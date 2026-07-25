@@ -870,6 +870,133 @@ export function parseSimpleTexParagraphIr(
   return buildSimpleTexParagraphIr(text, resolveColorAlias);
 }
 
+export interface SimpleTexSourceProjectionPolicy {
+  readonly removeLineBreaks?: boolean;
+  readonly removeControlParagraphBreaks?: boolean;
+}
+
+export function simpleTexSourceHasLineBreak(text: string): boolean {
+  return collectSimpleTexPolicyRanges(
+    parseSimpleTexParagraphIr(text).nodes,
+    "line-break"
+  ).length > 0;
+}
+
+export function splitSimpleTexSourceAtLineBreaks(text: string): string[] {
+  const ranges = collectSimpleTexPolicyRanges(
+    parseSimpleTexParagraphIr(text).nodes,
+    "line-break"
+  );
+  if (ranges.length === 0) {
+    return [text];
+  }
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const range of mergeSimpleTexSourceRanges(ranges)) {
+    parts.push(text.slice(cursor, range.start));
+    cursor = range.end;
+  }
+  parts.push(text.slice(cursor));
+  return parts;
+}
+
+export function projectSimpleTexSourceByPolicy(
+  text: string,
+  policy: SimpleTexSourceProjectionPolicy
+): string {
+  const ir = parseSimpleTexParagraphIr(text);
+  const ranges = [
+    ...(policy.removeLineBreaks
+      ? collectSimpleTexPolicyRanges(ir.nodes, "line-break")
+      : []),
+    ...(policy.removeControlParagraphBreaks
+      ? collectSimpleTexPolicyRanges(ir.nodes, "control-paragraph-break")
+      : []),
+  ];
+  if (ranges.length === 0) {
+    return text;
+  }
+  let result = "";
+  let cursor = 0;
+  for (const range of mergeSimpleTexSourceRanges(ranges)) {
+    result += text.slice(cursor, range.start);
+    cursor = range.end;
+  }
+  return result + text.slice(cursor);
+}
+
+interface SimpleTexPolicySourceRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+type SimpleTexPolicyTarget = "line-break" | "control-paragraph-break";
+
+function collectSimpleTexPolicyRanges(
+  nodes: readonly SimpleTexNode[],
+  target: SimpleTexPolicyTarget,
+  ranges: SimpleTexPolicySourceRange[] = []
+): SimpleTexPolicySourceRange[] {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    const matches =
+      (target === "line-break" && node?.kind === "line-break") ||
+      (target === "control-paragraph-break" &&
+        node?.kind === "paragraph-break" &&
+        node.breakKind === "control");
+    if (node && matches) {
+      const previous = nodes[index - 1];
+      const next = nodes[index + 1];
+      ranges.push({
+        start:
+          target === "line-break" && previous?.kind === "space"
+            ? previous.sourceStart
+            : node.sourceStart,
+        end: next?.kind === "space" ? next.sourceEnd : node.sourceEnd,
+      });
+    }
+    if (!node) {
+      continue;
+    }
+    if (
+      node.kind === "font-command" ||
+      node.kind === "color-command" ||
+      node.kind === "group" ||
+      node.kind === "mbox" ||
+      node.kind === "raisebox" ||
+      node.kind === "dimension-box"
+    ) {
+      collectSimpleTexPolicyRanges(node.children, target, ranges);
+    } else if (node.kind === "item" && node.labelNodes) {
+      collectSimpleTexPolicyRanges(node.labelNodes, target, ranges);
+    } else if (node.kind === "box") {
+      collectSimpleTexPolicyRanges(node.body.nodes, target, ranges);
+    }
+  }
+  return ranges;
+}
+
+function mergeSimpleTexSourceRanges(
+  ranges: readonly SimpleTexPolicySourceRange[]
+): readonly SimpleTexPolicySourceRange[] {
+  const sorted = [...ranges].sort(
+    (left, right) => left.start - right.start || left.end - right.end
+  );
+  const merged: SimpleTexPolicySourceRange[] = [];
+  for (const range of sorted) {
+    const previous = merged.at(-1);
+    if (previous && range.start <= previous.end) {
+      merged[merged.length - 1] = {
+        start: previous.start,
+        end: Math.max(previous.end, range.end),
+      };
+    } else {
+      merged.push(range);
+    }
+  }
+  return merged;
+}
+
 /**
  * Scan arbitrary TeX/TikZ document source with the same command frontend that
  * builds paragraph IR and expose its source-backed resource references.
@@ -1893,6 +2020,21 @@ function scanSimpleTexProseControl(
         sourceEnd: sourceOffset + (command?.end ?? start),
       },
       end: command?.end ?? start,
+      unsupportedCommand: false,
+    };
+  }
+
+  const explicitSpaceEnd = scanSimpleTexControlWord(text, start, "space");
+  if (explicitSpaceEnd !== null) {
+    const end = skipSimpleTexControlWordSpaces(text, explicitSpaceEnd);
+    return {
+      node: {
+        kind: "space",
+        text: text.slice(start, end),
+        sourceStart,
+        sourceEnd: sourceOffset + end,
+      },
+      end,
       unsupportedCommand: false,
     };
   }
@@ -3278,6 +3420,11 @@ function scanSimpleTexStyleDeclaration(
   for (const name of [
     "tiny", "scriptsize", "footnotesize", "small", "normalsize",
     "large", "Large", "LARGE", "huge", "Huge",
+    "pgfutil@font@tiny", "pgfutil@font@scriptsize",
+    "pgfutil@font@footnotesize", "pgfutil@font@small",
+    "pgfutil@font@normalsize", "pgfutil@font@large",
+    "pgfutil@font@Large", "pgfutil@font@LARGE",
+    "pgfutil@font@huge", "pgfutil@font@Huge",
   ] as const) {
     const end = scanSimpleTexControlWord(text, start, name);
     if (end !== null) {

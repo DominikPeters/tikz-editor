@@ -125,7 +125,7 @@ describe("native TeX text styling", () => {
 
   it("only promotes a leading size declaration to the node style", () => {
     expect(normalizeNodeTextFontSize(String.raw`{\small lead {\Large nested}}`, 10)).toEqual({
-      text: "lead {\\Large nested}",
+      text: String.raw`{\small lead {\Large nested}}`,
       fontSizePt: 9.96264 * 0.9,
     });
     expect(normalizeNodeTextFontSize(String.raw`lead {\small nested}`, 10)).toEqual({
@@ -144,14 +144,22 @@ describe("native TeX text styling", () => {
 
   it("lowers standard TeX prose spelling to source-backed native text", () => {
     const source = String.raw`\%\&\_\#\$\{\} \textbackslash{} ` +
-      "``quoted'' -- --- " + String.raw`\ldots\ text~tie`;
+      "``quoted'' -- --- " + String.raw`\ldots\ text~tie\space explicit`;
     const ir = parseSimpleTexParagraphIr(source);
     expect(ir.unsupportedCommand).toBe(false);
     const tokens = simpleTexInlineNodesToTokens(ir.nodes as readonly SimpleTexInlineNode[]);
     expect(tokens.filter((token) => token.kind === "text").map((token) => token.text).join(""))
-      .toBe("%&_#${}\\“quoted”–—…texttie");
+      .toBe("%&_#${}\\“quoted”–—…texttieexplicit");
     const tie = tokens.find((token) => token.nonBreaking);
     expect(tie).toMatchObject({ kind: "space", text: " ", sourceStart: source.indexOf("~") });
+    expect(tokens).toContainEqual(
+      expect.objectContaining({
+        kind: "space",
+        sourceStart: source.indexOf(String.raw`\space`),
+        sourceEnd:
+          source.indexOf(String.raw`\space`) + String.raw`\space `.length,
+      })
+    );
     expect(tokens.some((token) => token.literal)).toBe(false);
 
     const svg = renderTexParagraphDebugSvgBody({ text: source, width: 300 });

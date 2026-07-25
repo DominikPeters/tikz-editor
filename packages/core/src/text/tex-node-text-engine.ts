@@ -9,8 +9,10 @@ import {
   getSimpleTexFallbackReason,
   layoutSimpleTexParagraph,
   luaLatexDefaultTextFontProfile,
+  projectSimpleTexSourceByPolicy,
   renderTexParagraphSvgBody,
   renderTexVListSvgMetadata,
+  simpleTexSourceHasLineBreak,
 } from "./tex/index.js";
 import type {
   ResolvedTexFont,
@@ -83,10 +85,6 @@ const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
 const RENDER_CACHE_LIMIT = 2048;
 const TEX_LAYOUT_CACHE_LIMIT = 512;
 const VALIDATION_CACHE_LIMIT = 512;
-const EXPLICIT_LINE_BREAK_TOKEN_PATTERN = /\\\\(?:\[[^\]]*\])?/;
-const EXPLICIT_LINE_BREAK_CANONICAL_PATTERN =
-  /[ \t\r\n]*(\\\\(?:\[[^\]]*\])?)[ \t\r\n]*/g;
-
 let sharedEnginePromise: Promise<NodeTextEngine> | null = null;
 const profiledEnginePromises = new Map<string, Promise<NodeTextEngine>>();
 
@@ -637,21 +635,10 @@ function normalizeTexTextInput(
   readonly font: TextFontOptions;
   readonly sourceMap?: TextSourceMap;
 } {
-  const normalized = text
-    .replace(EXPLICIT_LINE_BREAK_CANONICAL_PATTERN, "$1")
-    .replace(/\r\n?/g, "\n")
-    .replace(/\n/g, " ");
-  const normalizedSourceMap = sourceMap && normalized !== text
-    ? mapTransformedTextWithFallback(
-      { text, sourceMap },
-      normalized,
-      "native TeX input normalization"
-    ).sourceMap
-    : sourceMap;
   return {
-    text: normalized,
+    text,
     font: { ...font },
-    ...(normalizedSourceMap ? { sourceMap: normalizedSourceMap } : {}),
+    ...(sourceMap ? { sourceMap } : {}),
   };
 }
 
@@ -664,10 +651,9 @@ function normalizeTexTextInput(
 function normalizeRestrictedHorizontalModeInput(
   input: ReturnType<typeof normalizeTexTextInput>
 ): ReturnType<typeof normalizeTexTextInput> {
-  const normalized = input.text.replace(
-    /\\par(?![A-Za-z@])[ \t\r\n]*/g,
-    ""
-  );
+  const normalized = projectSimpleTexSourceByPolicy(input.text, {
+    removeControlParagraphBreaks: true,
+  });
   if (normalized === input.text) {
     return input;
   }
@@ -686,7 +672,7 @@ function normalizeRestrictedHorizontalModeInput(
 }
 
 function hasExplicitMultilineBreaks(text: string): boolean {
-  return EXPLICIT_LINE_BREAK_TOKEN_PATTERN.test(text);
+  return simpleTexSourceHasLineBreak(text);
 }
 
 function measurementKey(

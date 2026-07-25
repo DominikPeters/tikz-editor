@@ -68,7 +68,7 @@ import {
 } from "./multipart.js";
 import type { NodeShape } from "./types.js";
 import { resolveNodeTargetPoint } from "./placement.js";
-import { normalizeEscapedTextSpaces, normalizeNodeTextFontSize } from "./normalize-text.js";
+import { normalizeNodeTextFontSize } from "./normalize-text.js";
 import { normalizeOptionValue } from "./utils.js";
 import { resolveFitOverrides } from "./fit.js";
 import { applyNodeDecorations } from "./node-decorations.js";
@@ -205,11 +205,7 @@ export function measureNodeAnchorExtents(
     trace: context.macroTraceCollector ?? undefined,
     sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = mapTransformedTextWithFallback(
-    expandedNodeText,
-    normalizeEscapedTextSpaces(expandedNodeText.text),
-    "escaped text space normalization"
-  );
+  const resolvedNodeText = expandedNodeText;
   const normalizedText = normalizeNodeTextFontSize(resolvedNodeText.text, nodeLocalStyle.fontSize);
   const normalizedMappedText = mapTransformedTextWithFallback(
     resolvedNodeText,
@@ -409,11 +405,7 @@ export function evaluateNodeItem(
     trace: context.macroTraceCollector ?? undefined,
     sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = mapTransformedTextWithFallback(
-    expandedNodeText,
-    normalizeEscapedTextSpaces(expandedNodeText.text),
-    "escaped text space normalization"
-  );
+  const resolvedNodeText = expandedNodeText;
   const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText.text) : [{ name: "text", text: resolvedNodeText.text }];
   const mainNodeText = rawNodeParts.find((part) => part.name === "text")?.text ?? "";
   const mainNodeMappedText = rawNodeParts.length === 1 && mainNodeText === resolvedNodeText.text

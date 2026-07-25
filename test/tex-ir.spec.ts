@@ -10,6 +10,9 @@ import {
   prepareSimpleTexLayoutDocument,
   prepareTexLayoutParagraphsFromVList,
   parseSimpleTexParagraphIr,
+  projectSimpleTexSourceByPolicy,
+  simpleTexSourceHasLineBreak,
+  splitSimpleTexSourceAtLineBreaks,
   texLength,
   texLayoutItemsForParagraphPlan,
 } from "../packages/core/src/text/tex/index.js";
@@ -31,6 +34,28 @@ describe("simple TeX paragraph IR", () => {
     const inlineMath = analyzeSimpleTexParagraph(String.raw`Alpha $x$`, 120);
     expect(inlineMath.ir?.unsupportedCommand).toBe(false);
     expect(inlineMath.fallbackReason).toBeNull();
+  });
+
+  it("projects node-mode policies from source-backed IR nodes", () => {
+    const explicitBreak = String.raw`Alpha {\textbf{ Beta \\ Gamma }} Delta`;
+    expect(simpleTexSourceHasLineBreak(explicitBreak)).toBe(true);
+    expect(splitSimpleTexSourceAtLineBreaks(explicitBreak)).toEqual([
+      String.raw`Alpha {\textbf{ Beta`,
+      String.raw`Gamma }} Delta`,
+    ]);
+    expect(
+      projectSimpleTexSourceByPolicy(explicitBreak, {
+        removeLineBreaks: true,
+      })
+    ).toBe(String.raw`Alpha {\textbf{ BetaGamma }} Delta`);
+
+    const restricted = String.raw`Alpha \par   Beta \paragraph{kept}`;
+    expect(
+      projectSimpleTexSourceByPolicy(restricted, {
+        removeControlParagraphBreaks: true,
+      })
+    ).toBe(String.raw`Alpha Beta \paragraph{kept}`);
+    expect(simpleTexSourceHasLineBreak(String.raw`$x\\y$ % \\`)).toBe(false);
   });
 
   it("parses mbox as an inline text hbox node", () => {

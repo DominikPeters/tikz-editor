@@ -48,7 +48,7 @@ import {
 } from "./elements.js";
 import { resolveNodeLayout } from "./layout.js";
 import { collectScopedNodeNames } from "./named-coordinates.js";
-import { normalizeEscapedTextSpaces, normalizeNodeTextFontSize } from "./normalize-text.js";
+import { normalizeNodeTextFontSize } from "./normalize-text.js";
 import {
   resolveNodeLayer,
   resolveNodeOptionScale,
@@ -198,11 +198,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
           sourceOffset: parsedCell.textSpan.from
         }
       );
-      const resolvedCellText = mapTransformedTextWithFallback(
-        expandedCellText,
-        normalizeEscapedTextSpaces(expandedCellText.text),
-        "escaped text space normalization"
-      );
+      const resolvedCellText = expandedCellText;
       const normalizedCellText = normalizeNodeTextFontSize(resolvedCellText.text, cellStyle.fontSize);
       const normalizedMappedCellText = mapTransformedTextWithFallback(
         resolvedCellText,
@@ -964,15 +960,13 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         options: resolvedCell.options,
         textSource: "group",
         textSpan: resolvedCell.cell.textSpan,
-        text: normalizeEscapedTextSpaces(
-          expandMacroBindings(
-            resolvedCell.cell.text,
-            params.context.stack[params.context.stack.length - 1].macroBindings,
-            {
-              maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-              trace: params.context.macroTraceCollector ?? undefined
-            }
-          )
+        text: expandMacroBindings(
+          resolvedCell.cell.text,
+          params.context.stack[params.context.stack.length - 1].macroBindings,
+          {
+            maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
+            trace: params.context.macroTraceCollector ?? undefined
+          }
         )
       };
       const evaluatedCell = params.evaluateNestedNode(cellItem, position);

@@ -185,7 +185,7 @@ describe("semantic node helper coverage", () => {
   it("parses multipart node text and rectangle split options", () => {
     const parts = parseNodeParts(String.raw`top \nodepart[style={x[y]}] {second} lower \nodepart   {third} c \nodepart{2} d \nodepart{{fourth}} e \nodepart{} tail \nodepart missing`);
     expect(parts).toEqual([
-      { name: "text", text: "top tail \\nodepartmissing" },
+      { name: "text", text: "top tail \\nodepart missing" },
       { name: "second", text: "lower" },
       { name: "third", text: "c" },
       { name: "2", text: "d" },
@@ -206,8 +206,23 @@ describe("semantic node helper coverage", () => {
     expect(resolveRectangleSplitIgnoreEmptyParts(parseOptionListRaw("[rectangle split ignore empty parts=0]"))).toBe(false);
     expect(resolveRectangleSplitIgnoreEmptyParts(parseOptionListRaw("[rectangle split ignore empty parts=yes]"))).toBe(true);
 
-    expect(resolveRectangleSplitPartTexts(parts, 4)).toEqual(["top tail \\nodepartmissing", "lower d", "c", "e"]);
+    expect(resolveRectangleSplitPartTexts(parts, 4)).toEqual(["top tail \\nodepart missing", "lower d", "c", "e"]);
     expect(resolveRectangleSplitPartTexts(parseNodeParts(String.raw`a\nodepart{text} x\nodepart{one} y\nodepart{twentieth} z\nodepart{unknown} u\nodepart{21} v`), 2)).toEqual(["a x y", "z"]);
+
+    expect(
+      parseNodeParts(
+        String.raw`top {\nodepart{two} nested} $x+\nodepart{two}$ % \nodepart{two}` +
+          "\n" +
+          String.raw`\nodepart{lower} bottom`
+      )
+    ).toEqual([
+      {
+        name: "text",
+        text:
+          String.raw`top {\nodepart{two} nested} $x+\nodepart{two}$ % \nodepart{two}`,
+      },
+      { name: "lower", text: "bottom" },
+    ]);
   });
 
   it("resolves node placement fractions and segment interpolation variants", () => {

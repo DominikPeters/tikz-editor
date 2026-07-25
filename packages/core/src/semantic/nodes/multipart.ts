@@ -1,4 +1,5 @@
 import type { OptionListAst } from "../../options/types.js";
+import { texFragmentParser } from "@tikz-editor/lezer-tex";
 import { normalizeOptionValue } from "./utils.js";
 
 export type NodePartText = {
@@ -54,70 +55,80 @@ const RECTANGLE_SPLIT_ORDINALS = [
 
 export function parseNodeParts(text: string): NodePartText[] {
   const parts: NodePartText[] = [];
-  let cursor = 0;
   let currentName = "text";
-  let buffer = "";
+  let contentStart = 0;
 
-  const pushCurrent = (): void => {
-    parts.push({ name: currentName, text: buffer.trim() });
-    buffer = "";
+  const pushCurrent = (contentEnd: number): void => {
+    parts.push({
+      name: currentName,
+      text: text.slice(contentStart, contentEnd).trim(),
+    });
   };
 
-  while (cursor < text.length) {
-    const idx = text.indexOf("\\nodepart", cursor);
-    if (idx < 0) {
-      buffer += text.slice(cursor);
-      break;
-    }
-
-    buffer += text.slice(cursor, idx);
-    cursor = idx + "\\nodepart".length;
-
-    while (cursor < text.length && /\s/u.test(text[cursor] ?? "")) {
-      cursor += 1;
-    }
-
-    if (text[cursor] === "[") {
-      let depth = 1;
-      cursor += 1;
-      while (cursor < text.length && depth > 0) {
-        const ch = text[cursor];
-        if (ch === "[") {
-          depth += 1;
-        } else if (ch === "]") {
-          depth -= 1;
-        }
-        cursor += 1;
-      }
-      while (cursor < text.length && /\s/u.test(text[cursor] ?? "")) {
-        cursor += 1;
-      }
-    }
-
-    if (text[cursor] !== "{") {
-      buffer += "\\nodepart";
-      continue;
-    }
-    cursor += 1;
-    const start = cursor;
-    let depth = 1;
-    while (cursor < text.length && depth > 0) {
-      const ch = text[cursor];
-      if (ch === "{") {
-        depth += 1;
-      } else if (ch === "}") {
-        depth -= 1;
-      }
-      cursor += 1;
-    }
-    const rawName = text.slice(start, Math.max(start, cursor - 1));
-    const normalizedName = normalizePartName(rawName);
-    pushCurrent();
-    currentName = normalizedName.length > 0 ? normalizedName : "text";
+  for (const directive of collectNodePartDirectives(text)) {
+    pushCurrent(directive.start);
+    currentName = directive.name.length > 0 ? directive.name : "text";
+    contentStart = directive.end;
   }
 
-  pushCurrent();
+  pushCurrent(text.length);
   return mergeNodeParts(parts);
+}
+
+interface NodePartDirective {
+  readonly start: number;
+  readonly end: number;
+  readonly name: string;
+}
+
+function collectNodePartDirectives(text: string): readonly NodePartDirective[] {
+  const items = texFragmentParser
+    .parse(text)
+    .topNode
+    .getChildren("FragmentItem")
+    .map((fragment) => fragment.getChild("TexItem")?.firstChild)
+    .filter((item) => item !== null && item !== undefined);
+  const directives: NodePartDirective[] = [];
+
+  for (let index = 0; index < items.length; index += 1) {
+    const command = items[index];
+    if (
+      command?.name !== "GenericCommand" ||
+      text.slice(command.from, command.to) !== String.raw`\nodepart`
+    ) {
+      continue;
+    }
+
+    let argumentIndex = index + 1;
+    while (
+      items[argumentIndex]?.name === "Whitespace" ||
+      items[argumentIndex]?.name === "Comment"
+    ) {
+      argumentIndex += 1;
+    }
+    if (items[argumentIndex]?.name === "OptionalArgument") {
+      argumentIndex += 1;
+      while (
+        items[argumentIndex]?.name === "Whitespace" ||
+        items[argumentIndex]?.name === "Comment"
+      ) {
+        argumentIndex += 1;
+      }
+    }
+
+    const nameGroup = items[argumentIndex];
+    if (nameGroup?.name !== "Group") {
+      continue;
+    }
+    const rawName = text.slice(nameGroup.from + 1, nameGroup.to - 1);
+    directives.push({
+      start: command.from,
+      end: nameGroup.to,
+      name: normalizePartName(rawName),
+    });
+    index = argumentIndex;
+  }
+  return directives;
 }
 
 function mergeNodeParts(parts: NodePartText[]): NodePartText[] {

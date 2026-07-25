@@ -8,6 +8,11 @@ import type {
   NodeTextRenderInfo
 } from "../../text/types.js";
 import {
+  projectSimpleTexSourceByPolicy,
+  simpleTexSourceHasLineBreak,
+  splitSimpleTexSourceAtLineBreaks,
+} from "../../text/tex/ir.js";
+import {
   concatMappedText,
   createGeneratedMappedText,
   mapTransformedTextWithFallback,
@@ -20,9 +25,6 @@ import type { ResolvedStyle } from "../types.js";
 import type { NodeLayout, NodeShape } from "./types.js";
 import { normalizeOptionValue } from "./utils.js";
 
-const EXPLICIT_LINE_BREAK_PATTERN = /[ \t\r\n]*\\\\(?:\[[^\]]*\])?[ \t\r\n]*/g;
-const EXPLICIT_LINE_BREAK_CANONICAL_PATTERN = /[ \t\r\n]*(\\\\(?:\[[^\]]*\])?)[ \t\r\n]*/g;
-const EXPLICIT_LINE_BREAK_TOKEN_PATTERN = /\\\\(?:\[[^\]]*\])?/;
 const PLAIN_TEXT_SERIF_FONT_STACK = "Latin Modern Roman, CMU Serif, Times New Roman, serif";
 const PLAIN_TEXT_SANS_FONT_STACK = "Latin Modern Sans, CMU Sans Serif, Helvetica, Arial, sans-serif";
 const PLAIN_TEXT_MONO_FONT_STACK = "Latin Modern Mono, CMU Typewriter Text, Courier New, monospace";
@@ -368,7 +370,7 @@ export function adjustNodeLayoutForShape(layout: NodeLayout, shape: NodeShape): 
 }
 
 function splitNodeLines(text: string): string[] {
-  const parts = text.replace(EXPLICIT_LINE_BREAK_PATTERN, "\n").split("\n");
+  const parts = splitSimpleTexSourceAtLineBreaks(text);
   if (parts.length === 0) {
     return [""];
   }
@@ -546,14 +548,14 @@ function parseAlignOption(valueRaw: string): ResolvedStyle["textAlign"] | null {
 }
 
 function hasExplicitLineBreakTokens(text: string): boolean {
-  return EXPLICIT_LINE_BREAK_TOKEN_PATTERN.test(text);
+  return simpleTexSourceHasLineBreak(text);
 }
 
 function normalizeTextForLineBreakPolicy(text: string, explicitLineBreaksActive: boolean): string {
   if (explicitLineBreaksActive) {
-    return text.replace(EXPLICIT_LINE_BREAK_CANONICAL_PATTERN, "$1");
+    return text;
   }
-  return text.replace(EXPLICIT_LINE_BREAK_PATTERN, "");
+  return projectSimpleTexSourceByPolicy(text, { removeLineBreaks: true });
 }
 
 function wrapLine(line: string, maxChars: number): string[] {

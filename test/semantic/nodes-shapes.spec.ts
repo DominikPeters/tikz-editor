@@ -545,12 +545,12 @@ describe("semantic evaluator / nodes and shapes", () => {
 
       const label = result.scene.elements.find(
         (element): element is Extract<(typeof result.scene.elements)[number], { kind: "Text" }> =>
-          element.kind === "Text" && element.text === "$v$"
+          element.kind === "Text" && element.text === String.raw`\tiny{$v$}`
       );
       expect(label).toBeDefined();
       if (label?.kind === "Text") {
         expect(label.style.fontSize).toBeLessThan(8);
-        expect(label.text).toBe("$v$");
+        expect(label.text).toBe(String.raw`\tiny{$v$}`);
       }
     });
 

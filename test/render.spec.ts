@@ -1197,8 +1197,9 @@ World};
       const renderInfo = text.textRenderInfo;
       expect(renderInfo?.mode).toBe("tex");
       if (renderInfo?.mode === "tex") {
-        expect(renderInfo.renderSourceText).toContain(String.raw`\\and this is the second`);
-        expect(renderInfo.renderSourceText).not.toContain(String.raw`\\ and this is the second`);
+        expect(renderInfo.renderSourceText).toContain(
+          String.raw`\\ and this is the second`
+        );
       }
     }
   });
