@@ -29,10 +29,11 @@ describe("TeX fuzz semantic coverage", () => {
     expect(accounting.generated).toContain("display-delimiter:flalign-star");
     expect(accounting.excluded).toEqual([
       "control-kind:unsupported-command",
+      "inline-kind:comment",
       "inline-kind:includegraphics",
       "inline-kind:literal",
     ]);
-    expect(Object.keys(TEX_FUZZ_EXPLICIT_EXCLUSIONS)).toHaveLength(3);
+    expect(Object.keys(TEX_FUZZ_EXPLICIT_EXCLUSIONS)).toHaveLength(4);
   });
 
   it("defines every feature reached by aggressive and document generation", () => {

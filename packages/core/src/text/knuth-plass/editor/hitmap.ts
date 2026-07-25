@@ -23,6 +23,7 @@ import type {
   TexVListLayout,
 } from '../../tex/vlist/types.js';
 import type { TexMathBox } from '../../tex/layout-inline-items.js';
+import { scanSimpleTexLineBreak } from '../../tex/ir.js';
 import {
   projectTexHBoxXToLine,
   projectTexHBoxYToLine,
@@ -1967,45 +1968,7 @@ function buildRunRawRanges(
   };
 
   const consumeTeXLinebreakCommand = (start: number): number | null => {
-    if (sourceText.charAt(start) !== '\\') {
-      return null;
-    }
-
-    if (sourceText.charAt(start + 1) === '\\') {
-      let cursor = start + 2;
-      if (sourceText.charAt(cursor) === '*') {
-        cursor += 1;
-      }
-
-      while (cursor < sourceText.length && /\s/.test(sourceText.charAt(cursor))) {
-        cursor += 1;
-      }
-
-      if (sourceText.charAt(cursor) === '[') {
-        cursor += 1;
-        while (cursor < sourceText.length && sourceText.charAt(cursor) !== ']') {
-          cursor += 1;
-        }
-        if (cursor >= sourceText.length) {
-          return null;
-        }
-        cursor += 1;
-      }
-
-      return cursor;
-    }
-
-    const named = 'newline';
-    if (sourceText.slice(start + 1, start + 1 + named.length) !== named) {
-      return null;
-    }
-
-    const boundary = sourceText.charAt(start + 1 + named.length);
-    if (/[A-Za-z]/.test(boundary)) {
-      return null;
-    }
-
-    return start + 1 + named.length;
+    return scanSimpleTexLineBreak(sourceText, start)?.end ?? null;
   };
 
   const consumeSpaceLike = (): { rawStart: number; rawEnd: number } | null => {

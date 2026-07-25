@@ -56,7 +56,7 @@ describe("@tikz-editor/lezer-tex", () => {
   it("provides math-fragment and math-environment structure", () => {
     const math = String.raw`x_1+\frac{a}{b}`;
     const document = String.raw`\begin{align}
-x &= y \\
+x &= \begin{bmatrix}y & 0\end{bmatrix} \\
 z &= 1
 \end{align}`;
 
@@ -68,7 +68,15 @@ z &= 1
     expect(mathTree.toString()).toContain("MathScript");
     expect(mathTree.toString()).toContain("MathGroup");
     expect(errorRanges(documentTree)).toEqual([]);
-    expect(documentTree.toString()).toContain("MathEnvironment");
+    let mathEnvironmentCount = 0;
+    documentTree.iterate({
+      enter(node) {
+        if (node.name === "MathEnvironment") {
+          mathEnvironmentCount += 1;
+        }
+      },
+    });
+    expect(mathEnvironmentCount).toBe(2);
     expect(documentTree.toString()).toContain("AlignmentTab");
   });
 

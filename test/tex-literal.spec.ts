@@ -40,10 +40,13 @@ describe("simple TeX literal runs", () => {
   });
 
   it("parses unsupported direct characters as single-char literal nodes", () => {
-    const ir = parseSimpleTexParagraphIr("50% off & more_stuff");
+    const ir = parseSimpleTexParagraphIr("50% comment\n& more_stuff");
     const literals = literalNodes(ir.nodes);
-    expect(literals.map((node) => node.text)).toEqual(["%", "&", "_"]);
+    expect(literals.map((node) => node.text)).toEqual(["&", "_"]);
     expect(literals.every((node) => node.reason === "unsupported-character")).toBe(true);
+    expect(ir.nodes).toContainEqual(
+      expect.objectContaining({ kind: "comment", text: "% comment\n" })
+    );
     expect(ir.unsupportedCommand).toBe(false);
   });
 
@@ -56,7 +59,9 @@ describe("simple TeX literal runs", () => {
 
   it("no longer reports a fallback reason for unknown commands or direct characters", () => {
     expect(analyzeSimpleTexParagraph("This is a \\tex", 200).fallbackReason).toBeNull();
-    expect(analyzeSimpleTexParagraph("50% off & more_stuff", 200).fallbackReason).toBeNull();
+    expect(
+      analyzeSimpleTexParagraph("50% comment\n& more_stuff", 200).fallbackReason
+    ).toBeNull();
   });
 
   it("supports catalogued accented prose and falls back honestly for missing scripts", () => {
@@ -184,8 +189,8 @@ describe("simple TeX literal runs", () => {
   });
 
   it("lays out unsupported direct characters with caret stops and literal metadata", () => {
-    const result = layoutSimpleTexParagraph("50% off", {
-      paragraphId: "tex:literal-percent",
+    const result = layoutSimpleTexParagraph("50& off", {
+      paragraphId: "tex:literal-ampersand",
       width: 200,
       hyphenator: { hyphenate: () => [] },
     });
@@ -193,7 +198,7 @@ describe("simple TeX literal runs", () => {
     const segments = result.report?.lines.flatMap((line) => line.segments) ?? [];
     const literalSegments = segments.filter((segment) => segment.literal);
     expect(literalSegments).toHaveLength(1);
-    expect(literalSegments[0].text).toBe("%");
+    expect(literalSegments[0].text).toBe("&");
     expect(literalSegments[0].literal?.reason).toBe("unsupported-character");
   });
 });

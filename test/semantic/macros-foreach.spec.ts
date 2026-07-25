@@ -132,7 +132,7 @@ describe("semantic evaluator / macros and foreach", () => {
       }
     });
 
-    it("normalizes escaped spaces in node text", () => {
+    it("preserves escaped spaces for shared TeX lowering", () => {
       const source = String.raw`\begin{tikzpicture}
     \node at (0,0) {min.\ utility};
   \end{tikzpicture}`;
@@ -141,7 +141,7 @@ describe("semantic evaluator / macros and foreach", () => {
       const label = result.scene.elements.find((element) => element.kind === "Text");
       expect(label?.kind).toBe("Text");
       if (label?.kind === "Text") {
-        expect(label.text).toBe("min. utility");
+        expect(label.text).toBe(String.raw`min.\ utility`);
       }
     });
 

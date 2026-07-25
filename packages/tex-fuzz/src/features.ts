@@ -165,6 +165,7 @@ function mathCommandDefinition(
 }
 
 export const TEX_FUZZ_EXPLICIT_EXCLUSIONS: Readonly<Record<string, string>> = {
+  "inline-kind:comment": "Source-trivia coverage is exercised by parser tests rather than semantic generation.",
   "inline-kind:includegraphics": "Requires a controlled asset resolver.",
   "inline-kind:literal": "Produced by malformed parsing rather than valid AST generation.",
   "control-kind:unsupported-command": "Used only as an oracle classification canary.",

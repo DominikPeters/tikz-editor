@@ -1498,9 +1498,8 @@ function scanSimpleTexIrNodes(
     }
 
     nodes.push({
-      kind: "literal",
+      kind: "text",
       text: char ?? "",
-      reason: "malformed-input",
       sourceStart,
       sourceEnd: sourceStart + 1,
     });

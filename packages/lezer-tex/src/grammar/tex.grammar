@@ -110,6 +110,7 @@ DisplayMath {
 
 MathItem {
   Comment |
+  MathEnvironment |
   MathTextCommand |
   MathCommand |
   MathGroup |

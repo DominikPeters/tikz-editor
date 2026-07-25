@@ -280,16 +280,37 @@ columns, blocks, theme constructs, and overlays. Textual leaves are
 by the existing simple-TeX/vlist pipeline. Beamer-specific concepts do not
 fork or specialize that generic text IR.
 
-TeX syntax has one authoritative interpretation: source-backed text IR.
-Rendering, capability reporting, resource discovery, and later editing
-consume that IR rather than recognizing commands independently in raw source.
+TeX syntax has one authoritative structural interpretation: the reusable
+Lezer CST in `packages/lezer-tex`. The TeX document and fragment parsers use
+the same grammar; Beamer is a dialect, TikZ node-text groups mount the TeX
+fragment parser, and TeX documents mount the TikZ parser for `tikzpicture`
+environments. Core lowers that CST into source-backed text IR. The native
+math parser remains a semantic parser below this boundary: Lezer owns math
+delimiters, environments, groups, and command spans, while the math parser
+owns TeX atom classes, macro meaning, dimensions, and box construction.
+
+Rendering, capability reporting, resource discovery, source-mode
+projections, hit-map reconciliation, and later editing consume the CST or its
+lowered IR rather than recognizing commands independently in raw source.
 Raw-source scans may be used only as non-authoritative performance prefilters
-or UI hints. In particular, the shared text frontend produces a
+or UI hints. Macro expansion is an explicit pre-CST phase: it owns expansion
+semantics and mapped-source provenance, but downstream consumers parse its
+materialized result through the shared frontend. In particular, the shared
+text frontend produces a
 `SimpleTexResourceManifest`, retaining command, filename, and option spans.
 It can flatten an existing inline/block IR or run the same resource-node
 scanner over arbitrary document source before structural layout. The app
 resolves that manifest asynchronously before layout and passes the resulting
 document-local resolver back to core.
+
+*Implemented (2026-07-25):* math boundaries, nested math environments,
+balanced groups and optional arguments, environment boundaries,
+control-sequence identity, comments, whitespace, prose tokens, graphics
+discovery, TikZ multipart `\nodepart` splitting, node font/space
+normalization, forced-break/restricted-horizontal-mode projections, and
+hit-map line-break reconciliation all use the shared CST/IR path. Comments
+are zero-width source-backed IR nodes, so rendering ignores them without
+losing editor ownership of their spans.
 
 The resolver contract is `DocumentGraphicsResolver` in
 `packages/core/src/graphics`, not a node-text service. The top-level TikZ and
