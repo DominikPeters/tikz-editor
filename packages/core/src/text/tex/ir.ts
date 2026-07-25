@@ -774,6 +774,35 @@ const luaLatexNormalFontState: SimpleTexFontState = {
   shape: "upright",
 };
 export const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1] as const;
+const SIMPLE_TEX_SYNTAX_INDEX_CACHE_LIMIT = 128;
+
+interface SimpleTexSyntaxIndex {
+  readonly mathByStart: ReadonlyMap<
+    number,
+    SimpleTexMathNode | SimpleTexDisplayMathNode
+  >;
+  readonly groupEndByStart: ReadonlyMap<number, number>;
+  readonly optionalArgumentEndByStart: ReadonlyMap<number, number>;
+  readonly environmentByStart: ReadonlyMap<
+    number,
+    {
+      readonly name: string;
+      readonly beginEnd: number;
+      readonly contentEnd: number;
+      readonly end: number;
+    }
+  >;
+  readonly environmentBoundaryByStart: ReadonlyMap<
+    number,
+    {
+      readonly boundary: "begin" | "end";
+      readonly name: string;
+      readonly end: number;
+    }
+  >;
+}
+
+const simpleTexSyntaxIndexCache = new Map<string, SimpleTexSyntaxIndex>();
 
 export interface SimpleTexParagraphIrOptions {
   readonly listLeftMarginEmByDepth?: readonly number[];
@@ -1001,7 +1030,7 @@ function scanSimpleTexIrNodes(
   resolveColorAlias?: ColorAliasResolver
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
-  const mathSyntaxByStart = collectSimpleTexMathSyntax(text);
+  const mathSyntaxByStart = simpleTexSyntaxIndex(text).mathByStart;
   let unsupportedCommand = false;
   let index = 0;
 
@@ -1333,13 +1362,78 @@ function scanSimpleTexIrNodes(
   return { nodes, unsupportedCommand };
 }
 
-function collectSimpleTexMathSyntax(
-  text: string
-): ReadonlyMap<number, SimpleTexMathNode | SimpleTexDisplayMathNode> {
+function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
+  const cached = simpleTexSyntaxIndexCache.get(text);
+  if (cached) {
+    simpleTexSyntaxIndexCache.delete(text);
+    simpleTexSyntaxIndexCache.set(text, cached);
+    return cached;
+  }
+
   const byStart = new Map<number, SimpleTexMathNode | SimpleTexDisplayMathNode>();
+  const groupEndByStart = new Map<number, number>();
+  const optionalArgumentEndByStart = new Map<number, number>();
+  const environmentByStart = new Map<
+    number,
+    {
+      readonly name: string;
+      readonly beginEnd: number;
+      readonly contentEnd: number;
+      readonly end: number;
+    }
+  >();
+  const environmentBoundaryByStart = new Map<
+    number,
+    {
+      readonly boundary: "begin" | "end";
+      readonly name: string;
+      readonly end: number;
+    }
+  >();
   const tree = texFragmentParser.parse(text);
   tree.iterate({
     enter(node) {
+      if (
+        node.name === "Group" &&
+        text[node.from] === "{" &&
+        text[node.to - 1] === "}"
+      ) {
+        groupEndByStart.set(node.from, node.to);
+      } else if (
+        node.name === "OptionalArgument" &&
+        text[node.from] === "[" &&
+        text[node.to - 1] === "]"
+      ) {
+        optionalArgumentEndByStart.set(node.from, node.to);
+      } else if (node.name === "Environment") {
+        const begin = node.node.getChild("BeginEnvironment");
+        const end = node.node.getChild("EndEnvironment");
+        const beginMatch = begin
+          ? /^\\begin\{([^}]+)\}$/u.exec(text.slice(begin.from, begin.to))
+          : null;
+        const endMatch = end
+          ? /^\\end\{([^}]+)\}$/u.exec(text.slice(end.from, end.to))
+          : null;
+        const name = beginMatch?.[1];
+        if (begin && end && name && endMatch?.[1] === name) {
+          environmentByStart.set(node.from, {
+            name,
+            beginEnd: begin.to,
+            contentEnd: end.from,
+            end: node.to,
+          });
+          environmentBoundaryByStart.set(begin.from, {
+            boundary: "begin",
+            name,
+            end: begin.to,
+          });
+          environmentBoundaryByStart.set(end.from, {
+            boundary: "end",
+            name,
+            end: end.to,
+          });
+        }
+      }
       const math = simpleTexMathNodeFromSyntax(text, node);
       if (math) {
         byStart.set(math.sourceStart, math);
@@ -1348,7 +1442,21 @@ function collectSimpleTexMathSyntax(
       return;
     },
   });
-  return byStart;
+  const index: SimpleTexSyntaxIndex = {
+    mathByStart: byStart,
+    groupEndByStart,
+    optionalArgumentEndByStart,
+    environmentByStart,
+    environmentBoundaryByStart,
+  };
+  simpleTexSyntaxIndexCache.set(text, index);
+  if (simpleTexSyntaxIndexCache.size > SIMPLE_TEX_SYNTAX_INDEX_CACHE_LIMIT) {
+    const oldest = simpleTexSyntaxIndexCache.keys().next().value;
+    if (oldest !== undefined) {
+      simpleTexSyntaxIndexCache.delete(oldest);
+    }
+  }
+  return index;
 }
 
 function simpleTexMathNodeFromSyntax(
@@ -2056,12 +2164,12 @@ function scanSimpleTexBoxEnvironment(
   end: number;
   unsupportedCommand: boolean;
 } | null {
-  const beginPrefix = String.raw`\begin{minipage}`;
-  if (!text.startsWith(beginPrefix, start)) {
+  const environment = simpleTexSyntaxIndex(text).environmentByStart.get(start);
+  if (environment?.name !== "minipage") {
     return null;
   }
 
-  let cursor = skipSimpleTexControlWordSpaces(text, start + beginPrefix.length);
+  let cursor = skipSimpleTexControlWordSpaces(text, environment.beginEnd);
   let alignment: SimpleTexBoxAlignment = "center";
   if (text[cursor] === "[") {
     const optionEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
@@ -2105,18 +2213,10 @@ function scanSimpleTexBoxEnvironment(
   unsupportedCommand ||= parsedWidth === null;
 
   const contentStart = widthGroupEnd;
-  const environmentEnd = findMatchingSimpleTexEnvironmentEnd(
-    text,
-    contentStart,
-    "minipage"
-  );
-  if (!environmentEnd) {
-    return null;
-  }
   const body = buildSimpleTexParagraphIrForRange(
     text,
     contentStart,
-    environmentEnd.contentEnd,
+    environment.contentEnd,
     sourceOffset,
     resolveColorAlias
   );
@@ -2125,53 +2225,21 @@ function scanSimpleTexBoxEnvironment(
   return {
     node: {
       kind: "box",
-      text: text.slice(start, environmentEnd.end),
+      text: text.slice(start, environment.end),
       command: "minipage",
       sourceStart: sourceOffset + start,
-      sourceEnd: sourceOffset + environmentEnd.end,
+      sourceEnd: sourceOffset + environment.end,
       width: parsedWidth ?? texLength(0),
       ...(height !== undefined ? { height } : {}),
       alignment,
-      content: text.slice(contentStart, environmentEnd.contentEnd),
+      content: text.slice(contentStart, environment.contentEnd),
       contentStart: sourceOffset + contentStart,
-      contentEnd: sourceOffset + environmentEnd.contentEnd,
+      contentEnd: sourceOffset + environment.contentEnd,
       body,
     },
-    end: environmentEnd.end,
+    end: environment.end,
     unsupportedCommand,
   };
-}
-
-function findMatchingSimpleTexEnvironmentEnd(
-  text: string,
-  start: number,
-  name: string
-): { readonly contentEnd: number; readonly end: number } | null {
-  const beginPrefix = `\\begin{${name}}`;
-  const endPrefix = `\\end{${name}}`;
-  let depth = 1;
-  let index = start;
-  while (index < text.length) {
-    const nextBegin = text.indexOf(beginPrefix, index);
-    const nextEnd = text.indexOf(endPrefix, index);
-    if (nextEnd < 0) {
-      return null;
-    }
-    if (nextBegin >= 0 && nextBegin < nextEnd) {
-      depth += 1;
-      index = nextBegin + beginPrefix.length;
-      continue;
-    }
-    depth -= 1;
-    if (depth === 0) {
-      return {
-        contentEnd: nextEnd,
-        end: nextEnd + endPrefix.length,
-      };
-    }
-    index = nextEnd + endPrefix.length;
-  }
-  return null;
 }
 
 function parseSimpleTexBoxAlignment(raw: string): SimpleTexBoxAlignment {
@@ -2189,30 +2257,19 @@ function scanSimpleTexEnvironmentBoundary(
   text: string,
   start: number
 ): { boundary: "begin" | "end"; name: SimpleTexEnvironmentName; end: number } | null {
-  for (const boundary of ["begin", "end"] as const) {
-    const prefix = `\\${boundary}{`;
-    if (!text.startsWith(prefix, start)) {
-      continue;
-    }
-    const nameStart = start + prefix.length;
-    const nameEnd = text.indexOf("}", nameStart);
-    if (nameEnd < 0) {
-      return null;
-    }
-    const name = text.slice(nameStart, nameEnd);
-    if (
-      isSimpleTexQuoteEnvironmentName(name) ||
-      isSimpleTexTrivlistEnvironmentName(name) ||
-      name === "itemize" ||
-      name === "enumerate" ||
-      name === "description"
-    ) {
-      return {
-        boundary,
-        name,
-        end: nameEnd + 1,
-      };
-    }
+  const boundary =
+    simpleTexSyntaxIndex(text).environmentBoundaryByStart.get(start);
+  if (
+    boundary &&
+    (isSimpleTexQuoteEnvironmentName(boundary.name) ||
+      isSimpleTexTrivlistEnvironmentName(boundary.name) ||
+      isSimpleTexListEnvironmentName(boundary.name))
+  ) {
+    return {
+      boundary: boundary.boundary,
+      name: boundary.name,
+      end: boundary.end,
+    };
   }
   return null;
 }
@@ -3316,68 +3373,16 @@ function scanSimpleTexGroup(
 }
 
 function findBalancedSimpleTexGroupEnd(text: string, start: number): number | null {
-  if (text[start] !== "{") {
-    return null;
-  }
-  let depth = 0;
-  for (let index = start; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-    if (char === "{") {
-      depth += 1;
-      continue;
-    }
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return index + 1;
-      }
-    }
-  }
-  return null;
+  return simpleTexSyntaxIndex(text).groupEndByStart.get(start) ?? null;
 }
 
 function findBalancedSimpleTexOptionalArgumentEnd(
   text: string,
   start: number
 ): number | null {
-  if (text[start] !== "[") {
-    return null;
-  }
-  let bracketDepth = 0;
-  let groupDepth = 0;
-  for (let index = start; index < text.length; index += 1) {
-    const char = text[index];
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-    if (char === "{") {
-      groupDepth += 1;
-      continue;
-    }
-    if (char === "}" && groupDepth > 0) {
-      groupDepth -= 1;
-      continue;
-    }
-    if (groupDepth > 0) {
-      continue;
-    }
-    if (char === "[") {
-      bracketDepth += 1;
-      continue;
-    }
-    if (char === "]") {
-      bracketDepth -= 1;
-      if (bracketDepth === 0) {
-        return index + 1;
-      }
-    }
-  }
-  return null;
+  return (
+    simpleTexSyntaxIndex(text).optionalArgumentEndByStart.get(start) ?? null
+  );
 }
 
 function skipSimpleTexControlWordSpaces(text: string, start: number): number {

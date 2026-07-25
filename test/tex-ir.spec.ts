@@ -697,6 +697,52 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("uses syntax-tree environment boundaries rather than commands in comments", () => {
+    const source =
+      String.raw`\begin{minipage}{50pt}Alpha % \end{minipage}` +
+      "\n" +
+      String.raw`Beta\end{minipage}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes).toHaveLength(1);
+    expect(parsed.nodes[0]).toMatchObject({
+      kind: "box",
+      command: "minipage",
+      width: 50,
+      content:
+        String.raw`Alpha % \end{minipage}` +
+        "\n" +
+        "Beta",
+      sourceStart: 0,
+      sourceEnd: source.length,
+    });
+  });
+
+  it("does not lower mismatched environment boundaries", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \begin{quote} Beta \end{quotation} Gamma`
+    );
+
+    expect(
+      parsed.nodes.filter((node) => node.kind === "environment-boundary")
+    ).toEqual([]);
+    expect(parsed.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "literal",
+          text: String.raw`\begin`,
+          reason: "unsupported-command",
+        }),
+        expect.objectContaining({
+          kind: "literal",
+          text: String.raw`\end`,
+          reason: "unsupported-command",
+        }),
+      ])
+    );
+  });
+
   it("parses block-position unsupported commands as literal paragraphs", () => {
     const source = String.raw`Alpha \par \unsupportedgraphics[width=1cm]{plot.pdf} \par Beta`;
     const parsed = parseSimpleTexParagraphIr(source);
