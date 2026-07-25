@@ -1,12 +1,16 @@
 import type {
+  DocumentGraphicsPreviewBundle,
+  DocumentGraphicsPreviewResolution,
   DocumentGraphicsResolution,
   DocumentGraphicsResolveRequest,
   DocumentGraphicsResolver,
 } from "@tikz-editor/core/graphics";
+import { documentGraphicsPreviewRequestKey } from "@tikz-editor/core/graphics";
 import {
   analyzeSimpleTexResources,
   type SimpleTexGraphicsOptions,
 } from "@tikz-editor/core/text/tex/index.js";
+import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { rasterizePdfAsset } from "./pdf-asset-rasterizer";
 import { getActiveEditorPlatform } from "./platform/current";
 import type { LocalAssetReadResult } from "./platform/types";
@@ -35,13 +39,20 @@ type PathCacheEntry = {
 
 const SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg", ".pdf"] as const;
 const TEX_PT_PER_BP = 72.27 / 72;
+const MAX_PREVIEW_BUNDLES = 8;
 const pathCache = new Map<string, PathCacheEntry>();
+const previewBundles = new Map<string, DocumentGraphicsPreviewBundle>();
 let cacheGeneration = 0;
 
-export async function prepareDocumentGraphicsResolver(params: {
+export type PreparedDocumentGraphicsContext = {
+  readonly resolver: DocumentGraphicsResolver;
+  readonly previewBundle: DocumentGraphicsPreviewBundle;
+};
+
+export async function prepareDocumentGraphicsContext(params: {
   readonly source: string;
   readonly documentFileRef?: DocumentFileRef | null;
-}): Promise<DocumentGraphicsResolver> {
+}): Promise<PreparedDocumentGraphicsContext> {
   const platform = getActiveEditorPlatform();
   const readLocalAsset = platform.files?.readLocalAsset;
   const baseDirectory = documentDirectory(params.documentFileRef);
@@ -96,9 +107,39 @@ export async function prepareDocumentGraphicsResolver(params: {
       );
     },
   };
+  const previewBundle: DocumentGraphicsPreviewBundle = {
+    version: 1,
+    cacheKey,
+    entries: [...entries.values()].map((entry) => ({
+      requestKey: documentGraphicsPreviewRequestKey({
+        filename: entry.filename,
+        options: entry.options,
+      }),
+      resolution: graphicsPreviewResolution(entry.resolution),
+    })),
+  };
+  rememberPreviewBundle(previewBundle);
 
   await syncLocalAssetWatches([...watchedPaths].sort());
-  return resolver;
+  return { resolver, previewBundle };
+}
+
+export async function prepareDocumentGraphicsResolver(params: {
+  readonly source: string;
+  readonly documentFileRef?: DocumentFileRef | null;
+}): Promise<DocumentGraphicsResolver> {
+  return (await prepareDocumentGraphicsContext(params)).resolver;
+}
+
+export function getDocumentGraphicsPreviewBundle(
+  cacheKey: string
+): DocumentGraphicsPreviewBundle | null {
+  const bundle = previewBundles.get(cacheKey) ?? null;
+  if (bundle) {
+    previewBundles.delete(cacheKey);
+    previewBundles.set(cacheKey, bundle);
+  }
+  return bundle;
 }
 
 export function invalidateImageAssetPath(path: string): void {
@@ -374,12 +415,60 @@ function imageAssetResolverCacheKey(params: {
     .sort((left, right) =>
       left.filename.localeCompare(right.filename) || left.rawOptions.localeCompare(right.rawOptions)
     );
-  return JSON.stringify({
-    kind: "image-assets",
-    generation: cacheGeneration,
-    baseDirectory: params.baseDirectory,
-    signatures,
-  });
+  return `image-assets:${computeSourceFingerprint(
+    JSON.stringify({
+      generation: cacheGeneration,
+      baseDirectory: params.baseDirectory,
+      signatures,
+    })
+  )}`;
+}
+
+function graphicsPreviewResolution(
+  resolution: DocumentGraphicsResolution
+): DocumentGraphicsPreviewResolution {
+  switch (resolution.status) {
+    case "resolved":
+      return {
+        status: "resolved",
+        mimeType: resolution.mimeType,
+        dataBase64: resolution.dataBase64,
+        naturalWidthPt: resolution.naturalWidthPt,
+        naturalHeightPt: resolution.naturalHeightPt,
+        revision: graphicsPreviewRevision(resolution.revision),
+      };
+    case "missing":
+      return {
+        status: "missing",
+        ...(resolution.revision
+          ? { revision: graphicsPreviewRevision(resolution.revision) }
+          : {}),
+      };
+    case "unsupported":
+      return {
+        status: "unsupported",
+        ...(resolution.reason ? { reason: resolution.reason } : {}),
+        ...(resolution.revision
+          ? { revision: graphicsPreviewRevision(resolution.revision) }
+          : {}),
+      };
+  }
+}
+
+function graphicsPreviewRevision(revision: string): string {
+  return `graphics-preview:${computeSourceFingerprint(revision)}`;
+}
+
+function rememberPreviewBundle(bundle: DocumentGraphicsPreviewBundle): void {
+  previewBundles.delete(bundle.cacheKey);
+  previewBundles.set(bundle.cacheKey, bundle);
+  while (previewBundles.size > MAX_PREVIEW_BUNDLES) {
+    const oldestKey = previewBundles.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    previewBundles.delete(oldestKey);
+  }
 }
 
 function collectIncludeGraphicsCandidates(source: string): ImageIncludeCandidate[] {

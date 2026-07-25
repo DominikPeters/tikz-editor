@@ -135,6 +135,7 @@ export function FigureNavigator() {
   const maxToRender = useMemo(() => Math.max(8, visibleFigureIds.length + 4), [visibleFigureIds.length]);
   const thumbnails = useFigureThumbnails(source, figures, {
     documentKey: activeDocumentId,
+    graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
     priorityFigureIds,
     maxToRender,
     refreshDelayMs: 350

@@ -36,12 +36,14 @@ function Harness(props: {
   source: string;
   figures: readonly FigureEntry[];
   documentKey?: string;
+  graphicsPreviewBundleKey?: string | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   onUpdate: (value: ReadonlyMap<string, string>) => void;
 }) {
   const thumbnails = useFigureThumbnails(props.source, props.figures as any, {
     documentKey: props.documentKey,
+    graphicsPreviewBundleKey: props.graphicsPreviewBundleKey,
     priorityFigureIds: props.priorityFigureIds,
     maxToRender: props.maxToRender ?? 4,
     refreshDelayMs: 0
@@ -399,6 +401,52 @@ describe("useFigureThumbnails", () => {
     await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
 
     expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates thumbnails and forwards the graphics preview bundle key", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result",
+      ok: true,
+      requestId: request.requestId,
+      groupId: request.groupId,
+      figureId: request.figureId,
+      figureSignature: request.figureSignature,
+      svg: "<svg />"
+    }));
+    const source = String.raw`\begin{tikzpicture}\node {\includegraphics{fig.png}};\end{tikzpicture}`;
+    const figures = [
+      { id: "figure:0", span: { from: 0, to: source.length } }
+    ] as const;
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-images",
+        graphicsPreviewBundleKey: "graphics:r1",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 1);
+    expect(vi.mocked(requestThumbnail).mock.calls[0]?.[0])
+      .toMatchObject({ graphicsPreviewBundleKey: "graphics:r1" });
+
+    await act(async () => {
+      root.render(createElement(Harness, {
+        source,
+        figures,
+        documentKey: "document-images",
+        graphicsPreviewBundleKey: "graphics:r2",
+        onUpdate: () => undefined
+      }));
+      vi.runOnlyPendingTimers();
+      await flushMicrotasks();
+    });
+    await waitForCondition(() => vi.mocked(requestThumbnail).mock.calls.length >= 2);
+    expect(vi.mocked(requestThumbnail).mock.calls[1]?.[0])
+      .toMatchObject({ graphicsPreviewBundleKey: "graphics:r2" });
   });
 });
 

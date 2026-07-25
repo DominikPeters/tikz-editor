@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const imageAssetCacheMocks = vi.hoisted(() => ({
+  getDocumentGraphicsPreviewBundle: vi.fn()
+}));
+
+vi.mock("../../packages/app/src/image-asset-cache", () => imageAssetCacheMocks);
+
 type WorkerListener = (event: { data?: unknown }) => void;
 
 class FakeWorker {
@@ -39,6 +45,7 @@ describe("thumbnail-worker-client", () => {
     vi.resetModules();
     vi.unstubAllGlobals();
     vi.stubGlobal("Worker", FakeWorker);
+    imageAssetCacheMocks.getDocumentGraphicsPreviewBundle.mockReset();
   });
 
   afterEach(() => {
@@ -129,5 +136,82 @@ describe("thumbnail-worker-client", () => {
     await expect(pendingA).rejects.toThrow("thumbnail-group-cancelled");
     await expect(pendingB).rejects.toThrow("thumbnail-group-cancelled");
   });
-});
 
+  it("registers a serializable graphics bundle once and sends only its key with renders", async () => {
+    const bundle = {
+      version: 1 as const,
+      cacheKey: "graphics:abc",
+      entries: [
+        {
+          requestKey: "fig.png\n",
+          resolution: {
+            status: "resolved" as const,
+            mimeType: "image/png" as const,
+            dataBase64: "preview-bytes",
+            naturalWidthPt: 20,
+            naturalHeightPt: 10,
+            revision: "r1"
+          }
+        }
+      ]
+    };
+    imageAssetCacheMocks.getDocumentGraphicsPreviewBundle.mockReturnValue(bundle);
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    const baseRequest = {
+      type: "render" as const,
+      groupId: "grp-images",
+      source: String.raw`\begin{frame}\includegraphics{fig.png}\end{frame}`,
+      figureId: "beamer-frame:0",
+      figureSignature: "sig-images",
+      graphicsPreviewBundleKey: bundle.cacheKey,
+      deckFrameIndex: 0,
+      parseOptions: {
+        activeRootId: "beamer-frame:0",
+        includeContextDefinitions: true,
+        recover: true
+      }
+    };
+
+    const first = client.requestThumbnail({
+      ...baseRequest,
+      requestId: "req-image-1"
+    });
+    const worker = FakeWorker.instances[0];
+    expect(worker.posted[0]).toEqual({ type: "registerGraphics", bundle });
+    expect(worker.posted[1]).toMatchObject({
+      type: "render",
+      requestId: "req-image-1",
+      graphicsPreviewBundleKey: bundle.cacheKey
+    });
+    worker.emitMessage({
+      type: "result",
+      ok: true,
+      requestId: "req-image-1",
+      groupId: "grp-images",
+      figureId: "beamer-frame:0",
+      figureSignature: "sig-images",
+      svg: "<svg />"
+    });
+    await first;
+
+    const second = client.requestThumbnail({
+      ...baseRequest,
+      requestId: "req-image-2"
+    });
+    expect(worker.posted.filter((message) =>
+      typeof message === "object" &&
+      message != null &&
+      (message as { type?: string }).type === "registerGraphics"
+    )).toHaveLength(1);
+    worker.emitMessage({
+      type: "result",
+      ok: true,
+      requestId: "req-image-2",
+      groupId: "grp-images",
+      figureId: "beamer-frame:0",
+      figureSignature: "sig-images",
+      svg: "<svg />"
+    });
+    await second;
+  });
+});

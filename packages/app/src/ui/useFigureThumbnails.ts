@@ -17,6 +17,7 @@ type FigureEntry = ThumbnailRootEntry;
 
 type UseFigureThumbnailsOptions = {
   documentKey?: string;
+  graphicsPreviewBundleKey?: string | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   refreshDelayMs?: number;
@@ -64,6 +65,7 @@ export function useFigureThumbnails(
 ): ReadonlyMap<string, string> {
   const {
     documentKey = "__default__",
+    graphicsPreviewBundleKey = null,
     priorityFigureIds = EMPTY_PRIORITY_FIGURE_IDS,
     maxToRender = 8,
     refreshDelayMs = 350
@@ -72,10 +74,12 @@ export function useFigureThumbnails(
     source: string;
     figures: readonly FigureEntry[];
     documentKey: string;
+    graphicsPreviewBundleKey: string | null;
   }>({
     source,
     figures,
-    documentKey
+    documentKey,
+    graphicsPreviewBundleKey
   });
   const lastThumbnailByDocumentKeyRef = useRef(new Map<string, Map<string, string>>());
   const requestTokenByFigureRef = useRef(new Map<string, number>());
@@ -83,11 +87,11 @@ export function useFigureThumbnails(
   const stableFigures = stableInput.figures;
 
   useEffect(() => {
-    setStableInput({ source, figures, documentKey });
+    setStableInput({ source, figures, documentKey, graphicsPreviewBundleKey });
     if (!lastThumbnailByDocumentKeyRef.current.has(documentKey)) {
       lastThumbnailByDocumentKeyRef.current.set(documentKey, new Map<string, string>());
     }
-  }, [documentKey, figures, source]);
+  }, [documentKey, figures, graphicsPreviewBundleKey, source]);
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -107,11 +111,13 @@ export function useFigureThumbnails(
     for (const figure of stableFigures) {
       map.set(
         figure.id,
-        makeFigureSignature(stableSource, figure, documentFingerprint)
+        `${makeFigureSignature(stableSource, figure, documentFingerprint)}:graphics=${
+          stableInput.graphicsPreviewBundleKey ?? ""
+        }`
       );
     }
     return map;
-  }, [stableFigures, stableSource]);
+  }, [stableFigures, stableInput.graphicsPreviewBundleKey, stableSource]);
   const figureKey = useMemo(
     () => stableFigures.map((figure) => `${figure.id}:${figureSignatures.get(figure.id) ?? ""}`).join("|"),
     [figureSignatures, stableFigures]
@@ -207,6 +213,9 @@ export function useFigureThumbnails(
             source: stableSource,
             figureId: figure.id,
             figureSignature,
+            ...(stableInput.graphicsPreviewBundleKey
+              ? { graphicsPreviewBundleKey: stableInput.graphicsPreviewBundleKey }
+              : {}),
             ...(figure.deckFrameIndex != null ? { deckFrameIndex: figure.deckFrameIndex } : {}),
             parseOptions: {
               recover: true,
@@ -275,7 +284,7 @@ export function useFigureThumbnails(
         window.clearTimeout(timer.id);
       }
     };
-  }, [documentKey, figureKey, figureSignatures, maxToRender, priorityFigureIds, priorityKey, stableFigures, stableSource]);
+  }, [documentKey, figureKey, figureSignatures, maxToRender, priorityFigureIds, priorityKey, stableFigures, stableInput.graphicsPreviewBundleKey, stableSource]);
 
   return thumbnails;
 }

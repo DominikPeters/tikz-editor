@@ -1,4 +1,7 @@
+import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics/index";
+import { getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import type {
+  ThumbnailRegisterGraphicsMessage,
   ThumbnailRenderFailure,
   ThumbnailRenderRequest,
   ThumbnailRenderSuccess,
@@ -15,6 +18,7 @@ let sharedWorker: Worker | null = null;
 let workerInitFailed = false;
 const pendingRequests = new Map<string, PendingRequest>();
 const requestIdsByGroup = new Map<string, Set<string>>();
+const registeredGraphicsBundleKeys = new Set<string>();
 
 function getWorker(): Worker | null {
   if (workerInitFailed) {
@@ -49,6 +53,7 @@ export async function requestThumbnail(request: ThumbnailRenderRequest): Promise
     const idsForGroup = requestIdsByGroup.get(request.groupId) ?? new Set<string>();
     idsForGroup.add(request.requestId);
     requestIdsByGroup.set(request.groupId, idsForGroup);
+    registerGraphicsBundleIfNeeded(worker, request.graphicsPreviewBundleKey);
     worker.postMessage(request);
   });
 }
@@ -111,12 +116,22 @@ function onWorkerMessage(event: MessageEvent<ThumbnailWorkerResponseMessage>): v
 
 async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise<ThumbnailRenderSuccess | ThumbnailRenderFailure> {
   try {
+    const previewBundle = request.graphicsPreviewBundleKey
+      ? getDocumentGraphicsPreviewBundle(request.graphicsPreviewBundleKey)
+      : null;
+    const graphicsResolver = previewBundle
+      ? createDocumentGraphicsResolverFromPreviewBundle(previewBundle)
+      : undefined;
     let svg: string;
     if (request.deckFrameIndex != null) {
       const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
       const prepared = prepareBeamerDocument(request.source);
       const step = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
-      svg = (await prepared.renderFrame({ frameIndex: request.deckFrameIndex, step })).svg.svg;
+      svg = (await prepared.renderFrame({
+        frameIndex: request.deckFrameIndex,
+        step,
+        graphicsResolver
+      })).svg.svg;
     } else {
       const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
       svg = (await renderTikzToSvgAsync(request.source, {
@@ -125,6 +140,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
           activeFigureId: request.parseOptions.activeRootId,
           includeContextDefinitions: request.parseOptions.includeContextDefinitions
         },
+        evaluate: { graphicsResolver },
         svg: {
           padding: request.svgOptions?.padding
         }
@@ -160,6 +176,7 @@ function onWorkerError(): void {
   workerInitFailed = true;
   sharedWorker.terminate();
   sharedWorker = null;
+  registeredGraphicsBundleKeys.clear();
   const pendingIds = [...pendingRequests.keys()];
   for (const requestId of pendingIds) {
     const pending = pendingRequests.get(requestId);
@@ -169,6 +186,22 @@ function onWorkerError(): void {
     pending.reject(new Error("thumbnail-worker-error"));
     dropPending(requestId, pending.groupId);
   }
+}
+
+function registerGraphicsBundleIfNeeded(worker: Worker, cacheKey: string | undefined): void {
+  if (!cacheKey || registeredGraphicsBundleKeys.has(cacheKey)) {
+    return;
+  }
+  const bundle = getDocumentGraphicsPreviewBundle(cacheKey);
+  if (!bundle) {
+    return;
+  }
+  const message: ThumbnailRegisterGraphicsMessage = {
+    type: "registerGraphics",
+    bundle
+  };
+  worker.postMessage(message);
+  registeredGraphicsBundleKeys.add(cacheKey);
 }
 
 function dropPending(requestId: string, groupId: string): void {

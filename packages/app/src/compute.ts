@@ -28,7 +28,7 @@ import {
   type PreparedBeamerDocument
 } from "@tikz-editor/core/beamer/index";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
-import { prepareDocumentGraphicsResolver } from "./image-asset-cache";
+import { prepareDocumentGraphicsContext } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
 
@@ -47,6 +47,11 @@ export type SessionSnapshot = {
   svgModel: SvgRenderModel | null;
   parseResult: ParseTikzResult | null;
   semanticResult: EvaluateTikzResult | null;
+  /**
+   * Identifies the path-free graphics preview bundle prepared for this
+   * document revision. Thumbnail workers register the bundle separately.
+   */
+  graphicsPreviewBundleKey?: string | null;
   incremental: SessionSnapshotIncrementalInfo | null;
   /** Present for Beamer decks; the tikz fields above stay empty. */
   deck: DeckSnapshot | null;
@@ -151,6 +156,7 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
     svgModel: null,
     parseResult: null,
     semanticResult: null,
+    graphicsPreviewBundleKey: null,
     incremental: null,
     deck: null
   };
@@ -211,6 +217,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         svgModel: result.svg.model,
         parseResult: result.parse,
         semanticResult: result.semantic,
+        graphicsPreviewBundleKey: result.graphicsPreviewBundleKey,
         deck: null,
         incremental: {
           trigger,
@@ -266,10 +273,11 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     incrementalSemanticSession?.reset();
     const semanticSession = getIncrementalSemanticSession();
     phaseStartedAt = performance.now();
-    const graphicsResolver = await prepareDocumentGraphicsResolver({
+    const graphicsContext = await prepareDocumentGraphicsContext({
       source: request.source,
       documentFileRef: request.documentFileRef ?? null
     });
+    const graphicsResolver = graphicsContext.resolver;
     phases.imageAssets = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
     const result = await renderTikzToSvgAsync(request.source, {
@@ -312,6 +320,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       svgModel: result.svg.model,
       parseResult: result.parse,
       semanticResult: result.semantic,
+      graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
       incremental: null,
       deck: null
     };
@@ -347,6 +356,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       svgModel: null,
       parseResult: null,
       semanticResult: null,
+      graphicsPreviewBundleKey: null,
       incremental: null,
       deck: null
     };
@@ -422,10 +432,11 @@ async function computeDeckSnapshot(
       diagnostics: []
     };
   }
-  const graphicsResolver = await prepareDocumentGraphicsResolver({
+  const graphicsContext = await prepareDocumentGraphicsContext({
     source: request.source,
     documentFileRef: request.documentFileRef ?? null
   });
+  const graphicsResolver = graphicsContext.resolver;
   if (
     deckComputeSession?.source !== request.source ||
     deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey
@@ -485,6 +496,7 @@ async function computeDeckSnapshot(
     svgModel: null,
     parseResult: null,
     semanticResult: null,
+    graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
     incremental: null,
     deck: {
       frames: session.frames,
@@ -531,6 +543,7 @@ async function computeSnapshotIncremental(
   semanticStats: IncrementalSemanticStats;
   renderDiagnostics: RenderDiagnostic[];
   phaseDurationsMs: Record<string, number>;
+  graphicsPreviewBundleKey: string;
 }> {
   const phases: Record<string, number> = {};
   let phaseStartedAt = performance.now();
@@ -538,10 +551,11 @@ async function computeSnapshotIncremental(
   const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
   phases.textEngine = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
-  const graphicsResolver = await prepareDocumentGraphicsResolver({
+  const graphicsContext = await prepareDocumentGraphicsContext({
     source,
     documentFileRef
   });
+  const graphicsResolver = graphicsContext.resolver;
   phases.imageAssets = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
   const parseSession = getIncrementalParseSession();
@@ -645,7 +659,8 @@ async function computeSnapshotIncremental(
     parseStats: parseIncremental.stats,
     semanticStats: incrementalStats,
     renderDiagnostics: [],
-    phaseDurationsMs: phases
+    phaseDurationsMs: phases,
+    graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey
   };
 }
 

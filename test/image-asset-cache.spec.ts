@@ -1,11 +1,16 @@
 import { Buffer } from "node:buffer";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { invalidateImageAssetPath, prepareDocumentGraphicsResolver } from "../packages/app/src/image-asset-cache.js";
+import {
+  invalidateImageAssetPath,
+  prepareDocumentGraphicsContext,
+  prepareDocumentGraphicsResolver,
+} from "../packages/app/src/image-asset-cache.js";
 import { setPdfAssetRasterizerForTests, type PdfAssetRasterizer } from "../packages/app/src/pdf-asset-rasterizer.js";
 import { setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
 import type { EditorPlatform } from "../packages/app/src/platform/types.js";
 import type { DocumentFileRef } from "../packages/app/src/store/types.js";
+import { createDocumentGraphicsResolverFromPreviewBundle } from "../packages/core/src/graphics/index.js";
 import {
   analyzeSimpleTexResources,
   type SimpleTexGraphicsOptions,
@@ -268,6 +273,51 @@ describe("image asset cache", () => {
       expect(page2.dataBase64).toBe("png-page-2");
       expect(page1.revision).not.toBe(page2.revision);
     }
+  });
+
+  it("builds a path-free serializable preview bundle that preserves PDF page variants", async () => {
+    const documentFileRef = desktopFileRef();
+    const pdfBase64 = Buffer.from("%PDF-1.7\npages").toString("base64");
+    restorePdfRasterizer = setPdfAssetRasterizerForTests(async (request) =>
+      rasterizedPdfPage(request.pageNumber)
+    );
+    setTestPlatform({
+      files: {
+        readLocalAsset: async (path) => ({
+          status: "ok",
+          path,
+          bytesBase64: pdfBase64,
+          size: pdfBase64.length,
+          revision: "pdf-preview-r1",
+        }),
+      },
+    });
+    invalidateImageAssetPath("/tmp/tikz/fig.pdf");
+
+    const context = await prepareDocumentGraphicsContext({
+      source: String.raw`\node {\includegraphics[page=1]{fig.pdf}\includegraphics[page=2]{fig.pdf}};`,
+      documentFileRef,
+    });
+    const clonedBundle = structuredClone(context.previewBundle);
+    const serializedBundle = JSON.stringify(clonedBundle);
+
+    expect(serializedBundle).not.toContain("/tmp/tikz");
+    expect(clonedBundle.entries).toHaveLength(2);
+
+    const workerResolver =
+      createDocumentGraphicsResolverFromPreviewBundle(clonedBundle);
+    const page1 = workerResolver.resolve(pdfResolveRequest("page=1"));
+    const page2 = workerResolver.resolve(pdfResolveRequest("page=2"));
+    expect(page1).toMatchObject({
+      status: "resolved",
+      dataBase64: "png-page-1",
+    });
+    expect(page2).toMatchObject({
+      status: "resolved",
+      dataBase64: "png-page-2",
+    });
+    expect(page1).not.toHaveProperty("resolvedPath");
+    expect(page2).not.toHaveProperty("watchedPaths");
   });
 
   it("reuses a PDF page asset across trim and clip variants", async () => {

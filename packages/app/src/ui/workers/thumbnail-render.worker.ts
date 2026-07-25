@@ -1,5 +1,9 @@
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
 import { prepareBeamerDocument, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
+import {
+  createDocumentGraphicsResolverFromPreviewBundle,
+  type DocumentGraphicsResolver
+} from "@tikz-editor/core/graphics/index";
 import type {
   ThumbnailRenderRequest,
   ThumbnailWorkerRequestMessage,
@@ -16,11 +20,20 @@ const workerContext = self as unknown as ThumbnailWorkerGlobalScope;
 const queue: ThumbnailRenderRequest[] = [];
 const cancelledRequestIds = new Set<string>();
 const cancelledGroupIds = new Set<string>();
+const graphicsResolvers = new Map<string, DocumentGraphicsResolver>();
 let busy = false;
 
 workerContext.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage>) => {
   const message = event.data;
   if (!message) {
+    return;
+  }
+
+  if (message.type === "registerGraphics") {
+    rememberGraphicsResolver(
+      message.bundle.cacheKey,
+      createDocumentGraphicsResolverFromPreviewBundle(message.bundle)
+    );
     return;
   }
 
@@ -55,14 +68,16 @@ async function pumpQueue(): Promise<void> {
 
   busy = true;
   try {
+    const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
     const svg = next.deckFrameIndex != null
-      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex)
+      ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver)
       : (await renderTikzToSvgAsync(next.source, {
           parse: {
             recover: next.parseOptions.recover ?? true,
             activeFigureId: next.parseOptions.activeRootId,
             includeContextDefinitions: next.parseOptions.includeContextDefinitions
           },
+          evaluate: { graphicsResolver },
           svg: {
             padding: next.svgOptions?.padding
           }
@@ -153,12 +168,40 @@ function cleanupCancellationMarks(): void {
 // Document-level Beamer passes are shared across the whole thumbnail sweep.
 let deckPrepared: { source: string; prepared: PreparedBeamerDocument } | null = null;
 
-async function renderDeckFrameThumbnail(source: string, frameIndex: number): Promise<string> {
+async function renderDeckFrameThumbnail(
+  source: string,
+  frameIndex: number,
+  graphicsResolver: DocumentGraphicsResolver | undefined
+): Promise<string> {
   if (deckPrepared?.source !== source) {
     deckPrepared = { source, prepared: prepareBeamerDocument(source) };
   }
   // Sorter thumbnails show the frame's final overlay step (handout view).
   const step = Math.max(1, deckPrepared.prepared.frameStepCount(frameIndex));
-  const result = await deckPrepared.prepared.renderFrame({ frameIndex, step });
+  const result = await deckPrepared.prepared.renderFrame({
+    frameIndex,
+    step,
+    graphicsResolver
+  });
   return result.svg.svg;
+}
+
+function rememberGraphicsResolver(
+  cacheKey: string,
+  resolver: DocumentGraphicsResolver
+): void {
+  graphicsResolvers.set(cacheKey, resolver);
+}
+
+function resolveGraphicsResolver(
+  cacheKey: string | undefined
+): DocumentGraphicsResolver | undefined {
+  if (!cacheKey) {
+    return undefined;
+  }
+  const resolver = graphicsResolvers.get(cacheKey);
+  if (!resolver) {
+    return undefined;
+  }
+  return resolver;
 }
