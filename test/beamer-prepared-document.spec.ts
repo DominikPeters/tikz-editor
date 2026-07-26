@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   prepareBeamerDocument,
@@ -109,5 +110,21 @@ describe("prepared Beamer document", () => {
     expect(new Set(results.map((result) => result.document))).toEqual(
       new Set([prepared.document])
     );
+  });
+
+  it("parses one Beamer CST for all prepared frontend passes", () => {
+    const source = `${readFileSync(OVERLAY_FIXTURE_PATH, "utf8")}
+% prepared-single-cst-contract`;
+    const parse = vi.spyOn(beamerDocumentParser, "parse");
+
+    try {
+      const prepared = prepareBeamerDocument(source);
+      for (let frameIndex = 0; frameIndex < prepared.document.frames.length; frameIndex += 1) {
+        prepared.frameStepCount(frameIndex);
+      }
+      expect(parse).toHaveBeenCalledTimes(1);
+    } finally {
+      parse.mockRestore();
+    }
   });
 });

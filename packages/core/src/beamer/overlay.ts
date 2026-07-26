@@ -6,12 +6,15 @@ import {
   type MappedText,
 } from "../text/source-map.js";
 import {
+  beamerSyntaxContext,
   readBeamerOptionalArgument,
   readBeamerOverlayArgument,
   readBeamerRequiredArgument,
   scanBeamerControlSequences,
   scanBeamerEnvironmentTokens,
-} from "./scan.js";
+  type BeamerSyntaxContext,
+} from "./syntax.js";
+import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type {
   BeamerDelimitedSourceValue,
   BeamerFrameModel,
@@ -120,11 +123,13 @@ const OVERLAY_COMMANDS = new Map<string, BeamerOverlayCommandKind>([
  */
 export function scanBeamerFrameOverlays(
   source: string,
-  frame: BeamerFrameModel
+  frame: BeamerFrameModel,
+  syntax?: TexSyntaxIndex
 ): BeamerOverlayModel {
+  const context = beamerSyntaxContext(source, syntax);
   const pending: PendingSpec[] = [];
-  const controls = scanBeamerControlSequences(source, frame.bodySpan);
-  const listRanges = beamerListRanges(source, frame.bodySpan);
+  const controls = scanBeamerControlSequences(context, frame.bodySpan);
+  const listRanges = beamerListRanges(context, frame.bodySpan);
   const itemControls = controls.filter((command) => command.name === "item");
   const explicitItemCommands = new Set<number>();
 
@@ -132,7 +137,7 @@ export function scanBeamerFrameOverlays(
     const overlayKind = OVERLAY_COMMANDS.get(command.name);
     if (overlayKind) {
       const parsed = parseOverlayCommand(
-        source,
+        context,
         frame.bodySpan.to,
         command.from,
         command.to,
@@ -150,7 +155,7 @@ export function scanBeamerFrameOverlays(
     }
     if (command.name === "pause") {
       const optional = readBeamerOptionalArgument(
-        source,
+        context,
         command.to,
         frame.bodySpan.to
       );
@@ -172,7 +177,7 @@ export function scanBeamerFrameOverlays(
       continue;
     }
     const overlay = readBeamerOverlayArgument(
-      source,
+      context,
       command.to,
       frame.bodySpan.to
     );
@@ -200,10 +205,10 @@ export function scanBeamerFrameOverlays(
       rawSpec: overlay,
     });
   }
-  pending.push(...overlayEnvironmentSpecs(source, frame.bodySpan));
+  pending.push(...overlayEnvironmentSpecs(context, frame.bodySpan));
   for (const list of listRanges) {
     const defaultArgument = readBeamerOptionalArgument(
-      source,
+      context,
       list.beginTo,
       list.contentTo
     );
@@ -464,7 +469,7 @@ export function projectBeamerOverlayText(
 }
 
 function parseOverlayCommand(
-  source: string,
+  context: BeamerSyntaxContext,
   limit: number,
   commandFrom: number,
   commandTo: number,
@@ -474,14 +479,14 @@ function parseOverlayCommand(
   rawSpec: BeamerDelimitedSourceValue;
 } | null {
   let cursor = commandTo;
-  let spec = readBeamerOverlayArgument(source, cursor, limit);
+  let spec = readBeamerOverlayArgument(context, cursor, limit);
   if (spec) {
     cursor = spec.span.to;
   }
   const branchCount = kind === "alt" ? 2 : kind === "temporal" ? 3 : 1;
   const branches: BeamerDelimitedSourceValue[] = [];
   for (let index = 0; index < branchCount; index += 1) {
-    const branch = readBeamerRequiredArgument(source, cursor, limit);
+    const branch = readBeamerRequiredArgument(context, cursor, limit);
     if (!branch) {
       return null;
     }
@@ -489,7 +494,7 @@ function parseOverlayCommand(
     cursor = branch.span.to;
   }
   if (!spec) {
-    spec = readBeamerOverlayArgument(source, cursor, limit);
+    spec = readBeamerOverlayArgument(context, cursor, limit);
     if (!spec) {
       return null;
     }
@@ -608,13 +613,13 @@ function resolveOverlaySpec(
 }
 
 function beamerListRanges(
-  source: string,
+  context: BeamerSyntaxContext,
   span: Span
 ): Array<Span & {
   readonly beginTo: number;
   readonly contentTo: number;
 }> {
-  const tokens = scanBeamerEnvironmentTokens(source, span);
+  const tokens = scanBeamerEnvironmentTokens(context, span);
   const stack: Array<{ name: string; from: number; beginTo: number }> = [];
   const result: Array<Span & { beginTo: number; contentTo: number }> = [];
   for (const token of tokens) {
@@ -651,16 +656,17 @@ function beamerListRanges(
 }
 
 function overlayEnvironmentSpecs(
-  source: string,
+  context: BeamerSyntaxContext,
   span: Span
 ): PendingSpec[] {
+  const { source } = context;
   const kindByName = new Map<string, BeamerOverlayCommandKind>([
     ["onlyenv", "only"],
     ["uncoverenv", "uncover"],
     ["visibleenv", "visible"],
     ["invisibleenv", "invisible"],
   ]);
-  const tokens = scanBeamerEnvironmentTokens(source, span);
+  const tokens = scanBeamerEnvironmentTokens(context, span);
   const result: PendingSpec[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const begin = tokens[index];
@@ -685,7 +691,7 @@ function overlayEnvironmentSpecs(
     }
     const end = tokens[endIndex];
     const spec = readBeamerOverlayArgument(
-      source,
+      context,
       begin.span.to,
       end?.span.from ?? span.to
     );

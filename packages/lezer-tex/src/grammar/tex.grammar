@@ -126,6 +126,7 @@ OptionalItem {
   GenericCommand |
   Group |
   OptionalArgument |
+  OverlaySpecification |
   Whitespace |
   Text
 }

@@ -63,7 +63,9 @@ import {
   type BeamerOverlayModel,
   type BeamerOverlayVisibility,
 } from "./overlay.js";
-import { scanBeamerDocument } from "./scan.js";
+import { scanBeamerDocumentWithSyntax } from "./scan.js";
+import { createBeamerSyntaxContext } from "./syntax.js";
+import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import {
   resolveBeamerTheoremOccurrences,
   type BeamerTheoremOccurrence,
@@ -197,6 +199,7 @@ function beamerListLayoutProfile(
  */
 type BeamerRenderContext = {
   readonly source: string;
+  readonly syntax: TexSyntaxIndex;
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
   readonly macroBindings: ReadonlyMap<string, MacroBinding>;
@@ -206,16 +209,21 @@ type BeamerRenderContext = {
 };
 
 function createBeamerRenderContext(source: string): BeamerRenderContext {
-  const document = scanBeamerDocument(source);
+  const syntaxContext = createBeamerSyntaxContext(source);
+  const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
   return {
     source,
+    syntax: syntaxContext.syntax,
     document,
     theme,
     macroBindings: collectMacroBindings(document.preamble.macroDefinitions),
     page: resolveBeamerPageGeometry(document, theme),
     navigationModel: createBeamerNavigationModel(document),
-    theoremOccurrences: resolveBeamerTheoremOccurrences(document),
+    theoremOccurrences: resolveBeamerTheoremOccurrences(
+      document,
+      syntaxContext.syntax
+    ),
   };
 }
 
@@ -268,6 +276,7 @@ export function prepareBeamerDocument(source: string): PreparedBeamerDocument {
       source: context.source,
       frame: requireFrame(frameIndex),
       document: context.document,
+      syntax: context.syntax,
       theoremOccurrences: context.theoremOccurrences,
     });
     bodyIrByFrameIndex.set(frameIndex, bodyIr);
@@ -301,7 +310,8 @@ export function prepareBeamerDocument(source: string): PreparedBeamerDocument {
       }
       const overlays = scanBeamerFrameOverlays(
         context.source,
-        requireFrame(frameIndex)
+        requireFrame(frameIndex),
+        context.syntax
       );
       overlaysByFrameIndex.set(frameIndex, overlays);
       return overlays.stepCount;

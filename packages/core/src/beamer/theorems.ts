@@ -2,7 +2,11 @@ import type {
   BeamerDocumentModel,
   BeamerTheoremDeclarationModel,
 } from "./types.js";
-import { scanBeamerEnvironmentTokens } from "./scan.js";
+import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import {
+  beamerSyntaxContext,
+  scanBeamerEnvironmentTokens,
+} from "./syntax.js";
 
 export type BeamerTheoremOccurrence = {
   readonly environment: string;
@@ -24,12 +28,14 @@ export type BeamerTheoremCounterSeed = {
  * independently of overlay pages.
  */
 export function resolveBeamerTheoremOccurrences(
-  document: BeamerDocumentModel
+  document: BeamerDocumentModel,
+  syntax?: TexSyntaxIndex
 ): ReadonlyMap<number, BeamerTheoremOccurrence> {
   const result = new Map<number, BeamerTheoremOccurrence>();
   const counters = new Map<string, number>();
+  const context = beamerSyntaxContext(document.source, syntax);
   const tokens = scanBeamerEnvironmentTokens(
-    document.source,
+    context,
     document.documentBodySpan
   );
 
@@ -84,11 +90,17 @@ export function activeBeamerTheoremDeclarations(
 
 export function resolveBeamerTheoremCounterSeed(
   document: BeamerDocumentModel,
-  offset: number
+  offset: number,
+  syntax?: TexSyntaxIndex
 ): readonly BeamerTheoremCounterSeed[] {
   const result = new Map<string, number>();
   const selectedSection = sectionNumberAt(document, offset);
-  for (const occurrence of resolveBeamerTheoremOccurrences(document).values()) {
+  for (
+    const occurrence of resolveBeamerTheoremOccurrences(
+      document,
+      syntax
+    ).values()
+  ) {
     if (occurrence.beginOffset >= offset || occurrence.number == null) {
       continue;
     }

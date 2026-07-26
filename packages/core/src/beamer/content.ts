@@ -6,13 +6,15 @@ import {
   createIdentityMappedText,
 } from "../text/source-map.js";
 import {
+  beamerSyntaxContext,
   readBeamerOptionalArgument,
   readBeamerOverlayArgument,
   readBeamerRequiredArgument,
   scanBeamerControlSequences,
   scanBeamerEnvironmentTokens,
+  type BeamerSyntaxContext,
   type BeamerEnvironmentToken,
-} from "./scan.js";
+} from "./syntax.js";
 import type {
   BeamerColumnAlignment,
   BeamerBlockBodyNode,
@@ -66,12 +68,13 @@ export function parseBeamerFrameBody(
   params: ParseBeamerFrameBodyParams
 ): BeamerFrameBodyIr {
   const { source, frame } = params;
+  const context = beamerSyntaxContext(source, params.syntax);
   const diagnostics: Diagnostic[] = [];
-  const tokens = scanBeamerEnvironmentTokens(source, frame.bodySpan);
+  const tokens = scanBeamerEnvironmentTokens(context, frame.bodySpan);
   const theoremOccurrences =
     params.theoremOccurrences ??
     (params.document
-      ? resolveBeamerTheoremOccurrences(params.document)
+      ? resolveBeamerTheoremOccurrences(params.document, context.syntax)
       : new Map<number, BeamerTheoremOccurrence>());
   const theoremTemplate =
     params.document?.preamble.theoremTemplate ?? "default";
@@ -107,6 +110,7 @@ export function parseBeamerFrameBody(
     const end = tokens[endIndex];
     const tikzNode = frameTikzFlowNode({
       source,
+      context,
       frameId: frame.id,
       begin: token,
       end,
@@ -126,7 +130,7 @@ export function parseBeamerFrameBody(
       tikzNode ??
       (token.name === "columns"
         ? parseColumns({
-            source,
+            context,
             frameId: frame.id,
             begin: token,
             end,
@@ -140,6 +144,7 @@ export function parseBeamerFrameBody(
             theoremOccurrences.has(token.span.from)
           ? parseTheorem({
               source,
+              context,
               ownerId: frame.id,
               begin: token,
               end,
@@ -149,6 +154,7 @@ export function parseBeamerFrameBody(
             })
           : parseBlock({
             source,
+            context,
             ownerId: frame.id,
             begin: token,
             end,
@@ -167,14 +173,15 @@ export function parseBeamerFrameBody(
     kind: "frame-body",
     frameId: frame.id,
     span: frame.bodySpan,
-    children: splitStandaloneFrameCommands(source, frame.id, children),
-    overlays: scanBeamerFrameOverlays(source, frame),
+    children: splitStandaloneFrameCommands(context, frame.id, children),
+    overlays: scanBeamerFrameOverlays(source, frame, context.syntax),
     diagnostics,
   };
 }
 
 function parseTheorem(params: {
   source: string;
+  context: BeamerSyntaxContext;
   ownerId: string;
   begin: BeamerEnvironmentToken;
   end: BeamerEnvironmentToken;
@@ -184,6 +191,7 @@ function parseTheorem(params: {
 }): BeamerTheoremBodyNode {
   const {
     source,
+    context,
     ownerId,
     begin,
     end,
@@ -192,13 +200,13 @@ function parseTheorem(params: {
     theoremTemplate,
   } = params;
   let cursor = begin.span.to;
-  let overlay = readBeamerOverlayArgument(source, cursor, end.span.from) ??
+  let overlay = readBeamerOverlayArgument(context, cursor, end.span.from) ??
     undefined;
   if (overlay) {
     cursor = overlay.span.to;
   }
   const addition = readBeamerOptionalArgument(
-    source,
+    context,
     cursor,
     end.span.from
   ) ?? undefined;
@@ -206,7 +214,7 @@ function parseTheorem(params: {
     cursor = addition.span.to;
   }
   if (!overlay) {
-    overlay = readBeamerOverlayArgument(source, cursor, end.span.from) ??
+    overlay = readBeamerOverlayArgument(context, cursor, end.span.from) ??
       undefined;
     if (overlay) {
       cursor = overlay.span.to;
@@ -292,22 +300,23 @@ function parseTheorem(params: {
 }
 
 function splitStandaloneFrameCommands(
-  source: string,
+  context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
   return splitStandaloneVerticalSpaces(
-    source,
+    context,
     frameId,
-    splitTitlePageCommands(source, frameId, children)
+    splitTitlePageCommands(context, frameId, children)
   );
 }
 
 function splitTitlePageCommands(
-  source: string,
+  context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
+  const { source } = context;
   const result: BeamerFrameBodyNode[] = [];
   let titlePageIndex = 0;
   let paragraphIndex = 0;
@@ -316,7 +325,7 @@ function splitTitlePageCommands(
       result.push(child);
       continue;
     }
-    const commands = scanBeamerControlSequences(source, child.span).filter(
+    const commands = scanBeamerControlSequences(context, child.span).filter(
       (command) => command.name === "titlepage"
     );
     if (commands.length === 0) {
@@ -358,7 +367,7 @@ function splitTitlePageCommands(
 }
 
 function splitStandaloneVerticalSpaces(
-  source: string,
+  context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
@@ -370,7 +379,7 @@ function splitStandaloneVerticalSpaces(
       continue;
     }
     const nodes = standaloneVerticalSpaceNodes(
-      source,
+      context,
       frameId,
       child.span,
       verticalSpaceIndex
@@ -386,21 +395,22 @@ function splitStandaloneVerticalSpaces(
 }
 
 function standaloneVerticalSpaceNodes(
-  source: string,
+  context: BeamerSyntaxContext,
   frameId: string,
   span: Span,
   firstIndex: number
 ): BeamerVerticalSpaceBodyNode[] | null {
+  const { source } = context;
   const result: BeamerVerticalSpaceBodyNode[] = [];
   let cursor = span.from;
-  for (const command of scanBeamerControlSequences(source, span)) {
+  for (const command of scanBeamerControlSequences(context, span)) {
     if (
       command.name !== "vspace" ||
       !isIgnorableFrameSource(source, { from: cursor, to: command.from })
     ) {
       return null;
     }
-    const value = readBeamerRequiredArgument(source, command.to, span.to);
+    const value = readBeamerRequiredArgument(context, command.to, span.to);
     if (!value) {
       return null;
     }
@@ -429,14 +439,15 @@ function isIgnorableFrameSource(source: string, span: Span): boolean {
 
 function frameTikzFlowNode(params: {
   source: string;
+  context: BeamerSyntaxContext;
   frameId: string;
   begin: BeamerEnvironmentToken;
   end: BeamerEnvironmentToken;
   nodeIndex: number;
 }): BeamerTikzBodyNode | null {
-  const { source, frameId, begin, end, nodeIndex } = params;
+  const { source, context, frameId, begin, end, nodeIndex } = params;
   if (begin.name === "tikzpicture") {
-    const roots = scanTikzRootsInSpan(source, frameId, {
+    const roots = scanTikzRootsInSpan(context, frameId, {
       from: begin.span.from,
       to: end.span.to,
     });
@@ -455,7 +466,7 @@ function frameTikzFlowNode(params: {
     return null;
   }
   const innerSpan = { from: begin.span.to, to: end.span.from };
-  const roots = scanTikzRootsInSpan(source, frameId, innerSpan);
+  const roots = scanTikzRootsInSpan(context, frameId, innerSpan);
   if (roots.length !== 1) {
     return null;
   }
@@ -477,20 +488,29 @@ function frameTikzFlowNode(params: {
 
 function parseBlock(params: {
   source: string;
+  context: BeamerSyntaxContext;
   ownerId: string;
   begin: BeamerEnvironmentToken;
   end: BeamerEnvironmentToken;
   nodeIndex: number;
   diagnostics: Diagnostic[];
 }): BeamerBlockBodyNode {
-  const { source, ownerId, begin, end, nodeIndex, diagnostics } = params;
-  const options = readBeamerOptionalArgument(
+  const {
     source,
+    context,
+    ownerId,
+    begin,
+    end,
+    nodeIndex,
+    diagnostics,
+  } = params;
+  const options = readBeamerOptionalArgument(
+    context,
     begin.span.to,
     end.span.from
   ) ?? undefined;
   const title = readBeamerRequiredArgument(
-    source,
+    context,
     options?.span.to ?? begin.span.to,
     end.span.from
   );
@@ -528,7 +548,7 @@ function parseBlock(params: {
 }
 
 function parseColumns(params: {
-  source: string;
+  context: BeamerSyntaxContext;
   frameId: string;
   begin: BeamerEnvironmentToken;
   end: BeamerEnvironmentToken;
@@ -539,7 +559,7 @@ function parseColumns(params: {
   theoremTemplate: BeamerTheoremTemplateVariant;
 }): BeamerColumnsBodyNode {
   const {
-    source,
+    context,
     frameId,
     begin,
     end,
@@ -550,7 +570,7 @@ function parseColumns(params: {
     theoremTemplate,
   } = params;
   const options = readBeamerOptionalArgument(
-    source,
+    context,
     begin.span.to,
     end.span.from
   ) ?? undefined;
@@ -575,12 +595,12 @@ function parseColumns(params: {
     }
     const columnEnd = tokens[endIndex];
     const columnOptions = readBeamerOptionalArgument(
-      source,
+      context,
       token.span.to,
       columnEnd.span.from
     ) ?? undefined;
     const width = readBeamerRequiredArgument(
-      source,
+      context,
       columnOptions?.span.to ?? token.span.to,
       columnEnd.span.from
     );
@@ -609,7 +629,7 @@ function parseColumns(params: {
       width,
       bodySpan,
       children: parseColumnFlow(
-        source,
+        context,
         frameId,
         columns.length,
         bodySpan,
@@ -689,7 +709,7 @@ function splitTopLevelOptions(value: string): string[] {
 }
 
 function parseColumnFlow(
-  source: string,
+  context: BeamerSyntaxContext,
   frameId: string,
   columnIndex: number,
   bodySpan: Span,
@@ -698,6 +718,7 @@ function parseColumnFlow(
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>,
   theoremTemplate: BeamerTheoremTemplateVariant
 ): BeamerColumnFlowNode[] {
+  const { source } = context;
   const structural: Array<{
     span: Span;
     node: BeamerColumnFlowNode;
@@ -725,6 +746,7 @@ function parseColumnFlow(
         theoremOccurrences.has(token.span.from)
       ? parseTheorem({
           source,
+          context,
           ownerId: `${frameId}:column:${columnIndex}`,
           begin: token,
           end,
@@ -734,6 +756,7 @@ function parseColumnFlow(
         })
       : parseBlock({
           source,
+          context,
           ownerId: `${frameId}:column:${columnIndex}`,
           begin: token,
           end,
@@ -772,7 +795,7 @@ function parseColumnFlow(
     index = endIndex;
   }
 
-  for (const root of scanTikzRootsInSpan(source, frameId, bodySpan)) {
+  for (const root of scanTikzRootsInSpan(context, frameId, bodySpan)) {
     structural.push({
       span: root.span,
       node: {
@@ -786,11 +809,11 @@ function parseColumnFlow(
     nodeIndex += 1;
   }
 
-  for (const command of scanBeamerControlSequences(source, bodySpan)) {
+  for (const command of scanBeamerControlSequences(context, bodySpan)) {
     if (command.name !== "vspace") {
       continue;
     }
-    const value = readBeamerRequiredArgument(source, command.to, bodySpan.to);
+    const value = readBeamerRequiredArgument(context, command.to, bodySpan.to);
     if (!value) {
       continue;
     }
@@ -834,11 +857,11 @@ function parseColumnFlow(
 }
 
 function scanTikzRootsInSpan(
-  source: string,
+  context: BeamerSyntaxContext,
   frameId: string,
   span: Span
 ) {
-  const tokens = scanBeamerEnvironmentTokens(source, span);
+  const tokens = scanBeamerEnvironmentTokens(context, span);
   const roots: Array<{
     kind: "tikzpicture";
     id: string;

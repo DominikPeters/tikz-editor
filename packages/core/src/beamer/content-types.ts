@@ -11,6 +11,7 @@ import type {
 } from "./types.js";
 import type { BeamerOverlayModel } from "./overlay.js";
 import type { BeamerTheoremOccurrence } from "./theorems.js";
+import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type { MappedText } from "../text/source-map.js";
 
 export type BeamerParagraphBodyNode = {
@@ -163,6 +164,8 @@ export type ParseBeamerFrameBodyParams = {
   source: string;
   frame: BeamerFrameModel;
   document?: BeamerDocumentModel;
+  /** Shared private syntax index for a prepared source revision. */
+  syntax?: TexSyntaxIndex;
   /**
    * Precomputed document-order theorem occurrences. Theorem counters are a
    * document-wide pass; a prepared document computes them once instead of

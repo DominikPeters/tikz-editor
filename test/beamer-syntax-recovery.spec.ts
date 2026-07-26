@@ -17,10 +17,11 @@ describe("Beamer syntax recovery contract", () => {
   it.each(OPAQUE_ENVIRONMENTS)(
     "keeps structural-looking source opaque inside %s",
     (environment) => {
+      const header = environment === "minted" ? "{tex}" : "";
       const source = String.raw`\documentclass{beamer}
 \begin{document}
 \begin{frame}[fragile]{Opaque ${environment}}
-\begin{${environment}}
+\begin{${environment}}${header}
 { unmatched literal brace
 % literal percent \end{frame}
 \begin{frame}{not structural}
