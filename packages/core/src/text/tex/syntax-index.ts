@@ -284,17 +284,11 @@ export function buildTexSyntaxIndex(
   markRecovered(overlayArguments, errors);
   markRecovered([...boundariesByStart.values()], errors);
   markRecovered(opaqueEnvironments, errors);
-  const controls = sortedValues(controlsByStart);
-  const environmentBoundaries = sortedValues(boundariesByStart);
-  comments.sort(compareSpans);
-  whitespace.sort(compareSpans);
-  groups.sort(compareArgumentSpans);
-  optionalArguments.sort(compareArgumentSpans);
-  overlayArguments.sort(compareArgumentSpans);
-  opaqueEnvironments.sort((left, right) =>
-    compareSpans(left.span, right.span)
-  );
-  errors.sort(compareSpans);
+  // Lezer's preorder traversal is source ordered. Maps preserve that
+  // insertion order, including the begin/end pair projected atomically from
+  // an opaque token, so no post-parse sorting pass is required.
+  const controls = [...controlsByStart.values()];
+  const environmentBoundaries = [...boundariesByStart.values()];
 
   const index: TexSyntaxIndex = {
     source,
@@ -393,11 +387,19 @@ function addControl(
   if (controlsByStart.has(node.from)) {
     return;
   }
-  const token = source.slice(node.from, node.to);
-  const word = /^\\([A-Za-z@]+)$/u.exec(token);
-  const symbol = /^\\([^\n\rA-Za-z@])$/u.exec(token);
-  const name = word?.[1] ?? symbol?.[1];
-  if (!name) {
+  if (source.charCodeAt(node.from) !== 92 || node.to <= node.from + 1) {
+    return;
+  }
+  const first = source.charCodeAt(node.from + 1);
+  const word =
+    first === 64 ||
+    (first >= 65 && first <= 90) ||
+    (first >= 97 && first <= 122);
+  const name = source.slice(node.from + 1, node.to);
+  if (
+    !word &&
+    (name.length !== 1 || first === 10 || first === 13)
+  ) {
     return;
   }
   const starSpan =
@@ -588,16 +590,36 @@ function markRecovered(
   errors: readonly TexSyntaxSpan[]
 ): void {
   for (const value of values) {
-    if (
-      !value.recovered &&
-      errors.some(
-        (error) =>
-          error.from >= value.span.from && error.to <= value.span.to
-      )
-    ) {
+    if (!value.recovered && containsError(errors, value.span)) {
       (value as { recovered: boolean }).recovered = true;
     }
   }
+}
+
+function containsError(
+  errors: readonly TexSyntaxSpan[],
+  span: Span
+): boolean {
+  let low = 0;
+  let high = errors.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if ((errors[middle]?.from ?? Number.POSITIVE_INFINITY) < span.from) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  for (let index = low; index < errors.length; index += 1) {
+    const error = errors[index];
+    if (!error || error.from > span.to) {
+      return false;
+    }
+    if (error.to <= span.to) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function trimSourceSpan(source: string, span: Span): Span {
@@ -624,12 +646,6 @@ function argumentMapForKind(
   return kind === "optional" ? optional : overlay;
 }
 
-function sortedValues<T>(values: ReadonlyMap<number, T>): T[] {
-  return [...values.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, value]) => value);
-}
-
 function valuesInRange<T>(
   values: readonly T[],
   range: Span,
@@ -654,15 +670,4 @@ function valuesInRange<T>(
     result.push(value);
   }
   return result;
-}
-
-function compareSpans(left: Span, right: Span): number {
-  return left.from - right.from || left.to - right.to;
-}
-
-function compareArgumentSpans(
-  left: TexSyntaxDelimitedArgument,
-  right: TexSyntaxDelimitedArgument
-): number {
-  return compareSpans(left.span, right.span);
 }

@@ -15,6 +15,7 @@ const OPAQUE_ENVIRONMENT_NAMES = [
   "verbatim",
   "verbatim*",
 ] as const;
+const BEGIN_ENVIRONMENT_PREFIX = "\\begin{";
 
 /**
  * LaTeX's verbatim-family scanners consume their body through the matching
@@ -24,12 +25,17 @@ const OPAQUE_ENVIRONMENT_NAMES = [
  */
 export const opaqueEnvironmentTokens = new ExternalTokenizer(
   (input, stack) => {
-    if (input.next !== 92) {
+    if (
+      input.next !== 92 ||
+      !matchesExact(input, BEGIN_ENVIRONMENT_PREFIX)
+    ) {
       return;
     }
     for (const name of OPAQUE_ENVIRONMENT_NAMES) {
-      const begin = `\\begin{${name}}`;
-      if (!matchesExact(input, begin)) {
+      if (
+        !matchesExact(input, name, BEGIN_ENVIRONMENT_PREFIX.length) ||
+        input.peek(BEGIN_ENVIRONMENT_PREFIX.length + name.length) !== 125
+      ) {
         continue;
       }
       const canComplete = stack.canShift(OpaqueEnvironmentToken);
@@ -37,6 +43,7 @@ export const opaqueEnvironmentTokens = new ExternalTokenizer(
       if (!canComplete && !canRecover) {
         return;
       }
+      const begin = `${BEGIN_ENVIRONMENT_PREFIX}${name}}`;
       advanceExact(input, begin);
       const end = `\\end{${name}}`;
       while (input.next >= 0 && !matchesExact(input, end)) {
@@ -62,9 +69,13 @@ function advanceExact(input: InputStream, value: string): void {
   }
 }
 
-function matchesExact(input: InputStream, value: string): boolean {
+function matchesExact(
+  input: InputStream,
+  value: string,
+  offset = 0
+): boolean {
   for (let index = 0; index < value.length; index += 1) {
-    if (input.peek(index) !== value.charCodeAt(index)) {
+    if (input.peek(offset + index) !== value.charCodeAt(index)) {
       return false;
     }
   }

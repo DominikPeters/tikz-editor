@@ -2,7 +2,7 @@ import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 
 import type { Span } from "../ast/types.js";
 import {
-  getTexSyntaxIndex,
+  buildTexSyntaxIndex,
   type TexSyntaxArgumentKind,
   type TexSyntaxDelimitedArgument,
   type TexSyntaxIndex,
@@ -32,7 +32,7 @@ export function createBeamerSyntaxContext(
 ): BeamerSyntaxContext {
   return {
     source,
-    syntax: getTexSyntaxIndex(source, beamerDocumentParser),
+    syntax: buildTexSyntaxIndex(source, beamerDocumentParser),
   };
 }
 
