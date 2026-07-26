@@ -14,6 +14,7 @@ FragmentItem { TexItem }
 
 TexItem {
   Comment |
+  OpaqueEnvironment |
   MathEnvironment |
   Environment |
   DisplayMath |
@@ -25,6 +26,49 @@ TexItem {
   OverlaySpecification |
   Whitespace |
   Text
+}
+
+OpaqueEnvironment {
+  OpaqueBVerbatimEnvironment |
+  OpaqueVerbatimCapitalEnvironment |
+  OpaqueAllttEnvironment |
+  OpaqueLstlistingEnvironment |
+  OpaqueMintedEnvironment |
+  OpaqueSemiverbatimEnvironment |
+  OpaqueVerbatimEnvironment |
+  OpaqueVerbatimStarEnvironment
+}
+
+OpaqueBVerbatimEnvironment {
+  OpaqueBVerbatimBegin OptionalArgument? OpaqueBVerbatimBody? OpaqueBVerbatimEnd
+}
+
+OpaqueVerbatimCapitalEnvironment {
+  OpaqueVerbatimCapitalBegin OptionalArgument? OpaqueVerbatimCapitalBody? OpaqueVerbatimCapitalEnd
+}
+
+OpaqueAllttEnvironment {
+  OpaqueAllttBegin OpaqueAllttBody? OpaqueAllttEnd
+}
+
+OpaqueLstlistingEnvironment {
+  OpaqueLstlistingBegin OptionalArgument? OpaqueLstlistingBody? OpaqueLstlistingEnd
+}
+
+OpaqueMintedEnvironment {
+  OpaqueMintedBegin OptionalArgument? Group OpaqueMintedBody? OpaqueMintedEnd
+}
+
+OpaqueSemiverbatimEnvironment {
+  OpaqueSemiverbatimBegin OpaqueSemiverbatimBody? OpaqueSemiverbatimEnd
+}
+
+OpaqueVerbatimEnvironment {
+  OpaqueVerbatimBegin OpaqueVerbatimBody? OpaqueVerbatimEnd
+}
+
+OpaqueVerbatimStarEnvironment {
+  OpaqueVerbatimStarBegin OpaqueVerbatimStarBody? OpaqueVerbatimStarEnd
 }
 
 Environment {
@@ -83,12 +127,11 @@ OptionalItem {
   Group |
   OptionalArgument |
   Whitespace |
-  Text |
-  AngleText
+  Text
 }
 
 OverlaySpecification {
-  "<" OverlayItem* ">"
+  OverlayOpen OverlayItem* OverlayClose
 }
 
 OverlayItem {
@@ -161,6 +204,7 @@ Text {
   "(" |
   ")" |
   OtherTextToken |
+  AngleText |
   Star |
   Superscript |
   Subscript |
@@ -243,8 +287,39 @@ MathEnvironmentName {
   @specialize<WordToken, "array">
 }
 
+@context opaqueEnvironmentContext from "./opaque-tokens.js"
+
+@external tokens opaqueEnvironmentTokens from "./opaque-tokens.js" {
+  OpaqueBVerbatimBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueBVerbatimBody[@name=OpaqueEnvironmentBody]
+  OpaqueBVerbatimEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueVerbatimCapitalBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueVerbatimCapitalBody[@name=OpaqueEnvironmentBody]
+  OpaqueVerbatimCapitalEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueAllttBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueAllttBody[@name=OpaqueEnvironmentBody]
+  OpaqueAllttEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueLstlistingBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueLstlistingBody[@name=OpaqueEnvironmentBody]
+  OpaqueLstlistingEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueMintedBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueMintedBody[@name=OpaqueEnvironmentBody]
+  OpaqueMintedEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueSemiverbatimBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueSemiverbatimBody[@name=OpaqueEnvironmentBody]
+  OpaqueSemiverbatimEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueVerbatimBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueVerbatimBody[@name=OpaqueEnvironmentBody]
+  OpaqueVerbatimEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueVerbatimStarBegin[@name=OpaqueEnvironmentBegin]
+  OpaqueVerbatimStarBody[@name=OpaqueEnvironmentBody]
+  OpaqueVerbatimStarEnd[@name=OpaqueEnvironmentEnd]
+}
+
 @tokens {
   @precedence {
+    OverlayOpen,
+    OverlayClose,
     BeginCommand,
     EndCommand,
     BeamerPartCmd,
@@ -275,6 +350,7 @@ MathEnvironmentName {
     WordToken,
     OperatorToken,
     PunctuationToken,
+    AngleText,
     OtherTextToken
   }
 
@@ -283,6 +359,9 @@ MathEnvironmentName {
 
   BeginCommand { "\\begin{" }
   EndCommand { "\\end{" }
+
+  OverlayOpen[@dialect=beamer] { "<" }
+  OverlayClose[@dialect=beamer] { ">" }
 
   BeamerPartCmd[@dialect=beamer] { "\\part" }
   BeamerSectionLevelCmd[@dialect=beamer] { "\\section" }

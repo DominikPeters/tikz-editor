@@ -20,6 +20,17 @@ function errorRanges(tree: Tree): Array<{ from: number; to: number }> {
   return ranges;
 }
 
+function countNodes(tree: Tree, name: string): number {
+  let count = 0;
+  const cursor = tree.cursor();
+  do {
+    if (cursor.name === name) {
+      count += 1;
+    }
+  } while (cursor.next());
+  return count;
+}
+
 describe("@tikz-editor/lezer-tex", () => {
   it("parses source-backed TeX fragments and structured inline math", () => {
     const source = String.raw`Hello \textbf{world} and $x_1+\lambda=0$.`;
@@ -53,7 +64,7 @@ describe("@tikz-editor/lezer-tex", () => {
     expect(beamerTree.toString()).toContain("OverlaySpecification");
   });
 
-  it("characterizes pre-cutover angle-bracket and opaque parsing", () => {
+  it("keeps overlays Beamer-specific and opaque bodies lexical", () => {
     const angleText = String.raw`Alpha <2-> omega`;
     const opaque = String.raw`\begin{verbatim}
 { % literal opaque source
@@ -64,12 +75,50 @@ describe("@tikz-editor/lezer-tex", () => {
     const beamerAngleTree = beamerDocumentParser.parse(angleText);
     const opaqueTree = beamerDocumentParser.parse(opaque);
 
-    // Stage 1 of the Beamer CST cutover deliberately changes the first
-    // assertion: generic angle text should stop becoming an overlay node.
-    expect(genericAngleTree.toString()).toContain("OverlaySpecification");
+    expect(errorRanges(genericAngleTree)).toEqual([]);
+    expect(genericAngleTree.toString()).not.toContain("OverlaySpecification");
     expect(beamerAngleTree.toString()).toContain("OverlaySpecification");
-    expect(opaqueTree.toString()).not.toContain("OpaqueEnvironmentBody");
-    expect(errorRanges(opaqueTree).length).toBeGreaterThan(0);
+    expect(errorRanges(beamerAngleTree)).toEqual([]);
+    expect(opaqueTree.toString()).toContain(
+      "OpaqueVerbatimEnvironment(OpaqueEnvironmentBegin,OpaqueEnvironmentBody,OpaqueEnvironmentEnd)"
+    );
+    expect(errorRanges(opaqueTree)).toEqual([]);
+  });
+
+  it.each([
+    ["BVerbatim", String.raw`[fontsize=\small]`],
+    ["Verbatim", "[numbers=left]"],
+    ["alltt", ""],
+    ["lstlisting", "[language=TeX]"],
+    ["minted", "[linenos]{tex}"],
+    ["semiverbatim", ""],
+    ["verbatim", ""],
+    ["verbatim*", ""],
+  ])("tokenizes %s through its matching terminator", (name, header) => {
+    const source = String.raw`\begin{${name}}${header}
+{ unmatched
+literal % \end{frame}
+\begin{frame}{not structural}
+\end{${name}}
+\begin{frame}Visible\end{frame}`;
+    const tree = beamerDocumentParser.parse(source);
+
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "OpaqueEnvironmentBody")).toBe(1);
+    expect(countNodes(tree, "BeginEnvironment")).toBe(1);
+    expect(countNodes(tree, "EndEnvironment")).toBe(1);
+  });
+
+  it("keeps an unterminated opaque body through the source limit", () => {
+    const source = String.raw`\begin{verbatim}
+literal % source
+\end{frame}
+\begin{frame}{not structural}`;
+    const tree = beamerDocumentParser.parse(source);
+
+    expect(countNodes(tree, "OpaqueEnvironmentBody")).toBe(1);
+    expect(countNodes(tree, "BeginEnvironment")).toBe(0);
+    expect(errorRanges(tree).length).toBeGreaterThan(0);
   });
 
   it("provides math-fragment and math-environment structure", () => {
