@@ -1,0 +1,649 @@
+import type { SyntaxNodeRef, Tree } from "@lezer/common";
+import type { LRParser } from "@lezer/lr";
+
+import type { Span } from "../../ast/types.js";
+
+const SYNTAX_INDEX_CACHE_LIMIT = 128;
+
+export type TexSyntaxArgumentKind = "required" | "optional" | "overlay";
+
+export interface TexSyntaxControlSequence {
+  readonly name: string;
+  readonly kind: "word" | "symbol";
+  /** The control sequence itself, excluding an immediately following star. */
+  readonly commandSpan: Span;
+  /** The complete command token, including an immediately following star. */
+  readonly span: Span;
+  readonly starSpan: Span | null;
+}
+
+export interface TexSyntaxSpan extends Span {
+  readonly recovered: boolean;
+}
+
+export interface TexSyntaxDelimitedArgument {
+  readonly kind: TexSyntaxArgumentKind;
+  readonly span: Span;
+  readonly contentSpan: Span;
+  readonly complete: boolean;
+  readonly recovered: boolean;
+}
+
+export interface TexSyntaxEnvironmentBoundary {
+  readonly kind: "begin" | "end";
+  readonly name: string;
+  readonly span: Span;
+  readonly commandSpan: Span;
+  readonly nameSpan: Span;
+  readonly recovered: boolean;
+  readonly opaque: boolean;
+}
+
+export interface TexSyntaxOpaqueEnvironment {
+  readonly name: string;
+  readonly span: Span;
+  readonly beginSpan: Span;
+  readonly bodySpan: Span;
+  readonly endSpan: Span | null;
+  readonly recovered: boolean;
+}
+
+export interface TexSyntaxMatchedEnvironment {
+  readonly name: string;
+  readonly begin: TexSyntaxEnvironmentBoundary;
+  readonly end: TexSyntaxEnvironmentBoundary;
+  readonly span: Span;
+  readonly contentSpan: Span;
+}
+
+export interface TexSyntaxIndex {
+  readonly source: string;
+  readonly tree: Tree;
+  readonly controls: readonly TexSyntaxControlSequence[];
+  readonly environmentBoundaries: readonly TexSyntaxEnvironmentBoundary[];
+  readonly comments: readonly TexSyntaxSpan[];
+  readonly whitespace: readonly TexSyntaxSpan[];
+  readonly groups: readonly TexSyntaxDelimitedArgument[];
+  readonly optionalArguments: readonly TexSyntaxDelimitedArgument[];
+  readonly overlayArguments: readonly TexSyntaxDelimitedArgument[];
+  readonly opaqueEnvironments: readonly TexSyntaxOpaqueEnvironment[];
+  readonly errors: readonly TexSyntaxSpan[];
+  readonly controlByStart: ReadonlyMap<number, TexSyntaxControlSequence>;
+  readonly environmentBoundaryByStart: ReadonlyMap<
+    number,
+    TexSyntaxEnvironmentBoundary
+  >;
+  readonly triviaEndByStart: ReadonlyMap<number, number>;
+  readonly commentEndByStart: ReadonlyMap<number, number>;
+  readonly whitespaceEndByStart: ReadonlyMap<number, number>;
+  readonly textEndByStart: ReadonlyMap<number, number>;
+  readonly groupByStart: ReadonlyMap<number, TexSyntaxDelimitedArgument>;
+  readonly optionalArgumentByStart: ReadonlyMap<
+    number,
+    TexSyntaxDelimitedArgument
+  >;
+  readonly overlayArgumentByStart: ReadonlyMap<
+    number,
+    TexSyntaxDelimitedArgument
+  >;
+  controlsIn(range: Span): readonly TexSyntaxControlSequence[];
+  environmentBoundariesIn(
+    range: Span
+  ): readonly TexSyntaxEnvironmentBoundary[];
+  argumentAfter(
+    offset: number,
+    kind: TexSyntaxArgumentKind,
+    limit: number
+  ): TexSyntaxDelimitedArgument | null;
+}
+
+const syntaxIndexCache = new WeakMap<
+  LRParser,
+  Map<string, TexSyntaxIndex>
+>();
+const matchedEnvironmentCache = new WeakMap<
+  TexSyntaxIndex,
+  ReadonlyMap<number, TexSyntaxMatchedEnvironment>
+>();
+
+export function getTexSyntaxIndex(
+  source: string,
+  parser: LRParser
+): TexSyntaxIndex {
+  let parserCache = syntaxIndexCache.get(parser);
+  if (!parserCache) {
+    parserCache = new Map();
+    syntaxIndexCache.set(parser, parserCache);
+  }
+  const cached = parserCache.get(source);
+  if (cached) {
+    return cached;
+  }
+  const index = buildTexSyntaxIndex(source, parser);
+  parserCache.set(source, index);
+  if (parserCache.size > SYNTAX_INDEX_CACHE_LIMIT) {
+    const oldest = parserCache.keys().next().value;
+    if (oldest !== undefined) {
+      parserCache.delete(oldest);
+    }
+  }
+  return index;
+}
+
+export function buildTexSyntaxIndex(
+  source: string,
+  parser: LRParser
+): TexSyntaxIndex {
+  const tree = parser.parse(source);
+  const controlsByStart = new Map<number, TexSyntaxControlSequence>();
+  const boundariesByStart = new Map<
+    number,
+    TexSyntaxEnvironmentBoundary
+  >();
+  const comments: TexSyntaxSpan[] = [];
+  const whitespace: TexSyntaxSpan[] = [];
+  const groups: TexSyntaxDelimitedArgument[] = [];
+  const optionalArguments: TexSyntaxDelimitedArgument[] = [];
+  const overlayArguments: TexSyntaxDelimitedArgument[] = [];
+  const opaqueEnvironments: TexSyntaxOpaqueEnvironment[] = [];
+  const errors: TexSyntaxSpan[] = [];
+  const triviaEndByStart = new Map<number, number>();
+  const commentEndByStart = new Map<number, number>();
+  const whitespaceEndByStart = new Map<number, number>();
+  const textEndByStart = new Map<number, number>();
+  const groupByStart = new Map<number, TexSyntaxDelimitedArgument>();
+  const optionalArgumentByStart = new Map<
+    number,
+    TexSyntaxDelimitedArgument
+  >();
+  const overlayArgumentByStart = new Map<
+    number,
+    TexSyntaxDelimitedArgument
+  >();
+
+  tree.iterate({
+    enter(node) {
+      if (node.type.isError) {
+        errors.push({
+          from: node.from,
+          to: node.to,
+          recovered: true,
+        });
+      }
+    },
+  });
+
+  tree.iterate({
+    enter(node) {
+      if (node.type.isError) {
+        return;
+      }
+      if (node.name === "ControlSequence" || node.name === "IncludeGraphicsCmd") {
+        addControl(source, node, controlsByStart);
+      } else if (node.name === "BeginCommand") {
+        addEnvironmentControl(source, node.from, "begin", controlsByStart);
+      } else if (node.name === "EndCommand") {
+        addEnvironmentControl(source, node.from, "end", controlsByStart);
+      } else if (node.name === "Comment") {
+        const span = syntaxSpan(node);
+        comments.push(span);
+        triviaEndByStart.set(node.from, node.to);
+        commentEndByStart.set(node.from, node.to);
+      } else if (node.name === "Whitespace") {
+        const span = syntaxSpan(node);
+        whitespace.push(span);
+        triviaEndByStart.set(node.from, node.to);
+        whitespaceEndByStart.set(node.from, node.to);
+      } else if (node.name === "Text") {
+        textEndByStart.set(node.from, node.to);
+      } else if (node.name === "Group") {
+        addArgument(
+          source,
+          node,
+          "required",
+          "{",
+          "}",
+          groups,
+          groupByStart,
+          errors
+        );
+      } else if (node.name === "OptionalArgument") {
+        addArgument(
+          source,
+          node,
+          "optional",
+          "[",
+          "]",
+          optionalArguments,
+          optionalArgumentByStart,
+          errors
+        );
+      } else if (node.name === "OverlaySpecification") {
+        addArgument(
+          source,
+          node,
+          "overlay",
+          "<",
+          ">",
+          overlayArguments,
+          overlayArgumentByStart,
+          errors
+        );
+      } else if (
+        node.name === "BeginEnvironment" ||
+        node.name === "BeginMathEnvironment"
+      ) {
+        addEnvironmentBoundary(
+          source,
+          node,
+          "begin",
+          false,
+          boundariesByStart,
+          controlsByStart,
+          errors
+        );
+      } else if (
+        node.name === "EndEnvironment" ||
+        node.name === "EndMathEnvironment"
+      ) {
+        addEnvironmentBoundary(
+          source,
+          node,
+          "end",
+          false,
+          boundariesByStart,
+          controlsByStart,
+          errors
+        );
+      } else if (node.name === "OpaqueEnvironment") {
+        const opaque = opaqueEnvironmentFromSyntax(source, node, errors);
+        if (opaque) {
+          opaqueEnvironments.push(opaque);
+          addOpaqueBoundary(
+            source,
+            opaque,
+            "begin",
+            boundariesByStart,
+            controlsByStart
+          );
+          if (opaque.endSpan) {
+            addOpaqueBoundary(
+              source,
+              opaque,
+              "end",
+              boundariesByStart,
+              controlsByStart
+            );
+          }
+        }
+      }
+      return;
+    },
+  });
+
+  const controls = sortedValues(controlsByStart);
+  const environmentBoundaries = sortedValues(boundariesByStart);
+  comments.sort(compareSpans);
+  whitespace.sort(compareSpans);
+  groups.sort(compareArgumentSpans);
+  optionalArguments.sort(compareArgumentSpans);
+  overlayArguments.sort(compareArgumentSpans);
+  opaqueEnvironments.sort((left, right) =>
+    compareSpans(left.span, right.span)
+  );
+  errors.sort(compareSpans);
+
+  const index: TexSyntaxIndex = {
+    source,
+    tree,
+    controls,
+    environmentBoundaries,
+    comments,
+    whitespace,
+    groups,
+    optionalArguments,
+    overlayArguments,
+    opaqueEnvironments,
+    errors,
+    controlByStart: controlsByStart,
+    environmentBoundaryByStart: boundariesByStart,
+    triviaEndByStart,
+    commentEndByStart,
+    whitespaceEndByStart,
+    textEndByStart,
+    groupByStart,
+    optionalArgumentByStart,
+    overlayArgumentByStart,
+    controlsIn(range) {
+      return valuesInRange(controls, range, (control) => control.span.from);
+    },
+    environmentBoundariesIn(range) {
+      return valuesInRange(
+        environmentBoundaries,
+        range,
+        (boundary) => boundary.span.from
+      );
+    },
+    argumentAfter(offset, kind, limit) {
+      if (offset < 0 || offset > limit || limit > source.length) {
+        return null;
+      }
+      let cursor = offset;
+      for (
+        let triviaEnd = triviaEndByStart.get(cursor);
+        triviaEnd !== undefined && triviaEnd <= limit;
+        triviaEnd = triviaEndByStart.get(cursor)
+      ) {
+        cursor = triviaEnd;
+      }
+      const argument = argumentMapForKind(
+        kind,
+        groupByStart,
+        optionalArgumentByStart,
+        overlayArgumentByStart
+      ).get(cursor);
+      return argument && argument.span.to <= limit ? argument : null;
+    },
+  };
+  return index;
+}
+
+export function matchTexSyntaxEnvironments(
+  index: TexSyntaxIndex
+): ReadonlyMap<number, TexSyntaxMatchedEnvironment> {
+  const cached = matchedEnvironmentCache.get(index);
+  if (cached) {
+    return cached;
+  }
+  const matched = new Map<number, TexSyntaxMatchedEnvironment>();
+  const stack: TexSyntaxEnvironmentBoundary[] = [];
+  for (const boundary of index.environmentBoundaries) {
+    if (boundary.kind === "begin") {
+      stack.push(boundary);
+      continue;
+    }
+    const begin = stack.at(-1);
+    if (begin?.name !== boundary.name) {
+      continue;
+    }
+    stack.pop();
+    if (begin.recovered || boundary.recovered) {
+      continue;
+    }
+    matched.set(begin.span.from, {
+      name: begin.name,
+      begin,
+      end: boundary,
+      span: { from: begin.span.from, to: boundary.span.to },
+      contentSpan: { from: begin.span.to, to: boundary.span.from },
+    });
+  }
+  matchedEnvironmentCache.set(index, matched);
+  return matched;
+}
+
+function addControl(
+  source: string,
+  node: SyntaxNodeRef,
+  controlsByStart: Map<number, TexSyntaxControlSequence>
+): void {
+  if (controlsByStart.has(node.from)) {
+    return;
+  }
+  const token = source.slice(node.from, node.to);
+  const word = /^\\([A-Za-z@]+)$/u.exec(token);
+  const symbol = /^\\([^\n\rA-Za-z@])$/u.exec(token);
+  const name = word?.[1] ?? symbol?.[1];
+  if (!name) {
+    return;
+  }
+  const starSpan =
+    word && source[node.to] === "*"
+      ? { from: node.to, to: node.to + 1 }
+      : null;
+  controlsByStart.set(node.from, {
+    name,
+    kind: word ? "word" : "symbol",
+    commandSpan: { from: node.from, to: node.to },
+    span: { from: node.from, to: starSpan?.to ?? node.to },
+    starSpan,
+  });
+}
+
+function addEnvironmentControl(
+  source: string,
+  from: number,
+  name: "begin" | "end",
+  controlsByStart: Map<number, TexSyntaxControlSequence>
+): void {
+  const to = from + name.length + 1;
+  if (
+    controlsByStart.has(from) ||
+    source.slice(from, to) !== `\\${name}`
+  ) {
+    return;
+  }
+  controlsByStart.set(from, {
+    name,
+    kind: "word",
+    commandSpan: { from, to },
+    span: { from, to },
+    starSpan: null,
+  });
+}
+
+function addArgument(
+  source: string,
+  node: SyntaxNodeRef,
+  kind: TexSyntaxArgumentKind,
+  open: string,
+  close: string,
+  target: TexSyntaxDelimitedArgument[],
+  byStart: Map<number, TexSyntaxDelimitedArgument>,
+  errors: readonly TexSyntaxSpan[]
+): void {
+  if (source[node.from] !== open || byStart.has(node.from)) {
+    return;
+  }
+  const complete = node.to > node.from && source[node.to - 1] === close;
+  const argument: TexSyntaxDelimitedArgument = {
+    kind,
+    span: { from: node.from, to: node.to },
+    contentSpan: {
+      from: Math.min(node.to, node.from + 1),
+      to: Math.max(node.from + 1, node.to - (complete ? 1 : 0)),
+    },
+    complete,
+    recovered: !complete || spanHasError(node, errors),
+  };
+  target.push(argument);
+  byStart.set(node.from, argument);
+}
+
+function addEnvironmentBoundary(
+  source: string,
+  node: SyntaxNodeRef,
+  kind: "begin" | "end",
+  opaque: boolean,
+  boundariesByStart: Map<number, TexSyntaxEnvironmentBoundary>,
+  controlsByStart: Map<number, TexSyntaxControlSequence>,
+  errors: readonly TexSyntaxSpan[]
+): void {
+  if (boundariesByStart.has(node.from)) {
+    return;
+  }
+  const prefix = `\\${kind}{`;
+  if (!source.startsWith(prefix, node.from)) {
+    return;
+  }
+  const contentFrom = node.from + prefix.length;
+  const complete = node.to > contentFrom && source[node.to - 1] === "}";
+  const rawContentTo = Math.max(contentFrom, node.to - (complete ? 1 : 0));
+  const nameSpan = trimSourceSpan(source, {
+    from: contentFrom,
+    to: rawContentTo,
+  });
+  const name = source.slice(nameSpan.from, nameSpan.to);
+  if (!name) {
+    return;
+  }
+  const commandTo = node.from + kind.length + 1;
+  const boundary: TexSyntaxEnvironmentBoundary = {
+    kind,
+    name,
+    span: { from: node.from, to: node.to },
+    commandSpan: { from: node.from, to: commandTo },
+    nameSpan,
+    recovered: !complete || spanHasError(node, errors),
+    opaque,
+  };
+  boundariesByStart.set(node.from, boundary);
+  addEnvironmentControl(source, node.from, kind, controlsByStart);
+}
+
+function opaqueEnvironmentFromSyntax(
+  source: string,
+  node: SyntaxNodeRef,
+  errors: readonly TexSyntaxSpan[]
+): TexSyntaxOpaqueEnvironment | null {
+  const environment = node.node.firstChild;
+  const begin = environment?.getChild("OpaqueEnvironmentBegin");
+  const body = environment?.getChild("OpaqueEnvironmentBody");
+  const end = environment?.getChild("OpaqueEnvironmentEnd");
+  if (!begin) {
+    return null;
+  }
+  const match = /^\\begin\{([^}]+)\}$/u.exec(
+    source.slice(begin.from, begin.to)
+  );
+  const name = match?.[1];
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    span: { from: node.from, to: node.to },
+    beginSpan: { from: begin.from, to: begin.to },
+    bodySpan: {
+      from: body?.from ?? begin.to,
+      to: body?.to ?? begin.to,
+    },
+    endSpan: end ? { from: end.from, to: end.to } : null,
+    recovered: !end || spanHasError(node, errors),
+  };
+}
+
+function addOpaqueBoundary(
+  source: string,
+  opaque: TexSyntaxOpaqueEnvironment,
+  kind: "begin" | "end",
+  boundariesByStart: Map<number, TexSyntaxEnvironmentBoundary>,
+  controlsByStart: Map<number, TexSyntaxControlSequence>
+): void {
+  const span = kind === "begin" ? opaque.beginSpan : opaque.endSpan;
+  if (!span) {
+    return;
+  }
+  const nameFrom = span.from + kind.length + 2;
+  const nameSpan = {
+    from: nameFrom,
+    to: span.to - 1,
+  };
+  boundariesByStart.set(span.from, {
+    kind,
+    name: opaque.name,
+    span,
+    commandSpan: {
+      from: span.from,
+      to: span.from + kind.length + 1,
+    },
+    nameSpan,
+    recovered: false,
+    opaque: true,
+  });
+  addEnvironmentControl(source, span.from, kind, controlsByStart);
+}
+
+function syntaxSpan(node: SyntaxNodeRef): TexSyntaxSpan {
+  return {
+    from: node.from,
+    to: node.to,
+    recovered: false,
+  };
+}
+
+function spanHasError(
+  node: SyntaxNodeRef,
+  errors: readonly TexSyntaxSpan[]
+): boolean {
+  return errors.some(
+    (error) => error.from >= node.from && error.to <= node.to
+  );
+}
+
+function trimSourceSpan(source: string, span: Span): Span {
+  let from = span.from;
+  let to = span.to;
+  while (from < to && /\s/u.test(source[from] ?? "")) {
+    from += 1;
+  }
+  while (to > from && /\s/u.test(source[to - 1] ?? "")) {
+    to -= 1;
+  }
+  return { from, to };
+}
+
+function argumentMapForKind(
+  kind: TexSyntaxArgumentKind,
+  groups: ReadonlyMap<number, TexSyntaxDelimitedArgument>,
+  optional: ReadonlyMap<number, TexSyntaxDelimitedArgument>,
+  overlay: ReadonlyMap<number, TexSyntaxDelimitedArgument>
+): ReadonlyMap<number, TexSyntaxDelimitedArgument> {
+  if (kind === "required") {
+    return groups;
+  }
+  return kind === "optional" ? optional : overlay;
+}
+
+function sortedValues<T>(values: ReadonlyMap<number, T>): T[] {
+  return [...values.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, value]) => value);
+}
+
+function valuesInRange<T>(
+  values: readonly T[],
+  range: Span,
+  position: (value: T) => number
+): readonly T[] {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (position(values[middle]) < range.from) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  const result: T[] = [];
+  for (let index = low; index < values.length; index += 1) {
+    const value = values[index];
+    if (position(value) >= range.to) {
+      break;
+    }
+    result.push(value);
+  }
+  return result;
+}
+
+function compareSpans(left: Span, right: Span): number {
+  return left.from - right.from || left.to - right.to;
+}
+
+function compareArgumentSpans(
+  left: TexSyntaxDelimitedArgument,
+  right: TexSyntaxDelimitedArgument
+): number {
+  return compareSpans(left.span, right.span);
+}

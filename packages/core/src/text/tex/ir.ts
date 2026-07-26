@@ -1,5 +1,8 @@
 import type { SyntaxNodeRef } from "@lezer/common";
-import { texDocumentParser, texFragmentParser } from "@tikz-editor/lezer-tex";
+import {
+  beamerDocumentParser,
+  texFragmentParser,
+} from "@tikz-editor/lezer-tex";
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
@@ -17,6 +20,11 @@ import {
   type TexHBoxOffsetY,
   type TexLength,
 } from "./coordinates.js";
+import {
+  getTexSyntaxIndex,
+  matchTexSyntaxEnvironments,
+  type TexSyntaxIndex,
+} from "./syntax-index.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
 export type TexAlignmentProfile = "latex-declaration" | "latex-quote";
@@ -786,47 +794,10 @@ const luaLatexNormalFontState: SimpleTexFontState = {
   shape: "upright",
 };
 export const articleListLeftMarginEmByDepth = [2.5, 2.2, 1.87, 1.7, 1, 1] as const;
-const SIMPLE_TEX_SYNTAX_INDEX_CACHE_LIMIT = 128;
-
-interface SimpleTexSyntaxIndex {
-  readonly commandByStart: ReadonlyMap<
-    number,
-    {
-      readonly name: string;
-      readonly end: number;
-      readonly kind: "word" | "symbol";
-    }
-  >;
-  readonly triviaEndByStart: ReadonlyMap<number, number>;
-  readonly commentEndByStart: ReadonlyMap<number, number>;
-  readonly whitespaceEndByStart: ReadonlyMap<number, number>;
-  readonly textEndByStart: ReadonlyMap<number, number>;
-  readonly mathByStart: ReadonlyMap<
-    number,
-    SimpleTexMathNode | SimpleTexDisplayMathNode
-  >;
-  readonly groupEndByStart: ReadonlyMap<number, number>;
-  readonly optionalArgumentEndByStart: ReadonlyMap<number, number>;
-  readonly environmentByStart: ReadonlyMap<
-    number,
-    {
-      readonly name: string;
-      readonly beginEnd: number;
-      readonly contentEnd: number;
-      readonly end: number;
-    }
-  >;
-  readonly environmentBoundaryByStart: ReadonlyMap<
-    number,
-    {
-      readonly boundary: "begin" | "end";
-      readonly name: string;
-      readonly end: number;
-    }
-  >;
-}
-
-const simpleTexSyntaxIndexCache = new Map<string, SimpleTexSyntaxIndex>();
+const simpleTexMathBySyntaxIndex = new WeakMap<
+  TexSyntaxIndex,
+  ReadonlyMap<number, SimpleTexMathNode | SimpleTexDisplayMathNode>
+>();
 
 export interface SimpleTexParagraphIrOptions {
   readonly listLeftMarginEmByDepth?: readonly number[];
@@ -1014,7 +985,10 @@ export function analyzeSimpleTexResources(
   text: string
 ): SimpleTexResourceManifest {
   const graphics: SimpleTexGraphicsResource[] = [];
-  const tree = texDocumentParser.parse(text);
+  // Resource discovery is a document-level superset operation: Beamer's
+  // overlay-qualified \includegraphics form must remain discoverable while
+  // all actual command and argument boundaries still come from the CST.
+  const tree = getTexSyntaxIndex(text, beamerDocumentParser).tree;
   tree.iterate({
     enter(node) {
       if (node.name !== "IncludeGraphicsCommand") {
@@ -1181,8 +1155,8 @@ function scanSimpleTexIrNodes(
   resolveColorAlias?: ColorAliasResolver
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
-  const syntax = simpleTexSyntaxIndex(text);
-  const mathSyntaxByStart = syntax.mathByStart;
+  const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  const mathSyntaxByStart = simpleTexMathNodes(syntax);
   let unsupportedCommand = false;
   let index = 0;
 
@@ -1427,13 +1401,13 @@ function scanSimpleTexIrNodes(
       }
 
       const end = scanUnsupportedControlSequenceEnd(text, index);
-      const command = syntax.commandByStart.get(index);
+      const command = syntax.controlByStart.get(index);
       nodes.push({
         kind: "literal",
         text: text.slice(index, end),
         reason: "unsupported-command",
         detail: command
-          ? text.slice(index, command.end)
+          ? text.slice(index, command.span.to)
           : text.slice(index, Math.min(end, index + 2)),
         sourceStart,
         sourceEnd: sourceOffset + end,
@@ -1620,116 +1594,18 @@ function appendSimpleTexTextNodes(
   }
 }
 
-function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
-  const cached = simpleTexSyntaxIndexCache.get(text);
+function simpleTexMathNodes(
+  syntax: TexSyntaxIndex
+): ReadonlyMap<number, SimpleTexMathNode | SimpleTexDisplayMathNode> {
+  const cached = simpleTexMathBySyntaxIndex.get(syntax);
   if (cached) {
     return cached;
   }
 
   const byStart = new Map<number, SimpleTexMathNode | SimpleTexDisplayMathNode>();
-  const commandByStart = new Map<
-    number,
-    {
-      readonly name: string;
-      readonly end: number;
-      readonly kind: "word" | "symbol";
-    }
-  >();
-  const triviaEndByStart = new Map<number, number>();
-  const commentEndByStart = new Map<number, number>();
-  const whitespaceEndByStart = new Map<number, number>();
-  const textEndByStart = new Map<number, number>();
-  const groupEndByStart = new Map<number, number>();
-  const optionalArgumentEndByStart = new Map<number, number>();
-  const environmentByStart = new Map<
-    number,
-    {
-      readonly name: string;
-      readonly beginEnd: number;
-      readonly contentEnd: number;
-      readonly end: number;
-    }
-  >();
-  const environmentBoundaryByStart = new Map<
-    number,
-    {
-      readonly boundary: "begin" | "end";
-      readonly name: string;
-      readonly end: number;
-    }
-  >();
-  const tree = texFragmentParser.parse(text);
-  tree.iterate({
+  syntax.tree.iterate({
     enter(node) {
-      if (node.name === "GenericCommand" || node.name === "IncludeGraphicsCmd") {
-        const source = text.slice(node.from, node.to);
-        const word = /^\\([A-Za-z@]+)$/u.exec(source);
-        const symbol = /^\\([^\n\rA-Za-z@])$/u.exec(source);
-        const name = word?.[1] ?? symbol?.[1];
-        if (name) {
-          commandByStart.set(node.from, {
-            name,
-            end: node.to,
-            kind: word ? "word" : "symbol",
-          });
-        }
-      } else if (node.name === "BeginCommand" || node.name === "EndCommand") {
-        const name = node.name === "BeginCommand" ? "begin" : "end";
-        commandByStart.set(node.from, {
-          name,
-          end: node.from + name.length + 1,
-          kind: "word",
-        });
-      } else if (node.name === "Comment") {
-        triviaEndByStart.set(node.from, node.to);
-        commentEndByStart.set(node.from, node.to);
-      } else if (node.name === "Whitespace") {
-        triviaEndByStart.set(node.from, node.to);
-        whitespaceEndByStart.set(node.from, node.to);
-      } else if (node.name === "Text") {
-        textEndByStart.set(node.from, node.to);
-      } else if (
-        node.name === "Group" &&
-        text[node.from] === "{" &&
-        text[node.to - 1] === "}"
-      ) {
-        groupEndByStart.set(node.from, node.to);
-      } else if (
-        node.name === "OptionalArgument" &&
-        text[node.from] === "[" &&
-        text[node.to - 1] === "]"
-      ) {
-        optionalArgumentEndByStart.set(node.from, node.to);
-      } else if (node.name === "Environment") {
-        const begin = node.node.getChild("BeginEnvironment");
-        const end = node.node.getChild("EndEnvironment");
-        const beginMatch = begin
-          ? /^\\begin\{([^}]+)\}$/u.exec(text.slice(begin.from, begin.to))
-          : null;
-        const endMatch = end
-          ? /^\\end\{([^}]+)\}$/u.exec(text.slice(end.from, end.to))
-          : null;
-        const name = beginMatch?.[1];
-        if (begin && end && name && endMatch?.[1] === name) {
-          environmentByStart.set(node.from, {
-            name,
-            beginEnd: begin.to,
-            contentEnd: end.from,
-            end: node.to,
-          });
-          environmentBoundaryByStart.set(begin.from, {
-            boundary: "begin",
-            name,
-            end: begin.to,
-          });
-          environmentBoundaryByStart.set(end.from, {
-            boundary: "end",
-            name,
-            end: end.to,
-          });
-        }
-      }
-      const math = simpleTexMathNodeFromSyntax(text, node);
+      const math = simpleTexMathNodeFromSyntax(syntax.source, node);
       if (math) {
         byStart.set(math.sourceStart, math);
         return false;
@@ -1737,26 +1613,8 @@ function simpleTexSyntaxIndex(text: string): SimpleTexSyntaxIndex {
       return;
     },
   });
-  const index: SimpleTexSyntaxIndex = {
-    commandByStart,
-    triviaEndByStart,
-    commentEndByStart,
-    whitespaceEndByStart,
-    textEndByStart,
-    mathByStart: byStart,
-    groupEndByStart,
-    optionalArgumentEndByStart,
-    environmentByStart,
-    environmentBoundaryByStart,
-  };
-  simpleTexSyntaxIndexCache.set(text, index);
-  if (simpleTexSyntaxIndexCache.size > SIMPLE_TEX_SYNTAX_INDEX_CACHE_LIMIT) {
-    const oldest = simpleTexSyntaxIndexCache.keys().next().value;
-    if (oldest !== undefined) {
-      simpleTexSyntaxIndexCache.delete(oldest);
-    }
-  }
-  return index;
+  simpleTexMathBySyntaxIndex.set(syntax, byStart);
+  return byStart;
 }
 
 function simpleTexMathNodeFromSyntax(
@@ -1993,7 +1851,10 @@ function scanSimpleTexProseControl(
   readonly unsupportedCommand: boolean;
 } | null {
   const sourceStart = sourceOffset + start;
-  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+    start
+  );
+  const commandEnd = command?.commandSpan.to ?? start;
   const escaped = command?.kind === "symbol" ? command.name : undefined;
   const escapedReplacements: Readonly<Record<string, string>> = {
     "%": "%",
@@ -2011,9 +1872,9 @@ function scanSimpleTexProseControl(
         kind: "text",
         text: escapedReplacement,
         sourceStart,
-        sourceEnd: sourceOffset + (command?.end ?? start),
+        sourceEnd: sourceOffset + commandEnd,
       },
-      end: command?.end ?? start,
+      end: commandEnd,
       unsupportedCommand: false,
     };
   }
@@ -2021,11 +1882,11 @@ function scanSimpleTexProseControl(
     return {
       node: {
         kind: "space",
-        text: text.slice(start, command?.end ?? start),
+        text: text.slice(start, commandEnd),
         sourceStart,
-        sourceEnd: sourceOffset + (command?.end ?? start),
+        sourceEnd: sourceOffset + commandEnd,
       },
-      end: command?.end ?? start,
+      end: commandEnd,
       unsupportedCommand: false,
     };
   }
@@ -2478,12 +2339,13 @@ function scanSimpleTexBoxEnvironment(
   end: number;
   unsupportedCommand: boolean;
 } | null {
-  const environment = simpleTexSyntaxIndex(text).environmentByStart.get(start);
+  const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  const environment = matchTexSyntaxEnvironments(syntax).get(start);
   if (environment?.name !== "minipage") {
     return null;
   }
 
-  let cursor = skipSimpleTexControlWordSpaces(text, environment.beginEnd);
+  let cursor = skipSimpleTexControlWordSpaces(text, environment.begin.span.to);
   let alignment: SimpleTexBoxAlignment = "center";
   if (text[cursor] === "[") {
     const optionEnd = findBalancedSimpleTexOptionalArgumentEnd(text, cursor);
@@ -2530,7 +2392,7 @@ function scanSimpleTexBoxEnvironment(
   const body = buildSimpleTexParagraphIrForRange(
     text,
     contentStart,
-    environment.contentEnd,
+    environment.contentSpan.to,
     sourceOffset,
     resolveColorAlias
   );
@@ -2539,19 +2401,19 @@ function scanSimpleTexBoxEnvironment(
   return {
     node: {
       kind: "box",
-      text: text.slice(start, environment.end),
+      text: text.slice(start, environment.span.to),
       command: "minipage",
       sourceStart: sourceOffset + start,
-      sourceEnd: sourceOffset + environment.end,
+      sourceEnd: sourceOffset + environment.span.to,
       width: parsedWidth ?? texLength(0),
       ...(height !== undefined ? { height } : {}),
       alignment,
-      content: text.slice(contentStart, environment.contentEnd),
+      content: text.slice(contentStart, environment.contentSpan.to),
       contentStart: sourceOffset + contentStart,
-      contentEnd: sourceOffset + environment.contentEnd,
+      contentEnd: sourceOffset + environment.contentSpan.to,
       body,
     },
-    end: environment.end,
+    end: environment.span.to,
     unsupportedCommand,
   };
 }
@@ -2571,18 +2433,24 @@ function scanSimpleTexEnvironmentBoundary(
   text: string,
   start: number
 ): { boundary: "begin" | "end"; name: SimpleTexEnvironmentName; end: number } | null {
-  const boundary =
-    simpleTexSyntaxIndex(text).environmentBoundaryByStart.get(start);
+  const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  const boundary = syntax.environmentBoundaryByStart.get(start);
+  const matched = [...matchTexSyntaxEnvironments(syntax).values()].some(
+    (environment) =>
+      environment.begin.span.from === start ||
+      environment.end.span.from === start
+  );
   if (
     boundary &&
+    matched &&
     (isSimpleTexQuoteEnvironmentName(boundary.name) ||
       isSimpleTexTrivlistEnvironmentName(boundary.name) ||
       isSimpleTexListEnvironmentName(boundary.name))
   ) {
     return {
-      boundary: boundary.boundary,
+      boundary: boundary.kind,
       name: boundary.name,
-      end: boundary.end,
+      end: boundary.span.to,
     };
   }
   return null;
@@ -3571,10 +3439,13 @@ function scanSimpleTexAccentCommand(
   start: number,
   sourceOffset: number
 ): { readonly node: SimpleTexTextNode; readonly end: number } | null {
-  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+    start
+  );
   if (!command) {
     return null;
   }
+  const commandEnd = command.commandSpan.to;
   if (command.kind === "word") {
     const replacement = SIMPLE_TEX_LETTER_COMMANDS[command.name];
     if (replacement) {
@@ -3583,9 +3454,9 @@ function scanSimpleTexAccentCommand(
           kind: "text",
           text: replacement,
           sourceStart: sourceOffset + start,
-          sourceEnd: sourceOffset + command.end,
+          sourceEnd: sourceOffset + commandEnd,
         },
-        end: command.end,
+        end: commandEnd,
       };
     }
   }
@@ -3594,7 +3465,7 @@ function scanSimpleTexAccentCommand(
   if (!mark) {
     return null;
   }
-  let cursor = skipSimpleTexControlWordSpaces(text, command.end);
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
   let base: string;
   if (text[cursor] === "{") {
     const groupEnd = findBalancedSimpleTexGroupEnd(text, cursor);
@@ -3665,21 +3536,30 @@ function scanSimpleTexGroup(
 }
 
 function findBalancedSimpleTexGroupEnd(text: string, start: number): number | null {
-  return simpleTexSyntaxIndex(text).groupEndByStart.get(start) ?? null;
+  const argument = getTexSyntaxIndex(
+    text,
+    texFragmentParser
+  ).groupByStart.get(start);
+  return argument?.complete ? argument.span.to : null;
 }
 
 function findBalancedSimpleTexOptionalArgumentEnd(
   text: string,
   start: number
 ): number | null {
-  return (
-    simpleTexSyntaxIndex(text).optionalArgumentEndByStart.get(start) ?? null
-  );
+  const argument = getTexSyntaxIndex(
+    text,
+    texFragmentParser
+  ).optionalArgumentByStart.get(start);
+  return argument?.complete ? argument.span.to : null;
 }
 
 function skipSimpleTexControlWordSpaces(text: string, start: number): number {
   let index = start;
-  const triviaEndByStart = simpleTexSyntaxIndex(text).triviaEndByStart;
+  const triviaEndByStart = getTexSyntaxIndex(
+    text,
+    texFragmentParser
+  ).triviaEndByStart;
   for (
     let triviaEnd = triviaEndByStart.get(index);
     triviaEnd !== undefined;
@@ -3694,23 +3574,26 @@ export function scanSimpleTexLineBreak(
   text: string,
   start: number
 ): { end: number; lineLeading?: string; priority?: 0 | 1 | 2 | 3 | 4 } | null {
-  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+    start
+  );
   if (!command) {
     return null;
   }
+  const commandEnd = command.commandSpan.to;
 
   if (command.kind === "word" && command.name === "newline") {
-    return { end: command.end };
+    return { end: commandEnd };
   }
   if (command.kind === "word" && command.name === "linebreak") {
-    const option = scanSimpleTexOptionalBracketArgument(text, command.end);
+    const option = scanSimpleTexOptionalBracketArgument(text, commandEnd);
     const priority = option && /^[0-4]$/u.test(option.content.trim())
       ? Number.parseInt(option.content.trim(), 10) as 0 | 1 | 2 | 3 | 4
       : 4;
     return {
       end: priority !== 4 || option?.content.trim() === "4"
-        ? option?.end ?? command.end
-        : command.end,
+        ? option?.end ?? commandEnd
+        : commandEnd,
       priority,
     };
   }
@@ -3718,7 +3601,7 @@ export function scanSimpleTexLineBreak(
     return null;
   }
 
-  let end = command.end;
+  let end = commandEnd;
   // LaTeX's starred form suppresses a page break after this forced line. The
   // distinction is irrelevant inside a single node paragraph, but the star
   // is still command syntax and must not leak into painted prose.
@@ -3776,20 +3659,25 @@ function scanSimpleTexAlignmentCommand(
 }
 
 function scanSimpleTexControlWord(text: string, start: number, word: string): number | null {
-  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+    start
+  );
   return command?.kind === "word" && command.name === word
-    ? command.end
+    ? command.commandSpan.to
     : null;
 }
 
 function scanUnsupportedControlSequenceEnd(text: string, start: number): number {
-  const command = simpleTexSyntaxIndex(text).commandByStart.get(start);
+  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+    start
+  );
   if (!command) {
     return Math.min(text.length, start + 2);
   }
+  const commandEnd = command.commandSpan.to;
   return command.kind === "word"
-    ? scanUnsupportedControlSequenceArgumentsEnd(text, command.end)
-    : command.end;
+    ? scanUnsupportedControlSequenceArgumentsEnd(text, commandEnd)
+    : commandEnd;
 }
 
 function scanUnsupportedControlSequenceArgumentsEnd(text: string, start: number): number {
