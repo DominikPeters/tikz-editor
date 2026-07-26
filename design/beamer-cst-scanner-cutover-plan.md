@@ -1,12 +1,11 @@
 # Beamer CST Scanner Cutover Plan
 
-**Status:** approved for implementation with review amendments (2026-07-26)
+**Status:** implemented and verified (2026-07-26)
 
 **Scope:** scanner/frontend infrastructure only
 
-**Integration gate:** fold the final architecture and implementation status
-into `design/beamer-editor.md` only after the cutover and all deletion gates
-are complete.
+**Integration gate:** complete. The final architecture and implementation
+status are folded into `design/beamer-editor.md`.
 
 ## Decision
 
@@ -41,6 +40,31 @@ shared immutable TeX syntax index
 Beamer retains its own semantic model. This cutover removes duplicated
 lexical interpretation; it does not move frames, overlays, navigation,
 theorem counters, or theme semantics into the generic text IR.
+
+## Implementation result
+
+The direct cutover landed in commits `625473f3` through `c4bb78de`.
+
+- `packages/core/src/text/tex/syntax-index.ts` is the shared immutable,
+  parser-selected CST syntax service used by generic TeX and Beamer.
+- Prepared Beamer revisions explicitly own one Beamer-dialect syntax context
+  shared by document, content, overlay, theorem, and rendering passes.
+- Opaque families are recognized by an atomic parser-level external token.
+  This is the equivalent shared lexical mechanism allowed by the plan: it
+  consumes the complete environment before ordinary TeX lexing, retains an
+  unterminated recovery token/error, and avoids the performance and recovery
+  problems found with a stateful body-only prototype.
+- Generic and Beamer angle-bracket ownership is dialect correct.
+- The raw Beamer scanner, opaque fallback, manual balanced-value readers, and
+  manual frame-option splitter are deleted; there is no dual path.
+- The full repository suite, checked-in corpus fixtures, all 20 KKT frames,
+  and the 28-theme/3-frame conformance matrix pass. The matrix reports 84/84
+  structural comparisons passing.
+- The committed post-cutover latency artifact is
+  `design/benchmarks/beamer-frontend-post-cst-cutover.json`: scan is
+  7.792 ms median / 9.331 ms p95 and prepare is
+  7.733 ms median / 8.885 ms p95 on the recorded profile, inside the agreed
+  budgets.
 
 ## Why cut over now
 

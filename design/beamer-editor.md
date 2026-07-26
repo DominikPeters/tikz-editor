@@ -134,11 +134,13 @@ type DocumentRoot =
   | { kind: "section"; span: Span; level: 1 | 2; title: Span };
 ```
 
-The frame scanner is the same delimiter-matching approach as
-`scanTikzFigures` with `\begin{frame}`/`\end{frame}` delimiters; it must
-also collect `\section`/`\subsection` commands between frames, because
-chrome (navigation, section pages) depends on them. Frames nest
-tikzpictures, so the inventory becomes shallowly hierarchical.
+The frame inventory is a Beamer semantic projection over the shared TeX CST
+syntax index. It consumes flat, source-ordered environment boundaries and
+performs name-aware `frame` pairing itself, so malformed unrelated
+environments cannot hide a later frame. The same projection collects
+`\section`/`\subsection` commands between frames, because chrome (navigation,
+section pages) depends on them. Frames nest tikzpictures, so the inventory
+becomes shallowly hierarchical.
 
 This refactor lands before **app integration**, not before the headless Beamer
 renderer. The core renderer can scan and render source-backed frames without
@@ -174,7 +176,10 @@ The preamble is never parsed fully; it is *mined* best-effort for:
 - `\AtBeginSection` blocks, recognized against known shapes (TOC frame,
   section page) rather than executed.
 
-Everything else in the preamble is opaque and preserved untouched.
+Everything else in the preamble is semantically opaque and preserved
+untouched. The whole source is still parsed once by the shared tolerant TeX
+grammar; "mining" describes the selective Beamer projection, not a second
+raw-source lexer.
 
 ## Frame Content Model
 
@@ -294,15 +299,50 @@ and box construction.
 
 Beamer's document model is a separate semantic projection, not another text
 IR. It owns name-aware frame/environment pairing, preamble and navigation
-models, overlay semantics, and recovery through malformed or opaque content.
-At present `packages/core/src/beamer/scan.ts` still obtains its tokens and
-balanced arguments from a raw-source scanner. This is a transitional syntax
-duplication, not the intended final boundary. The target is **one CST, multiple
-semantic IRs**: the Beamer projection consumes a shared CST-backed token/index
-service for control sequences, comments, groups, optional arguments, and
-source spans, while retaining its own semantic pairing and recovery policy.
-Direct source scanning is then confined to explicit recovery for malformed or
-opaque regions that the CST cannot represent faithfully.
+models, overlay semantics, and recovery policy. The implemented boundary is
+**one CST, multiple semantic IRs**:
+
+```text
+Lezer TeX CST (caller-selected parser/dialect)
+        |
+        v
+shared immutable TeX syntax index
+        |
+        +-- generic text IR
+        |
+        +-- Beamer semantic model
+              frames, sections, themes, overlays,
+              navigation and theorem occurrences
+```
+
+`packages/core/src/text/tex/syntax-index.ts` is the sole structural syntax
+service. It exposes source-backed control sequences, comments, whitespace,
+required/optional/overlay arguments, flat environment boundaries, parser
+errors, and binary-search range queries. Generic text lowering and Beamer
+consume that same contract. Generic callers may use its bounded parser-keyed
+cache; parser identity (and therefore top rule/dialect) is part of the cache
+identity. A prepared Beamer revision instead builds one Beamer-dialect
+`BeamerSyntaxContext` explicitly and passes it through document, frame-body,
+overlay, theorem, and render preparation, avoiding both cross-dialect cache
+reuse and per-frame reparsing.
+
+Opaque/verbatim-family handling occurs in the Lezer lexical layer, before
+ordinary comment, group, command, or environment tokenization. The external
+tokenizer recognizes the supported opaque family and emits one atomic token
+from its `\begin{...}` through the matching terminator; an unterminated body
+is retained through the source limit with a parser recovery error. The syntax
+index projects exact begin/body/end spans from that token. Thus literal `%`,
+unmatched braces, or frame-looking text in the body cannot become structural
+tokens, and Beamer has no raw-source fallback for these regions.
+
+The shared index exposes flat environment boundaries rather than imposing CST
+nesting on semantic consumers. Beamer therefore retains its deliberate
+name-aware pairing and edit-state recovery: incomplete frames remain in the
+inventory, unmatched or nested frame ends are diagnosed, mismatched unrelated
+environments do not suppress later frames, and argument association is bounded
+by the current frame/document limit. Semantic parsers over already-delimited
+values—overlay interval decoding, dimensions, theorem options, macro meaning,
+and math atoms—remain below this syntax boundary.
 
 Generic text rendering, capability reporting, resource discovery,
 source-mode projections, hit-map reconciliation, and later editing consume
@@ -320,15 +360,16 @@ document source before structural layout. The app resolves that manifest
 asynchronously before layout and passes the resulting document-local resolver
 back to core.
 
-*Implemented for the generic TeX frontend (2026-07-25):* math boundaries,
+*Implemented for the shared TeX frontend (2026-07-26):* math boundaries,
 nested math environments, balanced groups and optional arguments, environment
 boundaries, control-sequence identity, comments, whitespace, prose tokens,
 graphics discovery, TikZ multipart `\nodepart` splitting, node font/space
 normalization, forced-break/restricted-horizontal-mode projections, and
 hit-map line-break reconciliation all use the shared CST/IR path. Comments
 are zero-width source-backed IR nodes, so rendering ignores them without
-losing editor ownership of their spans. Migrating the Beamer structural
-scanner onto the shared syntax service remains a separate pass.
+losing editor ownership of their spans. The Beamer document, content, overlay,
+and theorem frontends now consume the same extracted syntax index; the former
+raw lexical scanner and manual frame-option splitter have been deleted.
 
 The resolver contract is `DocumentGraphicsResolver` in
 `packages/core/src/graphics`, not a node-text service. The top-level TikZ and
@@ -681,8 +722,11 @@ requires TeX:
    with the source snippet, rest of the frame stays WYSIWYG. This keeps one
    exotic `tcolorbox` from demoting a whole frame.
 
-Parse-level whole-document failure should not exist: the frame scanner is
-delimiter-based and survives arbitrary preamble and body content.
+Parse-level whole-document failure should not exist: the tolerant Beamer
+dialect produces a CST and syntax index for incomplete source, while the
+Beamer projection pairs flat environment boundaries independently of generic
+CST nesting. Unsupported preamble/body content remains source-backed and
+cannot by itself prevent discovery of later well-formed frames.
 
 ### Macro handling
 
@@ -734,23 +778,34 @@ biggest determinant of coverage. Strategy:
   per-step layout including `\only` reflow.
 - **Round-trip property tests**: open → no-op → byte-identical source;
   open → edit one element → diff touches only that element's spans.
+- **Frontend recovery and latency gate**: malformed document/frame/argument
+  fixtures, all supported opaque families, generic-vs-Beamer overlay dialect
+  ownership, and one-parse prepared-document instrumentation are permanent
+  tests. `scripts/benchmark-beamer-frontend.mjs` measures unique source
+  revisions of both `scanBeamerDocument` and `prepareBeamerDocument` on the
+  20-frame KKT deck. The direct CST cutover artifacts are
+  `design/benchmarks/beamer-frontend-{pre,post}-cst-cutover.json`; on the
+  recorded Apple Silicon/Node 26 profile the post-cutover result is
+  7.792 ms median / 9.331 ms p95 for scan and 7.733 ms median / 8.885 ms p95
+  for prepare, within the 8/12 ms and 9/13 ms acceptance budgets.
 
 ## Implementation Phases
 
 ### Phase B0: Measurement and Renderer Contract
 
-**Progress (2026-07-23):** The initial source contract and scanner are in
-place under `packages/core/src/beamer`: exact document/frame/header/body
-spans, frame options and titles, sections/subsections, basic preamble mining,
-absolute nested-TikZ roots, recovery diagnostics, and a public
-`scanBeamerDocument` entry point. `npm run probe:beamer-frame` compiles a
-selected source frame with LuaLaTeX and records the Beamer source
-version/hash, TeX page dimensions, PDF page box, positioned structured text,
-PDF, and SVG. The frame layout/result contracts, ordered theme-component
-resolver, registered structural chrome plans, and initial source-backed
-columns/list/glue/TikZ body IR are now in place. The first headless renderer
-composes the representative Madrid/Seahorse frame through those boundaries;
-broader body nodes, overlay steps, and oracle-driven visual refinement remain.
+**Progress (2026-07-26):** The source contract and Beamer semantic projection
+are in place under `packages/core/src/beamer`: exact
+document/frame/header/body spans, frame options and titles,
+sections/subsections, preamble mining, absolute nested-TikZ roots, recovery
+diagnostics, and a public `scanBeamerDocument` entry point. The projection now
+uses the shared CST syntax index end to end; the direct-cutover workstream is
+recorded in `design/beamer-cst-scanner-cutover-plan.md`, and no legacy scanner
+or fallback remains. `npm run probe:beamer-frame` compiles a selected source
+frame with LuaLaTeX and records the Beamer source version/hash, TeX page
+dimensions, PDF page box, positioned structured text, PDF, and SVG. The frame
+layout/result contracts, ordered theme-component resolver, registered
+structural chrome plans, and source-backed columns/list/glue/TikZ body IR are
+in place.
 
 - Maintain the corpus scanner and add Beamer constructs to the capabilities
   matrix. Scanner metrics must count file-defined macro use inside math and
@@ -1203,8 +1258,11 @@ found two gaps in the headless surface:
    theorem-occurrence pass (previously re-run inside every
    `parseBeamerFrameBody`) into one shared context, caches frame body IRs
    lazily, and exposes `frameStepCount` from the overlay scanner without
-   rendering. `renderBeamerFrame`/`renderBeamerFramePages` are now one-shot
-   wrappers over it; equivalence and error-behavior are covered by
+   rendering. Since the 2026-07-26 syntax cutover, that context also owns
+   exactly one Beamer-dialect CST/syntax index for the complete source
+   revision and supplies it to all frontend passes.
+   `renderBeamerFrame`/`renderBeamerFramePages` are one-shot wrappers over it;
+   equivalence, error behavior, and the one-parse invariant are covered by
    `test/beamer-prepared-document.spec.ts`.
 2. **Block/inline fallback is not yet a placeholder.** Unsupported flow
    nodes are currently dropped with `beamer-render-unsupported-flow-node`
@@ -1272,7 +1330,8 @@ bar consume deck frames as roots. Browser code no longer pulls the
 Node-backed corpus helpers through the core package root.
 
 *Remaining:* typing still invalidates the whole prepared session per
-keystroke and needs frame-level IR reuse across revisions. The navigator is
+keystroke and needs `TreeFragment`-backed incremental CST parsing plus
+frame-level IR reuse across revisions. The navigator is
 still the original horizontal `FigureNavigator`, not the planned flexible
 root navigator with section headers, grid/vertical modes, fallback cards,
 and drag sorting. Block/inline source-card placeholders, chrome-level
