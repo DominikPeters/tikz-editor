@@ -1,9 +1,12 @@
 # Beamer CST Scanner Cutover Plan
 
-**Status:** proposed for review  
-**Scope:** scanner/frontend infrastructure only  
-**Approval gate:** do not fold this plan into `design/beamer-editor.md` or
-begin the cutover until this standalone plan is approved.
+**Status:** approved for implementation with review amendments (2026-07-26)
+
+**Scope:** scanner/frontend infrastructure only
+
+**Integration gate:** fold the final architecture and implementation status
+into `design/beamer-editor.md` only after the cutover and all deletion gates
+are complete.
 
 ## Decision
 
@@ -70,6 +73,13 @@ deletion gate is satisfied.
 - begin/end environment nodes;
 - math delimiters and math environments;
 - useful error recovery for incomplete input.
+
+It does **not** currently provide opaque/verbatim tokenization. Bodies of
+`verbatim`, `lstlisting`, `minted`, and related environments are parsed as
+ordinary TeX, so literal `%`, unmatched braces, and structural-looking
+commands can corrupt the CST before a post-parse masking pass sees them.
+Parser-level opaque handling is therefore expected implementation work, not
+an optional contingency.
 
 `packages/core/src/text/tex/ir.ts` already contains a private
 `simpleTexSyntaxIndex`. It parses with the shared CST and indexes:
@@ -197,6 +207,13 @@ required.
 - Nested groups, comments, escaped control symbols, and delimiters are defined
   by the CST, not by another character loop.
 
+Overlay arguments are dialect specific. In the intended contract, top-level
+`<...>` remains ordinary text under the generic TeX parser and becomes an
+overlay argument only under the Beamer dialect. Stage 0 must characterize
+both parser profiles. If necessary, Stage 1 should dialect-gate
+`OverlaySpecification` itself rather than merely filtering an already
+misclassified generic CST node in the index.
+
 ### Environment boundaries
 
 The shared syntax index exposes a flat sequence of source-backed begin/end
@@ -233,17 +250,34 @@ The initial opaque set remains:
 - `verbatim`;
 - `verbatim*`.
 
-Opaque masking is derived from CST environment boundaries:
+Opaque handling must occur at parser/tokenizer level, before ordinary comment,
+group, command, or environment tokenization can interpret the body.
 
-1. identify an opaque begin boundary;
-2. find its next name-matching end boundary;
-3. suppress structural tokens strictly inside that span;
-4. if no end boundary exists, mask through the containing scan limit and emit
-   the existing structural diagnostic behavior.
+The expected implementation is a context-tracked Lezer external tokenizer,
+or an equivalent shared parser-level mechanism, that:
 
-There is no `source.indexOf("\\end{...}")` fallback. If characterization
-tests show that Lezer recovery does not expose an end boundary, harden the
-grammar/index traversal until it does. Do not restore a private Beamer lexer.
+1. recognizes entry into one of the supported opaque environments;
+2. records the active opaque environment name in parser context;
+3. emits an `OpaqueEnvironmentBody`-style token through the environment's
+   valid terminator;
+4. prevents literal `%`, unmatched braces, and frame-looking commands inside
+   that body from becoming ordinary TeX tokens;
+5. resumes ordinary TeX tokenization at the matching opaque end boundary;
+6. retains a recovered body-to-limit token and parser error when no valid
+   terminator exists.
+
+The exact mechanism may differ if Lezer experiments reveal a cleaner shared
+solution, but post-parse masking by itself is not sufficient and a private
+Beamer source scanner is not acceptable.
+
+Termination rules must be established from the LaTeX/package sources for each
+supported family. Do not assume one universal substring rule: core LaTeX
+`verbatim`/`alltt`, FancyVerb-style environments, `listings`, and `minted`
+may impose different line, whitespace, or delimiter constraints.
+
+The syntax index still masks structural queries inside the opaque token/span
+as a defensive invariant. There is no
+`source.indexOf("\\end{...}")` fallback in Beamer code.
 
 ## Recovery invariants
 
@@ -258,7 +292,8 @@ invariants:
 6. A mismatched non-frame environment cannot prevent discovery of a later
    frame.
 7. Frame-looking text inside comments or opaque environments is never
-   structural.
+   structural; opaque tokenization takes precedence, so `%` inside an opaque
+   body is content rather than a TeX comment.
 8. A malformed argument cannot consume across the current frame/document
    limit.
 9. Partially typed commands and arguments do not throw.
@@ -282,9 +317,18 @@ Before extracting code:
    - control words, control symbols, and starred commands;
    - comments after commands and between arguments;
    - nested required/optional/overlay arguments;
+   - the same `<...>` source under generic and Beamer parser profiles,
+     asserting generic text versus Beamer overlay ownership;
    - escaped delimiters;
    - well-formed, mismatched, and incomplete environments;
-   - every opaque environment name;
+   - every opaque environment name, with terminators matching the applicable
+     package's actual lexical rules;
+   - opaque bodies containing unmatched `{` and `}`;
+   - literal `%` in opaque bodies, including `%` before a textual
+     `\end{...}` on the same line, with expectations derived from the
+     relevant package's real termination rule;
+   - `\begin{frame}` and `\end{frame}` inside opaque bodies;
+   - missing opaque terminators;
    - later-frame recovery after malformed environments.
 2. Extend `test/beamer-document-scan.spec.ts` with:
    - mismatched environment names before and inside frames;
@@ -298,8 +342,17 @@ Before extracting code:
 4. Record the current intended outputs as assertions. Where current raw
    behavior is demonstrably wrong, mark the desired CST behavior explicitly
    rather than enshrining the bug.
+5. Add `scripts/benchmark-beamer-frontend.mjs` (or an equivalently focused
+   benchmark) measuring both `scanBeamerDocument` and
+   `prepareBeamerDocument` on the largest available corpus deck:
+   - run enough warm iterations to report median and p95;
+   - record source size and frame count with the result;
+   - record the pre-cutover baseline artifact before changing the scanner;
+   - keep benchmark output machine-readable enough for before/after
+     comparison.
 
-**Gate:** the recovery contract is testable independently of rendering.
+**Gate:** the recovery contract is testable independently of rendering and a
+repeatable pre-cutover latency baseline has been recorded.
 
 ### Stage 1 — Extract the shared syntax index
 
@@ -313,11 +366,23 @@ Before extracting code:
 4. Add source-ordered arrays and range-query indexes.
 5. Add flat environment-boundary extraction independent of name matching.
 6. Add argument association and recovered-node status.
-7. Retain a bounded immutable-source cache only if it has one clear owner.
-   Prepared Beamer documents should pass an index explicitly rather than
-   relying on the global cache.
-8. Harden `packages/lezer-tex/src/grammar/tex.grammar` only where Stage 0
-   demonstrates missing or unstable syntax nodes.
+7. Implement parser-level opaque bodies, expected to require:
+   - a Lezer context tracker carrying the active opaque environment;
+   - an external tokenizer that emits an opaque body/recovery token;
+   - tokenizer precedence over `Comment`, groups, and ordinary control
+     sequences while the opaque context is active;
+   - source-backed begin/body/end spans exposed through the syntax index.
+8. Verify opaque terminator behavior against the installed LaTeX/package
+   sources and encode those rules in tests.
+9. Dialect-gate overlay specifications so the generic parser retains
+   top-level angle-bracket text while the Beamer parser indexes overlays.
+10. Retain a bounded immutable-source cache only if it has one clear owner.
+    Cache identity must include parser identity—at minimum top rule and
+    dialect—in addition to source. A parser-keyed `WeakMap` is preferable to
+    an ad hoc string key. Prepared Beamer documents should pass an index
+    explicitly rather than relying on the global cache.
+11. Harden `packages/lezer-tex/src/grammar/tex.grammar` wherever Stage 0
+    demonstrates missing or unstable syntax nodes.
 
 **Gate:** syntax-index tests and existing generic TeX tests pass.
 
@@ -403,9 +468,19 @@ overlay counts.
    present, but later structural tokens must remain discoverable.
 6. Fix recovery in the grammar or shared index. Do not add source scanning to
    Beamer as a shortcut.
+7. Re-run the Stage 0 frontend benchmark under the same runtime, source, warmup,
+   and iteration settings.
+8. Compare before/after median and p95 for both document scanning and prepared
+   document construction. Attach the comparison artifact to the implementation
+   handoff.
+9. Treat a material latency regression as a review blocker. Record the
+   baseline before choosing the numerical budget; once recorded, add the
+   agreed absolute/relative budget to the benchmark and this plan rather than
+   accepting a regression implicitly.
 
-**Gate:** all recovery invariants hold and corpus counts have no unexplained
-regressions.
+**Gate:** all recovery invariants hold, corpus counts have no unexplained
+regressions, and the measured latency comparison is within the agreed budget
+or has received an explicit architectural review.
 
 ### Stage 6 — Delete the legacy path
 
@@ -441,17 +516,18 @@ merge with either scanner path retained as a fallback.
 
 Recommended local commit sequence:
 
-1. `Test TeX syntax-index recovery contract`
-2. `Extract shared TeX syntax index`
-3. `Use shared syntax index in generic TeX lowering`
-4. `Move Beamer document scanning to TeX CST`
-5. `Move Beamer content and overlays to TeX CST`
-6. `Delete legacy Beamer source scanner`
-7. `Document approved Beamer CST architecture`
+1. `Test and benchmark TeX syntax-index recovery contract`
+2. `Tokenize opaque TeX environments in Lezer`
+3. `Extract shared TeX syntax index`
+4. `Use shared syntax index in generic TeX lowering`
+5. `Move Beamer document scanning to TeX CST`
+6. `Move Beamer content and overlays to TeX CST`
+7. `Delete legacy Beamer source scanner`
+8. `Document approved Beamer CST architecture`
 
 These commits are for reviewability and bisectability, not independent
-stopping points. Commits 1–6 form one required implementation series.
-Commit 7 folds the approved result into `design/beamer-editor.md`.
+stopping points. Commits 1–7 form one required implementation series.
+Commit 8 folds the approved result into `design/beamer-editor.md`.
 
 During the series:
 
@@ -484,6 +560,18 @@ npm run lint:prod
 npm test
 ```
 
+Performance gate:
+
+```sh
+node scripts/benchmark-beamer-frontend.mjs \
+  --input path/to/largest-corpus-deck.tex \
+  --json
+```
+
+Run this before and after the cutover with identical runtime, warmup, and
+iteration settings. Preserve both machine-readable results and a summarized
+median/p95 comparison.
+
 Beamer-specific artifact/corpus gates:
 
 - KKT deck retains 20 frames and existing section/navigation topology;
@@ -492,7 +580,9 @@ Beamer-specific artifact/corpus gates:
 - Beamer corpus frame and construct counts have no unexplained changes;
 - malformed-source tests demonstrate later-frame recovery;
 - prepared-document instrumentation demonstrates one shared syntax parse per
-  source revision.
+  source revision;
+- frontend scan/prepare latency remains within the post-baseline agreed
+  absolute/relative budget.
 
 ## Definition of done
 
@@ -500,14 +590,21 @@ The cutover is complete only when all of the following are true:
 
 - generic TeX and Beamer consume the extracted shared syntax index;
 - one prepared Beamer source revision owns one Beamer-dialect CST/index;
+- syntax-index caches cannot cross parser top-rule or dialect identities;
 - Beamer semantic pairing remains name aware and independently tested;
+- opaque bodies are recognized at parser/tokenizer level before comment,
+  group, and command lexing;
 - comments and opaque environments cannot emit false structural tokens;
+- generic angle-bracket text and Beamer overlay specifications retain
+  dialect-correct ownership;
 - incomplete and mismatched source retains later-frame discovery;
 - frame, section, preamble, content, overlay, and theorem spans remain
   source-backed;
 - the legacy raw lexical helpers are deleted;
 - no runtime fallback or dual-scanner switch exists;
 - focused, full-repository, corpus, and artifact gates pass;
+- before/after frontend latency is measured and within the agreed budget (or
+  explicitly reviewed);
 - the approved architecture and final implementation status are folded into
   `design/beamer-editor.md`.
 
@@ -519,7 +616,8 @@ The cutover does not itself implement:
 - macro expansion before Beamer structural projection;
 - new Beamer commands, environments, or themes;
 - editor caret/selection behavior beyond preserving syntax spans;
-- performance tuning beyond avoiding repeated prepared-document parses.
+- performance optimization beyond avoiding repeated prepared-document parses
+  and meeting the agreed regression budget.
 
 The syntax-index API should remain compatible with later incremental parsing,
 but correctness and deletion of the duplicate scanner take precedence in this
