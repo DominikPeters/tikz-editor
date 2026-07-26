@@ -215,10 +215,61 @@ describe("simple TeX paragraph IR", () => {
       sourceStart: source.indexOf(String.raw`\includegraphics`),
       sourceEnd: source.indexOf("{fig}") + "{fig}".length,
     });
-    expect(graphics?.options.width).toBeCloseTo(56.905512, 5);
-    expect(graphics?.options.height).toBeCloseTo(28.452756, 5);
+    expect(graphics?.options.width).toMatchObject({
+      kind: "absolute",
+      raw: "2cm",
+      value: expect.closeTo(56.905512, 5),
+    });
+    expect(graphics?.options.height).toMatchObject({
+      kind: "absolute",
+      raw: "1cm",
+      value: expect.closeTo(28.452756, 5),
+    });
     expect(graphics?.options.scale).toBe(0.5);
     expect(graphics?.options.keepAspectRatio).toBe(true);
+    const optionStart = source.indexOf("[width=");
+    expect(graphics?.options.optionList).toMatchObject({
+      span: {
+        from: optionStart,
+        to: source.indexOf("]", optionStart) + 1,
+      },
+      entries: [
+        {
+          kind: "kv",
+          key: "width",
+          keySpan: { from: optionStart + 1, to: optionStart + 6 },
+          valueSpan: { from: optionStart + 7, to: optionStart + 10 },
+        },
+        { kind: "kv", key: "height" },
+        { kind: "kv", key: "scale" },
+        { kind: "flag", key: "keepaspectratio" },
+      ],
+    });
+  });
+
+  it("preserves contextual graphics dimensions and duplicate option spans", () => {
+    const source = String.raw`\includegraphics[width=20pt,unknown={a,b},width=.8\textwidth,height=2em]{fig}`;
+    const parsed = parseSimpleTexParagraphIr(source);
+    const graphics = parsed.nodes.find((node) => node.kind === "includegraphics");
+
+    expect(graphics?.options.width).toEqual({
+      kind: "contextual",
+      raw: String.raw`.8\textwidth`,
+      factor: 0.8,
+      reference: "textwidth",
+    });
+    expect(graphics?.options.height).toEqual({
+      kind: "contextual",
+      raw: "2em",
+      factor: 2,
+      reference: "em",
+    });
+    expect(graphics?.options.optionList?.entries.map((entry) =>
+      entry.kind === "unknown" ? entry.raw : entry.key
+    )).toEqual(["width", "unknown", "width", "height"]);
+    for (const entry of graphics?.options.optionList?.entries ?? []) {
+      expect(source.slice(entry.span.from, entry.span.to)).toBe(entry.raw);
+    }
   });
 
   it("parses includegraphics crop and clip options", () => {
@@ -301,7 +352,11 @@ describe("simple TeX paragraph IR", () => {
         sourceEnd: source.length - 1,
         options: expect.objectContaining({
           raw: "width=24pt,page=2",
-          width: 24,
+          width: {
+            kind: "absolute",
+            raw: "24pt",
+            value: 24,
+          },
           page: { status: "valid", pageNumber: 2 },
         }),
       }),

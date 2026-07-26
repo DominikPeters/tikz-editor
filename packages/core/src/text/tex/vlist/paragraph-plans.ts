@@ -6,6 +6,7 @@ import type {
   TexLayoutLabel,
 } from "../layout-inline-items.js";
 import type { TexLayoutIrOptions } from "../layout-options.js";
+import type { TexDimensionContext } from "../dimensions.js";
 import {
   texHBoxX,
   texLength,
@@ -65,6 +66,7 @@ export interface TexLayoutParagraphPlan {
   readonly inlinePrefixItems: readonly TexLayoutInlineItem[];
   readonly preserveTrailingInterwordSpace?: boolean;
   readonly breakContext: TexLayoutParagraphBreakContext;
+  readonly dimensionContext?: TexDimensionContext;
   readonly overfullSingleLineFallback?: boolean;
   readonly lineLabel?: TexLayoutParagraphLineLabel;
 }
@@ -233,6 +235,9 @@ export function prepareTexLayoutParagraphsFromVList(
             paragraphStateResult.finalHyphenDemerits
           ),
         },
+        ...(paragraph.dimensionContext
+          ? { dimensionContext: paragraph.dimensionContext }
+          : {}),
         ...(listAttachments.marginLabel
           ? {
               lineLabel: {

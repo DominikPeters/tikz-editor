@@ -272,6 +272,9 @@ function buildTexSharedLayout(params: {
     metricProvider,
     textFontProfile,
     tikzTextWidthNode: true,
+    // The natural-width sentinel is an implementation detail, not a TeX
+    // document register. Keep named width registers unresolved in that mode.
+    dimensionContext: isNaturalWidthLayout ? null : undefined,
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: params.fontSizePt,

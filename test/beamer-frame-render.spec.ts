@@ -346,6 +346,56 @@ describe("headless Beamer frame renderer", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it("resolves frame and column graphics against their TeX width registers", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Contextual graphics}
+\includegraphics[width=.5\textwidth]{frame.png}
+\includegraphics[width=.1\paperwidth]{paper.png}
+\begin{columns}
+  \begin{column}{.4\textwidth}
+    \includegraphics[width=.5\textwidth]{column.png}
+  \end{column}
+\end{columns}
+\end{frame}
+\end{document}`;
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "beamer-contextual-graphics",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 40,
+        naturalHeightPt: 20,
+        revision: "contextual-r1",
+      }),
+    };
+    const result = await renderBeamerFrame(source, { graphicsResolver });
+    const frameGraphic = result.layout.graphics.find(
+      (graphic) => graphic.asset.filename === "frame.png"
+    );
+    const columnGraphic = result.layout.graphics.find(
+      (graphic) => graphic.asset.filename === "column.png"
+    );
+    const paperGraphic = result.layout.graphics.find(
+      (graphic) => graphic.asset.filename === "paper.png"
+    );
+
+    expect(frameGraphic?.bounds.width).toBeCloseTo(
+      result.layout.page.textArea.width * 0.5,
+      6
+    );
+    expect(columnGraphic?.bounds.width).toBeCloseTo(
+      result.layout.page.textArea.width * 0.4 * 0.5,
+      6
+    );
+    expect(paperGraphic?.bounds.width).toBeCloseTo(
+      result.layout.page.page.width * 0.1,
+      6
+    );
+    expect(result.diagnostics).toEqual([]);
+  });
+
   it("retains covered graphics geometry and exposes overlay visibility", async () => {
     const source = String.raw`\documentclass{beamer}
 \begin{document}

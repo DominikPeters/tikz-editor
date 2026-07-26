@@ -8,6 +8,7 @@ import {
 } from "../layout-inline-items.js";
 import type { TexLayoutParagraphPlan } from "./paragraph-plans.js";
 import type { TexLength } from "../coordinates.js";
+import type { TexDimensionContext } from "../dimensions.js";
 
 export function texLayoutItemsForParagraphPlan(
   plan: TexLayoutParagraphPlan,
@@ -17,6 +18,7 @@ export function texLayoutItemsForParagraphPlan(
     readonly mathBoxProvider?: TexMathBoxProvider;
     readonly graphicsResolver?: DocumentGraphicsResolver;
     readonly textFontProfile?: TexTextFontProfile;
+    readonly dimensionContext?: TexDimensionContext;
   }
 ): readonly TexLayoutInlineItem[] {
   const contentItems = simpleTexSegmentToLayoutItems(
@@ -27,7 +29,8 @@ export function texLayoutItemsForParagraphPlan(
     params.mathBoxProvider,
     params.textFontProfile?.defaultFontState,
     params.textFontProfile,
-    params.graphicsResolver
+    params.graphicsResolver,
+    params.dimensionContext
   );
   if (plan.preserveTrailingInterwordSpace) {
     const trailingSourceSpace = plan.segment.nodes.at(-1);

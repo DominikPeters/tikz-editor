@@ -33,6 +33,7 @@ import type {
 import type { TexMathBoxProvider, TexMathDisplayLabel } from "../layout-inline-items.js";
 import { parseTexMathAlignedBody } from "../math/index.js";
 import { texLength, type TexLength } from "../coordinates.js";
+import type { TexDimensionContext } from "../dimensions.js";
 
 export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly font?: ResolvedTexFont;
@@ -40,6 +41,7 @@ export interface LowerSimpleTexBlockItemsToVListOptions {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly width?: TexLength;
   readonly tikzTextWidthNode?: boolean;
+  readonly dimensionContext?: TexDimensionContext;
 }
 
 export function lowerSimpleTexBlocksToVList(
@@ -129,10 +131,23 @@ function vboxItemFromSimpleTexBox(
   item: SimpleTexBoxBlockItem,
   options: LowerSimpleTexBlockItemsToVListOptions
 ): TexVBoxItem {
+  const dimensionContext = options.dimensionContext
+    ? {
+        ...options.dimensionContext,
+        linewidth: item.width,
+        ...(item.command === "minipage"
+          ? {
+              textwidth: item.width,
+              columnwidth: item.width,
+            }
+          : {}),
+      }
+    : undefined;
   const nested = lowerSimpleTexBlockItemsToVList(item.items, {
     ...options,
     width: item.width,
     tikzTextWidthNode: false,
+    dimensionContext,
   });
   return {
     kind: "vbox",
@@ -651,6 +666,9 @@ function paragraphInputFromSimpleTexBlock(
       : {}),
     ...(options.tikzTextWidthNode === true
       ? { tikzTextWidthNode: true }
+      : {}),
+    ...(options.dimensionContext
+      ? { dimensionContext: options.dimensionContext }
       : {}),
     alignment: block.alignment,
     alignmentProfile: block.alignmentProfile,

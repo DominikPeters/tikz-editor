@@ -1,8 +1,14 @@
 import type { SyntaxNodeRef } from "@lezer/common";
 import { texDocumentParser, texFragmentParser } from "@tikz-editor/lezer-tex";
 import type { ParagraphAlignment } from "../knuth-plass/alignment.js";
+import { parseOptionListRaw } from "../../options/parse.js";
+import type { OptionListAst } from "../../options/types.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
-import { parseTexDimensionText } from "./dimensions.js";
+import {
+  parseTexDimensionExpression,
+  parseTexDimensionText,
+  type TexDimensionExpression,
+} from "./dimensions.js";
 import { normalizeColor, resolveDefineColorModel, type ColorAliasResolver } from "../../semantic/style/colors.js";
 import { DEFAULT_TEXT_FONT_SIZE, FONT_SIZE_COMMAND_FACTORS } from "../../semantic/style/constants.js";
 import {
@@ -263,8 +269,9 @@ export interface SimpleTexIncludeGraphicsNode extends SimpleTexSourceRange {
 }
 
 export interface SimpleTexGraphicsOptions {
-  readonly width?: TexLength;
-  readonly height?: TexLength;
+  readonly optionList?: OptionListAst;
+  readonly width?: TexDimensionExpression;
+  readonly height?: TexDimensionExpression;
   readonly scale?: number;
   readonly keepAspectRatio?: boolean;
   readonly page?: SimpleTexGraphicsPageOption;
@@ -1039,12 +1046,12 @@ function simpleTexGraphicsNodeFromSyntax(
 
   const filenameStart = filenameGroup.from + 1;
   const filenameEnd = filenameGroup.to - 1;
-  const rawOptions =
+  const optionList =
     option &&
     text[option.from] === "[" &&
     text[option.to - 1] === "]"
-      ? text.slice(option.from + 1, option.to - 1)
-      : "";
+      ? parseOptionListRaw(text.slice(option.from, option.to), option.from)
+      : undefined;
 
   return {
     kind: "includegraphics",
@@ -1052,7 +1059,7 @@ function simpleTexGraphicsNodeFromSyntax(
     filename: text.slice(filenameStart, filenameEnd).trim(),
     filenameStart,
     filenameEnd,
-    options: parseSimpleTexGraphicsOptions(rawOptions),
+    options: parseSimpleTexGraphicsOptions(optionList),
     sourceStart: syntax.from,
     sourceEnd: syntax.to,
   };
@@ -2878,13 +2885,16 @@ function scanSimpleTexIncludeGraphicsCommand(
   }
 
   let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
-  let rawOptions = "";
+  let optionList: OptionListAst | undefined;
   if (text[cursor] === "[") {
     const optionsArgument = scanSimpleTexOptionalBracketArgument(text, cursor);
     if (!optionsArgument) {
       return null;
     }
-    rawOptions = optionsArgument.content;
+    optionList = parseOptionListRaw(
+      text.slice(cursor, optionsArgument.end),
+      sourceOffset + cursor
+    );
     cursor = skipSimpleTexControlWordSpaces(text, optionsArgument.end);
   }
 
@@ -2906,7 +2916,7 @@ function scanSimpleTexIncludeGraphicsCommand(
       filename: text.slice(filenameStart, filenameEnd).trim(),
       filenameStart: sourceOffset + filenameStart,
       filenameEnd: sourceOffset + filenameEnd,
-      options: parseSimpleTexGraphicsOptions(rawOptions),
+      options: parseSimpleTexGraphicsOptions(optionList),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + groupEnd,
     },
@@ -2914,32 +2924,30 @@ function scanSimpleTexIncludeGraphicsCommand(
   };
 }
 
-function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
-  let width: TexLength | undefined;
-  let height: TexLength | undefined;
+function parseSimpleTexGraphicsOptions(
+  optionList?: OptionListAst
+): SimpleTexGraphicsOptions {
+  let width: TexDimensionExpression | undefined;
+  let height: TexDimensionExpression | undefined;
   let scale: number | undefined;
   let keepAspectRatio = false;
   let page: SimpleTexGraphicsPageOption | undefined;
   let trim: SimpleTexGraphicsTrim | undefined;
   let viewport: SimpleTexGraphicsViewport | undefined;
   let clip: boolean | undefined;
-  for (const part of splitSimpleTexGraphicsOptions(raw)) {
-    const trimmed = part.trim();
-    if (!trimmed) {
-      continue;
-    }
-    const equals = trimmed.indexOf("=");
-    const key = (equals >= 0 ? trimmed.slice(0, equals) : trimmed).trim().toLowerCase();
-    const value = equals >= 0 ? trimmed.slice(equals + 1).trim() : "";
+  for (const entry of optionList?.entries ?? []) {
+    const key = entry.kind === "unknown" ? "" : entry.key;
+    const value = entry.kind === "kv" ? entry.valueRaw : "";
+    const hasValue = entry.kind === "kv";
     if (key === "width") {
-      const parsed = parseTexDimensionText(value);
+      const parsed = parseTexDimensionExpression(value);
       if (parsed !== null) {
         width = parsed;
       }
       continue;
     }
     if (key === "height") {
-      const parsed = parseTexDimensionText(value);
+      const parsed = parseTexDimensionExpression(value);
       if (parsed !== null) {
         height = parsed;
       }
@@ -2953,12 +2961,12 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
       continue;
     }
     if (key === "keepaspectratio") {
-      keepAspectRatio = equals < 0 || simpleTexBooleanOptionValue(value);
+      keepAspectRatio = !hasValue || simpleTexBooleanOptionValue(value);
       continue;
     }
     if (key === "page") {
       const normalizedPage = stripSingleSimpleTexBraceLayer(value);
-      if (equals < 0 || !/^\d+$/u.test(normalizedPage)) {
+      if (!hasValue || !/^\d+$/u.test(normalizedPage)) {
         page = invalidSimpleTexGraphicsPageOption(value);
         continue;
       }
@@ -2993,7 +3001,7 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
       continue;
     }
     if (key === "clip") {
-      clip = equals < 0 || simpleTexBooleanOptionValue(value);
+      clip = !hasValue || simpleTexBooleanOptionValue(value);
     }
   }
   return {
@@ -3005,7 +3013,8 @@ function parseSimpleTexGraphicsOptions(raw: string): SimpleTexGraphicsOptions {
     ...(trim ? { trim } : {}),
     ...(viewport ? { viewport } : {}),
     ...(clip !== undefined ? { clip } : {}),
-    raw,
+    ...(optionList ? { optionList } : {}),
+    raw: optionList?.raw.slice(1, -1) ?? "",
   };
 }
 
@@ -3015,29 +3024,6 @@ function invalidSimpleTexGraphicsPageOption(raw: string): SimpleTexGraphicsPageO
     raw,
     reason: "PDF page option must be a positive integer.",
   };
-}
-
-function splitSimpleTexGraphicsOptions(raw: string): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  let braceDepth = 0;
-  for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
-    if (char === "{") {
-      braceDepth += 1;
-      continue;
-    }
-    if (char === "}" && braceDepth > 0) {
-      braceDepth -= 1;
-      continue;
-    }
-    if (char === "," && braceDepth === 0) {
-      parts.push(raw.slice(start, index));
-      start = index + 1;
-    }
-  }
-  parts.push(raw.slice(start));
-  return parts;
 }
 
 function simpleTexBooleanOptionValue(value: string): boolean {

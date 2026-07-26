@@ -133,6 +133,16 @@ export type {
   TexVListLayout,
 } from "./vlist/types.js";
 export type { TexGraphicsBox } from "./layout-inline-items.js";
+export {
+  parseTexDimensionExpression,
+  parseTexDimensionText,
+  resolveTexDimensionExpression,
+  texDimensionContextForFont,
+  texDimensionUnitFactor,
+  type TexContextualDimensionReference,
+  type TexDimensionContext,
+  type TexDimensionExpression,
+} from "./dimensions.js";
 export { collectTexGraphicsPlacements } from "./vlist/graphics-placements.js";
 export {
   projectTexHBoxXToLine,

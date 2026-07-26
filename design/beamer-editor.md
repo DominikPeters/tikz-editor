@@ -186,7 +186,9 @@ vertical glue, and display math, plus frame-level constructs:
   and `[t]`/`[b]` variants from frame options.
 - **`columns` / `column{<dim>}`**: constrained side-by-side vboxes. Widths
   are kept symbolic (`0.48\textwidth`) and evaluated against the theme's
-  content geometry; editing the divider rewrites the coefficient.
+  content geometry; editing the divider rewrites the coefficient. Beamer
+  implements each column as a minipage, so inside it `\linewidth`,
+  `\textwidth`, and `\columnwidth` all resolve to the column width.
 - **`block` / `alertblock` / `exampleblock` / `theorem` / `definition` /
   `example` / `proof`**: decorated vboxes; decoration comes from the theme's
   inner style + color record.
@@ -620,10 +622,15 @@ tarballs already are). Opening a `.tex` roots the project at its directory.
   `\linewidth`, then resolve them against the active `\linewidth`,
   `\textwidth`, `\columnwidth`, `\paperwidth`, `em`, and `ex`. Each graphicx
   option entry retains its complete, key, and value spans so a later resize
-  adapter can rewrite only the authored value. *Current status:* width,
-  height, trim, and viewport are parsed immediately into absolute
-  `TexLength`s, and only the complete raw option string is retained; this
-  contextual-expression and per-entry-span pass is still outstanding.
+  adapter can rewrite only the authored value. *Current status (2026-07-26):*
+  implemented for `width` and `height`, including absolute dimensions,
+  width registers, `em`/`ex`, ordered duplicate and unknown options, and
+  source-map projection of option/key/value spans. Resolution uses the
+  paragraph breaker's effective list-local `\linewidth`; minipages reset all
+  three local width registers, while parboxes reset only `\linewidth`.
+  `trim` and `viewport` deliberately remain absolute in this slice. Ambient
+  document registers for graphics inside embedded TikZ nodes remain a
+  separate render-request-context task.
 - Layout is likewise staged rather than inferred from paint. The inline TeX
   box retains a payload-free `DocumentGraphicsAsset`; paragraph reports carry
   the image as an atomic source-backed segment; the VList then publishes its

@@ -66,6 +66,21 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         `TeX paragraph breaker plan line label mismatch at index ${planIndex}.`
       );
     }
+    const enclosingWidth = breakContext.width ?? params.options.width;
+    const lineWidth = texLength(Math.max(
+      0,
+      enclosingWidth -
+        breakContext.scopePolicy.leftMarginWidth -
+        breakContext.scopePolicy.rightMarginWidth
+    ));
+    const ambientDimensionContext =
+      plan.dimensionContext ?? params.options.dimensionContext;
+    const dimensionContext = ambientDimensionContext
+      ? {
+          ...ambientDimensionContext,
+          linewidth: lineWidth,
+        }
+      : undefined;
     const { runs, shapedRuns: blockShapedRuns } = runAdapter.layoutItemsToRuns(
       texLayoutItemsForParagraphPlan(plan, {
         atPt: params.font.atPt,
@@ -73,6 +88,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         mathBoxProvider: params.options.mathBoxProvider,
         graphicsResolver: params.options.graphicsResolver,
         textFontProfile: params.options.textFontProfile,
+        dimensionContext,
       })
     );
     if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {

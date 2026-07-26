@@ -121,4 +121,84 @@ describe("native TeX node text engine", () => {
     expect(graphic?.id.startsWith(`${metrics?.paragraphId}:graphics:`))
       .toBe(true);
   });
+
+  it("resolves contextual graphics dimensions against layout width and active font", async () => {
+    const engine = await createTexNodeTextEngine();
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "node-contextual-graphics",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 40,
+        naturalHeightPt: 20,
+        revision: "contextual-r1",
+      }),
+    };
+    const metrics = engine.measure({
+      ...request(String.raw`\includegraphics[width=.8\linewidth,height=2em]{figure.png}`),
+      textWidthPt: 100,
+      graphicsResolver,
+    });
+    const graphic = engine.renderFromCache(metrics?.cacheKey ?? "")
+      ?.graphicsPlacements[0];
+
+    expect(graphic?.bounds.width).toBeCloseTo(80, 6);
+    expect(graphic?.bounds.height).toBeCloseTo(20, 6);
+  });
+
+  it("applies minipage and parbox register scoping to contextual graphics", async () => {
+    const engine = await createTexNodeTextEngine();
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "node-scoped-contextual-graphics",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 40,
+        naturalHeightPt: 20,
+        revision: "scoped-contextual-r1",
+      }),
+    };
+    const minipage = engine.measure({
+      ...request(String.raw`\begin{minipage}{40pt}\includegraphics[width=\textwidth]{minipage.png}\end{minipage}`),
+      textWidthPt: 100,
+      graphicsResolver,
+    });
+    const parbox = engine.measure({
+      ...request(String.raw`\parbox{40pt}{\includegraphics[width=\textwidth]{parbox.png}}`),
+      textWidthPt: 100,
+      graphicsResolver,
+    });
+
+    expect(engine.renderFromCache(minipage?.cacheKey ?? "")
+      ?.graphicsPlacements[0]?.bounds.width).toBeCloseTo(40, 6);
+    expect(engine.renderFromCache(parbox?.cacheKey ?? "")
+      ?.graphicsPlacements[0]?.bounds.width).toBeCloseTo(100, 6);
+  });
+
+  it("resolves linewidth after list margins have reduced the break width", async () => {
+    const engine = await createTexNodeTextEngine();
+    const graphicsResolver: DocumentGraphicsResolver = {
+      cacheKey: "node-list-linewidth-graphics",
+      resolve: () => ({
+        status: "resolved",
+        mimeType: "image/png",
+        dataBase64: "aW1hZ2U=",
+        naturalWidthPt: 40,
+        naturalHeightPt: 20,
+        revision: "list-linewidth-r1",
+      }),
+    };
+    const metrics = engine.measure({
+      ...request(String.raw`\begin{itemize}\item\includegraphics[width=\linewidth]{list.png}\end{itemize}`),
+      textWidthPt: 100,
+      graphicsResolver,
+    });
+    const width = engine.renderFromCache(metrics?.cacheKey ?? "")
+      ?.graphicsPlacements[0]?.bounds.width;
+
+    expect(width).toBeGreaterThan(0);
+    expect(width).toBeLessThan(100);
+  });
 });

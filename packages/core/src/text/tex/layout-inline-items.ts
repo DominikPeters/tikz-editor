@@ -63,6 +63,11 @@ import {
   type TexVListX,
 } from "./coordinates.js";
 import { texInterwordGlueForSpaceFactor } from "./space-glue.js";
+import {
+  resolveTexDimensionExpression,
+  texDimensionContextForFont,
+  type TexDimensionContext,
+} from "./dimensions.js";
 
 const TEX_LATEX_FBOX_RULE_PT = texLength(0.4);
 const TEX_LATEX_FBOX_SEP_PT = texLength(3);
@@ -502,7 +507,8 @@ export function simpleTexSegmentToLayoutItems(
   mathBoxProvider?: TexMathBoxProvider,
   initialFontState?: SimpleTexFontState,
   textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
-  graphicsResolver?: DocumentGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver,
+  dimensionContext?: TexDimensionContext
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
@@ -606,6 +612,7 @@ export function simpleTexSegmentToLayoutItems(
         mathBoxProvider,
         textFontProfile,
         graphicsResolver,
+        dimensionContext,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -654,6 +661,11 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "includegraphics") {
+      const activeFont = textFontProfile.resolveTextFont(
+        token.fontState,
+        atPt,
+        metricProvider
+      );
       const box = texIncludeGraphicsBox({
         source: token.text,
         filename: token.graphicsFilename ?? "",
@@ -663,6 +675,9 @@ export function simpleTexSegmentToLayoutItems(
         filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
         options: token.graphicsOptions ?? { raw: "" },
         graphicsResolver,
+        dimensionContext: dimensionContext
+          ? texDimensionContextForFont(dimensionContext, activeFont)
+          : undefined,
       });
       items.push({
         kind: "text-box",
@@ -704,6 +719,7 @@ export function simpleTexSegmentToLayoutItems(
         mathBoxProvider,
         textFontProfile,
         graphicsResolver,
+        dimensionContext,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -742,6 +758,7 @@ export function simpleTexSegmentToLayoutItems(
         mathBoxProvider,
         textFontProfile,
         graphicsResolver,
+        dimensionContext,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -841,6 +858,7 @@ function texMBoxFromInlineNodes(params: {
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: DocumentGraphicsResolver;
+  readonly dimensionContext?: TexDimensionContext;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -850,6 +868,7 @@ function texMBoxFromInlineNodes(params: {
     mathBoxProvider: params.mathBoxProvider,
     textFontProfile: params.textFontProfile,
     graphicsResolver: params.graphicsResolver,
+    dimensionContext: params.dimensionContext,
     trimEdges: false,
   });
   const hlist = texMBoxHListFromLayoutItems({
@@ -1160,6 +1179,7 @@ function texIncludeGraphicsBox(params: {
   readonly filenameEnd: number;
   readonly options: SimpleTexGraphicsOptions;
   readonly graphicsResolver?: DocumentGraphicsResolver;
+  readonly dimensionContext?: TexDimensionContext;
 }): TexMathBox {
   const resolution = params.graphicsResolver?.resolve({
     filename: params.filename,
@@ -1187,7 +1207,11 @@ function texIncludeGraphicsBox(params: {
         height: texLength((cropRect?.height ?? assetNatural.height) * (params.options.scale ?? 1)),
       }
     : null;
-  const size = texIncludeGraphicsTargetSize(params.options, displayNatural);
+  const size = texIncludeGraphicsTargetSize(
+    params.options,
+    displayNatural,
+    params.dimensionContext
+  );
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
   const svgBody = resolution.status === "resolved" && assetNatural
     ? renderTexIncludeGraphicsImageSvgBody({
@@ -1311,15 +1335,28 @@ function texIncludeGraphicsLayoutAsset(
 
 function texIncludeGraphicsTargetSize(
   options: {
-    readonly width?: TexLength;
-    readonly height?: TexLength;
+    readonly width?: SimpleTexGraphicsOptions["width"];
+    readonly height?: SimpleTexGraphicsOptions["height"];
     readonly scale?: number;
     readonly keepAspectRatio?: boolean;
   },
-  natural: { readonly width: TexLength; readonly height: TexLength } | null
+  natural: { readonly width: TexLength; readonly height: TexLength } | null,
+  dimensionContext?: TexDimensionContext
 ): { readonly width: TexLength; readonly height: TexLength } {
-  const requestedWidth = finitePositive(options.width);
-  const requestedHeight = finitePositive(options.height);
+  const requestedWidth = finitePositive(
+    options.width && dimensionContext
+      ? resolveTexDimensionExpression(options.width, dimensionContext)
+      : options.width?.kind === "absolute"
+        ? options.width.value
+        : undefined
+  );
+  const requestedHeight = finitePositive(
+    options.height && dimensionContext
+      ? resolveTexDimensionExpression(options.height, dimensionContext)
+      : options.height?.kind === "absolute"
+        ? options.height.value
+        : undefined
+  );
   const base = natural ?? {
     width: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1)),
     height: texLength(TEX_INCLUDEGRAPHICS_PLACEHOLDER_SIZE_PT * (options.scale ?? 1)),
@@ -1507,6 +1544,7 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: DocumentGraphicsResolver;
+  readonly dimensionContext?: TexDimensionContext;
 }): TexMathBox | null {
   const childFontState = params.childFontScale === undefined
     ? params.fontState
@@ -1524,6 +1562,7 @@ function texRaiseBoxFromInlineNodes(params: {
     mathBoxProvider: params.mathBoxProvider,
     textFontProfile: params.textFontProfile,
     graphicsResolver: params.graphicsResolver,
+    dimensionContext: params.dimensionContext,
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -1610,6 +1649,7 @@ function texDimensionBoxFromInlineNodes(params: {
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: DocumentGraphicsResolver;
+  readonly dimensionContext?: TexDimensionContext;
 }): TexMathBox | null {
   const innerItems = simpleTexInlineTokensToLayoutItems({
     tokens: simpleTexInlineNodesToTokens(params.children, params.fontState),
@@ -1619,6 +1659,7 @@ function texDimensionBoxFromInlineNodes(params: {
     mathBoxProvider: params.mathBoxProvider,
     textFontProfile: params.textFontProfile,
     graphicsResolver: params.graphicsResolver,
+    dimensionContext: params.dimensionContext,
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -1744,6 +1785,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: DocumentGraphicsResolver;
+  readonly dimensionContext?: TexDimensionContext;
   readonly trimEdges: boolean;
 }): TexLayoutInlineItem[] {
   const items: TexLayoutInlineItem[] = [];
@@ -1837,6 +1879,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         mathBoxProvider: params.mathBoxProvider,
         textFontProfile: params.textFontProfile,
         graphicsResolver: params.graphicsResolver,
+        dimensionContext: params.dimensionContext,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -1885,6 +1928,11 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     }
 
     if (token.kind === "includegraphics") {
+      const activeFont = params.textFontProfile.resolveTextFont(
+        token.fontState,
+        params.atPt,
+        params.metricProvider
+      );
       const box = texIncludeGraphicsBox({
         source: token.text,
         filename: token.graphicsFilename ?? "",
@@ -1894,6 +1942,9 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
         options: token.graphicsOptions ?? { raw: "" },
         graphicsResolver: params.graphicsResolver,
+        dimensionContext: params.dimensionContext
+          ? texDimensionContextForFont(params.dimensionContext, activeFont)
+          : undefined,
       });
       items.push({
         kind: "text-box",
@@ -1935,6 +1986,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         mathBoxProvider: params.mathBoxProvider,
         textFontProfile: params.textFontProfile,
         graphicsResolver: params.graphicsResolver,
+        dimensionContext: params.dimensionContext,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -1973,6 +2025,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         mathBoxProvider: params.mathBoxProvider,
         textFontProfile: params.textFontProfile,
         graphicsResolver: params.graphicsResolver,
+        dimensionContext: params.dimensionContext,
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);

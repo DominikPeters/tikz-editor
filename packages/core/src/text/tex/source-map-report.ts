@@ -18,6 +18,8 @@ import {
   type SourceCoordinateSpace,
 } from "../source-coordinates.js";
 import type { TexMathBox } from "./layout-inline-items.js";
+import type { OptionEntry, OptionListAst } from "../../options/types.js";
+import type { SimpleTexGraphicsOptions } from "./ir.js";
 import { texLength } from "./coordinates.js";
 import type {
   PositionedTexVListItem,
@@ -131,6 +133,7 @@ function remapTexGraphicsPlacement(
       start: documentSourceOffset(filenameSpan.start),
       end: documentSourceOffset(filenameSpan.end),
     },
+    options: remapSimpleTexGraphicsOptions(placement.options, sourceMap),
   };
 }
 
@@ -216,6 +219,7 @@ function remapLineGraphicsReport<Space extends SourceCoordinateSpace>(
     sourceEndRaw: documentSourceOffset(sourceSpan.end),
     filenameStartRaw: documentSourceOffset(filenameSpan.start),
     filenameEndRaw: documentSourceOffset(filenameSpan.end),
+    options: remapSimpleTexGraphicsOptions(graphic.options, sourceMap),
   };
 }
 
@@ -515,11 +519,61 @@ function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox 
         ...graphic,
         sourceSpan: graphicSpan,
         filenameSpan,
+        options: remapSimpleTexGraphicsOptions(graphic.options, sourceMap),
       };
     }),
     svgBody: box.svgBody ? remapSvgSourceDataAttributes(box.svgBody, sourceMap) : undefined,
     rootBox: box.rootBox ? remapTexMathBox(box.rootBox, sourceMap) : undefined
   };
+}
+
+function remapSimpleTexGraphicsOptions(
+  options: SimpleTexGraphicsOptions,
+  sourceMap: TextSourceMap
+): SimpleTexGraphicsOptions {
+  return options.optionList
+    ? {
+        ...options,
+        optionList: remapOptionListAst(options.optionList, sourceMap),
+      }
+    : options;
+}
+
+function remapOptionListAst(
+  optionList: OptionListAst,
+  sourceMap: TextSourceMap
+): OptionListAst {
+  return {
+    ...optionList,
+    span: mapOptionSpan(optionList.span, sourceMap),
+    entries: optionList.entries.map((entry) =>
+      remapOptionEntry(entry, sourceMap)
+    ),
+  };
+}
+
+function remapOptionEntry(
+  entry: OptionEntry,
+  sourceMap: TextSourceMap
+): OptionEntry {
+  return {
+    ...entry,
+    span: mapOptionSpan(entry.span, sourceMap),
+    ...("keySpan" in entry && entry.keySpan
+      ? { keySpan: mapOptionSpan(entry.keySpan, sourceMap) }
+      : {}),
+    ...(entry.kind === "kv" && entry.valueSpan
+      ? { valueSpan: mapOptionSpan(entry.valueSpan, sourceMap) }
+      : {}),
+  };
+}
+
+function mapOptionSpan(
+  span: { readonly from: number; readonly to: number },
+  sourceMap: TextSourceMap
+): { readonly from: number; readonly to: number } {
+  const mapped = mapInputSpan(sourceMap, span.from, span.to);
+  return { from: mapped.start, to: mapped.end };
 }
 
 function remapTexVListBoxLayoutReport(

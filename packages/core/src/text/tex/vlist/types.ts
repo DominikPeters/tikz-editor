@@ -18,6 +18,7 @@ import type {
   TexParagraphAlignment,
   TexSpaceGlueProfile,
 } from "../ir.js";
+import type { TexDimensionContext } from "../dimensions.js";
 import type {
   TexMathBox,
   TexMathDisplayAlignment,
@@ -177,6 +178,7 @@ export interface TexVListParagraphHorizontalLayout {
 
 export interface TexParagraphInput extends SimpleTexSegmentInput {
   readonly blockIndex: number;
+  readonly dimensionContext?: TexDimensionContext;
   /**
    * Horizontal-mode `\vspace` adjustments, retained until line breaking can
    * identify the line after which TeX ships each adjustment.

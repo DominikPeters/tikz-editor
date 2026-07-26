@@ -423,6 +423,7 @@ async function renderBeamerFrameStep(params: {
     modelBuilder,
     macroBindings,
     graphicsResolver: params.graphicsResolver,
+    paperWidth: page.page.width,
   });
 
   const availableContentBounds: BeamerRect = {
@@ -439,6 +440,7 @@ async function renderBeamerFrameStep(params: {
     source,
     children: bodyIr.children,
     textWidth: page.textArea.width,
+    paperWidth: page.page.width,
     leftSidebarWidth: page.frameArea.x,
     availableHeight: availableContentBounds.height,
     diagnostics,
@@ -703,6 +705,7 @@ function renderChrome(params: {
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth: number;
 }): void {
   const { chrome, theme, items, paragraphs, modelBuilder } = params;
   for (const primitive of chrome.primitives) {
@@ -763,6 +766,7 @@ function renderChrome(params: {
       disableAutomaticHyphenation: primitive.disableAutomaticHyphenation,
       macroBindings: params.macroBindings,
       graphicsResolver: params.graphicsResolver,
+      paperWidth: params.paperWidth,
     });
     if (!laid) {
       continue;
@@ -828,6 +832,7 @@ async function prepareFrameFlow(params: {
   source: string;
   children: readonly BeamerFrameBodyNode[];
   textWidth: number;
+  paperWidth: number;
   leftSidebarWidth: number;
   availableHeight: number;
   diagnostics: Diagnostic[];
@@ -863,6 +868,7 @@ async function prepareFrameFlow(params: {
           metadata: params.metadata,
           macroBindings: params.macroBindings,
           graphicsResolver: params.graphicsResolver,
+          paperWidth: params.paperWidth,
         }),
       });
       continue;
@@ -878,6 +884,7 @@ async function prepareFrameFlow(params: {
         overlays: params.overlays,
         step: params.step,
         graphicsResolver: params.graphicsResolver,
+        paperWidth: params.paperWidth,
       });
       if (paragraph) {
         result.push(paragraph);
@@ -916,6 +923,7 @@ async function prepareFrameFlow(params: {
             overlays: params.overlays,
             step: params.step,
             graphicsResolver: params.graphicsResolver,
+            paperWidth: params.paperWidth,
           })
         )
       );
@@ -980,6 +988,7 @@ async function prepareFrameFlow(params: {
         overlays: params.overlays,
         step: params.step,
         graphicsResolver: params.graphicsResolver,
+        paperWidth: params.paperWidth,
       });
       if (block) {
         result.push({
@@ -1011,6 +1020,7 @@ async function prepareFrameFlow(params: {
     overlays: params.overlays,
     step: params.step,
     graphicsResolver: params.graphicsResolver,
+    paperWidth: params.paperWidth,
   });
 }
 
@@ -1023,6 +1033,7 @@ function prepareTitlePage(params: {
   >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth: number;
 }): PreparedTitlePage {
   const hasSubtitle = params.metadata.subtitle?.value != null;
   const plan = planBeamerTitlePageTemplate(params.theme, hasSubtitle);
@@ -1043,6 +1054,7 @@ function prepareTitlePage(params: {
         alignment,
         macroBindings: params.macroBindings,
         graphicsResolver: params.graphicsResolver,
+        paperWidth: params.paperWidth,
       })
     : null;
   const subtitle = subtitleSource
@@ -1059,6 +1071,7 @@ function prepareTitlePage(params: {
         alignment,
         macroBindings: params.macroBindings,
         graphicsResolver: params.graphicsResolver,
+        paperWidth: params.paperWidth,
       })
     : null;
   if (plan.style === "inmargin") {
@@ -1115,6 +1128,7 @@ function prepareFrameParagraph(params: {
   step: number;
   targetHeight?: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth: number;
 }): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> | null {
   const paragraphSource = params.source.slice(
     params.node.span.from,
@@ -1143,6 +1157,7 @@ function prepareFrameParagraph(params: {
     hiddenSourceSpans: projection.hiddenSourceSpans,
     hiddenListItemIndices: projection.hiddenListItemIndices,
     graphicsResolver: params.graphicsResolver,
+    paperWidth: params.paperWidth,
   });
   if (!paragraph) {
     return null;
@@ -1194,6 +1209,7 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     overlays: BeamerOverlayModel;
     step: number;
     graphicsResolver?: DocumentGraphicsResolver;
+    paperWidth: number;
   }
 ): PreparedFrameFlowItem[] {
   const fitted = [...flow];
@@ -1400,6 +1416,7 @@ function prepareBlock(params: {
   overlays: BeamerOverlayModel;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth: number;
 }): PreparedBlock | null {
   const plan = planBeamerBlockTemplate({
     environment: params.node.kind === "theorem"
@@ -1463,6 +1480,9 @@ function prepareBlock(params: {
     macroBindings: params.macroBindings,
     hiddenSourceSpans: titleProjection.hiddenSourceSpans,
     graphicsResolver: params.graphicsResolver,
+    paperWidth: params.paperWidth,
+    textWidth: params.width,
+    columnWidth: params.width,
   });
   if (!title) {
     return null;
@@ -1505,6 +1525,7 @@ function prepareBlock(params: {
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
         hiddenListItemIndices: bodyProjection.hiddenListItemIndices,
         graphicsResolver: params.graphicsResolver,
+        paperWidth: params.paperWidth,
       })
     : null;
   const titleLine = title.layout.report.lines[0];
@@ -2337,6 +2358,7 @@ async function prepareColumnContent(params: {
   overlays: BeamerOverlayModel;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth: number;
 }): Promise<PreparedColumnContent> {
   const {
     source,
@@ -2368,6 +2390,7 @@ async function prepareColumnContent(params: {
       overlays: params.overlays,
       step: params.step,
       graphicsResolver: params.graphicsResolver,
+      paperWidth: params.paperWidth,
     });
     if (prepared) {
       flow.push(prepared);
@@ -2425,6 +2448,7 @@ async function prepareColumnFlowNode(params: {
   overlays: BeamerOverlayModel;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth: number;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -2440,6 +2464,7 @@ async function prepareColumnFlowNode(params: {
     overlays,
     step,
     graphicsResolver,
+    paperWidth,
   } = params;
   const visibility = resolveBeamerOverlaySpanVisibility(
     overlays,
@@ -2467,6 +2492,7 @@ async function prepareColumnFlowNode(params: {
       overlays,
       step,
       graphicsResolver,
+      paperWidth,
     });
     return block
       ? { kind: "block", visibility, block, height: block.naturalHeight }
@@ -2494,6 +2520,7 @@ async function prepareColumnFlowNode(params: {
       hiddenSourceSpans: projection.hiddenSourceSpans,
       hiddenListItemIndices: projection.hiddenListItemIndices,
       graphicsResolver,
+      paperWidth,
     });
     if (!paragraph) {
       return null;
@@ -2713,6 +2740,9 @@ function layoutParagraph(params: {
   hiddenSourceSpans?: readonly Span[];
   hiddenListItemIndices?: readonly number[];
   graphicsResolver?: DocumentGraphicsResolver;
+  paperWidth?: number;
+  textWidth?: number;
+  columnWidth?: number;
 }): LaidParagraph | null {
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
@@ -2791,6 +2821,12 @@ function layoutParagraph(params: {
       : undefined,
     sourceMap: mapped.sourceMap,
     graphicsResolver: params.graphicsResolver,
+    dimensionContext: {
+      linewidth: texLength(params.bounds.width),
+      textwidth: texLength(params.textWidth ?? params.bounds.width),
+      columnwidth: texLength(params.columnWidth ?? params.bounds.width),
+      paperwidth: texLength(params.paperWidth ?? params.bounds.width),
+    },
   } as const;
   let result = layoutSimpleTexParagraph(mapped.text, layoutOptions);
   if (

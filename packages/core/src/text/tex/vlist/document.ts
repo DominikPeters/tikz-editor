@@ -71,6 +71,7 @@ export function prepareSimpleTexLayoutScope(
         graphicsResolver: params.options.graphicsResolver,
         width: params.options.width,
         tikzTextWidthNode: params.options.tikzTextWidthNode,
+        dimensionContext: params.options.dimensionContext,
       })
     : lowerSimpleTexBlocksToVList(params.blocks, {
         font: params.font,
@@ -78,6 +79,7 @@ export function prepareSimpleTexLayoutScope(
         graphicsResolver: params.options.graphicsResolver,
         width: params.options.width,
         tikzTextWidthNode: params.options.tikzTextWidthNode,
+        dimensionContext: params.options.dimensionContext,
       });
   const preparedVList = prepareSimpleTexVList(
     baseVList,

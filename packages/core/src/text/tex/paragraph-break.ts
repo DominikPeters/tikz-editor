@@ -19,6 +19,7 @@ import type {
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import type { TexParagraphBreakResult } from "./vlist/index.js";
 import { texLength, type TexLength } from "./coordinates.js";
+import type { TexDimensionContext } from "./dimensions.js";
 
 const LATEX_RAGGED_FINAL_HYPHEN_DEMERITS = 0;
 const LATEX_PARBOX_SLOPPY_TOLERANCE = 9999;
@@ -53,6 +54,7 @@ export const DEFAULT_TEX_PARAGRAPH_BREAK_SCOPE_POLICY: TexParagraphBreakScopePol
 
 export interface TexParagraphBreakOptions {
   readonly width: TexLength;
+  readonly dimensionContext?: TexDimensionContext;
   readonly font?: ResolvedTexFont;
   readonly metricProvider?: TexMetricProvider;
   readonly tolerance?: number;

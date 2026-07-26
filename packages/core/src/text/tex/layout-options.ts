@@ -3,6 +3,7 @@ import type { TexSpaceGlueProfile } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type { TexLength } from "./coordinates.js";
+import type { TexDimensionContext } from "./dimensions.js";
 
 /**
  * A generated list marker measured in ems of the surrounding paragraph font.
@@ -115,6 +116,8 @@ export interface TexDisplayMathLayoutProfile {
 
 export interface TexLayoutIrOptions {
   readonly width?: TexLength;
+  /** Ambient TeX dimension registers, resolved before inline box lowering. */
+  readonly dimensionContext?: TexDimensionContext;
   readonly parindent?: TexLength;
   readonly rightskipStretch?: TexLength;
   readonly baselineSkip?: TexLength;

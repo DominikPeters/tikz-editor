@@ -35,10 +35,19 @@ import {
   type TexVListLayout,
 } from "./vlist/index.js";
 import { texLength } from "./coordinates.js";
+import {
+  texDimensionContextForFont,
+  type TexDimensionContext,
+} from "./dimensions.js";
 
 export interface TexParagraphLayoutOptions {
   readonly paragraphId?: string;
   readonly width: number;
+  /**
+   * Ambient document/minipage dimension registers. Omitted registers default
+   * to the paragraph width; font-relative units come from the active font.
+   */
+  readonly dimensionContext?: Partial<TexDimensionContext> | null;
   /** Optional enclosing vertical-box target used to set VList glue. */
   readonly height?: number;
   readonly alignment?: TexParagraphAlignment;
@@ -117,6 +126,21 @@ export function layoutSimpleTexParagraph(
     defaultAtPt,
     metricProvider
   );
+  const defaultWidth = options.dimensionContext === null
+    ? texLength(0)
+    : texLength(options.width);
+  const dimensionContext = texDimensionContextForFont(
+    {
+      linewidth: defaultWidth,
+      textwidth: defaultWidth,
+      columnwidth: defaultWidth,
+      paperwidth: defaultWidth,
+      em: texLength(font.atPt),
+      ex: texLength(font.atPt * 0.43),
+      ...options.dimensionContext,
+    },
+    font
+  );
   const {
     width: inputWidth,
     height: inputHeight,
@@ -129,6 +153,7 @@ export function layoutSimpleTexParagraph(
   const layoutOptions = {
     ...otherOptions,
     width: texLength(inputWidth),
+    dimensionContext,
     ...(inputHeight !== undefined
       ? { height: texLength(inputHeight) }
       : {}),
