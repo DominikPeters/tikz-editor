@@ -53,6 +53,25 @@ describe("@tikz-editor/lezer-tex", () => {
     expect(beamerTree.toString()).toContain("OverlaySpecification");
   });
 
+  it("characterizes pre-cutover angle-bracket and opaque parsing", () => {
+    const angleText = String.raw`Alpha <2-> omega`;
+    const opaque = String.raw`\begin{verbatim}
+{ % literal opaque source
+\end{frame}
+\end{verbatim}
+\begin{frame}Visible\end{frame}`;
+    const genericAngleTree = texDocumentParser.parse(angleText);
+    const beamerAngleTree = beamerDocumentParser.parse(angleText);
+    const opaqueTree = beamerDocumentParser.parse(opaque);
+
+    // Stage 1 of the Beamer CST cutover deliberately changes the first
+    // assertion: generic angle text should stop becoming an overlay node.
+    expect(genericAngleTree.toString()).toContain("OverlaySpecification");
+    expect(beamerAngleTree.toString()).toContain("OverlaySpecification");
+    expect(opaqueTree.toString()).not.toContain("OpaqueEnvironmentBody");
+    expect(errorRanges(opaqueTree).length).toBeGreaterThan(0);
+  });
+
   it("provides math-fragment and math-environment structure", () => {
     const math = String.raw`x_1+\frac{a}{b}`;
     const document = String.raw`\begin{align}

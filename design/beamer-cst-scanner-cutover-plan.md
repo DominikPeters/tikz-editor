@@ -478,6 +478,19 @@ overlay counts.
    agreed absolute/relative budget to the benchmark and this plan rather than
    accepting a regression implicitly.
 
+The pre-cutover baseline is recorded in
+`design/benchmarks/beamer-frontend-pre-cst-cutover.json`. On that recorded
+Apple Silicon/Node 26 profile, the post-cutover acceptance budgets are:
+
+- `scanBeamerDocument`: median ≤ 8 ms and p95 ≤ 12 ms;
+- `prepareBeamerDocument`: median ≤ 9 ms and p95 ≤ 13 ms.
+
+These are absolute editor-latency budgets rather than a multiplier over the
+sub-millisecond raw scanner. They leave room for the measured ~5.6 ms full
+Beamer-dialect Lezer parse while keeping the frontend below one 60 Hz frame
+on the baseline machine. Results on materially different hardware are
+reported but not compared mechanically to this profile.
+
 **Gate:** all recovery invariants hold, corpus counts have no unexplained
 regressions, and the measured latency comparison is within the agreed budget
 or has received an explicit architectural review.
