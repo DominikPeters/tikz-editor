@@ -21,7 +21,7 @@ export interface BeamerControlSequence {
   readonly starred: boolean;
 }
 
-export interface BeamerEnvironmentToken {
+export interface BeamerEnvironmentBoundary {
   readonly kind: "begin" | "end";
   readonly name: string;
   readonly span: Span;
@@ -45,7 +45,7 @@ export function beamerSyntaxContext(
     : createBeamerSyntaxContext(source);
 }
 
-export function scanBeamerControlSequences(
+export function beamerControlSequencesIn(
   context: BeamerSyntaxContext,
   range: Span
 ): readonly BeamerControlSequence[] {
@@ -57,10 +57,10 @@ export function scanBeamerControlSequences(
   }));
 }
 
-export function scanBeamerEnvironmentTokens(
+export function beamerEnvironmentBoundariesIn(
   context: BeamerSyntaxContext,
   range: Span
-): readonly BeamerEnvironmentToken[] {
+): readonly BeamerEnvironmentBoundary[] {
   return context.syntax.environmentBoundariesIn(range).map((boundary) => ({
     kind: boundary.kind,
     name: boundary.name,
@@ -68,7 +68,7 @@ export function scanBeamerEnvironmentTokens(
   }));
 }
 
-export function readBeamerRequiredArgument(
+export function beamerRequiredArgumentAfter(
   context: BeamerSyntaxContext,
   from: number,
   limit: number
@@ -76,7 +76,7 @@ export function readBeamerRequiredArgument(
   return readBeamerArgument(context, from, "required", limit);
 }
 
-export function readBeamerOptionalArgument(
+export function beamerOptionalArgumentAfter(
   context: BeamerSyntaxContext,
   from: number,
   limit: number
@@ -84,7 +84,7 @@ export function readBeamerOptionalArgument(
   return readBeamerArgument(context, from, "optional", limit);
 }
 
-export function readBeamerOverlayArgument(
+export function beamerOverlayArgumentAfter(
   context: BeamerSyntaxContext,
   from: number,
   limit: number

@@ -5,7 +5,7 @@ import type {
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import {
   beamerSyntaxContext,
-  scanBeamerEnvironmentTokens,
+  beamerEnvironmentBoundariesIn,
 } from "./syntax.js";
 
 export type BeamerTheoremOccurrence = {
@@ -34,7 +34,7 @@ export function resolveBeamerTheoremOccurrences(
   const result = new Map<number, BeamerTheoremOccurrence>();
   const counters = new Map<string, number>();
   const context = beamerSyntaxContext(document.source, syntax);
-  const tokens = scanBeamerEnvironmentTokens(
+  const tokens = beamerEnvironmentBoundariesIn(
     context,
     document.documentBodySpan
   );

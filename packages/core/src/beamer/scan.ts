@@ -6,13 +6,13 @@ import { scanTikzFigures } from "../parser/figure-scan.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import {
   createBeamerSyntaxContext,
-  readBeamerOptionalArgument,
-  readBeamerOverlayArgument,
-  readBeamerRequiredArgument,
-  scanBeamerControlSequences,
-  scanBeamerEnvironmentTokens,
+  beamerOptionalArgumentAfter,
+  beamerOverlayArgumentAfter,
+  beamerRequiredArgumentAfter,
+  beamerControlSequencesIn,
+  beamerEnvironmentBoundariesIn,
   type BeamerControlSequence,
-  type BeamerEnvironmentToken,
+  type BeamerEnvironmentBoundary,
   type BeamerSyntaxContext,
 } from "./syntax.js";
 import type {
@@ -41,8 +41,8 @@ type DocumentRange = {
 };
 
 type FrameCandidate = {
-  begin: BeamerEnvironmentToken;
-  end: BeamerEnvironmentToken | null;
+  begin: BeamerEnvironmentBoundary;
+  end: BeamerEnvironmentBoundary | null;
 };
 
 const THEME_COMMANDS = new Map<string, BeamerThemeKind>([
@@ -121,7 +121,7 @@ function findDocumentRange(
   diagnostics: Diagnostic[]
 ): DocumentRange {
   const { source } = context;
-  const tokens = scanBeamerEnvironmentTokens(context, {
+  const tokens = beamerEnvironmentBoundariesIn(context, {
     from: 0,
     to: source.length,
   });
@@ -173,11 +173,11 @@ function collectFrameCandidates(
   range: Span,
   diagnostics: Diagnostic[]
 ): FrameCandidate[] {
-  const tokens = scanBeamerEnvironmentTokens(context, range).filter(
+  const tokens = beamerEnvironmentBoundariesIn(context, range).filter(
     (token) => token.name === "frame"
   );
   const candidates: FrameCandidate[] = [];
-  let open: { begin: BeamerEnvironmentToken; depth: number } | null = null;
+  let open: { begin: BeamerEnvironmentBoundary; depth: number } | null = null;
 
   for (const token of tokens) {
     if (token.kind === "begin") {
@@ -282,28 +282,28 @@ function scanFrameHeader(
   let headerEnd = from;
 
   const overlay =
-    readBeamerOverlayArgument(context, cursor, frameEnd) ?? undefined;
+    beamerOverlayArgumentAfter(context, cursor, frameEnd) ?? undefined;
   if (overlay) {
     headerEnd = overlay.span.to;
     cursor = overlay.span.to;
   }
 
   const options =
-    readBeamerOptionalArgument(context, cursor, frameEnd) ?? undefined;
+    beamerOptionalArgumentAfter(context, cursor, frameEnd) ?? undefined;
   if (options) {
     headerEnd = options.span.to;
     cursor = options.span.to;
   }
 
   const title =
-    readBeamerRequiredArgument(context, cursor, frameEnd) ?? undefined;
+    beamerRequiredArgumentAfter(context, cursor, frameEnd) ?? undefined;
   if (title) {
     headerEnd = title.span.to;
     cursor = title.span.to;
   }
 
   const subtitle =
-    readBeamerRequiredArgument(context, cursor, frameEnd) ?? undefined;
+    beamerRequiredArgumentAfter(context, cursor, frameEnd) ?? undefined;
   if (subtitle) {
     headerEnd = subtitle.span.to;
   }
@@ -406,7 +406,7 @@ function scanSections(
   diagnostics: Diagnostic[]
 ): BeamerSectionModel[] {
   const sections: BeamerSectionModel[] = [];
-  for (const command of scanBeamerControlSequences(context, range)) {
+  for (const command of beamerControlSequencesIn(context, range)) {
     if (
       (command.name !== "section" && command.name !== "subsection") ||
       isInsideAnyFrame(command.from, frames)
@@ -415,7 +415,7 @@ function scanSections(
     }
 
     let argumentCursor = command.to;
-    const overlay = readBeamerOverlayArgument(
+    const overlay = beamerOverlayArgumentAfter(
       context,
       argumentCursor,
       range.to
@@ -424,12 +424,12 @@ function scanSections(
       argumentCursor = overlay.span.to;
     }
     const shortTitle =
-      readBeamerOptionalArgument(context, argumentCursor, range.to) ??
+      beamerOptionalArgumentAfter(context, argumentCursor, range.to) ??
       undefined;
     if (shortTitle) {
       argumentCursor = shortTitle.span.to;
     }
-    const title = readBeamerRequiredArgument(
+    const title = beamerRequiredArgumentAfter(
       context,
       argumentCursor,
       range.to
@@ -496,7 +496,7 @@ function scanPreamble(
   span: Span
 ): BeamerPreambleModel {
   const { source } = context;
-  const controls = scanBeamerControlSequences(context, span);
+  const controls = beamerControlSequencesIn(context, span);
   let documentClass: BeamerDocumentClassModel | null = null;
   const themes: BeamerThemeUseModel[] = [];
   const metadata: BeamerPreambleModel["metadata"] = {};
@@ -598,7 +598,7 @@ function scanBeamerTheoremDeclarations(params: {
       continue;
     }
     if (command.name === "theoremstyle") {
-      const value = readBeamerRequiredArgument(
+      const value = beamerRequiredArgumentAfter(
         params.context,
         command.to,
         params.span.to
@@ -630,23 +630,23 @@ function readBeamerTheoremDeclaration(
   limit: number,
   style: BeamerTheoremStyle
 ): BeamerTheoremDeclarationModel | null {
-  const name = readBeamerRequiredArgument(context, command.to, limit);
+  const name = beamerRequiredArgumentAfter(context, command.to, limit);
   if (!name || name.value.trim().length === 0) {
     return null;
   }
   let cursor = name.span.to;
-  const shared = readBeamerOptionalArgument(context, cursor, limit);
+  const shared = beamerOptionalArgumentAfter(context, cursor, limit);
   if (shared) {
     cursor = shared.span.to;
   }
-  const displayName = readBeamerRequiredArgument(context, cursor, limit);
+  const displayName = beamerRequiredArgumentAfter(context, cursor, limit);
   if (!displayName) {
     return null;
   }
   cursor = displayName.span.to;
   const within = shared
     ? null
-    : readBeamerOptionalArgument(context, cursor, limit);
+    : beamerOptionalArgumentAfter(context, cursor, limit);
   if (within) {
     cursor = within.span.to;
   }
@@ -871,7 +871,7 @@ function scanBeamerTheoremTemplate(
     ) {
       continue;
     }
-    const template = readBeamerRequiredArgument(
+    const template = beamerRequiredArgumentAfter(
       context,
       command.to,
       span.to
@@ -879,7 +879,7 @@ function scanBeamerTheoremTemplate(
     if (template?.value.trim() !== "theorems") {
       continue;
     }
-    const variant = readBeamerOptionalArgument(
+    const variant = beamerOptionalArgumentAfter(
       context,
       template.span.to,
       span.to
@@ -905,7 +905,7 @@ export function scanBeamerDocumentClass(
   source: string
 ): BeamerDocumentClassModel | null {
   const context = createBeamerSyntaxContext(source);
-  const controls = scanBeamerControlSequences(context, {
+  const controls = beamerControlSequencesIn(context, {
     from: 0,
     to: source.length,
   });
@@ -923,8 +923,8 @@ function readDocumentClass(
   limit: number
 ): BeamerDocumentClassModel | null {
   const options =
-    readBeamerOptionalArgument(context, command.to, limit) ?? undefined;
-  const className = readBeamerRequiredArgument(
+    beamerOptionalArgumentAfter(context, command.to, limit) ?? undefined;
+  const className = beamerRequiredArgumentAfter(
     context,
     options?.span.to ?? command.to,
     limit
@@ -947,8 +947,8 @@ function readThemeUse(
   limit: number
 ): BeamerThemeUseModel | null {
   const options =
-    readBeamerOptionalArgument(context, command.to, limit) ?? undefined;
-  const name = readBeamerRequiredArgument(
+    beamerOptionalArgumentAfter(context, command.to, limit) ?? undefined;
+  const name = beamerRequiredArgumentAfter(
     context,
     options?.span.to ?? command.to,
     limit
@@ -972,8 +972,8 @@ function readMetadataField(
   limit: number
 ): BeamerMetadataFieldModel | null {
   const shortValue =
-    readBeamerOptionalArgument(context, command.to, limit) ?? undefined;
-  const value = readBeamerRequiredArgument(
+    beamerOptionalArgumentAfter(context, command.to, limit) ?? undefined;
+  const value = beamerRequiredArgumentAfter(
     context,
     shortValue?.span.to ?? command.to,
     limit
@@ -996,7 +996,7 @@ function scanFirstCommandValue(
   commandName: string,
   excludedRoots: readonly BeamerTikzPictureRoot[]
 ): BeamerDelimitedSourceValue | undefined {
-  for (const command of scanBeamerControlSequences(context, range)) {
+  for (const command of beamerControlSequencesIn(context, range)) {
     if (
       command.name !== commandName ||
       excludedRoots.some(
@@ -1020,15 +1020,15 @@ function readCommandMainArgument(
   limit: number
 ): BeamerDelimitedSourceValue | null {
   let cursor = from;
-  const overlay = readBeamerOverlayArgument(context, cursor, limit);
+  const overlay = beamerOverlayArgumentAfter(context, cursor, limit);
   if (overlay) {
     cursor = overlay.span.to;
   }
-  const optional = readBeamerOptionalArgument(context, cursor, limit);
+  const optional = beamerOptionalArgumentAfter(context, cursor, limit);
   if (optional) {
     cursor = optional.span.to;
   }
-  return readBeamerRequiredArgument(context, cursor, limit);
+  return beamerRequiredArgumentAfter(context, cursor, limit);
 }
 
 function shiftSpan(span: Span, offset: number): Span {
