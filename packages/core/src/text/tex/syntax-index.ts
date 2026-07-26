@@ -4,6 +4,16 @@ import type { LRParser } from "@lezer/lr";
 import type { Span } from "../../ast/types.js";
 
 const SYNTAX_INDEX_CACHE_LIMIT = 128;
+const OPAQUE_ENVIRONMENT_NAMES = [
+  "BVerbatim",
+  "Verbatim",
+  "alltt",
+  "lstlisting",
+  "minted",
+  "semiverbatim",
+  "verbatim",
+  "verbatim*",
+] as const;
 
 export type TexSyntaxArgumentKind = "required" | "optional" | "overlay";
 
@@ -169,13 +179,6 @@ export function buildTexSyntaxIndex(
           to: node.to,
           recovered: true,
         });
-      }
-    },
-  });
-
-  tree.iterate({
-    enter(node) {
-      if (node.type.isError) {
         return;
       }
       if (node.name === "ControlSequence" || node.name === "IncludeGraphicsCmd") {
@@ -204,8 +207,7 @@ export function buildTexSyntaxIndex(
           "{",
           "}",
           groups,
-          groupByStart,
-          errors
+          groupByStart
         );
       } else if (node.name === "OptionalArgument") {
         addArgument(
@@ -215,8 +217,7 @@ export function buildTexSyntaxIndex(
           "[",
           "]",
           optionalArguments,
-          optionalArgumentByStart,
-          errors
+          optionalArgumentByStart
         );
       } else if (node.name === "OverlaySpecification") {
         addArgument(
@@ -226,8 +227,7 @@ export function buildTexSyntaxIndex(
           "<",
           ">",
           overlayArguments,
-          overlayArgumentByStart,
-          errors
+          overlayArgumentByStart
         );
       } else if (
         node.name === "BeginEnvironment" ||
@@ -239,8 +239,7 @@ export function buildTexSyntaxIndex(
           "begin",
           false,
           boundariesByStart,
-          controlsByStart,
-          errors
+          controlsByStart
         );
       } else if (
         node.name === "EndEnvironment" ||
@@ -252,11 +251,10 @@ export function buildTexSyntaxIndex(
           "end",
           false,
           boundariesByStart,
-          controlsByStart,
-          errors
+          controlsByStart
         );
       } else if (node.name === "OpaqueEnvironment") {
-        const opaque = opaqueEnvironmentFromSyntax(source, node, errors);
+        const opaque = opaqueEnvironmentFromSyntax(source, node);
         if (opaque) {
           opaqueEnvironments.push(opaque);
           addOpaqueBoundary(
@@ -281,6 +279,11 @@ export function buildTexSyntaxIndex(
     },
   });
 
+  markRecovered(groups, errors);
+  markRecovered(optionalArguments, errors);
+  markRecovered(overlayArguments, errors);
+  markRecovered([...boundariesByStart.values()], errors);
+  markRecovered(opaqueEnvironments, errors);
   const controls = sortedValues(controlsByStart);
   const environmentBoundaries = sortedValues(boundariesByStart);
   comments.sort(compareSpans);
@@ -439,8 +442,7 @@ function addArgument(
   open: string,
   close: string,
   target: TexSyntaxDelimitedArgument[],
-  byStart: Map<number, TexSyntaxDelimitedArgument>,
-  errors: readonly TexSyntaxSpan[]
+  byStart: Map<number, TexSyntaxDelimitedArgument>
 ): void {
   if (source[node.from] !== open || byStart.has(node.from)) {
     return;
@@ -454,7 +456,7 @@ function addArgument(
       to: Math.max(node.from + 1, node.to - (complete ? 1 : 0)),
     },
     complete,
-    recovered: !complete || spanHasError(node, errors),
+    recovered: !complete,
   };
   target.push(argument);
   byStart.set(node.from, argument);
@@ -466,8 +468,7 @@ function addEnvironmentBoundary(
   kind: "begin" | "end",
   opaque: boolean,
   boundariesByStart: Map<number, TexSyntaxEnvironmentBoundary>,
-  controlsByStart: Map<number, TexSyntaxControlSequence>,
-  errors: readonly TexSyntaxSpan[]
+  controlsByStart: Map<number, TexSyntaxControlSequence>
 ): void {
   if (boundariesByStart.has(node.from)) {
     return;
@@ -494,7 +495,7 @@ function addEnvironmentBoundary(
     span: { from: node.from, to: node.to },
     commandSpan: { from: node.from, to: commandTo },
     nameSpan,
-    recovered: !complete || spanHasError(node, errors),
+    recovered: !complete,
     opaque,
   };
   boundariesByStart.set(node.from, boundary);
@@ -503,33 +504,43 @@ function addEnvironmentBoundary(
 
 function opaqueEnvironmentFromSyntax(
   source: string,
-  node: SyntaxNodeRef,
-  errors: readonly TexSyntaxSpan[]
+  node: SyntaxNodeRef
 ): TexSyntaxOpaqueEnvironment | null {
-  const environment = node.node.firstChild;
-  const begin = environment?.getChild("OpaqueEnvironmentBegin");
-  const body = environment?.getChild("OpaqueEnvironmentBody");
-  const end = environment?.getChild("OpaqueEnvironmentEnd");
-  if (!begin) {
+  const token = node.node.firstChild;
+  if (
+    !token ||
+    (token.name !== "OpaqueEnvironmentToken" &&
+      token.name !== "UnterminatedOpaqueEnvironmentToken")
+  ) {
     return null;
   }
-  const match = /^\\begin\{([^}]+)\}$/u.exec(
-    source.slice(begin.from, begin.to)
+  const name = OPAQUE_ENVIRONMENT_NAMES.find((candidate) =>
+    source.startsWith(`\\begin{${candidate}}`, token.from)
   );
-  const name = match?.[1];
   if (!name) {
     return null;
   }
+  const beginSpan = {
+    from: token.from,
+    to: token.from + `\\begin{${name}}`.length,
+  };
+  const endMarker = `\\end{${name}}`;
+  const complete =
+    token.name === "OpaqueEnvironmentToken" &&
+    source.startsWith(endMarker, token.to - endMarker.length);
+  const endSpan = complete
+    ? { from: token.to - endMarker.length, to: token.to }
+    : null;
   return {
     name,
     span: { from: node.from, to: node.to },
-    beginSpan: { from: begin.from, to: begin.to },
+    beginSpan,
     bodySpan: {
-      from: body?.from ?? begin.to,
-      to: body?.to ?? begin.to,
+      from: beginSpan.to,
+      to: endSpan?.from ?? token.to,
     },
-    endSpan: end ? { from: end.from, to: end.to } : null,
-    recovered: !end || spanHasError(node, errors),
+    endSpan,
+    recovered: !complete,
   };
 }
 
@@ -572,13 +583,21 @@ function syntaxSpan(node: SyntaxNodeRef): TexSyntaxSpan {
   };
 }
 
-function spanHasError(
-  node: SyntaxNodeRef,
+function markRecovered(
+  values: readonly { readonly span: Span; readonly recovered: boolean }[],
   errors: readonly TexSyntaxSpan[]
-): boolean {
-  return errors.some(
-    (error) => error.from >= node.from && error.to <= node.to
-  );
+): void {
+  for (const value of values) {
+    if (
+      !value.recovered &&
+      errors.some(
+        (error) =>
+          error.from >= value.span.from && error.to <= value.span.to
+      )
+    ) {
+      (value as { recovered: boolean }).recovered = true;
+    }
+  }
 }
 
 function trimSourceSpan(source: string, span: Span): Span {

@@ -80,7 +80,7 @@ describe("@tikz-editor/lezer-tex", () => {
     expect(beamerAngleTree.toString()).toContain("OverlaySpecification");
     expect(errorRanges(beamerAngleTree)).toEqual([]);
     expect(opaqueTree.toString()).toContain(
-      "OpaqueVerbatimEnvironment(OpaqueEnvironmentBegin,OpaqueEnvironmentBody,OpaqueEnvironmentEnd)"
+      "OpaqueEnvironment(OpaqueEnvironmentToken)"
     );
     expect(errorRanges(opaqueTree)).toEqual([]);
   });
@@ -104,7 +104,7 @@ literal % \end{frame}
     const tree = beamerDocumentParser.parse(source);
 
     expect(errorRanges(tree)).toEqual([]);
-    expect(countNodes(tree, "OpaqueEnvironmentBody")).toBe(1);
+    expect(countNodes(tree, "OpaqueEnvironmentToken")).toBe(1);
     expect(countNodes(tree, "BeginEnvironment")).toBe(1);
     expect(countNodes(tree, "EndEnvironment")).toBe(1);
   });
@@ -116,7 +116,7 @@ literal % source
 \begin{frame}{not structural}`;
     const tree = beamerDocumentParser.parse(source);
 
-    expect(countNodes(tree, "OpaqueEnvironmentBody")).toBe(1);
+    expect(countNodes(tree, "UnterminatedOpaqueEnvironmentToken")).toBe(1);
     expect(countNodes(tree, "BeginEnvironment")).toBe(0);
     expect(errorRanges(tree).length).toBeGreaterThan(0);
   });

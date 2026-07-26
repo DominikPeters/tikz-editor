@@ -1,237 +1,65 @@
-import {
-  ContextTracker,
-  ExternalTokenizer,
-  type InputStream,
-} from "@lezer/lr";
+import { ExternalTokenizer, type InputStream } from "@lezer/lr";
 
 import {
-  OpaqueAllttBegin,
-  OpaqueAllttBody,
-  OpaqueAllttEnd,
-  OpaqueAllttEnvironment,
-  OpaqueBVerbatimBegin,
-  OpaqueBVerbatimBody,
-  OpaqueBVerbatimEnd,
-  OpaqueBVerbatimEnvironment,
-  OpaqueLstlistingBegin,
-  OpaqueLstlistingBody,
-  OpaqueLstlistingEnd,
-  OpaqueLstlistingEnvironment,
-  OpaqueMintedBegin,
-  OpaqueMintedBody,
-  OpaqueMintedEnd,
-  OpaqueMintedEnvironment,
-  OpaqueSemiverbatimBegin,
-  OpaqueSemiverbatimBody,
-  OpaqueSemiverbatimEnd,
-  OpaqueSemiverbatimEnvironment,
-  OpaqueVerbatimBegin,
-  OpaqueVerbatimBody,
-  OpaqueVerbatimCapitalBegin,
-  OpaqueVerbatimCapitalBody,
-  OpaqueVerbatimCapitalEnd,
-  OpaqueVerbatimCapitalEnvironment,
-  OpaqueVerbatimEnd,
-  OpaqueVerbatimEnvironment,
-  OpaqueVerbatimStarBegin,
-  OpaqueVerbatimStarBody,
-  OpaqueVerbatimStarEnd,
-  OpaqueVerbatimStarEnvironment,
-  OptionalArgument,
-  Group,
+  OpaqueEnvironmentToken,
+  UnterminatedOpaqueEnvironmentToken,
 } from "./tex-parser.terms.js";
 
-interface OpaqueEnvironmentTokens {
-  readonly name: string;
-  readonly begin: number;
-  readonly body: number;
-  readonly end: number;
-  readonly node: number;
-  readonly header: "body" | "optional" | "minted-language";
-}
+const OPAQUE_ENVIRONMENT_NAMES = [
+  "BVerbatim",
+  "Verbatim",
+  "alltt",
+  "lstlisting",
+  "minted",
+  "semiverbatim",
+  "verbatim",
+  "verbatim*",
+] as const;
 
-const ENVIRONMENTS: readonly OpaqueEnvironmentTokens[] = [
-  {
-    name: "BVerbatim",
-    begin: OpaqueBVerbatimBegin,
-    body: OpaqueBVerbatimBody,
-    end: OpaqueBVerbatimEnd,
-    node: OpaqueBVerbatimEnvironment,
-    header: "optional",
-  },
-  {
-    name: "Verbatim",
-    begin: OpaqueVerbatimCapitalBegin,
-    body: OpaqueVerbatimCapitalBody,
-    end: OpaqueVerbatimCapitalEnd,
-    node: OpaqueVerbatimCapitalEnvironment,
-    header: "optional",
-  },
-  {
-    name: "alltt",
-    begin: OpaqueAllttBegin,
-    body: OpaqueAllttBody,
-    end: OpaqueAllttEnd,
-    node: OpaqueAllttEnvironment,
-    header: "body",
-  },
-  {
-    name: "lstlisting",
-    begin: OpaqueLstlistingBegin,
-    body: OpaqueLstlistingBody,
-    end: OpaqueLstlistingEnd,
-    node: OpaqueLstlistingEnvironment,
-    header: "optional",
-  },
-  {
-    name: "minted",
-    begin: OpaqueMintedBegin,
-    body: OpaqueMintedBody,
-    end: OpaqueMintedEnd,
-    node: OpaqueMintedEnvironment,
-    header: "minted-language",
-  },
-  {
-    name: "semiverbatim",
-    begin: OpaqueSemiverbatimBegin,
-    body: OpaqueSemiverbatimBody,
-    end: OpaqueSemiverbatimEnd,
-    node: OpaqueSemiverbatimEnvironment,
-    header: "body",
-  },
-  {
-    name: "verbatim",
-    begin: OpaqueVerbatimBegin,
-    body: OpaqueVerbatimBody,
-    end: OpaqueVerbatimEnd,
-    node: OpaqueVerbatimEnvironment,
-    header: "body",
-  },
-  {
-    name: "verbatim*",
-    begin: OpaqueVerbatimStarBegin,
-    body: OpaqueVerbatimStarBody,
-    end: OpaqueVerbatimStarEnd,
-    node: OpaqueVerbatimStarEnvironment,
-    header: "body",
-  },
-];
-
-interface OpaqueEnvironmentContext {
-  readonly environment: OpaqueEnvironmentTokens;
-  readonly header: OpaqueEnvironmentTokens["header"];
-}
-
-export const opaqueEnvironmentContext =
-  new ContextTracker<OpaqueEnvironmentContext | null>({
-    start: null,
-    shift(context, term, _stack, input) {
-      const environment = ENVIRONMENTS.find((entry) => entry.begin === term);
-      return environment &&
-        matchesExact(input, `\\begin{${environment.name}}`)
-        ? { environment, header: environment.header }
-        : context;
-    },
-    reduce(context, term) {
-      if (!context) {
-        return null;
-      }
-      if (term === context.environment.node) {
-        return null;
-      }
-      if (term === OptionalArgument && context.header === "optional") {
-        return { ...context, header: "body" };
-      }
-      if (term === Group && context.header === "minted-language") {
-        return { ...context, header: "body" };
-      }
-      return context;
-    },
-    reuse(context, node, _stack, input) {
-      const environment = ENVIRONMENTS.find(
-        (entry) => entry.begin === node.type.id
-      );
-      return environment &&
-        matchesExact(input, `\\begin{${environment.name}}`)
-        ? { environment, header: environment.header }
-        : context;
-    },
-    strict: false,
-  });
-
+/**
+ * LaTeX's verbatim-family scanners consume their body through the matching
+ * environment terminator before ordinary comment/group tokenization resumes.
+ * Model that lexical unit atomically; the source-backed syntax index projects
+ * its exact begin/body/end spans without reparsing the body.
+ */
 export const opaqueEnvironmentTokens = new ExternalTokenizer(
   (input, stack) => {
-    const context = stack.context as OpaqueEnvironmentContext | null;
-    if (!context) {
-      for (const environment of ENVIRONMENTS) {
-        if (
-          stack.canShift(environment.begin) &&
-          acceptExact(input, `\\begin{${environment.name}}`)
-        ) {
-          input.acceptToken(environment.begin);
-          return;
+    if (input.next !== 92) {
+      return;
+    }
+    for (const name of OPAQUE_ENVIRONMENT_NAMES) {
+      const begin = `\\begin{${name}}`;
+      if (!matchesExact(input, begin)) {
+        continue;
+      }
+      const canComplete = stack.canShift(OpaqueEnvironmentToken);
+      const canRecover = stack.canShift(UnterminatedOpaqueEnvironmentToken);
+      if (!canComplete && !canRecover) {
+        return;
+      }
+      advanceExact(input, begin);
+      const end = `\\end{${name}}`;
+      while (input.next >= 0 && !matchesExact(input, end)) {
+        input.advance();
+      }
+      if (input.next >= 0) {
+        advanceExact(input, end);
+        if (canComplete) {
+          input.acceptToken(OpaqueEnvironmentToken);
         }
+      } else if (canRecover) {
+        input.acceptToken(UnterminatedOpaqueEnvironmentToken);
       }
       return;
-    }
-
-    const { environment } = context;
-    if (
-      stack.canShift(environment.end) &&
-      acceptExact(input, `\\end{${environment.name}}`)
-    ) {
-      input.acceptToken(environment.end);
-      return;
-    }
-    if (shouldParseHeader(input, context)) {
-      return;
-    }
-    if (stack.canShift(environment.body)) {
-      acceptBody(input, environment);
     }
   },
   { contextual: true }
 );
 
-function shouldParseHeader(
-  input: InputStream,
-  context: OpaqueEnvironmentContext
-): boolean {
-  if (context.header === "optional") {
-    return input.next === 91;
-  }
-  if (context.header === "minted-language") {
-    return input.next === 91 || input.next === 123;
-  }
-  return false;
-}
-
-function acceptBody(
-  input: InputStream,
-  environment: OpaqueEnvironmentTokens
-): void {
-  const terminator = `\\end{${environment.name}}`;
-  let length = 0;
-  while (input.next >= 0) {
-    if (matchesExact(input, terminator)) {
-      break;
-    }
-    input.advance();
-    length += 1;
-  }
-  if (length > 0) {
-    input.acceptToken(environment.body);
-  }
-}
-
-function acceptExact(input: InputStream, value: string): boolean {
-  if (!matchesExact(input, value)) {
-    return false;
-  }
+function advanceExact(input: InputStream, value: string): void {
   for (let index = 0; index < value.length; index += 1) {
     input.advance();
   }
-  return true;
 }
 
 function matchesExact(input: InputStream, value: string): boolean {

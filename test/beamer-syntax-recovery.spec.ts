@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { scanBeamerDocument } from "../packages/core/src/index.js";
+import {
+  parseBeamerFrameBody,
+  scanBeamerFrameOverlays,
+} from "../packages/core/src/beamer/index.js";
 
 const OPAQUE_ENVIRONMENTS = [
   "BVerbatim",
@@ -40,6 +44,7 @@ Visible
       ]);
       expect(document.diagnostics).toEqual([]);
       expectModelSpansInBounds(document, source.length);
+      expectFramePassesComplete(source, document);
     }
   );
 
@@ -61,6 +66,7 @@ Visible
       "Later",
     ]);
     expect(document.diagnostics).toEqual([]);
+    expectFramePassesComplete(source, document);
   });
 
   it("masks an unterminated opaque body through the containing source limit", () => {
@@ -80,6 +86,7 @@ Visible
       "beamer-unterminated-frame",
     ]);
     expectModelSpansInBounds(document, source.length);
+    expectFramePassesComplete(source, document);
   });
 
   it("discovers later frames after mismatched non-frame environments", () => {
@@ -98,6 +105,7 @@ Visible
     ]);
     expect(document.diagnostics).toEqual([]);
     expectModelSpansInBounds(document, source.length);
+    expectFramePassesComplete(source, document);
   });
 
   it("retains a frame with an incomplete title argument", () => {
@@ -119,6 +127,7 @@ unfinished`;
       "beamer-unterminated-frame",
     ]);
     expectModelSpansInBounds(document, source.length);
+    expectFramePassesComplete(source, document);
   });
 
   it("distinguishes escaped percent control symbols from comments", () => {
@@ -135,8 +144,22 @@ Body
       "Visible",
     ]);
     expect(document.diagnostics).toEqual([]);
+    expectFramePassesComplete(source, document);
   });
 });
+
+function expectFramePassesComplete(
+  source: string,
+  document: ReturnType<typeof scanBeamerDocument>
+): void {
+  for (const frame of document.frames) {
+    const body = parseBeamerFrameBody({ source, document, frame });
+    const overlays = scanBeamerFrameOverlays(source, frame);
+    expect(body.span).toEqual(frame.bodySpan);
+    expect(body.overlays.stepCount).toBeGreaterThanOrEqual(1);
+    expect(overlays.stepCount).toBe(body.overlays.stepCount);
+  }
+}
 
 function expectModelSpansInBounds(
   document: ReturnType<typeof scanBeamerDocument>,

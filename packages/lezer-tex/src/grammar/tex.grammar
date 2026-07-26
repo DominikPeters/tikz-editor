@@ -29,46 +29,8 @@ TexItem {
 }
 
 OpaqueEnvironment {
-  OpaqueBVerbatimEnvironment |
-  OpaqueVerbatimCapitalEnvironment |
-  OpaqueAllttEnvironment |
-  OpaqueLstlistingEnvironment |
-  OpaqueMintedEnvironment |
-  OpaqueSemiverbatimEnvironment |
-  OpaqueVerbatimEnvironment |
-  OpaqueVerbatimStarEnvironment
-}
-
-OpaqueBVerbatimEnvironment {
-  OpaqueBVerbatimBegin OptionalArgument? OpaqueBVerbatimBody? OpaqueBVerbatimEnd
-}
-
-OpaqueVerbatimCapitalEnvironment {
-  OpaqueVerbatimCapitalBegin OptionalArgument? OpaqueVerbatimCapitalBody? OpaqueVerbatimCapitalEnd
-}
-
-OpaqueAllttEnvironment {
-  OpaqueAllttBegin OpaqueAllttBody? OpaqueAllttEnd
-}
-
-OpaqueLstlistingEnvironment {
-  OpaqueLstlistingBegin OptionalArgument? OpaqueLstlistingBody? OpaqueLstlistingEnd
-}
-
-OpaqueMintedEnvironment {
-  OpaqueMintedBegin OptionalArgument? Group OpaqueMintedBody? OpaqueMintedEnd
-}
-
-OpaqueSemiverbatimEnvironment {
-  OpaqueSemiverbatimBegin OpaqueSemiverbatimBody? OpaqueSemiverbatimEnd
-}
-
-OpaqueVerbatimEnvironment {
-  OpaqueVerbatimBegin OpaqueVerbatimBody? OpaqueVerbatimEnd
-}
-
-OpaqueVerbatimStarEnvironment {
-  OpaqueVerbatimStarBegin OpaqueVerbatimStarBody? OpaqueVerbatimStarEnd
+  OpaqueEnvironmentToken |
+  UnterminatedOpaqueEnvironmentToken MissingOpaqueEnvironmentEnd
 }
 
 Environment {
@@ -288,33 +250,10 @@ MathEnvironmentName {
   @specialize<WordToken, "array">
 }
 
-@context opaqueEnvironmentContext from "./opaque-tokens.js"
-
 @external tokens opaqueEnvironmentTokens from "./opaque-tokens.js" {
-  OpaqueBVerbatimBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueBVerbatimBody[@name=OpaqueEnvironmentBody]
-  OpaqueBVerbatimEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueVerbatimCapitalBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueVerbatimCapitalBody[@name=OpaqueEnvironmentBody]
-  OpaqueVerbatimCapitalEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueAllttBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueAllttBody[@name=OpaqueEnvironmentBody]
-  OpaqueAllttEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueLstlistingBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueLstlistingBody[@name=OpaqueEnvironmentBody]
-  OpaqueLstlistingEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueMintedBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueMintedBody[@name=OpaqueEnvironmentBody]
-  OpaqueMintedEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueSemiverbatimBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueSemiverbatimBody[@name=OpaqueEnvironmentBody]
-  OpaqueSemiverbatimEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueVerbatimBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueVerbatimBody[@name=OpaqueEnvironmentBody]
-  OpaqueVerbatimEnd[@name=OpaqueEnvironmentEnd]
-  OpaqueVerbatimStarBegin[@name=OpaqueEnvironmentBegin]
-  OpaqueVerbatimStarBody[@name=OpaqueEnvironmentBody]
-  OpaqueVerbatimStarEnd[@name=OpaqueEnvironmentEnd]
+  OpaqueEnvironmentToken
+  UnterminatedOpaqueEnvironmentToken
+  MissingOpaqueEnvironmentEnd
 }
 
 @tokens {
