@@ -280,37 +280,53 @@ columns, blocks, theme constructs, and overlays. Textual leaves are
 by the existing simple-TeX/vlist pipeline. Beamer-specific concepts do not
 fork or specialize that generic text IR.
 
-TeX syntax has one authoritative structural interpretation: the reusable
-Lezer CST in `packages/lezer-tex`. The TeX document and fragment parsers use
-the same grammar; Beamer is a dialect, TikZ node-text groups mount the TeX
-fragment parser, and TeX documents mount the TikZ parser for `tikzpicture`
-environments. Core lowers that CST into source-backed text IR. The native
-math parser remains a semantic parser below this boundary: Lezer owns math
-delimiters, environments, groups, and command spans, while the math parser
-owns TeX atom classes, macro meaning, dimensions, and box construction.
+Generic TeX syntax has one authoritative structural interpretation: the
+reusable Lezer CST in `packages/lezer-tex`. The TeX document and fragment
+parsers use the same grammar; Beamer is an editor-language dialect, TikZ
+node-text groups mount the TeX fragment parser, and TeX documents mount the
+TikZ parser for `tikzpicture` environments. Core lowers that CST into
+source-backed text IR. The native math parser remains a semantic parser below
+this boundary: Lezer owns math delimiters, environments, groups, and command
+spans, while the math parser owns TeX atom classes, macro meaning, dimensions,
+and box construction.
 
-Rendering, capability reporting, resource discovery, source-mode
-projections, hit-map reconciliation, and later editing consume the CST or its
-lowered IR rather than recognizing commands independently in raw source.
-Raw-source scans may be used only as non-authoritative performance prefilters
-or UI hints. Macro expansion is an explicit pre-CST phase: it owns expansion
-semantics and mapped-source provenance, but downstream consumers parse its
-materialized result through the shared frontend. In particular, the shared
-text frontend produces a
-`SimpleTexResourceManifest`, retaining command, filename, and option spans.
-It can flatten an existing inline/block IR or run the same resource-node
-scanner over arbitrary document source before structural layout. The app
-resolves that manifest asynchronously before layout and passes the resulting
-document-local resolver back to core.
+Beamer's document model is a separate semantic projection, not another text
+IR. It owns name-aware frame/environment pairing, preamble and navigation
+models, overlay semantics, and recovery through malformed or opaque content.
+At present `packages/core/src/beamer/scan.ts` still obtains its tokens and
+balanced arguments from a raw-source scanner. This is a transitional syntax
+duplication, not the intended final boundary. The target is **one CST, multiple
+semantic IRs**: the Beamer projection consumes a shared CST-backed token/index
+service for control sequences, comments, groups, optional arguments, and
+source spans, while retaining its own semantic pairing and recovery policy.
+Direct source scanning is then confined to explicit recovery for malformed or
+opaque regions that the CST cannot represent faithfully.
 
-*Implemented (2026-07-25):* math boundaries, nested math environments,
-balanced groups and optional arguments, environment boundaries,
-control-sequence identity, comments, whitespace, prose tokens, graphics
-discovery, TikZ multipart `\nodepart` splitting, node font/space
+Generic text rendering, capability reporting, resource discovery,
+source-mode projections, hit-map reconciliation, and later editing consume
+the CST or its lowered IR rather than recognizing commands independently in
+raw source. Raw-source scans may otherwise be used only as non-authoritative
+performance prefilters or UI hints. Macro expansion is an explicit pre-CST
+phase: it owns expansion semantics and mapped-source provenance, but
+downstream consumers parse its materialized result through the shared
+frontend. In particular, the shared text frontend produces a
+`SimpleTexResourceManifest`, currently retaining command and filename spans
+plus parsed options; the target contract also retains the option-argument and
+per-entry spans described under Graphics. It can flatten an existing
+inline/block IR or traverse the same CST resource nodes over arbitrary
+document source before structural layout. The app resolves that manifest
+asynchronously before layout and passes the resulting document-local resolver
+back to core.
+
+*Implemented for the generic TeX frontend (2026-07-25):* math boundaries,
+nested math environments, balanced groups and optional arguments, environment
+boundaries, control-sequence identity, comments, whitespace, prose tokens,
+graphics discovery, TikZ multipart `\nodepart` splitting, node font/space
 normalization, forced-break/restricted-horizontal-mode projections, and
 hit-map line-break reconciliation all use the shared CST/IR path. Comments
 are zero-width source-backed IR nodes, so rendering ignores them without
-losing editor ownership of their spans.
+losing editor ownership of their spans. Migrating the Beamer structural
+scanner onto the shared syntax service remains a separate pass.
 
 The resolver contract is `DocumentGraphicsResolver` in
 `packages/core/src/graphics`, not a node-text service. The top-level TikZ and
@@ -588,13 +604,26 @@ canvas, it is page-bounded with fit-to-view zoom.
 The project unit is the **directory** (what Overleaf, git, and arXiv
 tarballs already are). Opening a `.tex` roots the project at its directory.
 
-- Resolution: `\graphicspath` + relative paths; extensionless references try
-  pdfTeX's order (`.pdf`, `.png`, `.jpg`, `.jpeg`, ...).
+- **Resolution target:** `\graphicspath` + relative paths; extensionless
+  references try pdfTeX's order (`.pdf`, `.png`, `.jpg`, `.jpeg`, ...).
+  Relative paths and extensionless lookup are implemented for desktop-backed
+  documents; `\graphicspath` and browser project-directory lookup are not.
 - Discovery is a two-stage contract: the shared text frontend emits
   source-backed graphics resources with parsed options (including PDF
   `page`), then the platform asset layer performs filesystem lookup,
   rasterization, caching, and watching. It does not rescan `\includegraphics`
-  or parse graphicx options from strings.
+  or parse graphicx options from strings. Discovery currently traverses the
+  unexpanded source CST; resolving resources introduced through parameterized
+  macros remains to be implemented at the explicit expansion boundary.
+- Graphics dimensions remain structured expressions until layout. The IR must
+  preserve absolute lengths and expressions such as `.8\textwidth` and
+  `\linewidth`, then resolve them against the active `\linewidth`,
+  `\textwidth`, `\columnwidth`, `\paperwidth`, `em`, and `ex`. Each graphicx
+  option entry retains its complete, key, and value spans so a later resize
+  adapter can rewrite only the authored value. *Current status:* width,
+  height, trim, and viewport are parsed immediately into absolute
+  `TexLength`s, and only the complete raw option string is retained; this
+  contextual-expression and per-entry-span pass is still outstanding.
 - Layout is likewise staged rather than inferred from paint. The inline TeX
   box retains a payload-free `DocumentGraphicsAsset`; paragraph reports carry
   the image as an atomic source-backed segment; the VList then publishes its
@@ -611,12 +640,15 @@ tarballs already are). Opening a `.tex` roots the project at its directory.
 - **PDF figures render via PDF.js** (Apache-2.0; poppler/pdftocairo WASM
   rejected on license and maintenance grounds). Raster preview is
   sufficient because the compiled deck embeds the original vector PDF — the
-  editor's rendering never reaches the output. Rasterize at
-  `zoom × devicePixelRatio`, embed as `<image>`, cache by
-  `(file hash, page, dpi)`. Size by the **CropBox** (pdfTeX's default box),
-  falling back to MediaBox. PDFium-wasm (BSD) is the fallback engine if
-  PDF.js fidelity disappoints; desktop may later shell out to user-installed
-  tools as an opt-in enhancement.
+  editor's rendering never reaches the output. Page selection and a capped
+  fixed-scale raster preview are implemented. The target is to rasterize at
+  `zoom × devicePixelRatio`, embed as `<image>`, and cache by
+  `(file hash, page, dpi)`; adaptive rerasterization and DPI-sensitive
+  invalidation remain. Size by the **CropBox** (pdfTeX's default box),
+  falling back to MediaBox; add an explicit box-selection regression before
+  treating that fidelity point as closed. PDFium-wasm (BSD) is the fallback
+  engine if PDF.js fidelity disappoints; desktop may later shell out to
+  user-installed tools as an opt-in enhancement.
 - Web: File System Access API directory handle (Chromium); degraded mode
   elsewhere = placeholder + "locate file". The arXiv source browser is the
   friendlier web path since a tarball provides the whole tree.
@@ -1155,17 +1187,10 @@ match real Beamer within tolerance.
 ### Phase B2.5: App and Root Integration
 
 **Core prerequisites (Milestone 0).** Mapping the app boundary (2026-07-24)
-found two gaps in the headless surface that precede any app work:
+found two gaps in the headless surface:
 
-1. **No scan-once-render-many entry point.** Every `renderBeamerFrame` call
-   re-runs `scanBeamerDocument`, theme resolution, macro collection, and
-   navigation modeling from raw source; only `renderBeamerFramePages` shares
-   work, and only across the steps of one frame. Add a prepared-document
-   session (`prepareBeamerDocument(source)`) that performs the
-   document-level passes once and renders any frame/step against the
-   prepared model, plus cheap per-frame step counts from the overlay scanner
-   so a sorter can badge steps without rendering.
-   *Done (2026-07-24):* `prepareBeamerDocument(source): PreparedBeamerDocument`
+1. **Prepared document session — done (2026-07-24).**
+   `prepareBeamerDocument(source): PreparedBeamerDocument`
    in `packages/core/src/beamer/render.ts` hoists scan, theme resolution,
    page geometry, macro bindings, navigation topology, and the document-wide
    theorem-occurrence pass (previously re-run inside every
@@ -1184,7 +1209,7 @@ found two gaps in the headless surface that precede any app work:
 **Root generalization is a re-architecture pass, not a bolt-on.** The app
 encodes "a document is a list of tikzpictures" through ad-hoc mechanisms
 that must be replaced with explicit abstractions rather than extended.
-*Progress (2026-07-24):* the four bullets below are implemented — root id
+*Implemented (2026-07-24):* the four bullets below are implemented — root id
 codec (`packages/core/src/document/root-id.ts`), `rootKey` for per-root
 ephemeral state (`packages/app/src/root-key.ts`; the thumbnail cache stays
 content-addressed and navigator scroll document-scoped by design), named
@@ -1193,30 +1218,23 @@ policies (`packages/app/src/root-inventory.ts`: `parseWindowRootId`,
 detection (`packages/core/src/document/kind.ts`, projected on
 `EditorState`), and `activeRootId` with workspace persistence v4. Core
 parse options keep `activeFigureId` (the TikZ parse window is genuinely
-figure-scoped); app call sites map explicitly at that boundary. The
-remaining item is the kind-tagged `SessionSnapshot` render result, which
-lands with the deck compute path:
+figure-scoped); app call sites map explicitly at that boundary. The deck
+compute path adds a kind-tagged `deck` section to `SessionSnapshot`; changing
+the entire snapshot into a strict discriminated union remains an optional
+cleanup because the transitional shape still carries nullable TikZ fields:
 
-- Root ids are positional strings (`figure:N`) parsed with a regex in two
-  modules (`parser/shared.ts`, `cst-to-ast.ts`). Replace with a
-  discriminated root reference (kind + index/id) and one shared codec; no
-  string-shape parsing at call sites. Beamer frames (`frame:N`, nested
-  `frame:N:tikzpicture:M`) join the same namespace.
-- Per-root ephemeral state lives in five module-level maps with three
-  different key formats (viewport persistence, canvas context key, thumbnail
-  cache, carousel scroll, edit-analysis cache). Replace with one
-  `rootKey(documentId, rootRef)` helper and a per-root record.
-- `figures.length` acts as a UI-policy proxy in six call sites
-  (auto-selection, carousel visibility, dock auto-open, source dimming,
-  status bar, the repeated `activeFigureId ?? (figures.length > 1 ? null :
-  undefined)` idiom). Replace with explicit named policies on the root
-  inventory.
-- `EditorState` gains `documentKind` (`tikz` | `beamer`), detected from
-  `\documentclass{beamer}` — mode follows the file. `SessionSnapshot`'s
-  singular `scene`/`svg`/`editHandles` become a kind-tagged active-root
-  render result; `activeFigureId` becomes `activeRootId` with a workspace
-  persistence migration. TikZ behavior must be bit-identical after this
-  pass.
+- One shared root-id codec owns TikZ figures, Beamer frames, and nested frame
+  TikZ roots; call sites no longer parse id strings ad hoc.
+- Per-root ephemeral state keys use `rootKey(documentId, rootRef)`. The
+  thumbnail cache remains content-addressed and navigator scroll remains
+  document-scoped by design rather than being forced into that record.
+- Explicit root-inventory policies replace `figures.length` as a proxy for
+  auto-selection, navigator visibility, dock behavior, source dimming, and
+  status reporting.
+- `EditorState.documentKind` is detected from the source and
+  `activeFigureId` has become `activeRootId`, with the workspace persistence
+  migration applied. Core TikZ parse options deliberately retain
+  `activeFigureId` at their figure-scoped boundary.
 
 **Decisions (2026-07-24):**
 
@@ -1234,29 +1252,25 @@ lands with the deck compute path:
   deck-mode features of the same component. The thumbnail worker gains a
   root-kind discriminant instead of unconditionally rendering tikz.
 
-Remaining scope: deck-mode compute path (active frame at selected step,
-prepared-document reuse, per-frame memoization), selected-step state,
-source panel caret↔frame sync and dimming over roots, diagnostics
-surfacing (unknown-theme chrome badge, font substitution), corpus decks as
-fixtures, and an open→no-op→byte-identical round-trip test.
+*Implemented through 2026-07-25:* the first deck view works end-to-end in the
+web app. `SessionSnapshot` carries frame inventory, titles and step counts,
+and the selected frame/step page. A module-level compute session reuses
+`prepareBeamerDocument` and memoizes pages per frame/step. The canvas shows
+the frame through the existing SVG layer with a step scrubber (buttons +
+arrow keys); TikZ interactions are inert on the empty deck scene and the
+reducer rejects edit actions in deck mode. The navigator, thumbnail worker
+(final-step renders, step badges, and path-free graphics preview bundles),
+dock auto-open, source dimming/caret sync and Beamer diagnostics, and status
+bar consume deck frames as roots. Browser code no longer pulls the
+Node-backed corpus helpers through the core package root.
 
-*Progress (2026-07-24):* the first deck view works end-to-end in the web
-app. `SessionSnapshot` carries a kind-tagged `deck` section (frame
-inventory with titles/step counts plus the active frame's rendered page);
-a module-level compute session reuses `prepareBeamerDocument` and memoizes
-pages per frame/step. The canvas shows the frame through the existing SVG
-layer with a step scrubber (buttons + arrow keys); tikz interactions are
-inert on the empty deck scene and the reducer rejects edit actions in
-deck mode. The figure navigator, thumbnail worker (final-step renders,
-step badges), dock auto-open, source dimming/caret sync, and status bar
-consume deck frames as roots. Verified live: Madrid chrome, `\only`
-reflow across steps, `[<+->]` item projection, frame switching, and
-source-panel editing with live rerender. Two follow-ups measured, not
-guessed: typing invalidates the whole prepared session per keystroke
-(needs frame-level IR reuse across revisions), and the app must not
-import the core package root in browser code (it pulls `node:fs` via the
-corpus helpers). Inspector still shows the tikz panes in deck mode;
-navigator rewrite, fallback cards, and diagnostics badges remain.
+*Remaining:* typing still invalidates the whole prepared session per
+keystroke and needs frame-level IR reuse across revisions. The navigator is
+still the original horizontal `FigureNavigator`, not the planned flexible
+root navigator with section headers, grid/vertical modes, fallback cards,
+and drag sorting. Block/inline source-card placeholders, chrome-level
+diagnostic badges, deck-aware inspector panes, and a dedicated
+open→no-op→byte-identical Beamer round-trip test also remain.
 
 Exit: any corpus deck opens in the app; the sorter shows render order and
 fallback cards; existing TikZ editing remains unaffected.
