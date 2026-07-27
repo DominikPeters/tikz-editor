@@ -201,4 +201,24 @@ describe("native TeX node text engine", () => {
     expect(width).toBeGreaterThan(0);
     expect(width).toBeLessThan(100);
   });
+
+  it("renders the marker for an empty enumerate item", async () => {
+    const engine = await createTexNodeTextEngine();
+    const metrics = engine.measure({
+      ...request(String.raw`My list:
+\begin{enumerate}
+\item
+\end{enumerate}`),
+      textWidthPt: 100,
+      alignment: "ragged-right",
+    });
+    const body = engine.renderFromCache(metrics?.cacheKey ?? "")?.body;
+
+    expect(metrics).not.toBeNull();
+    expect(body).toContain(
+      'data-tex-hbox-role="list-label" data-tex-list-item-index="1"'
+    );
+    expect(body).toContain('data-tex-glyph="49"');
+    expect(body).toContain('data-tex-glyph="46"');
+  });
 });

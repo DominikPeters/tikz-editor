@@ -4099,6 +4099,32 @@ describe("simple TeX paragraph layout", () => {
     });
   });
 
+  it("renders the label of an empty enumerate item", () => {
+    const result = layoutSimpleTexParagraph(
+      String.raw`My list:
+\begin{enumerate}
+\item
+\end{enumerate}`,
+      {
+        paragraphId: "tex:empty-enumerate-item",
+        width: 100,
+        alignment: "ragged-right",
+        hyphenator: { hyphenate: () => [] },
+        tikzTextWidthNode: true,
+      }
+    );
+
+    expect(result.supported).toBe(true);
+    expect(lineTexts(result.report)).toEqual(["My list:", "1."]);
+    expect(result.report?.lines[1]?.segments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "text",
+        role: "list-label",
+        text: "1.",
+      }),
+    ]));
+  });
+
   it("keeps glyphless list-label lines explicit for TeX oracle comparisons", () => {
     const result = layoutSimpleTexParagraph(
       String.raw`\begin{minipage}{90pt}\begin{quotation}Stable gamma vector faithful modern lattice, quoted single lattice. \par Reader local lattice actual spacing double manual,.\end{quotation}\end{minipage}`,

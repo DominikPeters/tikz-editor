@@ -212,6 +212,10 @@ export function prepareTexLayoutParagraphsFromVList(
         spaceGlueProfile,
         inlinePrefixItems: [
           ...listAttachments.inlineLabelItems,
+          ...texEmptyListItemLinePrefix({
+            segment,
+            hasMarginLabel: listAttachments.marginLabel !== undefined,
+          }),
           ...quotationPrefix.inlinePrefixItems,
           ...(leadingInterwordSpace ? [leadingInterwordSpace] : []),
         ],
@@ -264,6 +268,43 @@ export function prepareTexLayoutParagraphsFromVList(
       attachmentResult.paragraphPathRemaps
     ),
   };
+}
+
+function texEmptyListItemLinePrefix(params: {
+  readonly segment: SimpleTexParagraphSegment;
+  readonly hasMarginLabel: boolean;
+}): readonly TexLayoutInlineItem[] {
+  if (
+    !params.hasMarginLabel ||
+    params.segment.text.length > 0 ||
+    params.segment.nodes.length > 0
+  ) {
+    return [];
+  }
+  const sourceStart = params.segment.sourceStart;
+  return [{
+    kind: "math",
+    role: "list-label",
+    text: "",
+    content: "",
+    delimiter: "dollar",
+    sourceStart,
+    sourceEnd: sourceStart,
+    contentStart: sourceStart,
+    contentEnd: sourceStart,
+    box: {
+      source: "",
+      content: "",
+      sourceStart,
+      sourceEnd: sourceStart,
+      contentStart: sourceStart,
+      contentEnd: sourceStart,
+      width: texLength(0),
+      height: texLength(0),
+      depth: texLength(0),
+      caretStops: [texHBoxX(0)],
+    },
+  }];
 }
 
 function texParagraphScopedLineWidth(

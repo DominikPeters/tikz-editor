@@ -717,6 +717,7 @@ export interface SimpleTexSegmentInput {
   };
   readonly nodes: readonly SimpleTexInlineNode[];
   readonly noIndent: boolean;
+  readonly listContext?: SimpleTexListContext;
   readonly startsAfterExplicitPar?: boolean;
   readonly firstLineIndentEm?: number;
   readonly leadingInterwordSpace?: boolean;
@@ -3883,7 +3884,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     quoteDepth: number,
     quotationDepth: number,
     alignment?: TexParagraphAlignment,
-    alignmentProfile?: TexAlignmentProfile
+    alignmentProfile?: TexAlignmentProfile,
+    allowEmptyListItem = false
   ) => {
     let start = rawStart;
     let end = rawEnd;
@@ -3899,7 +3901,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     ) {
       end -= 1;
     }
-    if (start < end) {
+    if (start < end || (allowEmptyListItem && pendingListShowLabel)) {
       const listContext = currentSimpleTexListContext();
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
@@ -4195,7 +4197,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
-        prefix.alignmentProfile
+        prefix.alignmentProfile,
+        true
       );
       if (abortScan) {
         break;
@@ -4228,7 +4231,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
-        prefix.alignmentProfile
+        prefix.alignmentProfile,
+        true
       );
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
@@ -4247,7 +4251,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
-        prefix.alignmentProfile
+        prefix.alignmentProfile,
+        node.boundary === "end" && isSimpleTexListEnvironmentName(node.name)
       );
       if (abortScan) {
         break;
@@ -4314,7 +4319,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
         currentQuoteDepth,
         currentQuotationDepth,
         prefix.alignment,
-        prefix.alignmentProfile
+        prefix.alignmentProfile,
+        true
       );
       if (abortScan) {
         break;
@@ -4483,7 +4489,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       currentQuoteDepth,
       currentQuotationDepth,
       prefix.alignment,
-      prefix.alignmentProfile
+      prefix.alignmentProfile,
+      true
     );
   }
   return {
@@ -4616,7 +4623,10 @@ export function splitSimpleTexParagraphSegments(
     while (end > start && (textCharAtSource(block, end - 1) === " " || textCharAtSource(block, end - 1) === "\n")) {
       end -= 1;
     }
-    if (start < end) {
+    if (
+      start < end ||
+      (segments.length === 0 && block.listContext?.showLabel === true)
+    ) {
       segments.push({
         text: block.text.slice(start - block.sourceSpan.start, end - block.sourceSpan.start),
         sourceStart: start,
