@@ -11,6 +11,7 @@ import type {
 import type { AssistantItem } from "../platform/types";
 import { buildEditParseOptions } from "../edit-parse-options";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
+import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
 import {
   createDocumentSession,
   createInitialWorkspaceState,
@@ -105,6 +106,7 @@ function actionLabel(kind: HistoryEntry["kind"]): string {
     case "align": return "Aligned elements";
     case "distribute": return "Distributed elements";
     case "flatten-foreach": return "Flattened foreach";
+    case "text-edit": return "Edited text";
   }
 }
 
@@ -943,6 +945,103 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         history: [...truncated, entry],
         historyIndex: truncated.length,
         dirty: result.newSource !== doc.savedSource
+      }));
+      break;
+    }
+
+    case "APPLY_SOURCE_PATCHES": {
+      const documentId = activeDocumentIdFromAction(state, action.documentId);
+      const activeDoc = readDocument(workspace.documents, documentId);
+      if (!activeDoc || activeDoc.assistantLockReason) {
+        return state;
+      }
+      if (action.baseRevision !== activeDoc.sourceRevision) {
+        workspace = updateDocument(workspace, documentId, (doc) =>
+          applyEditWarningToDocument(
+            doc,
+            "Text edit skipped because the source changed."
+          ));
+        break;
+      }
+      const applied = applySourcePatches(activeDoc.source, action.patches);
+      if (applied.kind !== "success") {
+        workspace = updateDocument(workspace, documentId, (doc) =>
+          applyEditWarningToDocument(
+            doc,
+            `Text edit failed: ${applied.reason}.`
+          ));
+        break;
+      }
+      if (applied.source === activeDoc.source) {
+        return state;
+      }
+
+      if (action.canvasTextEditMask) {
+        ui = {
+          ...ui,
+          canvasTextEditMask: {
+            documentId,
+            elementId: action.canvasTextEditMask.elementId,
+            span: action.canvasTextEditMask.span,
+            sourceRevision: activeDoc.sourceRevision + 1
+          }
+        };
+      }
+
+      const truncated = activeDoc.history.slice(0, activeDoc.historyIndex + 1);
+      const lastIndex = truncated.length - 1;
+      const lastEntry = truncated.at(lastIndex);
+      let history: HistoryEntry[];
+      let historyIndex: number;
+      if (
+        action.historyMergeKey &&
+        lastEntry?.mergeKey === action.historyMergeKey &&
+        lastEntry.kind === "text-edit"
+      ) {
+        history = [...truncated];
+        history[lastIndex] = {
+          ...lastEntry,
+          label: actionLabel("text-edit"),
+          forward: action.patches,
+          sourceAfter: applied.source,
+          selectedElementIdsAfter: [...activeDoc.selectedElementIds]
+        };
+        historyIndex = lastIndex;
+      } else {
+        history = [
+          ...truncated,
+          {
+            kind: "text-edit",
+            label: actionLabel("text-edit"),
+            mergeKey: action.historyMergeKey,
+            forward: action.patches,
+            sourceBefore: activeDoc.source,
+            sourceAfter: applied.source,
+            selectedElementIdsBefore: [...activeDoc.selectedElementIds],
+            selectedElementIdsAfter: [...activeDoc.selectedElementIds]
+          }
+        ];
+        historyIndex = truncated.length;
+      }
+
+      workspace = updateDocument(workspace, documentId, (doc) => ({
+        ...doc,
+        source: applied.source,
+        sourceRevision: doc.sourceRevision + 1,
+        lastEditChangedSourceIds: [...action.changedSourceIds],
+        lastEditChangeToken: doc.lastEditChangeToken + 1,
+        lastEditPatches: action.patches,
+        lastEditPatchBaseRevision:
+          action.patches.length > 0 ? doc.sourceRevision : null,
+        lastEditWarningMessage: null,
+        lastEditWarningToken:
+          doc.lastEditWarningMessage != null
+            ? doc.lastEditWarningToken + 1
+            : doc.lastEditWarningToken,
+        activeHandleId: null,
+        history,
+        historyIndex,
+        dirty: applied.source !== doc.savedSource
       }));
       break;
     }

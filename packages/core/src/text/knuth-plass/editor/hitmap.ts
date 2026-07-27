@@ -78,6 +78,7 @@ type SvgOwnerLike = {
   viewBox?: { baseVal?: { width?: number } };
 };
 type Element = {
+  tagName?: string;
   getBoundingClientRect?(): ClientRectLike;
   getScreenCTM?(): ScreenMatrixLike | null;
   viewBox?: SvgOwnerLike['viewBox'];
@@ -1505,11 +1506,11 @@ function registeredLineGeometry(
 ): LineGeometry[] | null {
   const layout = getTexVListLayout(layoutContext, report.paragraphId);
   const rootMatrix = containerElement.getScreenCTM?.();
-  const viewBoxWidth = Number(
-    containerElement.viewBox?.baseVal?.width ??
-      containerElement.ownerSVGElement?.viewBox?.baseVal?.width
+  const reportToSvgScaleX = reportToContainerSvgScaleX(
+    containerElement,
+    Number(report.width)
   );
-  if (!layout || !rootMatrix || !Number.isFinite(viewBoxWidth) || viewBoxWidth <= EPSILON) {
+  if (!layout || !rootMatrix || reportToSvgScaleX == null) {
     return null;
   }
   const linePlacementByIndex = new Map(
@@ -1523,7 +1524,6 @@ function registeredLineGeometry(
     throw new Error(`Invalid report width for paragraph '${report.paragraphId}'.`);
   }
   const baseMatrix = normalizedScreenMatrix(rootMatrix, `paragraph '${report.paragraphId}'`);
-  const reportToSvgScaleX = viewBoxWidth / reportWidth;
   return sortedLines.map((line) => {
     const placement = linePlacementByIndex.get(line.lineIndex);
     if (!placement) {
@@ -1567,6 +1567,30 @@ function registeredLineGeometry(
       inverseScreenMatrix,
     };
   });
+}
+
+function reportToContainerSvgScaleX(
+  containerElement: Element,
+  reportWidth: number
+): number | null {
+  if (!Number.isFinite(reportWidth) || reportWidth <= EPSILON) {
+    return null;
+  }
+  const tagName = String(containerElement.tagName ?? "").toLowerCase();
+  if (tagName === "g") {
+    // A paragraph <g> is authored directly in its owner's SVG coordinate
+    // space. Its screen CTM already includes every outer translation and
+    // scale, so applying the owner's viewBox ratio a second time drifts both
+    // hit-testing and caret projection.
+    return 1;
+  }
+  const viewBoxWidth = Number(
+    containerElement.viewBox?.baseVal?.width ??
+      containerElement.ownerSVGElement?.viewBox?.baseVal?.width
+  );
+  return Number.isFinite(viewBoxWidth) && viewBoxWidth > EPSILON
+    ? viewBoxWidth / reportWidth
+    : null;
 }
 
 function normalizedScreenMatrix(
@@ -2846,16 +2870,15 @@ function buildDisplayMathLineHitMaps(
 ): LineHitMap[] {
   const layout = getTexVListLayout(layoutContext, report.paragraphId);
   const rootMatrix = containerElement.getScreenCTM?.();
-  const viewBoxWidth = Number(
-    containerElement.viewBox?.baseVal?.width ??
-      containerElement.ownerSVGElement?.viewBox?.baseVal?.width
+  const reportToSvgScaleX = reportToContainerSvgScaleX(
+    containerElement,
+    Number(report.width)
   );
-  if (!layout || !rootMatrix || !Number.isFinite(viewBoxWidth) || viewBoxWidth <= EPSILON) {
+  if (!layout || !rootMatrix || reportToSvgScaleX == null) {
     return [];
   }
 
   const baseMatrix = normalizedScreenMatrix(rootMatrix, `paragraph '${report.paragraphId}'`);
-  const reportToSvgScaleX = viewBoxWidth / report.width;
   if (!Number.isFinite(reportToSvgScaleX) || reportToSvgScaleX <= EPSILON) {
     return [];
   }

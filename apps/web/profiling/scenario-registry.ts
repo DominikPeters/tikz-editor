@@ -68,6 +68,12 @@ export const PROFILING_SCENARIOS: ProfilingScenarioManifest[] = [
     specPath: "profiling/profile-node-text-latency.spec.ts"
   },
   {
+    id: "beamer-canvas-text-latency",
+    category: "canvas-edit",
+    description: "Thirty paced direct-text edits on a warmed KKT Beamer frame.",
+    specPath: "profiling/profile-beamer-canvas-text-latency.spec.ts"
+  },
+  {
     id: "source-typing",
     category: "source-edit",
     description: "Source editor typing profiling with paced keystrokes in small and dense TikZ documents.",

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { computeSnapshot } from "../packages/app/src/compute.js";
+import { computeSnapshot, type ComputeRequest } from "../packages/app/src/compute.js";
 
 const KKT_SOURCE = readFileSync(
   new URL("./fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url),
@@ -18,7 +18,10 @@ function deckRequest(overrides: {
   source: string;
   activeRootId?: string | null;
   deckStep?: number | null;
-}) {
+} & Partial<Pick<
+  ComputeRequest,
+  "sourceRevision" | "patches" | "patchBaseRevision" | "textEditMaskSpan"
+>>) {
   requestCounter += 1;
   return {
     id: `deck-req-${requestCounter}`,
@@ -27,7 +30,11 @@ function deckRequest(overrides: {
     ...(Object.prototype.hasOwnProperty.call(overrides, "activeRootId")
       ? { activeRootId: overrides.activeRootId }
       : {}),
-    deckStep: overrides.deckStep ?? null
+    deckStep: overrides.deckStep ?? null,
+    sourceRevision: overrides.sourceRevision,
+    patches: overrides.patches,
+    patchBaseRevision: overrides.patchBaseRevision,
+    textEditMaskSpan: overrides.textEditMaskSpan
   };
 }
 
@@ -53,6 +60,9 @@ describe("deck compute path", () => {
     expect(active!.step).toBe(1);
     expect(active!.svg).toContain("<svg");
     expect(active!.svgModel.parts.length).toBeGreaterThan(0);
+    expect(active!.layout.frameId).toBe("frame:0");
+    expect(active!.layout.paragraphs.length).toBeGreaterThan(0);
+    expect(structuredClone(active!.layout)).toEqual(active!.layout);
     expect(snapshot.activeRootId).toBe("frame:0");
   });
 
@@ -122,6 +132,55 @@ describe("deck compute path", () => {
     );
     expect(unknown.snapshot.deck!.activeFrame).toBeNull();
     expect(unknown.snapshot.activeRootId).toBeNull();
+  });
+
+  it("increments the Beamer syntax tree only from the matching base revision", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Title}
+Hello
+\end{frame}
+\begin{frame}{Later}
+World
+\end{frame}
+\end{document}`;
+    const base = await computeSnapshot(deckRequest({
+      source,
+      sourceRevision: 10
+    }));
+    const from = source.indexOf("Hello");
+    const edited = `${source.slice(0, from)}Hello!${source.slice(from + 5)}`;
+    const patch = {
+      oldSpan: { from, to: from + 5 },
+      newSpan: { from, to: from + 6 },
+      replacement: "Hello!"
+    };
+    const masked = await computeSnapshot(deckRequest({
+      source: edited,
+      sourceRevision: 11,
+      patches: [patch],
+      patchBaseRevision: 10,
+      textEditMaskSpan: patch.newSpan
+    }));
+    expect(masked.snapshot.deck!.frames).toHaveLength(2);
+    expect(masked.snapshot.deck!.activeFrame!.step).toBe(1);
+
+    const unmasked = await computeSnapshot(deckRequest({
+      source: edited,
+      sourceRevision: 11,
+      patches: [patch],
+      patchBaseRevision: 10
+    }));
+    expect(unmasked.snapshot.deck!.frames.map((frame) => frame.title)).toEqual([
+      "Title",
+      "Later"
+    ]);
+    expect(unmasked.snapshot.deck!.activeFrame!.layout.paragraphs
+      .flatMap((paragraph) => paragraph.editableTextSpans)
+      .some((editable) =>
+        edited.slice(editable.span.from, editable.span.to).includes("Hello!")
+      )).toBe(true);
+    expect(base.snapshot.deck!.frames).toHaveLength(2);
   });
 
   it("keeps the tikz path for tikz documents", async () => {

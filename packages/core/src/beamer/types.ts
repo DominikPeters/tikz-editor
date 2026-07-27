@@ -13,6 +13,9 @@ import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
 import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
 import type { TexVListLayout } from "../text/tex/index.js";
 import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
+import type { SvgRect } from "../coords/index.js";
+import type { SourcePatch } from "../edit/types.js";
+import type { Tree } from "@lezer/common";
 
 export type BeamerDelimitedSourceValue = {
   /** Span including the delimiters. */
@@ -254,10 +257,36 @@ export type BeamerParagraphLayout = {
   bounds: BeamerRect;
   report: ParagraphLayoutReport<"document">;
   vlistLayout: TexVListLayout<"document">;
+  /**
+   * Visible, directly-authored prose ranges that canvas typo editing may
+   * patch independently. Generated, macro-owned, math, graphics, labels, and
+   * hidden overlay material are intentionally absent.
+   */
+  editableTextSpans: BeamerEditableTextSpan[];
   /** Source ranges laid out for covered overlays but omitted from paint. */
   hiddenSourceSpans?: readonly Span[];
+  /** Source-backed but non-direct ranges, such as explicit custom-macro arguments. */
+  readOnlySourceSpans?: readonly Span[];
   /** One-based list item ordinals whose labels are covered on this step. */
   hiddenListItemIndices?: readonly number[];
+};
+
+export type BeamerEditableTextSpan = {
+  id: string;
+  span: Span;
+  /** Final document/SVG-space geometry; never paragraph-local geometry. */
+  hitBounds: SvgRect[];
+};
+
+export type PrepareBeamerDocumentOptions = {
+  /**
+   * Source ranges neutralized only for the document-structure CST. Text
+   * layout still consumes the real source.
+   */
+  structuralMasks?: readonly Span[];
+  /** Previous CST and source patches for incremental Lezer parsing. */
+  previousSyntaxTree?: Tree;
+  syntaxPatches?: readonly SourcePatch[];
 };
 
 export type BeamerEmbeddedTikzLayout = {

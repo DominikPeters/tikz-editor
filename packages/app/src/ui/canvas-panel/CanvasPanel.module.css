@@ -506,6 +506,12 @@
   max-width: 100%;
 }
 
+.textEditTextareaInlineTypo {
+  field-sizing: fixed;
+  white-space: pre;
+  text-align: left;
+}
+
 .textEditTextareaHideNativeCaret {
   caret-color: transparent;
 }

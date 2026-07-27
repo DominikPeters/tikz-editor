@@ -30,7 +30,6 @@ import {
   documentOffsetToTextarea,
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
-import { getActiveTextLayoutContext } from "@tikz-editor/core/text/layout-context";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
 import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
@@ -107,6 +106,7 @@ export type UseCanvasTextEditSessionArgs = {
     targetId: string,
     preferredSceneTextId?: string | null
   ) => EditableTextTarget | null;
+  textLayoutContext: unknown;
   dispatch: (action: EditorAction) => void;
 };
 
@@ -459,6 +459,7 @@ export function useCanvasTextEditSession(
     svgLayerHostRef,
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
+    textLayoutContext,
     dispatch
   } = args;
   const [state, setState] = useState(INITIAL_CANVAS_TEXT_EDIT_STATE);
@@ -474,10 +475,15 @@ export function useCanvasTextEditSession(
   const pendingTextEditPasteRef = useRef<string | null>(null);
   const pendingTextEditInsertTextRef = useRef<string | null>(null);
   const previousContextKeyRef = useRef(contextKey);
+  const sourceRevisionRef = useRef(sourceRevision);
 
   useLayoutEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useLayoutEffect(() => {
+    sourceRevisionRef.current = sourceRevision;
+  }, [sourceRevision]);
 
   const dispatchCanvasTextEditAction = useCallback((action: CanvasTextEditAction) => {
     const reduced = reduceCanvasTextEdit(stateRef.current, action);
@@ -488,30 +494,23 @@ export function useCanvasTextEditSession(
         continue;
       }
       dispatch({
-        type: "APPLY_EDIT_ACTION",
-        action: {
-          kind: "updateNodeText",
-          elementId: effect.sourceId,
-          text: effect.nextText
-        },
+        type: "APPLY_SOURCE_PATCHES",
+        baseRevision: sourceRevisionRef.current,
+        changedSourceIds: [effect.sourceId],
         historyMergeKey: effect.historyMergeKey,
-        precomputedResult: {
-          kind: "success",
-          newSource: effect.nextSource,
-          patches: [
-            {
-              oldSpan: effect.previousSpan,
-              newSpan: effect.changedSpan,
-              replacement: effect.replacement
-            }
-          ],
-          changedSourceIds: [effect.sourceId]
-        },
+        patches: [
+          {
+            oldSpan: effect.previousSpan,
+            newSpan: effect.changedSpan,
+            replacement: effect.replacement
+          }
+        ],
         canvasTextEditMask: {
           elementId: effect.sourceId,
           span: effect.changedSpan
         }
       });
+      sourceRevisionRef.current += 1;
     }
   }, [dispatch]);
 
@@ -548,12 +547,16 @@ export function useCanvasTextEditSession(
     }
   }, [textEditingSession]);
 
-  const resolveRenderedMathTextElement = useCallback((target: EditableTextTarget): SVGSVGElement | null => {
+  const resolveRenderedMathTextElement = useCallback((target: EditableTextTarget): SVGGraphicsElement | null => {
     const host = svgLayerHostRef.current;
     if (!host) {
       return null;
     }
-    const candidates = Array.from(host.querySelectorAll<SVGSVGElement>('svg[data-text-renderer="tex"]'));
+    const candidates = Array.from(
+      host.querySelectorAll<SVGGraphicsElement>(
+        'svg[data-text-renderer="tex"], g[data-paragraph-id]'
+      )
+    );
     for (const candidate of candidates) {
       if (candidate.getAttribute("data-scene-text-id") === target.sceneTextId) {
         return candidate;
@@ -577,7 +580,7 @@ export function useCanvasTextEditSession(
       target: EditableTextTarget,
       clientPoint: ClientPoint,
       layoutContext: unknown,
-      containerElement: SVGSVGElement
+      containerElement: SVGGraphicsElement
     ): VListSourceHit | null => {
       if (!target.paragraphId || !(target.usesTex && target.layoutKind !== "single-line")) {
         return null;
@@ -597,7 +600,7 @@ export function useCanvasTextEditSession(
       if (target.isForeachTemplateEdit) {
         return null;
       }
-      const layoutContext = getActiveTextLayoutContext();
+      const layoutContext = textLayoutContext;
       const containerElement = resolveRenderedMathTextElement(target);
       const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
       if (!target.paragraphId || !layoutContext || !containerElement) {
@@ -621,8 +624,10 @@ export function useCanvasTextEditSession(
       }
       const result = await getKnuthPlassCaretFromPoint(layoutContext, {
         paragraphId: target.paragraphId,
-        sourceText: target.text,
-        sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
+        sourceText: target.layoutSourceText ?? target.text,
+        sourceTextStartOffset: documentSourceOffset(
+          target.layoutSourceSpan?.from ?? target.sourceSpan.from
+        ),
         sourceCoordinateSpace: "document",
         containerElement,
         clientPoint
@@ -647,7 +652,7 @@ export function useCanvasTextEditSession(
         ),
       };
     },
-    [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, viewportRef]
+    [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
   );
 
   const resolveTextLineRangeFromClient = useCallback(
@@ -655,14 +660,16 @@ export function useCanvasTextEditSession(
       if (target.isForeachTemplateEdit) {
         return null;
       }
-      const layoutContext = getActiveTextLayoutContext();
+      const layoutContext = textLayoutContext;
       const containerElement = resolveRenderedMathTextElement(target);
       const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
       if (target.paragraphId && layoutContext && containerElement) {
         const result = await getKnuthPlassLineRangeFromPoint(layoutContext, {
           paragraphId: target.paragraphId,
-          sourceText: target.text,
-          sourceTextStartOffset: documentSourceOffset(target.sourceSpan.from),
+          sourceText: target.layoutSourceText ?? target.text,
+          sourceTextStartOffset: documentSourceOffset(
+            target.layoutSourceSpan?.from ?? target.sourceSpan.from
+          ),
           sourceCoordinateSpace: "document",
           containerElement,
           clientPoint
@@ -699,7 +706,7 @@ export function useCanvasTextEditSession(
         canvasTransform
       );
     },
-    [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, viewportRef]
+    [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
   );
 
   const startTextEditingSession = useCallback(
@@ -1194,7 +1201,8 @@ export function useCanvasTextEditSession(
     startTextEditingSession,
     setPendingAdornmentTextEditTargetId,
     canvasTransform,
-    svgResult
+    svgResult,
+    textLayoutContext
   });
 
   const supportsFieldSizing =
@@ -1233,8 +1241,25 @@ export function useCanvasTextEditSession(
       canvasTransform.translateY + (anchorBottom - svgResult.viewBox.y) * canvasTransform.scale;
     const centerX = (leftEdge + rightEdge) / 2;
     const nodeWidthPx = rightEdge - leftEdge;
-    const contentWidthPx = Math.max(contentBox.width * canvasTransform.scale, 1);
-    const maxWidth = clamp(Math.round(nodeWidthPx + 80), 160, viewportSize.width - minPadding * 2);
+    const editedContentWidthSvg =
+      textEditingSession.editMode === "inline-typo" && popupAnchorBox
+        ? popupAnchorBox.maxX - popupAnchorBox.minX
+        : contentBox.width;
+    const editorTextWidthPx =
+      textEditingSession.editMode === "inline-typo"
+        ? textEditingSession.text.length * 8 + 2
+        : 0;
+    const contentWidthPx = Math.max(
+      editedContentWidthSvg * canvasTransform.scale,
+      editorTextWidthPx,
+      1
+    );
+    const minimumPopupWidth = textEditingSession.editMode === "inline-typo" ? 80 : 160;
+    const maxWidth = clamp(
+      Math.round(Math.max(nodeWidthPx, contentWidthPx) + 80),
+      minimumPopupWidth,
+      viewportSize.width - minPadding * 2
+    );
     const textareaWidth = clamp(
       Math.round(contentWidthPx),
       48,

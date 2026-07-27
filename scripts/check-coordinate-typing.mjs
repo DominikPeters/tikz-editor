@@ -25,7 +25,7 @@ const bannedPatterns = [
   },
   {
     name: "raw branded point/bounds object literals",
-    regex: /:\s*(?:WorldPoint|SvgPoint|FrameLocalPoint|ViewportPoint|ClientPoint|TextRectLocalPoint|WorldBounds|SvgBounds|ViewportBounds|ClientBounds)\b[^;}\n=]*=\s*\{/
+    regex: /:\s*(?:WorldPoint|SvgPoint|FrameLocalPoint|ViewportPoint|ClientPoint|TextRectLocalPoint|WorldBounds|SvgBounds|ViewportBounds|ClientBounds|FrameLocalRect|SvgRect|ViewportRect|ClientRect)\b[^;}\n=]*=\s*\{/
   }
 ];
 

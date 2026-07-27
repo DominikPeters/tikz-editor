@@ -37,6 +37,9 @@ SceneElement
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
 import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
+import { getActiveTextLayoutContext } from "@tikz-editor/core/text/layout-context";
+import { registerParagraphLayoutReports } from "@tikz-editor/core/text/knuth-plass";
+import { registerTexVListLayouts } from "@tikz-editor/core/text/tex/vlist/index";
 import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
@@ -484,6 +487,26 @@ export const CanvasPanel = memo(function CanvasPanel({
   // same SVG pipeline. Scene and edit handles are empty, so tikz
   // interactions are inert; the reducer additionally rejects edit actions.
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  const deckTextLayoutContext = useMemo(() => {
+    if (!deckActiveFrame) {
+      return null;
+    }
+    const context = {};
+    registerParagraphLayoutReports(
+      context,
+      deckActiveFrame.layout.paragraphs.map((paragraph) => paragraph.report)
+    );
+    registerTexVListLayouts(
+      context,
+      deckActiveFrame.layout.paragraphs.map((paragraph) => ({
+        paragraphId: paragraph.paragraphId,
+        layout: paragraph.vlistLayout
+      }))
+    );
+    return context;
+  }, [deckActiveFrame]);
+  const textLayoutContext =
+    deckTextLayoutContext ?? getActiveTextLayoutContext();
   const deckSvgResult = useMemo(
     () =>
       deckActiveFrame
@@ -1218,7 +1241,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     curveControlLines,
     marqueeBounds,
     handleDisplays,
-    hitRegions,
+    hitRegions: sceneHitRegions,
     visibleRanges,
     viewportWorldBounds,
     scopeOverlay
@@ -1233,6 +1256,49 @@ export const CanvasPanel = memo(function CanvasPanel({
     viewportSize,
     ROTATE_HANDLE_OFFSET_PX
   });
+
+  const deckEditableTextById = useMemo(() => {
+    const result = new Map<string, {
+      paragraph: NonNullable<typeof deckActiveFrame>["layout"]["paragraphs"][number];
+      editable: NonNullable<typeof deckActiveFrame>["layout"]["paragraphs"][number]["editableTextSpans"][number];
+    }>();
+    for (const paragraph of deckActiveFrame?.layout.paragraphs ?? []) {
+      for (const editable of paragraph.editableTextSpans) {
+        result.set(editable.id, { paragraph, editable });
+      }
+    }
+    return result;
+  }, [deckActiveFrame]);
+
+  const hitRegions = useMemo<HitRegion[]>(() => {
+    if (!deckActiveFrame) {
+      return sceneHitRegions;
+    }
+    const deckRegions: HitRegion[] = [];
+    for (const { paragraph, editable } of deckEditableTextById.values()) {
+      editable.hitBounds.forEach((bounds, index) => {
+        deckRegions.push({
+          shape: "rect",
+          key: `deck-text:${editable.id}:${index}`,
+          sourceId: editable.id,
+          targetId: editable.id,
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          cx: bounds.x + bounds.width / 2,
+          cy: bounds.y + bounds.height / 2,
+          rotation: 0,
+          interactionMode: "text",
+          pointerMode: "fill",
+          sceneTextKey: paragraph.paragraphId,
+          contentWidth: bounds.width,
+          contentHeight: bounds.height
+        });
+      });
+    }
+    return [...sceneHitRegions, ...deckRegions];
+  }, [deckActiveFrame, deckEditableTextById, sceneHitRegions]);
 
   useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
@@ -1608,6 +1674,73 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (region?.shape !== "rect" || region.interactionMode === "move") {
         return null;
       }
+      const deckText = deckEditableTextById.get(targetId);
+      if (deckText) {
+        const { paragraph, editable } = deckText;
+        const text = source.slice(editable.span.from, editable.span.to);
+        const layoutSourceText = source.slice(
+          paragraph.sourceSpan.from,
+          paragraph.sourceSpan.to
+        );
+        if (!text || !layoutSourceText) {
+          return null;
+        }
+        const firstTextSegment = paragraph.report.lines
+          .flatMap((line) => line.segments)
+          .find((segment) =>
+            (segment.kind === "text" || segment.kind === "space") &&
+            segment.fontAtPt != null
+          );
+        const textAlign =
+          paragraph.report.alignment === "center"
+            ? "center"
+            : paragraph.report.alignment === "ragged-left"
+              ? "right"
+              : paragraph.report.alignment === "justified"
+                ? "justify"
+                : "left";
+        const editableBounds = editable.hitBounds.reduce<SvgBounds | null>(
+          (bounds, hitBounds) =>
+            bounds
+              ? svgBounds(
+                  pt(Math.min(bounds.minX, hitBounds.x)),
+                  pt(Math.min(bounds.minY, hitBounds.y)),
+                  pt(Math.max(bounds.maxX, hitBounds.x + hitBounds.width)),
+                  pt(Math.max(bounds.maxY, hitBounds.y + hitBounds.height))
+                )
+              : svgBounds(
+                  pt(hitBounds.x),
+                  pt(hitBounds.y),
+                  pt(hitBounds.x + hitBounds.width),
+                  pt(hitBounds.y + hitBounds.height)
+                ),
+          null
+        );
+        return {
+          sourceId: editable.id,
+          sceneTextId: paragraph.paragraphId,
+          sourceSpan: editable.span,
+          text,
+          layoutSourceSpan: paragraph.sourceSpan,
+          layoutSourceText,
+          renderSourceText: layoutSourceText,
+          usesTex: true,
+          paragraphId: paragraph.paragraphId,
+          layoutKind:
+            paragraph.report.lines.length > 1 ? "wrapped" : "single-line",
+          style: {
+            fontSize: Number(firstTextSegment?.fontAtPt ?? 11),
+            fontStyle: "normal",
+            fontWeight: "normal",
+            fontFamily: "sans",
+            textAlign
+          },
+          totalWidth: paragraph.bounds.width,
+          region,
+          editMode: "inline-typo",
+          popupAnchorBox: editableBounds ?? undefined
+        };
+      }
       const sceneText = sceneTextByRegionKey.get(region.sceneTextKey ?? region.key);
       if (!sceneText) {
         return null;
@@ -1698,7 +1831,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             )
       };
     },
-    [sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
+    [deckEditableTextById, sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
   );
 
   const editableTextRegionKeys = useMemo(() => {
@@ -1763,6 +1896,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     svgLayerHostRef,
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
+    textLayoutContext,
     dispatch
   });
 

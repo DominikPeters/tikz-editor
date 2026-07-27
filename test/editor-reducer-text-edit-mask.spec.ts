@@ -52,6 +52,77 @@ function maskIsValid(state: EditorState): boolean {
 }
 
 describe("editorReducer – canvas text edit mask", () => {
+  it("applies revision-checked source patches in deck mode with merged history", () => {
+    const deckSource = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Title}
+Hello
+\end{frame}
+\end{document}`;
+    const base = editorReducer(makeInitialState(), {
+      type: "CODE_EDITED",
+      source: deckSource
+    });
+    const from = base.source.indexOf("Hello");
+    const first = editorReducer(base, {
+      type: "APPLY_SOURCE_PATCHES",
+      baseRevision: base.sourceRevision,
+      patches: [{
+        oldSpan: { from, to: from + 5 },
+        newSpan: { from, to: from + 6 },
+        replacement: "Hello!"
+      }],
+      changedSourceIds: ["frame:0:paragraph:0:editable:0"],
+      historyMergeKey: "text-edit:frame:0:paragraph:0:editable:0",
+      canvasTextEditMask: {
+        elementId: "frame:0:paragraph:0:editable:0",
+        span: { from, to: from + 6 }
+      }
+    });
+    expect(first.source).toContain("Hello!");
+    expect(first.history.at(-1)?.kind).toBe("text-edit");
+    expect(maskIsValid(first)).toBe(true);
+
+    const second = editorReducer(first, {
+      type: "APPLY_SOURCE_PATCHES",
+      baseRevision: first.sourceRevision,
+      patches: [{
+        oldSpan: { from, to: from + 6 },
+        newSpan: { from, to: from + 7 },
+        replacement: "Hello!!"
+      }],
+      changedSourceIds: ["frame:0:paragraph:0:editable:0"],
+      historyMergeKey: "text-edit:frame:0:paragraph:0:editable:0",
+      canvasTextEditMask: {
+        elementId: "frame:0:paragraph:0:editable:0",
+        span: { from, to: from + 7 }
+      }
+    });
+    expect(second.history).toHaveLength(first.history.length);
+
+    const undone = editorReducer(second, { type: "UNDO" });
+    expect(undone.source).toBe(deckSource);
+    const redone = editorReducer(undone, { type: "REDO" });
+    expect(redone.source).toContain("Hello!!");
+  });
+
+  it("rejects a source patch based on a stale revision", () => {
+    const base = initialStateWithSource();
+    const from = base.source.indexOf("hello");
+    const next = editorReducer(base, {
+      type: "APPLY_SOURCE_PATCHES",
+      baseRevision: base.sourceRevision - 1,
+      patches: [{
+        oldSpan: { from, to: from + 5 },
+        newSpan: { from, to: from + 4 },
+        replacement: "nope"
+      }],
+      changedSourceIds: ["elem-1"]
+    });
+    expect(next.source).toBe(base.source);
+    expect(next.lastEditWarningMessage).toMatch(/source changed/u);
+  });
+
   it("installs the mask atomically with a session source write", () => {
     const base = initialStateWithSource();
     const next = editorReducer(base, canvasKeystroke("hello {", base));

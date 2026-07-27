@@ -1,4 +1,5 @@
 import type { Span } from "../ast/types.js";
+import { pt, svgPoint, svgRect, type SvgPoint, type SvgRect } from "../coords/index.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import {
@@ -124,6 +125,7 @@ import type {
   RenderBeamerFramePagesOptions,
   RenderBeamerFramePagesResult,
   RenderBeamerFrameResult,
+  PrepareBeamerDocumentOptions,
 } from "./types.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
@@ -208,8 +210,18 @@ type BeamerRenderContext = {
   readonly theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
 };
 
-function createBeamerRenderContext(source: string): BeamerRenderContext {
-  const syntaxContext = createBeamerSyntaxContext(source);
+function createBeamerRenderContext(
+  source: string,
+  options: PrepareBeamerDocumentOptions = {}
+): BeamerRenderContext {
+  const syntaxContext = createBeamerSyntaxContext(
+    source,
+    options.structuralMasks,
+    {
+      previousTree: options.previousSyntaxTree,
+      patches: options.syntaxPatches,
+    }
+  );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
   return {
@@ -235,6 +247,8 @@ function createBeamerRenderContext(source: string): BeamerRenderContext {
 export type PreparedBeamerDocument = {
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
+  /** Retained by the app compute session for incremental document parsing. */
+  readonly syntaxTree: TexSyntaxIndex["tree"];
   /** Overlay step count for one frame, without rendering it. */
   frameStepCount(frameIndex: number): number;
   renderFrame(
@@ -252,8 +266,11 @@ export type PreparedBeamerDocument = {
  * model. `renderBeamerFrame`/`renderBeamerFramePages` are one-shot wrappers
  * over this entry point.
  */
-export function prepareBeamerDocument(source: string): PreparedBeamerDocument {
-  const context = createBeamerRenderContext(source);
+export function prepareBeamerDocument(
+  source: string,
+  options: PrepareBeamerDocumentOptions = {}
+): PreparedBeamerDocument {
+  const context = createBeamerRenderContext(source, options);
   const bodyIrByFrameIndex = new Map<number, BeamerFrameBodyIr>();
   const overlaysByFrameIndex = new Map<number, BeamerOverlayModel>();
 
@@ -299,6 +316,7 @@ export function prepareBeamerDocument(source: string): PreparedBeamerDocument {
   return {
     document: context.document,
     theme: context.theme,
+    syntaxTree: context.syntax.tree,
     frameStepCount: (frameIndex) => {
       const bodyIr = bodyIrByFrameIndex.get(frameIndex);
       if (bodyIr) {
@@ -784,11 +802,10 @@ function renderChrome(params: {
     const y = primitive.baselineY == null
       ? verticallyAlignedParagraphY(primitive, laid.height)
       : primitive.baselineY - firstLineBaselineOffset(laid);
-    laid.layout.bounds = {
-      ...laid.layout.bounds,
-      x: primitive.bounds.x,
-      y,
-    };
+    positionParagraphLayout(
+      laid.layout,
+      svgPoint(pt(primitive.bounds.x), pt(y))
+    );
     paragraphs.push(laid.layout);
     items.push({
       id: primitive.id,
@@ -1726,14 +1743,13 @@ function emitPreparedBlock(params: {
 
   const titleX = params.x + block.titleXOffset;
   const titleY = params.y + block.titleTop;
-  block.title.layout.bounds = {
-    ...block.title.layout.bounds,
-    x: titleX,
-    y: titleY,
-  };
   if (params.visibility === "hidden") {
     block.title.layout.hiddenSourceSpans = [block.node.span];
   }
+  positionParagraphLayout(
+    block.title.layout,
+    svgPoint(pt(titleX), pt(titleY))
+  );
   params.paragraphs.push(block.title.layout);
   params.items.push({
     id: block.title.layout.paragraphId,
@@ -1762,15 +1778,14 @@ function emitPreparedBlock(params: {
   const childIds = [block.title.layout.paragraphId];
   if (block.body) {
     const bodyY = params.y + block.bodyParagraphTop;
-    block.body.layout.bounds = {
-      ...block.body.layout.bounds,
-      x: params.x,
-      y: bodyY,
-      height: paragraphLineExtent(block.body),
-    };
     if (params.visibility === "hidden") {
       block.body.layout.hiddenSourceSpans = [block.node.span];
     }
+    positionParagraphLayout(
+      block.body.layout,
+      svgPoint(pt(params.x), pt(bodyY)),
+      paragraphLineExtent(block.body)
+    );
     params.paragraphs.push(block.body.layout);
     childIds.push(block.body.layout.paragraphId);
     params.items.push({
@@ -2012,12 +2027,11 @@ function emitPreparedTitlePage(params: {
       boxBounds.y +
       baselineFromBoxTop -
       firstLineBaselineOffset(paragraph);
-    paragraph.layout.bounds = {
-      ...paragraph.layout.bounds,
-      x: params.x,
-      y,
-      height: paragraphLineExtent(paragraph),
-    };
+    positionParagraphLayout(
+      paragraph.layout,
+      svgPoint(pt(params.x), pt(y)),
+      paragraphLineExtent(paragraph)
+    );
     params.paragraphs.push(paragraph.layout);
     childIds.push(paragraph.layout.paragraphId);
     params.items.push({
@@ -2131,12 +2145,11 @@ function emitFrameParagraph(params: {
   theme: ResolvedBeamerTheme;
 }): void {
   const laid = params.prepared.paragraph;
-  laid.layout.bounds = {
-    ...laid.layout.bounds,
-    x: params.x,
-    y: params.y,
-    height: params.prepared.naturalHeight,
-  };
+  positionParagraphLayout(
+    laid.layout,
+    svgPoint(pt(params.x), pt(params.y)),
+    params.prepared.naturalHeight
+  );
   params.paragraphs.push(laid.layout);
   params.items.push({
     id: laid.layout.paragraphId,
@@ -2233,12 +2246,11 @@ function emitPreparedColumns(params: {
         flowY += flowItem.height;
       } else if (flowItem.kind === "paragraph") {
         const laid = flowItem.paragraph;
-        laid.layout.bounds = {
-          ...laid.layout.bounds,
-          x,
-          y: flowY,
-          height: flowItem.advanceHeight,
-        };
+        positionParagraphLayout(
+          laid.layout,
+          svgPoint(pt(x), pt(flowY)),
+          flowItem.advanceHeight
+        );
         params.paragraphs.push(laid.layout);
         childIds.push(laid.layout.paragraphId);
         params.items.push({
@@ -2732,6 +2744,28 @@ function fontXHeightPt(font: BeamerThemeFont): number {
   return Number(resolved.atPt) * resolved.data.fontdimen.xheight;
 }
 
+function positionParagraphLayout(
+  layout: BeamerParagraphLayout,
+  origin: SvgPoint,
+  height = layout.bounds.height
+): void {
+  layout.bounds = {
+    ...layout.bounds,
+    x: Number(origin.x),
+    y: Number(origin.y),
+    height,
+  };
+  layout.editableTextSpans = collectBeamerEditableTextSpans(
+    layout.paragraphId,
+    layout.role,
+    layout.report,
+    layout.vlistLayout,
+    layout.sourceSpan,
+    layout.bounds,
+    (layout.hiddenSourceSpans ?? []).concat(layout.readOnlySourceSpans ?? [])
+  );
+}
+
 function layoutParagraph(params: {
   mapped: MappedText;
   sourceSpan: Span;
@@ -2924,6 +2958,7 @@ function layoutParagraph(params: {
   }
   const height =
     result.vlistLayout.metrics.height + result.vlistLayout.metrics.depth;
+  const readOnlySourceSpans = collectMappedMacroArgumentSpans(mapped);
   return {
     height,
     layout: {
@@ -2936,8 +2971,20 @@ function layoutParagraph(params: {
       },
       report: result.report,
       vlistLayout: result.vlistLayout,
+      editableTextSpans: collectBeamerEditableTextSpans(
+        params.paragraphId,
+        params.role,
+        result.report,
+        result.vlistLayout,
+        params.sourceSpan,
+        null,
+        (params.hiddenSourceSpans ?? []).concat(readOnlySourceSpans)
+      ),
       ...(params.hiddenSourceSpans?.length
         ? { hiddenSourceSpans: params.hiddenSourceSpans }
+        : {}),
+      ...(readOnlySourceSpans.length
+        ? { readOnlySourceSpans }
         : {}),
       ...(params.hiddenListItemIndices?.length
         ? { hiddenListItemIndices: params.hiddenListItemIndices }
@@ -3012,6 +3059,101 @@ function layoutParagraph(params: {
         }];
       }),
   };
+}
+
+const EDITABLE_BEAMER_PARAGRAPH_ROLES =
+  new Set<BeamerParagraphLayout["role"]>([
+    "frame-title",
+    "body",
+    "block-title",
+    "block-body",
+  ]);
+
+function collectBeamerEditableTextSpans(
+  paragraphId: string,
+  role: BeamerParagraphLayout["role"],
+  report: BeamerParagraphLayout["report"],
+  vlistLayout: BeamerParagraphLayout["vlistLayout"],
+  paragraphSpan: Span,
+  paragraphBounds: BeamerRect | null,
+  hiddenSourceSpans: readonly Span[]
+): BeamerParagraphLayout["editableTextSpans"] {
+  if (!EDITABLE_BEAMER_PARAGRAPH_ROLES.has(role)) {
+    return [];
+  }
+  const candidates = report.lines.flatMap((line) => {
+    const placement = vlistLayout.linePlacements.find(
+      (candidate) => candidate.lineIndex === line.lineIndex
+    );
+    const y = (paragraphBounds?.y ?? 0) + Number(placement?.y ?? 0);
+    return line.segments.flatMap((segment) => {
+      if (
+        (segment.kind !== "text" && segment.kind !== "space") ||
+        segment.role === "list-label" ||
+        segment.sourceRangePolicy !== "caret" ||
+        segment.sourceStartRaw == null ||
+        segment.sourceEndRaw == null
+      ) {
+        return [];
+      }
+      const from = Math.max(paragraphSpan.from, Number(segment.sourceStartRaw));
+      const to = Math.min(paragraphSpan.to, Number(segment.sourceEndRaw));
+      if (
+        to <= from ||
+        hiddenSourceSpans.some((hidden) => from < hidden.to && hidden.from < to)
+      ) {
+        return [];
+      }
+      return [{
+        from,
+        to,
+        hitBounds: paragraphBounds
+          ? [svgRect(
+              paragraphBounds.x + Number(segment.x),
+              y,
+              Math.max(0.5, Number(segment.width)),
+              Math.max(1, Number(line.ascent) + Number(line.descent))
+            )]
+          : [],
+      }];
+    });
+  }).sort((left, right) => left.from - right.from || left.to - right.to);
+
+  const merged: Array<Span & { hitBounds: SvgRect[] }> = [];
+  for (const candidate of candidates) {
+    const previous = merged.at(-1);
+    if (previous && candidate.from <= previous.to) {
+      previous.to = Math.max(previous.to, candidate.to);
+      previous.hitBounds.push(...candidate.hitBounds);
+    } else {
+      merged.push({
+        from: candidate.from,
+        to: candidate.to,
+        hitBounds: [...candidate.hitBounds],
+      });
+    }
+  }
+  return merged.map(({ hitBounds, ...span }, index) => ({
+    id: `${paragraphId}:editable:${index}`,
+    span,
+    hitBounds,
+  }));
+}
+
+function collectMappedMacroArgumentSpans(mapped: MappedText): Span[] {
+  const spans: Span[] = [];
+  for (const origin of mapped.sourceMap.charOrigins) {
+    if (origin.kind !== "macro-argument" || origin.to <= origin.from) {
+      continue;
+    }
+    const previous = spans.at(-1);
+    if (previous && origin.from <= previous.to) {
+      previous.to = Math.max(previous.to, origin.to);
+    } else {
+      spans.push({ from: origin.from, to: origin.to });
+    }
+  }
+  return spans;
 }
 
 function activeBeamerNamedSize(source: string): {

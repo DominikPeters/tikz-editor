@@ -1,6 +1,8 @@
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 
 import type { Span } from "../ast/types.js";
+import type { SourcePatch } from "../edit/types.js";
+import type { Tree } from "@lezer/common";
 import {
   buildTexSyntaxIndex,
   type TexSyntaxArgumentKind,
@@ -28,12 +30,44 @@ export interface BeamerEnvironmentBoundary {
 }
 
 export function createBeamerSyntaxContext(
-  source: string
+  source: string,
+  structuralMasks: readonly Span[] = [],
+  incremental: {
+    previousTree?: Tree;
+    patches?: readonly SourcePatch[];
+  } = {}
 ): BeamerSyntaxContext {
+  const parseSource = applyStructuralMasks(source, structuralMasks);
   return {
     source,
-    syntax: buildTexSyntaxIndex(source, beamerDocumentParser),
+    syntax: buildTexSyntaxIndex(source, beamerDocumentParser, {
+      parseSource,
+      previousTree: incremental.previousTree,
+      changes: incremental.patches?.map((patch) => ({
+        fromA: patch.oldSpan.from,
+        toA: patch.oldSpan.to,
+        fromB: patch.newSpan.from,
+        toB: patch.newSpan.to,
+      })),
+    }),
   };
+}
+
+function applyStructuralMasks(
+  source: string,
+  masks: readonly Span[]
+): string {
+  let result = source;
+  for (const mask of masks) {
+    const from = Math.max(0, Math.min(result.length, mask.from));
+    const to = Math.max(from, Math.min(result.length, mask.to));
+    if (to === from) continue;
+    result =
+      result.slice(0, from) +
+      result.slice(from, to).replace(/[^\n]/gu, " ") +
+      result.slice(to);
+  }
+  return result;
 }
 
 export function beamerSyntaxContext(

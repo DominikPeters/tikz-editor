@@ -60,6 +60,7 @@ export function CanvasTextEditPopup({
       }}
       onPointerDown={model.onPopupPointerDown}
       data-testid="canvas-text-edit-popup"
+      data-text-edit-target-id={session.sourceId}
     >
       {session.isForeachTemplateEdit ? (
         <div className={css.textEditPopupTag} data-testid="canvas-text-edit-foreach-tag">foreach</div>
@@ -69,14 +70,23 @@ export function CanvasTextEditPopup({
           ref={model.textareaRef}
           className={[
             css.textEditTextarea,
+            session.editMode === "inline-typo" ? css.textEditTextareaInlineTypo : "",
             model.hideNativeCaret ? css.textEditTextareaHideNativeCaret : ""
           ]
             .filter(Boolean)
             .join(" ")}
           value={session.text}
           spellCheck={false}
-          rows={model.textareaSizing?.rows}
-          style={model.textareaSizing != null ? { width: placement.textareaWidth } : undefined}
+          rows={
+            session.editMode === "inline-typo"
+              ? 1
+              : model.textareaSizing?.rows
+          }
+          style={
+            model.textareaSizing != null || session.editMode === "inline-typo"
+              ? { width: placement.textareaWidth }
+              : undefined
+          }
           onSelect={model.onTextareaSelect}
           onCopy={model.onTextareaCopy}
           onCut={model.onTextareaCut}

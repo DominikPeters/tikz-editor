@@ -1,4 +1,4 @@
-import type { SyntaxNodeRef, Tree } from "@lezer/common";
+import { TreeFragment, type SyntaxNodeRef, type Tree } from "@lezer/common";
 import type { LRParser } from "@lezer/lr";
 
 import type { Span } from "../../ast/types.js";
@@ -142,9 +142,30 @@ export function getTexSyntaxIndex(
 
 export function buildTexSyntaxIndex(
   source: string,
-  parser: LRParser
+  parser: LRParser,
+  options: {
+    parseSource?: string;
+    previousTree?: Tree;
+    changes?: readonly {
+      fromA: number;
+      toA: number;
+      fromB: number;
+      toB: number;
+    }[];
+  } = {}
 ): TexSyntaxIndex {
-  const tree = parser.parse(source);
+  const parseSource = options.parseSource ?? source;
+  if (parseSource.length !== source.length) {
+    throw new Error("A TeX syntax parse source must preserve source length.");
+  }
+  const fragments =
+    options.previousTree && options.changes?.length
+      ? TreeFragment.applyChanges(
+          TreeFragment.addTree(options.previousTree),
+          options.changes
+        )
+      : undefined;
+  const tree = parser.parse(parseSource, fragments);
   const controlsByStart = new Map<number, TexSyntaxControlSequence>();
   const boundariesByStart = new Map<
     number,

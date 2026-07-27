@@ -135,6 +135,66 @@ function randomInt(rng: () => number, min: number, maxInclusive: number): number
 }
 
 describe("canvas text edit machine", () => {
+  it("keeps inline typo sessions single-line", () => {
+    const target = {
+      ...buildTarget(BASE_SOURCE, "$x$"),
+      editMode: "inline-typo" as const
+    };
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target,
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+
+    const pasted = reduceInputIntent(
+      started,
+      "insertFromPaste",
+      1,
+      1,
+      "two\nlines"
+    );
+    expect(pasted.state.session?.text).toBe("$x$");
+    expect(pasted.effects).toEqual([]);
+
+    const entered = reduceInputIntent(
+      started,
+      "insertParagraph",
+      1,
+      1,
+      null
+    );
+    expect(entered.state.session).toBeNull();
+    expect(entered.effects).toEqual([]);
+  });
+
+  it("closes an inline typo session when its authored span disappears", () => {
+    const target = {
+      ...buildTarget(BASE_SOURCE, "$x$"),
+      editMode: "inline-typo" as const
+    };
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target,
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+
+    const reconciled = reduceCanvasTextEdit(started, {
+      type: "source_reconciled",
+      source: BASE_SOURCE,
+      sourceRevision: 1,
+      target: null
+    });
+
+    expect(reconciled.state.session).toBeNull();
+    expect(reconciled.state.selectionOverlay).toBeNull();
+  });
+
   it("covers lifecycle start/select/type/delete/close", () => {
     const target = buildTarget(BASE_SOURCE, "$x$");
     const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {

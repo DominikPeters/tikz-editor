@@ -82,7 +82,8 @@ export type HistoryEntry = {
     | "reorder"
     | "align"
     | "distribute"
-    | "flatten-foreach";
+    | "flatten-foreach"
+    | "text-edit";
   label: string;
   /** Optional key used to coalesce drag updates into one undo step. */
   mergeKey?: string;
@@ -376,6 +377,18 @@ export type EditorAction =
        * structural parse mask atomically with the source change.
        */
       canvasTextEditMask?: { elementId: string; span: { from: number; to: number } };
+    }
+  | {
+      type: "APPLY_SOURCE_PATCHES";
+      documentId?: string;
+      baseRevision: number;
+      patches: SourcePatch[];
+      changedSourceIds: string[];
+      historyMergeKey?: string;
+      canvasTextEditMask?: {
+        elementId: string;
+        span: { from: number; to: number };
+      };
     }
   | {
       type: "SET_SOURCE_TRANSIENT";

@@ -591,7 +591,8 @@ export function reduceCanvasTextEdit(
             layoutKind: action.target.layoutKind,
             region: action.target.region,
             popupAnchorBox: action.target.popupAnchorBox,
-            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true
+            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
+            editMode: action.target.editMode ?? "default"
           },
           selectionOverlay: null,
           dragSelection: null,
@@ -629,7 +630,8 @@ export function reduceCanvasTextEdit(
             layoutKind: action.target.layoutKind,
             region: action.target.region,
             popupAnchorBox: action.target.popupAnchorBox,
-            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true
+            isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
+            editMode: action.target.editMode ?? "default"
           },
           selectionOverlay: null,
           dragSelection: {
@@ -718,6 +720,31 @@ export function reduceCanvasTextEdit(
     case "textarea_input_intent": {
       const session = state.session;
       if (!session) {
+        return { state, effects: [] };
+      }
+      if (
+        session.editMode === "inline-typo" &&
+        (action.inputType === "insertParagraph" ||
+          action.inputType === "insertLineBreak")
+      ) {
+        return {
+          state: {
+            ...state,
+            session: null,
+            selectionOverlay: null,
+            dragSelection: null,
+            compositionRange: null,
+            asyncRequestRevision: state.asyncRequestRevision + 1
+          },
+          effects: []
+        };
+      }
+      if (
+        session.editMode === "inline-typo" &&
+        (action.inputType === "insertFromPaste" ||
+          action.inputType === "insertFromDrop") &&
+        /[\r\n]/u.test(action.data ?? "")
+      ) {
         return { state, effects: [] };
       }
       const selection = normalizeSelection(session.text.length, action.selectionStart, action.selectionEnd);
@@ -920,6 +947,22 @@ export function reduceCanvasTextEdit(
         };
       }
       if (action.target?.sourceId !== session.sourceId) {
+        if (session.editMode === "inline-typo") {
+          return {
+            state: {
+              ...state,
+              sourceRevision: action.sourceRevision,
+              session: null,
+              selectionOverlay: null,
+              dragSelection: null,
+              compositionRange: null,
+              undoStack: [],
+              redoStack: [],
+              asyncRequestRevision: state.asyncRequestRevision + 1
+            },
+            effects: []
+          };
+        }
         if (state.sourceRevision === action.sourceRevision && session.workingSource === action.source) {
           return { state, effects: [] };
         }

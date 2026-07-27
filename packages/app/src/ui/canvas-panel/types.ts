@@ -315,6 +315,7 @@ export type TextEditingSession = {
   region: Extract<HitRegion, { shape: "rect" }>;
   popupAnchorBox?: SvgBounds;
   isForeachTemplateEdit: boolean;
+  editMode: "default" | "inline-typo";
 };
 
 export type NodeAnchorOverlayState = {
@@ -337,15 +338,23 @@ export type EditableTextTarget = {
   sceneTextId: string;
   sourceSpan: Span;
   text: string;
+  /** Complete paragraph source used by report-driven hit testing. */
+  layoutSourceSpan?: Span;
+  /** Complete paragraph text used by report-driven hit testing. */
+  layoutSourceText?: string;
   renderSourceText: string;
   usesTex: boolean;
   paragraphId: string | null;
   layoutKind: NodeTextLayoutKind;
-  style: SceneText["style"];
+  style: Pick<
+    SceneText["style"],
+    "fontSize" | "fontStyle" | "fontWeight" | "fontFamily" | "textAlign"
+  >;
   totalWidth: number;
   region: Extract<HitRegion, { shape: "rect" }>;
   popupAnchorBox?: SvgBounds;
   isForeachTemplateEdit?: boolean;
+  editMode?: "default" | "inline-typo";
 };
 
 export type SnapDebugLogInput = {

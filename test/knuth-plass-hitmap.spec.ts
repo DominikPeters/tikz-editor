@@ -719,7 +719,7 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(point.lineLocalX).toBeCloseTo(expectedEntry?.x ?? 0, 6);
   });
 
-  it("uses registered TeX vlist line placements for caret geometry without linebox DOM", async () => {
+  it("uses registered TeX vlist line placements in a paragraph group without owner-viewBox rescaling", async () => {
     const report = makeTwoLineReport();
     const shiftedLine = report.lines[1];
     const shiftedSegment = shiftedLine?.segments[0];
@@ -770,9 +770,10 @@ describe("knuth-plass hitmap line ranges", () => {
       }
     }]);
     const containerElement = {
+      tagName: "g",
       getBoundingClientRect: () => ({ left: 0, top: 0, right: 17, bottom: 22, width: 17, height: 22 }),
       getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
-      viewBox: { baseVal: { width: report.width } },
+      ownerSVGElement: { viewBox: { baseVal: { width: 453.543 } } },
       querySelectorAll: () => {
         throw new Error("registered line placements should avoid rendered linebox queries");
       }

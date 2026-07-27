@@ -22,6 +22,14 @@ type Bounds2D<Unit, Space extends string> = Readonly<{
   [coordBrand]: `bounds:${Space}`;
 }>;
 
+type Rect2D<Unit, Space extends string> = Readonly<{
+  x: Unit;
+  y: Unit;
+  width: Unit;
+  height: Unit;
+  [coordBrand]: `rect:${Space}`;
+}>;
+
 export type SourceCmPoint = Point2D<Cm, "source-cm">;
 export type FrameLocalPoint = Point2D<Pt, "frame-local">;
 export type WorldPoint = Point2D<Pt, "world">;
@@ -43,6 +51,13 @@ export type WorldBounds = Bounds2D<Pt, "world">;
 export type SvgBounds = Bounds2D<Pt, "svg">;
 export type ViewportBounds = Bounds2D<Px, "viewport">;
 export type ClientBounds = Bounds2D<Px, "client">;
+// Rectangles are branded as a whole because ordinary width/height arithmetic
+// intentionally produces numbers. Construction still makes the coordinate
+// space explicit and prevents local/document/viewport rectangles from mixing.
+export type FrameLocalRect = Rect2D<number, "frame-local">;
+export type SvgRect = Rect2D<number, "svg">;
+export type ViewportRect = Rect2D<number, "viewport">;
+export type ClientRect = Rect2D<number, "client">;
 
 type PointBrand =
   | SourceCmPoint[typeof coordBrand]
@@ -69,6 +84,12 @@ type BoundsBrand =
   | ViewportBounds[typeof coordBrand]
   | ClientBounds[typeof coordBrand];
 
+type RectBrand =
+  | FrameLocalRect[typeof coordBrand]
+  | SvgRect[typeof coordBrand]
+  | ViewportRect[typeof coordBrand]
+  | ClientRect[typeof coordBrand];
+
 function createPoint<Unit, Brand extends PointBrand>(x: Unit, y: Unit, brand: Brand): Point2D<Unit, Brand extends `point:${infer Space}` ? Space : never> {
   void brand;
   return { x, y } as unknown as Point2D<Unit, Brand extends `point:${infer Space}` ? Space : never>;
@@ -94,6 +115,20 @@ function createBounds<Unit, Brand extends BoundsBrand>(
   return { minX, minY, maxX, maxY } as unknown as Bounds2D<
     Unit,
     Brand extends `bounds:${infer Space}` ? Space : never
+  >;
+}
+
+function createRect<Unit, Brand extends RectBrand>(
+  x: Unit,
+  y: Unit,
+  width: Unit,
+  height: Unit,
+  brand: Brand
+): Rect2D<Unit, Brand extends `rect:${infer Space}` ? Space : never> {
+  void brand;
+  return { x, y, width, height } as unknown as Rect2D<
+    Unit,
+    Brand extends `rect:${infer Space}` ? Space : never
   >;
 }
 
@@ -171,4 +206,20 @@ export function viewportBounds(minX: Px, minY: Px, maxX: Px, maxY: Px): Viewport
 
 export function clientBounds(minX: Px, minY: Px, maxX: Px, maxY: Px): ClientBounds {
   return createBounds(minX, minY, maxX, maxY, "bounds:client");
+}
+
+export function frameLocalRect(x: number, y: number, width: number, height: number): FrameLocalRect {
+  return createRect(x, y, width, height, "rect:frame-local");
+}
+
+export function svgRect(x: number, y: number, width: number, height: number): SvgRect {
+  return createRect(x, y, width, height, "rect:svg");
+}
+
+export function viewportRect(x: number, y: number, width: number, height: number): ViewportRect {
+  return createRect(x, y, width, height, "rect:viewport");
+}
+
+export function clientRect(x: number, y: number, width: number, height: number): ClientRect {
+  return createRect(x, y, width, height, "rect:client");
 }

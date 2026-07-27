@@ -25,6 +25,7 @@ import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import {
   prepareBeamerDocument,
+  type BeamerFrameLayout,
   type PreparedBeamerDocument
 } from "@tikz-editor/core/beamer/index";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
@@ -76,6 +77,7 @@ export type DeckActiveFrame = {
   svg: string;
   svgModel: SvgRenderModel;
   viewBox: SvgViewBox;
+  layout: BeamerFrameLayout;
 };
 
 export type DeckSnapshot = {
@@ -396,13 +398,56 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
  */
 type DeckComputeSession = {
   source: string;
+  sourceRevision: number | null;
   resolverCacheKey: string;
+  structuralMaskKey: string;
   prepared: PreparedBeamerDocument;
   frames: DeckFrameSummary[];
   renderedPages: Map<string, DeckActiveFrame>;
 };
 
 let deckComputeSession: DeckComputeSession | null = null;
+
+/**
+ * Beamer's paragraph reports retain font resolvers used while laying out the
+ * page. The active-frame snapshot only publishes the resulting geometry, so
+ * omit those executable helpers at the worker boundary while preserving the
+ * report/vlist data consumed by canvas hit testing.
+ */
+function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): BeamerFrameLayout {
+  const copies = new WeakMap<object, object>();
+
+  const copy = (value: unknown): unknown => {
+    if (typeof value === "function" || typeof value === "symbol") {
+      return undefined;
+    }
+    if (value === null || typeof value !== "object") {
+      return value;
+    }
+    const cached = copies.get(value);
+    if (cached) {
+      return cached;
+    }
+    if (Array.isArray(value)) {
+      const result: unknown[] = [];
+      copies.set(value, result);
+      for (const entry of value) {
+        result.push(copy(entry));
+      }
+      return result;
+    }
+    const result: Record<string, unknown> = {};
+    copies.set(value, result);
+    for (const [key, entry] of Object.entries(value)) {
+      if (typeof entry !== "function" && typeof entry !== "symbol") {
+        result[key] = copy(entry);
+      }
+    }
+    return result;
+  };
+
+  return copy(layout) as BeamerFrameLayout;
+}
 
 function resolveDeckFrameIndex(
   frames: readonly DeckFrameSummary[],
@@ -450,14 +495,36 @@ async function computeDeckSnapshot(
     documentFileRef: request.documentFileRef ?? null
   });
   const graphicsResolver = graphicsContext.resolver;
+  const structuralMask = request.textEditMaskSpan ?? null;
+  const structuralMaskKey = structuralMask
+    ? `${structuralMask.from}:${structuralMask.to}`
+    : "";
   if (
     deckComputeSession?.source !== request.source ||
-    deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey
+    deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey ||
+    deckComputeSession.structuralMaskKey !== structuralMaskKey
   ) {
-    const prepared = prepareBeamerDocument(request.source);
+    const previousPrepared = deckComputeSession?.prepared;
+    const canIncrementallyParse =
+      request.patches != null &&
+      request.patches.length > 0 &&
+      request.patchBaseRevision != null &&
+      deckComputeSession?.sourceRevision === request.patchBaseRevision;
+    const prepared = prepareBeamerDocument(request.source, {
+      structuralMasks: structuralMask ? [structuralMask] : undefined,
+      previousSyntaxTree:
+        canIncrementallyParse && previousPrepared
+          ? previousPrepared.syntaxTree
+          : undefined,
+      syntaxPatches: canIncrementallyParse
+        ? request.patches ?? undefined
+        : undefined
+    });
     deckComputeSession = {
       source: request.source,
+      sourceRevision: request.sourceRevision ?? null,
       resolverCacheKey: graphicsResolver.cacheKey,
+      structuralMaskKey,
       prepared,
       frames: prepared.document.frames.map((frame, frameIndex) => ({
         id: frame.id,
@@ -492,7 +559,8 @@ async function computeDeckSnapshot(
         stepCount: result.layout.stepCount,
         svg: result.svg.svg,
         svgModel: result.svg.model,
-        viewBox: result.svg.viewBox
+        viewBox: result.svg.viewBox,
+        layout: makeBeamerLayoutCloneSafe(result.layout)
       };
       session.renderedPages.set(pageKey, activeFrame);
     }
