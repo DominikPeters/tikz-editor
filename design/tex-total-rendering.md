@@ -197,6 +197,21 @@ Smallest honest span, with these rules:
 - Adjacent literal items merge into one run for rendering and diagnostics.
 - A literal run never crosses a paragraph boundary.
 
+### Malformed environment containment
+
+Supported text environments are structural only when the syntax index finds a
+complete, correctly nested begin/end pair. An incomplete, unexpected, or
+mismatched boundary renders as one `malformed-input` literal run covering the
+whole delimiter. Context-sensitive `\item` commands are structural only inside
+a matched list environment; otherwise they render as malformed literal source.
+Correctly matched inner environments remain structural even when an enclosing
+boundary is malformed.
+
+The renderer does not synthesize an end boundary at EOF. An implicit close
+would guess scope and could apply list margins or paragraph alignment to the
+entire remainder of a node. Literal containment keeps recovery deterministic,
+source-mapped, and independent of caret position.
+
 ## Editing vs Display: A Styling Policy, Not a Mode
 
 With literal runs, the mid-edit problem largely dissolves: `This is a \tex`

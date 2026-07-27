@@ -24,6 +24,7 @@ import {
   getTexSyntaxIndex,
   matchTexSyntaxEnvironments,
   type TexSyntaxIndex,
+  type TexSyntaxMatchedEnvironment,
 } from "./syntax-index.js";
 
 export type TexParagraphAlignment = ParagraphAlignment;
@@ -1157,6 +1158,13 @@ function scanSimpleTexIrNodes(
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
   const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  const matchedEnvironments = [...matchTexSyntaxEnvironments(syntax).values()];
+  const matchedEnvironmentBoundaryStarts = new Set(
+    matchedEnvironments.flatMap((environment) => [
+      environment.begin.span.from,
+      environment.end.span.from,
+    ])
+  );
   const mathSyntaxByStart = simpleTexMathNodes(syntax);
   let unsupportedCommand = false;
   let index = 0;
@@ -1229,6 +1237,45 @@ function scanSimpleTexIrNodes(
         continue;
       }
 
+      const environmentBoundary = scanSimpleTexEnvironmentBoundary(
+        syntax,
+        matchedEnvironmentBoundaryStarts,
+        index
+      );
+      if (environmentBoundary) {
+        nodes.push({
+          kind: "environment-boundary",
+          text: text.slice(index, environmentBoundary.end),
+          boundary: environmentBoundary.boundary,
+          name: environmentBoundary.name,
+          sourceStart,
+          sourceEnd: sourceOffset + environmentBoundary.end,
+        });
+        index = environmentBoundary.end;
+        continue;
+      }
+      const malformedEnvironmentBoundary =
+        scanMalformedSimpleTexEnvironmentBoundary(
+          text,
+          syntax,
+          matchedEnvironmentBoundaryStarts,
+          index
+        );
+      if (malformedEnvironmentBoundary) {
+        nodes.push({
+          kind: "literal",
+          text: text.slice(index, malformedEnvironmentBoundary.end),
+          reason: "malformed-input",
+          detail: malformedSimpleTexEnvironmentBoundaryDetail(
+            malformedEnvironmentBoundary
+          ),
+          sourceStart,
+          sourceEnd: sourceOffset + malformedEnvironmentBoundary.end,
+        });
+        index = malformedEnvironmentBoundary.end;
+        continue;
+      }
+
       const proseControl = scanSimpleTexProseControl(text, index, sourceOffset, resolveColorAlias);
       if (proseControl) {
         nodes.push(proseControl.node);
@@ -1238,7 +1285,6 @@ function scanSimpleTexIrNodes(
       }
 
       const paragraphCommand = scanSimpleTexParagraphCommand(text, index);
-      const environmentBoundary = scanSimpleTexEnvironmentBoundary(text, index);
       const itemCommand = scanSimpleTexItemCommand(text, index, sourceOffset, resolveColorAlias);
       const verticalGlue = scanSimpleTexVerticalGlueCommand(text, index, sourceOffset);
       const verticalRule = scanSimpleTexVerticalRuleCommand(text, index, sourceOffset);
@@ -1262,21 +1308,20 @@ function scanSimpleTexIrNodes(
         index = boxEnvironment.end;
         continue;
       }
-      if (environmentBoundary) {
-        nodes.push({
-          kind: "environment-boundary",
-          text: text.slice(index, environmentBoundary.end),
-          boundary: environmentBoundary.boundary,
-          name: environmentBoundary.name,
-          sourceStart,
-          sourceEnd: sourceOffset + environmentBoundary.end,
-        });
-        index = environmentBoundary.end;
-        continue;
-      }
       if (itemCommand) {
-        nodes.push(itemCommand.node);
-        unsupportedCommand ||= itemCommand.unsupportedCommand;
+        if (isInsideMatchedSimpleTexListEnvironment(matchedEnvironments, index)) {
+          nodes.push(itemCommand.node);
+          unsupportedCommand ||= itemCommand.unsupportedCommand;
+        } else {
+          nodes.push({
+            kind: "literal",
+            text: itemCommand.node.text,
+            reason: "malformed-input",
+            detail: "\\item outside matched list environment",
+            sourceStart: itemCommand.node.sourceStart,
+            sourceEnd: itemCommand.node.sourceEnd,
+          });
+        }
         index = itemCommand.end;
         continue;
       }
@@ -2431,22 +2476,15 @@ function parseSimpleTexBoxAlignment(raw: string): SimpleTexBoxAlignment {
 }
 
 function scanSimpleTexEnvironmentBoundary(
-  text: string,
+  syntax: TexSyntaxIndex,
+  matchedBoundaryStarts: ReadonlySet<number>,
   start: number
 ): { boundary: "begin" | "end"; name: SimpleTexEnvironmentName; end: number } | null {
-  const syntax = getTexSyntaxIndex(text, texFragmentParser);
   const boundary = syntax.environmentBoundaryByStart.get(start);
-  const matched = [...matchTexSyntaxEnvironments(syntax).values()].some(
-    (environment) =>
-      environment.begin.span.from === start ||
-      environment.end.span.from === start
-  );
   if (
     boundary &&
-    matched &&
-    (isSimpleTexQuoteEnvironmentName(boundary.name) ||
-      isSimpleTexTrivlistEnvironmentName(boundary.name) ||
-      isSimpleTexListEnvironmentName(boundary.name))
+    matchedBoundaryStarts.has(start) &&
+    isSimpleTexEnvironmentName(boundary.name)
   ) {
     return {
       boundary: boundary.kind,
@@ -2455,6 +2493,108 @@ function scanSimpleTexEnvironmentBoundary(
     };
   }
   return null;
+}
+
+function isSimpleTexEnvironmentName(name: string): name is SimpleTexEnvironmentName {
+  return isSimpleTexQuoteEnvironmentName(name) ||
+    isSimpleTexTrivlistEnvironmentName(name) ||
+    isSimpleTexListEnvironmentName(name);
+}
+
+interface MalformedSimpleTexEnvironmentBoundary {
+  readonly kind: "begin" | "end";
+  readonly name: SimpleTexEnvironmentName | "minipage";
+  readonly end: number;
+  readonly recovered: boolean;
+}
+
+function scanMalformedSimpleTexEnvironmentBoundary(
+  text: string,
+  syntax: TexSyntaxIndex,
+  matchedBoundaryStarts: ReadonlySet<number>,
+  start: number
+): MalformedSimpleTexEnvironmentBoundary | null {
+  if (matchedBoundaryStarts.has(start)) {
+    return null;
+  }
+  const indexed = syntax.environmentBoundaryByStart.get(start);
+  if (indexed && isRecoverableSimpleTexEnvironmentName(indexed.name)) {
+    return {
+      kind: indexed.kind,
+      name: indexed.name,
+      end: indexed.span.to,
+      recovered: indexed.recovered,
+    };
+  }
+
+  const control = syntax.controlByStart.get(start);
+  const lexicalKind =
+    text.startsWith("\\begin", start) &&
+      !/[A-Za-z@]/u.test(text[start + "\\begin".length] ?? "")
+      ? "begin"
+      : text.startsWith("\\end", start) &&
+          !/[A-Za-z@]/u.test(text[start + "\\end".length] ?? "")
+        ? "end"
+        : null;
+  const kind =
+    control?.kind === "word" &&
+      (control.name === "begin" || control.name === "end")
+      ? control.name
+      : lexicalKind;
+  if (!kind) {
+    return null;
+  }
+  const commandEnd =
+    control?.kind === "word" && control.name === kind
+      ? control.commandSpan.to
+      : start + `\\${kind}`.length;
+  const groupStart = skipSimpleTexControlWordSpaces(text, commandEnd);
+  if (text[groupStart] !== "{") {
+    return null;
+  }
+  const indexedGroupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
+  const lexicalGroupClose = text.indexOf("}", groupStart + 1);
+  const groupEnd = indexedGroupEnd ??
+    (lexicalGroupClose >= 0 ? lexicalGroupClose + 1 : null);
+  const nameEnd = groupEnd === null ? text.length : groupEnd - 1;
+  const name = text.slice(groupStart + 1, nameEnd).trim();
+  if (!isRecoverableSimpleTexEnvironmentName(name)) {
+    return null;
+  }
+  return {
+    kind,
+    name,
+    end: groupEnd ?? text.length,
+    recovered: groupEnd === null,
+  };
+}
+
+function isRecoverableSimpleTexEnvironmentName(
+  name: string
+): name is SimpleTexEnvironmentName | "minipage" {
+  return name === "minipage" || isSimpleTexEnvironmentName(name);
+}
+
+function malformedSimpleTexEnvironmentBoundaryDetail(
+  boundary: MalformedSimpleTexEnvironmentBoundary
+): string {
+  if (boundary.recovered) {
+    return `incomplete \\${boundary.kind}{${boundary.name}}`;
+  }
+  return boundary.kind === "begin"
+    ? `missing \\end{${boundary.name}}`
+    : `unexpected \\end{${boundary.name}}`;
+}
+
+function isInsideMatchedSimpleTexListEnvironment(
+  environments: readonly TexSyntaxMatchedEnvironment[],
+  sourceOffset: number
+): boolean {
+  return environments.some((environment) =>
+    isSimpleTexListEnvironmentName(environment.name) &&
+    environment.contentSpan.from <= sourceOffset &&
+    sourceOffset < environment.contentSpan.to
+  );
 }
 
 function isSimpleTexQuoteEnvironmentName(name: string): name is SimpleTexQuoteEnvironmentName {

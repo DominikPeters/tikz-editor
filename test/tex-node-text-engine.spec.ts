@@ -221,4 +221,19 @@ describe("native TeX node text engine", () => {
     expect(body).toContain('data-tex-glyph="49"');
     expect(body).toContain('data-tex-glyph="46"');
   });
+
+  it("renders incomplete list environments as malformed literal source", async () => {
+    const engine = await createTexNodeTextEngine();
+    const metrics = engine.measure({
+      ...request(String.raw`\begin{enumerate}
+\item Alpha`),
+      textWidthPt: 100,
+      alignment: "ragged-right",
+    });
+    const body = engine.renderFromCache(metrics?.cacheKey ?? "")?.body;
+
+    expect(metrics).not.toBeNull();
+    expect(body).toContain('data-tex-literal="malformed-input"');
+    expect(body).not.toContain('data-tex-hbox-role="list-label"');
+  });
 });

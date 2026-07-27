@@ -251,3 +251,99 @@ describe("list material before the first \\item", () => {
     expect(analyzeSimpleTexParagraph(enumerateWith(""), 100).fallbackReason).toBeNull();
   });
 });
+
+describe("malformed TeX environments", () => {
+  it("contains an unterminated list and its orphan item as literal runs", () => {
+    const source = String.raw`\begin{enumerate}
+\item Alpha`;
+    const analysis = analyzeSimpleTexParagraph(source, 100);
+    const literals = analysis.ir?.blocks.flatMap((block) =>
+      literalNodes(block.nodes)
+    ) ?? [];
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+    expect(literals).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        text: String.raw`\begin{enumerate}`,
+        reason: "malformed-input",
+        detail: String.raw`missing \end{enumerate}`,
+      }),
+      expect.objectContaining({
+        text: String.raw`\item `,
+        reason: "malformed-input",
+        detail: String.raw`\item outside matched list environment`,
+      }),
+    ]));
+  });
+
+  it("contains mismatched list boundaries without aborting layout", () => {
+    const source = String.raw`\begin{enumerate}
+\item Alpha
+\end{itemize}`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:mismatched-list-environment",
+      width: 140,
+      alignment: "ragged-right",
+      hyphenator: { hyphenate: () => [] },
+    });
+    const literalText = result.report?.lines.flatMap((line) => line.segments)
+      .filter((segment) => segment.literal)
+      .map((segment) => segment.text)
+      .join("") ?? "";
+
+    expect(result.supported).toBe(true);
+    expect(literalText).toContain(String.raw`\begin{enumerate}`);
+    expect(literalText).toContain(String.raw`\item`);
+    expect(literalText).toContain(String.raw`\end{itemize}`);
+  });
+
+  it("keeps a correctly matched inner environment structural", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`\begin{quote}Before \begin{center}Inner\end{center} After\end{quotation}`
+    );
+
+    expect(parsed.unsupportedCommand).toBe(false);
+    expect(parsed.nodes.filter((node) => node.kind === "environment-boundary"))
+      .toEqual([
+        expect.objectContaining({ boundary: "begin", name: "center" }),
+        expect.objectContaining({ boundary: "end", name: "center" }),
+      ]);
+    expect(parsed.blocks.find((block) => block.text === "Inner")?.scopePath)
+      .toEqual([
+        expect.objectContaining({ kind: "trivlist", envName: "center" }),
+      ]);
+  });
+
+  it("renders an unexpected supported environment end as malformed source", () => {
+    const parsed = parseSimpleTexParagraphIr(
+      String.raw`Alpha \end{enumerate} Omega`
+    );
+
+    expect(literalNodes(parsed.nodes)).toContainEqual(expect.objectContaining({
+      text: String.raw`\end{enumerate}`,
+      reason: "malformed-input",
+      detail: String.raw`unexpected \end{enumerate}`,
+    }));
+    expect(parsed.unsupportedCommand).toBe(false);
+  });
+
+  it.each([
+    [String.raw`\begin{enumerate`, String.raw`incomplete \begin{enumerate}`],
+    [String.raw`\end{enumerate`, String.raw`incomplete \end{enumerate}`],
+    [String.raw`\begin{minipage`, String.raw`incomplete \begin{minipage}`],
+  ])("contains an incomplete environment delimiter: %s", (source, detail) => {
+    const parsed = parseSimpleTexParagraphIr(source);
+
+    expect(literalNodes(parsed.nodes)).toEqual([
+      expect.objectContaining({
+        text: source,
+        reason: "malformed-input",
+        detail,
+        sourceStart: 0,
+        sourceEnd: source.length,
+      }),
+    ]);
+    expect(parsed.unsupportedCommand).toBe(false);
+  });
+});

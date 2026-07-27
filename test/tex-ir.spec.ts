@@ -811,13 +811,15 @@ describe("simple TeX paragraph IR", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "literal",
-          text: String.raw`\begin`,
-          reason: "unsupported-command",
+          text: String.raw`\begin{quote}`,
+          reason: "malformed-input",
+          detail: String.raw`missing \end{quote}`,
         }),
         expect.objectContaining({
           kind: "literal",
-          text: String.raw`\end`,
-          reason: "unsupported-command",
+          text: String.raw`\end{quotation}`,
+          reason: "malformed-input",
+          detail: String.raw`unexpected \end{quotation}`,
         }),
       ])
     );
