@@ -1401,6 +1401,7 @@ function displayAlignmentRowHBox(
         width: row.width,
         height: row.height,
         depth: row.depth,
+        ...(row.caretMap ? { caretMap: row.caretMap } : {}),
         ...(row.caretStops ? { caretStops: row.caretStops } : {}),
         ...(row.constructRanges ? { constructRanges: row.constructRanges } : {}),
         ...(row.breakpoints ? { breakpoints: row.breakpoints } : {}),

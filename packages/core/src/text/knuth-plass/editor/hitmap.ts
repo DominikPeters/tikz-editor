@@ -3076,6 +3076,7 @@ function displayMathSourceForHBox(item: TexHBoxItem): TexMathBox | null {
     width: texLength(hitMap.width as number),
     height: texLength(hitMap.height as number),
     depth: texLength(hitMap.depth as number),
+    caretMap: hitMap.caretMap,
     caretStops: hitMap.caretStops,
     constructRanges: hitMap.constructRanges,
     breakpoints: hitMap.breakpoints,

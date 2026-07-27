@@ -322,6 +322,7 @@ async function readTexSourceClientPoint(
         getSceneTextDebug?: () => Array<{
           sourceId: string;
           text: string;
+          sourceStart: number;
           renderSourceText: string | null;
         }>;
       };
@@ -348,15 +349,19 @@ async function readTexSourceClientPoint(
     const minSourceStart = sourceRanges.length > 0
       ? Math.min(...sourceRanges.map((entry) => entry.start))
       : null;
-    const offsets = [renderOffset];
-    if (minSourceStart != null && minSourceStart !== 0) {
-      offsets.push(minSourceStart + renderOffset);
-    }
-    const candidates = sourceRanges.filter(({ start, end }) => {
-      return Number.isFinite(start) &&
-        Number.isFinite(end) &&
-        offsets.some((offset) => start <= offset && offset < Math.max(start + 1, end));
-    });
+    const offsets = debugText
+      ? [debugText.sourceStart + renderOffset, renderOffset]
+      : minSourceStart != null && minSourceStart !== 0
+        ? [minSourceStart + renderOffset]
+        : [renderOffset];
+    const candidates = offsets
+      .map((offset) => sourceRanges.filter(({ start, end }) => {
+        return Number.isFinite(start) &&
+          Number.isFinite(end) &&
+          start <= offset &&
+          offset < Math.max(start + 1, end);
+      }))
+      .find((entries) => entries.length > 0) ?? [];
     const glyphEntry = candidates
       .filter(({ element }) => element.hasAttribute("data-tex-glyph"))
       .sort((left, right) => (left.end - left.start) - (right.end - right.start))[0] ?? candidates[0];
@@ -1322,7 +1327,7 @@ test("explicit multiline aligned text keeps authored line breaks and canvas sele
   }
 });
 
-test("plain fallback multiline caret uses literal backslash text positions", async ({ page }) => {
+test("plain fallback multiline caret uses literal backslash text positions with TeX-derived rendering", async ({ page }) => {
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
   \node at (0.2,3.2) [align=left]{I'm testing the TeX \\ rendering \te};
@@ -1334,7 +1339,10 @@ test("plain fallback multiline caret uses literal backslash text positions", asy
   const text = String.raw`I'm testing the TeX \\ rendering \te`;
   const textarea = page.getByTestId("canvas-text-edit-textarea");
   await expect(textarea).toHaveValue(text);
-  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveCount(0);
+  await expect(page.locator("svg[data-text-renderer='tex'][data-source-id='path:0']")).toHaveAttribute(
+    "data-paragraph-id",
+    /.+/
+  );
 
   const firstLineOffset = text.indexOf("the") + 2;
   await setTextareaSelection(page, firstLineOffset, firstLineOffset);

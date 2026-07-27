@@ -157,6 +157,7 @@ export interface TexHitMap {
   readonly width?: TexLength;
   readonly height?: TexLength;
   readonly depth?: TexLength;
+  readonly caretMap?: TexMathBox["caretMap"];
   readonly caretStops?: readonly TexHBoxX[];
   readonly constructRanges?: TexMathBox["constructRanges"];
   readonly breakpoints?: TexMathBox["breakpoints"];

@@ -43,6 +43,16 @@ describe("native TeX node text engine", () => {
     expect(engine.measure(request("   "))).toBeNull();
   });
 
+  it("gives unmatched math delimiters visible malformed-literal geometry", async () => {
+    const engine = await createTexNodeTextEngine();
+    const metrics = engine.measure(request("$"));
+    const payload = engine.renderFromCache(metrics?.cacheKey ?? "");
+
+    expect(metrics?.width).toBeGreaterThan(0);
+    expect(metrics?.height).toBeGreaterThan(0);
+    expect(payload?.body).toContain('data-tex-literal="malformed-input"');
+  });
+
   it("lays out each requested font size with its TeX-selected face", async () => {
     const engine = await createTexNodeTextEngine();
     const tenPoint = engine.measure(request("native", 10));

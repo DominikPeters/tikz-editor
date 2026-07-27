@@ -6082,6 +6082,28 @@ unordered.`;
       offset,
       kind: "math",
     });
+
+    const tagOffset = sourceText.indexOf("A");
+    const tagPoint = await getKnuthPlassPointFromOffset(layoutContext, {
+      paragraphId: "tex:numbered-display-align-caret",
+      sourceText,
+      containerElement,
+      offset: tagOffset,
+    });
+    expect(tagPoint.error?.message ?? null).toBeNull();
+    const tagCaret = await getKnuthPlassCaretFromPoint(layoutContext, {
+      paragraphId: "tex:numbered-display-align-caret",
+      sourceText,
+      containerElement,
+      clientPoint: clientPoint(
+        px(tagPoint.clientPoint?.x ?? 0),
+        px(tagPoint.clientPoint?.y ?? 0)
+      ),
+    });
+    expect(tagCaret.ok).toBe(true);
+    expect(tagCaret.kind).toBe("math");
+    expect(tagCaret.offset).toBeGreaterThanOrEqual(sourceText.indexOf(String.raw`\tag`));
+    expect(tagCaret.offset).toBeLessThanOrEqual(sourceText.indexOf("}", tagOffset) + 1);
   });
 
   it("maps editor carets inside shoved multline rows from registered vlist geometry", async () => {

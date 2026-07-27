@@ -450,6 +450,31 @@ function remapTexHitMap(hitMap: TexHitMap, sourceMap: TextSourceMap): TexHitMap 
     ...hitMap,
     ...(sourceSpan ? { sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end } : {}),
     ...(contentSpan ? { contentStart: contentSpan.start, contentEnd: contentSpan.end } : {}),
+    caretMap: hitMap.caretMap
+      ? {
+          ...hitMap.caretMap,
+          ...(sourceSpan ? { sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end } : {}),
+          ...(contentSpan ? { contentStart: contentSpan.start, contentEnd: contentSpan.end } : {}),
+          entries: hitMap.caretMap.entries.map((entry) => {
+            const entrySpan = entry.sourceSpan
+              ? mapInputSpan(sourceMap, entry.sourceSpan.start, entry.sourceSpan.end)
+              : null;
+            return {
+              ...entry,
+              sourceOffset: mapInputOffset(sourceMap, entry.sourceOffset),
+              ...(entrySpan ? { sourceSpan: entrySpan } : {}),
+            };
+          }),
+          diagnostics: hitMap.caretMap.diagnostics?.map((diagnostic) => ({
+            ...diagnostic,
+            sourceSpan: mapInputSpan(
+              sourceMap,
+              diagnostic.sourceSpan.start,
+              diagnostic.sourceSpan.end
+            ),
+          })),
+        }
+      : undefined,
     constructRanges: hitMap.constructRanges?.map((range) => {
       const mapped = mapInputSpan(sourceMap, range.sourceStart, range.sourceEnd);
       return { ...range, sourceStart: mapped.start, sourceEnd: mapped.end };

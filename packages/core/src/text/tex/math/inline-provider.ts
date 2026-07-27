@@ -14,6 +14,7 @@ import type {
 import { roundTexPt } from "../fonts/units.js";
 import {
   texHBoxLocalX,
+  texHBoxLocalY,
   texHBoxLocalXFromOrigin,
   texHBoxOffsetX,
   texHBoxOffsetY,
@@ -1949,11 +1950,7 @@ function addDisplayAlignmentTag(
     depth: texLength(Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth)),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(
-        tag.items,
-        texHBoxOffsetX(tagX),
-        texHBoxOffsetY(tagRenderShiftY)
-      ),
+      displayAlignmentTagHList(tag, tagX, tagRenderShiftY),
     ],
   };
 }
@@ -1992,11 +1989,7 @@ function addGatherDisplayTag(
     depth: texLength(roundTexPt(depth)),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(
-        tag.items,
-        texHBoxOffsetX(tagX),
-        texHBoxOffsetY(tagRenderShiftY)
-      ),
+      displayAlignmentTagHList(tag, tagX, tagRenderShiftY),
     ],
   };
 }
@@ -2030,12 +2023,26 @@ function addMultlineDisplayTag(
     depth: texLength(Math.max(row.depth + tagMetricShiftY, tagMetricShiftY + tag.depth)),
     items: [
       ...rowItems,
-      ...offsetMathHListItems(
-        tag.items,
-        texHBoxOffsetX(tagX),
-        texHBoxOffsetY(tagRenderShiftY)
-      ),
+      displayAlignmentTagHList(tag, tagX, tagRenderShiftY),
     ],
+  };
+}
+
+function displayAlignmentTagHList(
+  tag: TexMathHList,
+  x: number,
+  y: number
+): TexMathChildHListLayoutItem {
+  return {
+    kind: "hlist",
+    role: "nucleus",
+    x: texHBoxLocalX(roundTexPt(x)),
+    y: texHBoxLocalY(roundTexPt(y)),
+    width: tag.width,
+    height: tag.height,
+    depth: tag.depth,
+    sourceSpan: tag.sourceSpan,
+    items: tag.items,
   };
 }
 

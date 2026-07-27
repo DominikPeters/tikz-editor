@@ -1683,6 +1683,9 @@ function simpleTexMathNodeFromSyntax(
     }
     const contentStart = syntax.from + delimiterLength;
     const contentEnd = syntax.to - delimiterLength;
+    if (contentEnd < contentStart) {
+      return null;
+    }
     return {
       kind: "math",
       text: text.slice(syntax.from, syntax.to),
@@ -1711,6 +1714,9 @@ function simpleTexMathNodeFromSyntax(
     }
     const contentStart = syntax.from + delimiterLength;
     const contentEnd = syntax.to - delimiterLength;
+    if (contentEnd < contentStart) {
+      return null;
+    }
     return {
       kind: "display-math",
       text: text.slice(syntax.from, syntax.to),

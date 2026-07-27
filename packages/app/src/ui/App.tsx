@@ -1500,6 +1500,7 @@ export function App() {
           sourceId: string;
           sceneTextId: string;
           text: string;
+          sourceStart: number;
           renderSourceText: string | null;
           paragraphId: string | null;
           layoutKind: string | null;
@@ -1605,6 +1606,7 @@ export function App() {
             sourceId: element.sourceRef.sourceId,
             sceneTextId: element.id,
             text: element.text,
+            sourceStart: element.textSourceSpan?.from ?? element.sourceRef.sourceSpan.from,
             renderSourceText: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.renderSourceText : null,
             paragraphId: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.paragraphId : null,
             layoutKind: element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.layoutKind : null

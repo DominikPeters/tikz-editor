@@ -58,6 +58,18 @@ describe("simple TeX paragraph IR", () => {
     expect(simpleTexSourceHasLineBreak(String.raw`$x\\y$ % \\`)).toBe(false);
   });
 
+  it("classifies an unmatched math delimiter as malformed literal source", () => {
+    expect(parseSimpleTexParagraphIr("$").nodes).toEqual([
+      expect.objectContaining({
+        kind: "literal",
+        text: "$",
+        reason: "malformed-input",
+        sourceStart: 0,
+        sourceEnd: 1,
+      }),
+    ]);
+  });
+
   it("parses mbox as an inline text hbox node", () => {
     const source = String.raw`Alpha \mbox{ beta \textit{gamma} $x$ } Omega`;
     const parsed = parseSimpleTexParagraphIr(source);
