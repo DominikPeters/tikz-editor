@@ -689,6 +689,22 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
       'data-beamer-block-template="beamer/block/rounded-shadow"'
     );
     expect(result.svg.svg).toContain("<linearGradient");
+    const roundedShadow = result.svg.svg.match(
+      /<rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)" rx="([^"]+)" fill="#000000" opacity="0\.45" filter="url\(#frame-19-column-0-block-0-shadow-filter\)" \/>/
+    );
+    expect(roundedShadow).not.toBeNull();
+    const shadowX = Number(roundedShadow?.[1]);
+    const shadowY = Number(roundedShadow?.[2]);
+    const shadowWidth = Number(roundedShadow?.[3]);
+    const shadowHeight = Number(roundedShadow?.[4]);
+    const shadowRadius = Number(roundedShadow?.[5]);
+    expect(shadowX - blocks[0]!.bounds.x).toBeCloseTo(2.5, 3);
+    expect(shadowY - blocks[0]!.bounds.y).toBeCloseTo(2.5, 3);
+    expect(shadowWidth).toBeCloseTo(blocks[0]!.bounds.width, 3);
+    expect(blocks[0]!.bounds.height - shadowHeight).toBeCloseTo(
+      shadowRadius,
+      3
+    );
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 

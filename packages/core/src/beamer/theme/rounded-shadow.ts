@@ -7,48 +7,31 @@ export function beamerRoundedShadowMarkup(params: {
   right: number;
   bottom: number;
 }): string {
-  // beamerbaseboxes.sty builds its fading from two 4bp radial "shadow
-  // balls", one 8bp bottom-right ball, and horizontal/vertical edge
-  // shadings. The box paint that follows clips the inward halves, so the
-  // native SVG can express the same mask as gradients behind the box.
+  // beamerbaseboxes.sty composes several shadings into a single fading mask
+  // and clips that mask against the rounded box. Emitting those shadings as
+  // independent SVG shapes exposes their seams and opaque centers. A blurred
+  // rounded silhouette reproduces the final, already-composited fading.
   const extent = 4 * (72.27 / 72);
-  const largeExtent = 8 * (72.27 / 72);
-  const bottomId = `${params.id}-bottom`;
-  const rightId = `${params.id}-right`;
-  const cornerId = `${params.id}-corner`;
-  const largeCornerId = `${params.id}-corner-large`;
+  const blurStdDeviation = 1.25;
+  const offset = 2.5;
+  const opacity = 0.45;
+  const filterMargin = 4 * blurStdDeviation + offset;
+  const filterId = `${params.id}-filter`;
   const width = Math.max(0, params.right - params.left);
   const height = Math.max(0, params.bottom - params.top);
   return (
-    `<defs>` +
-    `<linearGradient id="${bottomId}" x1="0" y1="0" x2="0" y2="1">` +
-    `<stop offset="0" stop-color="#000000" stop-opacity="0.525" />` +
-    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
-    `</linearGradient>` +
-    `<linearGradient id="${rightId}" x1="0" y1="0" x2="1" y2="0">` +
-    `<stop offset="0" stop-color="#000000" stop-opacity="0.52" />` +
-    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
-    `</linearGradient>` +
-    `<radialGradient id="${cornerId}">` +
-    `<stop offset="0" stop-color="#000000" stop-opacity="0.5" />` +
-    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
-    `</radialGradient>` +
-    `<radialGradient id="${largeCornerId}">` +
-    `<stop offset="0" stop-color="#000000" stop-opacity="1" />` +
-    `<stop offset="1" stop-color="#000000" stop-opacity="0" />` +
-    `</radialGradient>` +
-    `</defs>` +
-    `<rect x="${fmt(params.left + 2 * extent)}" y="${fmt(params.bottom)}" ` +
-    `width="${fmt(Math.max(0, width - 2 * extent))}" height="${fmt(extent)}" ` +
-    `fill="url(#${bottomId})" />` +
-    `<rect x="${fmt(params.right)}" y="${fmt(params.top + extent)}" ` +
-    `width="${fmt(extent)}" height="${fmt(Math.max(0, height - extent))}" ` +
-    `fill="url(#${rightId})" />` +
-    `<circle cx="${fmt(params.left + 2 * extent)}" cy="${fmt(params.bottom)}" ` +
-    `r="${fmt(extent)}" fill="url(#${cornerId})" />` +
-    `<circle cx="${fmt(params.right)}" cy="${fmt(params.top + extent)}" ` +
-    `r="${fmt(extent)}" fill="url(#${cornerId})" />` +
-    `<circle cx="${fmt(params.right)}" cy="${fmt(params.bottom)}" ` +
-    `r="${fmt(largeExtent)}" fill="url(#${largeCornerId})" />`
+    `<defs><filter id="${filterId}" filterUnits="userSpaceOnUse" ` +
+    `x="${fmt(params.left - filterMargin)}" ` +
+    `y="${fmt(params.top - filterMargin)}" ` +
+    `width="${fmt(width + 2 * filterMargin)}" ` +
+    `height="${fmt(height + 2 * filterMargin)}" ` +
+    `color-interpolation-filters="sRGB">` +
+    `<feGaussianBlur stdDeviation="${fmt(blurStdDeviation)}" />` +
+    `</filter></defs>` +
+    `<rect x="${fmt(params.left + offset)}" ` +
+    `y="${fmt(params.top + offset)}" ` +
+    `width="${fmt(width)}" height="${fmt(height)}" ` +
+    `rx="${fmt(extent)}" fill="#000000" opacity="${fmt(opacity)}" ` +
+    `filter="url(#${filterId})" />`
   );
 }
