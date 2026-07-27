@@ -165,6 +165,20 @@ export type WorkspacePersistedState = {
   recentDocumentIds: string[];
 };
 
+/**
+ * Structural mask for an active canvas text-editing session. While valid,
+ * the compute pipeline parses the document with `span` neutralized so
+ * momentarily-invalid TeX in the edited text cannot reshape document
+ * structure. Valid only while `documentId` and `sourceRevision` match the
+ * active document — any foreign source change invalidates it.
+ */
+export type CanvasTextEditMask = {
+  documentId: string;
+  elementId: string;
+  span: { from: number; to: number };
+  sourceRevision: number;
+};
+
 export type WorkspaceEphemeralState = {
   // ── canvas slice ─────────────────────────────────────────────────────────────
   toolMode: ToolMode;
@@ -175,6 +189,8 @@ export type WorkspaceEphemeralState = {
   activeSourceScrubSourceId: string | null;
   /** Source id currently being edited through the canvas text popup. */
   activeCanvasTextEditSourceId: string | null;
+  /** Structural mask for the active canvas text-editing session (see type). */
+  canvasTextEditMask: CanvasTextEditMask | null;
   showGrid: boolean;
   showTransparencyGrid: boolean;
   snapModes: SnapModes;
@@ -267,6 +283,8 @@ export type EditorState = {
   activeSourceScrubSourceId: string | null;
   /** Source id currently being edited through the canvas text popup. */
   activeCanvasTextEditSourceId: string | null;
+  /** Structural mask for the active canvas text-editing session (see type). */
+  canvasTextEditMask: CanvasTextEditMask | null;
   showGrid: boolean;
   showTransparencyGrid: boolean;
   snapModes: SnapModes;
@@ -352,6 +370,12 @@ export type EditorAction =
       recordInHistory?: boolean;
       precomputedSource?: string;
       precomputedResult?: Extract<EditActionResult, { kind: "success" | "partial" }>;
+      /**
+       * Present when this edit comes from an active canvas text-editing
+       * session: the post-edit span of the edited text, installed as the
+       * structural parse mask atomically with the source change.
+       */
+      canvasTextEditMask?: { elementId: string; span: { from: number; to: number } };
     }
   | {
       type: "SET_SOURCE_TRANSIENT";

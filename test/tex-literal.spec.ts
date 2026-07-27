@@ -202,3 +202,52 @@ describe("simple TeX literal runs", () => {
     expect(literalSegments[0].literal?.reason).toBe("unsupported-character");
   });
 });
+
+describe("list material before the first \\item", () => {
+  const enumerateWith = (body: string): string =>
+    `My list:\n\\begin{enumerate}\n${body}\n\\end{enumerate} `;
+
+  it("keeps every half-typed \\item prefix out of whole-node fallback", () => {
+    // "\\" alone scans as a control space, so it has no visible material;
+    // the rest must surface as literal runs.
+    for (const midEdit of ["\\", "\\i", "\\it", "\\ite", "stray text"]) {
+      const analysis = analyzeSimpleTexParagraph(enumerateWith(midEdit), 100);
+      expect(analysis.fallbackReason, `body: ${midEdit}`).toBeNull();
+      expect(analysis.ir?.unsupportedCommand, `body: ${midEdit}`).toBe(false);
+    }
+  });
+
+  it("renders pre-item material as literal runs instead of degrading the node", () => {
+    for (const midEdit of ["\\i", "\\it", "\\ite", "stray text"]) {
+      const analysis = analyzeSimpleTexParagraph(enumerateWith(midEdit), 100);
+      const preItemBlock = analysis.ir?.blocks.find((block) =>
+        block.nodes.some((node) => node.kind === "literal")
+      );
+      expect(preItemBlock, `body: ${midEdit}`).toBeDefined();
+      const literals = literalNodes(preItemBlock!.nodes);
+      expect(literals.length, `body: ${midEdit}`).toBeGreaterThan(0);
+      // Nodes that were already literal (e.g. the unknown command `\i`)
+      // keep their own reason; everything else is wrapped as missing-item
+      // malformed input.
+      expect(
+        literals.every(
+          (node) =>
+            node.reason === "unsupported-command" ||
+            (node.reason === "malformed-input" && node.detail === "missing \\item")
+        ),
+        `body: ${midEdit}`
+      ).toBe(true);
+    }
+  });
+
+  it("keeps a completed \\item fully supported", () => {
+    const analysis = analyzeSimpleTexParagraph(enumerateWith("\\item first"), 100);
+    expect(analysis.fallbackReason).toBeNull();
+    const literals = analysis.ir?.blocks.flatMap((block) => literalNodes(block.nodes)) ?? [];
+    expect(literals).toHaveLength(0);
+  });
+
+  it("keeps an empty list body supported", () => {
+    expect(analyzeSimpleTexParagraph(enumerateWith(""), 100).fallbackReason).toBeNull();
+  });
+});

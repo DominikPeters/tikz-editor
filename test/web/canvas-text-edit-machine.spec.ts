@@ -943,7 +943,7 @@ describe("canvas text edit machine", () => {
     expect(deletedForward.session?.text).toBe("alpha\nb");
   });
 
-  it("defers source patch emission for trailing single backslash and catches up on next character", () => {
+  it("writes a trailing single backslash through immediately", () => {
     const baseSource = String.raw`\begin{tikzpicture}
   \node at (0,0) {A};
   \node at (1,0) {B};
@@ -960,8 +960,8 @@ describe("canvas text edit machine", () => {
 
     const insertedBackslash = reduceInputIntent(started, "insertText", 1, 1, "\\");
     expect(insertedBackslash.state.session?.text).toBe("A\\");
-    expect(insertedBackslash.state.session?.workingSource).toBe(baseSource);
-    expect(insertedBackslash.effects).toHaveLength(0);
+    expect(insertedBackslash.effects).toHaveLength(1);
+    expect(insertedBackslash.state.session?.workingSource).toContain("{A\\};");
 
     const insertedNextChar = reduceInputIntent(insertedBackslash.state, "insertText", 2, 2, "a");
     expect(insertedNextChar.state.session?.text).toBe("A\\a");
@@ -970,7 +970,7 @@ describe("canvas text edit machine", () => {
     expect(insertedNextChar.state.session?.workingSource).toContain("{B};");
   });
 
-  it("restores original source after typing two backslashes then backspacing twice", () => {
+  it("keeps source in sync through backslashes and backspaces", () => {
     const baseSource = String.raw`\begin{tikzpicture}
   \node[draw] (A) at (-1, -1) {Q};
   \node[draw] (B) at (1.5, -0.5) {B};
@@ -987,7 +987,7 @@ describe("canvas text edit machine", () => {
 
     const firstSlash = reduceInputIntent(started, "insertText", 1, 1, "\\").state;
     expect(firstSlash.session?.text).toBe("Q\\");
-    expect(firstSlash.session?.workingSource).toBe(baseSource);
+    expect(firstSlash.session?.workingSource).toContain("{Q\\};");
 
     const secondSlash = reduceInputIntent(firstSlash, "insertText", 2, 2, "\\").state;
     expect(secondSlash.session?.text).toBe("Q\\\\");
@@ -995,7 +995,7 @@ describe("canvas text edit machine", () => {
 
     const backspaceOnce = reduceInputIntent(secondSlash, "deleteContentBackward", 3, 3).state;
     expect(backspaceOnce.session?.text).toBe("Q\\");
-    expect(backspaceOnce.session?.workingSource).toContain("{Q\\\\};");
+    expect(backspaceOnce.session?.workingSource).toContain("{Q\\};");
 
     const backspaceTwice = reduceInputIntent(backspaceOnce, "deleteContentBackward", 2, 2).state;
     expect(backspaceTwice.session?.text).toBe("Q");
@@ -1028,7 +1028,8 @@ describe("canvas text edit machine", () => {
 
     const firstInsert = reduceInputIntent(started, "insertText", 0, 2, "\\");
     expect(firstInsert.state.session?.text).toBe("\\");
-    expect(firstInsert.effects).toHaveLength(0);
+    expect(firstInsert.effects).toHaveLength(1);
+    expect(firstInsert.state.session?.workingSource).toContain(String.raw`{\};`);
 
     const secondInsert = reduceInputIntent(firstInsert.state, "insertText", 1, 1, "y units");
     expect(secondInsert.state.session?.text).toBe(String.raw`\y units`);

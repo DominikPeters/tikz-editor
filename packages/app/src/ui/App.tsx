@@ -237,6 +237,7 @@ export function App() {
     activeCanvasDragKind,
     activeSourceScrubSourceId,
     activeDeckStep,
+    textEditMaskSpan,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
@@ -261,6 +262,11 @@ export function App() {
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
+    textEditMaskSpan:
+      s.canvasTextEditMask?.documentId === s.activeDocumentId &&
+      s.canvasTextEditMask.sourceRevision === s.sourceRevision
+        ? s.canvasTextEditMask.span
+        : null,
     dispatch: s.dispatch
   })));
   const { uiFontSizePx, colorScheme, canvasInvert } = useSettingsStore(useShallow((s) => ({
@@ -1012,9 +1018,10 @@ export function App() {
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger,
-      renderViewBox
+      renderViewBox,
+      textEditMaskSpan
     });
-  }, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, trigger, typingComputeDelay]);
+  }, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, textEditMaskSpan, trigger, typingComputeDelay]);
 
   useDebouncedEffect(() => {
     const scheduler = computeSchedulerRef.current;
@@ -1033,9 +1040,10 @@ export function App() {
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
-      trigger
+      trigger,
+      textEditMaskSpan
     });
-  }, typingComputeDelay, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, trigger, typingComputeDelay]);
+  }, typingComputeDelay, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, textEditMaskSpan, trigger, typingComputeDelay]);
 
   useEffect(() => {
     let prewarmTimer: number | null = null;

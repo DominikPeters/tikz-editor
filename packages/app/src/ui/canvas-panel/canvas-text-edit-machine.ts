@@ -477,39 +477,6 @@ function reduceUnsupportedInputIntent(
   return { state, effects: [] };
 }
 
-function hasUnstableTrailingEscape(text: string): boolean {
-  let trailingBackslashes = 0;
-  for (let index = text.length - 1; index >= 0; index -= 1) {
-    if (text[index] !== "\\") {
-      break;
-    }
-    trailingBackslashes += 1;
-  }
-  return trailingBackslashes % 2 === 1;
-}
-
-function shouldReuseCurrentSpanForDeferredEscape(
-  sourceSlice: string,
-  expectedText: string
-): boolean {
-  if (sourceSlice === expectedText) {
-    return true;
-  }
-  if (!sourceSlice.startsWith(expectedText)) {
-    return false;
-  }
-  const suffix = sourceSlice.slice(expectedText.length);
-  if (suffix.length === 0) {
-    return false;
-  }
-  for (const character of suffix) {
-    if (character !== "\\") {
-      return false;
-    }
-  }
-  return true;
-}
-
 function resolveSourceSpanForSessionText(source: string, text: string, suggestedSpan: Span): Span {
   if (source.slice(suggestedSpan.from, suggestedSpan.to) === text) {
     return suggestedSpan;
@@ -536,7 +503,11 @@ function resolveReconciledSessionSourceSpan(
   session: TextEditingSession,
   targetSpan: Span
 ): Span {
-  if (hasUnstableTrailingEscape(session.text)) {
+  // The session's own span stays authoritative while it still slices to the
+  // session text: string-based re-anchoring against the target span can
+  // latch onto ambiguous needles (a transient lone `\` matches every
+  // command prefix). Re-anchor only when a foreign edit invalidated it.
+  if (source.slice(session.sourceSpan.from, session.sourceSpan.to) === session.text) {
     return session.sourceSpan;
   }
   return resolveSourceSpanForSessionText(source, session.text, targetSpan);
@@ -553,31 +524,13 @@ function applySessionTextUpdate(
     return { state, effects: [] };
   }
   const selection = normalizeSelection(nextText.length, selectionStart, selectionEnd);
-  const currentTextHasUnstableTrailingEscape = hasUnstableTrailingEscape(current.text);
-  const nextTextHasUnstableTrailingEscape = hasUnstableTrailingEscape(nextText);
-  if (nextTextHasUnstableTrailingEscape) {
-    return {
-      state: {
-        ...state,
-        session: {
-          ...current,
-          text: nextText,
-          selectionStart: selection.start,
-          selectionEnd: selection.end
-        },
-        inputRevision: state.inputRevision + 1,
-        asyncRequestRevision: state.asyncRequestRevision + 1
-      },
-      effects: []
-    };
-  }
+  // Every keystroke writes through, including a trailing backslash: the
+  // structural parse mask keeps the document stable while the span content
+  // is momentarily invalid TeX (e.g. a pending `\}` escape).
   const currentSlice = current.workingSource.slice(current.sourceSpan.from, current.sourceSpan.to);
-  const isStabilizingDeferredEscape = currentTextHasUnstableTrailingEscape && !nextTextHasUnstableTrailingEscape;
-  const currentSpan = isStabilizingDeferredEscape
+  const currentSpan = currentSlice === current.text
     ? current.sourceSpan
-    : shouldReuseCurrentSpanForDeferredEscape(currentSlice, current.text)
-      ? current.sourceSpan
-      : resolveCurrentTextSpan(current.workingSource, current.text, current.sourceSpan);
+    : resolveCurrentTextSpan(current.workingSource, current.text, current.sourceSpan);
   const updated = replaceSpan(current.workingSource, currentSpan, nextText);
   return {
     state: {

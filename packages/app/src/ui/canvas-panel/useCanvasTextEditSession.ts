@@ -506,6 +506,10 @@ export function useCanvasTextEditSession(
             }
           ],
           changedSourceIds: [effect.sourceId]
+        },
+        canvasTextEditMask: {
+          elementId: effect.sourceId,
+          span: effect.changedSpan
         }
       });
     }

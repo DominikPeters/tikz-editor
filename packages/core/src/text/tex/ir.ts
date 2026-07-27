@@ -3901,18 +3901,31 @@ function buildSimpleTexParagraphBlocksFromNodes(
     }
     if (start < end) {
       const listContext = currentSimpleTexListContext();
-      if (listStack.length > 0 && !listContext) {
-        unsupportedCommand = true;
-        abortScan = true;
-        return;
-      }
       const startsAfterExplicitPar = previousParagraphBlockEnd !== undefined &&
         hasExplicitParagraphBoundaryBetween(previousParagraphBlockEnd, rawStart);
       const scopePath = currentSimpleTexScopePath();
-      const nodes = simpleTexInlineNodesAfterHorizontalVSpace(
+      let nodes = simpleTexInlineNodesAfterHorizontalVSpace(
         simpleTexInlineNodesForRange(sourceNodes, start, end),
         pendingParagraphVerticalAdjustments
       );
+      if (listStack.length > 0 && !listContext) {
+        // Material before a list's first `\item` fails to compile in LaTeX
+        // ("perhaps a missing \item"), so it is outside the supported
+        // subset; render it as a literal run instead of degrading the whole
+        // node, keeping a half-typed `\item` locally stable while editing.
+        nodes = nodes.map((node) =>
+          node.kind === "space" || node.kind === "literal"
+            ? node
+            : {
+                kind: "literal",
+                text: textSliceAtSourceOffsets(node.sourceStart, node.sourceEnd),
+                reason: "malformed-input",
+                detail: "missing \\item",
+                sourceStart: node.sourceStart,
+                sourceEnd: node.sourceEnd,
+              }
+        );
+      }
       unsupportedCommand ||= simpleTexBlockStartsWithVerticalModeLapBox(nodes);
       const block: SimpleTexParagraphBlock = {
         text: textSliceAtSourceOffsets(start, end),

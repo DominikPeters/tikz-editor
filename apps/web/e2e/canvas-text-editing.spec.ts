@@ -1849,7 +1849,7 @@ test("replacement and drop affect only the targeted identical text node", async 
   await expect.poll(async () => await readStoreSource(page)).toContain("{Hello};\n\\node at (2,0) {TikZ}");
 });
 
-test("typing trailing backslash in node text stays local until stabilized by next character", async ({ page }) => {
+test("typing trailing backslash in node text writes through immediately", async ({ page }) => {
   await gotoApp(page);
   const originalSource = String.raw`\begin{tikzpicture}
   \node at (0,0) {A};
@@ -1867,7 +1867,7 @@ test("typing trailing backslash in node text stays local until stabilized by nex
   await expect.poll(async () => await readTextareaSelection(page)).toEqual({ start: 1, end: 1 });
   await page.keyboard.type("\\");
   await expect(textarea).toHaveValue("A\\");
-  await expect.poll(async () => await readStoreSource(page)).toBe(originalSource);
+  await expect.poll(async () => await readStoreSource(page)).toContain("{A\\};");
 
   await page.keyboard.type("a");
   await expect(textarea).toHaveValue("A\\a");
@@ -1929,7 +1929,7 @@ test("typing two backslashes then backspacing twice restores original node sourc
 
   await textarea.press("Backspace");
   await expect(textarea).toHaveValue("A\\");
-  await expect.poll(async () => await readStoreSource(page)).toContain("{A\\\\};");
+  await expect.poll(async () => await readStoreSource(page)).toContain("{A\\};");
 
   await textarea.press("Backspace");
   await expect(textarea).toHaveValue("A");
@@ -2077,4 +2077,85 @@ test("triple-click drag extends selection by lines in multiline canvas text", as
   expect(dragLength).toBeGreaterThan(singleLineLength);
   expect(dragLength).toBeLessThanOrEqual(text.length);
   await expect.poll(async () => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(1);
+});
+
+test("unbalanced braces while editing do not reshape the rest of the picture", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\node at (0,0) {hello};
+\node at (2,0) {world};
+\draw (0.7,0) -- (1.4,0);
+\end{tikzpicture}`);
+
+  const readSettledSceneSourceIds = async (): Promise<string[] | null> => {
+    return await page.evaluate(() => {
+      const api = (globalThis as unknown as {
+        __TIKZ_EDITOR_APP_TEST_API__?: {
+          getSource?: () => string;
+          getSnapshotSource?: () => string;
+          getSceneSourceIds?: () => string[];
+        };
+      }).__TIKZ_EDITOR_APP_TEST_API__;
+      if (!api?.getSource || !api.getSnapshotSource || !api.getSceneSourceIds) {
+        return null;
+      }
+      if (api.getSnapshotSource() !== api.getSource()) {
+        return null;
+      }
+      return api.getSceneSourceIds();
+    });
+  };
+
+  await clickTextHitRegionByTargetId(page, "path:0");
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toBeFocused();
+  await setTextareaSelection(page, 5, 5);
+
+  for (const char of [" ", "\\", "t", "e", "x", "t", "b", "f", "{"]) {
+    await page.keyboard.type(char);
+  }
+  await expect(textarea).toHaveValue("hello \\textbf{");
+  await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{hello \textbf{};`);
+
+  // The document now contains an unbalanced brace, but the structural mask
+  // keeps the parse stable: once the snapshot catches up, all three
+  // statements must still be present and edit mode must stay active.
+  await expect.poll(readSettledSceneSourceIds).toEqual(["path:0", "path:1", "path:2"]);
+  await expect(textarea).toBeFocused();
+
+  // Closing the brace returns to fully balanced rendering with the same scene.
+  await page.keyboard.type("bold}");
+  await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{hello \textbf{bold}};`);
+  await expect.poll(readSettledSceneSourceIds).toEqual(["path:0", "path:1", "path:2"]);
+});
+
+test("trailing backslash writes through and stays in sync across backspace", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+\node at (0,0) {node};
+\end{tikzpicture}`);
+
+  await clickTextHitRegionByTargetId(page, "path:0");
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toBeFocused();
+  await setTextareaSelection(page, 4, 4);
+
+  // A trailing backslash used to be deferred (and crashed the canvas once
+  // the snapshot settled); it now writes through under the structural mask.
+  await page.keyboard.type("\\");
+  await expect(textarea).toHaveValue("node\\");
+  await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{node\};`);
+
+  await page.keyboard.type("t");
+  await expect(textarea).toHaveValue("node\\t");
+  await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{node\t};`);
+
+  await page.keyboard.press("Backspace");
+  await expect(textarea).toHaveValue("node\\");
+  await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{node\};`);
+
+  await page.keyboard.press("Backspace");
+  await expect(textarea).toHaveValue("node");
+  await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{node};`);
+  await expect(textarea).toBeFocused();
 });

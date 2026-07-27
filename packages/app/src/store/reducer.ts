@@ -51,6 +51,7 @@ function initialUiState(): WorkspaceEphemeralState {
     activeCanvasDragKind: null,
     activeSourceScrubSourceId: null,
     activeCanvasTextEditSourceId: null,
+    canvasTextEditMask: null,
     showGrid: true,
     showTransparencyGrid: false,
     snapModes: {
@@ -807,6 +808,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         return state;
       }
 
+      if (action.canvasTextEditMask) {
+        ui = {
+          ...ui,
+          canvasTextEditMask: {
+            documentId,
+            elementId: action.canvasTextEditMask.elementId,
+            span: action.canvasTextEditMask.span,
+            sourceRevision: activeDoc.sourceRevision + 1
+          }
+        };
+      }
+
       const nextSelection: ReadonlySet<string> = result.selectedSourceIds
         ? new Set<string>(result.selectedSourceIds)
         : activeDoc.selectedElementIds;
@@ -1176,7 +1189,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
     case "SET_ACTIVE_CANVAS_TEXT_EDIT":
       if (ui.activeCanvasTextEditSourceId === action.sourceId) return state;
-      ui = { ...ui, activeCanvasTextEditSourceId: action.sourceId };
+      // The structural mask is scoped to one session; starting or ending a
+      // session drops it (the next session keystroke reinstalls it).
+      ui = { ...ui, activeCanvasTextEditSourceId: action.sourceId, canvasTextEditMask: null };
       break;
 
     case "TOGGLE_CANVAS_AID":

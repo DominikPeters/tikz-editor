@@ -312,8 +312,15 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       return;
     }
 
-    const boundedStart = clamp(textEditingSession.selectionStart, 0, textEditingSession.text.length);
-    const boundedEnd = clamp(textEditingSession.selectionEnd, 0, textEditingSession.text.length);
+    // While a trailing-backslash write is deferred, the session text is
+    // longer than the document span the overlay is measured against, so the
+    // caret must be bounded by both lengths.
+    const overlayTextLength = Math.min(
+      textEditingSession.text.length,
+      Math.max(0, target.sourceSpan.to - target.sourceSpan.from)
+    );
+    const boundedStart = clamp(textEditingSession.selectionStart, 0, overlayTextLength);
+    const boundedEnd = clamp(textEditingSession.selectionEnd, 0, overlayTextLength);
     if (textEditingSession.isForeachTemplateEdit || target.isForeachTemplateEdit) {
       dispatchCanvasTextEditAction({
         type: "overlay_resolved",

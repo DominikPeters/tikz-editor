@@ -118,6 +118,13 @@ export type ComputeRequest = {
   trigger?: IncrementalSemanticTrigger;
   kind?: "render" | "prewarm";
   renderViewBox?: SvgViewBox | null;
+  /**
+   * Span of an active canvas text-editing session. Structure is parsed with
+   * this span neutralized so momentarily-invalid TeX (unmatched braces etc.)
+   * cannot reshape the document while the user types; the span's real text
+   * still feeds node text rendering.
+   */
+  textEditMaskSpan?: { from: number; to: number } | null;
 };
 
 export type ComputeResponse = {
@@ -280,11 +287,13 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     const graphicsResolver = graphicsContext.resolver;
     phases.imageAssets = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
+    const textEditMaskSpan = request.textEditMaskSpan ?? null;
     const result = await renderTikzToSvgAsync(request.source, {
       parse: {
         recover: true,
         activeFigureId: request.activeRootId,
-        includeContextDefinitions: true
+        includeContextDefinitions: true,
+        structuralMasks: textEditMaskSpan ? [textEditMaskSpan] : undefined
       },
       evaluate: { sourceFingerprint, graphicsResolver },
       semanticEvaluator: (figure, source, options) =>
@@ -300,12 +309,16 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     phases.render = performance.now() - phaseStartedAt;
     incrementalWarmSource = request.source;
     phaseStartedAt = performance.now();
-    const parseSession = getIncrementalParseSession();
-    parseSession.prime(result.parse, {
-      activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
-      includeContextDefinitions: true,
-      sourceRevision: request.sourceRevision ?? null
-    });
+    if (!textEditMaskSpan) {
+      // A masked parse must not seed the drag-incremental cache; the session
+      // ending clears the mask and triggers an unmasked render that primes.
+      const parseSession = getIncrementalParseSession();
+      parseSession.prime(result.parse, {
+        activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
+        includeContextDefinitions: true,
+        sourceRevision: request.sourceRevision ?? null
+      });
+    }
     phases.primeParse = performance.now() - phaseStartedAt;
     previousSvgModel = result.svg.model;
 

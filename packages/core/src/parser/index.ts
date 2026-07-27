@@ -25,11 +25,21 @@ export type NodeTextValidationIssue = {
   message: string;
 };
 
+export type StructuralMaskSpan = { from: number; to: number };
+
 export type ParseTikzOptions = {
   recover?: boolean;
   activeFigureId?: string | null;
   includeContextDefinitions?: boolean;
   nodeTextValidator?: (context: NodeTextValidationContext) => NodeTextValidationIssue | null;
+  /**
+   * Spans whose content is neutralized (non-newline characters replaced by
+   * spaces) in the string handed to the syntax parser, so a
+   * momentarily-unbalanced edit inside them cannot reshape document
+   * structure. All downstream text extraction still slices the real input.
+   * Used while a canvas text-editing session is active on the span.
+   */
+  structuralMasks?: readonly StructuralMaskSpan[];
 };
 
 export type ParseTikzResult = {
@@ -45,12 +55,13 @@ export type ParseTikzResult = {
 export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikzResult {
   incrementProfilingCounter("parseTikzCalls");
   const recover = opts.recover ?? true;
-  const scannedFigures = scanTikzFigures(input);
+  const structurallyMaskedInput = applyStructuralMasks(input, opts.structuralMasks);
+  const scannedFigures = scanTikzFigures(structurallyMaskedInput);
   const figureSpans = scannedFigures
     .filter((figure) => !figure.isTemplate)
     .map((figure) => ({ from: figure.span.from, to: figure.span.to }));
   const activeFigureSpan = resolveActiveFigureSpan(figureSpans, opts.activeFigureId);
-  const parseSource = resolveParseWindowSource(input, activeFigureSpan);
+  const parseSource = resolveParseWindowSource(structurallyMaskedInput, activeFigureSpan);
   const contextDefinitions =
     opts.includeContextDefinitions && activeFigureSpan
       ? getCachedContextDefinitions(input.slice(0, activeFigureSpan.from), collectContextDefinitions)
@@ -98,6 +109,28 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
     diagnostics,
     features: FeatureFlags
   };
+}
+
+function applyStructuralMasks(
+  source: string,
+  masks: readonly StructuralMaskSpan[] | undefined
+): string {
+  if (!masks || masks.length === 0) {
+    return source;
+  }
+  let result = source;
+  for (const mask of masks) {
+    const from = Math.max(0, Math.min(result.length, mask.from));
+    const to = Math.max(from, Math.min(result.length, mask.to));
+    if (to === from) {
+      continue;
+    }
+    result =
+      result.slice(0, from) +
+      result.slice(from, to).replace(/[^\n]/g, " ") +
+      result.slice(to);
+  }
+  return result;
 }
 
 function collectNodeItems(statements: Statement[]): NodeItem[] {
