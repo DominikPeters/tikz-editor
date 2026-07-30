@@ -304,6 +304,12 @@ export type TextEditingSession = {
   sceneTextId: string;
   sourceSpan: Span;
   workingSource: string;
+  /**
+   * Structure-free document spans inside the buffer that may be masked for
+   * the structural parse while their content is transiently invalid.
+   * Null means the whole buffer is structure-free (TikZ node sessions).
+   */
+  maskRanges: readonly Span[] | null;
   text: string;
   selectionStart: number;
   selectionEnd: number;
@@ -338,6 +344,12 @@ export type EditableTextTarget = {
   sceneTextId: string;
   sourceSpan: Span;
   text: string;
+  /**
+   * Structure-free document spans inside the buffer (e.g. Beamer editable
+   * runs). When present, only the range containing an edit is masked for
+   * structural parsing; when absent the whole buffer is masked.
+   */
+  structuralMaskRanges?: readonly Span[];
   /** Complete paragraph source used by report-driven hit testing. */
   layoutSourceSpan?: Span;
   /** Complete paragraph text used by report-driven hit testing. */

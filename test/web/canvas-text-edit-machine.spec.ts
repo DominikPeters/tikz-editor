@@ -829,6 +829,101 @@ describe("canvas text edit machine", () => {
       from: spanFrom + deleteFrom - 1,
       to: spanFrom + deleteFrom - 1
     });
+    // Buffer-is-structure-free targets mask the whole session span.
+    expect(deleteEffect.maskSpan).toEqual(deleteEffect.sessionSpan);
+  });
+
+  it("masks only the structure-free range containing an edit", () => {
+    const text = String.raw`Hello \textbf{world} tail`;
+    const source = `\\begin{frame}${text}\\end{frame}`;
+    const bufferFrom = source.indexOf(text);
+    const runA = { from: bufferFrom, to: bufferFrom + "Hello ".length };
+    const runB = {
+      from: source.indexOf("world"),
+      to: source.indexOf("world") + "world".length
+    };
+    const runC = {
+      from: source.indexOf(" tail"),
+      to: source.indexOf(" tail") + " tail".length
+    };
+    const target: EditableTextTarget = {
+      ...buildTarget(source, text),
+      structuralMaskRanges: [runA, runB, runC]
+    };
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source,
+      target,
+      selectionStart: 0,
+      selectionEnd: 0,
+      historyMergeKey: "merge"
+    }).state;
+    expect(started.session?.maskRanges).toEqual([runA, runB, runC]);
+
+    // Typing inside the first run masks that run only, grown by the edit.
+    const caret = "Hello".length;
+    const inserted = reduceInputIntent(started, "insertText", caret, caret, "!!");
+    const [insertEffect] = inserted.effects;
+    if (insertEffect?.type !== "apply_source_patch") {
+      throw new Error("expected apply_source_patch effect");
+    }
+    expect(insertEffect.maskSpan).toEqual({ from: runA.from, to: runA.to + 2 });
+    // Later ranges shift with the delta; a second keystroke before any
+    // reconciliation still resolves against the adjusted ranges.
+    expect(inserted.state.session?.maskRanges).toEqual([
+      { from: runA.from, to: runA.to + 2 },
+      { from: runB.from + 2, to: runB.to + 2 },
+      { from: runC.from + 2, to: runC.to + 2 }
+    ]);
+    const caretInB = inserted.state.session
+      ? inserted.state.session.text.indexOf("world") + "wor".length
+      : 0;
+    const insertedB = reduceInputIntent(inserted.state, "insertText", caretInB, caretInB, "x");
+    const [insertBEffect] = insertedB.effects;
+    if (insertBEffect?.type !== "apply_source_patch") {
+      throw new Error("expected apply_source_patch effect");
+    }
+    expect(insertBEffect.maskSpan).toEqual({ from: runB.from + 2, to: runB.to + 3 });
+
+    // A selection deletion crossing out of the runs emits no mask.
+    const selStart = insertedB.state.session?.text.indexOf("\\textbf") ?? 0;
+    const selEnd = selStart + "\\textbf{wor".length;
+    const crossed = reduceInputIntent(insertedB.state, "deleteContentBackward", selStart, selEnd);
+    const [crossEffect] = crossed.effects;
+    if (crossEffect?.type !== "apply_source_patch") {
+      throw new Error("expected apply_source_patch effect");
+    }
+    expect(crossEffect.maskSpan).toBeNull();
+  });
+
+  it("refreshes mask ranges from the reconciled target", () => {
+    const text = "Alpha beta";
+    const source = `\\begin{frame}${text}\\end{frame}`;
+    const bufferFrom = source.indexOf(text);
+    const initialRange = { from: bufferFrom, to: bufferFrom + text.length };
+    const target: EditableTextTarget = {
+      ...buildTarget(source, text),
+      structuralMaskRanges: [initialRange]
+    };
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source,
+      target,
+      selectionStart: 0,
+      selectionEnd: 0,
+      historyMergeKey: "merge"
+    }).state;
+    const refreshedRanges = [
+      { from: bufferFrom, to: bufferFrom + "Alpha".length },
+      { from: bufferFrom + "Alpha ".length, to: bufferFrom + text.length }
+    ];
+    const reconciled = reduceCanvasTextEdit(started, {
+      type: "source_reconciled",
+      source,
+      sourceRevision: 1,
+      target: { ...target, structuralMaskRanges: refreshedRanges }
+    }).state;
+    expect(reconciled.session?.maskRanges).toEqual(refreshedRanges);
   });
 
   it("round-trips through invalid partially typed math states without corruption", () => {

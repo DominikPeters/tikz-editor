@@ -154,8 +154,15 @@ export type CanvasTextEditEffect =
       changedSpan: Span;
       /** Replacement for `previousSpan` only, not the whole session buffer. */
       replacement: string;
-      /** The session's full buffer span after the edit (mask scope). */
+      /** The session's full buffer span after the edit. */
       sessionSpan: Span;
+      /**
+       * Structural mask for this edit in post-edit document coordinates:
+       * the whole buffer when it is structure-free, else the structure-free
+       * range containing the edit, or null when the edit crosses range
+       * boundaries and no mask is safe.
+       */
+      maskSpan: Span | null;
       nextSource: string;
     };
 
@@ -518,6 +525,38 @@ function resolveReconciledSessionSourceSpan(
   return resolveSourceSpanForSessionText(source, session.text, targetSpan);
 }
 
+/**
+ * Maps a structure-free span through an edit. Spans strictly before the
+ * edit are unchanged, spans after shift by the length delta, the span
+ * containing the edit grows or shrinks with it, and spans partially
+ * overlapped by the edit are dropped (no longer provably structure-free).
+ */
+function adjustMaskRangeForEdit(range: Span, oldSpan: Span, delta: number): Span | null {
+  if (range.from <= oldSpan.from && oldSpan.to <= range.to) {
+    return { from: range.from, to: range.to + delta };
+  }
+  if (range.to <= oldSpan.from) {
+    return range;
+  }
+  if (range.from >= oldSpan.to) {
+    return { from: range.from + delta, to: range.to + delta };
+  }
+  return null;
+}
+
+function sameMaskRanges(
+  left: readonly Span[] | null,
+  right: readonly Span[] | null
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every((span, index) => sameSpan(span, right[index]));
+}
+
 function applySessionTextUpdate(
   state: CanvasTextEditState,
   nextText: string,
@@ -541,6 +580,31 @@ function applySessionTextUpdate(
   // buffer, so a keystroke in a scope-sized session stays a keystroke-sized
   // source change for incremental parsing and history.
   const bufferDiff = computeMinimalReplacementPatch(current.text, nextText);
+  const editOldSpan: Span = {
+    from: currentSpan.from + bufferDiff.oldSpan.from,
+    to: currentSpan.from + bufferDiff.oldSpan.to
+  };
+  const editDelta = bufferDiff.replacement.length - (editOldSpan.to - editOldSpan.from);
+  let maskSpan: Span | null;
+  let nextMaskRanges: readonly Span[] | null;
+  if (current.maskRanges == null) {
+    maskSpan = updated.changedSpan;
+    nextMaskRanges = null;
+  } else {
+    maskSpan = null;
+    const adjusted: Span[] = [];
+    for (const range of current.maskRanges) {
+      const containsEdit = range.from <= editOldSpan.from && editOldSpan.to <= range.to;
+      const next = adjustMaskRangeForEdit(range, editOldSpan, editDelta);
+      if (next) {
+        adjusted.push(next);
+        if (containsEdit) {
+          maskSpan = next;
+        }
+      }
+    }
+    nextMaskRanges = adjusted;
+  }
   return {
     state: {
       ...state,
@@ -548,6 +612,7 @@ function applySessionTextUpdate(
         ...current,
         sourceSpan: updated.changedSpan,
         workingSource: updated.source,
+        maskRanges: nextMaskRanges,
         text: nextText,
         selectionStart: selection.start,
         selectionEnd: selection.end
@@ -561,16 +626,14 @@ function applySessionTextUpdate(
         sourceId: current.sourceId,
         historyMergeKey: current.historyMergeKey,
         nextText,
-        previousSpan: {
-          from: currentSpan.from + bufferDiff.oldSpan.from,
-          to: currentSpan.from + bufferDiff.oldSpan.to
-        },
+        previousSpan: editOldSpan,
         changedSpan: {
           from: currentSpan.from + bufferDiff.newSpan.from,
           to: currentSpan.from + bufferDiff.newSpan.to
         },
         replacement: bufferDiff.replacement,
         sessionSpan: updated.changedSpan,
+        maskSpan,
         nextSource: updated.source
       }
     ]
@@ -597,6 +660,7 @@ export function reduceCanvasTextEdit(
             sceneTextId: action.target.sceneTextId,
             sourceSpan,
             workingSource: action.source,
+            maskRanges: action.target.structuralMaskRanges ?? null,
             text: action.target.text,
             selectionStart: selection.start,
             selectionEnd: selection.end,
@@ -636,6 +700,7 @@ export function reduceCanvasTextEdit(
             sceneTextId: action.target.sceneTextId,
             sourceSpan,
             workingSource: action.source,
+            maskRanges: action.target.structuralMaskRanges ?? null,
             text: action.target.text,
             selectionStart: selection.start,
             selectionEnd: selection.end,
@@ -1011,12 +1076,16 @@ export function reduceCanvasTextEdit(
       const nextIsForeachTemplateEdit = targetMatchesSessionText
         ? action.target.isForeachTemplateEdit === true
         : session.isForeachTemplateEdit;
+      const nextMaskRanges = targetMatchesSessionText
+        ? action.target.structuralMaskRanges ?? null
+        : session.maskRanges;
       if (
         state.sourceRevision === action.sourceRevision &&
         session.workingSource === action.source &&
         session.sceneTextId === nextSceneTextId &&
         session.usesTex === nextUsesTex &&
         sameSpan(session.sourceSpan, reconciledSourceSpan) &&
+        sameMaskRanges(session.maskRanges, nextMaskRanges) &&
         session.paragraphId === nextParagraphId &&
         session.renderSourceText === nextRenderSourceText &&
         session.layoutKind === nextLayoutKind &&
@@ -1044,6 +1113,7 @@ export function reduceCanvasTextEdit(
             sceneTextId: nextSceneTextId,
             sourceSpan: reconciledSourceSpan,
             workingSource: action.source,
+            maskRanges: nextMaskRanges,
             usesTex: nextUsesTex,
             paragraphId: nextParagraphId,
             renderSourceText: nextRenderSourceText,

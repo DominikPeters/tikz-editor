@@ -505,10 +505,12 @@ export function useCanvasTextEditSession(
             replacement: effect.replacement
           }
         ],
-        canvasTextEditMask: {
-          elementId: effect.sourceId,
-          span: effect.sessionSpan
-        }
+        canvasTextEditMask: effect.maskSpan
+          ? {
+              elementId: effect.sourceId,
+              span: effect.maskSpan
+            }
+          : undefined
       });
       sourceRevisionRef.current += 1;
     }
