@@ -2766,6 +2766,15 @@ function positionParagraphLayout(
     layout.bounds,
     (layout.hiddenSourceSpans ?? []).concat(layout.readOnlySourceSpans ?? [])
   );
+  layout.atomicRenderSpans = collectBeamerAtomicRenderSpans(
+    layout.paragraphId,
+    layout.role,
+    layout.report,
+    layout.vlistLayout,
+    layout.sourceSpan,
+    layout.bounds,
+    layout.hiddenSourceSpans ?? []
+  );
 }
 
 function layoutParagraph(params: {
@@ -2982,6 +2991,15 @@ function layoutParagraph(params: {
         null,
         (params.hiddenSourceSpans ?? []).concat(readOnlySourceSpans)
       ),
+      atomicRenderSpans: collectBeamerAtomicRenderSpans(
+        params.paragraphId,
+        params.role,
+        result.report,
+        result.vlistLayout,
+        params.sourceSpan,
+        null,
+        params.hiddenSourceSpans ?? []
+      ),
       ...(params.hiddenSourceSpans?.length
         ? { hiddenSourceSpans: params.hiddenSourceSpans }
         : {}),
@@ -3175,6 +3193,82 @@ function collectBeamerEditableTextSpans(
     id: `${paragraphId}:editable:${index}`,
     span,
     kind,
+    hitBounds,
+  }));
+}
+
+/**
+ * Rendered output whose source is not directly editable: segments with a
+ * macro or select source-range policy (each output glyph reports the full
+ * invocation span, so same-span candidates merge into one atom). Hidden
+ * overlay material ("generated" policy) publishes nothing.
+ */
+function collectBeamerAtomicRenderSpans(
+  paragraphId: string,
+  role: BeamerParagraphLayout["role"],
+  report: BeamerParagraphLayout["report"],
+  vlistLayout: BeamerParagraphLayout["vlistLayout"],
+  paragraphSpan: Span,
+  paragraphBounds: BeamerRect | null,
+  hiddenSourceSpans: readonly Span[]
+): BeamerParagraphLayout["atomicRenderSpans"] {
+  if (!EDITABLE_BEAMER_PARAGRAPH_ROLES.has(role)) {
+    return [];
+  }
+  const candidates = report.lines.flatMap((line) => {
+    const placement = vlistLayout.linePlacements.find(
+      (candidate) => candidate.lineIndex === line.lineIndex
+    );
+    const y = (paragraphBounds?.y ?? 0) + Number(placement?.y ?? 0);
+    return line.segments.flatMap((segment) => {
+      if (
+        (segment.sourceRangePolicy !== "macro" && segment.sourceRangePolicy !== "select") ||
+        segment.role === "list-label" ||
+        segment.sourceStartRaw == null ||
+        segment.sourceEndRaw == null
+      ) {
+        return [];
+      }
+      const from = Math.max(paragraphSpan.from, Number(segment.sourceStartRaw));
+      const to = Math.min(paragraphSpan.to, Number(segment.sourceEndRaw));
+      if (
+        to <= from ||
+        hiddenSourceSpans.some((hidden) => from < hidden.to && hidden.from < to)
+      ) {
+        return [];
+      }
+      return [{
+        from,
+        to,
+        hitBounds: paragraphBounds
+          ? [svgRect(
+              paragraphBounds.x + Number(segment.x),
+              y,
+              Math.max(0.5, Number(segment.width)),
+              Math.max(1, Number(line.ascent) + Number(line.descent))
+            )]
+          : [],
+      }];
+    });
+  }).sort((left, right) => left.from - right.from || left.to - right.to);
+
+  const merged: Array<Span & { hitBounds: SvgRect[] }> = [];
+  for (const candidate of candidates) {
+    const previous = merged.at(-1);
+    if (previous && candidate.from <= previous.to) {
+      previous.to = Math.max(previous.to, candidate.to);
+      previous.hitBounds.push(...candidate.hitBounds);
+    } else {
+      merged.push({
+        from: candidate.from,
+        to: candidate.to,
+        hitBounds: [...candidate.hitBounds],
+      });
+    }
+  }
+  return merged.map(({ hitBounds, ...span }, index) => ({
+    id: `${paragraphId}:atom:${index}`,
+    span,
     hitBounds,
   }));
 }

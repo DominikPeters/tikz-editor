@@ -371,6 +371,12 @@ export type EditableTextTarget = {
    * against the paragraph containing the pointer or offset.
    */
   scopeParagraphs?: readonly ScopeParagraphRef[];
+  /**
+   * When the clicked region renders an atomic construct (macro output,
+   * embedded tikzpicture, graphics), the session opens with this document
+   * span selected instead of resolving a caret from the pointer.
+   */
+  atomicSelectionSpan?: Span;
   /** Complete paragraph source used by report-driven hit testing. */
   layoutSourceSpan?: Span;
   /** Complete paragraph text used by report-driven hit testing. */

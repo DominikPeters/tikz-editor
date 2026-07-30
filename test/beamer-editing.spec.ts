@@ -68,6 +68,16 @@ describe("Beamer canvas editing contract", () => {
     const mathJoined = editableSlices(page.layout, SOURCE, "math").join("|");
     expect(mathJoined).toContain("x + y");
     expect(mathJoined).not.toContain("Direct prose");
+
+    // Macro output publishes atomic click-to-select spans covering the
+    // invocation; hidden overlay material publishes nothing.
+    const atomSlices = page.layout.paragraphs.flatMap((paragraph) =>
+      paragraph.atomicRenderSpans.map((atom) =>
+        SOURCE.slice(atom.span.from, atom.span.to)
+      )
+    );
+    expect(atomSlices).toContain(String.raw`\generatedword`);
+    expect(atomSlices.join("|")).not.toContain("Overlay text");
     expect(
       page.layout.paragraphs.flatMap((paragraph) =>
         paragraph.editableTextSpans.flatMap((editable) => editable.hitBounds)

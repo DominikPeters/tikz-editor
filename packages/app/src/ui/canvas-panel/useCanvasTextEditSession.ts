@@ -849,6 +849,19 @@ export function useCanvasTextEditSession(
         );
         return;
       }
+      if (target.atomicSelectionSpan) {
+        // Atomic renders (macro output, embedded tikz, graphics) have no
+        // caret geometry of their own: clicking one selects the atom's
+        // full source span in the scope buffer.
+        event.preventDefault();
+        startTextEditingSession(
+          target,
+          clamp(target.atomicSelectionSpan.from - target.sourceSpan.from, 0, target.text.length),
+          clamp(target.atomicSelectionSpan.to - target.sourceSpan.from, 0, target.text.length),
+          textEditingSession?.sourceId === target.sourceId ? textEditingSession.historyMergeKey : undefined
+        );
+        return;
+      }
       const requestRevision = state.asyncRequestRevision + 1;
       const baseInputRevision = state.inputRevision;
       const existingHistoryMergeKey =

@@ -263,6 +263,12 @@ export type BeamerParagraphLayout = {
    * hidden overlay material are intentionally absent.
    */
   editableTextSpans: BeamerEditableTextSpan[];
+  /**
+   * Rendered output whose source is not directly editable — macro
+   * invocations rendering their expansion. Clicking such output selects
+   * the atom's full source span in the enclosing scope session.
+   */
+  atomicRenderSpans: BeamerAtomicRenderSpan[];
   /** Source ranges laid out for covered overlays but omitted from paint. */
   hiddenSourceSpans?: readonly Span[];
   /** Source-backed but non-direct ranges, such as explicit custom-macro arguments. */
@@ -281,6 +287,14 @@ export type BeamerEditableTextSpan = {
    * math caret entries.
    */
   kind: "text" | "math";
+  /** Final document/SVG-space geometry; never paragraph-local geometry. */
+  hitBounds: SvgRect[];
+};
+
+export type BeamerAtomicRenderSpan = {
+  id: string;
+  /** Full source span of the rendered atom (e.g. the macro invocation). */
+  span: Span;
   /** Final document/SVG-space geometry; never paragraph-local geometry. */
   hitBounds: SvgRect[];
 };

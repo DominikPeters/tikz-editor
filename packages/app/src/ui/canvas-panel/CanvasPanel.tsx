@@ -1275,9 +1275,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     const scopesById = new Map<string, DeckScopeEntry>();
     const paragraphById = new Map<string, DeckParagraph>();
     const regions: HitRegion[] = [];
+    const atomSpanByRegionKey = new Map<string, Span>();
     const layout = deckActiveFrame?.layout;
     if (!layout) {
-      return { scopesById, paragraphById, regions };
+      return { scopesById, paragraphById, regions, atomSpanByRegionKey };
     }
     const editScopes = layout.editScopes ?? [];
     for (const scope of editScopes) {
@@ -1316,6 +1317,26 @@ export const CanvasPanel = memo(function CanvasPanel({
             pt(paragraph.bounds.x + paragraph.bounds.width),
             pt(paragraph.bounds.y + paragraph.bounds.height)
           );
+      const pushRegion = (key: string, bounds: { x: number; y: number; width: number; height: number }) => {
+        regions.push({
+          shape: "rect",
+          key,
+          sourceId: scope.id,
+          targetId: scope.id,
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          cx: bounds.x + bounds.width / 2,
+          cy: bounds.y + bounds.height / 2,
+          rotation: 0,
+          interactionMode: "text",
+          pointerMode: "fill",
+          sceneTextKey: paragraph.paragraphId,
+          contentWidth: bounds.width,
+          contentHeight: bounds.height
+        });
+      };
       for (const editable of paragraph.editableTextSpans) {
         // Math islands are click-into targets, but only structure-free
         // prose runs are safe to mask during edits.
@@ -1323,28 +1344,69 @@ export const CanvasPanel = memo(function CanvasPanel({
           entry.maskRanges.push(editable.span);
         }
         editable.hitBounds.forEach((bounds, index) => {
-          regions.push({
-            shape: "rect",
-            key: `deck-text:${editable.id}:${index}`,
-            sourceId: scope.id,
-            targetId: scope.id,
-            x: bounds.x,
-            y: bounds.y,
-            width: bounds.width,
-            height: bounds.height,
-            cx: bounds.x + bounds.width / 2,
-            cy: bounds.y + bounds.height / 2,
-            rotation: 0,
-            interactionMode: "text",
-            pointerMode: "fill",
-            sceneTextKey: paragraph.paragraphId,
-            contentWidth: bounds.width,
-            contentHeight: bounds.height
-          });
+          pushRegion(`deck-text:${editable.id}:${index}`, bounds);
+        });
+      }
+      // Atomic renders (macro output) select their invocation span.
+      for (const atom of paragraph.atomicRenderSpans ?? []) {
+        atom.hitBounds.forEach((bounds, index) => {
+          const key = `deck-atom:${atom.id}:${index}`;
+          atomSpanByRegionKey.set(key, atom.span);
+          pushRegion(key, bounds);
         });
       }
     }
-    return { scopesById, paragraphById, regions };
+    // Frame-level atoms: embedded tikzpictures and graphics select their
+    // whole source span in the enclosing scope's session.
+    const frameAtoms = [
+      ...layout.embeddedTikz.map((tikz) => ({
+        id: tikz.itemId,
+        span: tikz.sourceSpan,
+        bounds: tikz.bounds,
+        visible: true
+      })),
+      ...layout.graphics.map((graphics) => ({
+        id: graphics.itemId,
+        span: graphics.sourceSpan,
+        bounds: graphics.bounds,
+        visible: graphics.visibility === "visible"
+      }))
+    ];
+    for (const atom of frameAtoms) {
+      if (!atom.visible) {
+        continue;
+      }
+      const scope = resolveBeamerEditScopeAt(editScopes, atom.span.from);
+      const entry = scope ? scopesById.get(scope.id) : undefined;
+      if (!scope || !entry) {
+        continue;
+      }
+      const anchorParagraph = entry.scopeParagraphs[0]?.paragraphId;
+      if (!anchorParagraph) {
+        continue;
+      }
+      const key = `deck-atom:${atom.id}`;
+      atomSpanByRegionKey.set(key, atom.span);
+      regions.push({
+        shape: "rect",
+        key,
+        sourceId: scope.id,
+        targetId: scope.id,
+        x: atom.bounds.x,
+        y: atom.bounds.y,
+        width: atom.bounds.width,
+        height: atom.bounds.height,
+        cx: atom.bounds.x + atom.bounds.width / 2,
+        cy: atom.bounds.y + atom.bounds.height / 2,
+        rotation: 0,
+        interactionMode: "text",
+        pointerMode: "fill",
+        sceneTextKey: anchorParagraph,
+        contentWidth: atom.bounds.width,
+        contentHeight: atom.bounds.height
+      });
+    }
+    return { scopesById, paragraphById, regions, atomSpanByRegionKey };
   }, [deckActiveFrame]);
 
   const hitRegions = useMemo<HitRegion[]>(() => {
@@ -1773,6 +1835,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           text,
           structuralMaskRanges: deckScopeEntry.maskRanges,
           scopeParagraphs: deckScopeEntry.scopeParagraphs,
+          atomicSelectionSpan: deckEditing.atomSpanByRegionKey.get(region.key),
           layoutSourceSpan: paragraph.sourceSpan,
           layoutSourceText,
           renderSourceText: layoutSourceText,
