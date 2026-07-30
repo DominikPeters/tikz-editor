@@ -11,6 +11,8 @@ import css from "./CanvasPanel.module.css";
 
 export type CanvasTextEditPopupModel = {
   session: TextEditingSession;
+  /** Floating popup near the edited content, or a bar docked at the canvas bottom. */
+  surface: "popup" | "bar";
   placement: {
     centerX: number;
     top: number;
@@ -46,20 +48,25 @@ export function CanvasTextEditPopup({
   prefersNonBlinkingTextInsertionIndicator: boolean;
   caretBlinkVisible: boolean;
 }) {
-  const { session, placement } = model;
+  const { session, placement, surface } = model;
   return (
     <div
       ref={model.popupRef}
-      className={css.textEditPopup}
-      style={{
-        left: placement.centerX,
-        top: placement.top,
-        maxWidth: placement.maxWidth,
-        transform: "translateX(-50%)",
-        visibility: model.measuredHeight == null ? "hidden" : "visible"
-      }}
+      className={surface === "bar" ? css.textEditBar : css.textEditPopup}
+      style={
+        surface === "bar"
+          ? undefined
+          : {
+              left: placement.centerX,
+              top: placement.top,
+              maxWidth: placement.maxWidth,
+              transform: "translateX(-50%)",
+              visibility: model.measuredHeight == null ? "hidden" : "visible"
+            }
+      }
       onPointerDown={model.onPopupPointerDown}
       data-testid="canvas-text-edit-popup"
+      data-text-edit-surface={surface}
       data-text-edit-target-id={session.sourceId}
     >
       {session.isForeachTemplateEdit ? (
@@ -71,6 +78,8 @@ export function CanvasTextEditPopup({
           className={[
             css.textEditTextarea,
             session.editMode === "inline-typo" ? css.textEditTextareaInlineTypo : "",
+            session.isScopeSession ? css.textEditTextareaScope : "",
+            surface === "bar" ? css.textEditTextareaBar : "",
             model.hideNativeCaret ? css.textEditTextareaHideNativeCaret : ""
           ]
             .filter(Boolean)
@@ -83,9 +92,11 @@ export function CanvasTextEditPopup({
               : model.textareaSizing?.rows
           }
           style={
-            model.textareaSizing != null || session.editMode === "inline-typo"
-              ? { width: placement.textareaWidth }
-              : undefined
+            surface === "bar"
+              ? undefined
+              : model.textareaSizing != null || session.editMode === "inline-typo"
+                ? { width: placement.textareaWidth }
+                : undefined
           }
           onSelect={model.onTextareaSelect}
           onCopy={model.onTextareaCopy}

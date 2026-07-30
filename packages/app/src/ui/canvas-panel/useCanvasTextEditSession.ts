@@ -30,6 +30,7 @@ import {
   documentOffsetToTextarea,
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
+import type { CanvasTextEditPlacement } from "../../settings/types";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
 import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
@@ -107,6 +108,7 @@ export type UseCanvasTextEditSessionArgs = {
     preferredSceneTextId?: string | null
   ) => EditableTextTarget | null;
   textLayoutContext: unknown;
+  textEditPlacement: CanvasTextEditPlacement;
   dispatch: (action: EditorAction) => void;
 };
 
@@ -123,6 +125,12 @@ export type CanvasTextEditSessionController = {
 };
 
 const TEXT_CARET_OVERLAY_EPSILON_PX = 0.25;
+/**
+ * Scope buffers larger than this always use the docked bar: a floating
+ * popup carrying a whole frame body would cover the very content being
+ * edited.
+ */
+const SCOPE_POPUP_MAX_BUFFER_CHARS = 400;
 const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
   "box-sizing",
   "direction",
@@ -460,6 +468,7 @@ export function useCanvasTextEditSession(
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
     textLayoutContext,
+    textEditPlacement,
     dispatch
   } = args;
   const [state, setState] = useState(INITIAL_CANVAS_TEXT_EDIT_STATE);
@@ -1410,13 +1419,33 @@ export function useCanvasTextEditSession(
     setTextEditPopupHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
   }, [textEditingSession, textEditPopupPlacement]);
 
+  const textEditSurface = useMemo<"popup" | "bar" | null>(() => {
+    if (!textEditingSession) {
+      return null;
+    }
+    if (textEditPlacement === "bar") {
+      return "bar";
+    }
+    if (
+      textEditingSession.isScopeSession &&
+      textEditingSession.text.length > SCOPE_POPUP_MAX_BUFFER_CHARS
+    ) {
+      return "bar";
+    }
+    return "popup";
+  }, [textEditingSession, textEditPlacement]);
+
   const popup = useMemo<CanvasTextEditPopupModel | null>(() => {
-    if (!textEditingSession || !textEditPopupPlacement) {
+    if (!textEditingSession || !textEditSurface) {
+      return null;
+    }
+    if (textEditSurface === "popup" && !textEditPopupPlacement) {
       return null;
     }
     return {
       session: textEditingSession,
-      placement: textEditPopupPlacement,
+      surface: textEditSurface,
+      placement: textEditPopupPlacement ?? { centerX: 0, top: 0, maxWidth: 0, textareaWidth: 0 },
       measuredHeight: textEditPopupHeight,
       popupRef: textEditPopupRef,
       textareaRef: textEditTextareaRef,
@@ -1444,6 +1473,7 @@ export function useCanvasTextEditSession(
     textEditCaretOverlay,
     textEditPopupHeight,
     textEditPopupPlacement,
+    textEditSurface,
     textEditTextareaSizing
   ]);
 

@@ -470,6 +470,33 @@
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
 }
 
+.textEditBar {
+  position: absolute;
+  z-index: 5;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent 30%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-pane) 82%, transparent 18%);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.10);
+  pointer-events: auto;
+}
+
+.textEditBar:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
+}
+
+.textEditBar .textEditTextareaLayer {
+  display: block;
+  max-width: none;
+}
+
 .textEditPopupTag {
   align-self: center;
   margin: -1px 0 2px;
@@ -509,6 +536,19 @@
 .textEditTextareaInlineTypo {
   field-sizing: fixed;
   white-space: pre;
+  text-align: left;
+}
+
+/* Scope buffers are structural source, not centered node labels. */
+.textEditTextareaScope {
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.textEditTextareaBar {
+  width: 100%;
+  max-height: 180px;
+  overflow-y: auto;
   text-align: left;
 }
 

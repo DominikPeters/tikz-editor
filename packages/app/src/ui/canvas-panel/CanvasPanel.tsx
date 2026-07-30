@@ -478,11 +478,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     showDevPanel: s.showDevPanel,
     dispatch: s.dispatch
   })));
-  const { gridSize, handleSizePx, zoomSpeed, snapHapticsEnabled } = useSettingsStore(useShallow((s) => ({
+  const { gridSize, handleSizePx, zoomSpeed, snapHapticsEnabled, textEditPlacement } = useSettingsStore(useShallow((s) => ({
     gridSize: s.settings.canvas.gridSize,
     handleSizePx: s.settings.canvas.handleSizePx,
     zoomSpeed: s.settings.canvas.zoomSpeed,
-    snapHapticsEnabled: s.settings.canvas.snapHapticsEnabled
+    snapHapticsEnabled: s.settings.canvas.snapHapticsEnabled,
+    textEditPlacement: s.settings.canvas.textEditPlacement
   })));
   const gridMinorTargetPx = GRID_SIZE_MINOR_TARGET_PX[gridSize];
 
@@ -1945,6 +1946,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
     textLayoutContext,
+    textEditPlacement,
     dispatch
   });
 

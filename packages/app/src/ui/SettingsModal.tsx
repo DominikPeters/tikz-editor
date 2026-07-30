@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSettingsStore } from "../settings/useSettingsStore";
-import { EDITOR_FONT_SIZE_OPTIONS, type ColorPickerAccuracy, type ColorScheme, type GridSize } from "../settings/types";
+import { EDITOR_FONT_SIZE_OPTIONS, type CanvasTextEditPlacement, type ColorPickerAccuracy, type ColorScheme, type GridSize } from "../settings/types";
 import { Modal } from "./Modal";
 import css from "./SettingsModal.module.css";
 
@@ -331,6 +331,28 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       <option value={7}>Small</option>
                       <option value={9}>Medium</option>
                       <option value={11}>Large</option>
+                    </select>
+                  </div>
+
+                  <div className={css.settingRow}>
+                    <label className={css.settingLabel} htmlFor="setting-text-edit-placement">
+                      Text Editing Surface
+                      <span className={css.settingDesc}>
+                        Where canvas text editing shows the source. Long buffers always use the docked bar.
+                      </span>
+                    </label>
+                    <select
+                      id="setting-text-edit-placement"
+                      className={css.select}
+                      value={settings.canvas.textEditPlacement}
+                      onChange={(e) => {
+                        updateCanvasSettings({
+                          textEditPlacement: e.target.value as CanvasTextEditPlacement
+                        });
+                      }}
+                    >
+                      <option value="popup">Floating popup</option>
+                      <option value="bar">Docked bar</option>
                     </select>
                   </div>
 

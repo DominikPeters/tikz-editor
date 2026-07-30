@@ -19,11 +19,19 @@ export type GeneralSettings = {
   canvasInvert: boolean;
 };
 
+export type CanvasTextEditPlacement = "popup" | "bar";
+
 export type CanvasSettings = {
   gridSize: GridSize;
   handleSizePx: number;
   zoomSpeed: number;
   snapHapticsEnabled: boolean;
+  /**
+   * Where canvas text editing shows its source surface: a floating popup
+   * near the edited content or a bar docked to the canvas bottom edge.
+   * Large scope buffers always fall back to the bar.
+   */
+  textEditPlacement: CanvasTextEditPlacement;
 };
 
 export type AppSettings = {
@@ -66,7 +74,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     gridSize: "standard",
     handleSizePx: 9,
     zoomSpeed: 0.0045,
-    snapHapticsEnabled: true
+    snapHapticsEnabled: true,
+    textEditPlacement: "popup"
   },
   colorPicker: {
     accuracy: "approximate"
