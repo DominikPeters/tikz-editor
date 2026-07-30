@@ -772,9 +772,63 @@ describe("canvas text edit machine", () => {
     if (effect?.type === "apply_source_patch") {
       const firstOccurrence = driftedSource.indexOf("$x$");
       const secondOccurrence = driftedSource.indexOf("$x$", firstOccurrence + 1);
-      expect(effect.previousSpan.from).toBe(secondOccurrence);
-      expect(effect.previousSpan.from).not.toBe(firstOccurrence);
+      expect(effect.sessionSpan.from).toBe(secondOccurrence);
+      expect(effect.sessionSpan.from).not.toBe(firstOccurrence);
+      expect(effect.previousSpan.from).toBeGreaterThanOrEqual(secondOccurrence);
+      expect(effect.previousSpan.to).toBeLessThanOrEqual(secondOccurrence + "$x$".length);
     }
+  });
+
+  it("emits minimal patches instead of whole-buffer replacements", () => {
+    const text = "The quick brown fox";
+    const source = `\\begin{tikzpicture}\n  \\node at (0,0) {${text}};\n\\end{tikzpicture}`;
+    const target = buildTarget(source, text);
+    const spanFrom = source.indexOf(text);
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source,
+      target,
+      selectionStart: 4,
+      selectionEnd: 4,
+      historyMergeKey: "merge"
+    }).state;
+
+    const caret = "The ".length;
+    const inserted = reduceInputIntent(started, "insertText", caret, caret, "very ");
+    expect(inserted.effects).toHaveLength(1);
+    const [insertEffect] = inserted.effects;
+    if (insertEffect?.type !== "apply_source_patch") {
+      throw new Error("expected apply_source_patch effect");
+    }
+    expect(insertEffect.replacement).toBe("very ");
+    expect(insertEffect.previousSpan).toEqual({ from: spanFrom + caret, to: spanFrom + caret });
+    expect(insertEffect.changedSpan).toEqual({ from: spanFrom + caret, to: spanFrom + caret + "very ".length });
+    expect(insertEffect.sessionSpan).toEqual({
+      from: spanFrom,
+      to: spanFrom + "The very quick brown fox".length
+    });
+    expect(insertEffect.nextText).toBe("The very quick brown fox");
+
+    const deleteFrom = "The very quick".length;
+    const deleted = reduceInputIntent(
+      inserted.state,
+      "deleteContentBackward",
+      deleteFrom,
+      deleteFrom
+    );
+    const [deleteEffect] = deleted.effects;
+    if (deleteEffect?.type !== "apply_source_patch") {
+      throw new Error("expected apply_source_patch effect");
+    }
+    expect(deleteEffect.replacement).toBe("");
+    expect(deleteEffect.previousSpan).toEqual({
+      from: spanFrom + deleteFrom - 1,
+      to: spanFrom + deleteFrom
+    });
+    expect(deleteEffect.changedSpan).toEqual({
+      from: spanFrom + deleteFrom - 1,
+      to: spanFrom + deleteFrom - 1
+    });
   });
 
   it("round-trips through invalid partially typed math states without corruption", () => {

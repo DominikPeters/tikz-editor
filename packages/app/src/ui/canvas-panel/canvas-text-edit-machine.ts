@@ -1,5 +1,5 @@
 import type { Span } from "@tikz-editor/core/ast/types";
-import { replaceSpan } from "@tikz-editor/core/edit/patch";
+import { computeMinimalReplacementPatch, replaceSpan } from "@tikz-editor/core/edit/patch";
 
 import type { EditableTextTarget, TextEditingSession, TextSelectionOverlay } from "./types";
 import { clamp } from "./geometry";
@@ -148,9 +148,14 @@ export type CanvasTextEditEffect =
       sourceId: string;
       historyMergeKey: string;
       nextText: string;
+      /** Minimal changed range in pre-edit document coordinates. */
       previousSpan: Span;
+      /** Minimal changed range in post-edit document coordinates. */
       changedSpan: Span;
+      /** Replacement for `previousSpan` only, not the whole session buffer. */
       replacement: string;
+      /** The session's full buffer span after the edit (mask scope). */
+      sessionSpan: Span;
       nextSource: string;
     };
 
@@ -532,6 +537,10 @@ function applySessionTextUpdate(
     ? current.sourceSpan
     : resolveCurrentTextSpan(current.workingSource, current.text, current.sourceSpan);
   const updated = replaceSpan(current.workingSource, currentSpan, nextText);
+  // The dispatched patch covers only the changed characters inside the
+  // buffer, so a keystroke in a scope-sized session stays a keystroke-sized
+  // source change for incremental parsing and history.
+  const bufferDiff = computeMinimalReplacementPatch(current.text, nextText);
   return {
     state: {
       ...state,
@@ -552,9 +561,16 @@ function applySessionTextUpdate(
         sourceId: current.sourceId,
         historyMergeKey: current.historyMergeKey,
         nextText,
-        previousSpan: currentSpan,
-        changedSpan: updated.changedSpan,
-        replacement: nextText,
+        previousSpan: {
+          from: currentSpan.from + bufferDiff.oldSpan.from,
+          to: currentSpan.from + bufferDiff.oldSpan.to
+        },
+        changedSpan: {
+          from: currentSpan.from + bufferDiff.newSpan.from,
+          to: currentSpan.from + bufferDiff.newSpan.to
+        },
+        replacement: bufferDiff.replacement,
+        sessionSpan: updated.changedSpan,
         nextSource: updated.source
       }
     ]

@@ -6,7 +6,7 @@ import type { WorldPoint, WorldBounds } from "../coords/points.js";
 import type { NodeItem, PathItem, PathStatement, Statement, Span } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
 import { applyEditIntent } from "./apply.js";
-import { replaceSpan } from "./patch.js";
+import { computeMinimalReplacementPatch, replaceSpan } from "./patch.js";
 import { PT_PER_CM, type DragFormatPrecision } from "./format.js";
 import {
   generateElementSource,
@@ -356,7 +356,7 @@ function normalizeResultPatches(source: string, result: EditActionResult): EditA
 
   return {
     ...result,
-    patches: [computeReplacementPatch(source, result.newSource)]
+    patches: [computeMinimalReplacementPatch(source, result.newSource)]
   };
 }
 
@@ -551,7 +551,7 @@ function applyConnectHandle(
   const reorderedPatches = reordered ? reordered.patches : [];
   const newSource = reordered?.source ?? updated.source;
   const patches = nameResolution.insertedSpan
-    ? [computeReplacementPatch(source, newSource)]
+    ? [computeMinimalReplacementPatch(source, newSource)]
     : [
         {
           oldSpan: handle.sourceRef.sourceSpan,
@@ -1132,36 +1132,8 @@ function applyAddElement(
   return {
     kind: "success",
     newSource,
-    patches: [computeReplacementPatch(source, newSource)],
+    patches: [computeMinimalReplacementPatch(source, newSource)],
     selectedSourceIds: [insertedStatementId],
     changedSourceIds: [insertedStatementId]
-  };
-}
-
-function computeReplacementPatch(oldSource: string, newSource: string): SourcePatch {
-  const oldLen = oldSource.length;
-  const newLen = newSource.length;
-  const minLen = Math.min(oldLen, newLen);
-
-  let prefix = 0;
-  while (prefix < minLen && oldSource.charCodeAt(prefix) === newSource.charCodeAt(prefix)) {
-    prefix += 1;
-  }
-
-  let oldSuffix = oldLen;
-  let newSuffix = newLen;
-  while (
-    oldSuffix > prefix &&
-    newSuffix > prefix &&
-    oldSource.charCodeAt(oldSuffix - 1) === newSource.charCodeAt(newSuffix - 1)
-  ) {
-    oldSuffix -= 1;
-    newSuffix -= 1;
-  }
-
-  return {
-    oldSpan: { from: prefix, to: oldSuffix },
-    newSpan: { from: prefix, to: newSuffix },
-    replacement: newSource.slice(prefix, newSuffix)
   };
 }

@@ -507,7 +507,7 @@ export function useCanvasTextEditSession(
         ],
         canvasTextEditMask: {
           elementId: effect.sourceId,
-          span: effect.changedSpan
+          span: effect.sessionSpan
         }
       });
       sourceRevisionRef.current += 1;
