@@ -32,11 +32,15 @@ Later body
 \end{frame}
 \end{document}`;
 
-function editableSlices(layout: BeamerFrameLayout, source = SOURCE): string[] {
+function editableSlices(
+  layout: BeamerFrameLayout,
+  source = SOURCE,
+  kind: "text" | "math" = "text"
+): string[] {
   return layout.paragraphs.flatMap((paragraph) =>
-    paragraph.editableTextSpans.map((editable) =>
-      source.slice(editable.span.from, editable.span.to)
-    )
+    paragraph.editableTextSpans
+      .filter((editable) => editable.kind === kind)
+      .map((editable) => source.slice(editable.span.from, editable.span.to))
   );
 }
 
@@ -59,6 +63,11 @@ describe("Beamer canvas editing contract", () => {
     expect(joined).not.toContain("Macro argument");
     expect(joined).not.toContain("Overlay text");
     expect(joined).not.toContain("x + y");
+
+    // Math islands publish click-into hit spans of their own kind.
+    const mathJoined = editableSlices(page.layout, SOURCE, "math").join("|");
+    expect(mathJoined).toContain("x + y");
+    expect(mathJoined).not.toContain("Direct prose");
     expect(
       page.layout.paragraphs.flatMap((paragraph) =>
         paragraph.editableTextSpans.flatMap((editable) => editable.hitBounds)

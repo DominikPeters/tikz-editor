@@ -274,6 +274,13 @@ export type BeamerParagraphLayout = {
 export type BeamerEditableTextSpan = {
   id: string;
   span: Span;
+  /**
+   * Directly-authored prose ("text") or a rendered math island ("math").
+   * Text spans are structure-free and safe to mask during edits; math
+   * spans are click-into targets whose caret mapping runs through the
+   * math caret entries.
+   */
+  kind: "text" | "math";
   /** Final document/SVG-space geometry; never paragraph-local geometry. */
   hitBounds: SvgRect[];
 };

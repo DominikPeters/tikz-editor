@@ -3089,8 +3089,10 @@ function collectBeamerEditableTextSpans(
     );
     const y = (paragraphBounds?.y ?? 0) + Number(placement?.y ?? 0);
     return line.segments.flatMap((segment) => {
+      const isDirectText = segment.kind === "text" || segment.kind === "space";
+      const isMathIsland = segment.kind === "math";
       if (
-        (segment.kind !== "text" && segment.kind !== "space") ||
+        (!isDirectText && !isMathIsland) ||
         segment.role === "list-label" ||
         segment.sourceRangePolicy !== "caret" ||
         segment.sourceStartRaw == null ||
@@ -3109,6 +3111,7 @@ function collectBeamerEditableTextSpans(
       return [{
         from,
         to,
+        kind: isMathIsland ? ("math" as const) : ("text" as const),
         hitBounds: paragraphBounds
           ? [svgRect(
               paragraphBounds.x + Number(segment.x),
@@ -3119,25 +3122,59 @@ function collectBeamerEditableTextSpans(
           : [],
       }];
     });
-  }).sort((left, right) => left.from - right.from || left.to - right.to);
+  });
 
-  const merged: Array<Span & { hitBounds: SvgRect[] }> = [];
-  for (const candidate of candidates) {
+  // Display math lives in vlist boxes, not paragraph report segments: each
+  // display block publishes a math hit span over its content range.
+  const displayMathCandidates = vlistLayout.boxReport.items.flatMap((item) => {
+    if (!item.displayMath) {
+      return [];
+    }
+    const from = Math.max(paragraphSpan.from, item.displayMath.contentStart);
+    const to = Math.min(paragraphSpan.to, item.displayMath.contentEnd);
+    if (
+      to <= from ||
+      hiddenSourceSpans.some((hidden) => from < hidden.to && hidden.from < to)
+    ) {
+      return [];
+    }
+    return [{
+      from,
+      to,
+      kind: "math" as const,
+      hitBounds: paragraphBounds
+        ? [svgRect(
+            paragraphBounds.x + Number(item.x),
+            paragraphBounds.y + Number(item.y),
+            Math.max(0.5, Number(item.width)),
+            Math.max(1, Number(item.totalHeight))
+          )]
+        : [],
+    }];
+  });
+
+  const allCandidates = [...candidates, ...displayMathCandidates]
+    .sort((left, right) => left.from - right.from || left.to - right.to);
+
+  const merged: Array<Span & { kind: "text" | "math"; hitBounds: SvgRect[] }> = [];
+  for (const candidate of allCandidates) {
     const previous = merged.at(-1);
-    if (previous && candidate.from <= previous.to) {
+    if (candidate.kind === previous?.kind && candidate.from <= previous.to) {
       previous.to = Math.max(previous.to, candidate.to);
       previous.hitBounds.push(...candidate.hitBounds);
     } else {
       merged.push({
         from: candidate.from,
         to: candidate.to,
+        kind: candidate.kind,
         hitBounds: [...candidate.hitBounds],
       });
     }
   }
-  return merged.map(({ hitBounds, ...span }, index) => ({
+  return merged.map(({ hitBounds, kind, ...span }, index) => ({
     id: `${paragraphId}:editable:${index}`,
     span,
+    kind,
     hitBounds,
   }));
 }

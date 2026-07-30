@@ -1317,7 +1317,11 @@ export const CanvasPanel = memo(function CanvasPanel({
             pt(paragraph.bounds.y + paragraph.bounds.height)
           );
       for (const editable of paragraph.editableTextSpans) {
-        entry.maskRanges.push(editable.span);
+        // Math islands are click-into targets, but only structure-free
+        // prose runs are safe to mask during edits.
+        if (editable.kind === "text") {
+          entry.maskRanges.push(editable.span);
+        }
         editable.hitBounds.forEach((bounds, index) => {
           regions.push({
             shape: "rect",
