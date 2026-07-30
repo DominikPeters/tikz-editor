@@ -1,5 +1,6 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
 export { parseBeamerFrameBody } from "./content.js";
+export { collectBeamerEditScopes, resolveBeamerEditScopeAt } from "./edit-scopes.js";
 export {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,

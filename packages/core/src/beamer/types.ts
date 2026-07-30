@@ -278,6 +278,20 @@ export type BeamerEditableTextSpan = {
   hitBounds: SvgRect[];
 };
 
+export type BeamerEditScopeKind = "frame-title" | "column" | "frame-body";
+
+/**
+ * A canvas editing session's buffer unit: the nearest container of the
+ * edited text (design/beamer-canvas-editing.md). Column scopes nest inside
+ * the frame-body scope; the smallest containing span wins.
+ */
+export type BeamerEditScope = {
+  kind: BeamerEditScopeKind;
+  id: string;
+  /** Full session buffer span in document coordinates. */
+  span: Span;
+};
+
 export type PrepareBeamerDocumentOptions = {
   /**
    * Source ranges neutralized only for the document-structure CST. Text
@@ -334,6 +348,7 @@ export type BeamerFrameLayout = {
   paragraphs: BeamerParagraphLayout[];
   graphics: BeamerGraphicsLayout[];
   embeddedTikz: BeamerEmbeddedTikzLayout[];
+  editScopes: BeamerEditScope[];
 };
 
 export type BeamerFrameSvgResult = {

@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
   prepareBeamerDocument,
+  resolveBeamerEditScopeAt,
   type BeamerFrameLayout,
 } from "../packages/core/src/beamer/index.js";
 
@@ -90,6 +94,51 @@ describe("Beamer canvas editing contract", () => {
       const page = await masked.renderFrame({ frameIndex: 0, step: 1 });
       expect(page.layout.frameId).toBe("frame:0");
     });
+
+  it("publishes edit scopes with nearest-container resolution", async () => {
+    const kktSource = readFileSync(
+      fileURLToPath(new URL("./fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url)),
+      "utf8"
+    );
+    const prepared = prepareBeamerDocument(kktSource);
+
+    // Frame 2 ("Why KKT conditions matter"): title + two columns + body.
+    const columnsPage = await prepared.renderFrame({ frameIndex: 1, step: 1 });
+    const columnsScopes = columnsPage.layout.editScopes;
+    expect(columnsScopes.map((scope) => scope.kind)).toEqual([
+      "frame-title",
+      "column",
+      "column",
+      "frame-body",
+    ]);
+    const titleScope = columnsScopes[0];
+    expect(kktSource.slice(titleScope.span.from, titleScope.span.to)).toBe(
+      "Why KKT conditions matter"
+    );
+    const columnProse = kktSource.indexOf("KKT conditions turn a constrained");
+    const columnScope = resolveBeamerEditScopeAt(columnsScopes, columnProse);
+    expect(columnScope?.kind).toBe("column");
+    expect(kktSource.slice(columnScope!.span.from, columnScope!.span.to)).toContain(
+      "They generalize"
+    );
+    expect(
+      resolveBeamerEditScopeAt(columnsScopes, titleScope.span.from + 1)?.kind
+    ).toBe("frame-title");
+
+    // Frame 3 ("Problem form and notation"): no containers, so prose,
+    // display math, and glue all resolve to the whole-body scope.
+    const bodyPage = await prepared.renderFrame({ frameIndex: 2, step: 1 });
+    const bodyScopes = bodyPage.layout.editScopes;
+    expect(bodyScopes.map((scope) => scope.kind)).toEqual([
+      "frame-title",
+      "frame-body",
+    ]);
+    for (const anchor of ["We consider", "minimize", "\\vspace{.3em}"]) {
+      const offset = kktSource.indexOf(anchor, bodyScopes[1].span.from);
+      expect(resolveBeamerEditScopeAt(bodyScopes, offset)?.kind).toBe("frame-body");
+    }
+    expect(structuredClone(bodyScopes)).toEqual(bodyScopes);
+  });
 
   it("returns structured-clone-compatible editable span metadata", async () => {
     const page = await prepareBeamerDocument(SOURCE).renderFrame({

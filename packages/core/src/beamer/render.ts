@@ -34,6 +34,7 @@ import {
   type TexMetricProvider,
 } from "../text/tex/index.js";
 import { parseBeamerFrameBody } from "./content.js";
+import { collectBeamerEditScopes } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
 import {
   leadingBeamerTrivlistAdjustment,
@@ -624,6 +625,7 @@ async function renderBeamerFrameStep(params: {
     paragraphs,
     graphics,
     embeddedTikz,
+    editScopes: collectBeamerEditScopes(frame, bodyIr),
   };
 
   return {

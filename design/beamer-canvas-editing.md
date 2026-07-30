@@ -1,0 +1,415 @@
+# Beamer Canvas Editing UX
+
+Decided 2026-07-30 in design discussion. This document specifies the slide
+canvas editing model for deck mode and supersedes the one-paragraph Phase B3
+sketch in `design/beamer-editor.md`. It assumes the rendering, source-map,
+caret, and hit-map infrastructure described there; it changes interaction
+architecture, not the rendering pipeline.
+
+Revised the same day after an external implementation review whose findings
+were independently verified against the code and by direct experiment (see
+Core prerequisites and the masking section): the UX model stands, but the
+original staging understated the infrastructure work, and one masking
+assumption was demonstrated to be wrong.
+
+## Diagnosis of the current state
+
+The first beamer canvas text editing slice (commit 78923231) bound an editing
+session to a `BeamerEditableTextSpan`: a maximal source-contiguous run of
+caret-policy text/space segments inside one paragraph
+(`packages/core/src/beamer/render.ts`, `collectBeamerEditableTextSpans`).
+Because a run is cut by every soft line wrap, every `$…$`, every inline
+command, every `\item`, and every macro use, the user experiences editing
+that "stops" at invisible boundaries. Clicking past the run's edge threw an
+unhandled rejection (`documentOffsetToTextarea` out of range) that froze the
+caret. The session surface was a visible one-line popup textarea in
+`inline-typo` mode (Enter closes, no newlines).
+
+The diagnosis: the *session scope* and the *input surface* were wrong; the
+pipeline below them is right and is kept unchanged. In particular:
+
+- `MathCaretEntry` carries per-source-offset caret geometry (x, y, height,
+  depth) inside rendered math, consumed by both `getKnuthPlassCaretFromPoint`
+  and `getKnuthPlassPointFromOffset` — click-into-math and caret-drawn-in-math
+  both already work in the TikZ node path.
+- Partial input degrades locally: unknown or half-typed commands render as
+  literal runs at the smallest boundary (`ir.ts` malformed-input literals,
+  `partialFallbackSupported`), and the structural mask keeps the frame parse
+  stable while a span is being edited.
+- Span patches, session-local undo merged into one store step, and the
+  ≤50 ms/keystroke latency gate all carry over.
+
+The TikZ node model — popup as raw-TeX buffer, canvas as live view with a
+true caret — is the validated architecture. Deck editing generalizes it; it
+does not replace it. TikZ node editing itself is unchanged by this document.
+
+## Core model
+
+### One session per scope; the buffer is the scope's full source span
+
+An editing session opens on click into slide text. Its buffer is the entire
+source span of the caret's **scope** (defined below) — not a fragment. All
+text, inline math, display math, commands, braces, and macro calls inside the
+scope are in-buffer. There are no session hops while the caret stays in
+scope, and no click inside the scope can fall outside the buffer (the
+out-of-range failure class is eliminated by construction).
+
+### Scope rule
+
+The scope is the nearest *container* ancestor of the click:
+
+1. a `column`'s content;
+2. the frame title argument (`\begin{frame}{…}` / `\frametitle{…}`);
+3. otherwise the whole frame body.
+
+Rationale, grounded in the KKT fixture
+(`test/fixtures/beamer/kkt_theorem_beamer.tex`):
+
+- Frame 3 ("Problem form and notation") is one continuous no-blank-line flow
+  of text, display math, and `\vspace` — any finer unit would recreate the
+  seam problem. Scope = whole body keeps it seam-free.
+- Frame 2's columns are spatial regions sitting side by side. Arrow keys
+  clamping at a column edge matches PowerPoint (arrows never leave a text
+  box), and "flowing" into a column that is *beside* the caret would be
+  spatially wrong. Scope = column content.
+- **Blocks are transparent to the caret**, not scope boundaries (decided
+  2026-07-30, revisitable). A block is decorated flow, usually mid-thought
+  with its surrounding paragraphs ("The theorem" frames: block → paragraph →
+  itemize is one train of thought). Blocks remain fully selectable objects
+  via their chrome. Columns are spatial; blocks are flow — that distinction,
+  not size, decides scopehood. Transparent is also the reversible choice.
+- Theorem-family environments follow blocks (transparent).
+- Lists are not scopes; items are flow with structural key semantics.
+
+Scope bounds the source surface's window. It does **not** bound the
+structural mask: masking any scope that contains nested structure destroys
+flow topology (see Masking and structural recovery), so mask and session
+span are independent for *every* scope type.
+
+**Preamble-backed fields** are the one genuinely separate session kind: on a
+`\titlepage` frame, clicking a rendered metadata field opens a session whose
+buffer is the corresponding preamble argument (`\title{…}` etc.). Same
+machinery, different span. Current gap: `prepareTitlePage` lays out only
+title and subtitle as source-backed paragraphs; author, institute, and date
+must become source-backed rendered paragraphs before they are clickable.
+The scope rule explicitly covers subtitle, institute, and `\framesubtitle`
+alongside the fields named above.
+
+### Two surfaces, one buffer; focus picks the key interpretation
+
+A session has two synchronized surfaces:
+
+- the **canvas**: the rendered slide with a caret and selection overlay;
+- the **source surface**: a raw-TeX text field showing a window of the
+  buffer. Placement is a user setting: **docked bar** (Excel-formula-bar
+  style strip on the canvas edge; ~5–8 lines, auto-scrolled to keep the
+  caret visible) or **floating popup** (anchored near the edited text,
+  showing the caret's enclosing chunk). Same component, different anchoring.
+  The iPad default should be the bar (popup and software keyboard fight for
+  space).
+
+The floating popup does not scale to whole-body scopes (a 20-line KKT
+frame 3 buffer would occlude half the slide): above a small buffer-size
+threshold the popup placement auto-falls-back to the docked bar. The
+placement setting is honored for column/title scopes and small bodies.
+
+Both surfaces edit the same buffer and share one caret/selection. Keyboard
+focus determines how navigation and structure keys are interpreted:
+
+| | Canvas focused (WYSIWYG keys) | Bar focused (source keys) |
+| --- | --- | --- |
+| typing | insert literal chars at caret | insert literal chars at caret |
+| ←/→ | rendered caret stops: atomic over `\textbf{`, macro calls, ligature interiors; per-atom inside math | one source character |
+| ↑/↓ | rendered lines | source lines |
+| Enter | structural (table below); no-op in math | newline in source |
+| Backspace | previous rendered atom; objects and glue select-then-delete | one source character |
+| Tab | list indent/outdent | literal / focus move |
+| Cmd+B, Cmd+I, … | wrap/toggle selection | same |
+
+This is the resolution of the "two modes" question: the modes exist, but as
+a focus state the user flows through constantly (Excel's cell vs formula
+bar), not a persistent setting. The bar being always visible during a
+session is what makes canvas-focused editing safe: `\textbf{bold|}` vs
+`\textbf{bold}|` collapse to one canvas caret stop (defaulting **inside**,
+so typing continues the style — decided 2026-07-30), and the bar shows which
+side of the brace the caret is really on. A half-typed `\rightarr` while
+canvas-focused renders as a literal run on the slide and as correct source
+in the bar.
+
+**Safety property (deliberate):** the two modes agree on plain typing.
+They differ only in navigation and structure keys, and the worst misread
+(Enter in the bar when an item split was intended) inserts a harmless,
+undoable newline. Focus indicators are for fluency, not damage prevention.
+
+Focus gestures: click slide text → canvas focus; click into the bar (or
+Cmd+E) → bar focus at the same caret; Esc from the bar → canvas focus.
+(Exact chords to be finalized; consider F2 for Excel muscle memory.)
+
+### Focus indication
+
+1. **Only the focused surface blinks.** The unfocused surface shows a
+   static, lower-contrast caret at the same position.
+2. **Selection color**: accent in the focused surface, gray in the
+   unfocused one (macOS active/inactive convention) — the selection is
+   visible in both, ownership is visible by color.
+3. **Focus ring** on the bar when hot; slightly dimmed bar chrome when not.
+4. **PPT edit border on the canvas**: canvas focus draws PowerPoint's dashed
+   text-edit outline around the scope container (column or body); a selected
+   object draws a solid outline; bar focus drops the dashed outline to a
+   faint state. The dashed border doubles as scope visualization — the user
+   can see where arrow keys will clamp.
+
+### Caret mapping details
+
+- Clicks map through the existing hit maps, including `mathCaretEntries`
+  (subscript-level positions inside math work).
+- Macro output: the caret cannot enter an expansion (`macro` policy);
+  clicking rendered macro output selects the macro *call*'s span in the
+  buffer, visible in the bar. Typing replaces the call. (Strictly more
+  capable than the previous drop-macro-spans-entirely behavior.)
+- Zero-width syntax (braces, `%`, declarations like `\Large`): the canvas
+  caret sits at the collapsed visual stop with inside preference; the bar is
+  the disambiguator. Ligature/kern interiors keep the existing skip policy.
+- Overlay steps: the caret domain per step excludes source hidden on the
+  current step (the hidden-span filter already does this). A ghosted
+  "show covered content" view (Beamer's `transparent`) is a later toggle.
+
+## Structural keys (canvas focus)
+
+| Caret context | Enter | Source patch |
+| --- | --- | --- |
+| inside an `\item`'s text | split into new item | insert `\n<indent>\item ` (indent copied from neighbor) |
+| in an empty item | delete item, exit list | remove `\item`; remove the env if now empty |
+| ordinary paragraph text | paragraph break | blank line |
+| inside display/inline math | no-op (v1) | — |
+| frame title argument | no-op or jump to body start | — |
+| Shift+Enter in text | line break | `\\` |
+
+- **Backspace at item start**: merge with the previous item — remove
+  `\item` plus surrounding newline/indent and join with a single space
+  (whitespace repair is part of the patch; the source stays idiomatic).
+- **Backspace/arrow onto a non-text flow object** (`\vspace`/`\vfill`/glue,
+  embedded tikzpicture, `\includegraphics`): first press *selects* the
+  object — glue renders as a thin highlighted band labeled with its source
+  (e.g. `\vspace{.3em}`) — second press deletes its span. Select-then-delete
+  is the Word convention and is also the discoverability answer for vertical
+  glue (160 corpus uses of `\vspace`).
+- **Tab/Shift+Tab** in an item: nest/unnest one itemize level (wrap/unwrap
+  a nested `itemize` around the item).
+
+## Selection: three tiers
+
+1. **Bar selection is free.** Any source range, balanced or not — the user
+   sees raw source and is trusted (same as TikZ nodes today).
+2. **Canvas drags within continuous text snap to construct boundaries.**
+   Extending the existing math-delimiter snapping to display math, command
+   groups, and macro calls: a drag from prose into a display selects the
+   whole `\[…\]`. Result ranges are always balanced; deletion is safe.
+   Text→text crossings within one scope all work, including across display
+   math and glue.
+3. **Canvas drags crossing container boundaries promote to whole-node
+   object selection.** Endpoints round outward until they are siblings:
+   mid-item-1 → mid-item-3 selects items 1–3 (deleting all items removes
+   the env); prose → block-body selects {paragraph, block}; column →
+   column selects whole columns (Word table-cell rule). Tier-3 selections
+   render as object outlines, not text highlight — the user sees they are
+   about to operate on structure. Body ↔ frame title drags clamp (the title
+   is a template area, not flow).
+
+## Object layer
+
+Objects are selectable structural nodes with published hit geometry and
+stable ids (the object-layer analog of `BeamerEditableTextSpan`). They are
+never in front of text: clicking text always yields a caret; objects are
+selected by clicking chrome/non-text renders, via Esc, or via caret
+traversal (select-then-delete).
+
+- **Esc ladder**: caret → containing object (item → list → block → column)
+  → clear. Enter/F2 drills back in.
+- **Blocks**: click chrome → select; inspector: type dropdown
+  (block/alertblock/exampleblock — env rename patch), title field, overlay
+  spec; Delete / Cmd+D duplicate; drag-reorder in flow later.
+- **`\includegraphics`**: corner resize handles in v1 — the graphics IR
+  already retains per-option key/value spans precisely so a resize adapter
+  can rewrite only the authored value. Corner drag rewrites
+  `width=0.63\textwidth`, preserving the symbolic `\textwidth`-relative
+  form; aspect preserved by leaving `height` unset.
+- **Columns**: hover the inter-column gap → col-resize cursor spanning the
+  column height; drag with live re-layout; on release rewrite *both*
+  adjacent width coefficients preserving their sum (`.55/.42` → `.48/.49`),
+  rounded to two decimals, symbolic form preserved. With three columns each
+  divider touches only its two neighbors. Inspector holds the exact numeric
+  field.
+- **Embedded tikzpictures**: click → select (inspector shows `scale=`/
+  `\scalebox` value when present — same retained-span rewrite);
+  double-click → switch `activeRootId` to the nested root with a breadcrumb
+  back to the slide ("Slide 4 ▸ Figure"); Esc returns. Caveat: switching
+  `activeRootId` alone is not enough — `computeSnapshot` routes all Beamer
+  source to deck compute by `documentKind`, so entering the nested figure
+  needs a real compute-mode branch (deck document, TikZ-root scene).
+  In-place editing stays deferred (Phase B5); the breadcrumb keeps the
+  interaction grammar stable when it lands.
+- **Vertical glue**: selectable via caret traversal / backspace only (no
+  hover-click target v1); selected state is the labeled band.
+
+Foundation vs gaps: `BeamerFrameLayoutItem` already publishes stable ids,
+parent relationships, source spans, and bounds for columns, blocks,
+graphics, and TikZ, and graphics retain parsed option metadata — the
+geometry side is largely present. Missing for editing: column content and
+width-*value* spans in the app-facing layout, block env/title/overlay edit
+metadata, explicit list/item object nodes, deck-specific edit actions
+(generic `APPLY_EDIT_ACTION` is deliberately rejected for Beamer documents
+today) with selection state, and topology-preserving duplicate/delete
+adapters. Stage 3 is therefore a real workstream, not wiring.
+
+## Masking and structural recovery
+
+The original draft assumed mask-equals-session was safe for column scopes.
+**Verified false** (probe, 2026-07-30): rendering the KKT fixture's frame 2
+with the first column's body masked collapses the column's itemize into the
+preceding paragraph — the distinct `column:0:list:0` flow node disappears
+and its list markers re-parent under `column:0:paragraph:0` with new IDs.
+Masking replaces `\begin{itemize}`/`\item` with spaces for the Beamer
+frontend, so any scope containing nested structure (lists, blocks,
+theorems, glue, TikZ — i.e. most real columns and bodies) changes topology
+under its own mask.
+
+Requirements:
+
+- Session span and structural recovery are independent for **every** scope
+  type. The mask may only ever cover a structure-free chunk around the
+  caret, and even that is not sufficient for edits that delete or cross
+  construct boundaries.
+- The robust model is a **session-baseline structural projection**: capture
+  the scope's container topology (flow nodes, stable IDs) when the session
+  opens and project it through the session's patches while input is
+  transiently invalid, rather than re-deriving topology from masked source.
+  An equivalent recovery mechanism preserving original container topology
+  is acceptable; silent re-derivation is not.
+- Tests must assert **topology and stable IDs** across masked/mid-edit
+  renders (paragraph/list/block node identity), not merely that the frame
+  still renders. The probe above is the seed regression.
+
+The user-facing invariant this work serves: **the canvas must never
+visibly restructure content the user is not editing, mid-keystroke.**
+If baseline topology projection proves harder than expected, the
+sanctioned plan B is to visually freeze the edited scope's render (show
+the stale layout with a live caret) until the source is structurally
+valid again — a deliberate degradation, decided here, not something an
+implementer should improvise.
+
+## Core prerequisites (Stage 0)
+
+Scope-wide sessions are not "a bigger buffer" over the existing machinery;
+four contracts must change first. Verified against the current code:
+
+1. **A core-owned Beamer edit index.** Deck hit regions are currently built
+   only from `editableTextSpans`, which exclude math, macro output,
+   generated content, graphics, and hidden material by construction. The
+   edit index replaces that with, per frame: scope inventory (id, kind,
+   buffer span), visual hit geometry for direct text *and* math, atomic
+   source ranges for commands and macro calls (the caret API currently
+   returns only offset + text/space/math kind — it must also return the
+   enclosing atomic range so click-on-macro-output can select the
+   invocation), paragraph id + document offsets for every hit, and explicit
+   hidden/read-only/generated policy per range. Object topology (below)
+   rides the same index.
+2. **Session shape.** `TextEditingSession` holds one `paragraphId`, one
+   rendered text, one hit region — one rendered paragraph. A scope spans
+   many rendered paragraphs (block → prose → list; a column with prose,
+   glue, list, TikZ). The session must separate: stable scope identity +
+   full buffer span; the active rendered paragraph under the caret;
+   canonical selection in document offsets; and zero-or-more per-paragraph
+   selection overlays (a cross-paragraph selection renders as multiple
+   overlay rect sets).
+3. **Minimal-diff patches.** The edit machine currently emits the entire
+   session buffer as the patch replacement on every input event
+   (`applySessionTextUpdate` → `replacement: nextText`). Fine for a
+   ten-character typo span; with scope buffers every keystroke becomes a
+   scope-sized replacement, defeating incremental CST parsing and making
+   the latency gate measure the wrong workload. Compute the minimal
+   prefix/suffix diff inside the buffer and dispatch only that.
+4. **Masking/recovery independence** per the previous section.
+
+## Implementation notes
+
+- **Canvas focus input**: a hidden textarea (IME/composition capture)
+  feeding the existing `beforeinput`-intercepting machine; the machine and
+  its `compositionRange` model are unchanged. Stage 2 only.
+- **Rendered caret-stop domain**: canvas-focus arrow motion needs an
+  ordered stop sequence over the scope (all runs in flow order, atoms as
+  single stops, math via `mathCaretEntries`). Stage 2 only.
+- The bar/popup is one component with a placement setting; `inline-typo`
+  mode (Enter closes, `rows=1`) is retired for deck sessions in favor of
+  multi-line source-key behavior.
+- Session lifecycle: click text opens; click background, Esc-ladder past
+  the top, or selecting another root closes. Patches keep flowing per
+  keystroke as today; undo grouping unchanged.
+- The per-keystroke deck compute path (prepared-document rebuild + full
+  frame re-layout) stays within the existing latency gate; the gate
+  (`profile-beamer-canvas-text-latency.spec.ts`) must keep running with
+  **actual full KKT body/column buffers**, not the current short spans.
+  Frame-level IR reuse across revisions remains the known optimization
+  (tracked in `design/beamer-editor.md` Phase B2.5).
+
+## Staging
+
+- **Stage 0 — editing infrastructure** (added after review): the Core
+  prerequisites above — Beamer edit index, session refactor (scope buffer +
+  active paragraph + document-offset selection + multi-paragraph overlays),
+  minimal-diff patching, mask/recovery independence for all scopes — plus
+  topology-preservation and latency tests using actual full KKT
+  body/column buffers. No UX change ships here; Stage 1's UX claims are
+  only honest once this exists.
+- **Stage 1 — scope-wide sessions, bar focus only** (decided 2026-07-30):
+  scope rule, whole-scope buffers, docked-bar + floating-popup placement
+  setting, source-key behavior throughout (no structural keys). The user
+  experience is today's proven TikZ interaction with a bigger buffer and a
+  docked placement; it fixes the fragmentation complaint outright.
+  Acceptance is split, in order: (a) direct text across a whole scope;
+  (b) click-into-math caret mapping; (c) atomic-render click-to-select —
+  clicking a macro's output, an embedded tikzpicture, or a graphic selects
+  that atom's full source span in the enclosing scope's bar (one rule, one
+  code path; not object selection, but no click is ever dead);
+  (d) preamble-backed title-page fields (requires rendering author/
+  institute/date as source-backed paragraphs first). Ship, gather usage.
+- **Stage 2 — canvas-focus mode**: hidden input, rendered-stop motion,
+  structural Enter/Backspace/Tab, focus indication set (blink/gray/ring/
+  dashed border), focus gestures.
+- **Stage 3 — object layer**: object selection state over the edit index's
+  topology, Esc ladder, deck edit actions (replacing the blanket
+  `APPLY_EDIT_ACTION` rejection), inspectors (block, column, image,
+  overlay, embedded tikz), graphics resize handles, column divider drag,
+  glue bands, tier-3 selection promotion, nested-TikZ compute-mode branch
+  for the breadcrumb. Can proceed partly in parallel with Stage 2.
+- **Later** (unchanged from `design/beamer-editor.md`): insertion templates
+  and ghost placeholders, drag-reorder in flow, formatting toolbar polish,
+  free-form overlay layer, in-place embedded figure editing.
+
+### Editing fixture corpus
+
+The nine rendering fixtures are a good rendering corpus but an insufficient
+editing corpus: across them there are columns, blocks, lists, TikZ
+pictures, and one title page, but no `\includegraphics`, `description`,
+nested lists, `\frametitle`/`\framesubtitle` command forms, or populated
+author/institute/date. Stage 0/1 should add editing-specific fixtures
+covering: those gaps, empty items, multiple overlay steps (`\alt`,
+`\temporal`, list `[<+->]`, `\pause`), macro calls with arguments, explicit
+text `\\`, `\vfill`, graphics with width/height/scale variants, and a
+fragile/verbatim frame (expected: frame fallback, no session).
+
+## Open questions
+
+- Focus-switch chord set: Cmd+E in / Esc out is the working assumption; is
+  F2 worth adding? Does double-click on text want a meaning (word select,
+  as today) distinct from focus switching (yes, presumably)?
+- Enter = blank line for paragraph splits: confirm this is the idiomatic
+  patch in dense no-blank-line bodies (KKT frame 3 style) or whether a
+  `\par`-free alternative is ever needed.
+- Tier-2 snapping catalog: exact list of constructs that snap (math,
+  command groups, macro calls, environments?) and whether snapping is
+  extend-only or can shrink a drag.
+- Glue band styling and whether hover should reveal glue targets before
+  caret traversal does.
+- When blocks-transparent meets very tall blocks, does the Esc ladder
+  (caret → item → list → block → column) feel too long in practice?

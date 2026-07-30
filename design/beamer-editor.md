@@ -1343,6 +1343,12 @@ fallback cards; existing TikZ editing remains unaffected.
 
 ### Phase B3: Editing
 
+The canvas editing UX is specified in `design/beamer-canvas-editing.md`
+(2026-07-30): scope-wide editing sessions (column / frame body / title),
+a two-surface focus model (canvas WYSIWYG keys vs docked-bar source keys),
+three-tier selection, and the object layer. Its Stage 1–3 sequencing
+refines the bullet below.
+
 - Canvas text editing over the frame block tree; ghost placeholders;
   formatting toolbar; inspector panes; overlay editing UI; column divider
   drag; insertion templates and slide-type recognition.
