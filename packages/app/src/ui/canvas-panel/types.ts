@@ -299,6 +299,19 @@ export type TextSelectionOverlayBox = {
   rotationDeg?: number;
 };
 
+/**
+ * One rendered paragraph inside a scope-wide editing session, in flow
+ * order: enough to route document offsets and pointer positions to the
+ * paragraph that renders them.
+ */
+export type ScopeParagraphRef = {
+  paragraphId: string;
+  /** Paragraph layout span in document coordinates. */
+  sourceSpan: Span;
+  /** Paragraph bounds in SVG/page coordinates. */
+  bounds: { x: number; y: number; width: number; height: number };
+};
+
 export type TextEditingSession = {
   sourceId: string;
   sceneTextId: string;
@@ -322,6 +335,8 @@ export type TextEditingSession = {
   popupAnchorBox?: SvgBounds;
   isForeachTemplateEdit: boolean;
   editMode: "default" | "inline-typo";
+  /** True when the buffer is a Beamer edit scope spanning many paragraphs. */
+  isScopeSession: boolean;
 };
 
 export type NodeAnchorOverlayState = {
@@ -350,6 +365,12 @@ export type EditableTextTarget = {
    * structural parsing; when absent the whole buffer is masked.
    */
   structuralMaskRanges?: readonly Span[];
+  /**
+   * Rendered paragraphs covered by the buffer, in flow order. Present on
+   * Beamer scope targets; hit-testing and selection overlays resolve
+   * against the paragraph containing the pointer or offset.
+   */
+  scopeParagraphs?: readonly ScopeParagraphRef[];
   /** Complete paragraph source used by report-driven hit testing. */
   layoutSourceSpan?: Span;
   /** Complete paragraph text used by report-driven hit testing. */

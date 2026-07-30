@@ -551,7 +551,7 @@ function sameMaskRanges(
   if (left === right) {
     return true;
   }
-  if (!left || !right || left.length !== right.length) {
+  if (!left || left.length !== right?.length) {
     return false;
   }
   return left.every((span, index) => sameSpan(span, right[index]));
@@ -672,7 +672,8 @@ export function reduceCanvasTextEdit(
             region: action.target.region,
             popupAnchorBox: action.target.popupAnchorBox,
             isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
-            editMode: action.target.editMode ?? "default"
+            editMode: action.target.editMode ?? "default",
+            isScopeSession: action.target.scopeParagraphs != null
           },
           selectionOverlay: null,
           dragSelection: null,
@@ -712,7 +713,8 @@ export function reduceCanvasTextEdit(
             region: action.target.region,
             popupAnchorBox: action.target.popupAnchorBox,
             isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
-            editMode: action.target.editMode ?? "default"
+            editMode: action.target.editMode ?? "default",
+            isScopeSession: action.target.scopeParagraphs != null
           },
           selectionOverlay: null,
           dragSelection: {

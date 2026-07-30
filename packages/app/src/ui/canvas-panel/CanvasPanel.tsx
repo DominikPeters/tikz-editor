@@ -28,6 +28,7 @@ makeForeachTemplateTargetId,
 resolvePropertyTargetFromParseResult
 } from "@tikz-editor/core/edit/property-target";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
+import { resolveBeamerEditScopeAt } from "@tikz-editor/core/beamer/index";
 import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import type {
 EditHandlePositioningContext,
@@ -64,6 +65,7 @@ clamp,
 viewportToWorldPoint,
 worldToSvgPoint
 } from "./geometry";
+import type { Span } from "@tikz-editor/core/ast/types";
 import type { HitRegion } from "./hit-regions";
 import {
 pickClosestSourceId
@@ -113,6 +115,7 @@ PathToolDraft,
 PendingAddedSelection,
 PendingBezier,
 PendingTouchViewport,
+ScopeParagraphRef,
 SnapDebugLogInput,
 SourceBoundsMap,
 StateSetter
@@ -1257,48 +1260,94 @@ export const CanvasPanel = memo(function CanvasPanel({
     ROTATE_HANDLE_OFFSET_PX
   });
 
-  const deckEditableTextById = useMemo(() => {
-    const result = new Map<string, {
-      paragraph: NonNullable<typeof deckActiveFrame>["layout"]["paragraphs"][number];
-      editable: NonNullable<typeof deckActiveFrame>["layout"]["paragraphs"][number]["editableTextSpans"][number];
-    }>();
-    for (const paragraph of deckActiveFrame?.layout.paragraphs ?? []) {
+  // One editing session per Beamer edit scope: hit regions and targets are
+  // grouped by the scope owning each directly-authored run, per
+  // design/beamer-canvas-editing.md.
+  const deckEditing = useMemo(() => {
+    type DeckParagraph = NonNullable<typeof deckActiveFrame>["layout"]["paragraphs"][number];
+    type DeckScopeEntry = {
+      scope: NonNullable<typeof deckActiveFrame>["layout"]["editScopes"][number];
+      scopeParagraphs: ScopeParagraphRef[];
+      maskRanges: Span[];
+      anchorBounds: SvgBounds | null;
+    };
+    const scopesById = new Map<string, DeckScopeEntry>();
+    const paragraphById = new Map<string, DeckParagraph>();
+    const regions: HitRegion[] = [];
+    const layout = deckActiveFrame?.layout;
+    if (!layout) {
+      return { scopesById, paragraphById, regions };
+    }
+    const editScopes = layout.editScopes ?? [];
+    for (const scope of editScopes) {
+      scopesById.set(scope.id, {
+        scope,
+        scopeParagraphs: [],
+        maskRanges: [],
+        anchorBounds: null
+      });
+    }
+    for (const paragraph of layout.paragraphs) {
+      paragraphById.set(paragraph.paragraphId, paragraph);
+      const scope = resolveBeamerEditScopeAt(editScopes, paragraph.sourceSpan.from);
+      if (!scope || paragraph.sourceSpan.to > scope.span.to) {
+        continue;
+      }
+      const entry = scopesById.get(scope.id);
+      if (!entry) {
+        continue;
+      }
+      entry.scopeParagraphs.push({
+        paragraphId: paragraph.paragraphId,
+        sourceSpan: paragraph.sourceSpan,
+        bounds: paragraph.bounds
+      });
+      entry.anchorBounds = entry.anchorBounds
+        ? svgBounds(
+            pt(Math.min(entry.anchorBounds.minX, paragraph.bounds.x)),
+            pt(Math.min(entry.anchorBounds.minY, paragraph.bounds.y)),
+            pt(Math.max(entry.anchorBounds.maxX, paragraph.bounds.x + paragraph.bounds.width)),
+            pt(Math.max(entry.anchorBounds.maxY, paragraph.bounds.y + paragraph.bounds.height))
+          )
+        : svgBounds(
+            pt(paragraph.bounds.x),
+            pt(paragraph.bounds.y),
+            pt(paragraph.bounds.x + paragraph.bounds.width),
+            pt(paragraph.bounds.y + paragraph.bounds.height)
+          );
       for (const editable of paragraph.editableTextSpans) {
-        result.set(editable.id, { paragraph, editable });
+        entry.maskRanges.push(editable.span);
+        editable.hitBounds.forEach((bounds, index) => {
+          regions.push({
+            shape: "rect",
+            key: `deck-text:${editable.id}:${index}`,
+            sourceId: scope.id,
+            targetId: scope.id,
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            cx: bounds.x + bounds.width / 2,
+            cy: bounds.y + bounds.height / 2,
+            rotation: 0,
+            interactionMode: "text",
+            pointerMode: "fill",
+            sceneTextKey: paragraph.paragraphId,
+            contentWidth: bounds.width,
+            contentHeight: bounds.height
+          });
+        });
       }
     }
-    return result;
+    return { scopesById, paragraphById, regions };
   }, [deckActiveFrame]);
 
   const hitRegions = useMemo<HitRegion[]>(() => {
     if (!deckActiveFrame) {
       return sceneHitRegions;
     }
-    const deckRegions: HitRegion[] = [];
-    for (const { paragraph, editable } of deckEditableTextById.values()) {
-      editable.hitBounds.forEach((bounds, index) => {
-        deckRegions.push({
-          shape: "rect",
-          key: `deck-text:${editable.id}:${index}`,
-          sourceId: editable.id,
-          targetId: editable.id,
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height,
-          cx: bounds.x + bounds.width / 2,
-          cy: bounds.y + bounds.height / 2,
-          rotation: 0,
-          interactionMode: "text",
-          pointerMode: "fill",
-          sceneTextKey: paragraph.paragraphId,
-          contentWidth: bounds.width,
-          contentHeight: bounds.height
-        });
-      });
-    }
-    return [...sceneHitRegions, ...deckRegions];
-  }, [deckActiveFrame, deckEditableTextById, sceneHitRegions]);
+    return [...sceneHitRegions, ...deckEditing.regions];
+  }, [deckActiveFrame, deckEditing, sceneHitRegions]);
 
   useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
@@ -1674,15 +1723,28 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (region?.shape !== "rect" || region.interactionMode === "move") {
         return null;
       }
-      const deckText = deckEditableTextById.get(targetId);
-      if (deckText) {
-        const { paragraph, editable } = deckText;
-        const text = source.slice(editable.span.from, editable.span.to);
+      const deckScopeEntry = deckEditing.scopesById.get(targetId);
+      if (deckScopeEntry) {
+        const { scope } = deckScopeEntry;
+        const text = source.slice(scope.span.from, scope.span.to);
+        if (!text) {
+          return null;
+        }
+        const paragraph =
+          (region.sceneTextKey
+            ? deckEditing.paragraphById.get(region.sceneTextKey)
+            : undefined) ??
+          (deckScopeEntry.scopeParagraphs[0]
+            ? deckEditing.paragraphById.get(deckScopeEntry.scopeParagraphs[0].paragraphId)
+            : undefined);
+        if (!paragraph) {
+          return null;
+        }
         const layoutSourceText = source.slice(
           paragraph.sourceSpan.from,
           paragraph.sourceSpan.to
         );
-        if (!text || !layoutSourceText) {
+        if (!layoutSourceText) {
           return null;
         }
         const firstTextSegment = paragraph.report.lines
@@ -1699,35 +1761,21 @@ export const CanvasPanel = memo(function CanvasPanel({
               : paragraph.report.alignment === "justified"
                 ? "justify"
                 : "left";
-        const editableBounds = editable.hitBounds.reduce<SvgBounds | null>(
-          (bounds, hitBounds) =>
-            bounds
-              ? svgBounds(
-                  pt(Math.min(bounds.minX, hitBounds.x)),
-                  pt(Math.min(bounds.minY, hitBounds.y)),
-                  pt(Math.max(bounds.maxX, hitBounds.x + hitBounds.width)),
-                  pt(Math.max(bounds.maxY, hitBounds.y + hitBounds.height))
-                )
-              : svgBounds(
-                  pt(hitBounds.x),
-                  pt(hitBounds.y),
-                  pt(hitBounds.x + hitBounds.width),
-                  pt(hitBounds.y + hitBounds.height)
-                ),
-          null
-        );
         return {
-          sourceId: editable.id,
+          sourceId: scope.id,
           sceneTextId: paragraph.paragraphId,
-          sourceSpan: editable.span,
+          sourceSpan: scope.span,
           text,
+          structuralMaskRanges: deckScopeEntry.maskRanges,
+          scopeParagraphs: deckScopeEntry.scopeParagraphs,
           layoutSourceSpan: paragraph.sourceSpan,
           layoutSourceText,
           renderSourceText: layoutSourceText,
           usesTex: true,
           paragraphId: paragraph.paragraphId,
-          layoutKind:
-            paragraph.report.lines.length > 1 ? "wrapped" : "single-line",
+          // Scope buffers always resolve carets through paragraph geometry;
+          // the single-line estimate path assumes plain text.
+          layoutKind: "wrapped",
           style: {
             fontSize: Number(firstTextSegment?.fontAtPt ?? 11),
             fontStyle: "normal",
@@ -1737,8 +1785,8 @@ export const CanvasPanel = memo(function CanvasPanel({
           },
           totalWidth: paragraph.bounds.width,
           region,
-          editMode: "inline-typo",
-          popupAnchorBox: editableBounds ?? undefined
+          editMode: "default",
+          popupAnchorBox: deckScopeEntry.anchorBounds ?? undefined
         };
       }
       const sceneText = sceneTextByRegionKey.get(region.sceneTextKey ?? region.key);
@@ -1831,7 +1879,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             )
       };
     },
-    [deckEditableTextById, sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
+    [deckEditing, sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
   );
 
   const editableTextRegionKeys = useMemo(() => {

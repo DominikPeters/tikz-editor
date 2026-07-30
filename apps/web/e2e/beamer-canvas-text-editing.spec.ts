@@ -31,6 +31,20 @@ Later body
 \end{frame}
 \end{document}`;
 
+const BODY_SCOPE_TEXT = String.raw`
+Body typo.
+\begin{itemize}
+\item List typo
+\end{itemize}
+\begin{block}{Block typo}
+Block body typo
+\end{block}
+\only<2->{Hidden overlay}
+\[
+  x + y
+\]
+`;
+
 test.beforeEach(async ({ page }) => {
   await resetStorageBeforeNavigation(page);
   await gotoApp(page);
@@ -43,7 +57,12 @@ function deckTextRegions(page: Page): Locator {
   );
 }
 
-async function openAuthoredSpan(page: Page, expectedText: string): Promise<Locator> {
+/**
+ * Clicks deck text regions until a scope session whose buffer contains
+ * `expectedNeedle` opens, and returns the session textarea. One session per
+ * scope: the buffer is the scope's full source span, not a fragment.
+ */
+async function openScopeContaining(page: Page, expectedNeedle: string): Promise<Locator> {
   await expect.poll(async () => deckTextRegions(page).count(), {
     timeout: 30_000
   }).toBeGreaterThan(0);
@@ -63,77 +82,33 @@ async function openAuthoredSpan(page: Page, expectedText: string): Promise<Locat
     }
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     const textarea = page.getByTestId("canvas-text-edit-textarea");
-    if (await textarea.count() > 0 && await textarea.inputValue() === expectedText) {
+    if (await textarea.count() > 0 && (await textarea.inputValue()).includes(expectedNeedle)) {
       await expect(textarea).toBeFocused();
       return textarea;
     }
     await page.keyboard.press("Escape");
   }
-  throw new Error(`No editable Beamer span contained exactly ${JSON.stringify(expectedText)}.`);
+  throw new Error(`No Beamer edit scope buffer contained ${JSON.stringify(expectedNeedle)}.`);
 }
 
-async function dispatchPaste(page: Page, text: string): Promise<void> {
-  await page.getByTestId("canvas-text-edit-textarea").evaluate((element, data) => {
-    const textarea = element as HTMLTextAreaElement;
-    textarea.focus();
-    const event = new InputEvent("beforeinput", {
+async function replaceRange(
+  page: Page,
+  textarea: Locator,
+  start: number,
+  end: number,
+  data: string
+): Promise<void> {
+  await textarea.evaluate((element, args) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(args.start, args.end);
+    input.dispatchEvent(new InputEvent("beforeinput", {
       bubbles: true,
       cancelable: true,
-      inputType: "insertFromPaste",
-      data
-    });
-    textarea.dispatchEvent(event);
-  }, text);
-}
-
-async function expectCaretAndPopupToTrackEditedSpan(
-  page: Page,
-  textarea: Locator
-): Promise<void> {
-  const popup = page.getByTestId("canvas-text-edit-popup");
-  const targetId = await popup.getAttribute("data-text-edit-target-id");
-  if (!targetId) {
-    throw new Error("Active text editor did not publish its target ID.");
-  }
-  const regions = page.locator(
-    `[data-hit-region-target-id="${targetId}"][data-hit-region-interaction-mode="text"]`
-  );
-  const regionBoxes = (await Promise.all(
-    Array.from({ length: await regions.count() }, (_, index) =>
-      regions.nth(index).boundingBox()
-    )
-  )).filter((box): box is NonNullable<typeof box> => box != null);
-  if (regionBoxes.length === 0) {
-    throw new Error(`No visible hit geometry for active target ${targetId}.`);
-  }
-  const editedBounds = {
-    left: Math.min(...regionBoxes.map((box) => box.x)),
-    right: Math.max(...regionBoxes.map((box) => box.x + box.width)),
-    top: Math.min(...regionBoxes.map((box) => box.y)),
-    bottom: Math.max(...regionBoxes.map((box) => box.y + box.height))
-  };
-
-  await expect.poll(async () => {
-    const popupBox = await popup.boundingBox();
-    return popupBox
-      ? popupBox.x + popupBox.width / 2
-      : Number.NaN;
-  }).toBeCloseTo((editedBounds.left + editedBounds.right) / 2, 0);
-
-  await expect.poll(async () => (await textarea.boundingBox())?.width ?? Number.NaN)
-    .toBeGreaterThanOrEqual(editedBounds.right - editedBounds.left - 1);
-
-  await textarea.press("Home");
-  await expect.poll(async () => {
-    const caretBox = await page.getByTestId("canvas-text-selection-caret").boundingBox();
-    return caretBox ? caretBox.x + caretBox.width / 2 : Number.NaN;
-  }).toBeCloseTo(editedBounds.left, 0);
-
-  await textarea.press("End");
-  await expect.poll(async () => {
-    const caretBox = await page.getByTestId("canvas-text-selection-caret").boundingBox();
-    return caretBox ? caretBox.x + caretBox.width / 2 : Number.NaN;
-  }).toBeCloseTo(editedBounds.right, 0);
+      inputType: "insertReplacementText",
+      data: args.data
+    }));
+  }, { start, end, data });
 }
 
 async function clickRenderedSourceOffset(page: Page, sourceOffset: number): Promise<void> {
@@ -151,71 +126,104 @@ async function clickRenderedSourceOffset(page: Page, sourceOffset: number): Prom
   throw new Error(`No visible rendered source geometry starts at ${sourceOffset}.`);
 }
 
-test("edits authored frame-title and list text with live source sync and undo/redo", async ({ page }) => {
-  let textarea = await openAuthoredSpan(page, "Titel typo ");
-  await expectCaretAndPopupToTrackEditedSpan(page, textarea);
-  await textarea.evaluate((element) => {
-    const input = element as HTMLTextAreaElement;
-    input.focus();
-    input.setSelectionRange(3, 5);
-    input.dispatchEvent(new InputEvent("beforeinput", {
-      bubbles: true,
-      cancelable: true,
-      inputType: "insertReplacementText",
-      data: "le"
-    }));
-  });
+test("opens scope-wide sessions and edits title and list text with undo/redo", async ({ page }) => {
+  const titleTextarea = await openScopeContaining(page, "Titel typo");
+  // The frame-title scope buffer is the whole title argument, including
+  // content that is not directly editable (the macro invocation).
+  await expect(titleTextarea).toHaveValue(String.raw`Titel typo \generatedword`);
 
+  // Caret tracking: buffer offset 0 renders a canvas caret at the title's
+  // left edge.
+  const titleRegions = page.locator(
+    '[data-hit-region-target-id$=":scope:title"][data-hit-region-interaction-mode="text"]'
+  );
+  const titleBoxes = (await Promise.all(
+    Array.from({ length: await titleRegions.count() }, (_, index) =>
+      titleRegions.nth(index).boundingBox()
+    )
+  )).filter((box): box is NonNullable<typeof box> => box != null);
+  const titleLeft = Math.min(...titleBoxes.map((box) => box.x));
+  await titleTextarea.press("Home");
+  await expect.poll(async () => {
+    const caretBox = await page.getByTestId("canvas-text-selection-caret").boundingBox();
+    return caretBox ? caretBox.x + caretBox.width / 2 : Number.NaN;
+  }).toBeCloseTo(titleLeft, 0);
+
+  await replaceRange(page, titleTextarea, 3, 5, "le");
   const titleEdited = SOURCE.replace("Titel typo", "Title typo");
   await expect.poll(() => readStoreSource(page)).toBe(titleEdited);
   await expect.poll(() => readCodeMirrorText(page)).toBe(titleEdited);
-  await expect(textarea).toHaveValue("Title typo ");
+  await expect(titleTextarea).toHaveValue(String.raw`Title typo \generatedword`);
   await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(1);
 
-  await textarea.press(`${PRIMARY_MOD}+z`);
+  await titleTextarea.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
-  await textarea.press(`${PRIMARY_MOD}+Shift+z`);
+  await titleTextarea.press(`${PRIMARY_MOD}+Shift+z`);
   await expect.poll(() => readStoreSource(page)).toBe(titleEdited);
 
   await page.keyboard.press("Escape");
-  textarea = await openAuthoredSpan(page, "List typo");
-  await textarea.selectText();
-  await textarea.type("List fixed");
+  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+
+  // The whole frame body is one scope: list items, blocks, and structural
+  // source share a single session buffer.
+  const bodyTextarea = await openScopeContaining(page, "List typo");
+  await expect(bodyTextarea).toHaveValue(BODY_SCOPE_TEXT);
+  const bufferText = await bodyTextarea.inputValue();
+  const listStart = bufferText.indexOf("List typo");
+  await replaceRange(page, bodyTextarea, listStart, listStart + "List typo".length, "List fixed");
   const finalSource = titleEdited.replace("List typo", "List fixed");
   await expect.poll(() => readStoreSource(page)).toBe(finalSource);
   await expect.poll(() => readCodeMirrorText(page)).toBe(finalSource);
-  expect(finalSource.replace("Title typo", "Titel typo").replace("List fixed", "List typo"))
-    .toBe(SOURCE);
 });
 
-test("rejects structural input and exposes only visible directly-authored spans", async ({ page }) => {
-  await openAuthoredSpan(page, "Titel typo ");
-  await page.keyboard.press("Escape");
-  await openAuthoredSpan(page, "List typo");
-  await page.keyboard.press("Escape");
-  await openAuthoredSpan(page, "Block typo");
-  await page.keyboard.press("Escape");
-  await openAuthoredSpan(page, "Block body typo");
+test("keeps structure stable through transiently invalid source and supports structural edits", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const bufferText = await textarea.inputValue();
+
+  const readParagraphTopology = () =>
+    page.locator('[data-testid="canvas-svg-layer"] g[data-paragraph-id]').evaluateAll(
+      (elements) => elements.map((element) => element.getAttribute("data-paragraph-id"))
+    );
+  const stableTopology = await readParagraphTopology();
+  expect(stableTopology.length).toBeGreaterThan(2);
+
+  // Type a lone backslash inside the "Body typo." run: the source becomes
+  // transiently invalid TeX, but the structural mask must keep the rest of
+  // the frame from restructuring mid-keystroke — same flow nodes, same ids.
+  const caret = bufferText.indexOf("Body ty") + 2;
+  await textarea.evaluate((element, offset) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(offset, offset);
+  }, caret);
+  await textarea.press("\\");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Bo\dy typo.`);
+  await expect.poll(readParagraphTopology).toEqual(stableTopology);
+  await textarea.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
+
+  // Enter is a source newline in a scope session, not a session close.
+  const afterBody = bufferText.indexOf("Body typo.") + "Body typo.".length;
+  await textarea.evaluate((element, offset) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(offset, offset);
+  }, afterBody);
+  await textarea.press("Enter");
+  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(1);
+  await expect.poll(() => readStoreSource(page)).toBe(
+    SOURCE.replace("Body typo.\n", "Body typo.\n\n")
+  );
+  await textarea.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
   await page.keyboard.press("Escape");
 
+  // Macro output and hidden overlay content stay outside the hit regions
+  // until atomic-render click-to-select ships.
   const generatedInvocation = SOURCE.indexOf(
     String.raw`\generatedword`,
     SOURCE.indexOf(String.raw`\begin{frame}`)
   );
   await clickRenderedSourceOffset(page, generatedInvocation);
   await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
-  await expect(
-    page.locator('[data-testid="canvas-svg-layer"]')
-  ).not.toContainText("Hidden overlay");
-
-  const textarea = await openAuthoredSpan(page, "Body typo.");
-  await expectCaretAndPopupToTrackEditedSpan(page, textarea);
-  await textarea.press("End");
-  await dispatchPaste(page, "two\nlines");
-  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
-  await expect(textarea).toHaveValue("Body typo.");
-
-  await textarea.press("Enter");
-  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
-  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
 });

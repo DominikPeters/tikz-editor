@@ -549,7 +549,10 @@ export function useCanvasTextEditSession(
     }
   }, [textEditingSession]);
 
-  const resolveRenderedMathTextElement = useCallback((target: EditableTextTarget): SVGGraphicsElement | null => {
+  const resolveRenderedMathTextElement = useCallback((
+    target: EditableTextTarget,
+    paragraphIdOverride?: string
+  ): SVGGraphicsElement | null => {
     const host = svgLayerHostRef.current;
     if (!host) {
       return null;
@@ -559,6 +562,14 @@ export function useCanvasTextEditSession(
         'svg[data-text-renderer="tex"], g[data-paragraph-id]'
       )
     );
+    if (paragraphIdOverride) {
+      for (const candidate of candidates) {
+        if (candidate.getAttribute("data-paragraph-id") === paragraphIdOverride) {
+          return candidate;
+        }
+      }
+      return null;
+    }
     for (const candidate of candidates) {
       if (candidate.getAttribute("data-scene-text-id") === target.sceneTextId) {
         return candidate;
@@ -577,19 +588,92 @@ export function useCanvasTextEditSession(
     return null;
   }, [svgLayerHostRef]);
 
+  const resolveScopeParagraphAtClient = useCallback(
+    (target: EditableTextTarget, clientPoint: ClientPoint) => {
+      const paragraphs = target.scopeParagraphs;
+      if (!paragraphs || paragraphs.length === 0) {
+        return null;
+      }
+      const svgPoint = clientToSvgPoint(clientPoint, interactionSvgRef.current) ?? (
+        svgResult
+          ? viewportToSvgPoint(
+              viewportPointFromClient(clientPoint, viewportRef.current),
+              canvasTransform,
+              svgResult.viewBox
+            )
+          : null
+      );
+      if (!svgPoint) {
+        return paragraphs.find((paragraph) => paragraph.paragraphId === target.paragraphId)
+          ?? paragraphs[0];
+      }
+      const x = Number(svgPoint.x);
+      const y = Number(svgPoint.y);
+      let best = paragraphs[0];
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const paragraph of paragraphs) {
+        const { bounds } = paragraph;
+        const dx = x < bounds.x ? bounds.x - x : Math.max(0, x - (bounds.x + bounds.width));
+        const dy = y < bounds.y ? bounds.y - y : Math.max(0, y - (bounds.y + bounds.height));
+        if (dx === 0 && dy === 0) {
+          return paragraph;
+        }
+        // Prefer the paragraph whose vertical band contains the pointer:
+        // clicking past a line's end should target that line's paragraph.
+        const distance = dy * dy * 4096 + dx * dx;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = paragraph;
+        }
+      }
+      return best;
+    },
+    [canvasTransform, interactionSvgRef, svgResult, viewportRef]
+  );
+
+  const resolveParagraphHitView = useCallback(
+    (target: EditableTextTarget, clientPoint: ClientPoint): {
+      paragraphId: string;
+      sourceText: string;
+      sourceStartOffset: number;
+      containerElement: SVGGraphicsElement | null;
+    } | null => {
+      const scopeParagraph = resolveScopeParagraphAtClient(target, clientPoint);
+      if (scopeParagraph) {
+        return {
+          paragraphId: scopeParagraph.paragraphId,
+          sourceText: source.slice(scopeParagraph.sourceSpan.from, scopeParagraph.sourceSpan.to),
+          sourceStartOffset: scopeParagraph.sourceSpan.from,
+          containerElement: resolveRenderedMathTextElement(target, scopeParagraph.paragraphId)
+        };
+      }
+      if (!target.paragraphId) {
+        return null;
+      }
+      return {
+        paragraphId: target.paragraphId,
+        sourceText: target.layoutSourceText ?? target.text,
+        sourceStartOffset: target.layoutSourceSpan?.from ?? target.sourceSpan.from,
+        containerElement: resolveRenderedMathTextElement(target)
+      };
+    },
+    [resolveRenderedMathTextElement, resolveScopeParagraphAtClient, source]
+  );
+
   const resolveTexVListSourceHitFromClient = useCallback(
     (
       target: EditableTextTarget,
       clientPoint: ClientPoint,
       layoutContext: unknown,
-      containerElement: SVGGraphicsElement
+      containerElement: SVGGraphicsElement,
+      paragraphId: string | null
     ): VListSourceHit | null => {
-      if (!target.paragraphId || !(target.usesTex && target.layoutKind !== "single-line")) {
+      if (!paragraphId || !(target.usesTex && target.layoutKind !== "single-line")) {
         return null;
       }
       const snapshot = getKnuthPlassVListGeometrySnapshot({
         layoutContext,
-        paragraphId: target.paragraphId,
+        paragraphId,
         containerElement
       });
       return getKnuthPlassVListSourceHitFromSnapshot({ snapshot, clientPoint });
@@ -603,13 +687,13 @@ export function useCanvasTextEditSession(
         return null;
       }
       const layoutContext = textLayoutContext;
-      const containerElement = resolveRenderedMathTextElement(target);
+      const view = resolveParagraphHitView(target, clientPoint);
       const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
-      if (!target.paragraphId || !layoutContext || !containerElement) {
+      if (!view || !layoutContext || !view.containerElement) {
         if (requiresParagraphGeometry) {
           console.error("[canvas-text-edit] Missing paragraph geometry for multiline TeX hit-testing.", {
             sourceId: target.sourceId,
-            paragraphId: target.paragraphId,
+            paragraphId: view?.paragraphId ?? target.paragraphId,
             layoutKind: target.layoutKind
           });
           return null;
@@ -624,12 +708,11 @@ export function useCanvasTextEditSession(
         );
         return { offset, selectionRange: null };
       }
+      const containerElement = view.containerElement;
       const result = await getKnuthPlassCaretFromPoint(layoutContext, {
-        paragraphId: target.paragraphId,
-        sourceText: target.layoutSourceText ?? target.text,
-        sourceTextStartOffset: documentSourceOffset(
-          target.layoutSourceSpan?.from ?? target.sourceSpan.from
-        ),
+        paragraphId: view.paragraphId,
+        sourceText: view.sourceText,
+        sourceTextStartOffset: documentSourceOffset(view.sourceStartOffset),
         sourceCoordinateSpace: "document",
         containerElement,
         clientPoint
@@ -641,7 +724,13 @@ export function useCanvasTextEditSession(
         };
       }
       console.error("[canvas-text-edit] Paragraph source hit failed.", result.error);
-      const vlistHit = resolveTexVListSourceHitFromClient(target, clientPoint, layoutContext, containerElement);
+      const vlistHit = resolveTexVListSourceHitFromClient(
+        target,
+        clientPoint,
+        layoutContext,
+        containerElement,
+        view.paragraphId
+      );
       if (!vlistHit) {
         return null;
       }
@@ -654,7 +743,7 @@ export function useCanvasTextEditSession(
         ),
       };
     },
-    [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
+    [canvasTransform, interactionSvgRef, resolveParagraphHitView, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
   );
 
   const resolveTextLineRangeFromClient = useCallback(
@@ -663,15 +752,14 @@ export function useCanvasTextEditSession(
         return null;
       }
       const layoutContext = textLayoutContext;
-      const containerElement = resolveRenderedMathTextElement(target);
+      const view = resolveParagraphHitView(target, clientPoint);
       const requiresParagraphGeometry = target.usesTex && target.layoutKind !== "single-line";
-      if (target.paragraphId && layoutContext && containerElement) {
+      if (view?.containerElement && layoutContext) {
+        const containerElement = view.containerElement;
         const result = await getKnuthPlassLineRangeFromPoint(layoutContext, {
-          paragraphId: target.paragraphId,
-          sourceText: target.layoutSourceText ?? target.text,
-          sourceTextStartOffset: documentSourceOffset(
-            target.layoutSourceSpan?.from ?? target.sourceSpan.from
-          ),
+          paragraphId: view.paragraphId,
+          sourceText: view.sourceText,
+          sourceTextStartOffset: documentSourceOffset(view.sourceStartOffset),
           sourceCoordinateSpace: "document",
           containerElement,
           clientPoint
@@ -683,7 +771,13 @@ export function useCanvasTextEditSession(
           }, target.text.length);
         }
         const vlistLineRange = textLineRangeFromVListSourceHit(
-          resolveTexVListSourceHitFromClient(target, clientPoint, layoutContext, containerElement),
+          resolveTexVListSourceHitFromClient(
+            target,
+            clientPoint,
+            layoutContext,
+            containerElement,
+            view.paragraphId
+          ),
           (offset) => documentOffsetToTextarea(documentSourceOffset(offset), target.sourceSpan),
           target.text.length
         );
@@ -694,7 +788,7 @@ export function useCanvasTextEditSession(
       if (requiresParagraphGeometry) {
         console.error("[canvas-text-edit] Missing paragraph geometry for multiline TeX line-range resolution.", {
           sourceId: target.sourceId,
-          paragraphId: target.paragraphId,
+          paragraphId: view?.paragraphId ?? target.paragraphId,
           layoutKind: target.layoutKind
         });
         return null;
@@ -708,7 +802,7 @@ export function useCanvasTextEditSession(
         canvasTransform
       );
     },
-    [canvasTransform, interactionSvgRef, resolveRenderedMathTextElement, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
+    [canvasTransform, interactionSvgRef, resolveParagraphHitView, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
   );
 
   const startTextEditingSession = useCallback(
@@ -1244,7 +1338,8 @@ export function useCanvasTextEditSession(
     const centerX = (leftEdge + rightEdge) / 2;
     const nodeWidthPx = rightEdge - leftEdge;
     const editedContentWidthSvg =
-      textEditingSession.editMode === "inline-typo" && popupAnchorBox
+      (textEditingSession.editMode === "inline-typo" || textEditingSession.isScopeSession) &&
+      popupAnchorBox
         ? popupAnchorBox.maxX - popupAnchorBox.minX
         : contentBox.width;
     const editorTextWidthPx =

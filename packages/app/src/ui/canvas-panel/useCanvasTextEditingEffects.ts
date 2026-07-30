@@ -24,7 +24,10 @@ export type UseCanvasTextEditingEffectsArgs = {
   dispatchCanvasTextEditAction: (action: CanvasTextEditAction) => void;
   selectedElementIds: ReadonlySet<string>;
   resolveEditableTextTargetById: (sourceId: string, sceneTextId?: string) => EditableTextTarget | null;
-  resolveRenderedMathTextElement: (target: EditableTextTarget) => SVGGraphicsElement | null;
+  resolveRenderedMathTextElement: (
+    target: EditableTextTarget,
+    paragraphIdOverride?: string
+  ) => SVGGraphicsElement | null;
   viewportRef: RefObject<HTMLDivElement | null>;
   pendingAdornmentTextEditTargetId: string | null;
   snapshot: CanvasSnapshot;
@@ -402,6 +405,129 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
       };
 
       try {
+        // Scope sessions span many rendered paragraphs: the caret resolves
+        // against the paragraph containing the offset, and a range
+        // selection renders one rect set per intersected paragraph.
+        const scopeParagraphs = target.scopeParagraphs;
+        if (scopeParagraphs && scopeParagraphs.length > 0) {
+          if (!layoutContext) {
+            pushOverlay(null);
+            return;
+          }
+          if (documentStart === documentEnd) {
+            const paragraph = scopeParagraphs.find(
+              (candidate) =>
+                documentStart >= candidate.sourceSpan.from &&
+                documentStart <= candidate.sourceSpan.to
+            );
+            const paragraphContainer = paragraph
+              ? resolveRenderedMathTextElement(target, paragraph.paragraphId)
+              : null;
+            if (!paragraph || !paragraphContainer) {
+              pushOverlay(null);
+              return;
+            }
+            const sourceText = source.slice(
+              paragraph.sourceSpan.from,
+              paragraph.sourceSpan.to
+            );
+            const point = await getKnuthPlassPointFromOffset(layoutContext, {
+              paragraphId: paragraph.paragraphId,
+              sourceText,
+              sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
+              sourceCoordinateSpace: "document",
+              containerElement: paragraphContainer,
+              offset: documentStart
+            });
+            if (requestRef.cancelled) {
+              return;
+            }
+            if (!point.ok || point.clientPoint == null) {
+              pushOverlay(null);
+              return;
+            }
+            const height =
+              (await estimateCaretHeight(
+                layoutContext,
+                paragraph.paragraphId,
+                sourceText,
+                documentSourceOffset(paragraph.sourceSpan.from),
+                paragraphContainer,
+                point.offset ?? documentStart
+              )) ?? Math.max(1, target.region.height);
+            if (requestRef.cancelled) {
+              return;
+            }
+            pushOverlay({
+              sourceId: target.sourceId,
+              selectionStart: boundedStart,
+              selectionEnd: boundedEnd,
+              caret: {
+                bounds: viewportBounds(
+                  px(point.clientPoint.x - viewportRect.left),
+                  px(point.clientPoint.y - viewportRect.top - height / 2),
+                  px(point.clientPoint.x - viewportRect.left),
+                  px(point.clientPoint.y - viewportRect.top + height / 2)
+                ),
+                center: clientToViewport(point.clientPoint, viewportRect),
+                rotationDeg:
+                  typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg)
+                    ? point.rotationDeg
+                    : undefined
+              },
+              rects: []
+            });
+            return;
+          }
+
+          const rects: TextSelectionOverlayBox[] = [];
+          for (const paragraph of scopeParagraphs) {
+            const startOffset = Math.max(documentStart, paragraph.sourceSpan.from);
+            const endOffset = Math.min(documentEnd, paragraph.sourceSpan.to);
+            if (endOffset <= startOffset) {
+              continue;
+            }
+            const paragraphContainer = resolveRenderedMathTextElement(
+              target,
+              paragraph.paragraphId
+            );
+            if (!paragraphContainer) {
+              continue;
+            }
+            const paragraphRects = await getKnuthPlassSelectionRects(layoutContext, {
+              paragraphId: paragraph.paragraphId,
+              sourceText: source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to),
+              sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
+              sourceCoordinateSpace: "document",
+              containerElement: paragraphContainer,
+              startOffset: documentSourceOffset(startOffset),
+              endOffset: documentSourceOffset(endOffset)
+            });
+            if (requestRef.cancelled) {
+              return;
+            }
+            if (paragraphRects.ok) {
+              rects.push(...paragraphRects.rects.map((rect) => ({
+                bounds: clientBoundsToViewport(rect.bounds, viewportRect),
+                center: clientToViewport(rect.center, viewportRect),
+                rotationDeg: rect.rotationDeg
+              })));
+            }
+          }
+          pushOverlay(
+            rects.length > 0
+              ? {
+                  sourceId: target.sourceId,
+                  selectionStart: boundedStart,
+                  selectionEnd: boundedEnd,
+                  caret: null,
+                  rects
+                }
+              : null
+          );
+          return;
+        }
+
         if (!target.paragraphId || !layoutContext || !containerElement) {
           setRegionFallbackOverlay();
           return;
