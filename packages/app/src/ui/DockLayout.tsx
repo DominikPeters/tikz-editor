@@ -8,6 +8,7 @@ import { SourcePanel } from "./source-panel/SourcePanel";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import { FigureNavigator } from "./FigureNavigator";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
+import { DeckInspectorPanel } from "./inspector-panel/DeckInspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { StylesPanel } from "./StylesPanel";
 import { AssistantPanel } from "./AssistantPanel";
@@ -387,6 +388,13 @@ const MemoSourcePanel = memo(SourcePanel);
 const MemoCanvasPanel = memo(CanvasPanel);
 const MemoFigureNavigator = memo(FigureNavigator);
 const MemoInspectorPanel = memo(InspectorPanel);
+const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
+
+/** Deck documents get the deck object/frame inspector, tikz the full one. */
+function InspectorPanelSwitch() {
+  const documentKind = useEditorStore((s) => s.documentKind);
+  return documentKind === "beamer" ? <MemoDeckInspectorPanel /> : <MemoInspectorPanel />;
+}
 const MemoObjectsPanel = memo(ObjectsPanel);
 const MemoStylesPanel = memo(StylesPanel);
 const MemoAssistantPanel = memo(AssistantPanel);
@@ -433,7 +441,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
             </Suspense>
           );
         case "inspector":
-          return <MemoInspectorPanel />;
+          return <InspectorPanelSwitch />;
         case "objects":
           return <MemoObjectsPanel />;
         case "styles":

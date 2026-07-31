@@ -540,6 +540,27 @@ foundation; full status paragraph in the Object layer section above.
     structural-edit stragglers that need object semantics: Backspace at
     the first item's content start dissolving the item into a paragraph,
     and Enter with a non-empty selection (delete-then-split).
+    **Implemented except the stragglers** (2026-07-31, decided with
+    Dominik: inspector lives in the existing inspector panel; no-selection
+    state shows frame options, never the frame title — that is
+    canvas-editable; overlay specs are free text; number-label scrub is
+    kept). Core: `DeckEditAction` family in
+    `packages/core/src/beamer/deck-edit-actions.ts` — pure
+    `(source, frame layout, action) → EditActionResult` sharing the tikz
+    result type — and `deck-inspector.ts` model builders that read current
+    values from the same spans the actions rewrite. App: the reducer's
+    beamer branch routes deck actions with a snapshot-freshness guard
+    (deck results reconcile immediately — an empty changed-ids list skips
+    the typing debounce; a duplicate-then-delete race taught us that);
+    `DeckInspectorPanel` reuses the tikz inspector's CSS and scrub
+    machinery, holds drafts in text/number fields (commit on Enter/blur —
+    per-keystroke commits would race the frame re-render), and scrubs
+    against a frozen base source+layout, previewing via
+    `SET_SOURCE_TRANSIENT` and committing one recorded action as a
+    precomputed result. Implementing 3b exposed and fixed a rendering
+    bug: `\begin{block}<2->{…}` was treated as an uncoverenv-style
+    wrapper and vanished entirely; content environments with action specs
+    now keep their structure and uncover as one unit.
   - **Stage 3c — direct manipulation**: graphics corner resize handles
     (rewrite the authored `width=0.63\textwidth` value span, symbolic form
     preserved), column divider drag with live re-layout (rewrite both

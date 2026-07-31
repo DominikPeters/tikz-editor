@@ -641,3 +641,48 @@ test("object layer: Esc ladder, marker selection, duplicate and delete with undo
   await page.keyboard.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(OBJECT_LAYER_SOURCE);
 });
+
+test("deck inspector: frame options with no selection, object properties when selected", async ({ page }) => {
+  await setSource(page, OBJECT_LAYER_SOURCE);
+
+  // With nothing selected the inspector shows the frame options (never the
+  // frame title — that is edited on canvas).
+  const alignmentDropdown = page.getByRole("button", { name: "Alignment" });
+  await expect(alignmentDropdown).toBeVisible();
+  await alignmentDropdown.click();
+  await page.getByRole("option", { name: "Top" }).click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{frame}[t]{Objects}`);
+
+  // Selecting an item swaps the inspector to the object: free-text overlay
+  // spec commits on Enter.
+  const markerRegions = page.locator('[data-hit-region-key^="deck-object-marker:"]');
+  await expect.poll(async () => markerRegions.count(), { timeout: 30_000 }).toBe(3);
+  const markerBox = await markerRegions.nth(1).boundingBox();
+  await page.mouse.click(
+    markerBox!.x + markerBox!.width / 2,
+    markerBox!.y + markerBox!.height / 2
+  );
+  const overlayInput = page.getByPlaceholder("e.g. 2-");
+  await expect(overlayInput).toBeVisible();
+  await overlayInput.fill("2-");
+  await overlayInput.press("Enter");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\item<2-> Beta two`);
+
+  // Block selection exposes title and type; the type dropdown renames the
+  // environment at both boundaries.
+  const blockRegion = page.locator('[data-hit-region-key^="deck-object:"][data-hit-region-deck-object-id*="block"]');
+  const blockBox = await blockRegion.boundingBox();
+  await page.mouse.click(blockBox!.x + blockBox!.width - 6, blockBox!.y + 5);
+  const outline = page.locator('[data-testid="deck-object-selection"] rect');
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "block");
+  const titleInput = page.getByRole("textbox", { name: "Title" });
+  await expect(titleInput).toHaveValue("Facts");
+  await titleInput.fill("Key facts");
+  await titleInput.press("Enter");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{block}{Key facts}`);
+  const typeDropdown = page.getByRole("button", { name: "Type" });
+  await typeDropdown.click();
+  await page.getByRole("option", { name: "alertblock" }).click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{alertblock}{Key facts}`);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\end{alertblock}`);
+});
