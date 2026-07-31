@@ -271,3 +271,36 @@ test("edits title-page metadata through preamble field scopes", async ({ page })
   );
   await expect(instituteTextarea).toHaveValue("Analytical Engine Institute");
 });
+
+const DRAWING_ONLY_SOURCE = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Drawing only}
+\begin{center}
+\begin{tikzpicture}
+\draw[very thick] (0,0) rectangle (4,2);
+\end{tikzpicture}
+\end{center}
+\end{frame}
+\end{document}`;
+
+test("selects the drawing atom in a frame without rendered paragraphs", async ({ page }) => {
+  await setSource(page, DRAWING_ONLY_SOURCE);
+
+  // The frame body renders no paragraphs, so the tikzpicture atom itself
+  // must anchor the scope session.
+  const atomRegion = page.locator('[data-hit-region-key^="deck-atom:"]').first();
+  await expect(atomRegion).toBeVisible({ timeout: 30_000 });
+  const box = await atomRegion.boundingBox();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toHaveCount(1);
+  const buffer = await textarea.inputValue();
+  expect(buffer).toContain(String.raw`\begin{tikzpicture}`);
+  const selection = await textarea.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0);
+  });
+  expect(selection).toContain(String.raw`\begin{tikzpicture}`);
+  expect(selection).toContain(String.raw`\end{tikzpicture}`);
+});

@@ -1386,10 +1386,15 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!scope || !entry) {
         continue;
       }
+      // Atom-only scopes (e.g. a drawing-only frame body) have no rendered
+      // paragraphs; the atom itself anchors the session surface.
       const anchorParagraph = entry.scopeParagraphs[0]?.paragraphId;
-      if (!anchorParagraph) {
-        continue;
-      }
+      entry.anchorBounds ??= svgBounds(
+        pt(atom.bounds.x),
+        pt(atom.bounds.y),
+        pt(atom.bounds.x + atom.bounds.width),
+        pt(atom.bounds.y + atom.bounds.height)
+      );
       const key = `deck-atom:${atom.id}`;
       atomSpanByRegionKey.set(key, atom.span);
       regions.push({
@@ -1406,7 +1411,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         rotation: 0,
         interactionMode: "text",
         pointerMode: "fill",
-        sceneTextKey: anchorParagraph,
+        ...(anchorParagraph ? { sceneTextKey: anchorParagraph } : {}),
         contentWidth: atom.bounds.width,
         contentHeight: atom.bounds.height
       });
@@ -1802,6 +1807,9 @@ export const CanvasPanel = memo(function CanvasPanel({
         if (!text) {
           return null;
         }
+        // Atom-only scopes (e.g. a drawing-only frame body) resolve without
+        // a rendered paragraph: the session opens on the scope buffer with
+        // the atom span selected, and there is no canvas caret geometry.
         const paragraph =
           (region.sceneTextKey
             ? deckEditing.paragraphById.get(region.sceneTextKey)
@@ -1809,43 +1817,39 @@ export const CanvasPanel = memo(function CanvasPanel({
           (deckScopeEntry.scopeParagraphs[0]
             ? deckEditing.paragraphById.get(deckScopeEntry.scopeParagraphs[0].paragraphId)
             : undefined);
-        if (!paragraph) {
-          return null;
-        }
-        const layoutSourceText = source.slice(
-          paragraph.sourceSpan.from,
-          paragraph.sourceSpan.to
-        );
+        const layoutSourceText = paragraph
+          ? source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to)
+          : text;
         if (!layoutSourceText) {
           return null;
         }
-        const firstTextSegment = paragraph.report.lines
+        const firstTextSegment = paragraph?.report.lines
           .flatMap((line) => line.segments)
           .find((segment) =>
             (segment.kind === "text" || segment.kind === "space") &&
             segment.fontAtPt != null
           );
         const textAlign =
-          paragraph.report.alignment === "center"
+          paragraph?.report.alignment === "center"
             ? "center"
-            : paragraph.report.alignment === "ragged-left"
+            : paragraph?.report.alignment === "ragged-left"
               ? "right"
-              : paragraph.report.alignment === "justified"
+              : paragraph?.report.alignment === "justified"
                 ? "justify"
                 : "left";
         return {
           sourceId: scope.id,
-          sceneTextId: paragraph.paragraphId,
+          sceneTextId: paragraph?.paragraphId ?? scope.id,
           sourceSpan: scope.span,
           text,
           structuralMaskRanges: deckScopeEntry.maskRanges,
           scopeParagraphs: deckScopeEntry.scopeParagraphs,
           atomicSelectionSpan: deckEditing.atomSpanByRegionKey.get(region.key),
-          layoutSourceSpan: paragraph.sourceSpan,
+          layoutSourceSpan: paragraph?.sourceSpan ?? scope.span,
           layoutSourceText,
           renderSourceText: layoutSourceText,
           usesTex: true,
-          paragraphId: paragraph.paragraphId,
+          paragraphId: paragraph?.paragraphId ?? null,
           // Scope buffers always resolve carets through paragraph geometry;
           // the single-line estimate path assumes plain text.
           layoutKind: "wrapped",
@@ -1856,7 +1860,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             fontFamily: "sans",
             textAlign
           },
-          totalWidth: paragraph.bounds.width,
+          totalWidth: paragraph?.bounds.width ?? region.width,
           region,
           editMode: "default",
           popupAnchorBox: deckScopeEntry.anchorBounds ?? undefined
