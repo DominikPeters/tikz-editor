@@ -242,6 +242,30 @@ function resolveTextareaCaretClientRect(textarea: HTMLTextAreaElement, offset: n
   }
 }
 
+/**
+ * Keep the caret (or the selection focus end) visible inside a scrolled
+ * textarea. Programmatic setSelectionRange and controlled value updates
+ * never auto-scroll, so canvas clicks and typing in long scope buffers
+ * would otherwise leave the caret outside the textarea viewport.
+ */
+function scrollTextareaCaretIntoView(textarea: HTMLTextAreaElement, offset: number): void {
+  if (textarea.scrollHeight <= textarea.clientHeight) {
+    return;
+  }
+  const caretRect = resolveTextareaCaretClientRect(textarea, offset);
+  if (!caretRect) {
+    return;
+  }
+  const textareaRect = textarea.getBoundingClientRect();
+  const viewTop = textareaRect.top;
+  const viewBottom = textareaRect.top + textarea.clientHeight;
+  if (caretRect.top < viewTop) {
+    textarea.scrollTop -= viewTop - caretRect.top;
+  } else if (caretRect.bottom > viewBottom) {
+    textarea.scrollTop += caretRect.bottom - viewBottom;
+  }
+}
+
 function resolveTextSelectionModeFromClickCount(clickCount: number): TextSelectionDragMode {
   if (clickCount >= 3) {
     return "line";
@@ -1107,7 +1131,9 @@ export function useCanvasTextEditSession(
     return () => { textarea.removeEventListener("beforeinput", handleBeforeInput); };
   }, [dispatchTextEditBeforeInputIntent, textEditingSession]);
 
-  useEffect(() => {
+  // Layout effect so the scroll-into-view adjustment lands before the caret
+  // overlay (a later layout effect) measures against the textarea viewport.
+  useLayoutEffect(() => {
     const textarea = textEditTextareaRef.current;
     if (!textEditingSession || !textarea) {
       return;
@@ -1120,6 +1146,7 @@ export function useCanvasTextEditSession(
     if (textarea.selectionStart !== start || textarea.selectionEnd !== end) {
       textarea.setSelectionRange(start, end);
     }
+    scrollTextareaCaretIntoView(textarea, end);
   }, [textEditingSession]);
 
   useEffect(() => {
@@ -1183,9 +1210,22 @@ export function useCanvasTextEditSession(
       }
       const textareaRect = currentTextarea.getBoundingClientRect();
       const height = Math.max(1, Math.min(measuredRect.height, textareaRect.height));
+      const left = measuredRect.left - textareaRect.left;
+      const top = measuredRect.top - textareaRect.top;
+      // A caret scrolled out of the textarea viewport is clipped like the
+      // native one, not pinned to the nearest edge.
+      if (
+        top + height <= 0 ||
+        top >= textareaRect.height ||
+        left < -1 ||
+        left > textareaRect.width + 1
+      ) {
+        setTextEditCaretOverlay(null);
+        return;
+      }
       const nextOverlay = {
-        left: clamp(measuredRect.left - textareaRect.left, 0, textareaRect.width),
-        top: clamp(measuredRect.top - textareaRect.top, 0, textareaRect.height - height),
+        left: clamp(left, 0, textareaRect.width),
+        top: clamp(top, 0, textareaRect.height - height),
         height
       };
       setTextEditCaretOverlay((current) => {

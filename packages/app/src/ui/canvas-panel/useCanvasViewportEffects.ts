@@ -209,6 +209,17 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     const onWheel = (event: WheelEvent) => {
       const currentSvg = svgResultRef.current;
       if (!currentSvg) return;
+      // Plain wheel gestures over the text edit surface scroll its textarea,
+      // not the canvas. Zoom chords keep zooming the canvas (and must not
+      // fall through to browser page zoom).
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.target instanceof Element &&
+        event.target.closest('[data-testid="canvas-text-edit-popup"]')
+      ) {
+        return;
+      }
       const currentTransform = canvasTransformRef.current;
 
       event.preventDefault();
