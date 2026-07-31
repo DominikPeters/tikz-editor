@@ -27,6 +27,7 @@ import {
   defaultTexMathFontProfile,
   layoutSimpleTexParagraph,
   renderTexParagraphSvgBody,
+  TEX_ALERT_COLOR_ALIAS,
   texLength,
   texLineX,
   type TexDisplayMathLayoutProfile,
@@ -68,6 +69,7 @@ import {
 import { scanBeamerDocumentWithSyntax } from "./scan.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import type { NodeTextColorResolver } from "../text/types.js";
 import {
   resolveBeamerTheoremOccurrences,
   type BeamerTheoremOccurrence,
@@ -797,6 +799,7 @@ function renderChrome(params: {
       role: paragraphRole(primitive.fontRole),
       bounds: primitive.bounds,
       font,
+      colorResolver: beamerAlertColorResolver(theme),
       alignment: primitive.alignment,
       interwordSpacePt: primitive.interwordSpacePt,
       disableAutomaticHyphenation: primitive.disableAutomaticHyphenation,
@@ -919,6 +922,7 @@ async function prepareFrameFlow(params: {
         overlays: params.overlays,
         step: params.step,
         graphicsResolver: params.graphicsResolver,
+        colorResolver: beamerAlertColorResolver(params.theme),
         paperWidth: params.paperWidth,
       });
       if (paragraph) {
@@ -1055,6 +1059,7 @@ async function prepareFrameFlow(params: {
     overlays: params.overlays,
     step: params.step,
     graphicsResolver: params.graphicsResolver,
+    colorResolver: beamerAlertColorResolver(params.theme),
     paperWidth: params.paperWidth,
   });
 }
@@ -1086,6 +1091,7 @@ function prepareTitlePage(params: {
         role: "title",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: params.theme.fonts.title,
+        colorResolver: beamerAlertColorResolver(params.theme),
         alignment,
         macroBindings: params.macroBindings,
         graphicsResolver: params.graphicsResolver,
@@ -1103,6 +1109,7 @@ function prepareTitlePage(params: {
         role: "subtitle",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: params.theme.fonts.subtitle,
+        colorResolver: beamerAlertColorResolver(params.theme),
         alignment,
         macroBindings: params.macroBindings,
         graphicsResolver: params.graphicsResolver,
@@ -1154,6 +1161,7 @@ function prepareTitlePage(params: {
           role: field,
           bounds: { x: 0, y: 0, width: params.width, height: 0 },
           font: params.theme.fonts[field],
+          colorResolver: beamerAlertColorResolver(params.theme),
           alignment,
           macroBindings: params.macroBindings,
           graphicsResolver: params.graphicsResolver,
@@ -1192,6 +1200,7 @@ function prepareFrameParagraph(params: {
   step: number;
   targetHeight?: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  colorResolver?: NodeTextColorResolver;
   paperWidth: number;
 }): Extract<PreparedFrameFlowItem, { kind: "paragraph" }> | null {
   const paragraphSource = params.source.slice(
@@ -1214,6 +1223,7 @@ function prepareFrameParagraph(params: {
     role: "body",
     bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
     font: params.bodyFont,
+    colorResolver: params.colorResolver,
     alignment: "left",
     listProfile: params.listProfile,
     macroBindings: params.macroBindings,
@@ -1273,6 +1283,7 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     overlays: BeamerOverlayModel;
     step: number;
     graphicsResolver?: DocumentGraphicsResolver;
+    colorResolver?: NodeTextColorResolver;
     paperWidth: number;
   }
 ): PreparedFrameFlowItem[] {
@@ -1539,6 +1550,7 @@ function prepareBlock(params: {
       height: 0,
     },
     font: blockTitleLayoutFont,
+    colorResolver: beamerAlertColorResolver(params.theme),
     alignment: plan.style === "inmargin" ? "right" : "left",
     disableAutomaticHyphenation: plan.style === "inmargin",
     macroBindings: params.macroBindings,
@@ -1583,6 +1595,7 @@ function prepareBlock(params: {
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: theoremBodyFont,
         mathFont: params.theme.fonts[plan.bodyFontRole],
+        colorResolver: beamerAlertColorResolver(params.theme),
         alignment: "left",
         disableAutomaticHyphenation: true,
         // Lists inside blocks use the same theme templates (margins,
@@ -2606,6 +2619,7 @@ async function prepareColumnFlowNode(params: {
       role: "body",
       bounds: { x: 0, y: 0, width, height: 0 },
       font: bodyFont,
+      colorResolver: beamerAlertColorResolver(theme),
       alignment: "left",
       initialPreviousDepth,
       listProfile,
@@ -2847,6 +2861,27 @@ function positionParagraphLayout(
   );
 }
 
+/**
+ * Layout color resolvers keyed by alerted-text color: `\alert{...}` in any
+ * frame text resolves through this alias to the theme's "alerted text"
+ * foreground. Memoized so resolver identity is stable across paragraphs
+ * of one render (and across renders of an unchanged theme).
+ */
+const beamerAlertColorResolvers = new Map<string, NodeTextColorResolver>();
+
+function beamerAlertColorResolver(theme: ResolvedBeamerTheme): NodeTextColorResolver {
+  const color = resolveBeamerThemeColor(theme, "alerted text").fg ?? "#ff0000";
+  let resolver = beamerAlertColorResolvers.get(color);
+  if (!resolver) {
+    resolver = {
+      cacheKey: `beamer-alert:${color}`,
+      resolve: (name) => (name === TEX_ALERT_COLOR_ALIAS ? color : null),
+    };
+    beamerAlertColorResolvers.set(color, resolver);
+  }
+  return resolver;
+}
+
 function layoutParagraph(params: {
   mapped: MappedText;
   sourceSpan: Span;
@@ -2865,6 +2900,7 @@ function layoutParagraph(params: {
   hiddenSourceSpans?: readonly Span[];
   hiddenListItemIndices?: readonly number[];
   graphicsResolver?: DocumentGraphicsResolver;
+  colorResolver?: NodeTextColorResolver;
   paperWidth?: number;
   textWidth?: number;
   columnWidth?: number;
@@ -2946,6 +2982,7 @@ function layoutParagraph(params: {
       : undefined,
     sourceMap: mapped.sourceMap,
     graphicsResolver: params.graphicsResolver,
+    colorResolver: params.colorResolver,
     dimensionContext: {
       linewidth: texLength(params.bounds.width),
       textwidth: texLength(params.textWidth ?? params.bounds.width),

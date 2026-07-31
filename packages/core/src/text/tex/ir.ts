@@ -1341,6 +1341,7 @@ function scanSimpleTexIrNodes(
       const fontDeclaration = scanSimpleTexFontDeclaration(text, index, sourceOffset);
       const styleDeclaration = scanSimpleTexStyleDeclaration(text, index, sourceOffset, resolveColorAlias);
       const colorCommand = scanSimpleTexColorCommand(text, index, sourceOffset, resolveColorAlias);
+      const alertCommand = scanSimpleTexAlertCommand(text, index, sourceOffset, resolveColorAlias);
       const accentCommand = scanSimpleTexAccentCommand(text, index, sourceOffset);
       if (boxEnvironment) {
         nodes.push(boxEnvironment.node);
@@ -1478,6 +1479,12 @@ function scanSimpleTexIrNodes(
         nodes.push(colorCommand.node);
         unsupportedCommand ||= colorCommand.unsupportedCommand;
         index = colorCommand.end;
+        continue;
+      }
+      if (alertCommand) {
+        nodes.push(alertCommand.node);
+        unsupportedCommand ||= alertCommand.unsupportedCommand;
+        index = alertCommand.end;
         continue;
       }
       if (accentCommand) {
@@ -3563,6 +3570,58 @@ function scanSimpleTexColorCommand(
   if (!contentArgument) return null;
   const color = normalizeSimpleTexColor(colorArgument.content, model, resolveColorAlias);
   if (!color) return null;
+  const childScan = scanSimpleTexIrNodes(
+    contentArgument.content,
+    sourceOffset + contentArgument.contentStart,
+    resolveColorAlias
+  );
+  const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  return {
+    node: {
+      kind: "color-command",
+      text: text.slice(start, contentArgument.end),
+      color,
+      contentStart: sourceOffset + contentArgument.contentStart,
+      contentEnd: sourceOffset + contentArgument.contentEnd,
+      children: childrenAreInline ? childScan.nodes.filter(isSimpleTexInlineNode) : [],
+      sourceStart: sourceOffset + start,
+      sourceEnd: sourceOffset + contentArgument.end,
+    },
+    end: contentArgument.end,
+    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline,
+  };
+}
+
+/**
+ * Reserved alias name the `\alert` scanner resolves through the caller's
+ * color resolver. It contains a space so it can never collide with an
+ * xcolor name; callers that do not resolve it (TikZ node text) keep
+ * `\alert` on the unsupported-command fallback path.
+ */
+export const TEX_ALERT_COLOR_ALIAS = "beamer alerted text";
+
+function scanSimpleTexAlertCommand(
+  text: string,
+  start: number,
+  sourceOffset: number,
+  resolveColorAlias?: ColorAliasResolver
+): { node: SimpleTexColorCommandNode; end: number; unsupportedCommand: boolean } | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "alert");
+  if (commandEnd === null) return null;
+  const color = resolveColorAlias?.(TEX_ALERT_COLOR_ALIAS);
+  if (!color) return null;
+  let cursor = skipSimpleTexControlWordSpaces(text, commandEnd);
+  // An overlay action spec surviving to layout colors every step (the
+  // per-step projection upstream owns real `\alert<...>` semantics); it
+  // is consumed as command syntax, never rendered.
+  if (text[cursor] === "<") {
+    const specEnd = text.indexOf(">", cursor + 1);
+    const nextBrace = text.indexOf("{", cursor + 1);
+    if (specEnd === -1 || (nextBrace !== -1 && nextBrace < specEnd)) return null;
+    cursor = skipSimpleTexControlWordSpaces(text, specEnd + 1);
+  }
+  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  if (!contentArgument) return null;
   const childScan = scanSimpleTexIrNodes(
     contentArgument.content,
     sourceOffset + contentArgument.contentStart,

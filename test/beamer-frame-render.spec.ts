@@ -869,4 +869,36 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
       "positive integer"
     );
   });
+
+  it("renders inline \\alert in the theme's alerted-text color", async () => {
+    const source = [
+      "\\documentclass{beamer}",
+      "\\begin{document}",
+      "\\begin{frame}{Alerts}",
+      "Plain then \\alert{very important} words.",
+      "\\begin{itemize}",
+      "\\item An \\alert<2->{acted} item",
+      "\\end{itemize}",
+      "\\end{frame}",
+      "\\end{document}",
+    ].join("\n");
+    const result = await renderBeamerFrame(source, { frameIndex: 0 });
+    const body = result.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "body"
+    );
+    expect(body).toBeDefined();
+    const rowText = body!.report.lines
+      .map((line) => line.segments.map((segment) => segment.text ?? "").join(""))
+      .join(" ");
+    expect(rowText).toContain("important");
+    // No raw command text may leak into the layout, and the default
+    // alerted-text foreground paints the content.
+    expect(rowText).not.toContain("alert");
+    expect(result.svg.svg).toContain('fill="#ff0000"');
+    expect(
+      result.diagnostics.filter((diagnostic) =>
+        diagnostic.message.includes("alert")
+      )
+    ).toEqual([]);
+  });
 });

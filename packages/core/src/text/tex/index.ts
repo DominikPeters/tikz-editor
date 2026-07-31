@@ -36,6 +36,7 @@ export {
   SIMPLE_TEX_FONT_DECLARATION_NAMES,
   SIMPLE_TEX_INLINE_NODE_KINDS,
   SIMPLE_TEX_TEXT_BOX_COMMAND_NAMES,
+  TEX_ALERT_COLOR_ALIAS,
   analyzeSimpleTexResources,
   collectSimpleTexResourceManifest,
   parseSimpleTexParagraphIr,
