@@ -30,6 +30,11 @@ export {
   type BeamerStructuralPatch,
 } from "./structural-edit.js";
 export {
+  applyDeckEditAction,
+  isDeckEditAction,
+  type DeckEditAction,
+} from "./deck-edit-actions.js";
+export {
   beamerObjectAtOffset,
   buildBeamerObjectIndex,
   type BeamerObjectIndex,
