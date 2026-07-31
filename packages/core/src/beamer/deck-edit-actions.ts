@@ -37,6 +37,7 @@ export type DeckEditAction =
   | { kind: "deckSetEnvironmentTitle"; frameId: string; objectId: string; title: string }
   | { kind: "deckSetOverlaySpec"; frameId: string; objectId: string; spec: string | null }
   | { kind: "deckSetGraphicsOption"; frameId: string; objectId: string; key: string; value: string | null }
+  | { kind: "deckSetEnvironmentOption"; frameId: string; objectId: string; key: string; value: string | null }
   | { kind: "deckSetColumnWidth"; frameId: string; objectId: string; width: string }
   | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null };
 
@@ -47,6 +48,7 @@ const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckSetEnvironmentTitle",
   "deckSetOverlaySpec",
   "deckSetGraphicsOption",
+  "deckSetEnvironmentOption",
   "deckSetColumnWidth",
   "deckSetFrameOption",
 ]);
@@ -60,9 +62,10 @@ export function isDeckEditAction(action: { kind: string }): action is DeckEditAc
  * groups: turning a block into a columns environment would not preserve the
  * body's meaning.
  */
-const RENAMEABLE_ENVIRONMENT_GROUPS: readonly (readonly string[])[] = [
+export const RENAMEABLE_ENVIRONMENT_GROUPS: readonly (readonly string[])[] = [
   ["block", "alertblock", "exampleblock"],
   ["theorem", "lemma", "corollary", "proposition", "definition", "example", "fact", "proof"],
+  ["itemize", "enumerate"],
 ];
 
 /** Mutually exclusive frame alignment flags. */
@@ -113,6 +116,8 @@ export function applyDeckEditAction(
       return applySetOverlaySpec(source, node, action.spec);
     case "deckSetGraphicsOption":
       return applySetGraphicsOption(source, node, action.key, action.value);
+    case "deckSetEnvironmentOption":
+      return applySetEnvironmentOption(source, node, action.key, action.value);
     case "deckSetColumnWidth":
       return applySetColumnWidth(source, node, action.width);
   }
@@ -147,7 +152,7 @@ function finishEdits(
   return { kind: "success", newSource, patches };
 }
 
-type EnvironmentBoundaries = {
+export type EnvironmentBoundaries = {
   begin: { span: Span; nameSpan: Span; name: string };
   end: { span: Span; nameSpan: Span; name: string };
 };
@@ -157,7 +162,7 @@ type EnvironmentBoundaries = {
  * Env layout items span begin through end inclusive, so the pair is the
  * boundary starting at the node's start and the one ending at its end.
  */
-function environmentBoundariesOf(
+export function environmentBoundariesOf(
   context: BeamerSyntaxContext,
   node: BeamerObjectNode
 ): EnvironmentBoundaries | null {
@@ -204,8 +209,8 @@ function applyRenameEnvironment(
   node: BeamerObjectNode,
   name: string
 ): EditActionResult {
-  if (node.kind !== "block") {
-    return { kind: "unsupported", reason: "Only block-style environments can be renamed." };
+  if (node.kind !== "block" && node.kind !== "list") {
+    return { kind: "unsupported", reason: "Only block-style environments and lists can be renamed." };
   }
   const context = createBeamerSyntaxContext(source);
   const pair = environmentBoundariesOf(context, node);
@@ -314,7 +319,7 @@ function normalizeOverlaySpec(
 }
 
 /** A parsed `[...]` option list with absolute entry spans. */
-type OptionListLocation = {
+export type OptionListLocation = {
   /** Span including the brackets. */
   span: Span;
   /** Span of the source between the brackets. */
@@ -322,7 +327,7 @@ type OptionListLocation = {
   entries: readonly { span: Span; key: string | null; valueSpan: Span | null }[];
 };
 
-function readOptionList(
+export function readOptionList(
   source: string,
   argument: { span: Span; contentSpan: Span }
 ): OptionListLocation {
@@ -462,6 +467,37 @@ function applySetGraphicsOption(
     {
       list: optional ? readOptionList(source, optional) : null,
       insertAt: command.span.to,
+    },
+    key,
+    value ?? null
+  );
+  if ("error" in result) {
+    return { kind: "unsupported", reason: result.error };
+  }
+  return finishEdits(source, result.edits);
+}
+
+/** Option-list edits on an environment's `[...]` (embedded tikz `scale=`). */
+function applySetEnvironmentOption(
+  source: string,
+  node: BeamerObjectNode,
+  key: string,
+  value: string | null
+): EditActionResult {
+  if (node.kind !== "tikzpicture") {
+    return { kind: "unsupported", reason: "This object does not take environment options." };
+  }
+  const context = createBeamerSyntaxContext(source);
+  const pair = environmentBoundariesOf(context, node);
+  if (!pair) {
+    return { kind: "unsupported", reason: "Environment boundaries were not found." };
+  }
+  const optional = beamerOptionalArgumentAfter(context, pair.begin.span.to, node.sourceSpan.to);
+  const result = buildOptionEdits(
+    source,
+    {
+      list: optional ? readOptionList(source, optional) : null,
+      insertAt: pair.begin.span.to,
     },
     key,
     value ?? null

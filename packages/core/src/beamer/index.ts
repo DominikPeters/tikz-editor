@@ -35,6 +35,14 @@ export {
   type DeckEditAction,
 } from "./deck-edit-actions.js";
 export {
+  buildDeckFrameInspector,
+  buildDeckObjectInspector,
+  splitDeckDimension,
+  type DeckInspectorField,
+  type DeckInspectorModel,
+  type DeckInspectorWrite,
+} from "./deck-inspector.js";
+export {
   beamerObjectAtOffset,
   buildBeamerObjectIndex,
   type BeamerObjectIndex,

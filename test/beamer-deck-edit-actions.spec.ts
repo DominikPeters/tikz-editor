@@ -25,6 +25,9 @@ const SOURCE = [
   "\\end{column}",
   "\\begin{column}{.42\\textwidth}",
   "\\includegraphics[width=0.63\\textwidth]{demo.png}",
+  "\\begin{tikzpicture}",
+  "\\draw (0,0) -- (1,1);",
+  "\\end{tikzpicture}",
   "\\end{column}",
   "\\end{columns}",
   "\\end{frame}",
@@ -201,6 +204,35 @@ describe("applyDeckEditAction", () => {
     });
     expect(removed).toContain("\\includegraphics{demo.png}");
     await expectRenders(removed);
+  });
+
+  it("renames a list between itemize and enumerate", async () => {
+    const fx = await fixture();
+    const list = fx.nodeOfKind("list");
+    const next = applied(fx, {
+      kind: "deckRenameEnvironment",
+      frameId: fx.frameId,
+      objectId: list.id,
+      name: "enumerate",
+    });
+    expect(next).toContain("\\begin{enumerate}");
+    expect(next).toContain("\\end{enumerate}");
+    expect(next).not.toContain("itemize");
+    await expectRenders(next);
+  });
+
+  it("sets and removes environment options on an embedded tikzpicture", async () => {
+    const fx = await fixture();
+    const tikz = fx.nodeOfKind("tikzpicture");
+    const scaled = applied(fx, {
+      kind: "deckSetEnvironmentOption",
+      frameId: fx.frameId,
+      objectId: tikz.id,
+      key: "scale",
+      value: "0.8",
+    });
+    expect(scaled).toContain("\\begin{tikzpicture}[scale=0.8]");
+    await expectRenders(scaled);
   });
 
   it("replaces a column width argument", async () => {
