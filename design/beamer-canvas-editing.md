@@ -372,10 +372,29 @@ low-contrast caret on the other), accent vs gray selection in both
 directions (the bar mirror-measures its range rects while unfocused, since
 an unfocused textarea hides its native selection), bar focus ring/dimmed
 chrome, and the dashed PPT edit border on the scope container
-(`anchorBounds`), faint under bar focus. Arrow/Enter keys are still
-source-style under canvas focus until Stage 2b/2c. Stage 2b (rendered-stop
-motion) and 2c (structural keys) are not started. The editing fixture
-corpus below is built
+(`anchorBounds`), faint under bar focus. **Stage 2b is implemented**:
+rendered-stop motion under canvas focus. The stop domain is derived from
+the click hit-map's own stop-building pass, exported DOM-free as
+`getKnuthPlassParagraphCaretStops` (display-math rows included via the
+vlist items), and shaped per scope by
+`buildBeamerCaretStopDomain` (`packages/core/src/beamer/caret-stops.ts`):
+stops are gated by `editableTextSpans` (which already exclude
+overlay-hidden content, list chrome, and read-only macro-argument glyphs)
+and collapsed over atomic spans (macro invocations, atomic renders), with
+page-space rows for vertical motion. Canvas-focus keys: ←/→ step by
+rendered stops (atomic over macro calls, per-offset inside math and
+ligatures — matching what clicks can reach), ↑/↓ move by rendered rows
+(nearest-x, clamping to row start/end at the edges), Home/End and
+Cmd+←/→ go to rendered-row edges, Cmd+↑/↓ to the scope's visual extremes,
+Shift extends all of these, and Backspace/Delete beside an atom select it
+first (select-then-delete) with the second press deleting the invocation.
+Alt-modified keys and everything in the bar stay native source-style.
+Known 2b gaps: `caretPolicy: "filename-linear"` for graphics was never
+implemented in the hit map and remains whole-atom selection; inter-
+paragraph glue (`\vspace`/`\vfill`) and frame-level flow objects (embedded
+tikz, graphics) are not yet in the traversal/select-then-delete domain —
+they arrive with the object layer. Stage 2c (structural keys) is not
+started. The editing fixture corpus below is built
 (`test/fixtures/beamer/editing_corpus_beamer.tex`, tests in
 `test/beamer-editing.spec.ts`); building it surfaced and fixed two
 content-flow bugs (command-form `\frametitle`/`\framesubtitle` leaked into

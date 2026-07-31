@@ -321,6 +321,76 @@ test("canvas focus: types on the slide, Cmd+E and Esc walk the surfaces, indicat
   await expect(page.getByTestId("canvas-scope-edit-border")).toHaveCount(0);
 });
 
+test("canvas focus: arrows move by rendered stops, rows, and select-then-delete atoms", async ({ page }) => {
+  const titleTextarea = await openScopeContaining(page, "Titel typo");
+  const hiddenInput = page.getByTestId("canvas-focus-input");
+  const titleBuffer = await titleTextarea.inputValue();
+  expect(titleBuffer).toBe(String.raw`Titel typo \generatedword`);
+
+  const readSelection = () => hiddenInput.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return [input.selectionStart, input.selectionEnd];
+  });
+  const setCaret = (offset: number) => hiddenInput.evaluate((element, value) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(value, value);
+    input.dispatchEvent(new Event("select", { bubbles: true }));
+  }, offset);
+
+  // Arrow motion is atomic over a macro invocation: one step crosses the
+  // whole \generatedword call in either direction.
+  const invocationStart = titleBuffer.indexOf(String.raw`\generatedword`);
+  await setCaret(invocationStart);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(readSelection).toEqual([titleBuffer.length, titleBuffer.length]);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(readSelection).toEqual([invocationStart, invocationStart]);
+
+  // Backspace beside the atom selects it first (select-then-delete), and
+  // the second press deletes the whole invocation; undo restores it.
+  await setCaret(titleBuffer.length);
+  await page.keyboard.press("Backspace");
+  await expect.poll(readSelection).toEqual([invocationStart, titleBuffer.length]);
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => readStoreSource(page)).toBe(
+    SOURCE.replace(String.raw`Titel typo \generatedword`, "Titel typo ")
+  );
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
+  await closeScopeSession(page);
+
+  // Vertical motion walks rendered rows: down from the body paragraph lands
+  // inside the list item's rendered text, skipping structural source.
+  const bodyTextarea = await openScopeContaining(page, "Body typo.");
+  const bodyBuffer = await bodyTextarea.inputValue();
+  const bodyStart = bodyBuffer.indexOf("Body typo.");
+  const listStart = bodyBuffer.indexOf("List typo");
+  await setCaret(bodyStart);
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(readSelection).toEqual([
+    expect.any(Number),
+    expect.any(Number),
+  ]);
+  const [downOffset] = await readSelection();
+  expect(downOffset).toBeGreaterThanOrEqual(listStart);
+  expect(downOffset).toBeLessThanOrEqual(listStart + "List typo".length);
+
+  // Home/End clamp to the rendered row, not the buffer line.
+  await page.keyboard.press("End");
+  await expect.poll(readSelection).toEqual([
+    listStart + "List typo".length,
+    listStart + "List typo".length,
+  ]);
+  await page.keyboard.press("Home");
+  await expect.poll(readSelection).toEqual([listStart, listStart]);
+
+  // Shift extends over rendered stops.
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect.poll(readSelection).toEqual([listStart, listStart + 1]);
+  await expect(page.getByTestId("canvas-text-selection-overlay")).toHaveCount(1);
+});
+
 const TITLE_PAGE_SOURCE = String.raw`\documentclass{beamer}
 \usetheme{Madrid}
 \title{Deck title}

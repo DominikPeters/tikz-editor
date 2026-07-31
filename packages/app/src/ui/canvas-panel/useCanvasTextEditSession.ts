@@ -30,6 +30,14 @@ import {
   documentOffsetToTextarea,
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
+import {
+  beamerCaretAtomBeside,
+  beamerCaretRowEdgeOffset,
+  nearestBeamerCaretOffset,
+  nextBeamerCaretOffset,
+  verticalBeamerCaretOffset,
+  type BeamerCaretDomain
+} from "@tikz-editor/core/beamer/index";
 import type { CanvasTextEditPlacement } from "../../settings/types";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
 import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
@@ -109,6 +117,8 @@ export type UseCanvasTextEditSessionArgs = {
     targetId: string,
     preferredSceneTextId?: string | null
   ) => EditableTextTarget | null;
+  /** Rendered caret-stop domain for a deck scope; null → source-style keys. */
+  resolveDeckCaretDomain: (scopeId: string) => BeamerCaretDomain | null;
   textLayoutContext: unknown;
   textEditPlacement: CanvasTextEditPlacement;
   dispatch: (action: EditorAction) => void;
@@ -565,6 +575,7 @@ export function useCanvasTextEditSession(
     svgLayerHostRef,
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
+    resolveDeckCaretDomain,
     textLayoutContext,
     textEditPlacement,
     dispatch
@@ -1218,6 +1229,122 @@ export function useCanvasTextEditSession(
     handleSharedTextEditModifierKeys(event);
   }, [dispatchCanvasTextEditAction, handleSharedTextEditModifierKeys, isFocusSurfaceChord]);
 
+  /**
+   * Canvas-focus navigation over the rendered caret-stop domain: arrows move
+   * by rendered stops (atomic over macro calls and embedded objects, per-
+   * offset inside math), ↑/↓ by rendered rows, Home/End to row edges, and
+   * Backspace/Delete beside an atomic span select it before deleting (Word's
+   * select-then-delete convention). Returns false to fall through to native
+   * source-style behavior (no domain, alt-modified keys, range deletes).
+   */
+  const handleCanvasRenderedMotionKey = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+    const session = stateRef.current.session;
+    if (!session?.isScopeSession) {
+      return false;
+    }
+    const key = event.key;
+    const horizontal = key === "ArrowLeft" ? -1 : key === "ArrowRight" ? 1 : 0;
+    const vertical = key === "ArrowUp" ? -1 : key === "ArrowDown" ? 1 : 0;
+    const isHome = key === "Home";
+    const isEnd = key === "End";
+    const isBackspace = key === "Backspace";
+    const isDelete = key === "Delete";
+    if (!horizontal && !vertical && !isHome && !isEnd && !isBackspace && !isDelete) {
+      return false;
+    }
+    if (event.altKey) {
+      return false;
+    }
+    const withPrimary = event.metaKey || event.ctrlKey;
+    if ((isBackspace || isDelete) && (withPrimary || event.shiftKey)) {
+      return false;
+    }
+    const domain = resolveDeckCaretDomain(session.sourceId);
+    if (!domain || domain.offsets.length === 0) {
+      return false;
+    }
+    const input = event.currentTarget;
+    const bufferLength = session.text.length;
+    const toDocument = (local: number) => session.sourceSpan.from + clamp(local, 0, bufferLength);
+    const toLocal = (documentOffset: number) =>
+      clamp(documentOffset - session.sourceSpan.from, 0, bufferLength);
+    const applySelection = (start: number, end: number, direction: "forward" | "backward" | "none") => {
+      event.preventDefault();
+      event.stopPropagation();
+      pendingTextEditInsertTextRef.current = null;
+      input.setSelectionRange(start, end, direction);
+      dispatchCanvasTextEditAction({
+        type: "textarea_selection",
+        selectionStart: start,
+        selectionEnd: end
+      });
+    };
+
+    if (isBackspace || isDelete) {
+      if (session.selectionStart !== session.selectionEnd) {
+        // Range deletes (including an atom selected by the previous press)
+        // run natively through the beforeinput machine.
+        return false;
+      }
+      const atom = beamerCaretAtomBeside(
+        domain,
+        toDocument(session.selectionStart),
+        isBackspace ? "before" : "after"
+      );
+      if (!atom) {
+        return false;
+      }
+      applySelection(toLocal(atom.from), toLocal(atom.to), isBackspace ? "backward" : "forward");
+      return true;
+    }
+
+    const selectionBackward = input.selectionDirection === "backward";
+    const focusLocal = selectionBackward ? session.selectionStart : session.selectionEnd;
+    const anchorLocal = selectionBackward ? session.selectionEnd : session.selectionStart;
+    const hasRange = session.selectionStart !== session.selectionEnd;
+    const focusDoc = toDocument(focusLocal);
+    const domainFocus = nearestBeamerCaretOffset(domain, focusDoc) ?? focusDoc;
+
+    let nextDoc: number | null;
+    if (isHome || isEnd || (withPrimary && horizontal !== 0)) {
+      nextDoc = beamerCaretRowEdgeOffset(
+        domain,
+        domainFocus,
+        isHome || horizontal < 0 ? "start" : "end"
+      );
+    } else if (withPrimary && vertical !== 0) {
+      const row = vertical < 0 ? domain.rows[0] : domain.rows[domain.rows.length - 1];
+      const stop = vertical < 0 ? row?.stops[0] : row?.stops[row.stops.length - 1];
+      nextDoc = stop?.offset ?? null;
+    } else if (horizontal !== 0) {
+      if (!event.shiftKey && hasRange) {
+        // Plain arrows collapse a range onto its edge without moving.
+        nextDoc = horizontal < 0
+          ? toDocument(session.selectionStart)
+          : toDocument(session.selectionEnd);
+      } else {
+        nextDoc = nextBeamerCaretOffset(domain, domainFocus, horizontal) ?? domainFocus;
+      }
+    } else {
+      nextDoc = verticalBeamerCaretOffset(domain, domainFocus, vertical as -1 | 1) ?? domainFocus;
+    }
+    if (nextDoc == null) {
+      return false;
+    }
+
+    const nextLocal = toLocal(nextDoc);
+    if (event.shiftKey) {
+      applySelection(
+        Math.min(anchorLocal, nextLocal),
+        Math.max(anchorLocal, nextLocal),
+        nextLocal < anchorLocal ? "backward" : "forward"
+      );
+    } else {
+      applySelection(nextLocal, nextLocal, "none");
+    }
+    return true;
+  }, [dispatchCanvasTextEditAction, resolveDeckCaretDomain]);
+
   const handleCanvasFocusInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -1242,8 +1369,17 @@ export function useCanvasTextEditSession(
       return;
     }
 
+    if (handleCanvasRenderedMotionKey(event)) {
+      return;
+    }
+
     handleSharedTextEditModifierKeys(event);
-  }, [dispatchCanvasTextEditAction, handleSharedTextEditModifierKeys, isFocusSurfaceChord]);
+  }, [
+    dispatchCanvasTextEditAction,
+    handleCanvasRenderedMotionKey,
+    handleSharedTextEditModifierKeys,
+    isFocusSurfaceChord
+  ]);
 
   const handleTextEditTextareaFocus = useCallback(() => {
     const currentState = stateRef.current;

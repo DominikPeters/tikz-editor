@@ -28,7 +28,11 @@ makeForeachTemplateTargetId,
 resolvePropertyTargetFromParseResult
 } from "@tikz-editor/core/edit/property-target";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
-import { resolveBeamerEditScopeAt } from "@tikz-editor/core/beamer/index";
+import {
+  buildBeamerCaretStopDomain,
+  resolveBeamerEditScopeAt,
+  type BeamerCaretDomain
+} from "@tikz-editor/core/beamer/index";
 import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import type {
 EditHandlePositioningContext,
@@ -1426,6 +1430,34 @@ export const CanvasPanel = memo(function CanvasPanel({
     return [...sceneHitRegions, ...deckEditing.regions];
   }, [deckActiveFrame, deckEditing, sceneHitRegions]);
 
+  // Rendered caret-stop domains for canvas-focus arrow motion, built lazily
+  // per scope from the same layout the hit regions come from and cached
+  // until the frame layout changes.
+  const deckCaretDomainCache = useMemo(
+    () => new Map<string, BeamerCaretDomain | null>(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cache identity tracks the layout inputs
+    [deckEditing, source]
+  );
+  const resolveDeckCaretDomain = useCallback((scopeId: string): BeamerCaretDomain | null => {
+    const cached = deckCaretDomainCache.get(scopeId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const entry = deckEditing.scopesById.get(scopeId);
+    if (!entry) {
+      deckCaretDomainCache.set(scopeId, null);
+      return null;
+    }
+    const paragraphs = entry.scopeParagraphs
+      .map((ref) => deckEditing.paragraphById.get(ref.paragraphId))
+      .filter((paragraph): paragraph is NonNullable<typeof paragraph> => paragraph != null);
+    const domain = paragraphs.length
+      ? buildBeamerCaretStopDomain({ paragraphs, source })
+      : null;
+    deckCaretDomainCache.set(scopeId, domain);
+    return domain;
+  }, [deckCaretDomainCache, deckEditing, source]);
+
   useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
     selectedElementIdsRef.current = selectedElementIds;
@@ -2021,6 +2053,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     svgLayerHostRef,
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
+    resolveDeckCaretDomain,
     textLayoutContext,
     textEditPlacement,
     dispatch

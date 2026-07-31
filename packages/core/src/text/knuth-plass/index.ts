@@ -13,6 +13,7 @@ export {
 export {
   getKnuthPlassCaretFromPoint,
   getKnuthPlassLineRangeFromPoint,
+  getKnuthPlassParagraphCaretStops,
   getKnuthPlassPlaceholderGeometry,
   getKnuthPlassPointFromOffset,
   getKnuthPlassSelectionRects,
@@ -29,6 +30,8 @@ export {
   getKnuthPlassVListTreeHitFromSnapshot,
   clearKnuthPlassCaretMappingCache,
   type CaretFromPointParams,
+  type KnuthPlassParagraphCaretStop,
+  type KnuthPlassParagraphCaretStopsLine,
   type PointFromOffsetParams,
   type SelectionRectsParams,
   type CaretHitResult,

@@ -3336,6 +3336,107 @@ function buildParagraphHitMap(
   };
 }
 
+export interface KnuthPlassParagraphCaretStop {
+  readonly offset: number;
+  /** Line-frame x in report pt (same frame as `line.xStart`/segment x). */
+  readonly x: number;
+  readonly kind: 'text' | 'math' | 'space';
+}
+
+export interface KnuthPlassParagraphCaretStopsLine {
+  readonly lineIndex: number;
+  readonly kind: 'report' | 'display-math';
+  /** Sorted by x, ties by ascending offset — the click map's stop order. */
+  readonly stops: readonly KnuthPlassParagraphCaretStop[];
+  /** Display-math rows only: box placement in the vlist frame. */
+  readonly display?: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * The ordered caret-stop domain of a paragraph, DOM-free: exactly the stops
+ * `getKnuthPlassCaretFromPoint` can resolve a click to, derived from the
+ * same alignment + stop-building pass as the hit map (single source of
+ * truth). Display-math rows are included when the paragraph's positioned
+ * vlist items are provided; only their client-rect conversion needs a DOM,
+ * not the stops themselves.
+ */
+export function getKnuthPlassParagraphCaretStops(params: {
+  report: ParagraphLayoutReport;
+  sourceText: string;
+  sourceTextStartOffset: number;
+  vlistItems?: readonly PositionedTexVListItem[];
+}): { lines: KnuthPlassParagraphCaretStopsLine[]; error: string | null } {
+  const aligned = alignSegmentsToSource(
+    params.report,
+    params.sourceText,
+    params.sourceTextStartOffset
+  );
+  if (aligned.error) {
+    return { lines: [], error: aligned.error };
+  }
+  let stopsByLine: Map<number, Stop[]>;
+  try {
+    stopsByLine = buildStopsByLine(aligned.aligned);
+  } catch (error) {
+    return { lines: [], error: error instanceof Error ? error.message : String(error) };
+  }
+  const lines: KnuthPlassParagraphCaretStopsLine[] = [...stopsByLine.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([lineIndex, stops]) => ({
+      lineIndex,
+      kind: 'report',
+      stops: stops.map((stop) => ({
+        offset: stop.offset,
+        x: Number(stop.x),
+        kind: stop.kind,
+      })),
+    }));
+
+  const baseLineIndex = Math.max(-1, ...params.report.lines.map((line) => line.lineIndex));
+  const displayLines = (params.vlistItems
+    ? flattenPositionedTexVListItems(params.vlistItems)
+    : []
+  ).flatMap((item, displayIndex): KnuthPlassParagraphCaretStopsLine[] => {
+    const source = displayMathSourceForPositionedItem(item);
+    if (!source) {
+      return [];
+    }
+    const metrics = item.metrics;
+    const width = texLength(Math.max(0, metrics.width));
+    const sourceStart = Math.max(0, Math.floor(source.sourceStart));
+    const sourceEnd = Math.max(sourceStart, Math.floor(source.sourceEnd));
+    if (sourceEnd <= sourceStart || width <= EPSILON) {
+      return [];
+    }
+    const xStart = projectTexVListXToLine(item.x, texVListX(0), texLineX(0));
+    const y = Number(item.y);
+    if (!Number.isFinite(xStart) || !Number.isFinite(y)) {
+      return [];
+    }
+    const stops = displayMathStopsForBox(source, xStart, width);
+    if (!stops.length) {
+      return [];
+    }
+    return [{
+      lineIndex: baseLineIndex + 1 + displayIndex,
+      kind: 'display-math',
+      stops: stops.map((stop) => ({
+        offset: stop.offset,
+        x: Number(stop.x),
+        kind: stop.kind,
+      })),
+      display: {
+        x: Number(xStart),
+        y,
+        width: Number(width),
+        height: Math.max(1, metrics.height + metrics.depth),
+      },
+    }];
+  });
+
+  return { lines: [...lines, ...displayLines], error: null };
+}
+
 async function getParagraphHitMap(
   layoutContext: unknown,
   report: ParagraphLayoutReport,

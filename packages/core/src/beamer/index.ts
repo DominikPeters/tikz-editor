@@ -1,5 +1,17 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
 export { parseBeamerFrameBody } from "./content.js";
+export {
+  beamerCaretAtomBeside,
+  beamerCaretRowEdgeOffset,
+  beamerCaretRowForOffset,
+  buildBeamerCaretStopDomain,
+  nearestBeamerCaretOffset,
+  nextBeamerCaretOffset,
+  verticalBeamerCaretOffset,
+  type BeamerCaretDomain,
+  type BeamerCaretRow,
+  type BeamerCaretStop,
+} from "./caret-stops.js";
 export { collectBeamerEditScopes, resolveBeamerEditScopeAt } from "./edit-scopes.js";
 export {
   beamerOverlaySpecContains,
