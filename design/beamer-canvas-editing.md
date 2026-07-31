@@ -354,6 +354,16 @@ four contracts must change first. Verified against the current code:
 
 ## Staging
 
+Status (2026-07-31, branch `beamer`): **Stage 0 and Stage 1 (a)–(d) are
+implemented and verified** (commits 9ac0e5f6..238c023c) — scope-wide
+sessions with per-run structural masks and minimal-diff patches, the
+docked-bar/popup placement setting, click-into-math (inline and display),
+atomic-render click-to-select, and preamble-backed title-page fields
+(author/institute/date now render as source-backed paragraphs; each
+metadata field is a `preamble-field` edit scope). The latency gate
+measures the full KKT column scope buffer on both browsers. Stage 2+ is
+not started. The editing fixture corpus below is still outstanding.
+
 - **Stage 0 — editing infrastructure** (added after review): the Core
   prerequisites above — Beamer edit index, session refactor (scope buffer +
   active paragraph + document-offset selection + multi-paragraph overlays),
