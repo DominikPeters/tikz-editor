@@ -19,6 +19,47 @@ const INFOLINES_NAVIGATION_FIXTURE_PATH = new URL(
 );
 
 describe("headless Beamer frame renderer", () => {
+  it("renders a multi-item nested list followed by an outer item", async () => {
+    // Regression: the second nested item's interline glue used to land
+    // between its list-label hbox and paragraph, breaking the measurer's
+    // label/paragraph adjacency invariant (spacing.ts).
+    const source = [
+      "\\documentclass{beamer}",
+      "\\begin{document}",
+      "\\begin{frame}{Nested}",
+      "\\begin{itemize}",
+      "\\item First one",
+      "\\begin{itemize}",
+      "\\item Inner row",
+      "\\item Inner two",
+      "\\end{itemize}",
+      "\\item Outer last",
+      "\\end{itemize}",
+      "\\end{frame}",
+      "\\end{document}",
+    ].join("\n");
+    const result = await renderBeamerFrame(source, { frameIndex: 0 });
+    const body = result.layout.paragraphs.find((paragraph) => paragraph.role === "body");
+    expect(body).toBeDefined();
+    const rowTexts = body!.report.lines.map((line) =>
+      line.segments.map((segment) => segment.text ?? "").join("")
+    );
+    expect(rowTexts.join("\n")).toContain("Inner two");
+    // Inner rows keep vertical order: the glue fix must not reorder rows.
+    const placementFor = (needle: string) => {
+      const line = body!.report.lines.find((candidate) =>
+        candidate.segments.some((segment) => segment.text?.includes(needle))
+      )!;
+      return Number(
+        body!.vlistLayout.linePlacements.find(
+          (candidate) => candidate.lineIndex === line.lineIndex
+        )!.y
+      );
+    };
+    expect(placementFor("row")).toBeLessThan(placementFor("two"));
+    expect(placementFor("two")).toBeLessThan(placementFor("last"));
+  });
+
   it("renders Infolines section navigation at the measured TeX positions", async () => {
     const source = readFileSync(INFOLINES_NAVIGATION_FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 0 });

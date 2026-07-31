@@ -765,14 +765,27 @@ function resolveDisplayMathVerticalGlueInItems(
         plainParagraphInterlinePending &&
         !paragraphBoundaryInterlineAlreadyInserted
       ) {
-        items.push(plainParagraphBoundaryInterlineGlueItem(
+        const interlineGlue = plainParagraphBoundaryInterlineGlueItem(
           item,
           texInterlineGlueSize(
             previousDepth,
             paragraphMeasurement.ruleLeadingMetrics.height,
             options.lineHeight
           )
-        ));
+        );
+        // A list-label hbox rides directly before its paragraph — an
+        // adjacency the measurer enforces, and the label's y derives from
+        // the cursor at the pair. Interline glue belongs above the pair,
+        // never between the label and its paragraph.
+        const attachedLabel = items.at(-1);
+        if (
+          attachedLabel?.kind === "hbox" &&
+          attachedLabel.verticalPlacement?.kind === "paragraph-first-line-baseline"
+        ) {
+          items.splice(items.length - 1, 0, interlineGlue);
+        } else {
+          items.push(interlineGlue);
+        }
       }
       previousParagraphMeasurement = paragraphMeasurement;
       previousDisplayMaterialMetrics = undefined;
