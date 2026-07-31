@@ -201,6 +201,38 @@ Always visible.
     );
   });
 
+  it("keeps block structure for an action spec on the environment itself", async () => {
+    const source = deck(String.raw`
+Intro prose.
+\begin{block}<2->{Acted block}
+\begin{itemize}
+\item Inside item
+\end{itemize}
+\end{block}`);
+    const result = await renderBeamerFramePages(source);
+    expect(result.stepCount).toBe(2);
+
+    // The block is a real block on both pages: covered (space reserved,
+    // paint suppressed) on page one, painted on page two. The begin/end
+    // tokens are block structure, not overlay syntax to strip.
+    const blockItems = (pageIndex: number) =>
+      result.pages[pageIndex]!.layout.items.filter(
+        (item) => item.kind === "block"
+      );
+    expect(blockItems(0)).toHaveLength(1);
+    expect(blockItems(0)[0]!.visibility).toBe("hidden");
+    expect(blockItems(1)).toHaveLength(1);
+    expect(blockItems(1)[0]!.visibility).not.toBe("hidden");
+    expect(tracedContentText(result.pages[1]!)).toContain("Actedblock");
+    expect(tracedContentText(result.pages[1]!)).toContain("Insideitem");
+    // The title parses behind the spec — no missing-title diagnostic.
+    expect(
+      result.diagnostics.filter(
+        (diagnostic) => diagnostic.code === "beamer-block-missing-title"
+      )
+    ).toHaveLength(0);
+  });
+
   it("supports alternate, temporal, invisible, and pause projections", async () => {
     const source = deck(String.raw`
 \alt<2>{During}{Otherwise}

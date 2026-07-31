@@ -662,14 +662,21 @@ function parseBlock(params: {
     nodeIndex,
     diagnostics,
   } = params;
-  const options = beamerOptionalArgumentAfter(
+  // An action spec (`\begin{block}<2->`) precedes the title; visibility is
+  // handled by the frame overlay model, the parser only skips past it.
+  const overlay = beamerOverlayArgumentAfter(
     context,
     begin.span.to,
+    end.span.from
+  );
+  const options = beamerOptionalArgumentAfter(
+    context,
+    overlay?.span.to ?? begin.span.to,
     end.span.from
   ) ?? undefined;
   const title = beamerRequiredArgumentAfter(
     context,
-    options?.span.to ?? begin.span.to,
+    options?.span.to ?? overlay?.span.to ?? begin.span.to,
     end.span.from
   );
   if (!title) {

@@ -699,27 +699,52 @@ function overlayEnvironmentSpecs(
     if (!end || !spec || !kind) {
       continue;
     }
-    const body: BeamerDelimitedSourceValue = {
-      span: { from: spec.span.to, to: end.span.from },
-      contentSpan: { from: spec.span.to, to: end.span.from },
-      value: source.slice(spec.span.to, end.span.from),
-    };
     const commandSpan = { from: begin.span.from, to: begin.span.to };
-    result.push({
-      kind: "command",
-      sourceOrder: begin.span.from,
-      rawSpec: spec,
-      command: {
-        kind,
+    if (explicitKind) {
+      // Wrapper environments (onlyenv & friends) exist only to carry the
+      // spec: their begin/end are overlay syntax and the body is the branch.
+      const body: BeamerDelimitedSourceValue = {
+        span: { from: spec.span.to, to: end.span.from },
+        contentSpan: { from: spec.span.to, to: end.span.from },
+        value: source.slice(spec.span.to, end.span.from),
+      };
+      result.push({
+        kind: "command",
+        sourceOrder: begin.span.from,
+        rawSpec: spec,
+        command: {
+          kind,
+          span: { from: begin.span.from, to: end.span.to },
+          commandSpan,
+          branches: [body],
+          syntaxSpans: [
+            { from: begin.span.from, to: spec.span.to },
+            { from: end.span.from, to: end.span.to },
+          ],
+        },
+      });
+    } else {
+      // A content environment with an action spec (`\begin{block}<2->`)
+      // keeps its structure: only the spec is overlay syntax, and the whole
+      // environment uncovers as one unit (space reserved while covered).
+      const body: BeamerDelimitedSourceValue = {
         span: { from: begin.span.from, to: end.span.to },
-        commandSpan,
-        branches: [body],
-        syntaxSpans: [
-          { from: begin.span.from, to: spec.span.to },
-          { from: end.span.from, to: end.span.to },
-        ],
-      },
-    });
+        contentSpan: { from: begin.span.from, to: end.span.to },
+        value: source.slice(begin.span.from, end.span.to),
+      };
+      result.push({
+        kind: "command",
+        sourceOrder: begin.span.from,
+        rawSpec: spec,
+        command: {
+          kind,
+          span: { from: begin.span.from, to: end.span.to },
+          commandSpan,
+          branches: [body],
+          syntaxSpans: [spec.span],
+        },
+      });
+    }
     index = endIndex;
   }
   return result;
