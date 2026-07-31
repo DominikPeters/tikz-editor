@@ -599,6 +599,13 @@ export function useCanvasTextEditSession(
   >(null);
   const pendingTextEditPasteRef = useRef<string | null>(null);
   const pendingTextEditInsertTextRef = useRef<string | null>(null);
+  /**
+   * Sticky goal column for consecutive ↑/↓ presses: survives only while the
+   * caret sits where the last vertical move left it, so any other movement
+   * (click, typing, horizontal keys) starts a fresh goal without needing to
+   * hook every selection path.
+   */
+  const canvasVerticalGoalRef = useRef<{ offset: number; x: number } | null>(null);
   const previousContextKeyRef = useRef(contextKey);
   const sourceRevisionRef = useRef(sourceRevision);
 
@@ -1306,6 +1313,7 @@ export function useCanvasTextEditSession(
     const domainFocus = nearestBeamerCaretOffset(domain, focusDoc) ?? focusDoc;
 
     let nextDoc: number | null;
+    let nextVerticalGoal: { offset: number; x: number } | null = null;
     if (isHome || isEnd || (withPrimary && horizontal !== 0)) {
       nextDoc = beamerCaretRowEdgeOffset(
         domain,
@@ -1326,11 +1334,20 @@ export function useCanvasTextEditSession(
         nextDoc = nextBeamerCaretOffset(domain, domainFocus, horizontal) ?? domainFocus;
       }
     } else {
-      nextDoc = verticalBeamerCaretOffset(domain, domainFocus, vertical as -1 | 1) ?? domainFocus;
+      const remembered = canvasVerticalGoalRef.current;
+      const goalX = remembered?.offset === domainFocus ? remembered.x : null;
+      const moved = verticalBeamerCaretOffset(domain, domainFocus, vertical as -1 | 1, goalX);
+      if (moved) {
+        nextDoc = moved.offset;
+        nextVerticalGoal = { offset: moved.offset, x: moved.goalX };
+      } else {
+        nextDoc = domainFocus;
+      }
     }
     if (nextDoc == null) {
       return false;
     }
+    canvasVerticalGoalRef.current = nextVerticalGoal;
 
     const nextLocal = toLocal(nextDoc);
     if (event.shiftKey) {

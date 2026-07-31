@@ -384,7 +384,9 @@ and collapsed over atomic spans (macro invocations, atomic renders), with
 page-space rows for vertical motion. Canvas-focus keys: ←/→ step by
 rendered stops (atomic over macro calls, per-offset inside math and
 ligatures — matching what clicks can reach), ↑/↓ move by rendered rows
-(nearest-x, clamping to row start/end at the edges), Home/End and
+(nearest-x with a sticky goal column that survives consecutive vertical
+presses through short rows, clamping to row start/end at the edges —
+clamping resets the goal, standard editor convention), Home/End and
 Cmd+←/→ go to rendered-row edges, Cmd+↑/↓ to the scope's visual extremes,
 Shift extends all of these, and Backspace/Delete beside an atom select it
 first (select-then-delete) with the second press deleting the invocation.

@@ -109,8 +109,8 @@ describe("beamer caret-stop domain", () => {
     };
     const down = verticalBeamerCaretOffset(domain, outerFirst, 1);
     expect(down).not.toBeNull();
-    expect(down!).toBeGreaterThanOrEqual(nested.from);
-    expect(down!).toBeLessThanOrEqual(nested.to);
+    expect(down!.offset).toBeGreaterThanOrEqual(nested.from);
+    expect(down!.offset).toBeLessThanOrEqual(nested.to);
 
     const pointsUphill = corpusSource.indexOf("Points uphill");
     const up = verticalBeamerCaretOffset(domain, pointsUphill, -1);
@@ -119,14 +119,46 @@ describe("beamer caret-stop domain", () => {
       to: corpusSource.indexOf("Outer after empty") + "Outer after empty".length,
     };
     expect(up).not.toBeNull();
-    expect(up!).toBeGreaterThanOrEqual(outerAfter.from);
-    expect(up!).toBeLessThanOrEqual(outerAfter.to);
+    expect(up!.offset).toBeGreaterThanOrEqual(outerAfter.from);
+    expect(up!.offset).toBeLessThanOrEqual(outerAfter.to);
 
     // Vertical motion at the domain edges clamps to the row's start/end.
     const titleStart = corpusSource.indexOf("Nested lists");
-    expect(verticalBeamerCaretOffset(domain, titleStart + 4, -1)).toBe(titleStart);
+    expect(verticalBeamerCaretOffset(domain, titleStart + 4, -1)?.offset).toBe(titleStart);
     const lastRowEnd = corpusSource.indexOf("Curves the bowl") + "Curves the bowl".length;
-    expect(verticalBeamerCaretOffset(domain, lastRowEnd - 4, 1)).toBe(lastRowEnd);
+    expect(verticalBeamerCaretOffset(domain, lastRowEnd - 4, 1)?.offset).toBe(lastRowEnd);
+  });
+
+  it("keeps the sticky goal column across a short row", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{T}
+A rather long opening line segment \\ hi \\ Another rather long closing line
+\end{frame}
+\end{document}`;
+    const domain = await domainFor(source, 0);
+
+    // Start deep into the long first row, well past the short row's extent.
+    const start = source.indexOf("segment") + "segment".length;
+    const first = verticalBeamerCaretOffset(domain, start, 1);
+    expect(first).not.toBeNull();
+    const shortRow = { from: source.indexOf("hi"), to: source.indexOf("hi") + 2 };
+    expect(first!.offset).toBeGreaterThanOrEqual(shortRow.from);
+    expect(first!.offset).toBeLessThanOrEqual(shortRow.to);
+    // The goal remembers the original x, not the clamped landing.
+    expect(first!.goalX).toBeGreaterThan(
+      verticalBeamerCaretOffset(domain, first!.offset, 1)!.goalX
+    );
+
+    // Continuing down with the goal returns to the original column; without
+    // it, the position decays to the short row's x.
+    const withGoal = verticalBeamerCaretOffset(domain, first!.offset, 1, first!.goalX);
+    const withoutGoal = verticalBeamerCaretOffset(domain, first!.offset, 1);
+    expect(withGoal).not.toBeNull();
+    expect(withoutGoal).not.toBeNull();
+    expect(withGoal!.offset).toBeGreaterThan(withoutGoal!.offset);
+    const closing = source.indexOf("Another rather long closing line");
+    expect(withGoal!.offset).toBeGreaterThan(closing + "Another rather".length);
   });
 
   it("excludes overlay-hidden content from the step's domain", async () => {

@@ -241,24 +241,35 @@ function nearestStopInRow(row: BeamerCaretRow, x: number): BeamerCaretStop {
  * Vertical caret motion by rendered rows: the nearest-x stop on the
  * adjacent row, clamping to the row's start/end at the domain's edges
  * (textarea convention for first/last line).
+ *
+ * `goalX` is the sticky goal column: consecutive vertical presses pass the
+ * returned `goalX` back in, so stepping through a short row does not decay
+ * the horizontal position. Pass null when the caret arrived by any other
+ * means (click, typing, horizontal motion) — the current stop's x becomes
+ * the new goal. Clamping to a row edge is an explicit horizontal move and
+ * resets the goal to the edge's x.
  */
 export function verticalBeamerCaretOffset(
   domain: BeamerCaretDomain,
   offset: number,
-  direction: -1 | 1
-): number | null {
+  direction: -1 | 1,
+  goalX: number | null = null
+): { offset: number; goalX: number } | null {
   const position = beamerCaretRowForOffset(domain, offset);
   if (!position) {
     return null;
   }
   const row = domain.rows[position.rowIndex];
-  const currentX = row.stops[position.stopIndex].x;
+  const effectiveGoalX = goalX ?? row.stops[position.stopIndex].x;
   const targetRow = domain.rows[position.rowIndex + direction];
   if (!targetRow) {
     const edge = direction < 0 ? row.stops[0] : row.stops[row.stops.length - 1];
-    return edge.offset === offset ? null : edge.offset;
+    return edge.offset === offset ? null : { offset: edge.offset, goalX: edge.x };
   }
-  return nearestStopInRow(targetRow, currentX).offset;
+  return {
+    offset: nearestStopInRow(targetRow, effectiveGoalX).offset,
+    goalX: effectiveGoalX,
+  };
 }
 
 /** Home/End: the visual start/end stop of the caret's rendered row. */
