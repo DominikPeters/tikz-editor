@@ -93,6 +93,24 @@ function findGlyphX(
   return null;
 }
 
+function findGlyphYs(
+  items: readonly TexMathHListItem[],
+  fontId: string,
+  codes: ReadonlySet<number>,
+  baseY = 0
+): readonly number[] {
+  const ys: number[] = [];
+  for (const item of items) {
+    if (item.kind === "glyph" && item.fontId === fontId && codes.has(item.code)) {
+      ys.push(baseY + item.y);
+    }
+    if (item.kind === "hlist") {
+      ys.push(...findGlyphYs(item.items, fontId, codes, baseY + item.y));
+    }
+  }
+  return ys;
+}
+
 function findCaretEntry(
   entries: readonly TexMathCaretEntry[] | undefined,
   sourceOffset: number,
@@ -3186,15 +3204,15 @@ describe("TeX math SVG rendering", () => {
       contentEnd: source.indexOf(String.raw`\end{align*}`),
       targetWidth: texLength(100),
     });
-    const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
-      item.kind === "glyph" &&
-      item.fontId === "lmroman10-regular" &&
-      (item.code === 40 || item.code === 65 || item.code === 41)
-    ) ?? [];
+    const tagGlyphYs = findGlyphYs(
+      directAlignment?.rows.at(0)?.hlist?.items ?? [],
+      "lmroman10-regular",
+      new Set([40, 65, 41])
+    );
 
     expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(19.85951, 4);
-    expect(tagGlyphs).toHaveLength(3);
-    expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
+    expect(tagGlyphYs).toHaveLength(3);
+    expect(tagGlyphYs).toEqual([
       expect.closeTo(16.25951, 5),
       expect.closeTo(16.25951, 5),
       expect.closeTo(16.25951, 5),
@@ -3213,15 +3231,15 @@ describe("TeX math SVG rendering", () => {
       contentEnd: source.indexOf(String.raw`\end{align*}`),
       targetWidth: texLength(120),
     });
-    const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
-      item.kind === "glyph" &&
-      item.fontId === "lmroman10-regular" &&
-      (item.code === 40 || item.code === 65 || item.code === 41)
-    ) ?? [];
+    const tagGlyphYs = findGlyphYs(
+      directAlignment?.rows.at(0)?.hlist?.items ?? [],
+      "lmroman10-regular",
+      new Set([40, 65, 41])
+    );
 
     expect(directAlignment?.rows.at(0)?.height).toBeCloseTo(8.81748, 5);
     expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(19.85951, 4);
-    expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
+    expect(tagGlyphYs).toEqual([
       expect.closeTo(16.25951, 5),
       expect.closeTo(16.25951, 5),
       expect.closeTo(16.25951, 5),
@@ -3241,14 +3259,14 @@ describe("TeX math SVG rendering", () => {
       contentEnd: source.indexOf(String.raw`\end{align*}`),
       targetWidth: texLength(170),
     });
-    const tagGlyphs = directAlignment?.rows.at(0)?.hlist?.items.filter((item): item is Extract<typeof item, { readonly kind: "glyph" }> =>
-      item.kind === "glyph" &&
-      item.fontId === "lmroman10-regular" &&
-      (item.code === 40 || item.code === 65 || item.code === 41)
-    ) ?? [];
+    const tagGlyphYs = findGlyphYs(
+      directAlignment?.rows.at(0)?.hlist?.items ?? [],
+      "lmroman10-regular",
+      new Set([40, 65, 41])
+    );
 
     expect(directAlignment?.rows.at(0)?.depth).toBeCloseTo(32.610077, 4);
-    expect(tagGlyphs.map((glyph) => glyph.y)).toEqual([
+    expect(tagGlyphYs).toEqual([
       expect.closeTo(29.01004, 5),
       expect.closeTo(29.01004, 5),
       expect.closeTo(29.01004, 5),
