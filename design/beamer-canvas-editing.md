@@ -242,15 +242,18 @@ traversal (select-then-delete).
   field.
 - **Embedded tikzpictures**: click → select (inspector shows `scale=`/
   `\scalebox` value when present — same retained-span rewrite);
-  double-click → switch `activeRootId` to the nested root with a breadcrumb
-  back to the slide ("Slide 4 ▸ Figure"); Esc returns. Caveat: switching
-  `activeRootId` alone is not enough — `computeSnapshot` routes all Beamer
-  source to deck compute by `documentKind`, so entering the nested figure
-  needs a real compute-mode branch (deck document, TikZ-root scene).
-  In-place editing stays deferred (Phase B5); the breadcrumb keeps the
-  interaction grammar stable when it lands.
-- **Vertical glue**: selectable via caret traversal / backspace only (no
-  hover-click target v1); selected state is the labeled band.
+  double-click or Enter on the selected picture → the nested figure
+  editor with a breadcrumb back to the slide ("Slide 4 ▸ Figure"); Esc
+  returns. Design settled 2026-07-31 — see "Nested TikZ figure editing"
+  below. In-place editing stays deferred (Phase B5); the breadcrumb keeps
+  the interaction grammar stable when it lands.
+- **Vertical glue**: selectable via caret traversal / backspace, and
+  **discoverable by hover** (decided 2026-07-31, superseding the earlier
+  no-hover-target lean): moving the pointer through the gap reveals a
+  faint band; clicking it selects the glue. The selected state is the
+  labeled band (label = the source command). Covers the whole
+  vertical-space family the engine already parses — `\vspace`,
+  `\smallskip`, `\medskip`, `\bigskip`, `\vfill`.
 
 Foundation vs gaps: `BeamerFrameLayoutItem` already publishes stable ids,
 parent relationships, source spans, and bounds for columns, blocks,
@@ -309,6 +312,111 @@ resize handles, column divider drag, glue bands, tier-3 drag promotion,
 the nested-TikZ compute-mode branch for the breadcrumb, and deck edit
 actions beyond delete/duplicate — split into Stages 3b/3c under Staging
 below.
+
+## Nested TikZ figure editing (settled 2026-07-31, not yet implemented)
+
+Entering an embedded `tikzpicture` turns the canvas into the *real* TikZ
+editor on that picture — scene, edit handles, drag, snapping, the TikZ
+inspector and styles cascade — scoped to the picture's source span inside
+the deck document. This is Stage 3c's largest item; the design below was
+discussed and settled with Dominik; implementation is deliberately
+deferred until scheduled.
+
+### Addressing and entry
+
+- Nested pictures are already first-class roots:
+  `frame:${i}:tikzpicture:${j}` in the document-root codec
+  (`packages/core/src/document/root-id.ts`), published by the Beamer scan
+  in the root inventory. Today `resolveDeckFrameIndex` maps such a root to
+  its owning frame; entering the figure means giving this root kind its
+  own compute behavior instead.
+- **Entry gestures**: double-click on the rendered picture, or Enter/F2
+  while the picture object is selected (3a currently opens the raw-source
+  atom session on Enter; that behavior is *replaced* — the raw source
+  stays reachable through the source panel and the session bar).
+- **Nothing to click**: a picture removed at the current step (`\only`)
+  has no hit region, and a covered one (`\uncover`, action specs) is
+  deliberately unselectable (hidden items are skipped by the object
+  index). Entry for invisible pictures goes through the figure navigator,
+  which lists every nested root regardless of visibility — or by stepping
+  the deck until the picture appears. Covered "ghost" pictures do not
+  become clickable in v1.
+- **Exit**: breadcrumb bar over the canvas — "Slide 4 ▸ Figure" — where
+  clicking the slide crumb or pressing Esc (with nothing else to unwind)
+  returns to the deck surface with `activeRootId = frame:${i}`. The
+  per-root overlay step (`deckStepByRootKey`) is untouched by the round
+  trip.
+
+### Compute: a third branch, absolute spans via masking
+
+`computeSnapshot` currently routes by `documentKind` alone; beamer source
+always produces a deck snapshot. The new routing: beamer document **and**
+`activeRootId` parsing to `beamer-frame-tikz` → run the **TikZ pipeline**
+(parse → semantic → emitSvg), but over the **full-length document source
+with everything outside the picture span masked to spaces** — the same
+structural-masking trick used by edit sessions and
+`createBeamerSyntaxContext`. The parser sees one tikzpicture in a
+document of blanks, so every span in the scene, edit handles, and source
+maps is an **absolute document offset with no remapping layer**.
+Consequences that fall out for free:
+
+- TikZ edit actions work unmodified: `applyEditAction` patches the real
+  document source; undo/redo shares the document history; the source
+  panel highlights the right text; returning to the slide re-renders the
+  edited picture.
+- The snapshot is TikZ-shaped (`scene`, `editHandles`, `svg`, one-entry
+  `figures`); it additionally carries the breadcrumb context (owning
+  frame id/index/title — a small `deck`-side field, with `activeFrame`
+  null).
+- The text engine uses the same Beamer font profile as
+  `prepareEmbeddedTikz`, so the nested editor and the slide render agree
+  glyph-for-glyph.
+
+**Mode is a function of `(documentKind, activeRootId)`**, not of the
+document alone. The reducer's `APPLY_EDIT_ACTION` branch accepts TikZ
+actions (and rejects deck actions) while a nested root is active, and
+vice versa on the deck surface. Implementation step one is an audit of
+every site that assumes `documentKind === "beamer"` implies a deck
+snapshot (canvas panel, inspector switch, deck step controls, edit-action
+gating, figure navigator, thumbnails).
+
+### Preamble context: selective unmasking (follow-up to v1)
+
+Pictures reference preamble material: `\tikzset` styles, `\definecolor`/
+`\colorlet` colors, `\newcommand` macros, `\usetikzlibrary`. The TikZ
+parser has first-class statements for all of these
+(`TikzSetStatement`, `DefineColorStatement`, the `Macro*Statement`
+family), so the masking approach extends naturally: **leave whitelisted
+preamble support statements unmasked** alongside the picture. Styles,
+colors, and macros then resolve at their true offsets — the styles
+cascade in the inspector works against the real preamble spans (and the
+StylesPanel can plausibly edit deck-wide TikZ styles unchanged). The same
+extracted statements get *prepended* to `prepareEmbeddedTikz`'s snippet
+so the slide preview shows identical output (prepending is fine there —
+the preview discards spans). v1 masks everything except the picture,
+which degrades exactly like today's embedded preview (consistent, if
+imperfect); the unmasking pass is the immediate follow-up because it
+upgrades preview and editor symmetrically.
+
+### Deck chrome while nested
+
+Step controls and the deck inspector hide; the TikZ inspector, styles
+panel behavior, and TikZ toolbars return (the surface *is* a TikZ
+editor). The canvas transform should fit the figure on entry and restore
+the deck view on exit (per-root transform, mirroring per-figure fit in
+TikZ documents).
+
+### Deferred alongside
+
+- **Overlays inside the picture** (`\node<2->`, `\visible<2->{…}` — the
+  Beamer-TikZ overlay extension): the slide preview *already* renders the
+  raw unprojected snippet, so the nested editor showing "all steps at
+  once" is consistent, not a regression. Making inner-picture overlays
+  actually step — in preview and editor both — is its own feature, near
+  Phase B5.
+- Beamer theme colors (`structure.fg` …) referenced inside pictures.
+- In-place (on-slide) figure editing: Phase B5; the breadcrumb editor is
+  its interaction-grammar placeholder.
 
 ## Masking and structural recovery
 
@@ -565,13 +673,12 @@ foundation; full status paragraph in the Object layer section above.
     (rewrite the authored `width=0.63\textwidth` value span, symbolic form
     preserved), column divider drag with live re-layout (rewrite both
     adjacent coefficients preserving their sum), glue bands (vertical glue
-    enters the caret-traversal/select-then-delete domain with the labeled
-    band), tier-3 selection promotion (text drags crossing containers
-    promote to object selection), and the nested-TikZ double-click
-    breadcrumb — the largest single item, since it needs a real
-    compute-mode branch (deck document with a TikZ-root scene; today
-    `computeSnapshot` routes all Beamer source to deck compute by
-    `documentKind`).
+    enters the caret-traversal/select-then-delete domain; hover reveals
+    the band — decided 2026-07-31 — covering `\vspace`/`\smallskip`/
+    `\medskip`/`\bigskip`/`\vfill`), tier-3 selection promotion (text
+    drags crossing containers promote to object selection), and the
+    nested-TikZ breadcrumb editor — the largest single item; design
+    settled 2026-07-31, see "Nested TikZ figure editing".
 - **Stage 4 — gap closing**: the deliberate gaps accumulated across
   stages 1–3, none of which block the object layer but all of which are
   user-visible: `\vfill` glue distribution (and column-level inline
@@ -628,7 +735,9 @@ fragile/verbatim frame (expected: frame fallback, no session).
 - Tier-2 snapping catalog: exact list of constructs that snap (math,
   command groups, macro calls, environments?) and whether snapping is
   extend-only or can shrink a drag.
-- Glue band styling and whether hover should reveal glue targets before
-  caret traversal does.
+- ~~Glue band styling and whether hover should reveal glue targets before
+  caret traversal does.~~ Settled 2026-07-31: hover reveals glue bands
+  (all vertical-space commands, incl. `\medskip` and friends); exact band
+  styling is an implementation detail.
 - When blocks-transparent meets very tall blocks, does the Esc ladder
   (caret → item → list → block → column) feel too long in practice?
