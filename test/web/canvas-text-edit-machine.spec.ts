@@ -1482,3 +1482,79 @@ describe("focus surface", () => {
     expect(clicked.focusSurface).toBe("canvas");
   });
 });
+
+describe("structural edits", () => {
+  const STRUCTURAL_SOURCE = String.raw`\begin{tikzpicture}
+  \node at (0,0) {hello};
+\end{tikzpicture}`;
+
+  const startSession = () => {
+    const target = buildTarget(STRUCTURAL_SOURCE, "hello");
+    return reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: STRUCTURAL_SOURCE,
+      target,
+      selectionStart: 2,
+      selectionEnd: 2,
+      historyMergeKey: "merge"
+    }).state;
+  };
+
+  it("applies an atomic buffer replacement with explicit caret placement", () => {
+    const started = startSession();
+    const edited = reduceCanvasTextEdit(started, {
+      type: "structural_edit",
+      nextText: "heABllCDo",
+      selectionStart: 4,
+      selectionEnd: 4
+    });
+    expect(edited.state.session?.text).toBe("heABllCDo");
+    expect(edited.state.session?.selectionStart).toBe(4);
+    expect(edited.state.session?.selectionEnd).toBe(4);
+    expect(edited.effects).toHaveLength(1);
+    const effect = edited.effects[0]!;
+    expect(effect.type).toBe("apply_source_patch");
+    expect(effect.nextSource).toContain("heABllCDo");
+  });
+
+  it("creates its own undo checkpoint", () => {
+    const started = startSession();
+    const edited = reduceCanvasTextEdit(started, {
+      type: "structural_edit",
+      nextText: "hel\\item lo",
+      selectionStart: 9,
+      selectionEnd: 9
+    }).state;
+    expect(edited.undoStack).toHaveLength(1);
+    const undone = reduceCanvasTextEdit(edited, {
+      type: "textarea_input_intent",
+      inputType: "historyUndo",
+      data: null,
+      selectionStart: 9,
+      selectionEnd: 9
+    }).state;
+    expect(undone.session?.text).toBe("hello");
+    expect(undone.session?.selectionStart).toBe(2);
+  });
+
+  it("is a no-op without a session or without a change", () => {
+    const noSession = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "structural_edit",
+      nextText: "anything",
+      selectionStart: 0,
+      selectionEnd: 0
+    });
+    expect(noSession.state.session).toBeNull();
+    expect(noSession.effects).toEqual([]);
+
+    const started = startSession();
+    const unchanged = reduceCanvasTextEdit(started, {
+      type: "structural_edit",
+      nextText: "hello",
+      selectionStart: 2,
+      selectionEnd: 2
+    });
+    expect(unchanged.effects).toEqual([]);
+    expect(unchanged.state.undoStack).toHaveLength(0);
+  });
+});

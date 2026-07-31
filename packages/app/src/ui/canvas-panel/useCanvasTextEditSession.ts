@@ -33,10 +33,16 @@ import {
 import {
   beamerCaretAtomBeside,
   beamerCaretRowEdgeOffset,
+  beamerStructuralBackspacePatch,
+  beamerStructuralDeletePatch,
+  beamerStructuralEnterPatch,
+  beamerStructuralLineBreakPatch,
+  beamerStructuralTabPatch,
   nearestBeamerCaretOffset,
   nextBeamerCaretOffset,
   verticalBeamerCaretOffset,
-  type BeamerCaretDomain
+  type BeamerCaretDomain,
+  type BeamerStructuralKeyResult
 } from "@tikz-editor/core/beamer/index";
 import type { CanvasTextEditPlacement } from "../../settings/types";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
@@ -1362,6 +1368,121 @@ export function useCanvasTextEditSession(
     return true;
   }, [dispatchCanvasTextEditAction, resolveDeckCaretDomain]);
 
+  const handleCanvasStructuralKey = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
+    const currentState = stateRef.current;
+    const session = currentState.session;
+    if (!session?.isScopeSession || currentState.compositionRange) {
+      return false;
+    }
+    const key = event.key;
+    const isEnter = key === "Enter";
+    const isTab = key === "Tab";
+    const isBackspace = key === "Backspace";
+    const isDelete = key === "Delete";
+    if (!isEnter && !isTab && !isBackspace && !isDelete) {
+      return false;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return false;
+    }
+    if ((isBackspace || isDelete) && event.shiftKey) {
+      return false;
+    }
+    const hasRange = session.selectionStart !== session.selectionEnd;
+    if (hasRange && (isBackspace || isDelete)) {
+      // Range deletes (including a selected atom) run natively through the
+      // beforeinput machine.
+      return false;
+    }
+    const swallow = (): boolean => {
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    };
+    const domain = resolveDeckCaretDomain(session.sourceId);
+    if (!domain) {
+      // No rendered domain: degrade to plain source keys (design safety
+      // property); Tab still must not escape the session.
+      return isTab ? swallow() : false;
+    }
+    const offset =
+      session.sourceSpan.from + Math.min(session.selectionStart, session.selectionEnd);
+    let result: BeamerStructuralKeyResult;
+    if (isEnter) {
+      if (hasRange) {
+        return swallow();
+      }
+      result = event.shiftKey
+        ? beamerStructuralLineBreakPatch(domain, offset)
+        : beamerStructuralEnterPatch(domain, offset);
+      if (result == null) {
+        // Unknown context (fallback-rendered chunk): plain newline through
+        // the beforeinput machine.
+        return false;
+      }
+    } else if (isTab) {
+      result = hasRange
+        ? "swallow"
+        : beamerStructuralTabPatch(domain, offset, event.shiftKey ? "unnest" : "nest") ??
+          "swallow";
+    } else {
+      result = isBackspace
+        ? beamerStructuralBackspacePatch(domain, offset)
+        : beamerStructuralDeletePatch(domain, offset);
+      if (result == null) {
+        return false;
+      }
+    }
+    if (result === "swallow") {
+      return swallow();
+    }
+    // Staleness guard: the domain reflects the last reconciled render.
+    // Apply only while every edited range still holds the text the patch
+    // was computed against; otherwise swallow and wait for reconciliation.
+    const toLocal = (documentOffset: number) => documentOffset - session.sourceSpan.from;
+    for (const edit of result.edits) {
+      const from = toLocal(edit.span.from);
+      const to = toLocal(edit.span.to);
+      if (from < 0 || to > session.text.length || from > to) {
+        return swallow();
+      }
+      if (
+        session.text.slice(from, to) !== domain.source.slice(edit.span.from, edit.span.to)
+      ) {
+        return swallow();
+      }
+    }
+    let nextText = session.text;
+    for (let index = result.edits.length - 1; index >= 0; index -= 1) {
+      const edit = result.edits[index];
+      nextText =
+        nextText.slice(0, toLocal(edit.span.from)) +
+        edit.insert +
+        nextText.slice(toLocal(edit.span.to));
+    }
+    const caretLocal = clamp(toLocal(result.caretOffset), 0, nextText.length);
+    event.preventDefault();
+    event.stopPropagation();
+    pendingTextEditInsertTextRef.current = null;
+    canvasVerticalGoalRef.current = null;
+    // Write the DOM inputs before dispatching (the motion handler's order):
+    // a selectionchange queued against the pre-edit caret otherwise fires
+    // after the machine update and echoes the stale offset back into it.
+    for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
+      if (input) {
+        input.value = nextText;
+        input.setSelectionRange(caretLocal, caretLocal);
+      }
+    }
+    dispatchCanvasTextEditAction({
+      type: "structural_edit",
+      nextText,
+      selectionStart: caretLocal,
+      selectionEnd: caretLocal
+    });
+    return true;
+  }, [dispatchCanvasTextEditAction, resolveDeckCaretDomain]);
+
   const handleCanvasFocusInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -1378,9 +1499,13 @@ export function useCanvasTextEditSession(
       return;
     }
 
+    if (handleCanvasStructuralKey(event)) {
+      return;
+    }
+
     if (event.key === "Tab") {
-      // Structural Tab (list indent/outdent) lands in Stage 2c; swallow it
-      // now so focus cannot tab out of the hidden input mid-session.
+      // A modified Tab the structural handler declined: swallow so focus
+      // cannot tab out of the hidden input mid-session.
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -1394,6 +1519,7 @@ export function useCanvasTextEditSession(
   }, [
     dispatchCanvasTextEditAction,
     handleCanvasRenderedMotionKey,
+    handleCanvasStructuralKey,
     handleSharedTextEditModifierKeys,
     isFocusSurfaceChord
   ]);

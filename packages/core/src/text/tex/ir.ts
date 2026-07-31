@@ -728,11 +728,49 @@ export interface SimpleTexSegmentInput {
   readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
+export interface SimpleTexListItemTopology {
+  /** The `\item` token, including an optional `[label]` and trailing spaces. */
+  readonly commandSpan: SimpleTexTopologySpan;
+  /** Content of the optional `[label]` argument, when present. */
+  readonly labelSpan?: SimpleTexTopologySpan;
+  /**
+   * Item body: first content offset (after the command and any space/prefix
+   * nodes) through the next structural token (`\item` or `\end`) of the
+   * owning environment. Empty items have `from === to`.
+   */
+  readonly contentSpan: SimpleTexTopologySpan;
+  /** One-based ordinal within the owning environment. */
+  readonly itemIndex: number;
+}
+
+export interface SimpleTexTopologySpan {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * A list environment the block scan matched, with the source facts
+ * structural editing needs. Retained at parse time so downstream editors
+ * never re-interpret `\item` topology from raw source.
+ */
+export interface SimpleTexListTopology {
+  readonly name: SimpleTexListKind;
+  /** The `\begin{...}` boundary token. */
+  readonly beginSpan: SimpleTexTopologySpan;
+  /** The `\end{...}` boundary token. */
+  readonly endSpan: SimpleTexTopologySpan;
+  /** One-based nesting depth among list environments in this chunk. */
+  readonly depth: number;
+  readonly items: readonly SimpleTexListItemTopology[];
+}
+
 export interface SimpleTexParagraphBlockScanResult {
   readonly blocks: readonly SimpleTexParagraphBlock[];
   readonly items: readonly SimpleTexBlockItem[];
   readonly partialFallbackSupported: boolean;
   readonly unsupportedCommand: boolean;
+  /** List environments the scan closed, in source order; absent when the scan aborted. */
+  readonly listStructure?: readonly SimpleTexListTopology[];
 }
 
 export interface SimpleTexParagraphIr {
@@ -742,6 +780,7 @@ export interface SimpleTexParagraphIr {
   readonly items: readonly SimpleTexBlockItem[];
   readonly partialFallbackSupported: boolean;
   readonly unsupportedCommand: boolean;
+  readonly listStructure?: readonly SimpleTexListTopology[];
 }
 
 export interface SimpleTexParagraphAnalysis {
@@ -1148,6 +1187,7 @@ function buildSimpleTexParagraphIrForRange(
       blockScan.partialFallbackSupported &&
       simpleTexBlockItemsContainPlaceholder(blockScan.items),
     unsupportedCommand: nodeScan.unsupportedCommand || blockScan.unsupportedCommand,
+    ...(blockScan.listStructure ? { listStructure: blockScan.listStructure } : {}),
   };
 }
 
@@ -3912,7 +3952,33 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly name: SimpleTexEnvironmentName;
     readonly scopeRole: Exclude<SimpleTexScopePathRole, { readonly kind: "list-item" }>;
   }
+  interface MutableListItemTopology {
+    commandSpan: SimpleTexTopologySpan;
+    labelSpan?: SimpleTexTopologySpan;
+    contentFrom: number;
+    contentTo: number | null;
+    itemIndex: number;
+  }
+  interface MutableListTopology {
+    name: SimpleTexListKind;
+    beginSpan: SimpleTexTopologySpan;
+    depth: number;
+    items: MutableListItemTopology[];
+  }
   const listStack: ActiveSimpleTexList[] = [];
+  // Parallel to the list entries of `listStack` (only `beginList` pushes
+  // there): the source topology the environment's structural edits need.
+  const listTopologyStack: MutableListTopology[] = [];
+  const completedListTopologies: SimpleTexListTopology[] = [];
+  const closeOpenListItemTopology = (
+    topology: MutableListTopology | undefined,
+    boundaryStart: number
+  ): void => {
+    const openItem = topology?.items.at(-1);
+    if (openItem?.contentTo === null) {
+      openItem.contentTo = boundaryStart;
+    }
+  };
   const environmentStack: ActiveSimpleTexEnvironment[] = [];
   const scopeStack: Exclude<SimpleTexScopePathRole, { readonly kind: "list-item" }>[] = [];
   let pendingParagraphVerticalAdjustments: SimpleTexVerticalGlueBlockItem[] = [];
@@ -4411,6 +4477,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
           scopeRole = beginTrivlist(node.name);
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           scopeRole = beginList(node.name);
+          listTopologyStack.push({
+            name: node.name,
+            beginSpan: { from: node.sourceStart, to: node.sourceEnd },
+            depth: listTopologyStack.length + 1,
+            items: [],
+          });
         } else {
           unsupportedCommand = true;
           abortScan = true;
@@ -4440,6 +4512,25 @@ function buildSimpleTexParagraphBlocksFromNodes(
           }
         } else if (isSimpleTexListEnvironmentName(node.name)) {
           listStack.pop();
+          const topology = listTopologyStack.pop();
+          if (topology) {
+            closeOpenListItemTopology(topology, node.sourceStart);
+            completedListTopologies.push({
+              name: topology.name,
+              beginSpan: topology.beginSpan,
+              endSpan: { from: node.sourceStart, to: node.sourceEnd },
+              depth: topology.depth,
+              items: topology.items.map((item) => ({
+                commandSpan: item.commandSpan,
+                ...(item.labelSpan ? { labelSpan: item.labelSpan } : {}),
+                contentSpan: {
+                  from: item.contentFrom,
+                  to: item.contentTo ?? node.sourceStart,
+                },
+                itemIndex: item.itemIndex,
+              })),
+            });
+          }
           pendingListLabel = undefined;
           pendingListShowLabel = false;
         } else if (!isSimpleTexTrivlistEnvironmentName(node.name)) {
@@ -4488,6 +4579,19 @@ function buildSimpleTexParagraphBlocksFromNodes(
         : undefined;
       prefix = consumeParagraphPrefix(index + 1);
       blockStart = sourceStartForNodeIndex(prefix.start);
+      const activeTopology = listTopologyStack.at(-1);
+      if (activeTopology) {
+        closeOpenListItemTopology(activeTopology, node.sourceStart);
+        activeTopology.items.push({
+          commandSpan: { from: node.sourceStart, to: node.sourceEnd },
+          ...(node.labelSourceStart !== undefined && node.labelSourceEnd !== undefined
+            ? { labelSpan: { from: node.labelSourceStart, to: node.labelSourceEnd } }
+            : {}),
+          contentFrom: Math.min(blockStart, sourceEnd),
+          contentTo: null,
+          itemIndex: activeList.itemIndex,
+        });
+      }
       currentNoIndent = true;
       horizontalModeResumedAfterDisplay = false;
       index = prefix.start;
@@ -4639,11 +4743,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
       true
     );
   }
+  completedListTopologies.sort((left, right) => left.beginSpan.from - right.beginSpan.from);
   return {
     blocks,
     items,
     partialFallbackSupported: unsupportedCommand && !abortScan,
     unsupportedCommand,
+    ...(abortScan || completedListTopologies.length === 0
+      ? {}
+      : { listStructure: completedListTopologies }),
   };
 }
 

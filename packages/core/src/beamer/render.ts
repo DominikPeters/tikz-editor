@@ -121,6 +121,7 @@ import type {
   BeamerMetadataFieldModel,
   BeamerMetadataFieldName,
   BeamerPageGeometry,
+  BeamerListTopology,
   BeamerParagraphLayout,
   BeamerRect,
   RenderBeamerFrameOptions,
@@ -3028,6 +3029,20 @@ function layoutParagraph(params: {
     result.vlistLayout.metrics.height + result.vlistLayout.metrics.depth;
   const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped);
   const readOnlySourceSpans = macroArgumentRuns.map((run) => run.span);
+  const listStructure: BeamerListTopology[] = (result.listStructure ?? []).map((list) => ({
+    environment: list.name,
+    beginSpan: { from: list.beginSpan.from, to: list.beginSpan.to },
+    endSpan: { from: list.endSpan.from, to: list.endSpan.to },
+    depth: list.depth,
+    items: list.items.map((item) => ({
+      commandSpan: { from: item.commandSpan.from, to: item.commandSpan.to },
+      ...(item.labelSpan
+        ? { labelSpan: { from: item.labelSpan.from, to: item.labelSpan.to } }
+        : {}),
+      contentSpan: { from: item.contentSpan.from, to: item.contentSpan.to },
+      itemIndex: item.itemIndex,
+    })),
+  }));
   return {
     height,
     layout: {
@@ -3071,6 +3086,7 @@ function layoutParagraph(params: {
       ...(params.hiddenListItemIndices?.length
         ? { hiddenListItemIndices: params.hiddenListItemIndices }
         : {}),
+      ...(listStructure.length ? { listStructure } : {}),
     },
     svgBody: hideOverlayPaintInSvg(
       renderTexParagraphSvgBody(result.report, {

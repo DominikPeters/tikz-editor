@@ -19,7 +19,12 @@ import {
 } from "../source-coordinates.js";
 import type { TexMathBox } from "./layout-inline-items.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
-import type { SimpleTexGraphicsOptions } from "./ir.js";
+import type {
+  SimpleTexGraphicsOptions,
+  SimpleTexListItemTopology,
+  SimpleTexListTopology,
+  SimpleTexTopologySpan,
+} from "./ir.js";
 import { texLength } from "./coordinates.js";
 import type {
   PositionedTexVListItem,
@@ -644,6 +649,64 @@ function remapTexVListParagraphPlacement(
 
 function mapTexSourceSpan(span: TexSourceSpan, sourceMap: TextSourceMap): TexSourceSpan {
   return mapInputSpan(sourceMap, span.start, span.end);
+}
+
+/**
+ * Maps a chunk's retained list topology into document coordinates. A list
+ * whose boundary or item spans do not map as directly-authored source
+ * (macro-generated material) is dropped whole: structural edits must never
+ * patch text the author did not write.
+ */
+export function remapSimpleTexListStructureSourceMap(
+  lists: readonly SimpleTexListTopology[] | undefined,
+  sourceMap: TextSourceMap | undefined
+): readonly SimpleTexListTopology[] | undefined {
+  if (!lists?.length) {
+    return undefined;
+  }
+  if (!sourceMap) {
+    return lists;
+  }
+  const mapSpan = (span: SimpleTexTopologySpan): SimpleTexTopologySpan | null => {
+    const mapped = mapInputSpanWithPolicy(sourceMap, span.from, span.to);
+    if (mapped.policy !== "caret" && mapped.policy !== "select") {
+      return null;
+    }
+    if (mapped.end < mapped.start) {
+      return null;
+    }
+    return { from: mapped.start, to: mapped.end };
+  };
+  const remapped: SimpleTexListTopology[] = [];
+  for (const list of lists) {
+    const beginSpan = mapSpan(list.beginSpan);
+    const endSpan = mapSpan(list.endSpan);
+    if (!beginSpan || !endSpan) {
+      continue;
+    }
+    const items: SimpleTexListItemTopology[] = [];
+    let allItemsMapped = true;
+    for (const item of list.items) {
+      const commandSpan = mapSpan(item.commandSpan);
+      const contentSpan = mapSpan(item.contentSpan);
+      const labelSpan = item.labelSpan ? mapSpan(item.labelSpan) : undefined;
+      if (!commandSpan || !contentSpan || (item.labelSpan && !labelSpan)) {
+        allItemsMapped = false;
+        break;
+      }
+      items.push({
+        commandSpan,
+        ...(labelSpan ? { labelSpan } : {}),
+        contentSpan,
+        itemIndex: item.itemIndex,
+      });
+    }
+    if (!allItemsMapped) {
+      continue;
+    }
+    remapped.push({ name: list.name, beginSpan, endSpan, depth: list.depth, items });
+  }
+  return remapped.length ? remapped : undefined;
 }
 
 function mapInputSpan(sourceMap: TextSourceMap, start: number, end: number): TexSourceSpan {

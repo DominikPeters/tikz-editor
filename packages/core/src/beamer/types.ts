@@ -280,6 +280,40 @@ export type BeamerParagraphLayout = {
   macroArgumentRuns?: readonly { span: Span; invocationSpan: Span }[];
   /** One-based list item ordinals whose labels are covered on this step. */
   hiddenListItemIndices?: readonly number[];
+  /**
+   * List-environment topology the text engine retained while parsing this
+   * chunk (design/beamer-canvas-editing.md, "Item topology comes from the
+   * text engine"). Structural key patches derive from these spans; absent
+   * when the chunk has no lists or failed to parse, in which case
+   * structural keys degrade to plain source behavior.
+   */
+  listStructure?: readonly BeamerListTopology[];
+};
+
+export type BeamerListItemTopology = {
+  /** The `\item` token, including an optional `[label]` and trailing spaces. */
+  commandSpan: Span;
+  /** Content of the optional `[label]` argument, when present. */
+  labelSpan?: Span;
+  /**
+   * Item body: first content offset through the next structural token
+   * (`\item` or `\end`) of the owning environment. Empty items have
+   * `from === to`.
+   */
+  contentSpan: Span;
+  /** One-based ordinal within the owning environment. */
+  itemIndex: number;
+};
+
+export type BeamerListTopology = {
+  environment: "itemize" | "enumerate" | "description";
+  /** The `\begin{...}` boundary token. */
+  beginSpan: Span;
+  /** The `\end{...}` boundary token. */
+  endSpan: Span;
+  /** One-based nesting depth among list environments in the chunk. */
+  depth: number;
+  items: readonly BeamerListItemTopology[];
 };
 
 export type BeamerEditableTextSpan = {

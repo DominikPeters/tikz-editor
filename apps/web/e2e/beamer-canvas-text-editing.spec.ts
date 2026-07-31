@@ -391,6 +391,98 @@ test("canvas focus: arrows move by rendered stops, rows, and select-then-delete 
   await expect(page.getByTestId("canvas-text-selection-overlay")).toHaveCount(1);
 });
 
+test("canvas focus: structural Enter splits items, Backspace merges, Tab nests and unnests", async ({ page }) => {
+  await openScopeContaining(page, "List typo");
+  const hiddenInput = page.getByTestId("canvas-focus-input");
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+
+  const readSelection = () => hiddenInput.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return [input.selectionStart, input.selectionEnd];
+  });
+  const setCaret = (offset: number) => hiddenInput.evaluate((element, value) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(value, value);
+    input.dispatchEvent(new Event("select", { bubbles: true }));
+  }, offset);
+  // The block title's segment offset shifts with every upstream edit, so it
+  // doubles as a "this source revision is rendered" signal — structural keys
+  // are guarded against stale caret domains and would otherwise swallow.
+  const waitForRenderOf = (source: string) =>
+    expect.poll(async () =>
+      page.locator(
+        `[data-testid="canvas-svg-layer"] [data-source-start="${source.indexOf("Block typo")}"]`
+      ).count()
+    ).toBeGreaterThan(0);
+  await waitForRenderOf(SOURCE);
+
+  // Enter mid-item splits it into two items with idiomatic source, caret at
+  // the new item's content start.
+  let buffer = await textarea.inputValue();
+  await setCaret(buffer.indexOf(" typo\n\\end{itemize}"));
+  await page.keyboard.press("Enter");
+  const afterSplit = SOURCE.replace("\\item List typo", "\\item List\n\\item typo");
+  await expect.poll(() => readStoreSource(page)).toBe(afterSplit);
+  buffer = await textarea.inputValue();
+  const splitCaret = buffer.indexOf("typo\n\\end{itemize}");
+  await expect.poll(readSelection).toEqual([splitCaret, splitCaret]);
+  await waitForRenderOf(afterSplit);
+
+  // Backspace at the new item's content start merges it back into the
+  // previous item, restoring the original source.
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
+  await waitForRenderOf(SOURCE);
+
+  // Tab nests the second item into a nested itemize; Shift+Tab unwraps it.
+  buffer = await textarea.inputValue();
+  await setCaret(buffer.indexOf(" typo\n\\end{itemize}"));
+  await page.keyboard.press("Enter");
+  await expect.poll(() => readStoreSource(page)).toBe(afterSplit);
+  await waitForRenderOf(afterSplit);
+  await page.keyboard.press("Tab");
+  const nested = afterSplit.replace(
+    "\\item typo\n",
+    "\\begin{itemize}\n\\item typo\n\\end{itemize}\n"
+  );
+  await expect.poll(() => readStoreSource(page)).toBe(nested);
+  await waitForRenderOf(nested);
+  await page.keyboard.press("Shift+Tab");
+  await expect.poll(() => readStoreSource(page)).toBe(afterSplit);
+  await waitForRenderOf(afterSplit);
+
+  // Enter at the end of the last item opens an empty item; a second Enter
+  // deletes it and exits the list onto a fresh line after the environment.
+  buffer = await textarea.inputValue();
+  const typoEnd = buffer.indexOf("typo\n\\end{itemize}") + "typo".length;
+  await setCaret(typoEnd);
+  await page.keyboard.press("Enter");
+  const withEmptyItem = afterSplit.replace(
+    "\\item typo\n",
+    "\\item typo\n\\item \n"
+  );
+  await expect.poll(() => readStoreSource(page)).toBe(withEmptyItem);
+  await waitForRenderOf(withEmptyItem);
+  await page.keyboard.press("Enter");
+  const exited = afterSplit.replace("\\end{itemize}\n", "\\end{itemize}\n\n");
+  await expect.poll(() => readStoreSource(page)).toBe(exited);
+  await waitForRenderOf(exited);
+
+  // Enter in ordinary body prose breaks the paragraph with a blank line.
+  buffer = await textarea.inputValue();
+  await setCaret(buffer.indexOf(" typo."));
+  await page.keyboard.press("Enter");
+  const paragraphBreak = exited.replace("Body typo.", "Body\n\ntypo.");
+  await expect.poll(() => readStoreSource(page)).toBe(paragraphBreak);
+
+  // The whole structural sequence unwinds through session undo.
+  for (const expected of [exited, withEmptyItem, afterSplit, nested, afterSplit, SOURCE, afterSplit, SOURCE]) {
+    await page.keyboard.press(`${PRIMARY_MOD}+z`);
+    await expect.poll(() => readStoreSource(page)).toBe(expected);
+  }
+});
+
 const TITLE_PAGE_SOURCE = String.raw`\documentclass{beamer}
 \usetheme{Madrid}
 \title{Deck title}

@@ -20,13 +20,18 @@ import type {
 } from "./layout-options.js";
 import {
   analyzeSimpleTexParagraph,
+  type SimpleTexListTopology,
   type SimpleTexMathNode,
   type SimpleTexNode,
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
 } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
-import { remapParagraphLayoutReportSourceMap, remapTexVListLayoutSourceMap } from "./source-map-report.js";
+import {
+  remapParagraphLayoutReportSourceMap,
+  remapSimpleTexListStructureSourceMap,
+  remapTexVListLayoutSourceMap,
+} from "./source-map-report.js";
 import {
   breakSimpleTexLayoutDocumentParagraphs,
   createSimpleTexLayoutScopeIrFromPreparation,
@@ -81,6 +86,13 @@ export interface TexParagraphLayoutResult<Space extends SourceCoordinateSpace = 
   readonly fallbackReason: string | null;
   readonly shapedRuns: ReadonlyMap<number, ShapedTexTextRun>;
   readonly errors: readonly string[];
+  /**
+   * List-environment topology the chunk scan retained (design/
+   * beamer-canvas-editing.md, "Item topology comes from the text engine"),
+   * in the same coordinate space as the report. Absent when the chunk has
+   * no lists or the scan aborted.
+   */
+  readonly listStructure?: readonly SimpleTexListTopology[];
 }
 
 export function layoutSimpleTexParagraph(
@@ -282,6 +294,10 @@ export function layoutSimpleTexParagraph(
 
   const report = remapParagraphLayoutReportSourceMap(reportAssembly.report, options.sourceMap);
   const vlistLayout = remapTexVListLayoutSourceMap(reportAssembly.layout, options.sourceMap);
+  const listStructure = remapSimpleTexListStructureSourceMap(
+    analysis.ir?.listStructure,
+    options.sourceMap
+  );
   return {
     supported: true,
     report,
@@ -289,6 +305,7 @@ export function layoutSimpleTexParagraph(
     fallbackReason: null,
     shapedRuns: reportAssembly.combined.shapedRuns,
     errors: reportAssembly.combined.errors,
+    ...(listStructure ? { listStructure } : {}),
   };
 }
 

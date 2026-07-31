@@ -144,6 +144,18 @@ export type CanvasTextEditAction =
       surface: CanvasTextEditFocusSurface;
     }
   | {
+      /**
+       * A computed structural-key edit (item split, merge, nest/unnest):
+       * an atomic buffer replacement with explicit caret placement and its
+       * own undo checkpoint, flowing through the same minimal-diff patch
+       * path as typing.
+       */
+      type: "structural_edit";
+      nextText: string;
+      selectionStart: number;
+      selectionEnd: number;
+    }
+  | {
       type: "session_close";
     }
   | {
@@ -1002,6 +1014,33 @@ export function reduceCanvasTextEdit(
         state: {
           ...reduced.state,
           compositionRange: nextCompositionRange
+        },
+        effects: reduced.effects
+      };
+    }
+
+    case "structural_edit": {
+      const session = state.session;
+      if (!session) {
+        return { state, effects: [] };
+      }
+      if (
+        session.text === action.nextText &&
+        session.selectionStart === action.selectionStart &&
+        session.selectionEnd === action.selectionEnd
+      ) {
+        return { state, effects: [] };
+      }
+      const reduced = applySessionTextUpdate(
+        withUndoCheckpoint(state, session),
+        action.nextText,
+        action.selectionStart,
+        action.selectionEnd
+      );
+      return {
+        state: {
+          ...reduced.state,
+          compositionRange: null
         },
         effects: reduced.effects
       };

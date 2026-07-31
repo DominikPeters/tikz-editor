@@ -395,8 +395,53 @@ Known 2b gaps: `caretPolicy: "filename-linear"` for graphics was never
 implemented in the hit map and remains whole-atom selection; inter-
 paragraph glue (`\vspace`/`\vfill`) and frame-level flow objects (embedded
 tikz, graphics) are not yet in the traversal/select-then-delete domain —
-they arrive with the object layer. Stage 2c (structural keys) is not
-started. The editing fixture corpus below is built
+they arrive with the object layer. **Stage 2c is implemented**: structural
+keys under canvas focus, powered by the engine-retained topology decided
+above. The chunk scan (`text/tex/ir.ts`) records
+`SimpleTexListTopology` (env begin/end token spans, per-item
+command/label/content spans, 1-based depth) on a stack parallel to
+`listStack`, threads it through the paragraph IR and
+`layoutSimpleTexParagraph` (spans remapped through the sourceMap; lists
+touching macro-generated material are dropped whole), and publishes it as
+`BeamerParagraphLayout.listStructure`. The caret domain carries the
+structural context (`lists`, `mathSpans`, paragraph roles, and the source
+it was built from), and `packages/core/src/beamer/structural-edit.ts`
+computes pure multi-edit patches with explicit post-edit caret offsets:
+Enter splits the item at the caret (whitespace repair, indent copied from
+the item's line; at content start it opens an empty item above), Enter on
+an empty *last* item deletes it and exits onto a fresh line after the env
+(removing the whole env when it was the only item; an empty middle item
+just splits again, the Word convention), Enter in body/block-body prose
+inserts a blank line, Shift+Enter inserts ` \\ `, Backspace at item
+content start merges into the previous item (single-space join; first item
+swallows), forward Delete at rendered item end merges the next item in,
+Tab wraps the item in a same-kind nested env — extending an adjacent
+nested env left by a previous Tab instead of chaining siblings — and
+Shift+Tab unnests with first/middle/last/single-item env splitting. The
+`\item` command's swallowed whitespace tail counts as item interior
+(clamped to content start) so a caret parked right after a fresh split
+resolves to the empty item. Enter/Shift+Enter are swallowed inside math
+islands and non-flow roles (titles); with no published topology or no
+paragraph context the keys degrade to plain source behavior per the safety
+property. App side: a `structural_edit` machine action applies an atomic
+buffer replacement with explicit caret and its own undo checkpoint through
+the same minimal-diff patch path as typing; the hidden-input keydown
+handler intercepts Enter/Tab/Backspace/Delete before rendered motion,
+verifies each edit span against the live buffer (staleness guard — a
+not-yet-reconciled domain swallows rather than corrupts), and writes the
+DOM inputs before dispatching so queued selectionchange events cannot echo
+the stale caret back into the machine. Implementing 2c surfaced and fixed
+an engine layout bug: a multi-item nested list followed by another outer
+item crashed rendering ("paragraph-baseline hbox is not immediately before
+its paragraph") because plain-paragraph interline glue was inserted
+between a list-label hbox and its paragraph; the glue now goes above the
+label/paragraph pair (`vlist/spacing.ts`, regression test in
+`test/beamer-frame-render.spec.ts`). 2c gaps, deliberate: Enter with a
+non-empty selection is swallowed (no delete-then-split yet); Backspace at
+the *first* item's content start is swallowed rather than dissolving the
+item into a paragraph (object-layer work); Tab on a first item is a no-op
+(LaTeX forbids an env before the first `\item`). The editing fixture
+corpus below is built
 (`test/fixtures/beamer/editing_corpus_beamer.tex`, tests in
 `test/beamer-editing.spec.ts`); building it surfaced and fixed two
 content-flow bugs (command-form `\frametitle`/`\framesubtitle` leaked into

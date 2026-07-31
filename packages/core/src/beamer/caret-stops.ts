@@ -1,6 +1,6 @@
 import type { Span } from "../ast/types.js";
 import { getKnuthPlassParagraphCaretStops } from "../text/knuth-plass/index.js";
-import type { BeamerParagraphLayout } from "./types.js";
+import type { BeamerListTopology, BeamerParagraphLayout } from "./types.js";
 
 /**
  * Ordered rendered-caret-stop domain for one Beamer edit scope: the offsets
@@ -26,13 +26,27 @@ export type BeamerCaretRow = {
   readonly stops: readonly BeamerCaretStop[];
 };
 
+export type BeamerCaretDomainParagraph = {
+  readonly paragraphId: string;
+  readonly role: BeamerParagraphLayout["role"];
+  readonly span: Span;
+};
+
 export type BeamerCaretDomain = {
+  /** The source text the domain was built against. */
+  readonly source: string;
   /** Rendered rows in vertical page order. */
   readonly rows: readonly BeamerCaretRow[];
   /** Global horizontal-motion domain: unique offsets in source order. */
   readonly offsets: readonly number[];
   /** Atomic spans (macro invocations, atomic renders), sorted by `from`. */
   readonly atomSpans: readonly Span[];
+  /** Engine-published list topology across the scope, sorted by `beginSpan.from`. */
+  readonly lists: readonly BeamerListTopology[];
+  /** Rendered math islands (inline and display), sorted by `from`. */
+  readonly mathSpans: readonly Span[];
+  /** Per-paragraph role and span, for structural-key context checks. */
+  readonly paragraphs: readonly BeamerCaretDomainParagraph[];
 };
 
 type MutableRow = {
@@ -49,8 +63,24 @@ export function buildBeamerCaretStopDomain(args: {
   const rows: MutableRow[] = [];
   const offsetSet = new Set<number>();
   const atomByRange = new Map<string, Span>();
+  const listByRange = new Map<string, BeamerListTopology>();
+  const mathByRange = new Map<string, Span>();
+  const paragraphs: BeamerCaretDomainParagraph[] = [];
 
   for (const paragraph of args.paragraphs) {
+    paragraphs.push({
+      paragraphId: paragraph.paragraphId,
+      role: paragraph.role,
+      span: paragraph.sourceSpan,
+    });
+    for (const list of paragraph.listStructure ?? []) {
+      listByRange.set(`${list.beginSpan.from}:${list.endSpan.to}`, list);
+    }
+    for (const editable of paragraph.editableTextSpans) {
+      if (editable.kind === "math" && editable.span.to > editable.span.from) {
+        mathByRange.set(`${editable.span.from}:${editable.span.to}`, editable.span);
+      }
+    }
     const paragraphSpan = paragraph.sourceSpan;
     const sourceText = args.source.slice(paragraphSpan.from, paragraphSpan.to);
     if (!sourceText) {
@@ -144,9 +174,15 @@ export function buildBeamerCaretStopDomain(args: {
   });
 
   return {
+    source: args.source,
     rows,
     offsets: [...offsetSet].sort((left, right) => left - right),
     atomSpans: [...atomByRange.values()].sort((left, right) => left.from - right.from),
+    lists: [...listByRange.values()].sort(
+      (left, right) => left.beginSpan.from - right.beginSpan.from
+    ),
+    mathSpans: [...mathByRange.values()].sort((left, right) => left.from - right.from),
+    paragraphs,
   };
 }
 

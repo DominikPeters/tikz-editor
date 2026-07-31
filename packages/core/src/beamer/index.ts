@@ -9,9 +9,23 @@ export {
   nextBeamerCaretOffset,
   verticalBeamerCaretOffset,
   type BeamerCaretDomain,
+  type BeamerCaretDomainParagraph,
   type BeamerCaretRow,
   type BeamerCaretStop,
 } from "./caret-stops.js";
+export {
+  applyBeamerStructuralEdits,
+  beamerListItemAt,
+  beamerStructuralBackspacePatch,
+  beamerStructuralDeletePatch,
+  beamerStructuralEnterPatch,
+  beamerStructuralLineBreakPatch,
+  beamerStructuralTabPatch,
+  type BeamerListItemContext,
+  type BeamerStructuralEdit,
+  type BeamerStructuralKeyResult,
+  type BeamerStructuralPatch,
+} from "./structural-edit.js";
 export { collectBeamerEditScopes, resolveBeamerEditScopeAt } from "./edit-scopes.js";
 export {
   beamerOverlaySpecContains,
