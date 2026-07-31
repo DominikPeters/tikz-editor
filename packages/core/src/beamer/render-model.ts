@@ -53,12 +53,23 @@ export type PreparedBlock = {
   endingDepth: number;
 };
 
+export type PreparedTitlePageMetadataBox = {
+  field: "author" | "institute" | "date";
+  paragraph: LaidParagraph | null;
+  /** Box top measured from the title-page group top, like plan.titleBoxTopPt. */
+  topPt: number;
+  /** Colorbox height: 2*sep padding plus the laid content extent. */
+  heightPt: number;
+};
+
 export type PreparedTitlePage = {
   node: BeamerTitlePageBodyNode;
   plan: BeamerTitlePageTemplatePlan;
   width: number;
   title: LaidParagraph | null;
   subtitle: LaidParagraph | null;
+  /** Author/institute/date colorboxes of the default template, in order. */
+  metadataBoxes: readonly PreparedTitlePageMetadataBox[];
   naturalHeight: number;
   leadingFillWeight: number;
   trailingFillWeight: number;

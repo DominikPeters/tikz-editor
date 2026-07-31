@@ -299,7 +299,11 @@ export type BeamerAtomicRenderSpan = {
   hitBounds: SvgRect[];
 };
 
-export type BeamerEditScopeKind = "frame-title" | "column" | "frame-body";
+export type BeamerEditScopeKind =
+  | "frame-title"
+  | "column"
+  | "frame-body"
+  | "preamble-field";
 
 /**
  * A canvas editing session's buffer unit: the nearest container of the

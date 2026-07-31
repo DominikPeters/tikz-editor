@@ -109,6 +109,7 @@ import type {
   PreparedColumnFlowItem,
   PreparedFrameFlowItem,
   PreparedTitlePage,
+  PreparedTitlePageMetadataBox,
 } from "./render-model.js";
 import type {
   BeamerDocumentModel,
@@ -625,7 +626,11 @@ async function renderBeamerFrameStep(params: {
     paragraphs,
     graphics,
     embeddedTikz,
-    editScopes: collectBeamerEditScopes(frame, bodyIr),
+    editScopes: collectBeamerEditScopes(
+      frame,
+      bodyIr,
+      document.preamble.metadata
+    ),
   };
 
   return {
@@ -1118,6 +1123,7 @@ function prepareTitlePage(params: {
       width: params.width,
       title,
       subtitle,
+      metadataBoxes: [],
       naturalHeight,
       // Unlike the default title-page template, inmargin has no leading
       // \vfill and retains one fill after the title group.
@@ -1125,21 +1131,49 @@ function prepareTitlePage(params: {
       trailingFillWeight: 1,
     };
   }
-  const metadataBoxesHeight =
-    3 * BEAMER_EMPTY_METADATA_COLORBOX_PT +
-    3 * BEAMER_TITLE_TEMPLATE_INTERBOX_PT;
-  const naturalHeight =
+  // The default template stacks author/institute/date colorboxes below the
+  // title box. Each is a sep=8pt colorbox (16pt when empty), separated by
+  // TeX \lineskip since the boxes exceed the baselineskip window.
+  const metadataBoxes: PreparedTitlePageMetadataBox[] = [];
+  let metadataTop =
     plan.titleBoxTopPt +
     plan.titleBoxHeightPt +
-    BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT +
-    metadataBoxesHeight +
-    BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT;
+    BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT;
+  for (const field of ["author", "institute", "date"] as const) {
+    metadataTop += BEAMER_TITLE_TEMPLATE_INTERBOX_PT;
+    const fieldSource = params.metadata[field]?.value;
+    const paragraph = fieldSource
+      ? layoutParagraph({
+          mapped: createIdentityMappedText(
+            fieldSource.value,
+            fieldSource.contentSpan.from
+          ),
+          sourceSpan: fieldSource.contentSpan,
+          paragraphId: `${params.node.id}:${field}`,
+          role: field,
+          bounds: { x: 0, y: 0, width: params.width, height: 0 },
+          font: params.theme.fonts[field],
+          alignment,
+          macroBindings: params.macroBindings,
+          graphicsResolver: params.graphicsResolver,
+          paperWidth: params.paperWidth,
+        })
+      : null;
+    const heightPt =
+      BEAMER_EMPTY_METADATA_COLORBOX_PT +
+      (paragraph ? paragraphLineExtent(paragraph) : 0);
+    metadataBoxes.push({ field, paragraph, topPt: metadataTop, heightPt });
+    metadataTop += heightPt;
+  }
+  const naturalHeight =
+    metadataTop + BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT;
   return {
     node: params.node,
     plan,
     width: params.width,
     title,
     subtitle,
+    metadataBoxes,
     naturalHeight,
     leadingFillWeight: 1,
     trailingFillWeight: 1,
@@ -2020,7 +2054,7 @@ function emitPreparedTitlePage(params: {
   const emitText = (
     paragraph: LaidParagraph | null,
     baselineFromBoxTop: number,
-    colorRole: "title" | "subtitle"
+    colorRole: "title" | "subtitle" | "author" | "institute" | "date"
   ) => {
     if (!paragraph) {
       return;
@@ -2066,6 +2100,21 @@ function emitPreparedTitlePage(params: {
     titlePage.plan.subtitleBaselineFromBoxTopPt,
     "subtitle"
   );
+  for (const box of titlePage.metadataBoxes) {
+    if (!box.paragraph) {
+      continue;
+    }
+    // Content sits sep-inset below the colorbox top; emitText measures
+    // baselines from the title box top.
+    emitText(
+      box.paragraph,
+      box.topPt -
+        titlePage.plan.titleBoxTopPt +
+        BEAMER_EMPTY_METADATA_COLORBOX_PT / 2 +
+        firstLineBaselineOffset(box.paragraph),
+      box.field
+    );
+  }
 
   params.items.push({
     id: titlePage.node.id,
@@ -2886,13 +2935,13 @@ function layoutParagraph(params: {
   let result = layoutSimpleTexParagraph(mapped.text, layoutOptions);
   if (
     !result.supported &&
-    alignment === "ragged-left"
+    (alignment === "ragged-left" || alignment === "center")
   ) {
-    // A short right-aligned template label in a wide Beamer color box can
-    // exhaust the finite ragged-left skip used by the generic breaker. A
-    // ragged-right retry finds the symmetric feasible line breaks; place
-    // those lines against the right edge, matching TeX's template-level
-    // \hfill.
+    // A short right-aligned or centered template line in a wide Beamer color
+    // box can exhaust the finite alignment skips used by the generic
+    // breaker. A ragged-right retry finds the symmetric feasible line
+    // breaks; place those lines against the right edge or center, matching
+    // TeX's template-level \hfill and \centering fil skips.
     const leftAligned = layoutSimpleTexParagraph(mapped.text, {
       ...layoutOptions,
       alignment: "ragged-right",
@@ -2905,9 +2954,16 @@ function layoutParagraph(params: {
       const width = texLength(params.bounds.width);
       const report = {
         ...leftAligned.report,
-        alignment: "ragged-left" as const,
+        alignment:
+          alignment === "center"
+            ? ("center" as const)
+            : ("ragged-left" as const),
         lines: leftAligned.report.lines.map((line) => {
-          const xStart = texLineX(width - line.width);
+          const xStart = texLineX(
+            alignment === "center"
+              ? (width - line.width) / 2
+              : width - line.width
+          );
           const delta = xStart - line.xStart;
           return {
             ...line,
@@ -3087,6 +3143,11 @@ const EDITABLE_BEAMER_PARAGRAPH_ROLES =
     "body",
     "block-title",
     "block-body",
+    "title",
+    "subtitle",
+    "author",
+    "institute",
+    "date",
   ]);
 
 function collectBeamerEditableTextSpans(

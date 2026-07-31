@@ -1,15 +1,33 @@
 import type { BeamerFrameBodyIr } from "./content-types.js";
-import type { BeamerEditScope, BeamerFrameModel } from "./types.js";
+import type {
+  BeamerEditScope,
+  BeamerFrameModel,
+  BeamerMetadataFieldModel,
+  BeamerMetadataFieldName,
+} from "./types.js";
+
+const TITLE_PAGE_METADATA_FIELDS: readonly BeamerMetadataFieldName[] = [
+  "title",
+  "subtitle",
+  "author",
+  "institute",
+  "date",
+];
 
 /**
  * Editing scopes for one frame, per design/beamer-canvas-editing.md: a
  * canvas editing session's buffer is the full span of the nearest container
  * scope — a column's content, the frame title argument, else the whole
- * frame body. Blocks and theorems are deliberately not scopes.
+ * frame body. Blocks and theorems are deliberately not scopes. Frames that
+ * show the title page additionally expose one scope per preamble metadata
+ * field, so clicking rendered title-page text patches the preamble.
  */
 export function collectBeamerEditScopes(
   frame: BeamerFrameModel,
-  bodyIr: BeamerFrameBodyIr
+  bodyIr: BeamerFrameBodyIr,
+  metadata: Partial<
+    Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
+  > = {}
 ): BeamerEditScope[] {
   const scopes: BeamerEditScope[] = [];
   if (frame.title) {
@@ -18,6 +36,19 @@ export function collectBeamerEditScopes(
       id: `${frame.id}:scope:title`,
       span: frame.title.contentSpan,
     });
+  }
+  if (bodyIr.children.some((node) => node.kind === "title-page")) {
+    for (const field of TITLE_PAGE_METADATA_FIELDS) {
+      const value = metadata[field]?.value;
+      if (!value || value.contentSpan.to <= value.contentSpan.from) {
+        continue;
+      }
+      scopes.push({
+        kind: "preamble-field",
+        id: `${frame.id}:scope:preamble:${field}`,
+        span: value.contentSpan,
+      });
+    }
   }
   for (const node of bodyIr.children) {
     if (node.kind !== "columns") {

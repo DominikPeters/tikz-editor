@@ -1291,6 +1291,11 @@ export const CanvasPanel = memo(function CanvasPanel({
     }
     for (const paragraph of layout.paragraphs) {
       paragraphById.set(paragraph.paragraphId, paragraph);
+      // Chrome text (headline/footline) can mirror preamble metadata spans;
+      // it never participates in editing sessions.
+      if (paragraph.role === "headline" || paragraph.role === "footline") {
+        continue;
+      }
       const scope = resolveBeamerEditScopeAt(editScopes, paragraph.sourceSpan.from);
       if (!scope || paragraph.sourceSpan.to > scope.span.to) {
         continue;

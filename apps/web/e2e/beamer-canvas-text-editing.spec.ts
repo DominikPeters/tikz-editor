@@ -218,12 +218,56 @@ test("keeps structure stable through transiently invalid source and supports str
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
   await page.keyboard.press("Escape");
 
-  // Macro output and hidden overlay content stay outside the hit regions
-  // until atomic-render click-to-select ships.
+  // Macro output is an atomic render: clicking it opens the owning scope
+  // session with the whole invocation selected.
   const generatedInvocation = SOURCE.indexOf(
     String.raw`\generatedword`,
     SOURCE.indexOf(String.raw`\begin{frame}`)
   );
   await clickRenderedSourceOffset(page, generatedInvocation);
+  const atomTextarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(atomTextarea).toHaveCount(1);
+  await expect(atomTextarea).toHaveValue(String.raw`Titel typo \generatedword`);
+  const titleBuffer = String.raw`Titel typo \generatedword`;
+  await expect.poll(async () => atomTextarea.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return [input.selectionStart, input.selectionEnd];
+  })).toEqual([
+    titleBuffer.indexOf(String.raw`\generatedword`),
+    titleBuffer.length
+  ]);
+});
+
+const TITLE_PAGE_SOURCE = String.raw`\documentclass{beamer}
+\usetheme{Madrid}
+\title{Deck title}
+\subtitle{Deck subtitle}
+\author{Ada Lovelace}
+\institute{Analytical Engine Institute}
+\date{December 1843}
+\begin{document}
+\begin{frame}
+\titlepage
+\end{frame}
+\end{document}`;
+
+test("edits title-page metadata through preamble field scopes", async ({ page }) => {
+  await setSource(page, TITLE_PAGE_SOURCE);
+
+  // Each metadata field is its own scope whose buffer is the preamble
+  // argument content.
+  const authorTextarea = await openScopeContaining(page, "Ada Lovelace");
+  await expect(authorTextarea).toHaveValue("Ada Lovelace");
+  await replaceRange(page, authorTextarea, 0, "Ada".length, "Augusta");
+  const edited = TITLE_PAGE_SOURCE.replace("Ada Lovelace", "Augusta Lovelace");
+  await expect.poll(() => readStoreSource(page)).toBe(edited);
+  await expect.poll(() => readCodeMirrorText(page)).toBe(edited);
+  await page.keyboard.press("Escape");
   await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+
+  const instituteTextarea = await openScopeContaining(
+    page,
+    "Analytical Engine Institute"
+  );
+  await expect(instituteTextarea).toHaveValue("Analytical Engine Institute");
 });

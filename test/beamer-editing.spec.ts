@@ -159,6 +159,125 @@ describe("Beamer canvas editing contract", () => {
     expect(structuredClone(bodyScopes)).toEqual(bodyScopes);
   });
 
+  it("renders title-page metadata fields as editable preamble scopes", async () => {
+    const source = String.raw`\documentclass{beamer}
+\title{Deck title}
+\subtitle{Deck subtitle}
+\author{Ada Lovelace}
+\institute{Analytical Engine Institute}
+\date{December 1843}
+\begin{document}
+\begin{frame}
+\titlepage
+\end{frame}
+\end{document}`;
+    const page = await prepareBeamerDocument(source).renderFrame({
+      frameIndex: 0,
+      step: 1,
+    });
+
+    const byRole = new Map(
+      page.layout.paragraphs.map((paragraph) => [paragraph.role, paragraph])
+    );
+    for (const [role, text] of [
+      ["title", "Deck title"],
+      ["subtitle", "Deck subtitle"],
+      ["author", "Ada Lovelace"],
+      ["institute", "Analytical Engine Institute"],
+      ["date", "December 1843"],
+    ] as const) {
+      const paragraph = byRole.get(role);
+      expect(paragraph, role).toBeDefined();
+      expect(
+        source.slice(paragraph!.sourceSpan.from, paragraph!.sourceSpan.to),
+        role
+      ).toBe(text);
+      expect(editableSlices(page.layout, source).join("|"), role).toContain(
+        text
+      );
+    }
+    // Metadata boxes stack below the title box in template order.
+    const tops = (["subtitle", "author", "institute", "date"] as const).map(
+      (role) => byRole.get(role)!.bounds.y
+    );
+    expect(tops).toEqual([...tops].sort((a, b) => a - b));
+
+    // Each field is its own preamble scope patching the preamble span.
+    const preambleScopes = page.layout.editScopes.filter(
+      (scope) => scope.kind === "preamble-field"
+    );
+    expect(preambleScopes).toHaveLength(5);
+    const authorOffset = source.indexOf("Ada Lovelace");
+    const authorScope = resolveBeamerEditScopeAt(
+      page.layout.editScopes,
+      authorOffset
+    );
+    expect(authorScope?.kind).toBe("preamble-field");
+    expect(
+      source.slice(authorScope!.span.from, authorScope!.span.to)
+    ).toBe("Ada Lovelace");
+    // Frame-body offsets still resolve to the frame-body scope.
+    expect(
+      resolveBeamerEditScopeAt(
+        page.layout.editScopes,
+        source.indexOf(String.raw`\titlepage`)
+      )?.kind
+    ).toBe("frame-body");
+  });
+
+  it("centers short metadata lines that exceed the finite-skip breaker", async () => {
+    // Madrid's wider rounded title box previously made the 8pt institute
+    // line infeasible for the generic centered breaker; the center retry
+    // must land it mid-measure instead of dropping the paragraph.
+    const source = String.raw`\documentclass{beamer}
+\usetheme{Madrid}
+\title{Deck title}
+\author{Ada Lovelace}
+\institute{Analytical Engine Institute}
+\date{December 1843}
+\begin{document}
+\begin{frame}
+\titlepage
+\end{frame}
+\end{document}`;
+    const page = await prepareBeamerDocument(source).renderFrame({
+      frameIndex: 0,
+      step: 1,
+    });
+    const institute = page.layout.paragraphs.find(
+      (paragraph) => paragraph.role === "institute"
+    );
+    expect(institute).toBeDefined();
+    const line = institute!.report.lines[0]!;
+    const center = Number(line.xStart) + Number(line.width) / 2;
+    expect(center).toBeCloseTo(institute!.bounds.width / 2, 4);
+  });
+
+  it("keeps empty metadata fields as empty boxes without scopes", async () => {
+    const source = String.raw`\documentclass{beamer}
+\title{Deck title}
+\author{}
+\date{}
+\begin{document}
+\begin{frame}
+\titlepage
+\end{frame}
+\end{document}`;
+    const page = await prepareBeamerDocument(source).renderFrame({
+      frameIndex: 0,
+      step: 1,
+    });
+
+    expect(
+      page.layout.paragraphs.map((paragraph) => paragraph.role)
+    ).not.toContain("author");
+    expect(
+      page.layout.editScopes.filter(
+        (scope) => scope.kind === "preamble-field"
+      ).map((scope) => scope.id)
+    ).toEqual(["frame:0:scope:preamble:title"]);
+  });
+
   it("returns structured-clone-compatible editable span metadata", async () => {
     const page = await prepareBeamerDocument(SOURCE).renderFrame({
       frameIndex: 0,
