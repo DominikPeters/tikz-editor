@@ -273,6 +273,11 @@ export type BeamerParagraphLayout = {
   hiddenSourceSpans?: readonly Span[];
   /** Source-backed but non-direct ranges, such as explicit custom-macro arguments. */
   readOnlySourceSpans?: readonly Span[];
+  /**
+   * Rendered macro-argument ranges paired with the invocation each one came
+   * from. Clicking argument output selects the invocation atom.
+   */
+  macroArgumentRuns?: readonly { span: Span; invocationSpan: Span }[];
   /** One-based list item ordinals whose labels are covered on this step. */
   hiddenListItemIndices?: readonly number[];
 };

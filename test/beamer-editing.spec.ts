@@ -12,10 +12,11 @@ import {
 const SOURCE = String.raw`\documentclass{beamer}
 \newcommand{\generatedword}{Generated}
 \newcommand{\shout}[1]{#1!}
+\newcommand{\plain}[1]{#1}
 \begin{document}
 \begin{frame}{Editable title \generatedword}
 Direct prose and \textbf{bold words}. \generatedword
-\shout{Macro argument}
+\shout{Macro argument} \plain{Plain wrapped}
 \begin{itemize}
 \item Editable item
 \end{itemize}
@@ -61,6 +62,7 @@ describe("Beamer canvas editing contract", () => {
     expect(joined).toContain("Editable block body");
     expect(joined).not.toContain("Generated");
     expect(joined).not.toContain("Macro argument");
+    expect(joined).not.toContain("Plain wrapped");
     expect(joined).not.toContain("Overlay text");
     expect(joined).not.toContain("x + y");
 
@@ -77,6 +79,10 @@ describe("Beamer canvas editing contract", () => {
       )
     );
     expect(atomSlices).toContain(String.raw`\generatedword`);
+    // Rendered argument output selects the whole invocation, including for
+    // macros whose output is nothing but their argument.
+    expect(atomSlices).toContain(String.raw`\shout{Macro argument}`);
+    expect(atomSlices).toContain(String.raw`\plain{Plain wrapped}`);
     expect(atomSlices.join("|")).not.toContain("Overlay text");
     expect(
       page.layout.paragraphs.flatMap((paragraph) =>

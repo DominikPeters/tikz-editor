@@ -2822,7 +2822,8 @@ function positionParagraphLayout(
     layout.vlistLayout,
     layout.sourceSpan,
     layout.bounds,
-    layout.hiddenSourceSpans ?? []
+    layout.hiddenSourceSpans ?? [],
+    layout.macroArgumentRuns ?? []
   );
 }
 
@@ -3025,7 +3026,8 @@ function layoutParagraph(params: {
   }
   const height =
     result.vlistLayout.metrics.height + result.vlistLayout.metrics.depth;
-  const readOnlySourceSpans = collectMappedMacroArgumentSpans(mapped);
+  const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped);
+  const readOnlySourceSpans = macroArgumentRuns.map((run) => run.span);
   return {
     height,
     layout: {
@@ -3054,13 +3056,17 @@ function layoutParagraph(params: {
         result.vlistLayout,
         params.sourceSpan,
         null,
-        params.hiddenSourceSpans ?? []
+        params.hiddenSourceSpans ?? [],
+        macroArgumentRuns
       ),
       ...(params.hiddenSourceSpans?.length
         ? { hiddenSourceSpans: params.hiddenSourceSpans }
         : {}),
       ...(readOnlySourceSpans.length
         ? { readOnlySourceSpans }
+        : {}),
+      ...(macroArgumentRuns.length
+        ? { macroArgumentRuns }
         : {}),
       ...(params.hiddenListItemIndices?.length
         ? { hiddenListItemIndices: params.hiddenListItemIndices }
@@ -3261,8 +3267,9 @@ function collectBeamerEditableTextSpans(
 /**
  * Rendered output whose source is not directly editable: segments with a
  * macro or select source-range policy (each output glyph reports the full
- * invocation span, so same-span candidates merge into one atom). Hidden
- * overlay material ("generated" policy) publishes nothing.
+ * invocation span, so same-span candidates merge into one atom), plus
+ * rendered macro-argument output, which selects its invocation's span.
+ * Hidden overlay material ("generated" policy) publishes nothing.
  */
 function collectBeamerAtomicRenderSpans(
   paragraphId: string,
@@ -3271,7 +3278,8 @@ function collectBeamerAtomicRenderSpans(
   vlistLayout: BeamerParagraphLayout["vlistLayout"],
   paragraphSpan: Span,
   paragraphBounds: BeamerRect | null,
-  hiddenSourceSpans: readonly Span[]
+  hiddenSourceSpans: readonly Span[],
+  macroArgumentRuns: NonNullable<BeamerParagraphLayout["macroArgumentRuns"]> = []
 ): BeamerParagraphLayout["atomicRenderSpans"] {
   if (!EDITABLE_BEAMER_PARAGRAPH_ROLES.has(role)) {
     return [];
@@ -3282,8 +3290,15 @@ function collectBeamerAtomicRenderSpans(
     );
     const y = (paragraphBounds?.y ?? 0) + Number(placement?.y ?? 0);
     return line.segments.flatMap((segment) => {
+      const isAtomicPolicy =
+        segment.sourceRangePolicy === "macro" ||
+        segment.sourceRangePolicy === "select";
+      const isArgumentCandidate =
+        !isAtomicPolicy &&
+        segment.sourceRangePolicy === "caret" &&
+        (segment.kind === "text" || segment.kind === "space");
       if (
-        (segment.sourceRangePolicy !== "macro" && segment.sourceRangePolicy !== "select") ||
+        (!isAtomicPolicy && !isArgumentCandidate) ||
         segment.role === "list-label" ||
         segment.sourceStartRaw == null ||
         segment.sourceEndRaw == null
@@ -3298,9 +3313,27 @@ function collectBeamerAtomicRenderSpans(
       ) {
         return [];
       }
+      // Argument output maps caret-precisely into the argument source, but
+      // an argument can render any number of times, so direct editing stays
+      // off; clicking it selects the whole invocation instead.
+      let atomFrom = from;
+      let atomTo = to;
+      if (isArgumentCandidate) {
+        const run = macroArgumentRuns.find(
+          (candidate) => from < candidate.span.to && candidate.span.from < to
+        );
+        if (!run) {
+          return [];
+        }
+        atomFrom = Math.max(paragraphSpan.from, run.invocationSpan.from);
+        atomTo = Math.min(paragraphSpan.to, run.invocationSpan.to);
+        if (atomTo <= atomFrom) {
+          return [];
+        }
+      }
       return [{
-        from,
-        to,
+        from: atomFrom,
+        to: atomTo,
         hitBounds: paragraphBounds
           ? [svgRect(
               paragraphBounds.x + Number(segment.x),
@@ -3334,20 +3367,36 @@ function collectBeamerAtomicRenderSpans(
   }));
 }
 
-function collectMappedMacroArgumentSpans(mapped: MappedText): Span[] {
-  const spans: Span[] = [];
+function collectMappedMacroArgumentRuns(
+  mapped: MappedText
+): NonNullable<BeamerParagraphLayout["macroArgumentRuns"]>[number][] {
+  const runs: NonNullable<BeamerParagraphLayout["macroArgumentRuns"]>[number][] = [];
   for (const origin of mapped.sourceMap.charOrigins) {
     if (origin.kind !== "macro-argument" || origin.to <= origin.from) {
       continue;
     }
-    const previous = spans.at(-1);
-    if (previous && origin.from <= previous.to) {
-      previous.to = Math.max(previous.to, origin.to);
+    const previous = runs.at(-1);
+    if (
+      previous &&
+      origin.from <= previous.span.to &&
+      previous.invocationSpan.from === origin.invocation.from &&
+      previous.invocationSpan.to === origin.invocation.to
+    ) {
+      previous.span = {
+        from: previous.span.from,
+        to: Math.max(previous.span.to, origin.to),
+      };
     } else {
-      spans.push({ from: origin.from, to: origin.to });
+      runs.push({
+        span: { from: origin.from, to: origin.to },
+        invocationSpan: {
+          from: origin.invocation.from,
+          to: origin.invocation.to,
+        },
+      });
     }
   }
-  return spans;
+  return runs;
 }
 
 function activeBeamerNamedSize(source: string): {
