@@ -669,6 +669,35 @@ foundation; full status paragraph in the Object layer section above.
     bug: `\begin{block}<2->{…}` was treated as an uncoverenv-style
     wrapper and vanished entirely; content environments with action specs
     now keep their structure and uncover as one unit.
+  - **Stage 3c — format toolbar (implemented 2026-07-31)**: a compact
+    button row attached to the existing text-edit popup/bar (decision:
+    attach, not a separate floating Keynote-style bar), shown for every
+    text session. Wrap buttons B/I/U/tt + color swatch menu + alert
+    toggle `\textbf`/`\textit`/`\underline`/`\texttt`/`\textcolor`/
+    `\alert` around the selection via pure helpers in
+    `packages/core/src/text/format-commands.ts` (lexical wrapper scan,
+    innermost-active detection, unwrap, in-place color-argument replace;
+    wrap safety = balanced braces, even `$` count, no blank line, no
+    comment start; new wraps additionally reject selections containing
+    `\item`/`\begin`/`\end` tokens — unwrapping an active wrapper is
+    always legal). Buttons dispatch through the machine's
+    `structural_edit` path (own undo checkpoint, minimal-diff source
+    patch); Cmd+B/I/U ride the shared modifier-key handler. List buttons
+    (Gmail-style): bullets/numbered call
+    `beamerStructuralListTogglePatch` (same-kind → dissolve the item back
+    to prose, boundary removals keep an empty line so the environment's
+    implicit paragraph break survives; other kind → rename the innermost
+    environment's boundary tokens; outside a list → wrap the caret's
+    blank-line-delimited paragraph chunk in a fresh single-item
+    environment), indent/outdent reuse `beamerStructuralTabPatch`; all
+    structural patches share the staleness-guarded session apply. The
+    engine gained native inline `\alert{…}` rendering: the simple-tex
+    scanner resolves the reserved alias `TEX_ALERT_COLOR_ALIAS` through
+    the layout `colorResolver`, which beamer render supplies from the
+    theme's "alerted text" foreground (an `\alert<spec>` surviving to
+    layout colors every step; per-step projection is deferred). Also
+    deferred: mixed-run partial toggling, `\structure`, font-size
+    controls.
   - **Stage 3c — direct manipulation**: graphics corner resize handles
     (rewrite the authored `width=0.63\textwidth` value span, symbolic form
     preserved), column divider drag with live re-layout (rewrite both
