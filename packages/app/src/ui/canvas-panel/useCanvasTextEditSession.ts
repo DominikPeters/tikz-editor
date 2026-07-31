@@ -33,10 +33,12 @@ import {
 import {
   beamerCaretAtomBeside,
   beamerCaretRowEdgeOffset,
+  beamerListItemAt,
   beamerStructuralBackspacePatch,
   beamerStructuralDeletePatch,
   beamerStructuralEnterPatch,
   beamerStructuralLineBreakPatch,
+  beamerStructuralListTogglePatch,
   beamerStructuralTabPatch,
   nearestBeamerCaretOffset,
   nextBeamerCaretOffset,
@@ -44,6 +46,12 @@ import {
   type BeamerCaretDomain,
   type BeamerStructuralKeyResult
 } from "@tikz-editor/core/beamer/index";
+import {
+  activeTextFormatWrapper,
+  applyTextColorCommand,
+  toggleTextFormatCommand,
+  type TextFormatCommandName
+} from "@tikz-editor/core/text/format-commands";
 import type { CanvasTextEditPlacement } from "../../settings/types";
 import type { CanvasTransform, EditorAction, ToolMode } from "../../store/types";
 import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
@@ -58,7 +66,11 @@ import type {
   CanvasFocusInputModel,
   CanvasScopeEditBorder,
   CanvasTextEditPopupModel,
-  CanvasTextEditViewModel
+  CanvasTextEditViewModel,
+  CanvasTextFormatCommandId,
+  CanvasTextFormatColorSwatch,
+  CanvasTextFormatToolbarItem,
+  CanvasTextFormatToolbarModel
 } from "./CanvasTextEditPopup";
 import { clamp, clientToSvgPoint, viewportToSvgPoint } from "./geometry";
 import { makeMergeKey, mapPointToRectRegionLocal } from "./panel-helpers";
@@ -163,6 +175,81 @@ const TEXT_CARET_OVERLAY_EPSILON_PX = 0.25;
  * edited.
  */
 const SCOPE_POPUP_MAX_BUFFER_CHARS = 400;
+
+/** Toolbar wrap buttons and the format command each one toggles. */
+const TEXT_FORMAT_WRAP_COMMANDS: Partial<
+  Record<CanvasTextFormatCommandId, Exclude<TextFormatCommandName, "textcolor">>
+> = {
+  bold: "textbf",
+  italic: "textit",
+  underline: "underline",
+  mono: "texttt",
+  alert: "alert"
+};
+
+/**
+ * Toolbar color menu: xcolor names the engine resolves natively, with their
+ * display values.
+ */
+const TEXT_FORMAT_COLOR_SWATCHES: readonly CanvasTextFormatColorSwatch[] = [
+  { name: "red", css: "#ff0000" },
+  { name: "orange", css: "#ff8000" },
+  { name: "blue", css: "#0000ff" },
+  { name: "teal", css: "#008080" },
+  { name: "violet", css: "#800080" },
+  { name: "gray", css: "#808080" }
+];
+
+/**
+ * Format wraps must not swallow structure: a selection containing an
+ * `\item` or environment boundary token would wrap it into the command
+ * argument. Inline command syntax (an existing `\textbf{`, a color
+ * argument) is fine — the wrap-safety scan in the toggle helpers already
+ * guards brace balance, math parity, and paragraph breaks.
+ */
+function textFormatSelectionEditable(session: TextEditingSession): boolean {
+  const from = Math.min(session.selectionStart, session.selectionEnd);
+  const to = Math.max(session.selectionStart, session.selectionEnd);
+  return !/\\(?:item|begin|end)(?![a-zA-Z])/u.test(session.text.slice(from, to));
+}
+
+/**
+ * Applies a structural patch to the session buffer under the staleness
+ * guard (the domain reflects the last reconciled render): every edited
+ * range must still hold the text the patch was computed against, else the
+ * edit is dropped and the caller waits for reconciliation.
+ */
+function sessionTextAfterStructuralPatch(
+  session: TextEditingSession,
+  domainSource: string,
+  result: Exclude<BeamerStructuralKeyResult, "swallow" | null>
+): { nextText: string; caretLocal: number } | null {
+  const toLocal = (documentOffset: number) => documentOffset - session.sourceSpan.from;
+  for (const edit of result.edits) {
+    const from = toLocal(edit.span.from);
+    const to = toLocal(edit.span.to);
+    if (from < 0 || to > session.text.length || from > to) {
+      return null;
+    }
+    if (
+      session.text.slice(from, to) !== domainSource.slice(edit.span.from, edit.span.to)
+    ) {
+      return null;
+    }
+  }
+  let nextText = session.text;
+  for (let index = result.edits.length - 1; index >= 0; index -= 1) {
+    const edit = result.edits[index];
+    nextText =
+      nextText.slice(0, toLocal(edit.span.from)) +
+      edit.insert +
+      nextText.slice(toLocal(edit.span.to));
+  }
+  return {
+    nextText,
+    caretLocal: clamp(toLocal(result.caretOffset), 0, nextText.length)
+  };
+}
 const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
   "box-sizing",
   "direction",
@@ -1191,7 +1278,142 @@ export function useCanvasTextEditSession(
     });
   }, [dispatchCanvasTextEditAction]);
 
+  /**
+   * Atomic buffer replacement shared by structural keys and the format
+   * toolbar: writes the DOM inputs before dispatching (the motion handler's
+   * order) so a queued selectionchange cannot echo a stale offset back into
+   * the machine, then routes through `structural_edit` for its own undo
+   * checkpoint and minimal-diff source patch.
+   */
+  const applyTextEditBufferReplacement = useCallback((
+    nextText: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    pendingTextEditInsertTextRef.current = null;
+    canvasVerticalGoalRef.current = null;
+    for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
+      if (input) {
+        input.value = nextText;
+        input.setSelectionRange(selectionStart, selectionEnd);
+      }
+    }
+    dispatchCanvasTextEditAction({
+      type: "structural_edit",
+      nextText,
+      selectionStart,
+      selectionEnd
+    });
+  }, [dispatchCanvasTextEditAction]);
+
+  const handleTextFormatCommand = useCallback((commandId: CanvasTextFormatCommandId) => {
+    const currentState = stateRef.current;
+    const session = currentState.session;
+    if (!session || currentState.compositionRange) {
+      return;
+    }
+    const wrapName = TEXT_FORMAT_WRAP_COMMANDS[commandId];
+    if (wrapName) {
+      const active = activeTextFormatWrapper(
+        session.text,
+        session.selectionStart,
+        session.selectionEnd,
+        wrapName
+      );
+      // Unwrapping an active wrapper is always legal; only fresh wraps
+      // need the structural-selection guard.
+      if (!active && !textFormatSelectionEditable(session)) {
+        return;
+      }
+      const result = toggleTextFormatCommand(
+        session.text,
+        session.selectionStart,
+        session.selectionEnd,
+        wrapName
+      );
+      if (result) {
+        applyTextEditBufferReplacement(
+          result.nextText,
+          result.selectionStart,
+          result.selectionEnd
+        );
+      }
+      return;
+    }
+    if (!session.isScopeSession) {
+      return;
+    }
+    const domain = resolveDeckCaretDomain(session.sourceId);
+    if (!domain) {
+      return;
+    }
+    const offset =
+      session.sourceSpan.from + Math.min(session.selectionStart, session.selectionEnd);
+    const result =
+      commandId === "bullets" || commandId === "numbered"
+        ? beamerStructuralListTogglePatch(
+            domain,
+            offset,
+            commandId === "bullets" ? "itemize" : "enumerate"
+          )
+        : beamerStructuralTabPatch(
+            domain,
+            offset,
+            commandId === "indent" ? "nest" : "unnest"
+          );
+    if (!result || result === "swallow") {
+      return;
+    }
+    const applied = sessionTextAfterStructuralPatch(session, domain.source, result);
+    if (!applied) {
+      return;
+    }
+    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.caretLocal);
+  }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
+
+  const handleTextFormatColor = useCallback((color: string | null) => {
+    const currentState = stateRef.current;
+    const session = currentState.session;
+    if (!session || currentState.compositionRange) {
+      return;
+    }
+    const active = activeTextFormatWrapper(
+      session.text,
+      session.selectionStart,
+      session.selectionEnd,
+      "textcolor"
+    );
+    if (!active && !textFormatSelectionEditable(session)) {
+      return;
+    }
+    const result = applyTextColorCommand(
+      session.text,
+      session.selectionStart,
+      session.selectionEnd,
+      color
+    );
+    if (result) {
+      applyTextEditBufferReplacement(
+        result.nextText,
+        result.selectionStart,
+        result.selectionEnd
+      );
+    }
+  }, [applyTextEditBufferReplacement]);
+
   const handleSharedTextEditModifierKeys = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      const formatKey = event.key.toLowerCase();
+      const formatCommand =
+        formatKey === "b" ? "bold" : formatKey === "i" ? "italic" : formatKey === "u" ? "underline" : null;
+      if (formatCommand) {
+        pendingTextEditInsertTextRef.current = null;
+        event.preventDefault();
+        event.stopPropagation();
+        handleTextFormatCommand(formatCommand);
+        return;
+      }
+    }
     if ((event.ctrlKey || event.metaKey) && !event.altKey) {
       const lowerKey = event.key.toLowerCase();
       let historyIntent: "historyUndo" | "historyRedo" | null = null;
@@ -1222,7 +1444,7 @@ export function useCanvasTextEditSession(
       return;
     }
     pendingTextEditInsertTextRef.current = event.key.length === 1 ? event.key : null;
-  }, [dispatchCanvasTextEditAction]);
+  }, [dispatchCanvasTextEditAction, handleTextFormatCommand]);
 
   const isFocusSurfaceChord = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => (
     (event.metaKey || event.ctrlKey) &&
@@ -1451,52 +1673,15 @@ export function useCanvasTextEditSession(
     if (result === "swallow") {
       return swallow();
     }
-    // Staleness guard: the domain reflects the last reconciled render.
-    // Apply only while every edited range still holds the text the patch
-    // was computed against; otherwise swallow and wait for reconciliation.
-    const toLocal = (documentOffset: number) => documentOffset - session.sourceSpan.from;
-    for (const edit of result.edits) {
-      const from = toLocal(edit.span.from);
-      const to = toLocal(edit.span.to);
-      if (from < 0 || to > session.text.length || from > to) {
-        return swallow();
-      }
-      if (
-        session.text.slice(from, to) !== domain.source.slice(edit.span.from, edit.span.to)
-      ) {
-        return swallow();
-      }
+    const applied = sessionTextAfterStructuralPatch(session, domain.source, result);
+    if (!applied) {
+      return swallow();
     }
-    let nextText = session.text;
-    for (let index = result.edits.length - 1; index >= 0; index -= 1) {
-      const edit = result.edits[index];
-      nextText =
-        nextText.slice(0, toLocal(edit.span.from)) +
-        edit.insert +
-        nextText.slice(toLocal(edit.span.to));
-    }
-    const caretLocal = clamp(toLocal(result.caretOffset), 0, nextText.length);
     event.preventDefault();
     event.stopPropagation();
-    pendingTextEditInsertTextRef.current = null;
-    canvasVerticalGoalRef.current = null;
-    // Write the DOM inputs before dispatching (the motion handler's order):
-    // a selectionchange queued against the pre-edit caret otherwise fires
-    // after the machine update and echoes the stale offset back into it.
-    for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
-      if (input) {
-        input.value = nextText;
-        input.setSelectionRange(caretLocal, caretLocal);
-      }
-    }
-    dispatchCanvasTextEditAction({
-      type: "structural_edit",
-      nextText,
-      selectionStart: caretLocal,
-      selectionEnd: caretLocal
-    });
+    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.caretLocal);
     return true;
-  }, [dispatchCanvasTextEditAction, resolveDeckCaretDomain]);
+  }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
 
   const handleCanvasFocusInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
@@ -2010,6 +2195,102 @@ export function useCanvasTextEditSession(
     return "popup";
   }, [textEditingSession, textEditPlacement]);
 
+  const textEditToolbar = useMemo<CanvasTextFormatToolbarModel | null>(() => {
+    if (!textEditingSession) {
+      return null;
+    }
+    const session = textEditingSession;
+    const editable = textFormatSelectionEditable(session);
+    const wrapItem = (
+      id: CanvasTextFormatCommandId,
+      name: Exclude<TextFormatCommandName, "textcolor">,
+      label: string,
+      glyph: string,
+      glyphClass?: CanvasTextFormatToolbarItem["glyphClass"]
+    ): CanvasTextFormatToolbarItem => {
+      const active =
+        activeTextFormatWrapper(
+          session.text,
+          session.selectionStart,
+          session.selectionEnd,
+          name
+        ) != null;
+      const disabled =
+        !active &&
+        (!editable ||
+          toggleTextFormatCommand(
+            session.text,
+            session.selectionStart,
+            session.selectionEnd,
+            name
+          ) === null);
+      return { id, label, glyph, glyphClass, active, disabled };
+    };
+    const items: CanvasTextFormatToolbarItem[] = [
+      wrapItem("bold", "textbf", "Bold", "B", "bold"),
+      wrapItem("italic", "textit", "Italic", "I", "italic"),
+      wrapItem("underline", "underline", "Underline", "U", "underline"),
+      wrapItem("mono", "texttt", "Monospace", "tt", "mono"),
+      wrapItem("alert", "alert", "Alert", "A!", "alert")
+    ];
+    if (session.isScopeSession) {
+      const domain = resolveDeckCaretDomain(session.sourceId);
+      const offset =
+        session.sourceSpan.from +
+        Math.min(session.selectionStart, session.selectionEnd);
+      const listContext = domain ? beamerListItemAt(domain, offset) : null;
+      items.push(
+        {
+          id: "bullets",
+          label: "Bulleted list",
+          glyph: "•—",
+          active: listContext?.list.environment === "itemize",
+          disabled: !domain
+        },
+        {
+          id: "numbered",
+          label: "Numbered list",
+          glyph: "1—",
+          active: listContext?.list.environment === "enumerate",
+          disabled: !domain
+        },
+        {
+          id: "outdent",
+          label: "Decrease indent",
+          glyph: "⇤",
+          active: false,
+          disabled: !listContext
+        },
+        {
+          id: "indent",
+          label: "Increase indent",
+          glyph: "⇥",
+          active: false,
+          disabled: !listContext
+        }
+      );
+    }
+    const colorWrapper = activeTextFormatWrapper(
+      session.text,
+      session.selectionStart,
+      session.selectionEnd,
+      "textcolor"
+    );
+    return {
+      items,
+      colorSwatches: TEXT_FORMAT_COLOR_SWATCHES,
+      activeColor: colorWrapper?.colorValue ?? null,
+      colorDisabled: colorWrapper == null && !editable,
+      onCommand: handleTextFormatCommand,
+      onColor: handleTextFormatColor
+    };
+  }, [
+    handleTextFormatColor,
+    handleTextFormatCommand,
+    resolveDeckCaretDomain,
+    textEditingSession
+  ]);
+
   const popup = useMemo<CanvasTextEditPopupModel | null>(() => {
     if (!textEditingSession || !textEditSurface) {
       return null;
@@ -2023,6 +2304,7 @@ export function useCanvasTextEditSession(
       focusSurface: textEditFocusSurface,
       placement: textEditPopupPlacement ?? { centerX: 0, top: 0, maxWidth: 0, textareaWidth: 0 },
       measuredHeight: textEditPopupHeight,
+      toolbar: textEditToolbar,
       popupRef: textEditPopupRef,
       textareaRef: textEditTextareaRef,
       textareaSizing: textEditTextareaSizing,
@@ -2056,7 +2338,8 @@ export function useCanvasTextEditSession(
     textEditPopupHeight,
     textEditPopupPlacement,
     textEditSurface,
-    textEditTextareaSizing
+    textEditTextareaSizing,
+    textEditToolbar
   ]);
 
   const canvasFocusInput = useMemo<CanvasFocusInputModel | null>(() => {

@@ -686,3 +686,65 @@ test("deck inspector: frame options with no selection, object properties when se
   await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{alertblock}{Key facts}`);
   await expect.poll(() => readStoreSource(page)).toContain(String.raw`\end{alertblock}`);
 });
+
+test("format toolbar: wrap toggles, shortcut, color menu, and list buttons", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+
+  const selectInBuffer = async (needle: string, length = needle.length) => {
+    const buffer = await textarea.inputValue();
+    const start = buffer.indexOf(needle);
+    expect(start).toBeGreaterThanOrEqual(0);
+    await textarea.evaluate((element, args) => {
+      const input = element as HTMLTextAreaElement;
+      input.focus();
+      input.setSelectionRange(args.start, args.end);
+      input.dispatchEvent(new Event("select", { bubbles: true }));
+    }, { start, end: start + length });
+  };
+
+  // Bold wraps the selection; the button reports active; Cmd+B unwraps it
+  // through the shared shortcut path.
+  await selectInBuffer("typo", 4);
+  const bold = page.getByTestId("text-format-bold");
+  await expect(bold).toBeEnabled();
+  await bold.click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textbf{typo}.`);
+  await expect(bold).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press(`${PRIMARY_MOD}+b`);
+  await expect.poll(() => readStoreSource(page)).toContain("Body typo.");
+
+  // The color menu applies \textcolor; picking another swatch replaces the
+  // color argument in place; Remove color unwraps.
+  // The floating swatch menu defeats Playwright's stability heuristics, so
+  // menu interactions dispatch clicks directly; the pointer path is covered
+  // by the toolbar buttons above.
+  await selectInBuffer("typo", 4);
+  await page.getByTestId("text-format-color").dispatchEvent("click");
+  await page.getByTestId("text-format-color-blue").dispatchEvent("click");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textcolor{blue}{typo}.`);
+  await page.getByTestId("text-format-color").dispatchEvent("click");
+  await page.getByTestId("text-format-color-red").dispatchEvent("click");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textcolor{red}{typo}.`);
+  await page.getByTestId("text-format-color").dispatchEvent("click");
+  await page.getByTestId("text-format-color-none").dispatchEvent("click");
+  await expect.poll(() => readStoreSource(page)).toContain("Body typo.");
+
+  // List buttons: a caret in the itemize item lights the bullets button;
+  // Numbered renames the environment; clicking the active kind dissolves
+  // the item back into prose; Bulleted on prose re-creates a list.
+  await selectInBuffer("List typo", 0);
+  const bullets = page.getByTestId("text-format-bullets");
+  const numbered = page.getByTestId("text-format-numbered");
+  await expect(bullets).toHaveAttribute("aria-pressed", "true");
+  await numbered.click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{enumerate}`);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\end{enumerate}`);
+  await expect(numbered).toHaveAttribute("aria-pressed", "true");
+  await numbered.click();
+  await expect.poll(() => readStoreSource(page)).not.toContain(String.raw`\begin{enumerate}`);
+  await expect.poll(() => readStoreSource(page)).toContain("List typo");
+  await selectInBuffer("List typo", 0);
+  await bullets.click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\item List typo`);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{itemize}`);
+});

@@ -562,6 +562,137 @@
   user-select: none;
 }
 
+.textEditToolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  align-self: center;
+  margin: -1px 0 3px;
+  user-select: none;
+}
+
+.textEditToolbarSlot {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.textEditToolbarDivider {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--border) 80%, transparent 20%);
+}
+
+.textEditToolbarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: default;
+}
+
+.textEditToolbarButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent 92%);
+}
+
+.textEditToolbarButton:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.textEditToolbarButtonActive {
+  background: color-mix(in srgb, var(--accent) 18%, transparent 82%);
+  color: var(--accent);
+}
+
+.textEditToolbarButtonActive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 26%, transparent 74%);
+}
+
+.textEditToolbarGlyphBold {
+  font-weight: 700;
+}
+
+.textEditToolbarGlyphItalic {
+  font-style: italic;
+  font-family: var(--font-serif, Georgia, serif);
+}
+
+.textEditToolbarGlyphUnderline {
+  text-decoration: underline;
+}
+
+.textEditToolbarGlyphMono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.textEditToolbarGlyphAlert {
+  font-weight: 700;
+  color: #d03030;
+}
+
+.textEditToolbarColorWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.textEditToolbarColorGlyph {
+  border-bottom: 2px solid currentcolor;
+  line-height: 1.1;
+}
+
+.textEditToolbarColorMenu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent 30%);
+  border-radius: 6px;
+  background: var(--bg-pane);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+}
+
+.textEditToolbarSwatch {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.25);
+  border-radius: 3px;
+  padding: 0;
+  cursor: default;
+}
+
+.textEditToolbarSwatchActive {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.textEditToolbarSwatchNone {
+  width: 16px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent 20%);
+  border-radius: 3px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+}
+
 .textEditTextarea {
   display: block;
   resize: none;

@@ -1,15 +1,54 @@
-import type {
-  ClipboardEvent as ReactClipboardEvent,
-  DragEvent as ReactDragEvent,
-  FocusEvent as ReactFocusEvent,
-  KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
-  RefObject,
-  SyntheticEvent as ReactSyntheticEvent
+import {
+  useEffect,
+  useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  type SyntheticEvent as ReactSyntheticEvent
 } from "react";
 import type { CanvasTextEditFocusSurface } from "./canvas-text-edit-machine";
 import type { TextEditingSession } from "./types";
 import css from "./CanvasPanel.module.css";
+
+export type CanvasTextFormatCommandId =
+  | "bold"
+  | "italic"
+  | "underline"
+  | "mono"
+  | "alert"
+  | "bullets"
+  | "numbered"
+  | "outdent"
+  | "indent";
+
+export type CanvasTextFormatToolbarItem = {
+  id: CanvasTextFormatCommandId;
+  label: string;
+  glyph: string;
+  glyphClass?: "bold" | "italic" | "underline" | "mono" | "alert";
+  active: boolean;
+  disabled: boolean;
+};
+
+export type CanvasTextFormatColorSwatch = {
+  /** LaTeX color name written into `\textcolor{...}`. */
+  name: string;
+  /** Display color for the swatch button. */
+  css: string;
+};
+
+export type CanvasTextFormatToolbarModel = {
+  items: readonly CanvasTextFormatToolbarItem[];
+  colorSwatches: readonly CanvasTextFormatColorSwatch[];
+  /** Raw color argument of the enclosing `\textcolor`, if any. */
+  activeColor: string | null;
+  colorDisabled: boolean;
+  onCommand: (id: CanvasTextFormatCommandId) => void;
+  onColor: (name: string | null) => void;
+};
 
 export type CanvasTextEditPopupModel = {
   session: TextEditingSession;
@@ -24,6 +63,7 @@ export type CanvasTextEditPopupModel = {
     textareaWidth: number;
   };
   measuredHeight: number | null;
+  toolbar: CanvasTextFormatToolbarModel | null;
   popupRef: RefObject<HTMLDivElement | null>;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   textareaSizing: { rows: number } | null;
@@ -78,6 +118,136 @@ export type CanvasTextEditViewModel = {
   scopeEditBorder: CanvasScopeEditBorder | null;
 };
 
+const GLYPH_CLASS_NAMES: Record<
+  NonNullable<CanvasTextFormatToolbarItem["glyphClass"]>,
+  string
+> = {
+  bold: css.textEditToolbarGlyphBold,
+  italic: css.textEditToolbarGlyphItalic,
+  underline: css.textEditToolbarGlyphUnderline,
+  mono: css.textEditToolbarGlyphMono,
+  alert: css.textEditToolbarGlyphAlert
+};
+
+/** Keeps pointer interactions from moving focus out of the session inputs. */
+function keepSessionFocus(event: ReactPointerEvent<HTMLElement>) {
+  event.preventDefault();
+}
+
+function CanvasTextFormatToolbar({
+  toolbar,
+  sessionKey
+}: {
+  toolbar: CanvasTextFormatToolbarModel;
+  sessionKey: string;
+}) {
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  useEffect(() => {
+    setColorMenuOpen(false);
+  }, [sessionKey]);
+  const activeSwatch =
+    toolbar.colorSwatches.find((swatch) => swatch.name === toolbar.activeColor) ?? null;
+  return (
+    <div className={css.textEditToolbar} data-testid="canvas-text-format-toolbar">
+      {toolbar.items.map((item) => (
+        <span key={item.id} className={css.textEditToolbarSlot}>
+          {item.id === "bullets" ? <span className={css.textEditToolbarDivider} /> : null}
+          <button
+            type="button"
+            className={[
+              css.textEditToolbarButton,
+              item.active ? css.textEditToolbarButtonActive : ""
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            aria-label={item.label}
+            title={item.label}
+            aria-pressed={item.active}
+            disabled={item.disabled}
+            onPointerDown={keepSessionFocus}
+            onClick={() => { toolbar.onCommand(item.id); }}
+            data-testid={`text-format-${item.id}`}
+          >
+            <span className={item.glyphClass ? GLYPH_CLASS_NAMES[item.glyphClass] : undefined}>
+              {item.glyph}
+            </span>
+          </button>
+          {item.id === "mono" ? (
+            <span className={css.textEditToolbarColorWrap}>
+              <button
+                type="button"
+                className={[
+                  css.textEditToolbarButton,
+                  toolbar.activeColor != null ? css.textEditToolbarButtonActive : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-label="Text color"
+                title="Text color"
+                disabled={toolbar.colorDisabled}
+                onPointerDown={keepSessionFocus}
+                onClick={() => { setColorMenuOpen((open) => !open); }}
+                data-testid="text-format-color"
+              >
+                <span
+                  className={css.textEditToolbarColorGlyph}
+                  style={{ borderBottomColor: activeSwatch?.css ?? "currentcolor" }}
+                >
+                  A
+                </span>
+              </button>
+              {colorMenuOpen ? (
+                <span
+                  className={css.textEditToolbarColorMenu}
+                  data-testid="text-format-color-menu"
+                >
+                  {toolbar.colorSwatches.map((swatch) => (
+                    <button
+                      key={swatch.name}
+                      type="button"
+                      className={[
+                        css.textEditToolbarSwatch,
+                        swatch.name === toolbar.activeColor
+                          ? css.textEditToolbarSwatchActive
+                          : ""
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      style={{ background: swatch.css }}
+                      aria-label={`Color ${swatch.name}`}
+                      title={swatch.name}
+                      onPointerDown={keepSessionFocus}
+                      onClick={() => {
+                        toolbar.onColor(swatch.name);
+                        setColorMenuOpen(false);
+                      }}
+                      data-testid={`text-format-color-${swatch.name}`}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className={css.textEditToolbarSwatchNone}
+                    aria-label="Remove color"
+                    title="Remove color"
+                    onPointerDown={keepSessionFocus}
+                    onClick={() => {
+                      toolbar.onColor(null);
+                      setColorMenuOpen(false);
+                    }}
+                    data-testid="text-format-color-none"
+                  >
+                    ×
+                  </button>
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function CanvasTextEditPopup({
   model,
   prefersNonBlinkingTextInsertionIndicator,
@@ -117,6 +287,12 @@ export function CanvasTextEditPopup({
     >
       {session.isForeachTemplateEdit ? (
         <div className={css.textEditPopupTag} data-testid="canvas-text-edit-foreach-tag">foreach</div>
+      ) : null}
+      {model.toolbar ? (
+        <CanvasTextFormatToolbar
+          toolbar={model.toolbar}
+          sessionKey={session.sourceId}
+        />
       ) : null}
       <div className={css.textEditTextareaLayer}>
         <textarea
