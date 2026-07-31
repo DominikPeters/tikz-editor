@@ -41,6 +41,8 @@ import {
   type CanvasTextEditAction
 } from "./canvas-text-edit-machine";
 import type {
+  CanvasFocusInputModel,
+  CanvasScopeEditBorder,
   CanvasTextEditPopupModel,
   CanvasTextEditViewModel
 } from "./CanvasTextEditPopup";
@@ -237,6 +239,78 @@ function resolveTextareaCaretClientRect(textarea: HTMLTextAreaElement, offset: n
       1,
       height
     );
+  } finally {
+    mirror.remove();
+  }
+}
+
+/**
+ * Measure the client rects covering a text range inside a textarea via the
+ * same mirror technique as {@link resolveTextareaCaretClientRect}: an
+ * unfocused textarea hides its native selection, so the popup/bar draws
+ * these itself while the canvas surface owns the keyboard. Returns one rect
+ * per rendered line, in textarea-relative coordinates (scroll applied),
+ * clipped to the textarea viewport.
+ */
+function resolveTextareaRangeClientRects(
+  textarea: HTMLTextAreaElement,
+  start: number,
+  end: number
+): { left: number; top: number; width: number; height: number }[] | null {
+  const documentRef = textarea.ownerDocument;
+  const windowRef = documentRef.defaultView;
+  if (!windowRef) {
+    return null;
+  }
+  const boundedStart = clamp(Math.min(start, end), 0, textarea.value.length);
+  const boundedEnd = clamp(Math.max(start, end), 0, textarea.value.length);
+  if (boundedStart === boundedEnd) {
+    return [];
+  }
+  const computed = windowRef.getComputedStyle(textarea);
+  const textareaRect = textarea.getBoundingClientRect();
+  const mirror = documentRef.createElement("div");
+  const rangeSpan = documentRef.createElement("span");
+
+  mirror.style.position = "fixed";
+  mirror.style.visibility = "hidden";
+  mirror.style.pointerEvents = "none";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.wordWrap = "break-word";
+  mirror.style.wordBreak = "break-word";
+  mirror.style.overflowWrap = "break-word";
+  mirror.style.overflow = "hidden";
+  mirror.style.left = `${textareaRect.left}px`;
+  mirror.style.top = `${textareaRect.top}px`;
+  for (const property of TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES) {
+    mirror.style.setProperty(property, computed.getPropertyValue(property));
+  }
+  rangeSpan.textContent = textarea.value.slice(boundedStart, boundedEnd);
+
+  try {
+    mirror.append(textarea.value.slice(0, boundedStart), rangeSpan, textarea.value.slice(boundedEnd));
+    documentRef.body.append(mirror);
+    const viewWidth = textareaRect.width;
+    const viewHeight = textarea.clientHeight > 0 ? textarea.clientHeight : textareaRect.height;
+    const rects: { left: number; top: number; width: number; height: number }[] = [];
+    const rangeRects = rangeSpan.getClientRects();
+    for (let index = 0; index < rangeRects.length; index += 1) {
+      const rect = rangeRects[index];
+      if (!rect || !Number.isFinite(rect.left) || !Number.isFinite(rect.top)) {
+        continue;
+      }
+      const left = rect.left - textareaRect.left - textarea.scrollLeft;
+      const top = rect.top - textareaRect.top - textarea.scrollTop;
+      const clippedLeft = clamp(left, 0, viewWidth);
+      const clippedTop = clamp(top, 0, viewHeight);
+      const width = clamp(left + rect.width, 0, viewWidth) - clippedLeft;
+      const height = clamp(top + rect.height, 0, viewHeight) - clippedTop;
+      if (width <= 0 || height <= 0) {
+        continue;
+      }
+      rects.push({ left: clippedLeft, top: clippedTop, width, height });
+    }
+    return rects;
   } finally {
     mirror.remove();
   }
@@ -499,12 +573,19 @@ export function useCanvasTextEditSession(
   const stateRef = useRef(INITIAL_CANVAS_TEXT_EDIT_STATE);
   const textEditingSession = state.session;
   const textSelectionOverlay = state.selectionOverlay;
+  const textEditFocusSurface = state.focusSurface;
+  const canvasSurfaceFocused =
+    textEditingSession?.isScopeSession === true && textEditFocusSurface === "canvas";
   const [pendingAdornmentTextEditTargetId, setPendingAdornmentTextEditTargetId] = useState<string | null>(null);
   const textSelectionDragRef = useRef<TextSelectionDrag | null>(null);
   const textEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const canvasFocusInputRef = useRef<HTMLTextAreaElement | null>(null);
   const textEditPopupRef = useRef<HTMLDivElement | null>(null);
   const [textEditPopupHeight, setTextEditPopupHeight] = useState<number | null>(null);
   const [textEditCaretOverlay, setTextEditCaretOverlay] = useState<TextEditCaretOverlay | null>(null);
+  const [textEditInactiveSelectionRects, setTextEditInactiveSelectionRects] = useState<
+    { left: number; top: number; width: number; height: number }[] | null
+  >(null);
   const pendingTextEditPasteRef = useRef<string | null>(null);
   const pendingTextEditInsertTextRef = useRef<string | null>(null);
   const previousContextKeyRef = useRef(contextKey);
@@ -1071,15 +1152,7 @@ export function useCanvasTextEditSession(
     });
   }, [dispatchCanvasTextEditAction]);
 
-  const handleTextEditTextareaKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      textSelectionDragRef.current = null;
-      dispatchCanvasTextEditAction({ type: "session_close" });
-      return;
-    }
-
+  const handleSharedTextEditModifierKeys = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.ctrlKey || event.metaKey) && !event.altKey) {
       const lowerKey = event.key.toLowerCase();
       let historyIntent: "historyUndo" | "historyRedo" | null = null;
@@ -1112,42 +1185,131 @@ export function useCanvasTextEditSession(
     pendingTextEditInsertTextRef.current = event.key.length === 1 ? event.key : null;
   }, [dispatchCanvasTextEditAction]);
 
+  const isFocusSurfaceChord = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => (
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === "e"
+  ), []);
+
+  const handleTextEditTextareaKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      textSelectionDragRef.current = null;
+      // Esc steps out one level: bar focus hands the keyboard back to the
+      // canvas surface in scope sessions; node sessions close outright.
+      if (stateRef.current.session?.isScopeSession) {
+        dispatchCanvasTextEditAction({ type: "focus_surface", surface: "canvas" });
+      } else {
+        dispatchCanvasTextEditAction({ type: "session_close" });
+      }
+      return;
+    }
+
+    if (isFocusSurfaceChord(event)) {
+      // Cmd+E targets the bar, which is already focused; swallow it so the
+      // browser's "use selection for find" cannot fire mid-session.
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    handleSharedTextEditModifierKeys(event);
+  }, [dispatchCanvasTextEditAction, handleSharedTextEditModifierKeys, isFocusSurfaceChord]);
+
+  const handleCanvasFocusInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      textSelectionDragRef.current = null;
+      dispatchCanvasTextEditAction({ type: "session_close" });
+      return;
+    }
+
+    if (isFocusSurfaceChord(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      dispatchCanvasTextEditAction({ type: "focus_surface", surface: "bar" });
+      return;
+    }
+
+    if (event.key === "Tab") {
+      // Structural Tab (list indent/outdent) lands in Stage 2c; swallow it
+      // now so focus cannot tab out of the hidden input mid-session.
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    handleSharedTextEditModifierKeys(event);
+  }, [dispatchCanvasTextEditAction, handleSharedTextEditModifierKeys, isFocusSurfaceChord]);
+
+  const handleTextEditTextareaFocus = useCallback(() => {
+    const currentState = stateRef.current;
+    if (currentState.session && currentState.focusSurface !== "bar") {
+      dispatchCanvasTextEditAction({ type: "focus_surface", surface: "bar" });
+    }
+  }, [dispatchCanvasTextEditAction]);
+
   const handleTextEditPopupPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
   }, []);
 
   useLayoutEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
+    if (!textEditingSession) {
       return;
     }
-    const handleBeforeInput = (event: Event) => {
-      const inputEvent = event as InputEvent;
-      if (typeof inputEvent.inputType === "string") {
-        dispatchTextEditBeforeInputIntent(inputEvent, textarea);
+    // Both surfaces feed the same beforeinput-intercepting machine; typing
+    // is identical whichever input holds DOM focus.
+    const inputs = [textEditTextareaRef.current, canvasFocusInputRef.current].filter(
+      (input): input is HTMLTextAreaElement => input != null
+    );
+    if (inputs.length === 0) {
+      return;
+    }
+    const cleanups = inputs.map((input) => {
+      const handleBeforeInput = (event: Event) => {
+        const inputEvent = event as InputEvent;
+        if (typeof inputEvent.inputType === "string") {
+          dispatchTextEditBeforeInputIntent(inputEvent, input);
+        }
+      };
+      input.addEventListener("beforeinput", handleBeforeInput);
+      return () => { input.removeEventListener("beforeinput", handleBeforeInput); };
+    });
+    return () => {
+      for (const cleanup of cleanups) {
+        cleanup();
       }
     };
-    textarea.addEventListener("beforeinput", handleBeforeInput);
-    return () => { textarea.removeEventListener("beforeinput", handleBeforeInput); };
   }, [dispatchTextEditBeforeInputIntent, textEditingSession]);
 
   // Layout effect so the scroll-into-view adjustment lands before the caret
   // overlay (a later layout effect) measures against the textarea viewport.
   useLayoutEffect(() => {
     const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
+    const canvasInput = canvasFocusInputRef.current;
+    if (!textEditingSession || (!textarea && !canvasInput)) {
       return;
     }
-    if (document.activeElement !== textarea) {
-      textarea.focus({ preventScroll: true });
+    const activeInput = canvasSurfaceFocused ? canvasInput : textarea;
+    if (activeInput && document.activeElement !== activeInput) {
+      activeInput.focus({ preventScroll: true });
     }
     const start = clamp(textEditingSession.selectionStart, 0, textEditingSession.text.length);
     const end = clamp(textEditingSession.selectionEnd, 0, textEditingSession.text.length);
-    if (textarea.selectionStart !== start || textarea.selectionEnd !== end) {
-      textarea.setSelectionRange(start, end);
+    // Both inputs mirror the buffer selection so native editing semantics
+    // (word deletes, composition) report correct offsets from either.
+    for (const input of [textarea, canvasInput]) {
+      if (input && (input.selectionStart !== start || input.selectionEnd !== end)) {
+        input.setSelectionRange(start, end);
+      }
     }
-    scrollTextareaCaretIntoView(textarea, end);
-  }, [textEditingSession]);
+    if (textarea) {
+      scrollTextareaCaretIntoView(textarea, end);
+    }
+  }, [canvasSurfaceFocused, textEditingSession]);
 
   useEffect(() => {
     const textarea = textEditTextareaRef.current;
@@ -1160,28 +1322,46 @@ export function useCanvasTextEditSession(
   }, [textEditingSession, textEditPopupHeight]);
 
   useEffect(() => {
-    const textarea = textEditTextareaRef.current;
-    if (!textEditingSession || !textarea) {
+    if (!textEditingSession) {
       return;
     }
-    const syncSelectionFromTextarea = () => {
+    const inputs = [textEditTextareaRef.current, canvasFocusInputRef.current].filter(
+      (input): input is HTMLTextAreaElement => input != null
+    );
+    if (inputs.length === 0) {
+      return;
+    }
+    // With two mirroring inputs only the focused one is authoritative for
+    // selection; the other's selection is programmatic echo.
+    const syncSelectionFromInput = (input: HTMLTextAreaElement) => {
+      if (document.activeElement !== input) {
+        return;
+      }
       dispatchCanvasTextEditAction({
         type: "textarea_selection",
-        selectionStart: textarea.selectionStart ?? 0,
-        selectionEnd: textarea.selectionEnd ?? 0
+        selectionStart: input.selectionStart ?? 0,
+        selectionEnd: input.selectionEnd ?? 0
       });
     };
     const handleDocumentSelectionChange = () => {
-      if (document.activeElement === textarea) {
-        syncSelectionFromTextarea();
+      for (const input of inputs) {
+        syncSelectionFromInput(input);
       }
     };
-    textarea.addEventListener("select", syncSelectionFromTextarea);
-    textarea.addEventListener("mouseup", syncSelectionFromTextarea);
+    const cleanups = inputs.map((input) => {
+      const handleInputSelection = () => { syncSelectionFromInput(input); };
+      input.addEventListener("select", handleInputSelection);
+      input.addEventListener("mouseup", handleInputSelection);
+      return () => {
+        input.removeEventListener("select", handleInputSelection);
+        input.removeEventListener("mouseup", handleInputSelection);
+      };
+    });
     document.addEventListener("selectionchange", handleDocumentSelectionChange);
     return () => {
-      textarea.removeEventListener("select", syncSelectionFromTextarea);
-      textarea.removeEventListener("mouseup", syncSelectionFromTextarea);
+      for (const cleanup of cleanups) {
+        cleanup();
+      }
       document.removeEventListener("selectionchange", handleDocumentSelectionChange);
     };
   }, [dispatchCanvasTextEditAction, textEditingSession]);
@@ -1260,6 +1440,43 @@ export function useCanvasTextEditSession(
       windowRef?.removeEventListener("resize", syncTextEditCaretOverlay);
     };
   }, [textEditingSession, textEditPopupHeight]);
+
+  // While the canvas surface owns the keyboard the bar textarea is unfocused
+  // and hides its native selection; mirror-measure the range so the bar can
+  // draw it in the inactive (gray) style.
+  useLayoutEffect(() => {
+    const textarea = textEditTextareaRef.current;
+    if (
+      !textEditingSession ||
+      !textarea ||
+      !canvasSurfaceFocused ||
+      textEditingSession.selectionStart === textEditingSession.selectionEnd
+    ) {
+      setTextEditInactiveSelectionRects(null);
+      return;
+    }
+    const syncInactiveSelectionRects = () => {
+      const currentTextarea = textEditTextareaRef.current;
+      if (!currentTextarea) {
+        setTextEditInactiveSelectionRects(null);
+        return;
+      }
+      const rects = resolveTextareaRangeClientRects(
+        currentTextarea,
+        textEditingSession.selectionStart,
+        textEditingSession.selectionEnd
+      );
+      setTextEditInactiveSelectionRects(rects && rects.length > 0 ? rects : null);
+    };
+    syncInactiveSelectionRects();
+    textarea.addEventListener("scroll", syncInactiveSelectionRects, { passive: true });
+    const windowRef = textarea.ownerDocument.defaultView;
+    windowRef?.addEventListener("resize", syncInactiveSelectionRects);
+    return () => {
+      textarea.removeEventListener("scroll", syncInactiveSelectionRects);
+      windowRef?.removeEventListener("resize", syncInactiveSelectionRects);
+    };
+  }, [canvasSurfaceFocused, textEditingSession, textEditPopupHeight]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -1498,6 +1715,7 @@ export function useCanvasTextEditSession(
     return {
       session: textEditingSession,
       surface: textEditSurface,
+      focusSurface: textEditFocusSurface,
       placement: textEditPopupPlacement ?? { centerX: 0, top: 0, maxWidth: 0, textareaWidth: 0 },
       measuredHeight: textEditPopupHeight,
       popupRef: textEditPopupRef,
@@ -1507,7 +1725,9 @@ export function useCanvasTextEditSession(
       hideNativeCaret:
         textEditingSession.selectionStart === textEditingSession.selectionEnd &&
         textEditCaretOverlay != null,
+      inactiveSelectionRects: canvasSurfaceFocused ? textEditInactiveSelectionRects : null,
       onPopupPointerDown: handleTextEditPopupPointerDown,
+      onTextareaFocus: handleTextEditTextareaFocus,
       onTextareaSelect: handleTextEditTextareaSelect,
       onTextareaCopy: stopTextEditTextareaClipboardPropagation,
       onTextareaCut: stopTextEditTextareaClipboardPropagation,
@@ -1516,23 +1736,83 @@ export function useCanvasTextEditSession(
       onTextareaKeyDown: handleTextEditTextareaKeyDown
     };
   }, [
+    canvasSurfaceFocused,
     handleTextEditPopupPointerDown,
     handleTextEditTextareaDrop,
+    handleTextEditTextareaFocus,
     handleTextEditTextareaKeyDown,
     handleTextEditTextareaPaste,
     handleTextEditTextareaSelect,
     stopTextEditTextareaClipboardPropagation,
     textEditingSession,
     textEditCaretOverlay,
+    textEditFocusSurface,
+    textEditInactiveSelectionRects,
     textEditPopupHeight,
     textEditPopupPlacement,
     textEditSurface,
     textEditTextareaSizing
   ]);
 
+  const canvasFocusInput = useMemo<CanvasFocusInputModel | null>(() => {
+    if (!textEditingSession?.isScopeSession) {
+      return null;
+    }
+    // Mounted for the whole scope session (not just while canvas-focused) so
+    // focus can move between surfaces without remount races.
+    const caret = textSelectionOverlay?.caret ?? null;
+    return {
+      inputRef: canvasFocusInputRef,
+      value: textEditingSession.text,
+      position: caret ? { left: caret.bounds.minX, top: caret.bounds.minY } : null,
+      onKeyDown: handleCanvasFocusInputKeyDown,
+      onSelect: handleTextEditTextareaSelect,
+      onCopy: stopTextEditTextareaClipboardPropagation,
+      onCut: stopTextEditTextareaClipboardPropagation,
+      onPaste: handleTextEditTextareaPaste,
+      onDrop: handleTextEditTextareaDrop
+    };
+  }, [
+    handleCanvasFocusInputKeyDown,
+    handleTextEditTextareaDrop,
+    handleTextEditTextareaPaste,
+    handleTextEditTextareaSelect,
+    stopTextEditTextareaClipboardPropagation,
+    textEditingSession,
+    textSelectionOverlay
+  ]);
+
+  const scopeEditBorder = useMemo<CanvasScopeEditBorder | null>(() => {
+    if (!textEditingSession?.isScopeSession || !svgResult) {
+      return null;
+    }
+    const anchorBox = textEditingSession.popupAnchorBox;
+    if (!anchorBox) {
+      return null;
+    }
+    return {
+      left: canvasTransform.translateX + (anchorBox.minX - svgResult.viewBox.x) * canvasTransform.scale,
+      top: canvasTransform.translateY + (anchorBox.minY - svgResult.viewBox.y) * canvasTransform.scale,
+      width: (anchorBox.maxX - anchorBox.minX) * canvasTransform.scale,
+      height: (anchorBox.maxY - anchorBox.minY) * canvasTransform.scale
+    };
+  }, [
+    canvasTransform.scale,
+    canvasTransform.translateX,
+    canvasTransform.translateY,
+    svgResult,
+    textEditingSession
+  ]);
+
   const view = useMemo<CanvasTextEditViewModel>(
-    () => ({ session: textEditingSession, popup }),
-    [popup, textEditingSession]
+    () => ({
+      session: textEditingSession,
+      popup,
+      focusSurface: textEditFocusSurface,
+      canvasFocusInput,
+      scopeEditBorder
+    }),
+    [canvasFocusInput, popup, scopeEditBorder, textEditFocusSurface, textEditingSession]
   );
 
   return {

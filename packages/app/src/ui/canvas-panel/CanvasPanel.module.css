@@ -444,11 +444,57 @@
   background: rgba(63, 136, 227, 0.28);
 }
 
+/* macOS active/inactive convention: the surface that lost the keyboard keeps
+   its selection visible, in gray. */
+.textSelectionViewportRectInactive {
+  background: rgba(120, 128, 140, 0.26);
+}
+
 .textSelectionViewportCaret {
   position: absolute;
   width: 1.5px;
   background: var(--accent-dark);
   animation: textCaretBlink 1s steps(1, end) infinite;
+}
+
+.textSelectionViewportCaretInactive {
+  background: color-mix(in srgb, var(--text-muted) 75%, transparent 25%);
+}
+
+/* PowerPoint-style dashed edit outline around the scope container while a
+   deck session is open; also visualizes where arrow keys will clamp. */
+.scopeEditBorder {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  outline: 1.5px dashed color-mix(in srgb, var(--accent) 65%, var(--text-muted) 35%);
+  outline-offset: 5px;
+  border-radius: 1px;
+}
+
+.scopeEditBorderFaint {
+  outline-color: color-mix(in srgb, var(--text-muted) 45%, transparent 55%);
+}
+
+/* Hidden input capturing keyboard/IME while the canvas surface owns focus.
+   Kept 1x1 near the canvas caret so IME candidate windows open in place;
+   never display:none, which would make it unfocusable. */
+.canvasFocusInput {
+  position: absolute;
+  z-index: 2;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: none;
+  margin: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  caret-color: transparent;
+  background: transparent;
+  color: transparent;
 }
 
 .textEditPopup {
@@ -490,6 +536,15 @@
 
 .textEditBar:focus-within {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border) 50%);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent 70%),
+    0 3px 10px rgba(15, 23, 42, 0.10);
+}
+
+/* Bar/popup chrome while the canvas surface owns the keyboard: slightly
+   dimmed, no focus ring. */
+.textEditSurfaceUnfocused {
+  opacity: 0.92;
 }
 
 .textEditBar .textEditTextareaLayer {
@@ -566,6 +621,18 @@
   background: var(--accent-dark);
   pointer-events: none;
   animation: textCaretBlink 1s steps(1, end) infinite;
+}
+
+.textEditViewportCaretInactive {
+  background: color-mix(in srgb, var(--text-muted) 75%, transparent 25%);
+}
+
+/* Selection drawn by the bar itself while it is unfocused (the native
+   textarea selection hides without focus). */
+.textEditSelectionRectInactive {
+  position: absolute;
+  background: rgba(120, 128, 140, 0.26);
+  pointer-events: none;
 }
 
 .textCaretNoBlink {

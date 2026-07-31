@@ -361,8 +361,21 @@ docked-bar/popup placement setting, click-into-math (inline and display),
 atomic-render click-to-select, and preamble-backed title-page fields
 (author/institute/date now render as source-backed paragraphs; each
 metadata field is a `preamble-field` edit scope). The latency gate
-measures the full KKT column scope buffer on both browsers. Stage 2+ is
-not started. The editing fixture corpus below is built
+measures the full KKT column scope buffer on both browsers. **Stage 2a is
+implemented**: `focusSurface` in the edit machine (scope sessions enter in
+canvas focus, node sessions stay bar-only), a hidden canvas textarea
+feeding the same beforeinput machine (both surfaces mirror buffer and
+selection, so native word-deletes/IME report correct offsets from either),
+Cmd+E in / Esc out (Esc from bar → canvas focus, Esc from canvas → close),
+and the indication set: only the focused surface blinks (static
+low-contrast caret on the other), accent vs gray selection in both
+directions (the bar mirror-measures its range rects while unfocused, since
+an unfocused textarea hides its native selection), bar focus ring/dimmed
+chrome, and the dashed PPT edit border on the scope container
+(`anchorBounds`), faint under bar focus. Arrow/Enter keys are still
+source-style under canvas focus until Stage 2b/2c. Stage 2b (rendered-stop
+motion) and 2c (structural keys) are not started. The editing fixture
+corpus below is built
 (`test/fixtures/beamer/editing_corpus_beamer.tex`, tests in
 `test/beamer-editing.spec.ts`); building it surfaced and fixed two
 content-flow bugs (command-form `\frametitle`/`\framesubtitle` leaked into
@@ -425,6 +438,22 @@ fragile/verbatim frame (expected: frame fallback, no session).
   a focus switch.
 - Structural Enter splits paragraphs by inserting a **blank line**, also
   in dense no-blank-line bodies (KKT frame 3 style); no `\par` variant.
+- **Item topology comes from the text engine, not a second parser**
+  (decided 2026-07-31): the engine's chunk scan already holds every span
+  structural keys need when it handles `\item` (command token span,
+  optional-label span, content start, live list stack with
+  kind/depth/itemIndex) and currently discards the topology, keeping only
+  per-block breadcrumbs (`listScope`/`scopePath`) and box roles. Stage 2c
+  retains a per-chunk list-structure record at parse time and threads it
+  to `BeamerParagraphLayout` the way `macroArgumentRuns` already is — the
+  same "engine keeps source facts it learned while parsing" pattern as
+  `mathCaretEntries`. Rejected: an independent source-level item pass in
+  the Beamer content layer (two interpretations of `\item` that could
+  diverge) and deriving items from rendered vlist box geometry
+  (render-coupled, per-step, lacks the token/label/whitespace spans a
+  patch needs). When a chunk fails to parse there is no topology and
+  structural keys degrade to plain source behavior — correct per the
+  safety property.
 
 ## Open questions
 

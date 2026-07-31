@@ -61,6 +61,8 @@ function deckTextRegions(page: Page): Locator {
  * Clicks deck text regions until a scope session whose buffer contains
  * `expectedNeedle` opens, and returns the session textarea. One session per
  * scope: the buffer is the scope's full source span, not a fragment.
+ * Clicking slide text gives the canvas surface the keyboard, so the hidden
+ * canvas input (not the bar textarea) holds DOM focus on return.
  */
 async function openScopeContaining(page: Page, expectedNeedle: string): Promise<Locator> {
   await expect.poll(async () => deckTextRegions(page).count(), {
@@ -83,12 +85,25 @@ async function openScopeContaining(page: Page, expectedNeedle: string): Promise<
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     const textarea = page.getByTestId("canvas-text-edit-textarea");
     if (await textarea.count() > 0 && (await textarea.inputValue()).includes(expectedNeedle)) {
-      await expect(textarea).toBeFocused();
+      await expect(page.getByTestId("canvas-focus-input")).toBeFocused();
       return textarea;
     }
-    await page.keyboard.press("Escape");
+    await closeScopeSession(page);
   }
   throw new Error(`No Beamer edit scope buffer contained ${JSON.stringify(expectedNeedle)}.`);
+}
+
+/**
+ * Esc steps outward one surface at a time: bar focus hands the keyboard back
+ * to the canvas surface, canvas focus closes the session. Press until the
+ * session is gone regardless of which surface currently holds focus.
+ */
+async function closeScopeSession(page: Page): Promise<void> {
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  for (let press = 0; press < 2 && (await textarea.count()) > 0; press += 1) {
+    await page.keyboard.press("Escape");
+  }
+  await expect(textarea).toHaveCount(0);
 }
 
 async function replaceRange(
@@ -161,8 +176,7 @@ test("opens scope-wide sessions and edits title and list text with undo/redo", a
   await titleTextarea.press(`${PRIMARY_MOD}+Shift+z`);
   await expect.poll(() => readStoreSource(page)).toBe(titleEdited);
 
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+  await closeScopeSession(page);
 
   // The whole frame body is one scope: list items, blocks, and structural
   // source share a single session buffer.
@@ -229,7 +243,7 @@ test("keeps structure stable through transiently invalid source and supports str
   );
   await textarea.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
-  await page.keyboard.press("Escape");
+  await closeScopeSession(page);
 
   // Macro output is an atomic render: clicking it opens the owning scope
   // session with the whole invocation selected.
@@ -249,6 +263,62 @@ test("keeps structure stable through transiently invalid source and supports str
     titleBuffer.indexOf(String.raw`\generatedword`),
     titleBuffer.length
   ]);
+});
+
+test("canvas focus: types on the slide, Cmd+E and Esc walk the surfaces, indication follows", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const hiddenInput = page.getByTestId("canvas-focus-input");
+  const popup = page.getByTestId("canvas-text-edit-popup");
+
+  // Entry state: canvas surface owns the keyboard, the bar shows unfocused
+  // chrome, and the dashed scope border marks the editable container.
+  await expect(hiddenInput).toBeFocused();
+  await expect(popup).toHaveAttribute("data-text-edit-focus", "canvas");
+  await expect(page.getByTestId("canvas-scope-edit-border")).toHaveCount(1);
+
+  // Typing goes to the slide without touching the bar; both surfaces mirror
+  // the same buffer (safety property: typing is identical in both).
+  const bufferText = await textarea.inputValue();
+  const caret = bufferText.indexOf("Body typo") + "Body typo".length;
+  await hiddenInput.evaluate((element, offset) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(offset, offset);
+  }, caret);
+  await page.keyboard.type("x");
+  await expect.poll(() => readStoreSource(page)).toContain("Body typox.");
+  await expect(textarea).toHaveValue(bufferText.replace("Body typo.", "Body typox."));
+  await expect(hiddenInput).toBeFocused();
+
+  // A range selection renders gray (inactive) in the unfocused bar.
+  await hiddenInput.evaluate((element, offset) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(offset - "Body typo".length, offset + 1);
+    input.dispatchEvent(new Event("select", { bubbles: true }));
+  }, caret);
+  await expect
+    .poll(async () => page.getByTestId("canvas-text-edit-inactive-selection-rect").count())
+    .toBeGreaterThan(0);
+
+  // Cmd+E hands the keyboard to the bar at the same caret.
+  await page.keyboard.press(`${PRIMARY_MOD}+e`);
+  await expect(textarea).toBeFocused();
+  await expect(popup).toHaveAttribute("data-text-edit-focus", "bar");
+  await expect(page.getByTestId("canvas-text-edit-inactive-selection-rect")).toHaveCount(0);
+  await expect(page.getByTestId("canvas-scope-edit-border")).toHaveCount(1);
+
+  // Esc from the bar returns to canvas focus with the session open ...
+  await page.keyboard.press("Escape");
+  await expect(hiddenInput).toBeFocused();
+  await expect(popup).toHaveAttribute("data-text-edit-focus", "canvas");
+  await expect(textarea).toHaveCount(1);
+
+  // ... and Esc from canvas focus closes the session.
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+  await expect(page.getByTestId("canvas-focus-input")).toHaveCount(0);
+  await expect(page.getByTestId("canvas-scope-edit-border")).toHaveCount(0);
 });
 
 const TITLE_PAGE_SOURCE = String.raw`\documentclass{beamer}
@@ -275,8 +345,7 @@ test("edits title-page metadata through preamble field scopes", async ({ page })
   const edited = TITLE_PAGE_SOURCE.replace("Ada Lovelace", "Augusta Lovelace");
   await expect.poll(() => readStoreSource(page)).toBe(edited);
   await expect.poll(() => readCodeMirrorText(page)).toBe(edited);
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+  await closeScopeSession(page);
 
   const instituteTextarea = await openScopeContaining(
     page,

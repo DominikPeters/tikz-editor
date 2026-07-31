@@ -297,6 +297,10 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     ? Math.max(0, Math.min(viewportSize.height - MAGNIFIER_DIAMETER_PX, magnifierState.center.y - magnifierRadius))
     : 0;
   const textEditingSession = canvasTextEdit.session;
+  // Focus-surface indication only applies to scope (deck) sessions; node
+  // sessions keep the canvas and popup carets blinking in unison.
+  const canvasSurfaceInactive =
+    textEditingSession?.isScopeSession === true && canvasTextEdit.focusSurface === "bar";
   const textCaretBlinkKey =
     textEditingSession && textEditingSession.selectionStart === textEditingSession.selectionEnd
       ? `${textEditingSession.sourceId}:${textEditingSession.selectionStart}:${textEditingSession.selectionEnd}:${textEditingSession.text}`
@@ -739,6 +743,25 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           )}
 
+          {canvasTextEdit.scopeEditBorder ? (
+            <div
+              className={[
+                css.scopeEditBorder,
+                canvasSurfaceInactive ? css.scopeEditBorderFaint : ""
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-hidden="true"
+              data-testid="canvas-scope-edit-border"
+              style={{
+                left: canvasTextEdit.scopeEditBorder.left,
+                top: canvasTextEdit.scopeEditBorder.top,
+                width: canvasTextEdit.scopeEditBorder.width,
+                height: canvasTextEdit.scopeEditBorder.height
+              }}
+            />
+          ) : null}
+
           {textSelectionOverlay ? (
             <div className={css.textSelectionViewportOverlay} aria-hidden="true" data-testid="canvas-text-selection-overlay">
               {textSelectionOverlay.rects.map((rect: TextSelectionOverlayBox, index: number) => {
@@ -748,7 +771,12 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 return (
                   <div
                     key={`${textSelectionOverlay.sourceId}:rect:${index}:${rect.bounds.minX}:${rect.bounds.minY}:${rect.bounds.maxX}:${rect.bounds.maxY}:${rect.center?.x ?? ""}:${rect.center?.y ?? ""}:${rect.rotationDeg ?? ""}`}
-                    className={css.textSelectionViewportRect}
+                    className={[
+                      css.textSelectionViewportRect,
+                      canvasSurfaceInactive ? css.textSelectionViewportRectInactive : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
                     data-testid="canvas-text-selection-rect"
                     style={{
                       left: hasRotatedPlacement ? rect.center!.x : rect.bounds.minX,
@@ -770,6 +798,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                     <div
                       className={[
                         css.textSelectionViewportCaret,
+                        canvasSurfaceInactive ? css.textSelectionViewportCaretInactive : "",
                         props.prefersNonBlinkingTextInsertionIndicator ? css.textCaretNoBlink : ""
                       ]
                         .filter(Boolean)
@@ -780,7 +809,9 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                         top: hasRotatedPlacement ? caret.center!.y : caret.bounds.minY,
                         height,
                         animation: "none",
-                        opacity: textCaretBlinkVisible ? 1 : 0,
+                        // The unfocused surface holds a static, lower-contrast
+                        // caret; only the focused surface blinks.
+                        opacity: canvasSurfaceInactive ? 1 : textCaretBlinkVisible ? 1 : 0,
                         transform: hasRotatedPlacement
                           ? `translate(-50%, -50%) rotate(${caret.rotationDeg}deg)`
                           : undefined,
@@ -798,6 +829,34 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               model={canvasTextEdit.popup}
               prefersNonBlinkingTextInsertionIndicator={props.prefersNonBlinkingTextInsertionIndicator}
               caretBlinkVisible={textCaretBlinkVisible}
+            />
+          ) : null}
+
+          {canvasTextEdit.canvasFocusInput ? (
+            <textarea
+              ref={canvasTextEdit.canvasFocusInput.inputRef}
+              className={css.canvasFocusInput}
+              value={canvasTextEdit.canvasFocusInput.value}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              tabIndex={-1}
+              aria-hidden="true"
+              style={
+                canvasTextEdit.canvasFocusInput.position
+                  ? {
+                      left: canvasTextEdit.canvasFocusInput.position.left,
+                      top: canvasTextEdit.canvasFocusInput.position.top
+                    }
+                  : undefined
+              }
+              onKeyDown={canvasTextEdit.canvasFocusInput.onKeyDown}
+              onSelect={canvasTextEdit.canvasFocusInput.onSelect}
+              onCopy={canvasTextEdit.canvasFocusInput.onCopy}
+              onCut={canvasTextEdit.canvasFocusInput.onCut}
+              onPaste={canvasTextEdit.canvasFocusInput.onPaste}
+              onDrop={canvasTextEdit.canvasFocusInput.onDrop}
+              data-testid="canvas-focus-input"
             />
           ) : null}
 

@@ -1341,3 +1341,144 @@ describe("canvas text edit machine", () => {
     ).toThrowError(/unsupported inputType/i);
   });
 });
+
+describe("focus surface", () => {
+  function buildScopeTarget(): EditableTextTarget {
+    return {
+      ...buildTarget(BASE_SOURCE, "$x$"),
+      scopeParagraphs: [
+        {
+          paragraphId: "frame:0:paragraph:0",
+          sourceSpan: { from: 0, to: 3 },
+          bounds: { x: 0, y: 0, width: 10, height: 10 }
+        }
+      ]
+    } as unknown as EditableTextTarget;
+  }
+
+  it("defaults scope sessions to canvas focus and node sessions to bar focus", () => {
+    const scopeStarted = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target: buildScopeTarget(),
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+    expect(scopeStarted.focusSurface).toBe("canvas");
+
+    const nodeStarted = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target: buildTarget(BASE_SOURCE, "$x$"),
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+    expect(nodeStarted.focusSurface).toBe("bar");
+  });
+
+  it("switches surfaces via focus_surface and resets to bar on close", () => {
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target: buildScopeTarget(),
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+
+    const barFocused = reduceCanvasTextEdit(started, {
+      type: "focus_surface",
+      surface: "bar"
+    }).state;
+    expect(barFocused.focusSurface).toBe("bar");
+    expect(barFocused.session).not.toBeNull();
+
+    const canvasAgain = reduceCanvasTextEdit(barFocused, {
+      type: "focus_surface",
+      surface: "canvas"
+    }).state;
+    expect(canvasAgain.focusSurface).toBe("canvas");
+
+    const closed = reduceCanvasTextEdit(canvasAgain, { type: "session_close" }).state;
+    expect(closed.session).toBeNull();
+    expect(closed.focusSurface).toBe("bar");
+  });
+
+  it("refuses canvas focus for node sessions and without a session", () => {
+    const nodeStarted = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target: buildTarget(BASE_SOURCE, "$x$"),
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+    const requested = reduceCanvasTextEdit(nodeStarted, {
+      type: "focus_surface",
+      surface: "canvas"
+    }).state;
+    expect(requested.focusSurface).toBe("bar");
+
+    const withoutSession = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "focus_surface",
+      surface: "canvas"
+    }).state;
+    expect(withoutSession.focusSurface).toBe("bar");
+  });
+
+  it("keeps an explicit bar focus through source reconciliation", () => {
+    const target = buildScopeTarget();
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target,
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+    const barFocused = reduceCanvasTextEdit(started, {
+      type: "focus_surface",
+      surface: "bar"
+    }).state;
+
+    const reconciled = reduceCanvasTextEdit(barFocused, {
+      type: "source_reconciled",
+      source: BASE_SOURCE,
+      sourceRevision: 1,
+      target
+    }).state;
+    expect(reconciled.session).not.toBeNull();
+    expect(reconciled.focusSurface).toBe("bar");
+  });
+
+  it("re-claims canvas focus when slide text is clicked while the bar is focused", () => {
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target: buildScopeTarget(),
+      selectionStart: 1,
+      selectionEnd: 1,
+      historyMergeKey: "merge"
+    }).state;
+    const barFocused = reduceCanvasTextEdit(started, {
+      type: "focus_surface",
+      surface: "bar"
+    }).state;
+
+    const clicked = reduceCanvasTextEdit(barFocused, {
+      type: "pointer_down_provisional",
+      target: buildScopeTarget(),
+      source: BASE_SOURCE,
+      pointerId: 1,
+      selectionStart: 2,
+      selectionEnd: 2,
+      anchorOffset: 2,
+      mode: "char",
+      anchorLineRange: null,
+      historyMergeKey: "merge"
+    }).state;
+    expect(clicked.focusSurface).toBe("canvas");
+  });
+});

@@ -22,11 +22,20 @@ export type CanvasTextSelectionDragState = {
   anchorLineRange: CanvasTextLineRange | null;
 };
 
+/**
+ * Which surface interprets the keyboard during a session. Both surfaces
+ * share one buffer and identical typing; they differ in navigation and
+ * structure keys. Scope (deck) sessions default to canvas focus on entry
+ * (click slide text → canvas); non-scope sessions are bar-only.
+ */
+export type CanvasTextEditFocusSurface = "bar" | "canvas";
+
 export type CanvasTextEditState = {
   session: TextEditingSession | null;
   selectionOverlay: TextSelectionOverlay | null;
   dragSelection: CanvasTextSelectionDragState | null;
   compositionRange: CanvasTextLineRange | null;
+  focusSurface: CanvasTextEditFocusSurface;
   undoStack: CanvasTextEditHistoryEntry[];
   redoStack: CanvasTextEditHistoryEntry[];
   inputRevision: number;
@@ -131,6 +140,10 @@ export type CanvasTextEditAction =
       target: EditableTextTarget | null;
     }
   | {
+      type: "focus_surface";
+      surface: CanvasTextEditFocusSurface;
+    }
+  | {
       type: "session_close";
     }
   | {
@@ -171,6 +184,7 @@ export const INITIAL_CANVAS_TEXT_EDIT_STATE: CanvasTextEditState = {
   selectionOverlay: null,
   dragSelection: null,
   compositionRange: null,
+  focusSurface: "bar",
   undoStack: [],
   redoStack: [],
   inputRevision: 0,
@@ -259,6 +273,7 @@ function closeState(state: CanvasTextEditState): CanvasTextEditState {
     !state.selectionOverlay &&
     !state.dragSelection &&
     !state.compositionRange &&
+    state.focusSurface === "bar" &&
     state.undoStack.length === 0 &&
     state.redoStack.length === 0
   ) {
@@ -270,6 +285,7 @@ function closeState(state: CanvasTextEditState): CanvasTextEditState {
     selectionOverlay: null,
     dragSelection: null,
     compositionRange: null,
+    focusSurface: "bar",
     undoStack: [],
     redoStack: [],
     asyncRequestRevision: state.asyncRequestRevision + 1
@@ -678,6 +694,7 @@ export function reduceCanvasTextEdit(
           selectionOverlay: null,
           dragSelection: null,
           compositionRange: null,
+          focusSurface: action.target.scopeParagraphs != null ? "canvas" : "bar",
           undoStack: [],
           redoStack: [],
           asyncRequestRevision: state.asyncRequestRevision + 1
@@ -728,6 +745,9 @@ export function reduceCanvasTextEdit(
             anchorLineRange: action.anchorLineRange
           },
           compositionRange: null,
+          // Clicking slide text always claims canvas focus, including when
+          // the bar held it a moment ago.
+          focusSurface: action.target.scopeParagraphs != null ? "canvas" : "bar",
           undoStack: [],
           redoStack: [],
           asyncRequestRevision: state.asyncRequestRevision + 1
@@ -1148,6 +1168,26 @@ export function reduceCanvasTextEdit(
         state: {
           ...state,
           selectionOverlay: nextOverlay
+        },
+        effects: []
+      };
+    }
+
+    case "focus_surface": {
+      const session = state.session;
+      if (!session) {
+        return { state, effects: [] };
+      }
+      // Canvas focus only exists for scope (deck) sessions; node sessions
+      // stay bar-focused regardless of what is requested.
+      const surface = session.isScopeSession ? action.surface : "bar";
+      if (state.focusSurface === surface) {
+        return { state, effects: [] };
+      }
+      return {
+        state: {
+          ...state,
+          focusSurface: surface
         },
         effects: []
       };
