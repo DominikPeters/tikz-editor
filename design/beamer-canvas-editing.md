@@ -408,14 +408,16 @@ covering: those gaps, empty items, multiple overlay steps (`\alt`,
 text `\\`, `\vfill`, graphics with width/height/scale variants, and a
 fragile/verbatim frame (expected: frame fallback, no session).
 
+## Settled Stage 2 decisions (2026-07-31)
+
+- Focus-switch chord: **Cmd+E in / Esc out**, as assumed; no F2 binding.
+- Double-click on canvas text keeps its **word-select** meaning; it is not
+  a focus switch.
+- Structural Enter splits paragraphs by inserting a **blank line**, also
+  in dense no-blank-line bodies (KKT frame 3 style); no `\par` variant.
+
 ## Open questions
 
-- Focus-switch chord set: Cmd+E in / Esc out is the working assumption; is
-  F2 worth adding? Does double-click on text want a meaning (word select,
-  as today) distinct from focus switching (yes, presumably)?
-- Enter = blank line for paragraph splits: confirm this is the idiomatic
-  patch in dense no-blank-line bodies (KKT frame 3 style) or whether a
-  `\par`-free alternative is ever needed.
 - Tier-2 snapping catalog: exact list of constructs that snap (math,
   command groups, macro calls, environments?) and whether snapping is
   extend-only or can shrink a drag.
