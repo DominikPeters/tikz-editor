@@ -180,6 +180,17 @@ export type CanvasTextEditMask = {
   sourceRevision: number;
 };
 
+/**
+ * A selected deck object (block, column, list, item, graphic, embedded
+ * tikzpicture). Object ids are only stable within one rendered frame layout;
+ * consumers must drop selections whose id no longer resolves.
+ */
+export type DeckObjectSelection = {
+  documentId: string;
+  frameId: string;
+  objectId: string;
+};
+
 export type WorkspaceEphemeralState = {
   // ── canvas slice ─────────────────────────────────────────────────────────────
   toolMode: ToolMode;
@@ -207,6 +218,8 @@ export type WorkspaceEphemeralState = {
   creationFillColor: string;
   /** Selected overlay step per deck frame, keyed by rootKey(documentId, rootId). */
   deckStepByRootKey: Record<string, number>;
+  /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
+  deckObjectSelection: DeckObjectSelection | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -301,6 +314,8 @@ export type EditorState = {
   creationFillColor: string;
   /** Selected overlay step per deck frame, keyed by rootKey(documentId, rootId). */
   deckStepByRootKey: Record<string, number>;
+  /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
+  deckObjectSelection: DeckObjectSelection | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -448,6 +463,7 @@ export type EditorAction =
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
   | { type: "SET_DECK_STEP"; rootId: string; step: number }
+  | { type: "SET_DECK_OBJECT_SELECTION"; frameId: string; objectId: string | null }
   | { type: "TOGGLE_CANVAS_AID"; aid: CanvasAid }
   | { type: "TOGGLE_SNAP_MODE"; mode: SnapMode }
   | { type: "REQUEST_FIT_TO_CONTENT" }

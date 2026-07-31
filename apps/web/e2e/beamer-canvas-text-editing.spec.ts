@@ -527,18 +527,28 @@ const DRAWING_ONLY_SOURCE = String.raw`\documentclass{beamer}
 \end{frame}
 \end{document}`;
 
-test("selects the drawing atom in a frame without rendered paragraphs", async ({ page }) => {
+test("selects the drawing object and drills into its atom span with Enter", async ({ page }) => {
   await setSource(page, DRAWING_ONLY_SOURCE);
 
-  // The frame body renders no paragraphs, so the tikzpicture atom itself
-  // must anchor the scope session.
-  const atomRegion = page.locator('[data-hit-region-key^="deck-atom:"]').first();
-  await expect(atomRegion).toBeVisible({ timeout: 30_000 });
-  const box = await atomRegion.boundingBox();
+  // Since the object layer, clicking a non-text render selects the object;
+  // Enter reopens the scope session with the atom's span selected. Anchor on
+  // the tikz-specific key: the beforeEach source publishes its own object
+  // regions, and a generic locator can race the re-render.
+  const objectRegion = page.locator(
+    '[data-hit-region-deck-object-id][data-hit-region-key*="tikz"]'
+  );
+  await expect(objectRegion).toBeVisible({ timeout: 30_000 });
+  const box = await objectRegion.boundingBox();
   await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 
+  const outline = page.locator('[data-testid="deck-object-selection"] rect');
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "tikzpicture");
+  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+
+  await page.keyboard.press("Enter");
   const textarea = page.getByTestId("canvas-text-edit-textarea");
   await expect(textarea).toHaveCount(1);
+  await expect(outline).toHaveCount(0);
   const buffer = await textarea.inputValue();
   expect(buffer).toContain(String.raw`\begin{tikzpicture}`);
   const selection = await textarea.evaluate((element) => {
@@ -547,4 +557,87 @@ test("selects the drawing atom in a frame without rendered paragraphs", async ({
   });
   expect(selection).toContain(String.raw`\begin{tikzpicture}`);
   expect(selection).toContain(String.raw`\end{tikzpicture}`);
+});
+
+const OBJECT_LAYER_SOURCE = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Objects}
+\begin{block}{Facts}
+\begin{itemize}
+\item Alpha one
+\item Beta two
+\item Gamma three
+\end{itemize}
+\end{block}
+\end{frame}
+\end{document}`;
+
+test("object layer: Esc ladder, marker selection, duplicate and delete with undo", async ({ page }) => {
+  await setSource(page, OBJECT_LAYER_SOURCE);
+
+  const outline = page.locator('[data-testid="deck-object-selection"] rect');
+  const markerRegions = page.locator('[data-hit-region-key^="deck-object-marker:"]');
+  await expect.poll(async () => markerRegions.count(), { timeout: 30_000 }).toBe(3);
+
+  // Clicking the second bullet selects its item.
+  const secondMarker = markerRegions.nth(1);
+  const markerBox = await secondMarker.boundingBox();
+  await page.mouse.click(
+    markerBox!.x + markerBox!.width / 2,
+    markerBox!.y + markerBox!.height / 2
+  );
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "item");
+
+  // Esc walks the ladder: item → list → block → clear.
+  await page.keyboard.press("Escape");
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "list");
+  await page.keyboard.press("Escape");
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "block");
+  await page.keyboard.press("Escape");
+  await expect(outline).toHaveCount(0);
+
+  // Enter drills back into text at the item's content start; Esc returns
+  // to the same selected item (ladder rung 1 from a session).
+  await page.mouse.click(
+    markerBox!.x + markerBox!.width / 2,
+    markerBox!.y + markerBox!.height / 2
+  );
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "item");
+  await page.keyboard.press("Enter");
+  const focusInput = page.getByTestId("canvas-focus-input");
+  await expect(focusInput).toBeFocused();
+  const caretContext = await focusInput.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return input.value.slice(input.selectionStart ?? 0, (input.selectionStart ?? 0) + 4);
+  });
+  expect(caretContext).toBe("Beta");
+  await page.keyboard.press("Escape");
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "item");
+  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+
+  // Cmd/Ctrl+D duplicates the item and selects the copy.
+  await page.keyboard.press(`${PRIMARY_MOD}+d`);
+  await expect
+    .poll(async () => (await readStoreSource(page)).match(/\\item Beta two/gu)?.length)
+    .toBe(2);
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "item", {
+    timeout: 15_000
+  });
+
+  // Delete removes the selected copy again.
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => readStoreSource(page)).toBe(OBJECT_LAYER_SOURCE);
+  await expect(outline).toHaveCount(0);
+
+  // Block chrome click (top-right corner, clear of the title text) selects
+  // the block; Delete removes the whole environment; undo restores it.
+  const blockRegion = page.locator('[data-hit-region-key^="deck-object:"][data-hit-region-deck-object-id*="block"]');
+  await expect(blockRegion).toHaveCount(1);
+  const blockBox = await blockRegion.boundingBox();
+  await page.mouse.click(blockBox!.x + blockBox!.width - 6, blockBox!.y + 5);
+  await expect(outline).toHaveAttribute("data-deck-object-kind", "block");
+  await page.keyboard.press("Delete");
+  await expect.poll(() => readStoreSource(page)).not.toContain("Facts");
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(OBJECT_LAYER_SOURCE);
 });

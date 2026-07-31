@@ -72,6 +72,7 @@ function initialUiState(): WorkspaceEphemeralState {
     creationStrokeColor: DEFAULT_CREATION_STROKE_COLOR,
     creationFillColor: DEFAULT_CREATION_FILL_COLOR,
     deckStepByRootKey: {},
+    deckObjectSelection: null,
     fitToContentRequestToken: 0,
     fitToContentModeActive: true,
     canvasFitToContentScale: null,
@@ -1289,9 +1290,38 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "SET_ACTIVE_CANVAS_TEXT_EDIT":
       if (ui.activeCanvasTextEditSourceId === action.sourceId) return state;
       // The structural mask is scoped to one session; starting or ending a
-      // session drops it (the next session keystroke reinstalls it).
-      ui = { ...ui, activeCanvasTextEditSourceId: action.sourceId, canvasTextEditMask: null };
+      // session drops it (the next session keystroke reinstalls it). A text
+      // session and a deck object selection are mutually exclusive.
+      ui = {
+        ...ui,
+        activeCanvasTextEditSourceId: action.sourceId,
+        canvasTextEditMask: null,
+        deckObjectSelection:
+          action.sourceId != null ? null : ui.deckObjectSelection
+      };
       break;
+
+    case "SET_DECK_OBJECT_SELECTION": {
+      const selection =
+        action.objectId == null
+          ? null
+          : {
+              documentId: workspace.activeDocumentId,
+              frameId: action.frameId,
+              objectId: action.objectId
+            };
+      if (
+        (ui.deckObjectSelection == null && selection == null) ||
+        (ui.deckObjectSelection != null &&
+          ui.deckObjectSelection.documentId === selection?.documentId &&
+          ui.deckObjectSelection.frameId === selection.frameId &&
+          ui.deckObjectSelection.objectId === selection.objectId)
+      ) {
+        return state;
+      }
+      ui = { ...ui, deckObjectSelection: selection };
+      break;
+    }
 
     case "TOGGLE_CANVAS_AID":
       if (action.aid === "grid") {

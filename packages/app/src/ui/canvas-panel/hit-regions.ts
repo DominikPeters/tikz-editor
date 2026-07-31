@@ -73,6 +73,8 @@ export type HitRegion =
       sceneTextKey?: string;
       contentWidth?: number;
       contentHeight?: number;
+      /** Deck object-layer target: clicking selects this object. */
+      deckObjectId?: string;
       matrixEdgeSelection?: {
         kind: "row" | "column";
         matrixSourceId: string;

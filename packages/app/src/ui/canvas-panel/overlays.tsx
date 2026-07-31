@@ -880,6 +880,7 @@ export function HitRegionLayer({
                 data-hit-region-target-id={region.targetId}
                 data-hit-region-key={region.key}
                 data-hit-region-interaction-mode={region.interactionMode}
+                data-hit-region-deck-object-id={region.deckObjectId}
                 data-hit-region-matrix-edge-kind={region.matrixEdgeSelection?.kind}
                 data-hit-region-matrix-source-id={region.matrixEdgeSelection?.matrixSourceId}
               />

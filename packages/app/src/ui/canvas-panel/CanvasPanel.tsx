@@ -29,9 +29,14 @@ resolvePropertyTargetFromParseResult
 } from "@tikz-editor/core/edit/property-target";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import {
+  beamerObjectAtOffset,
+  beamerObjectDeletionPatch,
+  beamerObjectDuplicationPatch,
   buildBeamerCaretStopDomain,
+  buildBeamerObjectIndex,
   resolveBeamerEditScopeAt,
-  type BeamerCaretDomain
+  type BeamerCaretDomain,
+  type BeamerObjectNode
 } from "@tikz-editor/core/beamer/index";
 import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import type {
@@ -122,7 +127,8 @@ PendingTouchViewport,
 ScopeParagraphRef,
 SnapDebugLogInput,
 SourceBoundsMap,
-StateSetter
+StateSetter,
+TextEditingSession
 } from "./types";
 import { useCanvasDerivedState } from "./useCanvasDerivedState";
 import { useCanvasDragController } from "./useCanvasDragController";
@@ -415,6 +421,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     hoveredElementId,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
+    deckObjectSelection,
     lastEditChangedSourceIds,
     lastEditChangeToken,
     lastEditWarningMessage,
@@ -455,6 +462,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     hoveredElementId: s.hoveredElementId,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
+    deckObjectSelection: s.deckObjectSelection,
     lastEditChangedSourceIds: s.lastEditChangedSourceIds,
     lastEditChangeToken: s.lastEditChangeToken,
     lastEditWarningMessage: s.documents[s.activeDocumentId]?.lastEditWarningMessage ?? null,
@@ -1423,12 +1431,129 @@ export const CanvasPanel = memo(function CanvasPanel({
     return { scopesById, paragraphById, regions, atomSpanByRegionKey };
   }, [deckActiveFrame]);
 
+  // Object-layer topology (design doc "Object layer"): selectable structural
+  // nodes for the active frame. Built against the snapshot's own source so
+  // node spans always match the rendered layout; object edits additionally
+  // require the snapshot to be current (`snapshot.source === source`).
+  const deckObjectIndex = useMemo(() => {
+    const layout = deckActiveFrame?.layout;
+    if (!layout) {
+      return null;
+    }
+    return buildBeamerObjectIndex({
+      items: layout.items,
+      paragraphs: layout.paragraphs,
+      source: snapshot.source
+    });
+  }, [deckActiveFrame, snapshot.source]);
+
+  const deckSelectedObject = useMemo(() => {
+    if (!deckObjectSelection || !deckObjectIndex || !deckActiveFrame) {
+      return null;
+    }
+    if (
+      deckObjectSelection.documentId !== activeDocumentId ||
+      deckObjectSelection.frameId !== deckActiveFrame.frameId
+    ) {
+      return null;
+    }
+    return deckObjectIndex.byId.get(deckObjectSelection.objectId) ?? null;
+  }, [activeDocumentId, deckActiveFrame, deckObjectIndex, deckObjectSelection]);
+
+  const selectDeckObject = useCallback(
+    (objectId: string | null) => {
+      if (!deckActiveFrame) {
+        return;
+      }
+      dispatch({
+        type: "SET_DECK_OBJECT_SELECTION",
+        frameId: deckActiveFrame.frameId,
+        objectId
+      });
+    },
+    [deckActiveFrame, dispatch]
+  );
+
+  /**
+   * Esc ladder rung 1 (session → object): select the innermost object
+   * containing the caret when the session closes on Escape, and move
+   * keyboard focus to the viewport for the remaining rungs.
+   */
+  const handleCanvasSessionEscape = useCallback(
+    (session: TextEditingSession, caretDocumentOffset: number) => {
+      if (deckObjectIndex && session.isScopeSession && snapshot.source === source) {
+        const node = beamerObjectAtOffset(deckObjectIndex, caretDocumentOffset);
+        if (node) {
+          selectDeckObject(node.id);
+        }
+      }
+      viewportRef.current?.focus({ preventScroll: true });
+    },
+    [deckObjectIndex, selectDeckObject, snapshot.source, source, viewportRef]
+  );
+
+  // Click targets for the object layer. Container chrome (blocks, columns)
+  // sits UNDER the text regions — clicking text always yields a caret —
+  // while non-text renders (graphics, embedded tikz, list markers) sit on
+  // top and select their object.
+  const deckObjectRegions = useMemo(() => {
+    const under: HitRegion[] = [];
+    const over: HitRegion[] = [];
+    const layout = deckActiveFrame?.layout;
+    if (!layout || !deckObjectIndex) {
+      return { under, over };
+    }
+    const regionFor = (
+      node: BeamerObjectNode,
+      key: string,
+      bounds: { x: number; y: number; width: number; height: number }
+    ): HitRegion => ({
+      shape: "rect",
+      key,
+      sourceId: node.id,
+      targetId: node.id,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      cx: bounds.x + bounds.width / 2,
+      cy: bounds.y + bounds.height / 2,
+      rotation: 0,
+      pointerMode: "fill",
+      deckObjectId: node.id
+    });
+    for (const node of deckObjectIndex.nodes) {
+      if (node.kind === "block" || node.kind === "columns" || node.kind === "column") {
+        under.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
+      } else if (node.kind === "graphics" || node.kind === "tikzpicture") {
+        over.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
+      }
+    }
+    for (const item of layout.items) {
+      if (item.kind !== "list-marker" || item.visibility === "hidden") {
+        continue;
+      }
+      const objectId = deckObjectIndex.objectIdByMarkerId.get(item.id);
+      const node = objectId ? deckObjectIndex.byId.get(objectId) : undefined;
+      if (!node) {
+        continue;
+      }
+      over.push(regionFor(node, `deck-object-marker:${item.id}`, item.bounds));
+    }
+    return { under, over };
+  }, [deckActiveFrame, deckObjectIndex]);
+
   const hitRegions = useMemo<HitRegion[]>(() => {
     if (!deckActiveFrame) {
       return sceneHitRegions;
     }
-    return [...sceneHitRegions, ...deckEditing.regions];
-  }, [deckActiveFrame, deckEditing, sceneHitRegions]);
+    return [
+      ...sceneHitRegions,
+      ...deckObjectRegions.under,
+      ...deckEditing.regions,
+      ...deckObjectRegions.over
+    ];
+  }, [deckActiveFrame, deckEditing, deckObjectRegions, sceneHitRegions]);
 
   // Rendered caret-stop domains for canvas-focus arrow motion, built lazily
   // per scope from the same layout the hit regions come from and cached
@@ -2036,7 +2161,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     view: canvasTextEditView,
     beginCanvasTextInteraction,
     closeTextEditingSession,
-    requestAdornmentTextEdit
+    requestAdornmentTextEdit,
+    startTextEditingSession
   } = useCanvasTextEditSession({
     contextKey: rootKey(activeDocumentId, activeRootId),
     source,
@@ -2054,10 +2180,193 @@ export const CanvasPanel = memo(function CanvasPanel({
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
     resolveDeckCaretDomain,
+    onCanvasSessionEscape: handleCanvasSessionEscape,
     textLayoutContext,
     textEditPlacement,
     dispatch
   });
+
+  /**
+   * Enter/F2 drill-in: reopen a text session inside the selected object —
+   * at its first rendered caret stop, or with the whole atom span selected
+   * for graphics and embedded tikzpictures.
+   */
+  const openDeckObjectTextSession = useCallback(
+    (node: BeamerObjectNode) => {
+      const layout = deckActiveFrame?.layout;
+      if (!layout) {
+        return;
+      }
+      const scope = resolveBeamerEditScopeAt(layout.editScopes ?? [], node.sourceSpan.from);
+      if (!scope) {
+        return;
+      }
+      const target = resolveEditableTextTargetById(scope.id);
+      if (!target) {
+        return;
+      }
+      const clampLocal = (offset: number): number =>
+        Math.min(Math.max(offset - target.sourceSpan.from, 0), target.text.length);
+      if (node.kind === "graphics" || node.kind === "tikzpicture") {
+        startTextEditingSession(
+          target,
+          clampLocal(node.sourceSpan.from),
+          clampLocal(node.sourceSpan.to)
+        );
+        return;
+      }
+      const domain = resolveDeckCaretDomain(scope.id);
+      let offset =
+        node.kind === "item" && node.listItem
+          ? node.listItem.item.contentSpan.from
+          : node.sourceSpan.from;
+      const within = domain?.offsets.find(
+        (candidate) => candidate >= offset && candidate <= node.sourceSpan.to
+      );
+      if (within != null) {
+        offset = within;
+      }
+      const local = clampLocal(offset);
+      startTextEditingSession(target, local, local);
+    },
+    [deckActiveFrame, resolveDeckCaretDomain, resolveEditableTextTargetById, startTextEditingSession]
+  );
+
+  // A duplicate's copy only exists after the frame re-renders; remember the
+  // inserted span and reselect the object that appears inside it.
+  const pendingDeckReselectRef = useRef<{
+    frameId: string;
+    kind: BeamerObjectNode["kind"];
+    span: Span;
+  } | null>(null);
+
+  const applyDeckObjectEdit = useCallback(
+    (mode: "delete" | "duplicate", node: BeamerObjectNode) => {
+      if (!deckActiveFrame || !deckObjectIndex) {
+        return;
+      }
+      if (snapshot.source !== source) {
+        // The layout (and the object index derived from it) lags behind the
+        // source; refuse rather than patch through stale spans.
+        return;
+      }
+      const patch =
+        mode === "delete"
+          ? beamerObjectDeletionPatch(source, deckObjectIndex, node)
+          : beamerObjectDuplicationPatch(source, node);
+      if (!patch || patch.edits.length === 0) {
+        return;
+      }
+      dispatch({
+        type: "APPLY_SOURCE_PATCHES",
+        baseRevision: sourceRevision,
+        patches: patch.edits.map((edit) => ({
+          oldSpan: edit.span,
+          newSpan: { from: edit.span.from, to: edit.span.from + edit.insert.length },
+          replacement: edit.insert
+        })),
+        changedSourceIds: []
+      });
+      if (mode === "duplicate" && patch.selectSpan) {
+        pendingDeckReselectRef.current = {
+          frameId: deckActiveFrame.frameId,
+          kind: node.kind,
+          span: patch.selectSpan
+        };
+      } else {
+        selectDeckObject(null);
+      }
+    },
+    [deckActiveFrame, deckObjectIndex, dispatch, selectDeckObject, snapshot.source, source, sourceRevision]
+  );
+
+  useEffect(() => {
+    const pending = pendingDeckReselectRef.current;
+    if (!pending || !deckObjectIndex || !deckActiveFrame) {
+      return;
+    }
+    if (snapshot.source !== source || deckActiveFrame.frameId !== pending.frameId) {
+      return;
+    }
+    pendingDeckReselectRef.current = null;
+    // Items' topology spans run through the next `\item`/`\end` token, past
+    // the inserted copy, so match on the span START falling inside it.
+    const node = deckObjectIndex.nodes.find(
+      (candidate) =>
+        candidate.kind === pending.kind &&
+        candidate.sourceSpan.from >= pending.span.from &&
+        candidate.sourceSpan.from < pending.span.to
+    );
+    selectDeckObject(node ? node.id : null);
+  }, [deckActiveFrame, deckObjectIndex, selectDeckObject, snapshot.source, source]);
+
+  /**
+   * Viewport keys while a deck object is selected: Esc walks up the parent
+   * chain and finally clears, Enter/F2 drills back into text, Delete
+   * removes the object, Cmd/Ctrl+D duplicates it.
+   */
+  const handleDeckObjectViewportKey = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>): boolean => {
+      if (!deckSelectedObject) {
+        return false;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA"
+      ) {
+        return false;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        selectDeckObject(deckSelectedObject.parentId);
+        return true;
+      }
+      if (event.key === "Enter" || event.key === "F2") {
+        event.preventDefault();
+        openDeckObjectTextSession(deckSelectedObject);
+        return true;
+      }
+      if (
+        (event.key === "Backspace" || event.key === "Delete") &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        applyDeckObjectEdit("delete", deckSelectedObject);
+        return true;
+      }
+      if (
+        event.key.toLowerCase() === "d" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        applyDeckObjectEdit("duplicate", deckSelectedObject);
+        return true;
+      }
+      return false;
+    },
+    [applyDeckObjectEdit, deckSelectedObject, openDeckObjectTextSession, selectDeckObject]
+  );
+
+  const deckObjectSelectionBox = useMemo(() => {
+    if (!deckSelectedObject) {
+      return null;
+    }
+    const pad = 1.5;
+    return {
+      objectId: deckSelectedObject.id,
+      kind: deckSelectedObject.kind,
+      x: deckSelectedObject.bounds.x - pad,
+      y: deckSelectedObject.bounds.y - pad,
+      width: deckSelectedObject.bounds.width + pad * 2,
+      height: deckSelectedObject.bounds.height + pad * 2
+    };
+  }, [deckSelectedObject]);
 
   const handleAddNodeAdornmentCommand = useCallback((kind: "label" | "pin") => {
     const state = canvasCommandStateRef.current;
@@ -2213,6 +2522,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     suppressNextBackgroundClickRef,
     viewportRef,
     beginCanvasTextInteraction,
+    onDeckObjectSelect: selectDeckObject,
     closeTextEditingSession,
     interactionSvgRef,
     dispatch,
@@ -2470,9 +2780,27 @@ export const CanvasPanel = memo(function CanvasPanel({
         clearPendingNodePositionTargetPick();
         return;
       }
+      // Clear the deck object selection only for genuine background clicks:
+      // the handler fires on both the interaction svg and the viewport, and
+      // clicks on hit regions bubble here with a mismatched target (their
+      // suppression ref is consumed by the first of the two invocations).
+      if (
+        deckSelectedObject &&
+        event.target === event.currentTarget &&
+        !suppressNextBackgroundClickRef.current
+      ) {
+        selectDeckObject(null);
+      }
       onBackgroundClick(event);
     },
-    [clearPendingNodePositionTargetPick, onBackgroundClick, pendingNodePositionTargetPick]
+    [
+      clearPendingNodePositionTargetPick,
+      deckSelectedObject,
+      onBackgroundClick,
+      pendingNodePositionTargetPick,
+      selectDeckObject,
+      suppressNextBackgroundClickRef
+    ]
   );
 
   const {
@@ -2928,6 +3256,9 @@ export const CanvasPanel = memo(function CanvasPanel({
         toolMode={toolMode}
         viewportRef={viewportRef}
         onViewportKeyDown={(event) => {
+          if (handleDeckObjectViewportKey(event)) {
+            return;
+          }
           if (deckActiveFrame && deckActiveFrame.stepCount > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
             event.preventDefault();
             const delta = event.key === "ArrowRight" ? 1 : -1;
@@ -2999,6 +3330,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         nodePositionLinks={nodePositionLinks}
         marqueeBounds={marqueeBounds}
         selectionBoxes={selectionBoxes}
+        deckObjectSelectionBox={deckObjectSelectionBox}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}
         selectionStrokeWidth={selectionStrokeWidth}

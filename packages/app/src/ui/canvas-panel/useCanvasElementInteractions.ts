@@ -62,6 +62,8 @@ export type UseCanvasElementInteractionsArgs = {
   activeRootId: string | null;
   parseOptions: CanvasEditParseOptions;
   onNodePositionTargetPick?: (targetId: string) => boolean;
+  /** Deck object-layer selection for regions carrying a `deckObjectId`. */
+  onDeckObjectSelect?: (objectId: string) => void;
 };
 
 function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGElement> | ReactMouseEvent<SVGElement>, "clientX" | "clientY">): ClientPoint {
@@ -101,7 +103,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     applyActionWithFeedback,
     activeRootId,
     parseOptions,
-    onNodePositionTargetPick
+    onNodePositionTargetPick,
+    onDeckObjectSelect
   } = args;
 
   const pendingScopeDrillRef = useRef<{
@@ -402,6 +405,22 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         return;
       }
       if (toolMode !== "select") return;
+      if (
+        region?.shape === "rect" &&
+        region.deckObjectId != null &&
+        onDeckObjectSelect &&
+        event.button === 0
+      ) {
+        // Deck object layer: clicking chrome or a non-text render selects
+        // the object instead of opening a text session.
+        event.preventDefault();
+        event.stopPropagation();
+        suppressNextBackgroundClickRef.current = true;
+        viewportRef.current?.focus({ preventScroll: true });
+        closeTextEditingSession();
+        onDeckObjectSelect(region.deckObjectId);
+        return;
+      }
       const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
       const clientPoint = clientPointFromEvent(event);
       const hitSourceId = typeof region?.sourceId === "string" ? region.sourceId : targetId;
@@ -560,6 +579,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       interactionSvgRef,
       onBucketFillRegion,
       onNodePositionTargetPick,
+      onDeckObjectSelect,
       expandedDensePathSourceId,
       resolveEditableTextTarget,
       selectedElementIds,

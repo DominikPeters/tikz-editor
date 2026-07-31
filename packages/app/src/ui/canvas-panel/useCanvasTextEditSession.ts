@@ -125,6 +125,13 @@ export type UseCanvasTextEditSessionArgs = {
   ) => EditableTextTarget | null;
   /** Rendered caret-stop domain for a deck scope; null → source-style keys. */
   resolveDeckCaretDomain: (scopeId: string) => BeamerCaretDomain | null;
+  /**
+   * Esc ladder handoff (design doc "Object layer"): called before a
+   * canvas-focused scope session closes on Escape, with the caret's document
+   * offset. The panel selects the innermost containing object (when any) and
+   * takes keyboard focus for the remaining ladder rungs.
+   */
+  onCanvasSessionEscape?: (session: TextEditingSession, caretDocumentOffset: number) => void;
   textLayoutContext: unknown;
   textEditPlacement: CanvasTextEditPlacement;
   dispatch: (action: EditorAction) => void;
@@ -140,6 +147,13 @@ export type CanvasTextEditSessionController = {
   ) => void;
   closeTextEditingSession: () => void;
   requestAdornmentTextEdit: (targetId: string) => void;
+  /** Programmatic session entry (object-layer drill-in). */
+  startTextEditingSession: (
+    target: EditableTextTarget,
+    selectionStart: number,
+    selectionEnd: number,
+    historyMergeKey?: string
+  ) => void;
 };
 
 const TEXT_CARET_OVERLAY_EPSILON_PX = 0.25;
@@ -582,6 +596,7 @@ export function useCanvasTextEditSession(
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
     resolveDeckCaretDomain,
+    onCanvasSessionEscape,
     textLayoutContext,
     textEditPlacement,
     dispatch
@@ -1488,6 +1503,16 @@ export function useCanvasTextEditSession(
       event.preventDefault();
       event.stopPropagation();
       textSelectionDragRef.current = null;
+      // Esc ladder rung 1: hand the caret position to the object layer
+      // before closing; the panel selects the innermost containing object.
+      const session = stateRef.current.session;
+      if (session?.isScopeSession && onCanvasSessionEscape) {
+        onCanvasSessionEscape(
+          session,
+          session.sourceSpan.from +
+            Math.min(session.selectionStart, session.selectionEnd)
+        );
+      }
       dispatchCanvasTextEditAction({ type: "session_close" });
       return;
     }
@@ -1521,7 +1546,8 @@ export function useCanvasTextEditSession(
     handleCanvasRenderedMotionKey,
     handleCanvasStructuralKey,
     handleSharedTextEditModifierKeys,
-    isFocusSurfaceChord
+    isFocusSurfaceChord,
+    onCanvasSessionEscape
   ]);
 
   const handleTextEditTextareaFocus = useCallback(() => {
@@ -2100,6 +2126,7 @@ export function useCanvasTextEditSession(
     view,
     beginCanvasTextInteraction,
     closeTextEditingSession,
-    requestAdornmentTextEdit
+    requestAdornmentTextEdit,
+    startTextEditingSession
   };
 }

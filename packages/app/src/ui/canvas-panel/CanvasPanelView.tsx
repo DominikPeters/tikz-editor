@@ -132,6 +132,15 @@ type CanvasPanelViewProps = {
   nodePositionLinks: readonly NodePositionLinkDisplay[];
   marqueeBounds: SvgBounds | null;
   selectionBoxes: readonly SelectionBoxDisplay[];
+  /** Selected deck object outline (object layer), in world coordinates. */
+  deckObjectSelectionBox: {
+    objectId: string;
+    kind: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
   adornmentHighlightBoxes: readonly AdornmentHighlightBox[];
   selectedAdornmentConnectors: readonly AdornmentConnectorDisplay[];
   selectionStrokeWidth: number;
@@ -250,6 +259,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     nodePositionLinks,
     marqueeBounds,
     selectionBoxes,
+    deckObjectSelectionBox,
     adornmentHighlightBoxes,
     selectedAdornmentConnectors,
     selectionStrokeWidth,
@@ -680,6 +690,21 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   adornmentConnectors={selectedAdornmentConnectors}
                   selectionStrokeWidth={selectionStrokeWidth}
                 />
+
+                {deckObjectSelectionBox ? (
+                  <g className={css.selectionOverlay} data-testid="deck-object-selection">
+                    <rect
+                      className={[css.selectionRect, css.selectionRectDashed].join(" ")}
+                      x={deckObjectSelectionBox.x}
+                      y={deckObjectSelectionBox.y}
+                      width={Math.max(0.001, deckObjectSelectionBox.width)}
+                      height={Math.max(0.001, deckObjectSelectionBox.height)}
+                      strokeWidth={selectionStrokeWidth}
+                      data-deck-object-id={deckObjectSelectionBox.objectId}
+                      data-deck-object-kind={deckObjectSelectionBox.kind}
+                    />
+                  </g>
+                ) : null}
 
                 <SelectionDragLayer
                   toolMode={toolMode}

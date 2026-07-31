@@ -262,6 +262,54 @@ metadata, explicit list/item object nodes, deck-specific edit actions
 today) with selection state, and topology-preserving duplicate/delete
 adapters. Stage 3 is therefore a real workstream, not wiring.
 
+**Stage 3a is implemented** (selection foundation). Core: a per-frame
+object index (`packages/core/src/beamer/object-index.ts`) publishes
+selectable nodes for blocks, columns environments, columns, graphics,
+embedded tikzpictures, lists, and items — env/atom kinds from the frame
+layout items, list/item nodes synthesized from the engine's published list
+topology with bounds unioned from caret-stop rows plus the item's marker
+box. Parent links are computed uniformly from source-span nesting, which
+is exactly the Esc ladder order; `beamerObjectAtOffset` gives the
+innermost node for the caret→object rung. List markers carry the label
+hbox's source range (the whole list), so marker→item association is
+geometric (the item on whose first rendered line the marker sits) and
+published as `objectIdByMarkerId`. Deletion/duplication are pure patch
+builders in `structural-edit.ts` (`beamerObjectDeletionPatch` /
+`beamerObjectDuplicationPatch`): line-extent removal with promotion rules
+(only item → whole list env, only column → whole columns env), duplication
+inserts the line-extent copy below and reports a `selectSpan` for
+reselection. App: `deckObjectSelection` lives in ephemeral store state
+(cleared automatically whenever a text session starts); canvas-focus Esc
+hands the caret's document offset to the panel, which selects the
+innermost containing object before the session closes and refocuses the
+viewport; further Escs walk `parentId`; Enter/F2 drills back in (first
+caret stop inside the object, or the whole atom span for
+graphics/tikzpictures); Delete/Backspace and Cmd/Ctrl+D dispatch the
+patches through `APPLY_SOURCE_PATCHES` (store history undo works; both
+edits are refused while `snapshot.source !== source`, the layout-staleness
+guard); after a duplicate the copy is reselected by matching the object
+whose span *starts* inside the inserted range once the snapshot catches
+up. Click layering per the invariant above: block/columns/column chrome
+regions render *under* the deck text regions (text always wins),
+graphics/tikz/marker regions render *on top* (clicking a non-text render
+selects the object; the stage-1c click-to-select-atom-span behavior moved
+one keystroke away, behind Enter). The selected object shows a dashed
+outline (`deck-object-selection` overlay). Implementing 3a fixed a core
+publishing gap: block bodies laid out lists without the theme list profile
+(default margins, no marker metadata), so lists inside blocks published
+no `list-marker` layout items — block bodies now pass
+`beamerListLayoutProfile(theme)` like frame flow, and `emitPreparedBlock`
+emits the body's markers. Gotcha for future click handlers:
+`onBackgroundClick` fires on both the interaction svg and the viewport
+div, and the first invocation consumes `suppressNextBackgroundClickRef`,
+so background-clearing logic must also require
+`event.target === event.currentTarget`. Still open for 3b/3c: inspectors
+(block type/title/overlay, column width, image, embedded tikz), graphics
+resize handles, column divider drag, glue bands, tier-3 drag promotion,
+the nested-TikZ compute-mode branch for the breadcrumb, and deck edit
+actions beyond delete/duplicate — split into Stages 3b/3c under Staging
+below.
+
 ## Masking and structural recovery
 
 The original draft assumed mask-equals-session was safe for column scopes.
@@ -451,7 +499,8 @@ parse-level passes in `content.ts`). Known gaps the corpus documents:
 `\vfill` splits paragraphs but its fill glue is not yet distributed (and
 column-level inline `\vfill` still aborts its chunk), description labels
 are not editable, and frame subtitles are scanned but not rendered by any
-headline template.
+headline template. **Stage 3a is implemented** — object-selection
+foundation; full status paragraph in the Object layer section above.
 
 - **Stage 0 — editing infrastructure** (added after review): the Core
   prerequisites above — Beamer edit index, session refactor (scope buffer +
@@ -475,15 +524,47 @@ headline template.
 - **Stage 2 — canvas-focus mode**: hidden input, rendered-stop motion,
   structural Enter/Backspace/Tab, focus indication set (blink/gray/ring/
   dashed border), focus gestures.
-- **Stage 3 — object layer**: object selection state over the edit index's
-  topology, Esc ladder, deck edit actions (replacing the blanket
-  `APPLY_EDIT_ACTION` rejection), inspectors (block, column, image,
-  overlay, embedded tikz), graphics resize handles, column divider drag,
-  glue bands, tier-3 selection promotion, nested-TikZ compute-mode branch
-  for the breadcrumb. Can proceed partly in parallel with Stage 2.
+- **Stage 3 — object layer**, split into sub-stages (2026-07-31):
+  - **Stage 3a — selection foundation (implemented)**: per-frame object
+    index (blocks, columns, column, graphics, tikz, lists, items), click
+    chrome/markers/atoms to select, Esc ladder with Enter/F2 drill-in,
+    Delete and Cmd+D with undo, dashed selection outline. Details in the
+    Object layer section.
+  - **Stage 3b — inspectors and deck edit actions**: property editing over
+    the 3a selection. Deck edit actions replacing the blanket
+    `APPLY_EDIT_ACTION` rejection (env rename, option value set, …), then
+    the inspectors built on them: block (type dropdown block/alertblock/
+    exampleblock via env-rename patch, title field, overlay spec), column
+    (exact width numeric field), image (width/height/scale), embedded tikz
+    (`scale=`/`\scalebox` value via the retained-span rewrite). Also the
+    structural-edit stragglers that need object semantics: Backspace at
+    the first item's content start dissolving the item into a paragraph,
+    and Enter with a non-empty selection (delete-then-split).
+  - **Stage 3c — direct manipulation**: graphics corner resize handles
+    (rewrite the authored `width=0.63\textwidth` value span, symbolic form
+    preserved), column divider drag with live re-layout (rewrite both
+    adjacent coefficients preserving their sum), glue bands (vertical glue
+    enters the caret-traversal/select-then-delete domain with the labeled
+    band), tier-3 selection promotion (text drags crossing containers
+    promote to object selection), and the nested-TikZ double-click
+    breadcrumb — the largest single item, since it needs a real
+    compute-mode branch (deck document with a TikZ-root scene; today
+    `computeSnapshot` routes all Beamer source to deck compute by
+    `documentKind`).
+- **Stage 4 — gap closing**: the deliberate gaps accumulated across
+  stages 1–3, none of which block the object layer but all of which are
+  user-visible: `\vfill` glue distribution (and column-level inline
+  `\vfill` aborting its chunk), description-label editing, frame subtitle
+  rendering (scanned but no headline template shows it),
+  `caretPolicy: "filename-linear"` for graphics (currently whole-atom
+  selection), and whatever the open questions below resolve to (tier-2
+  snapping catalog, glue-band hover styling, Esc-ladder length in tall
+  blocks). Sequencing within Stage 4 is by user pain, not architecture —
+  each item is independent.
 - **Later** (unchanged from `design/beamer-editor.md`): insertion templates
   and ghost placeholders, drag-reorder in flow, formatting toolbar polish,
-  free-form overlay layer, in-place embedded figure editing.
+  free-form overlay layer, in-place embedded figure editing (Phase B5;
+  the 3c breadcrumb is its interaction-grammar placeholder).
 
 ### Editing fixture corpus
 
