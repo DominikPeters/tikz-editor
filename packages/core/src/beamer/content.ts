@@ -307,8 +307,166 @@ function splitStandaloneFrameCommands(
   return splitStandaloneVerticalSpaces(
     context,
     frameId,
-    splitTitlePageCommands(context, frameId, children)
+    splitVerticalFillCommands(
+      context,
+      stripFrameTitleCommands(
+        context,
+        splitTitlePageCommands(context, frameId, children)
+      )
+    )
   );
+}
+
+/**
+ * `\frametitle`/`\framesubtitle` commands are frame header material: the
+ * scanner lifts their values into the frame model, and Beamer never
+ * typesets the commands as body prose. Remove them (with their arguments)
+ * from paragraph flow so they are neither rendered literally nor editable
+ * as body text.
+ */
+function stripFrameTitleCommands(
+  context: BeamerSyntaxContext,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const { source } = context;
+  const result: BeamerFrameBodyNode[] = [];
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const removals: Span[] = [];
+    for (const command of beamerControlSequencesIn(context, child.span)) {
+      if (
+        (command.name !== "frametitle" && command.name !== "framesubtitle") ||
+        !hasBalancedBraces(source, { from: child.span.from, to: command.from })
+      ) {
+        continue;
+      }
+      let cursor = command.to;
+      const overlay = beamerOverlayArgumentAfter(context, cursor, child.span.to);
+      if (overlay) {
+        cursor = overlay.span.to;
+      }
+      const optional = beamerOptionalArgumentAfter(
+        context,
+        cursor,
+        child.span.to
+      );
+      if (optional) {
+        cursor = optional.span.to;
+      }
+      const value = beamerRequiredArgumentAfter(context, cursor, child.span.to);
+      if (value) {
+        removals.push({ from: command.from, to: value.span.to });
+      }
+    }
+    if (removals.length === 0) {
+      result.push(child);
+      continue;
+    }
+    emitParagraphPieces(source, child, removals, result);
+  }
+  return result;
+}
+
+/**
+ * TeX ends the current paragraph when it reaches vertical glue like
+ * `\vfill` in horizontal mode. The generic text frontend only supports
+ * vertical glue at paragraph-block starts (mid-paragraph `\vspace` gets
+ * the LaTeX `\vadjust` lowering; other glue aborts the whole chunk), so
+ * cut body chunks in front of each `\vfill` — the glue then leads its own
+ * chunk, which the frontend supports, and the surrounding prose survives.
+ */
+function splitVerticalFillCommands(
+  context: BeamerSyntaxContext,
+  children: readonly BeamerFrameBodyNode[]
+): BeamerFrameBodyNode[] {
+  const { source } = context;
+  const result: BeamerFrameBodyNode[] = [];
+  for (const child of children) {
+    if (child.kind !== "paragraph") {
+      result.push(child);
+      continue;
+    }
+    const cuts: Span[] = [];
+    let pieceStart = child.span.from;
+    for (const command of beamerControlSequencesIn(context, child.span)) {
+      if (command.name !== "vfill") {
+        continue;
+      }
+      const before = trimSpan(source, { from: pieceStart, to: command.from });
+      if (
+        before.to <= before.from ||
+        !hasBalancedBraces(source, { from: pieceStart, to: command.from })
+      ) {
+        continue;
+      }
+      cuts.push({ from: command.from, to: command.from });
+      pieceStart = command.from;
+    }
+    if (cuts.length === 0) {
+      result.push(child);
+      continue;
+    }
+    emitParagraphPieces(source, child, cuts, result);
+  }
+  return result;
+}
+
+/**
+ * Re-emit one paragraph node as the trimmed non-empty pieces around the
+ * given disjoint ordered spans. The first piece keeps the original node id
+ * so untouched siblings never collide; later pieces derive from it.
+ */
+function emitParagraphPieces(
+  source: string,
+  child: BeamerParagraphBodyNode,
+  removals: readonly Span[],
+  target: BeamerFrameBodyNode[]
+): void {
+  let cursor = child.span.from;
+  let pieceIndex = 0;
+  const pushPiece = (span: Span) => {
+    const trimmed = trimSpan(source, span);
+    if (trimmed.to <= trimmed.from) {
+      return;
+    }
+    target.push({
+      kind: "paragraph",
+      id: pieceIndex === 0 ? child.id : `${child.id}:${pieceIndex}`,
+      span: trimmed,
+    });
+    pieceIndex += 1;
+  };
+  for (const removal of removals) {
+    if (removal.from < cursor) {
+      continue;
+    }
+    pushPiece({ from: cursor, to: removal.from });
+    cursor = removal.to;
+  }
+  pushPiece({ from: cursor, to: child.span.to });
+}
+
+function hasBalancedBraces(source: string, span: Span): boolean {
+  let depth = 0;
+  for (let index = span.from; index < span.to; index += 1) {
+    const char = source[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth < 0) {
+        return false;
+      }
+    }
+  }
+  return depth === 0;
 }
 
 function splitTitlePageCommands(

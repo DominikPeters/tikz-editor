@@ -285,6 +285,144 @@ describe("Beamer canvas editing contract", () => {
     ).toEqual(["frame:0:scope:preamble:title"]);
   });
 
+  describe("editing corpus fixture", () => {
+    const corpusSource = readFileSync(
+      fileURLToPath(
+        new URL("./fixtures/beamer/editing_corpus_beamer.tex", import.meta.url)
+      ),
+      "utf8"
+    );
+    const corpus = prepareBeamerDocument(corpusSource);
+
+    it("strips command-form titles from body flow and splits at \\vfill", async () => {
+      const frame = corpus.document.frames[0];
+      expect(frame.title?.value).toBe("Command-form title");
+      expect(frame.subtitle?.value).toBe("Command-form subtitle");
+
+      const page = await corpus.renderFrame({ frameIndex: 0, step: 1 });
+      const slices = editableSlices(page.layout, corpusSource);
+      const joined = slices.join("|");
+      expect(joined).toContain("First line");
+      expect(joined).toContain("second line");
+      expect(joined).toContain("Signed with");
+      // Header commands are lifted into the frame model, never typeset as
+      // body prose (frame subtitles are not rendered by any headline
+      // template yet, so the subtitle text appears nowhere).
+      expect(joined).not.toContain("frametitle");
+      expect(joined).not.toContain("Short title");
+      expect(joined).not.toContain("Command-form subtitle");
+      // `\vfill` ends the paragraph like TeX vertical glue; the prose on
+      // both sides survives as separate paragraphs and the glue itself is
+      // structural source, not editable text.
+      expect(joined).not.toContain("vfill");
+      expect(
+        page.layout.paragraphs.filter((p) => p.role === "body").map((p) => p.paragraphId)
+      ).toEqual(["frame:0:paragraph:0", "frame:0:paragraph:0:1"]);
+
+      // Argument-bearing macro calls publish whole-invocation atoms.
+      const atoms = page.layout.paragraphs.flatMap((paragraph) =>
+        paragraph.atomicRenderSpans.map((atom) =>
+          corpusSource.slice(atom.span.from, atom.span.to)
+        )
+      );
+      expect(atoms).toContain(String.raw`\inner{x}{y}`);
+      expect(atoms).toContain(String.raw`\highlight{a wrapped phrase}`);
+    });
+
+    it("publishes editable prose for nested lists, empty items, and description bodies", async () => {
+      const page = await corpus.renderFrame({ frameIndex: 1, step: 1 });
+      const joined = editableSlices(page.layout, corpusSource).join("|");
+      expect(joined).toContain("Outer first");
+      expect(joined).toContain("Nested numbered");
+      expect(joined).toContain("Outer after empty");
+      expect(joined).toContain("Points uphill");
+      expect(joined).toContain("Curves the bowl");
+      // Known gap: description labels render as list chrome and are not
+      // yet editable on canvas.
+      expect(joined).not.toContain("Gradient");
+      expect(joined).not.toContain("Hessian");
+    });
+
+    it("gates editable spans per overlay step across pause, alt, temporal, and incremental lists", async () => {
+      const pages = await corpus.renderFramePages({ frameIndex: 2 });
+      expect(pages.stepCount).toBe(3);
+      const bodyTexts = (step: number) =>
+        pages.pages[step - 1].layout.paragraphs
+          .filter((paragraph) => paragraph.role === "body")
+          .flatMap((paragraph) =>
+            paragraph.editableTextSpans.map((editable) =>
+              corpusSource.slice(editable.span.from, editable.span.to).trim()
+            )
+          )
+          .filter((text) => text.length > 0)
+          .sort();
+      expect(bodyTexts(1)).toEqual(["Always visible"]);
+      expect(bodyTexts(2)).toEqual([
+        "Alt otherwise",
+        "Always visible",
+        "Incremental one",
+        "Revealed second",
+        "Temporal during",
+      ]);
+      expect(bodyTexts(3)).toEqual([
+        "Alt on three",
+        "Always visible",
+        "Incremental one",
+        "Incremental two",
+        "Revealed second",
+        "Temporal after",
+      ]);
+      // The leading \pause covers the temporal's step-1 branch, so it can
+      // never appear on any step.
+      for (const step of [1, 2, 3]) {
+        expect(bodyTexts(step)).not.toContain("Temporal before");
+      }
+    });
+
+    it("lays out graphics size variants with precise filename spans", async () => {
+      const page = await corpus.renderFrame({ frameIndex: 3, step: 1 });
+      const graphics = page.layout.graphics;
+      expect(
+        graphics.map((graphic) =>
+          corpusSource.slice(graphic.filenameSpan.from, graphic.filenameSpan.to)
+        )
+      ).toEqual(["plots/loss-curve", "diagrams/architecture", "photos/team"]);
+      // width=3cm, height=2cm, scale=0.5 of the 28.45pt placeholder.
+      expect(graphics[0].bounds.width).toBeCloseTo(85.36, 1);
+      expect(graphics[1].bounds.height).toBeCloseTo(56.91, 1);
+      expect(graphics[2].bounds.width).toBeCloseTo(14.23, 1);
+      for (const graphic of graphics) {
+        expect(graphic.caretPolicy).toBe("filename-linear");
+        expect(graphic.asset.status).toBe("missing");
+      }
+      // Each command also publishes a click-into hit span.
+      const mathJoined = editableSlices(page.layout, corpusSource, "math").join("|");
+      expect(mathJoined).toContain(
+        String.raw`\includegraphics[width=3cm]{plots/loss-curve}`
+      );
+      expect(mathJoined).toContain(
+        String.raw`\includegraphics[scale=0.5]{photos/team}`
+      );
+    });
+
+    it("falls back to an unsupported body for fragile verbatim frames without editing surfaces", async () => {
+      expect(corpus.document.frames[4].options?.fragile).toBe(true);
+      const page = await corpus.renderFrame({ frameIndex: 4, step: 1 });
+      // The whole body renders as the unsupported-body placeholder: no
+      // body paragraphs, no editable spans, no atoms — so no canvas
+      // session can anchor inside it (the title stays editable).
+      expect(page.layout.paragraphs.map((p) => p.role)).toEqual(["frame-title"]);
+      expect(
+        page.diagnostics.some(
+          (diagnostic) => diagnostic.code === "beamer-render-unsupported-body"
+        )
+      ).toBe(true);
+      expect(editableSlices(page.layout, corpusSource)).toEqual([
+        "Verbatim listing",
+      ]);
+    });
+  });
+
   it("returns structured-clone-compatible editable span metadata", async () => {
     const page = await prepareBeamerDocument(SOURCE).renderFrame({
       frameIndex: 0,

@@ -1,0 +1,60 @@
+% Editing-fixture corpus for Beamer canvas text editing
+% (design/beamer-canvas-editing.md, "Editing fixture corpus"): command-form
+% frame titles, explicit line breaks, \vfill, macro calls with arguments,
+% nested lists, empty items, description labels, multi-step overlays,
+% graphics size variants, and a fragile/verbatim frame.
+\documentclass{beamer}
+\newcommand{\inner}[2]{\(\langle #1, #2\rangle\)}
+\newcommand{\highlight}[1]{\textbf{#1}}
+\begin{document}
+
+\begin{frame}
+\frametitle[Short title]{Command-form title}
+\framesubtitle{Command-form subtitle}
+First line \\ second line
+\vfill
+Signed with \inner{x}{y} and \highlight{a wrapped phrase}
+\end{frame}
+
+\begin{frame}{Nested lists}
+\begin{itemize}
+\item Outer first
+\begin{enumerate}
+\item Nested numbered
+\end{enumerate}
+\item
+\item Outer after empty
+\end{itemize}
+\begin{description}
+\item[Gradient] Points uphill
+\item[Hessian] Curves the bowl
+\end{description}
+\end{frame}
+
+\begin{frame}{Overlay steps}
+Always visible
+\pause
+Revealed second
+\alt<3>{Alt on three}{Alt otherwise}
+\temporal<2>{Temporal before}{Temporal during}{Temporal after}
+\begin{itemize}[<+->]
+\item Incremental one
+\item Incremental two
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Graphics sizes}
+\includegraphics[width=3cm]{plots/loss-curve}
+\includegraphics[height=2cm]{diagrams/architecture}
+\includegraphics[scale=0.5]{photos/team}
+\end{frame}
+
+\begin{frame}[fragile]{Verbatim listing}
+Prose before the listing
+\begin{verbatim}
+for step in range(10):
+    loss.backward()
+\end{verbatim}
+\end{frame}
+
+\end{document}

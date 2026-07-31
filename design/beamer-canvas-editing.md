@@ -362,7 +362,17 @@ atomic-render click-to-select, and preamble-backed title-page fields
 (author/institute/date now render as source-backed paragraphs; each
 metadata field is a `preamble-field` edit scope). The latency gate
 measures the full KKT column scope buffer on both browsers. Stage 2+ is
-not started. The editing fixture corpus below is still outstanding.
+not started. The editing fixture corpus below is built
+(`test/fixtures/beamer/editing_corpus_beamer.tex`, tests in
+`test/beamer-editing.spec.ts`); building it surfaced and fixed two
+content-flow bugs (command-form `\frametitle`/`\framesubtitle` leaked into
+body prose as literal editable text; mid-paragraph `\vfill` aborted the
+whole text chunk and silently dropped its content — both fixed by
+parse-level passes in `content.ts`). Known gaps the corpus documents:
+`\vfill` splits paragraphs but its fill glue is not yet distributed (and
+column-level inline `\vfill` still aborts its chunk), description labels
+are not editable, and frame subtitles are scanned but not rendered by any
+headline template.
 
 - **Stage 0 — editing infrastructure** (added after review): the Core
   prerequisites above — Beamer edit index, session refactor (scope buffer +
