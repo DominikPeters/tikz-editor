@@ -1585,6 +1585,9 @@ function prepareBlock(params: {
         mathFont: params.theme.fonts[plan.bodyFontRole],
         alignment: "left",
         disableAutomaticHyphenation: true,
+        // Lists inside blocks use the same theme templates (margins,
+        // markers) as frame-level lists.
+        listProfile: beamerListLayoutProfile(params.theme),
         macroBindings: params.macroBindings,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
         hiddenListItemIndices: bodyProjection.hiddenListItemIndices,
@@ -1834,6 +1837,22 @@ function emitPreparedBlock(params: {
       paragraphId: block.body.layout.paragraphId,
       visibility: params.visibility,
     });
+    for (const marker of block.body.listMarkers) {
+      params.items.push({
+        id: marker.id,
+        kind: "list-marker",
+        sourceSpan: marker.sourceSpan ?? block.body.layout.sourceSpan,
+        bounds: {
+          x: params.x + marker.bounds.x,
+          y: bodyY + marker.bounds.y,
+          width: marker.bounds.width,
+          height: marker.bounds.height,
+        },
+        parentId: block.body.layout.paragraphId,
+        traceAsGlyph: marker.traceAsGlyph,
+        visibility: params.visibility === "hidden" ? "hidden" : marker.visibility,
+      });
+    }
     params.modelBuilder.addPart({
       basePartId: block.body.layout.paragraphId,
       sourceId: block.body.layout.paragraphId,
@@ -3110,19 +3129,22 @@ function layoutParagraph(params: {
         if (role?.kind !== "list-label") {
           return [];
         }
+        // Same fallback the layout itself uses: block bodies omit an
+        // explicit profile but still lay out (and paint) default markers.
+        const listProfile = params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE;
         const marker =
           role.listKind === "itemize"
-            ? params.listProfile?.itemizeMarkersByDepth?.[
+            ? listProfile.itemizeMarkersByDepth?.[
                 Math.max(
                   0,
                   Math.min(
                     role.labelDepth - 1,
-                    (params.listProfile.itemizeMarkersByDepth?.length ?? 1) - 1
+                    (listProfile.itemizeMarkersByDepth?.length ?? 1) - 1
                   )
                 )
               ]
             : role.listKind === "enumerate"
-              ? params.listProfile?.resolveEnumerateMarker?.(
+              ? listProfile.resolveEnumerateMarker?.(
                   role.itemIndex,
                   role.labelDepth
                 )
