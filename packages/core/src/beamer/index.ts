@@ -16,16 +16,27 @@ export {
 export {
   applyBeamerStructuralEdits,
   beamerListItemAt,
+  beamerObjectDeletionPatch,
+  beamerObjectDuplicationPatch,
   beamerStructuralBackspacePatch,
   beamerStructuralDeletePatch,
   beamerStructuralEnterPatch,
   beamerStructuralLineBreakPatch,
   beamerStructuralTabPatch,
   type BeamerListItemContext,
+  type BeamerObjectEditPatch,
   type BeamerStructuralEdit,
   type BeamerStructuralKeyResult,
   type BeamerStructuralPatch,
 } from "./structural-edit.js";
+export {
+  beamerObjectAtOffset,
+  buildBeamerObjectIndex,
+  type BeamerObjectIndex,
+  type BeamerObjectKind,
+  type BeamerObjectListItemContext,
+  type BeamerObjectNode,
+} from "./object-index.js";
 export { collectBeamerEditScopes, resolveBeamerEditScopeAt } from "./edit-scopes.js";
 export {
   beamerOverlaySpecContains,
