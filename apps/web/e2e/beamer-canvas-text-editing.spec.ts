@@ -202,6 +202,19 @@ test("keeps structure stable through transiently invalid source and supports str
   await textarea.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
 
+  // A caret on structural source (here: the newline before any rendered
+  // paragraph, and the \begin{itemize} line) collapses onto the nearest
+  // rendered stop instead of clearing the canvas caret.
+  for (const structuralOffset of [0, bufferText.indexOf(String.raw`\begin{itemize}`) + 1]) {
+    await textarea.evaluate((element, offset) => {
+      const input = element as HTMLTextAreaElement;
+      input.focus();
+      input.setSelectionRange(offset, offset);
+      input.dispatchEvent(new Event("select", { bubbles: true }));
+    }, structuralOffset);
+    await expect(page.getByTestId("canvas-text-selection-caret")).toHaveCount(1);
+  }
+
   // Enter is a source newline in a scope session, not a session close.
   const afterBody = bufferText.indexOf("Body typo.") + "Body typo.".length;
   await textarea.evaluate((element, offset) => {

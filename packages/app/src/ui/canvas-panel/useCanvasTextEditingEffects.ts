@@ -415,11 +415,28 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
             return;
           }
           if (documentStart === documentEnd) {
-            const paragraph = scopeParagraphs.find(
-              (candidate) =>
-                documentStart >= candidate.sourceSpan.from &&
-                documentStart <= candidate.sourceSpan.to
-            );
+            // Structural source between rendered paragraphs (\begin{itemize},
+            // \vspace, blank lines) has no containing paragraph; the caret
+            // collapses onto the nearest rendered stop, preferring the
+            // preceding paragraph's end.
+            const paragraph =
+              scopeParagraphs.find(
+                (candidate) =>
+                  documentStart >= candidate.sourceSpan.from &&
+                  documentStart <= candidate.sourceSpan.to
+              ) ??
+              [...scopeParagraphs].sort((left, right) => {
+                const distance = (candidate: typeof left) =>
+                  documentStart > candidate.sourceSpan.to
+                    ? documentStart - candidate.sourceSpan.to
+                    : candidate.sourceSpan.from - documentStart;
+                const precedes = (candidate: typeof left) =>
+                  candidate.sourceSpan.to <= documentStart ? 0 : 1;
+                return (
+                  distance(left) - distance(right) ||
+                  precedes(left) - precedes(right)
+                );
+              })[0];
             const paragraphContainer = paragraph
               ? resolveRenderedMathTextElement(target, paragraph.paragraphId)
               : null;
@@ -427,6 +444,10 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               pushOverlay(null);
               return;
             }
+            const caretDocumentOffset = Math.min(
+              Math.max(documentStart, paragraph.sourceSpan.from),
+              paragraph.sourceSpan.to
+            );
             const sourceText = source.slice(
               paragraph.sourceSpan.from,
               paragraph.sourceSpan.to
@@ -437,7 +458,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
               sourceCoordinateSpace: "document",
               containerElement: paragraphContainer,
-              offset: documentStart
+              offset: caretDocumentOffset
             });
             if (requestRef.cancelled) {
               return;
@@ -453,7 +474,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
                 sourceText,
                 documentSourceOffset(paragraph.sourceSpan.from),
                 paragraphContainer,
-                point.offset ?? documentStart
+                point.offset ?? caretDocumentOffset
               )) ?? Math.max(1, target.region.height);
             if (requestRef.cancelled) {
               return;
