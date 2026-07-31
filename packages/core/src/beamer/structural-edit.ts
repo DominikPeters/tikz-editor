@@ -532,6 +532,217 @@ function unnestItemPatch(
 }
 
 /**
+ * Toolbar list buttons (design doc "Format toolbar"): applies `environment`
+ * at the caret.
+ * - Inside a list of another kind: renames the innermost environment's
+ *   boundary tokens (list options and item overlay specs are untouched).
+ * - Inside a list of the same kind: dissolves the caret's item back into
+ *   body prose — the unnest split shapes, plus removal of the `\item`
+ *   token.
+ * - In body prose outside any list: wraps the caret's text paragraph (its
+ *   blank-line-delimited chunk) in a fresh single-item environment.
+ */
+export function beamerStructuralListTogglePatch(
+  domain: BeamerCaretDomain,
+  offset: number,
+  environment: "itemize" | "enumerate"
+): BeamerStructuralKeyResult {
+  if (isInsideMath(domain, offset)) {
+    return "swallow";
+  }
+  const context = beamerListItemAt(domain, offset);
+  if (context) {
+    const caret = clampToItemContent(offset, context.item);
+    return context.list.environment === environment
+      ? dissolveItemPatch(domain, context, caret)
+      : renameListPatch(context.list, environment, caret);
+  }
+  return wrapParagraphInListPatch(domain, offset, environment);
+}
+
+function renameListPatch(
+  list: BeamerListTopology,
+  environment: "itemize" | "enumerate",
+  offset: number
+): BeamerStructuralKeyResult {
+  const edits: BeamerStructuralEdit[] = [
+    { span: list.beginSpan, insert: `\\begin{${environment}}` },
+    { span: list.endSpan, insert: `\\end{${environment}}` },
+  ];
+  return { edits, caretOffset: mapOffsetAfterEdits(edits, offset) };
+}
+
+/**
+ * Removes a list boundary token, keeping an empty line in its place when
+ * the adjacent material would otherwise join the dissolved item's text
+ * into the neighboring paragraph — the environment's implicit paragraph
+ * break must survive its removal.
+ */
+function boundaryRemovalEdit(
+  source: string,
+  token: Span,
+  neighbor: "above" | "below"
+): BeamerStructuralEdit {
+  const span = tokenRemovalSpan(source, token);
+  const joins =
+    neighbor === "above"
+      ? span.from > 0 &&
+        !isBlank(source, lineStartAt(source, span.from - 1), span.from - 1)
+      : span.to < source.length &&
+        !isBlank(source, span.to, lineEndAt(source, span.to));
+  return { span, insert: joins ? "\n" : "" };
+}
+
+function dissolveItemPatch(
+  domain: BeamerCaretDomain,
+  context: BeamerListItemContext,
+  offset: number
+): BeamerStructuralKeyResult {
+  const { list, item, index } = context;
+  const source = domain.source;
+  const environment = list.environment;
+  const beginIndent = lineIndentAt(source, list.beginSpan.from);
+  const endIndent = lineIndentAt(source, list.endSpan.from);
+  const edits: BeamerStructuralEdit[] = [
+    // The `\item` token (plus any label and the whitespace run up to the
+    // content) goes away; the content keeps its line.
+    { span: { from: item.commandSpan.from, to: item.contentSpan.from }, insert: "" },
+  ];
+  if (list.items.length === 1) {
+    edits.push(boundaryRemovalEdit(source, list.beginSpan, "above"));
+    edits.push(boundaryRemovalEdit(source, list.endSpan, "below"));
+  } else if (index === 0) {
+    edits.push(boundaryRemovalEdit(source, list.beginSpan, "above"));
+    edits.push(
+      insertBeforeToken(
+        source,
+        list.items[1].commandSpan.from,
+        `${beginIndent}\\begin{${environment}}`
+      )
+    );
+  } else if (index === list.items.length - 1) {
+    edits.push(
+      insertBeforeToken(source, item.commandSpan.from, `${endIndent}\\end{${environment}}`)
+    );
+    edits.push(boundaryRemovalEdit(source, list.endSpan, "below"));
+  } else {
+    edits.push(
+      insertBeforeToken(source, item.commandSpan.from, `${endIndent}\\end{${environment}}`)
+    );
+    edits.push(
+      insertBeforeToken(
+        source,
+        list.items[index + 1].commandSpan.from,
+        `${beginIndent}\\begin{${environment}}`
+      )
+    );
+  }
+  // A zero-width insert can share `from` with the `\item` removal; it must
+  // sort first so the reverse-order apply performs the removal before
+  // inserting at the shared offset.
+  edits.sort(
+    (left, right) =>
+      left.span.from - right.span.from ||
+      (left.span.to - left.span.from) - (right.span.to - right.span.from)
+  );
+  return { edits, caretOffset: mapOffsetAfterEdits(edits, offset) };
+}
+
+function wrapParagraphInListPatch(
+  domain: BeamerCaretDomain,
+  offset: number,
+  environment: "itemize" | "enumerate"
+): BeamerStructuralKeyResult {
+  const role = paragraphRoleAt(domain, offset);
+  if (role === null || !STRUCTURAL_BODY_ROLES.has(role)) {
+    return "swallow";
+  }
+  const paragraph = domain.paragraphs.find(
+    (candidate) => candidate.span.from <= offset && offset <= candidate.span.to
+  );
+  if (!paragraph) {
+    return "swallow";
+  }
+  const source = domain.source;
+  // Chunk bounds: the blank-line-delimited text paragraph around the
+  // caret, clamped away from sibling list environments in the same
+  // rendered paragraph.
+  let boundFrom = paragraph.span.from;
+  let boundTo = paragraph.span.to;
+  for (const list of domain.lists) {
+    if (list.endSpan.to <= offset) {
+      boundFrom = Math.max(boundFrom, list.endSpan.to);
+    }
+    if (list.beginSpan.from >= offset) {
+      boundTo = Math.min(boundTo, list.beginSpan.from);
+    }
+  }
+  const indent = lineIndentAt(source, offset);
+  const lineFrom = lineStartAt(source, offset);
+  const lineTo = lineEndAt(source, offset);
+  if (isBlank(source, Math.max(lineFrom, boundFrom), Math.min(lineTo, boundTo))) {
+    // An empty line grows a fresh one-item environment in place.
+    const insert = `${indent}\\begin{${environment}}\n${indent}\\item \n${indent}\\end{${environment}}`;
+    const from = Math.max(lineFrom, boundFrom);
+    const to = Math.min(lineTo, boundTo);
+    const edits: BeamerStructuralEdit[] = [{ span: { from, to }, insert }];
+    return {
+      edits,
+      caretOffset:
+        from + `${indent}\\begin{${environment}}\n${indent}\\item `.length,
+    };
+  }
+  let chunkFrom = lineFrom;
+  while (chunkFrom - 1 > boundFrom) {
+    const previousLineStart = lineStartAt(source, chunkFrom - 1);
+    const previousLineEnd = lineEndAt(source, previousLineStart);
+    if (
+      previousLineEnd <= boundFrom ||
+      isBlank(
+        source,
+        Math.max(previousLineStart, boundFrom),
+        Math.min(previousLineEnd, chunkFrom - 1)
+      )
+    ) {
+      break;
+    }
+    chunkFrom = previousLineStart;
+  }
+  chunkFrom = Math.max(chunkFrom, boundFrom);
+  let chunkTo = Math.min(lineTo, boundTo);
+  while (chunkTo < boundTo) {
+    const nextLineStart = chunkTo + 1;
+    if (nextLineStart >= boundTo) {
+      break;
+    }
+    const nextLineEnd = Math.min(lineEndAt(source, nextLineStart), boundTo);
+    if (isBlank(source, nextLineStart, nextLineEnd)) {
+      break;
+    }
+    chunkTo = nextLineEnd;
+  }
+  const contentFrom = skipHorizontalForward(source, chunkFrom, chunkTo);
+  const beginEdit = insertBeforeToken(
+    source,
+    contentFrom,
+    `${indent}\\begin{${environment}}`
+  );
+  const edits: BeamerStructuralEdit[] = [
+    beginEdit,
+    { span: { from: contentFrom, to: contentFrom }, insert: "\\item " },
+    { span: { from: chunkTo, to: chunkTo }, insert: `\n${indent}\\end{${environment}}` },
+  ];
+  // Both leading inserts land at or before the caret; shift it past them
+  // explicitly (mapOffsetAfterEdits keeps carets before same-position
+  // inserts, which here would strand the caret inside the new tokens).
+  return {
+    edits,
+    caretOffset:
+      Math.max(offset, contentFrom) + beginEdit.insert.length + "\\item ".length,
+  };
+}
+
+/**
  * Object-level edits (design doc "Object layer"): deleting or duplicating a
  * selected object node. Same purity contract as the structural key patches.
  */

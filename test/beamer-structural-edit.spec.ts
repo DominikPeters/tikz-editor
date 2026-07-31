@@ -5,6 +5,7 @@ import {
   beamerStructuralDeletePatch,
   beamerStructuralEnterPatch,
   beamerStructuralLineBreakPatch,
+  beamerStructuralListTogglePatch,
   beamerStructuralTabPatch,
   buildBeamerCaretStopDomain,
   prepareBeamerDocument,
@@ -262,6 +263,89 @@ describe("beamer structural edits", () => {
     // Top-level items cannot unnest.
     expect(
       beamerStructuralTabPatch(domain, source.indexOf("Outer top"), "unnest")
+    ).toBe("swallow");
+  });
+
+  it("list toggle renames the innermost environment to the other kind", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const offset = source.indexOf("Second two");
+    const patch = asPatch(
+      beamerStructuralListTogglePatch(domain, offset, "enumerate")
+    );
+    const { next } = await applyAndRender(source, patch);
+    expect(next).toContain("\\begin{enumerate}\n\\item First one");
+    expect(next).toContain("\\item Third three\n\\end{enumerate}");
+    expect(next).not.toContain("itemize");
+    expect(next.slice(patch.caretOffset, patch.caretOffset + 3)).toBe("Sec");
+  });
+
+  it("list toggle renames only the nested environment at the caret", async () => {
+    const source = frameDocument(NESTED_BODY);
+    const domain = await domainFor(source);
+    const offset = source.indexOf("Beta row");
+    const patch = asPatch(
+      beamerStructuralListTogglePatch(domain, offset, "enumerate")
+    );
+    const { next } = await applyAndRender(source, patch);
+    expect(next).toContain("\\item Outer top\n\\begin{enumerate}");
+    expect(next).toContain("\\item Gamma row\n\\end{enumerate}\n\\item Outer last");
+    // The outer environment keeps its kind.
+    expect(next).toContain("\\begin{itemize}\n\\item Outer top");
+  });
+
+  it("list toggle dissolves the caret's item back into prose", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const offset = source.indexOf("Second two");
+    const patch = asPatch(
+      beamerStructuralListTogglePatch(domain, offset, "itemize")
+    );
+    const { next } = await applyAndRender(source, patch);
+    expect(next).toContain("\\item First one\n\\end{itemize}");
+    expect(next).toContain("\\end{itemize}\nSecond two\n\\begin{itemize}");
+    expect(next).toContain("\\begin{itemize}\n\\item Third three");
+    expect(next.slice(patch.caretOffset, patch.caretOffset + 3)).toBe("Sec");
+  });
+
+  it("list toggle dissolves a single-item list entirely", async () => {
+    const source = frameDocument(
+      ["Intro prose.", "\\begin{itemize}", "\\item Only entry", "\\end{itemize}"].join("\n")
+    );
+    const domain = await domainFor(source);
+    const patch = asPatch(
+      beamerStructuralListTogglePatch(domain, source.indexOf("Only entry"), "itemize")
+    );
+    const { next } = await applyAndRender(source, patch);
+    // The environment's implicit paragraph breaks survive as blank lines,
+    // so the dissolved text does not join the neighboring paragraphs.
+    expect(next).toContain("Intro prose.\n\nOnly entry\n\n");
+    expect(next).not.toContain("itemize");
+  });
+
+  it("list toggle wraps the caret's prose paragraph in a new list", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const offset = source.indexOf("Outro prose.");
+    const patch = asPatch(
+      beamerStructuralListTogglePatch(domain, offset, "enumerate")
+    );
+    const { next } = await applyAndRender(source, patch);
+    expect(next).toContain(
+      "\\end{itemize}\n\\begin{enumerate}\n\\item Outro prose.\n\\end{enumerate}"
+    );
+    // The existing list is untouched.
+    expect(next).toContain("\\begin{itemize}\n\\item First one");
+    expect(next.slice(patch.caretOffset, patch.caretOffset + 3)).toBe("Out");
+  });
+
+  it("list toggle swallows in template areas", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    // The frame title renders with role "frame-title", not a body role.
+    const offset = source.indexOf("{T}") + 1;
+    expect(
+      beamerStructuralListTogglePatch(domain, offset, "itemize")
     ).toBe("swallow");
   });
 });

@@ -22,6 +22,7 @@ export {
   beamerStructuralDeletePatch,
   beamerStructuralEnterPatch,
   beamerStructuralLineBreakPatch,
+  beamerStructuralListTogglePatch,
   beamerStructuralTabPatch,
   type BeamerListItemContext,
   type BeamerObjectEditPatch,
