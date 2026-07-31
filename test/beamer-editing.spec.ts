@@ -248,7 +248,8 @@ describe("Beamer canvas editing contract", () => {
       (paragraph) => paragraph.role === "institute"
     );
     expect(institute).toBeDefined();
-    const line = institute!.report.lines[0]!;
+    const line = institute!.report.lines[0];
+    expect(line).toBeDefined();
     const center = Number(line.xStart) + Number(line.width) / 2;
     expect(center).toBeCloseTo(institute!.bounds.width / 2, 4);
   });
