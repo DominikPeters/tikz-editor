@@ -1,5 +1,6 @@
 import type { SessionSnapshot } from "../compute";
 import type { EditAction, EditActionResult } from "@tikz-editor/core/edit/actions";
+import type { DeckEditAction } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type {
@@ -376,7 +377,7 @@ export type EditorAction =
     }
   | {
       type: "APPLY_EDIT_ACTION";
-      action: EditAction;
+      action: EditAction | DeckEditAction;
       historyMergeKey?: string;
       parseOptions?: {
         indentSize?: 2 | 4;

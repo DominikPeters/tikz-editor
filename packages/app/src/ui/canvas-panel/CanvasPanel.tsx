@@ -30,7 +30,6 @@ resolvePropertyTargetFromParseResult
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import {
   beamerObjectAtOffset,
-  beamerObjectDeletionPatch,
   beamerObjectDuplicationPatch,
   buildBeamerCaretStopDomain,
   buildBeamerObjectIndex,
@@ -2247,37 +2246,39 @@ export const CanvasPanel = memo(function CanvasPanel({
       }
       if (snapshot.source !== source) {
         // The layout (and the object index derived from it) lags behind the
-        // source; refuse rather than patch through stale spans.
+        // source; refuse rather than patch through stale spans. (The reducer
+        // repeats this guard; failing silently here avoids a warning toast
+        // for a keypress that raced a reconcile.)
         return;
       }
-      const patch =
-        mode === "delete"
-          ? beamerObjectDeletionPatch(source, deckObjectIndex, node)
-          : beamerObjectDuplicationPatch(source, node);
-      if (!patch || patch.edits.length === 0) {
-        return;
+      if (mode === "duplicate") {
+        // The action recomputes this patch deterministically; it is built
+        // here only for the reselect span of the not-yet-rendered copy.
+        const patch = beamerObjectDuplicationPatch(source, node);
+        if (!patch || patch.edits.length === 0) {
+          return;
+        }
+        if (patch.selectSpan) {
+          pendingDeckReselectRef.current = {
+            frameId: deckActiveFrame.frameId,
+            kind: node.kind,
+            span: patch.selectSpan
+          };
+        }
       }
       dispatch({
-        type: "APPLY_SOURCE_PATCHES",
-        baseRevision: sourceRevision,
-        patches: patch.edits.map((edit) => ({
-          oldSpan: edit.span,
-          newSpan: { from: edit.span.from, to: edit.span.from + edit.insert.length },
-          replacement: edit.insert
-        })),
-        changedSourceIds: []
-      });
-      if (mode === "duplicate" && patch.selectSpan) {
-        pendingDeckReselectRef.current = {
+        type: "APPLY_EDIT_ACTION",
+        action: {
+          kind: mode === "delete" ? "deckDeleteObject" : "deckDuplicateObject",
           frameId: deckActiveFrame.frameId,
-          kind: node.kind,
-          span: patch.selectSpan
-        };
-      } else {
+          objectId: node.id
+        }
+      });
+      if (mode === "delete") {
         selectDeckObject(null);
       }
     },
-    [deckActiveFrame, deckObjectIndex, dispatch, selectDeckObject, snapshot.source, source, sourceRevision]
+    [deckActiveFrame, deckObjectIndex, dispatch, selectDeckObject, snapshot.source, source]
   );
 
   useEffect(() => {

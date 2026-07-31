@@ -9,6 +9,8 @@ import type { EditHandle } from "../packages/core/src/semantic/types.js";
 import { identityMatrix } from "../packages/core/src/semantic/transform.js";
 import { computeSourceFingerprint } from "../packages/core/src/utils/source-fingerprint.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
+import { prepareBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { buildBeamerObjectIndex } from "../packages/core/src/beamer/object-index.js";
 import { wp } from "./coords-helpers.js";
 
 // Helper to dispatch a sequence of actions
@@ -1570,5 +1572,135 @@ describe("editorReducer – assistant integration", () => {
     });
     expect(updated.lastEditWarningMessage).toBeNull();
     expect(updated.lastEditWarningToken).toBe(4);
+  });
+});
+
+// ── APPLY_EDIT_ACTION (deck) ──────────────────────────────────────────────────
+
+describe("editorReducer – deck edit actions", () => {
+  const DECK_SOURCE = [
+    "\\documentclass{beamer}",
+    "\\begin{document}",
+    "\\begin{frame}{Objects}",
+    "\\begin{block}{Facts}",
+    "Body prose.",
+    "\\end{block}",
+    "\\end{frame}",
+    "\\end{document}"
+  ].join("\n");
+
+  async function makeDeckState(): Promise<{
+    state: EditorState;
+    frameId: string;
+    blockId: string;
+  }> {
+    const page = await prepareBeamerDocument(DECK_SOURCE).renderFrame({
+      frameIndex: 0,
+      step: 1
+    });
+    const layout = page.layout;
+    const index = buildBeamerObjectIndex({
+      items: layout.items,
+      paragraphs: layout.paragraphs,
+      source: DECK_SOURCE
+    });
+    const block = index.nodes.find((node) => node.kind === "block");
+    expect(block).toBeDefined();
+    const activeFrame = {
+      frameId: layout.frameId,
+      frameIndex: 0,
+      step: 1,
+      stepCount: layout.stepCount,
+      svg: "",
+      svgModel: null,
+      viewBox: null,
+      layout
+    } as unknown as NonNullable<NonNullable<EditorState["snapshot"]["deck"]>["activeFrame"]>;
+    const initial = makeInitialState();
+    const state: EditorState = {
+      ...initial,
+      source: DECK_SOURCE,
+      snapshot: {
+        ...makeEmptySnapshot(DECK_SOURCE),
+        source: DECK_SOURCE,
+        deck: { frames: [], activeFrame, diagnostics: [] }
+      },
+      deckObjectSelection: {
+        documentId: initial.activeDocumentId,
+        frameId: layout.frameId,
+        objectId: block!.id
+      }
+    };
+    return { state, frameId: layout.frameId, blockId: block!.id };
+  }
+
+  it("applies a deck delete with history and clears the object selection", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deckDeleteObject", frameId, objectId: blockId }
+    });
+    expect(edited.source).not.toContain("Facts");
+    expect(edited.history).toHaveLength(1);
+    expect(edited.history[0]?.kind).toBe("delete");
+    expect(edited.deckObjectSelection).toBeNull();
+    // Non-null changed ids make the compute pipeline reconcile immediately
+    // (skipping the typing debounce) — deck edits are structural edits.
+    expect(edited.lastEditChangedSourceIds).toEqual([]);
+
+    const undone = editorReducer(edited, { type: "UNDO" });
+    expect(undone.source).toBe(DECK_SOURCE);
+  });
+
+  it("applies deck property edits through the shared bookkeeping", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: {
+        kind: "deckRenameEnvironment",
+        frameId,
+        objectId: blockId,
+        name: "exampleblock"
+      }
+    });
+    expect(edited.source).toContain("\\begin{exampleblock}{Facts}");
+    expect(edited.history[0]?.kind).toBe("set-property");
+    expect(edited.deckObjectSelection).not.toBeNull();
+  });
+
+  it("refuses deck actions while the snapshot lags the source", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const stale: EditorState = { ...state, source: `${DECK_SOURCE}\n% trailing edit` };
+    const edited = editorReducer(stale, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deckDeleteObject", frameId, objectId: blockId }
+    });
+    expect(edited.source).toBe(stale.source);
+    expect(edited.lastEditWarningMessage).toContain("still catching up");
+  });
+
+  it("still warns for tikz edit actions on deck documents", async () => {
+    const { state } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deleteElement", elementId: "elem-1" }
+    });
+    expect(edited.source).toBe(DECK_SOURCE);
+    expect(edited.lastEditWarningMessage).toContain("Slide editing");
+  });
+
+  it("surfaces unsupported deck edits as warnings", async () => {
+    const { state, frameId, blockId } = await makeDeckState();
+    const edited = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: {
+        kind: "deckRenameEnvironment",
+        frameId,
+        objectId: blockId,
+        name: "columns"
+      }
+    });
+    expect(edited.source).toBe(DECK_SOURCE);
+    expect(edited.lastEditWarningMessage).toContain("Edit action skipped");
   });
 });

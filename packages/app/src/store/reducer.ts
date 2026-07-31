@@ -1,5 +1,6 @@
 import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
+import { applyDeckEditAction, isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
   DocumentSession,
   EditorAction,
@@ -744,12 +745,16 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (activeDoc.assistantLockReason) {
         return state;
       }
-      if (documentKindForSource(activeDoc.source) === "beamer") {
-        // Deck mode is read-only on the canvas until Beamer editing lands;
-        // tikz edit actions would corrupt the deck source.
+      const isDeckDocument = documentKindForSource(activeDoc.source) === "beamer";
+      if (isDeckDocument && !isDeckEditAction(action.action)) {
+        // Tikz edit actions would corrupt the deck source; decks accept only
+        // the deck action family.
         workspace = updateDocument(workspace, documentId, (doc) =>
           applyEditWarningToDocument(doc, "Slide editing is not available yet — edit the source panel instead."));
         break;
+      }
+      if (!isDeckDocument && isDeckEditAction(action.action)) {
+        return state;
       }
       let result: EditActionResult;
       if (
@@ -757,6 +762,16 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         (action.precomputedSource == null || action.precomputedSource === activeDoc.source)
       ) {
         result = action.precomputedResult;
+      } else if (isDeckEditAction(action.action)) {
+        // Deck targets resolve against the rendered frame layout — the deck
+        // analog of the stale-handle guard: refuse while the snapshot lags.
+        const deckFrame = activeDoc.snapshot.deck?.activeFrame;
+        if (!deckFrame || activeDoc.snapshot.source !== activeDoc.source) {
+          workspace = updateDocument(workspace, documentId, (doc) =>
+            applyEditWarningToDocument(doc, "Edit action skipped: the slide layout is still catching up."));
+          break;
+        }
+        result = applyDeckEditAction(activeDoc.source, deckFrame.layout, action.action);
       } else {
         const parseOptions = buildEditParseOptions({
           documentId,
@@ -800,7 +815,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const incrementalChangedSourceIds =
         action.action.kind === "movePathAttachedNode"
           ? null
-          : (result.changedSourceIds ?? null);
+          : isDeckEditAction(action.action)
+            // Deck edits reconcile immediately (like session text edits):
+            // an empty list skips the typing debounce without claiming an
+            // incremental hint.
+            ? (result.changedSourceIds ?? [])
+            : (result.changedSourceIds ?? null);
       const incrementalPatches = result.patches;
 
       if (result.newSource === activeDoc.source) {
@@ -809,6 +829,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           break;
         }
         return state;
+      }
+
+      if (
+        action.action.kind === "deckDeleteObject" &&
+        ui.deckObjectSelection?.objectId === action.action.objectId &&
+        ui.deckObjectSelection.documentId === documentId
+      ) {
+        ui = { ...ui, deckObjectSelection: null };
       }
 
       if (action.canvasTextEditMask) {
@@ -858,6 +886,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
 
       const historyKind: HistoryEntry["kind"] =
+        action.action.kind === "deckDeleteObject" ? "delete" :
+        action.action.kind === "deckDuplicateObject" ? "add-element" :
+        isDeckEditAction(action.action) ? "set-property" :
         action.action.kind === "moveElement" || action.action.kind === "moveElements" ? "move" :
         action.action.kind === "moveHandle" || action.action.kind === "connectHandle" || action.action.kind === "moveAdornment" ? "move-handle" :
         action.action.kind === "splitPath" || action.action.kind === "joinPaths" || action.action.kind === "toggleClosedPath" ||

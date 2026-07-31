@@ -20,6 +20,7 @@ import {
 } from "../packages/app/src/ui/editor-commands.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
+import { isDeckEditAction } from "../packages/core/src/beamer/index.js";
 import {
   SVG_CLIPBOARD_MIME,
   PLAIN_TEXT_CLIPBOARD_MIME,
@@ -887,6 +888,9 @@ describe("editor-commands", () => {
 
     let updated = source;
     for (const action of actions) {
+      if (isDeckEditAction(action.action)) {
+        throw new Error("Expected a tikz edit action");
+      }
       const result = applyEditAction(updated, rendered.semantic.editHandles, action.action);
       expect(result.kind).toBe("success");
       if (result.kind !== "success") {
