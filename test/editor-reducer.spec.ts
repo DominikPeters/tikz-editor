@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState, DEFAULT_SOURCE } from "../packages/app/src/store/reducer.js";
 import type { EditorAction, EditorState, HistoryEntry } from "../packages/app/src/store/types.js";
 import type { TikzFigureInventoryItem } from "../packages/core/src/ast/types.js";
-import { makeEmptySnapshot } from "../packages/app/src/compute.js";
+import { computeSnapshot, makeEmptySnapshot } from "../packages/app/src/compute.js";
 import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "../packages/core/src/edit/actions.js";
 import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import type { EditHandle } from "../packages/core/src/semantic/types.js";
@@ -1702,5 +1702,83 @@ describe("editorReducer – deck edit actions", () => {
     });
     expect(edited.source).toBe(DECK_SOURCE);
     expect(edited.lastEditWarningMessage).toContain("Edit action skipped");
+  });
+});
+
+// ── APPLY_EDIT_ACTION: nested figure mode ─────────────────────────────────────
+
+describe("editorReducer – nested figure edit actions", () => {
+  const NESTED_SOURCE = [
+    "\\documentclass{beamer}",
+    "\\begin{document}",
+    "\\begin{frame}{Nested demo}",
+    "Intro line before the picture.",
+    "\\begin{tikzpicture}",
+    "\\node[draw, fill=blue!20] (a) at (0,0) {Alpha};",
+    "\\node[draw] (b) at (3,1) {Beta};",
+    "\\draw[->] (a) -- (b);",
+    "\\end{tikzpicture}",
+    "Text after the picture.",
+    "\\end{frame}",
+    "\\end{document}",
+  ].join("\n");
+
+  async function makeNestedState(): Promise<EditorState> {
+    const response = await computeSnapshot({
+      id: "nested-reducer",
+      documentId: "doc-nested-reducer",
+      source: NESTED_SOURCE,
+      activeRootId: "frame:0:tikzpicture:0"
+    });
+    expect(response.snapshot.deck).toBeNull();
+    return {
+      ...makeInitialState(),
+      source: NESTED_SOURCE,
+      activeRootId: "frame:0:tikzpicture:0",
+      snapshot: response.snapshot
+    };
+  }
+
+  it("applies a tikz action against the masked snapshot and patches the real source", async () => {
+    const state = await makeNestedState();
+    const handle = state.snapshot.editHandles.find(
+      (candidate) =>
+        NESTED_SOURCE.slice(
+          candidate.sourceRef.sourceSpan.from,
+          candidate.sourceRef.sourceSpan.to
+        ) === "(0,0)"
+    );
+    expect(handle).toBeDefined();
+    const next = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "moveHandle", handleId: handle!.id, newWorld: wp(cm(2), cm(1)) }
+    });
+    // The patch replays onto the UNMASKED document: the coordinate moved
+    // and the surrounding beamer source is untouched.
+    expect(next.source).toContain("(a) at (2,1)");
+    expect(next.source).toContain("\\documentclass{beamer}");
+    expect(next.source).toContain("Intro line before the picture.");
+    expect(next.history).toHaveLength(1);
+    expect(next.history[0]?.sourceBefore).toBe(NESTED_SOURCE);
+  });
+
+  it("silently rejects deck actions while the nested root is active", async () => {
+    const state = await makeNestedState();
+    const next = editorReducer(state, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "deckDeleteObject", frameId: "frame:0", objectId: "anything" }
+    });
+    expect(next).toBe(state);
+  });
+
+  it("refuses tikz actions while the nested snapshot lags the source", async () => {
+    const state = await makeNestedState();
+    const stale: EditorState = { ...state, source: `${state.source}\n% trailing edit` };
+    const next = editorReducer(stale, {
+      type: "APPLY_EDIT_ACTION",
+      action: { kind: "moveHandle", handleId: "whatever", newWorld: wp(cm(1), cm(1)) }
+    });
+    expect(next.source).toBe(stale.source);
+    expect(next.lastEditWarningMessage).toContain("catching up");
   });
 });

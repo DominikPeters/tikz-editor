@@ -13,6 +13,8 @@ import type { AssistantItem } from "../platform/types";
 import { buildEditParseOptions } from "../edit-parse-options";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
 import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
+import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import {
   createDocumentSession,
   createInitialWorkspaceState,
@@ -534,12 +536,27 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         if (!isCurrentPendingRequest && !canApplyIntermediateDragSnapshot) {
           return doc;
         }
-        const rootSelection = reconcileActiveRootSelection({
-          activeRootId: doc.activeRootId,
-          hasInitializedRootSelection: doc.hasInitializedRootSelection,
-          previousRootCount: snapshotRoots(doc.snapshot).length,
-          roots: snapshotRoots(action.snapshot)
-        });
+        // A nested-figure snapshot (beamer document, tikz-shaped result)
+        // publishes the parsed picture as its only root; the store's
+        // nested root id is deliberately absent from that inventory, so
+        // reconciliation must not drop it. When the picture disappears,
+        // compute falls back to a deck snapshot and reconciliation then
+        // recovers to a frame root as usual.
+        const keepsNestedFigureRoot =
+          action.snapshot.deck == null &&
+          parseDocumentRootId(doc.activeRootId ?? "")?.kind === "beamer-frame-tikz" &&
+          documentKindForSource(action.snapshot.source) === "beamer";
+        const rootSelection = keepsNestedFigureRoot
+          ? {
+              activeRootId: doc.activeRootId,
+              hasInitializedRootSelection: doc.hasInitializedRootSelection
+            }
+          : reconcileActiveRootSelection({
+              activeRootId: doc.activeRootId,
+              hasInitializedRootSelection: doc.hasInitializedRootSelection,
+              previousRootCount: snapshotRoots(doc.snapshot).length,
+              roots: snapshotRoots(action.snapshot)
+            });
         return {
           ...doc,
           snapshot: action.snapshot,
@@ -745,15 +762,22 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (activeDoc.assistantLockReason) {
         return state;
       }
-      const isDeckDocument = documentKindForSource(activeDoc.source) === "beamer";
-      if (isDeckDocument && !isDeckEditAction(action.action)) {
+      const isBeamerDocument = documentKindForSource(activeDoc.source) === "beamer";
+      // Mode is a function of (document kind, active root): a beamer
+      // document with a nested tikzpicture root active behaves as a tikz
+      // editor over the masked snapshot, not as a deck.
+      const nestedTikzRootActive =
+        isBeamerDocument &&
+        parseDocumentRootId(activeDoc.activeRootId ?? "")?.kind === "beamer-frame-tikz";
+      const isDeckMode = isBeamerDocument && !nestedTikzRootActive;
+      if (isDeckMode && !isDeckEditAction(action.action)) {
         // Tikz edit actions would corrupt the deck source; decks accept only
         // the deck action family.
         workspace = updateDocument(workspace, documentId, (doc) =>
           applyEditWarningToDocument(doc, "Slide editing is not available yet — edit the source panel instead."));
         break;
       }
-      if (!isDeckDocument && isDeckEditAction(action.action)) {
+      if (!isDeckMode && isDeckEditAction(action.action)) {
         return state;
       }
       let result: EditActionResult;
@@ -772,6 +796,50 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           break;
         }
         result = applyDeckEditAction(activeDoc.source, deckFrame.layout, action.action);
+      } else if (nestedTikzRootActive) {
+        // Nested figure editing: the snapshot was computed from the masked
+        // document, so the action must be applied against the same masked
+        // text — statement ids and spans then match the edit handles
+        // exactly. The resulting patches carry absolute spans; replaying
+        // them onto the unmasked document yields the real next source.
+        const snapshot = activeDoc.snapshot;
+        const figure =
+          snapshot.figures.find((candidate) => candidate.id === snapshot.activeRootId) ??
+          (snapshot.figures.length > 0 ? snapshot.figures[0] : null);
+        if (figure == null || snapshot.source !== activeDoc.source) {
+          workspace = updateDocument(workspace, documentId, (doc) =>
+            applyEditWarningToDocument(doc, "Edit action skipped: the figure is still catching up."));
+          break;
+        }
+        const maskedSource = maskSourceOutsideSpan(activeDoc.source, figure.span);
+        const parseOptions = buildEditParseOptions({
+          documentId,
+          sourceRevision: activeDoc.sourceRevision,
+          source: maskedSource,
+          activeRootId: snapshot.activeRootId,
+          snapshot,
+          analysis: "none",
+          overrides: {
+            indentSize: action.parseOptions?.indentSize,
+            propertyWriteMode:
+              action.parseOptions?.propertyWriteMode ??
+              (action.recordInHistory === false ? "preview" : "commit")
+          }
+        });
+        const { sourceFingerprint } = parseOptions;
+        result = applyEditAction(maskedSource, snapshot.editHandles, action.action, {
+          evaluateOptions: { sourceFingerprint },
+          parseOptions
+        });
+        if (result.kind === "success" || result.kind === "partial") {
+          const replayed = applySourcePatches(activeDoc.source, result.patches);
+          if (replayed.kind !== "success") {
+            workspace = updateDocument(workspace, documentId, (doc) =>
+              applyEditWarningToDocument(doc, "Edit action skipped: the figure edit did not apply cleanly."));
+            break;
+          }
+          result = { ...result, newSource: replayed.source };
+        }
       } else {
         const parseOptions = buildEditParseOptions({
           documentId,
