@@ -313,7 +313,25 @@ the nested-TikZ compute-mode branch for the breadcrumb, and deck edit
 actions beyond delete/duplicate — split into Stages 3b/3c under Staging
 below.
 
-## Nested TikZ figure editing (settled 2026-07-31, not yet implemented)
+## Nested TikZ figure editing (settled 2026-07-31, implemented 2026-08-01)
+
+**Implementation status (2026-08-01): v1 shipped.** The third compute
+branch, mode-aware reducer gating (masked apply + patch replay onto the
+unmasked document), entry (double-click or Enter on the selected
+picture; Chromium reports `detail: 0` on pointerdown, so double clicks
+are hand-tracked), the breadcrumb bar with Esc-ladder exit, and the
+inspector/chrome swap are all live; drags and canvas edits run through
+the panel's masked precompute. Per-root viewport persistence supplies
+fit-on-entry/restore-on-exit for free. Implementation notes that
+sharpened the design: the body parser's picture roots carry span-local
+ids, so the frame layout REBINDS each published `tikzpicture` item to
+the scan child containing its begin token (`rootId` on
+`BeamerFrameLayoutItem`); and `reconcileActiveRootSelection` must keep
+the nested root even though the tikz-shaped snapshot's inventory only
+lists the parsed figure. Known v1 limits (below, unchanged): masked
+preamble (undefined styles/colors surface as diagnostics), default text
+family instead of the theme's, full-render drags (no incremental
+session), navigator entry for invisible pictures not yet wired.
 
 Entering an embedded `tikzpicture` turns the canvas into the *real* TikZ
 editor on that picture — scene, edit handles, drag, snapping, the TikZ
