@@ -527,13 +527,15 @@ const DRAWING_ONLY_SOURCE = String.raw`\documentclass{beamer}
 \end{frame}
 \end{document}`;
 
-test("selects the drawing object and drills into its atom span with Enter", async ({ page }) => {
+test("selects the drawing object; Enter opens the nested figure editor", async ({ page }) => {
   await setSource(page, DRAWING_ONLY_SOURCE);
 
-  // Since the object layer, clicking a non-text render selects the object;
-  // Enter reopens the scope session with the atom's span selected. Anchor on
-  // the tikz-specific key: the beforeEach source publishes its own object
-  // regions, and a generic locator can race the re-render.
+  // Since the object layer, clicking a non-text render selects the object.
+  // Enter on a tikzpicture enters the nested figure editor (the Stage 3a
+  // atom-span session remains only for pictures without a root id and for
+  // graphics). Anchor on the tikz-specific key: the beforeEach source
+  // publishes its own object regions, and a generic locator can race the
+  // re-render.
   const objectRegion = page.locator(
     '[data-hit-region-deck-object-id][data-hit-region-key*="tikz"]'
   );
@@ -546,17 +548,11 @@ test("selects the drawing object and drills into its atom span with Enter", asyn
   await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
 
   await page.keyboard.press("Enter");
-  const textarea = page.getByTestId("canvas-text-edit-textarea");
-  await expect(textarea).toHaveCount(1);
+  await expect(page.getByTestId("nested-figure-breadcrumb")).toBeVisible();
   await expect(outline).toHaveCount(0);
-  const buffer = await textarea.inputValue();
-  expect(buffer).toContain(String.raw`\begin{tikzpicture}`);
-  const selection = await textarea.evaluate((element) => {
-    const input = element as HTMLTextAreaElement;
-    return input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0);
-  });
-  expect(selection).toContain(String.raw`\begin{tikzpicture}`);
-  expect(selection).toContain(String.raw`\end{tikzpicture}`);
+  await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveCount(0);
+  await page.getByTestId("nested-figure-breadcrumb-exit").click();
+  await expect(page.getByTestId("nested-figure-breadcrumb")).toHaveCount(0);
 });
 
 const OBJECT_LAYER_SOURCE = String.raw`\documentclass{beamer}
@@ -747,4 +743,79 @@ test("format toolbar: wrap toggles, shortcut, color menu, and list buttons", asy
   await bullets.click();
   await expect.poll(() => readStoreSource(page)).toContain(String.raw`\item List typo`);
   await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{itemize}`);
+});
+
+test("nested figure editing: enter, edit the picture, and exit back to the deck", async ({ page }) => {
+  const NESTED_SOURCE = [
+    "\\documentclass{beamer}",
+    "\\begin{document}",
+    "\\begin{frame}{Nested demo}",
+    "Intro line before the picture.",
+    "\\begin{tikzpicture}",
+    "\\node[draw, fill=blue!20] (a) at (0,0) {Alpha};",
+    "\\node[draw] (b) at (3,1) {Beta};",
+    "\\draw[->] (a) -- (b);",
+    "\\end{tikzpicture}",
+    "Text after the picture.",
+    "\\end{frame}",
+    "\\end{document}",
+  ].join("\n");
+  await setSource(page, NESTED_SOURCE);
+
+  const activeRootId = () =>
+    page.evaluate(() =>
+      (window as unknown as {
+        __TIKZ_EDITOR_APP_TEST_API__: { getActiveFigureId: () => string | null };
+      }).__TIKZ_EDITOR_APP_TEST_API__.getActiveFigureId()
+    );
+
+  // Enter by double-clicking the embedded picture's object region.
+  const pictureRegion = page.locator(
+    '[data-hit-region-key^="deck-object:"][data-hit-region-deck-object-id*="tikz"]'
+  );
+  await expect.poll(async () => pictureRegion.count(), { timeout: 30_000 }).toBeGreaterThan(0);
+  const box = (await pictureRegion.first().boundingBox())!;
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.getByTestId("nested-figure-breadcrumb")).toBeVisible();
+  await expect.poll(activeRootId).toBe("frame:0:tikzpicture:0");
+  // Deck chrome is gone while nested.
+  await expect(page.getByTestId("deck-step-scrubber")).toHaveCount(0);
+
+  // Drag the Alpha node by its element hit region (the node's center is
+  // its text region, so press near the border), and the REAL source
+  // updates through the masked apply + patch replay.
+  const alphaRegion = page
+    .locator('[data-hit-region-target-id="path:0"]:not([data-hit-region-interaction-mode="text"])')
+    .first();
+  await expect.poll(async () => alphaRegion.count()).toBeGreaterThan(0);
+  const alphaBox = (await alphaRegion.boundingBox())!;
+  const startX = alphaBox.x + 3;
+  const startY = alphaBox.y + alphaBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 80, startY + 40, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => readStoreSource(page)).not.toContain("(a) at (0,0)");
+  await expect.poll(() => readStoreSource(page)).toContain("\\documentclass{beamer}");
+  await expect.poll(() => readStoreSource(page)).toContain("Text after the picture.");
+
+  // Breadcrumb exits back to the slide; deck chrome returns.
+  await page.getByTestId("nested-figure-breadcrumb-exit").click();
+  await expect(page.getByTestId("nested-figure-breadcrumb")).toHaveCount(0);
+  await expect.poll(activeRootId).toBe("frame:0");
+
+  // Re-enter with Enter on the selected picture, then the Esc ladder
+  // (clear selection, then exit) walks back out.
+  await expect.poll(async () => pictureRegion.count(), { timeout: 30_000 }).toBeGreaterThan(0);
+  const box2 = (await pictureRegion.first().boundingBox())!;
+  await page.mouse.click(box2.x + box2.width / 2, box2.y + box2.height / 2);
+  await expect(
+    page.locator('[data-testid="deck-object-selection"] rect')
+  ).toHaveAttribute("data-deck-object-kind", "tikzpicture");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("nested-figure-breadcrumb")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("nested-figure-breadcrumb")).toHaveCount(0);
+  await expect.poll(activeRootId).toBe("frame:0");
 });

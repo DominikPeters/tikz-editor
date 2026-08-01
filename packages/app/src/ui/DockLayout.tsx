@@ -2,6 +2,7 @@ import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Layout, Model, Actions, DockLocation, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
 import type { EditorAction } from "../store/types";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { getActiveEditorPlatform } from "../platform/current";
 import { loadDockLayout, saveDockLayout } from "../store/workspace-storage";
 import { SourcePanel } from "./source-panel/SourcePanel";
@@ -390,10 +391,19 @@ const MemoFigureNavigator = memo(FigureNavigator);
 const MemoInspectorPanel = memo(InspectorPanel);
 const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
 
-/** Deck documents get the deck object/frame inspector, tikz the full one. */
+/**
+ * Deck mode gets the deck object/frame inspector, tikz the full one.
+ * Mode is a function of (document kind, active root): a beamer document
+ * editing a nested tikzpicture root behaves as a tikz editor.
+ */
 function InspectorPanelSwitch() {
   const documentKind = useEditorStore((s) => s.documentKind);
-  return documentKind === "beamer" ? <MemoDeckInspectorPanel /> : <MemoInspectorPanel />;
+  const nestedFigureActive = useEditorStore(
+    (s) => parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz"
+  );
+  return documentKind === "beamer" && !nestedFigureActive
+    ? <MemoDeckInspectorPanel />
+    : <MemoInspectorPanel />;
 }
 const MemoObjectsPanel = memo(ObjectsPanel);
 const MemoStylesPanel = memo(StylesPanel);

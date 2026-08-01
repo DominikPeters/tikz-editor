@@ -64,6 +64,8 @@ export type UseCanvasElementInteractionsArgs = {
   onNodePositionTargetPick?: (targetId: string) => boolean;
   /** Deck object-layer selection for regions carrying a `deckObjectId`. */
   onDeckObjectSelect?: (objectId: string) => void;
+  /** Double-click on a deck object region (nested figure entry). */
+  onDeckObjectActivate?: (objectId: string) => void;
 };
 
 function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGElement> | ReactMouseEvent<SVGElement>, "clientX" | "clientY">): ClientPoint {
@@ -104,9 +106,11 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     activeRootId,
     parseOptions,
     onNodePositionTargetPick,
-    onDeckObjectSelect
+    onDeckObjectSelect,
+    onDeckObjectActivate
   } = args;
 
+  const lastDeckObjectPressRef = useRef<{ objectId: string; at: number } | null>(null);
   const pendingScopeDrillRef = useRef<{
     pointerId: number;
     startClient: ClientPoint;
@@ -418,6 +422,22 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         suppressNextBackgroundClickRef.current = true;
         viewportRef.current?.focus({ preventScroll: true });
         closeTextEditingSession();
+        // Chromium reports `detail: 0` on pointerdown, so double clicks are
+        // detected by hand: a second press on the same object within the
+        // double-click window activates it (nested figure entry for
+        // embedded tikzpictures) instead of re-selecting.
+        const now = performance.now();
+        const previousPress = lastDeckObjectPressRef.current;
+        lastDeckObjectPressRef.current = { objectId: region.deckObjectId, at: now };
+        if (
+          onDeckObjectActivate &&
+          previousPress?.objectId === region.deckObjectId &&
+          now - previousPress.at < 500
+        ) {
+          lastDeckObjectPressRef.current = null;
+          onDeckObjectActivate(region.deckObjectId);
+          return;
+        }
         onDeckObjectSelect(region.deckObjectId);
         return;
       }
@@ -580,6 +600,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       onBucketFillRegion,
       onNodePositionTargetPick,
       onDeckObjectSelect,
+      onDeckObjectActivate,
       expandedDensePathSourceId,
       resolveEditableTextTarget,
       selectedElementIds,

@@ -184,6 +184,12 @@ type CanvasPanelViewProps = {
     stepCount: number;
     onStepChange: (step: number) => void;
   } | null;
+  /** "Slide N ▸ Figure M" bar while a nested figure is being edited. */
+  nestedFigureBreadcrumb: {
+    slideLabel: string;
+    figureLabel: string;
+    onExit: () => void;
+  } | null;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
 };
@@ -292,6 +298,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     canvasTextEdit,
     selectionHint,
     deckStepper,
+    nestedFigureBreadcrumb,
     RULER_SIZE,
     magnifierState
   } = props;
@@ -1001,6 +1008,27 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
           {selectionHint && !warning ? (
             <div className={css.selectionHint} data-testid="canvas-selection-hint" data-select="text">
               {selectionHint}
+            </div>
+          ) : null}
+          {nestedFigureBreadcrumb ? (
+            <div
+              className={css.nestedFigureBreadcrumb}
+              data-testid="nested-figure-breadcrumb"
+              data-select="chrome"
+            >
+              <button
+                type="button"
+                className={css.nestedFigureBreadcrumbLink}
+                onClick={nestedFigureBreadcrumb.onExit}
+                aria-label={`Back to ${nestedFigureBreadcrumb.slideLabel}`}
+                data-testid="nested-figure-breadcrumb-exit"
+              >
+                {nestedFigureBreadcrumb.slideLabel}
+              </button>
+              <span className={css.nestedFigureBreadcrumbSeparator} aria-hidden="true">▸</span>
+              <span className={css.nestedFigureBreadcrumbCurrent}>
+                {nestedFigureBreadcrumb.figureLabel}
+              </span>
             </div>
           ) : null}
           {deckStepper ? (

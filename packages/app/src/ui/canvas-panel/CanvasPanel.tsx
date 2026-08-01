@@ -61,6 +61,9 @@ import { useEditorStore } from "../../store/store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
 import { resolveBucketFillEdit } from "./bucket-fill";
 import { rootKey } from "../../root-key";
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { CanvasPanelView } from "./CanvasPanelView";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
@@ -410,6 +413,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     assistantLockReason,
     source,
     activeRootId,
+    documentKind,
     activeDocumentId,
     tabOrder,
     sourceRevision,
@@ -451,6 +455,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     assistantLockReason: s.documents[s.activeDocumentId]?.assistantLockReason ?? null,
     source: s.source,
     activeRootId: s.activeRootId,
+    documentKind: s.documentKind,
     activeDocumentId: s.activeDocumentId,
     tabOrder: s.tabOrder,
     sourceRevision: s.sourceRevision,
@@ -675,17 +680,45 @@ export const CanvasPanel = memo(function CanvasPanel({
       unlisten?.();
     };
   }, [platform.accessibility]);
+  /**
+   * Nested figure mode (design doc, "Nested TikZ figure editing"): a
+   * beamer document whose active root addresses an embedded tikzpicture
+   * renders through the plain tikz pipeline over the masked snapshot; the
+   * deck layers above are inert because `snapshot.deck` is null. Entry
+   * and exit just swap the active root — viewport persistence gives the
+   * figure its own auto-fit slot and restores the deck view on return.
+   */
+  const nestedFigureRef = useMemo(() => {
+    const ref = activeRootId ? parseDocumentRootId(activeRootId) : null;
+    return ref?.kind === "beamer-frame-tikz" ? ref : null;
+  }, [activeRootId]);
+  const isNestedFigureMode =
+    nestedFigureRef != null && documentKind === "beamer" && snapshot.deck == null;
+  /** The parsed picture's span while nested — the maskable region. */
+  const nestedFigureSpan = useMemo(() => {
+    if (!isNestedFigureMode) {
+      return null;
+    }
+    const figure =
+      snapshot.figures.find((candidate) => candidate.id === snapshot.activeRootId) ??
+      (snapshot.figures.length > 0 ? snapshot.figures[0] : null);
+    return figure?.span ?? null;
+  }, [isNestedFigureMode, snapshot]);
+
   const editParseOptions = useMemo(
     () =>
       buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
-        source,
-        activeRootId,
+        // Nested figure edits parse the masked document (statement ids and
+        // spans then match the snapshot's edit handles exactly) under the
+        // snapshot's own tikz root id.
+        source: nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
+        activeRootId: nestedFigureSpan ? snapshot.activeRootId : activeRootId,
         snapshot,
         analysis: "shared"
       }),
-    [activeDocumentId, activeRootId, snapshot, source, sourceRevision]
+    [activeDocumentId, activeRootId, nestedFigureSpan, snapshot, source, sourceRevision]
   );
 
   const canvasCommandStateRef = useRef<{
@@ -1473,6 +1506,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     [deckActiveFrame, dispatch]
   );
 
+
   /**
    * Esc ladder rung 1 (session → object): select the innermost object
    * containing the caret when the session closes on Escape, and move
@@ -1698,10 +1732,32 @@ export const CanvasPanel = memo(function CanvasPanel({
             snapshot,
             analysis: "none"
           }).sourceFingerprint;
-      const result = applyEditAction(sourceForEdit, snapshot.editHandles, action, {
+      // Nested figure mode applies against the masked document; the drag
+      // preview's evolving override source only changes inside the picture,
+      // so the span end shifts by exactly the length delta.
+      const maskedForEdit = nestedFigureSpan
+        ? maskSourceOutsideSpan(sourceForEdit, {
+            from: nestedFigureSpan.from,
+            to: nestedFigureSpan.to + (sourceForEdit.length - source.length)
+          })
+        : sourceForEdit;
+      let result = applyEditAction(maskedForEdit, snapshot.editHandles, action, {
         evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
+      if (
+        nestedFigureSpan &&
+        (result.kind === "success" || result.kind === "partial")
+      ) {
+        // Patches carry absolute spans; replaying them onto the unmasked
+        // document yields the real next source.
+        const replayed = applySourcePatches(sourceForEdit, result.patches);
+        if (replayed.kind !== "success") {
+          setWarning("Edit action skipped: the figure edit did not apply cleanly.");
+          return { sourceChanged: false };
+        }
+        result = { ...result, newSource: replayed.source };
+      }
 
       if (result.kind === "success" || result.kind === "partial") {
         if (result.kind === "partial") {
@@ -1742,7 +1798,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
       return { sourceChanged: false };
     },
-    [activeDocumentId, activeRootId, dispatch, editParseOptions, source, sourceRevision, snapshot]
+    [activeDocumentId, activeRootId, dispatch, editParseOptions, nestedFigureSpan, source, sourceRevision, snapshot]
   );
   useLayoutEffect(() => {
     applyActionWithFeedbackRef.current = applyActionWithFeedback;
@@ -2185,10 +2241,50 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch
   });
 
+  const enterNestedFigure = useCallback(
+    (node: BeamerObjectNode): boolean => {
+      if (node.kind !== "tikzpicture" || !node.rootId) {
+        return false;
+      }
+      closeTextEditingSession();
+      selectDeckObject(null);
+      dispatch({ type: "SET_ACTIVE_ROOT", rootId: node.rootId });
+      return true;
+    },
+    [closeTextEditingSession, dispatch, selectDeckObject]
+  );
+
+  const exitNestedFigure = useCallback(() => {
+    if (!nestedFigureRef) {
+      return;
+    }
+    closeTextEditingSession();
+    dispatch({
+      type: "SET_ACTIVE_ROOT",
+      rootId: formatDocumentRootId({
+        kind: "beamer-frame",
+        index: nestedFigureRef.frameIndex
+      })
+    });
+  }, [closeTextEditingSession, dispatch, nestedFigureRef]);
+
+  const nestedFigureBreadcrumb = useMemo(
+    () =>
+      isNestedFigureMode && nestedFigureRef
+        ? {
+            slideLabel: `Slide ${nestedFigureRef.frameIndex + 1}`,
+            figureLabel: `Figure ${nestedFigureRef.index + 1}`,
+            onExit: exitNestedFigure
+          }
+        : null,
+    [exitNestedFigure, isNestedFigureMode, nestedFigureRef]
+  );
+
   /**
    * Enter/F2 drill-in: reopen a text session inside the selected object —
-   * at its first rendered caret stop, or with the whole atom span selected
-   * for graphics and embedded tikzpictures.
+   * at its first rendered caret stop, with the whole atom span selected
+   * for graphics — while embedded tikzpictures enter the nested figure
+   * editor instead.
    */
   const openDeckObjectTextSession = useCallback(
     (node: BeamerObjectNode) => {
@@ -2326,7 +2422,11 @@ export const CanvasPanel = memo(function CanvasPanel({
       }
       if (event.key === "Enter" || event.key === "F2") {
         event.preventDefault();
-        openDeckObjectTextSession(deckSelectedObject);
+        // Embedded tikzpictures enter the nested figure editor; other
+        // objects (or a picture without a root id) drill into text.
+        if (!enterNestedFigure(deckSelectedObject)) {
+          openDeckObjectTextSession(deckSelectedObject);
+        }
         return true;
       }
       if (
@@ -2351,7 +2451,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       }
       return false;
     },
-    [applyDeckObjectEdit, deckSelectedObject, openDeckObjectTextSession, selectDeckObject]
+    [applyDeckObjectEdit, deckSelectedObject, enterNestedFigure, openDeckObjectTextSession, selectDeckObject]
   );
 
   const deckObjectSelectionBox = useMemo(() => {
@@ -2524,6 +2624,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     viewportRef,
     beginCanvasTextInteraction,
     onDeckObjectSelect: selectDeckObject,
+    onDeckObjectActivate: (objectId: string) => {
+      const node = deckObjectIndex?.byId.get(objectId);
+      if (!node || !enterNestedFigure(node)) {
+        selectDeckObject(objectId);
+      }
+    },
     closeTextEditingSession,
     interactionSvgRef,
     dispatch,
@@ -3260,6 +3366,18 @@ export const CanvasPanel = memo(function CanvasPanel({
           if (handleDeckObjectViewportKey(event)) {
             return;
           }
+          if (
+            event.key === "Escape" &&
+            isNestedFigureMode &&
+            toolMode === "select" &&
+            selectedElementIds.size === 0
+          ) {
+            // Top rung of the nested-figure Esc ladder: with nothing left
+            // to deselect, Esc returns to the owning slide.
+            event.preventDefault();
+            exitNestedFigure();
+            return;
+          }
           if (deckActiveFrame && deckActiveFrame.stepCount > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
             event.preventDefault();
             const delta = event.key === "ArrowRight" ? 1 : -1;
@@ -3382,6 +3500,7 @@ export const CanvasPanel = memo(function CanvasPanel({
               }
             : null
         }
+        nestedFigureBreadcrumb={nestedFigureBreadcrumb}
         RULER_SIZE={RULER_SIZE}
       />
       {equationModalTarget ? (
