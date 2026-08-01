@@ -613,6 +613,21 @@ async function renderBeamerFrameStep(params: {
       message: diagnostic.message,
     })),
   });
+  // The body parser labels picture roots with span-local ids; the document
+  // root ids (`frame:i:tikzpicture:j`, nested figure addressing) come from
+  // the scan model. Rebind each published picture item to the scan child
+  // whose begin token it contains.
+  for (const item of items) {
+    if (item.kind !== "tikzpicture") {
+      continue;
+    }
+    const child = frame.children.find(
+      (candidate) =>
+        item.sourceSpan.from <= candidate.beginSpan.from &&
+        candidate.beginSpan.to <= item.sourceSpan.to
+    );
+    item.rootId = child?.id;
+  }
   const layout: BeamerFrameLayout = {
     coordinateSystem: {
       unit: "tex-pt",

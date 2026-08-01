@@ -39,6 +39,8 @@ export function emitEmbeddedTikz(params: {
   params.items.push({
     id: tikz.id,
     kind: "tikzpicture",
+    // The document root id (`frame:i:tikzpicture:j`) is rebound from the
+    // scan model once the frame layout assembles its final item list.
     sourceSpan: tikz.sourceSpan,
     bounds,
     parentId: params.parentId,

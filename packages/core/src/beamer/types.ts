@@ -232,6 +232,8 @@ export type BeamerFrameLayoutItem = {
   /** Hidden overlay material retains geometry but contributes no paint. */
   visibility?: "visible" | "hidden";
   paragraphId?: string;
+  /** Document root id for embedded tikzpictures (`frame:i:tikzpicture:j`). */
+  rootId?: string;
   childIds?: string[];
   message?: string;
   /** The marker is already represented by a glyph in its paragraph VList. */

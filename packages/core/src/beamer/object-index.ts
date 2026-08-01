@@ -47,6 +47,8 @@ export type BeamerObjectNode = {
   readonly list?: BeamerListTopology;
   /** Engine topology behind an `"item"` node. */
   readonly listItem?: BeamerObjectListItemContext;
+  /** Document root id for embedded tikzpictures (nested figure entry). */
+  readonly rootId?: string;
 };
 
 export type BeamerObjectIndex = {
@@ -120,6 +122,7 @@ export function buildBeamerObjectIndex(args: {
       bounds: item.bounds,
       parentId: null,
       childIds: [],
+      ...(item.rootId !== undefined ? { rootId: item.rootId } : {}),
     });
   }
 
