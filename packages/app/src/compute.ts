@@ -22,12 +22,16 @@ import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
 import { detectDocumentKind } from "@tikz-editor/core/document/kind";
-import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { parseDocumentRootId, type DocumentRootRef } from "@tikz-editor/core/document/root-id";
 import {
+  createBeamerTexMathFontProfile,
   prepareBeamerDocument,
+  resolveBeamerTheme,
+  scanBeamerDocument,
   type BeamerFrameLayout,
   type PreparedBeamerDocument
 } from "@tikz-editor/core/beamer/index";
+import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { prepareDocumentGraphicsContext } from "./image-asset-cache";
 import { buildSourceRevisionFingerprint } from "./source-identity";
@@ -183,6 +187,23 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
 
   try {
     if (detectDocumentKind(request.source) === "beamer") {
+      const rootRef = request.activeRootId
+        ? parseDocumentRootId(request.activeRootId)
+        : null;
+      if (rootRef?.kind === "beamer-frame-tikz") {
+        const nested = await computeNestedTikzSnapshot(
+          request,
+          revision,
+          requestKind,
+          computeStartedAt,
+          rootRef
+        );
+        if (nested) {
+          return nested;
+        }
+        // The addressed picture no longer exists (edited away): fall back
+        // to the deck so the app can recover to the owning frame.
+      }
       return await computeDeckSnapshot(request, revision, requestKind, computeStartedAt);
     }
     const trigger = request.trigger ?? "other";
@@ -602,6 +623,113 @@ async function computeDeckSnapshot(
       message: diagnostic.message,
       severity: diagnostic.severity
     })) ?? []
+  };
+}
+
+/**
+ * Scan cache for nested-picture renders: one entry, keyed by source. The
+ * nested branch rescans per source revision to track the picture span as
+ * it grows and shrinks under editing; the scan is much cheaper than the
+ * TikZ render that follows it.
+ */
+let nestedScanSession: {
+  source: string;
+  document: ReturnType<typeof scanBeamerDocument>;
+} | null = null;
+
+function maskSourceOutsideSpan(source: string, span: { from: number; to: number }): string {
+  const blank = (text: string): string => text.replace(/[^\n]/gu, " ");
+  return (
+    blank(source.slice(0, span.from)) +
+    source.slice(span.from, span.to) +
+    blank(source.slice(span.to))
+  );
+}
+
+/**
+ * Nested TikZ figure editing (design/beamer-canvas-editing.md, "Nested
+ * TikZ figure editing"): with a `beamer-frame-tikz` root active, run the
+ * plain TikZ pipeline over the full-length source with everything outside
+ * the picture span masked to spaces (newlines preserved). Every span in
+ * the resulting parse/scene/edit-handle data is an absolute offset into
+ * the REAL source, so tikz edit actions, undo, and the source panel work
+ * unmodified. Returns null when the addressed picture does not exist so
+ * the caller can fall back to the deck.
+ *
+ * Known v1 limits (doc, "Preamble context"): preamble definitions are
+ * masked (undefined styles/colors surface as diagnostics), text renders
+ * with the default text family rather than the theme's, and drags take
+ * the full-render path (no incremental session).
+ */
+async function computeNestedTikzSnapshot(
+  request: ComputeRequest,
+  revision: number,
+  requestKind: "render" | "prewarm",
+  computeStartedAt: number,
+  ref: Extract<DocumentRootRef, { kind: "beamer-frame-tikz" }>
+): Promise<ComputeResponse | null> {
+  if (requestKind === "prewarm") {
+    return {
+      id: request.id,
+      documentId: request.documentId,
+      snapshot: makeEmptySnapshot(request.source),
+      diagnostics: []
+    };
+  }
+  if (nestedScanSession?.source !== request.source) {
+    nestedScanSession = {
+      source: request.source,
+      document: scanBeamerDocument(request.source)
+    };
+  }
+  const document = nestedScanSession.document;
+  const picture = document.frames[ref.frameIndex]?.children[ref.index];
+  if (!picture) {
+    return null;
+  }
+  const graphicsContext = await prepareDocumentGraphicsContext({
+    source: request.source,
+    documentFileRef: request.documentFileRef ?? null
+  });
+  const theme = resolveBeamerTheme(document);
+  const textEngine = await createTexNodeTextEngine({
+    mathFontProfile: createBeamerTexMathFontProfile(theme.fonts["normal-text"])
+  });
+  const masked = maskSourceOutsideSpan(request.source, picture.span);
+  const result = await renderTikzToSvgAsync(masked, {
+    parse: { recover: true, includeContextDefinitions: true },
+    evaluate: { graphicsResolver: graphicsContext.resolver },
+    svg: { padding: resolveSvgPadding(masked, null) },
+    textEngine
+  });
+  const snapshot: SessionSnapshot = {
+    source: request.source,
+    revision,
+    figures: result.parse.figures,
+    activeRootId: result.parse.activeFigureId,
+    editHandles: result.semantic.editHandles,
+    scene: result.semantic.scene,
+    svg: result.svg,
+    svgModel: result.svg.model,
+    parseResult: result.parse,
+    semanticResult: result.semantic,
+    graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+    incremental: null,
+    deck: null
+  };
+  recordProfilingComputeTiming({
+    requestId: request.id,
+    kind: requestKind,
+    trigger: request.trigger ?? "other",
+    durationMs: performance.now() - computeStartedAt,
+    changedSourceCount: 0,
+    incremental: false
+  });
+  return {
+    id: request.id,
+    documentId: request.documentId,
+    snapshot,
+    diagnostics: result.renderDiagnostics
   };
 }
 
