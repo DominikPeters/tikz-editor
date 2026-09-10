@@ -1795,7 +1795,6 @@ export const CanvasPanel = memo(function CanvasPanel({
     draggableSourceIds,
     sceneTextByRegionKey,
     sourceBoundsSvg,
-    matrixSelectionSourceIds,
     resizeFramesBySource,
     selectionBoxes,
     selectedAdornmentConnectors,
@@ -3919,7 +3918,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         selectionStrokeWidth={selectionStrokeWidth}
         textSelectionOverlay={textSelectionOverlay}
         selectionDragStrokeWidth={selectionDragStrokeWidth}
-        matrixSelectionSourceIds={matrixSelectionSourceIds}
         curveControlLines={curveControlLines}
         curveControlStrokeWidth={curveControlStrokeWidth}
         nodeAnchorOverlay={pendingNodePositionAnchorOverlay ?? nodeAnchorOverlay}

@@ -1,4 +1,4 @@
-import { Fragment, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Fragment, useId, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import type { EditHandle, NodeAnchorTarget } from "tikz-editor/semantic/types";
 import type { WorldPoint } from "../coords/types";
 import type { ResizeRole } from "tikz-editor/edit/actions";
@@ -1001,43 +1001,53 @@ export function SelectionDragLayer({
   onElementContextMenu: (event: ReactMouseEvent<SVGElement>, sourceId: string, region?: HitRegion) => void;
   onElementDoubleClick: (event: ReactMouseEvent<SVGElement>, sourceId: string, region?: HitRegion) => void;
 }) {
+  const clipIdPrefix = useId();
   if (toolMode !== "select" || selectionBoxes.length === 0) {
     return null;
   }
 
   return (
     <g className={css.selectionDragLayer}>
-      {selectionBoxes.map((bounds) => {
+      {selectionBoxes.map((bounds, index) => {
         if (!draggableSourceIds.has(bounds.sourceId)) {
           return null;
         }
-        if (bounds.kind === "polygon") {
-          return (
-            <polygon
-              key={`${bounds.key}:drag`}
+        const points = bounds.kind === "polygon"
+          ? bounds.points
+          : [
+              { x: bounds.bounds.minX, y: bounds.bounds.minY },
+              { x: bounds.bounds.maxX, y: bounds.bounds.minY },
+              { x: bounds.bounds.maxX, y: bounds.bounds.maxY },
+              { x: bounds.bounds.minX, y: bounds.bounds.maxY }
+            ];
+        const framePath = `${points.map((point, pointIndex) => `${pointIndex === 0 ? "M" : "L"} ${fmt(point.x)} ${fmt(point.y)}`).join(" ")} Z`;
+        const minX = Math.min(...points.map((point) => point.x)) - dragStrokeWidth;
+        const minY = Math.min(...points.map((point) => point.y)) - dragStrokeWidth;
+        const maxX = Math.max(...points.map((point) => point.x)) + dragStrokeWidth;
+        const maxY = Math.max(...points.map((point) => point.y)) + dragStrokeWidth;
+        const outerPath = `M ${fmt(minX)} ${fmt(minY)} H ${fmt(maxX)} V ${fmt(maxY)} H ${fmt(minX)} Z`;
+        const clipId = `${clipIdPrefix}-selection-drag-${index}`;
+
+        return (
+          <g key={`${bounds.key}:drag`}>
+            <defs>
+              <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+                {/* Keep the wide drag target outside the frame so it cannot
+                    cover the editable text, even in a tiny or rotated node. */}
+                <path d={`${outerPath} ${framePath}`} clipRule="evenodd" />
+              </clipPath>
+            </defs>
+            <path
               className={css.selectionDragStroke}
-              points={bounds.points.map((point) => `${fmt(point.x)},${fmt(point.y)}`).join(" ")}
+              d={framePath}
+              clipPath={`url(#${clipId})`}
               strokeWidth={dragStrokeWidth}
               onPointerDown={(event) => { onElementPointerDown(event, bounds.sourceId); }}
               onContextMenu={(event) => { onElementContextMenu(event, bounds.sourceId); }}
               onDoubleClick={(event) => { onElementDoubleClick(event, bounds.sourceId); }}
+              data-selection-drag-source-id={bounds.sourceId}
             />
-          );
-        }
-
-        return (
-          <rect
-            key={`${bounds.key}:drag`}
-            className={css.selectionDragStroke}
-            x={bounds.bounds.minX}
-            y={bounds.bounds.minY}
-            width={Math.max(0.001, bounds.bounds.maxX - bounds.bounds.minX)}
-            height={Math.max(0.001, bounds.bounds.maxY - bounds.bounds.minY)}
-            strokeWidth={dragStrokeWidth}
-            onPointerDown={(event) => { onElementPointerDown(event, bounds.sourceId); }}
-            onContextMenu={(event) => { onElementContextMenu(event, bounds.sourceId); }}
-            onDoubleClick={(event) => { onElementDoubleClick(event, bounds.sourceId); }}
-          />
+          </g>
         );
       })}
     </g>
