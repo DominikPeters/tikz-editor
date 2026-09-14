@@ -1,6 +1,6 @@
 import type { AdornmentOwnerGeometry, Span, Statement } from "tikz-editor/ast/types";
 import type { ComplexPathSegment } from "tikz-editor/edit/element-templates";
-import type { EditAction, ResizeRole } from "tikz-editor/edit/actions";
+import type { ConnectedHandleUpdate, EditAction, ResizeRole } from "tikz-editor/edit/actions";
 import type { EditParseOptions } from "tikz-editor/edit/parse-options";
 import type { SelectionGeometry, SnapContext, SnapLine } from "tikz-editor/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement, SceneText } from "tikz-editor/semantic/types";
@@ -203,6 +203,7 @@ export type DragState =
       gridResizeSnap: GridResizeSnapConfig | null;
       historyMergeKey: string;
       activeEndpointAnchor: NodeAnchorTarget | null;
+      connectedHandle?: ConnectedHandleUpdate;
     }
   | {
       kind: "pan";
@@ -365,6 +366,7 @@ export type SnapDebugLogInput = {
 export type ApplyActionFeedback = {
   sourceChanged: boolean;
   newSource?: string;
+  connectedHandle?: ConnectedHandleUpdate;
 };
 
 export type SelectionBounds = {
