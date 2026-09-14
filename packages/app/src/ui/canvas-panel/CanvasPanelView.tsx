@@ -138,7 +138,6 @@ type CanvasPanelViewProps = {
   selectionStrokeWidth: number;
   textSelectionOverlay: TextSelectionOverlay | null;
   selectionDragStrokeWidth: number;
-  matrixSelectionSourceIds: ReadonlySet<string>;
   curveControlLines: readonly CurveControlLine[];
   curveControlStrokeWidth: number;
   nodeAnchorOverlay: NodeAnchorOverlayState | null;
@@ -269,7 +268,6 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     selectionStrokeWidth,
     textSelectionOverlay,
     selectionDragStrokeWidth,
-    matrixSelectionSourceIds,
     curveControlLines,
     curveControlStrokeWidth,
     nodeAnchorOverlay,
@@ -711,7 +709,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   toolMode={toolMode}
                   selectionBoxes={selectionBoxes}
                   dragStrokeWidth={selectionDragStrokeWidth}
-                  draggableSourceIds={matrixSelectionSourceIds}
+                  draggableSourceIds={draggableSourceIds}
                   onElementPointerDown={onElementPointerDown}
                   onElementContextMenu={onElementContextMenu}
                   onElementDoubleClick={onElementDoubleClick}

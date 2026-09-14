@@ -238,6 +238,26 @@ export function resolveHandleIdForDrag(
   drag: Extract<DragState, { kind: "handle" }>,
   handles: EditHandle[]
 ): string | null {
+  if (drag.connectedHandle) {
+    // Reordering can recycle the previous handle id for a different shape.
+    // Resolve only the coordinate identified by the completed connection edit.
+    const { sourceId, sourceSpan } = drag.connectedHandle;
+    const connected = handles.find((handle) =>
+      handle.kind === drag.handleKind &&
+      handle.sourceRef.sourceId === sourceId &&
+      handle.sourceRef.sourceSpan.from === sourceSpan.from &&
+      handle.sourceRef.sourceSpan.to === sourceSpan.to
+    );
+    if (!connected) {
+      return null;
+    }
+    drag.handleId = connected.id;
+    drag.sourceId = connected.sourceRef.sourceId;
+    drag.lastKnownWorld = { ...connected.world };
+    drag.connectedHandle = undefined;
+    return connected.id;
+  }
+
   const direct = handles.find((handle) => handle.id === drag.handleId);
   if (direct) {
     return direct.id;

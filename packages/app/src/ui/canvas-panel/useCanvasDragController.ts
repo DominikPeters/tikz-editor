@@ -55,7 +55,7 @@ import {
   snapPointDeltaToAxisStepMultiples,
   resolveToolCreateCurrentWorld
 } from "./interaction-helpers";
-import { resolveHandleDragAction, shouldCommitHandleAnchorOnPointerUp } from "./handle-drag-actions";
+import { resolveHandleDragAction, shouldCommitHandleAnchorOnPointerUp, updateHandleDragAfterAction } from "./handle-drag-actions";
 import { resolveEndpointAnchorSnap } from "./endpoint-anchor-snap";
 import { clientToWorldPoint, distanceSquared, worldToSvgPoint } from "./geometry";
 import { PATH_TOOL_BEND_DRAG_THRESHOLD_PX } from "./path-tool";
@@ -917,9 +917,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         }),
         drag.historyMergeKey
       );
-      if (ok.sourceChanged) {
-        drag.lastKnownWorld = nextWorld;
-      }
+      updateHandleDragAfterAction(drag, ok, nextWorld);
     }
 
     function onWorldPointerUp(event: PointerEvent) {

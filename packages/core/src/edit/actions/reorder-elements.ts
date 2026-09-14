@@ -134,8 +134,31 @@ export function buildParentReorderReplacement(
     return null;
   }
 
-  const sortedRefs = [...parentRefs].sort((left, right) => left.index - right.index);
-  const refsById = new Map(sortedRefs.map((ref) => [ref.id, ref] as const));
+  const allRefs = [...parentRefs].sort((left, right) => left.index - right.index);
+  const refsById = new Map(allRefs.map((ref) => [ref.id, ref] as const));
+  const orderedRefs = orderedIds.flatMap((id) => {
+    const ref = refsById.get(id);
+    return ref ? [ref] : [];
+  });
+
+  // Context definitions can precede the picture in this semantic statement list.
+  // Leave unchanged prefixes/suffixes in place so their intervening source (such
+  // as the picture environment and other figures) is never rebuilt.
+  let first = 0;
+  let last = allRefs.length;
+  let orderedLast = orderedRefs.length;
+  while (first < last && first < orderedLast && allRefs[first].id === orderedRefs[first].id) {
+    first += 1;
+  }
+  while (last > first && orderedLast > first && allRefs[last - 1].id === orderedRefs[orderedLast - 1].id) {
+    last -= 1;
+    orderedLast -= 1;
+  }
+  const sortedRefs = allRefs.slice(first, last);
+  const changedOrder = orderedRefs.slice(first, orderedLast);
+  if (sortedRefs.length === 0) {
+    return null;
+  }
 
   const replacementSpan: Span = {
     from: sortedRefs[0].span.from,
@@ -148,15 +171,10 @@ export function buildParentReorderReplacement(
   let text = "";
   let cursor = replacementSpan.from;
   const newSpansById = new Map<string, Span>();
-  for (let index = 0; index < orderedIds.length; index += 1) {
-    const id = orderedIds[index];
-    const ref = refsById.get(id);
-    if (!ref) {
-      continue;
-    }
-
+  for (let index = 0; index < changedOrder.length; index += 1) {
+    const ref = changedOrder[index];
     const statementText = source.slice(ref.span.from, ref.span.to);
-    newSpansById.set(id, {
+    newSpansById.set(ref.id, {
       from: cursor,
       to: cursor + statementText.length
     });
@@ -164,9 +182,15 @@ export function buildParentReorderReplacement(
     text += statementText;
     cursor += statementText.length;
 
-    if (index < orderedIds.length - 1) {
-      text += separator;
-      cursor += separator.length;
+    if (index < changedOrder.length - 1) {
+      const left = sortedRefs[index];
+      const right = sortedRefs[index + 1];
+      const gap = left && right ? source.slice(left.span.to, right.span.from) : "";
+      // Keep comments and other source between slots; only synthesize whitespace
+      // when adjacent statements need a line break.
+      const preservedGap = gap.includes("\n") || gap.trim().length > 0 ? gap : separator;
+      text += preservedGap;
+      cursor += preservedGap.length;
     }
   }
 

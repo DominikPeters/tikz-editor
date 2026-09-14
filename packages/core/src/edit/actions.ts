@@ -194,8 +194,22 @@ export type EditAction =
       };
     };
 
+export type ConnectedHandleUpdate = {
+  sourceId: string;
+  sourceSpan: Span;
+  nodeName: string;
+  anchor: string;
+};
+
 export type EditActionResult =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
+  | {
+      kind: "success";
+      newSource: string;
+      patches: SourcePatch[];
+      selectedSourceIds?: string[];
+      changedSourceIds?: string[];
+      connectedHandle?: ConnectedHandleUpdate;
+    }
   | {
       kind: "partial";
       newSource: string;
@@ -550,6 +564,16 @@ function applyConnectHandle(
   );
   const reorderedPatches = reordered ? reordered.patches : [];
   const newSource = reordered?.source ?? updated.source;
+  const handleOffset = reordered?.movingStatementOffset ?? 0;
+  const connectedSpan = {
+    from: updated.changedSpan.from + handleOffset,
+    to: updated.changedSpan.to + handleOffset
+  };
+  const connectedSourceId = reordered
+    ? parseStatementSnapshot(newSource, parseOptions).all.find((ref) =>
+        ref.statement.kind === "Path" && spanContains(ref.span, connectedSpan)
+      )!.id
+    : handle.sourceRef.sourceId;
   const patches = nameResolution.insertedSpan
     ? [computeReplacementPatch(source, newSource)]
     : [
@@ -564,6 +588,13 @@ function applyConnectHandle(
     kind: "success",
     newSource,
     patches,
+    connectedHandle: {
+      sourceId: connectedSourceId,
+      sourceSpan: connectedSpan,
+      nodeName: trimmedNodeName,
+      anchor: trimmedAnchor
+    },
+    selectedSourceIds: reordered ? [connectedSourceId] : undefined,
     // Reordering can renumber statement source ids, so avoid stale id hints.
     // Returning [] forces the drag path to use full recompute for this frame.
     changedSourceIds: reordered || nameResolution.insertedSpan ? [] : [handle.sourceRef.sourceId]
@@ -949,7 +980,7 @@ function moveStatementAfterNamedDefinition(
   movingStatementId: string,
   name: string,
   parseOptions: EditParseOptions = {}
-): { source: string; patches: SourcePatch[] } | null {
+): { source: string; patches: SourcePatch[]; movingStatementOffset: number } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const movingRef = snapshot.byId.get(movingStatementId);
   if (!movingRef) {
@@ -989,7 +1020,8 @@ function moveStatementAfterNamedDefinition(
 
   return {
     source: applied.source,
-    patches: applied.patches
+    patches: applied.patches,
+    movingStatementOffset: replacement.newSpansById.get(movingStatementId)!.from - movingRef.span.from
   };
 }
 

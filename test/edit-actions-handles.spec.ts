@@ -357,6 +357,86 @@ describe("applyEditAction – connectHandle", () => {
     expectPatchesReconstructSource(source, result);
   });
 
+  it.each([
+    { named: false, activeFigureId: "figure:0", newline: "\n" },
+    { named: true, activeFigureId: "figure:0", newline: "\n" },
+    { named: false, activeFigureId: "figure:1", newline: "\r\n" },
+    { named: true, activeFigureId: "figure:1", newline: "\r\n" }
+  ])("preserves document structure when connecting to a later node ($named, $activeFigureId)", ({ named, activeFigureId, newline }) => {
+    const previousFigure = activeFigureId === "figure:1"
+      ? String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (1,1);
+\end{tikzpicture}
+% Between figures.
+`
+      : "";
+    const prefix = (String.raw`% Repositioning figure.
+\definecolor{NavyGreen}{HTML}{024638}
+\tikzset{route/.style={draw=NavyGreen,line width=.8pt},ns/.style={anchor=west}}
+` + previousFigure + String.raw`\begin{tikzpicture}[x=1mm,y=-1mm]
+
+% A short preceding night followed by the service period.
+% Keep the picture coordinate system and these comments.
+\node (node1) at (26,49) {D};
+`).replaceAll("\n", newline);
+    const suffix = String.raw`
+% Later drawing content.
+\begin{scope}[shift={(14,25)},scale=.72]
+  \draw (0,0) rectangle (5.5,3.1);
+\end{scope}
+\end{tikzpicture}
+% Another figure must remain untouched.
+\begin{tikzpicture}
+  \node at (0,0) {Other figure};
+\end{tikzpicture}
+`.replaceAll("\n", newline);
+    const targetName = named ? " (depot)" : "";
+    const body = String.raw`\draw[route] (node1.west)--(11.1775,49.0000);
+% Preserve comments between the reordered statements.
+
+\node[ns,anchor=north]${targetName} at (6,52) {Depot};`.replaceAll("\n", newline);
+    const source = prefix + body + suffix;
+    const parseOptions = { activeFigureId };
+    const renderOptions = { parse: { ...parseOptions, includeContextDefinitions: true } };
+    const rendered = renderTikzToSvg(source, renderOptions);
+    const handle = rendered.semantic.editHandles.find((candidate) => candidate.sourceText === "(11.1775,49.0000)");
+    const targetSourceId = rendered.semantic.editHandles.find((candidate) => candidate.sourceText === "(6,52)")?.sourceRef.sourceId;
+    expect(handle).toBeDefined();
+    expect(targetSourceId).toBeDefined();
+    if (!handle || !targetSourceId) throw new Error("Expected route endpoint and Depot node");
+
+    const result = applyEditAction(source, rendered.semantic.editHandles, {
+      kind: "connectHandle",
+      handleId: handle.id,
+      nodeName: named ? "depot" : "",
+      nodeSourceId: targetSourceId,
+      anchor: "north east"
+    }, { parseOptions });
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") throw new Error("Expected anchor connection to succeed");
+    expect(result.newSource.startsWith(prefix)).toBe(true);
+    expect(result.newSource.endsWith(suffix)).toBe(true);
+    expect(result.newSource).toContain(`% Preserve comments between the reordered statements.${newline}${newline}`);
+    const reference = `(${named ? "depot" : "node2"}.north east)`;
+    expect(result.newSource).toContain(`\\draw[route] (node1.west)--${reference};`);
+    expect(result.newSource.indexOf("{Depot};")).toBeLessThan(result.newSource.indexOf("\\draw[route]"));
+    expectPatchesReconstructSource(source, result);
+
+    const connected = renderTikzToSvg(result.newSource, renderOptions);
+    expect(connected.parse.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+    expect(connected.semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+    expect(connected.semantic.scene.elements).toHaveLength(rendered.semantic.scene.elements.length);
+    const target = connected.semantic.nodeAnchorTargets.find((candidate) =>
+      candidate.nodeName === (named ? "depot" : "node2") && candidate.anchor === "north east"
+    );
+    expect(target).toBeDefined();
+    if (!target) throw new Error("Expected connected Depot anchor");
+    const endpoint = connected.semantic.editHandles.find((candidate) => candidate.sourceText === reference);
+    expect(endpoint?.world.x).toBeCloseTo(target.world.x, 6);
+    expect(endpoint?.world.y).toBeCloseTo(target.world.y, 6);
+  });
+
   it("keeps connection order stable for earlier, scoped, alias, and coordinate producers", () => {
     const earlierSource = String.raw`\begin{tikzpicture}
   \node (A) at (0,0) {A};
