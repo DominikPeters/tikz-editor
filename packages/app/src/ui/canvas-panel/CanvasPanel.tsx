@@ -2729,6 +2729,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    nestedFigureSpan,
+    parseOptions: editParseOptions,
     setWarning,
     setSnapLines,
     logSnapDebug,

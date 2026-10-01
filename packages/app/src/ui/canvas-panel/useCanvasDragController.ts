@@ -11,6 +11,7 @@ import {
   pt,
   px
 } from "@tikz-editor/core/coords/index";
+import { projectPathRectangleResize } from "@tikz-editor/core/edit/actions/resize-element";
 import { parseEditableTargetId } from "@tikz-editor/core/edit/editable-targets";
 import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
 import { worldToLocal } from "@tikz-editor/core/edit/coords";
@@ -19,6 +20,7 @@ import { parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
 import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
 import {
   snapHandlePosition,
+  pointerSnapLines,
   snapSelectionTranslation,
   selectionSnapLines,
   snapToolPointer,
@@ -151,6 +153,20 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   // when the recomputed scene actually satisfies the retained targets.
   useLayoutEffect(() => {
     const drag = dragRef.current;
+    if (drag?.kind === "resize" && drag.rectangleBaseline) {
+      if (source !== drag.latestSource) {
+        setDragState(null);
+        setSnapLines([]);
+        setDragTooltip(null);
+        return;
+      }
+      if (snapshotSource !== source) return;
+      const lines = rectangleResizeSnapLines(drag, liveResizeFramesRef.current.get(drag.elementId));
+      setSnapLines(lines);
+      if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
+      wasSnappedRef.current = lines.length > 0;
+      return;
+    }
     if (drag?.kind !== "element" || !drag.snapContext || !drag.snapTargets) return;
     if (source !== drag.latestSource) {
       setSnapLines([]);
@@ -164,7 +180,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     setSnapLines(lines);
     if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
     wasSnappedRef.current = lines.length > 0;
-  }, [dragRef, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback]);
+  }, [dragRef, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip]);
 
   useLayoutEffect(() => {
     function sameIdsAsCurrentSelection(ids: readonly string[]): boolean {
@@ -538,9 +554,23 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
 
       if (drag.kind === "resize") {
         setNodeAnchorOverlay(null);
-        setSnapLines([]);
-        maybeTriggerSnapFeedback(false);
+        const rectangleBaseline = drag.rectangleBaseline;
+        // Project first so snapping respects a rotated edge or an aspect lock.
+        const projected = rectangleBaseline ? projectPathRectangleResize({
+          elementId: drag.elementId, role: drag.role, newWorld: world,
+          preserveAspect: event.shiftKey
+        }, rectangleBaseline.context) : null;
+        const snap = projected && drag.snapContext ? snapHandlePosition({
+          context: drag.snapContext,
+          point: { ...projected.point, role: "corner" },
+          direction: projected.direction,
+          modifiers: { ctrlOrMeta }
+        }) : null;
+        const newWorld = snap?.snappedPoint ?? world;
+        drag.snapTargets = snap?.targets;
+        drag.snapPoint = snap?.snappedPoint;
         const liveFrame = liveResizeFramesRef.current.get(drag.elementId) ?? null;
+        const lines = rectangleResizeSnapLines(drag, liveFrame);
         const liveDimensions = liveFrame ? resolveFrameBasis(liveFrame) : null;
         const dimensions = liveDimensions
           ? { width: liveDimensions.width, height: liveDimensions.height }
@@ -568,25 +598,40 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           snapshotMatchesSource: snapshotSource === source,
           dragKind: "resize",
           rawPoint: world,
-          lines: []
+          snappedPoint: newWorld,
+          lines
         });
 
-        applyActionWithFeedback(
+        const result = applyActionWithFeedback(
           {
             kind: "resizeElement",
             elementId: drag.elementId,
             role: drag.role,
-            newWorld: world,
+            newWorld,
+            rectangleBaseline: rectangleBaseline ?? undefined,
             preserveAspect: event.shiftKey,
-            preserveAspectRatio: drag.preserveAspectRatio ?? undefined,
+            preserveAspectRatio: rectangleBaseline ? undefined : drag.preserveAspectRatio ?? undefined,
             formatPrecision,
             referenceBounds: resizeFrameWorldBounds(drag.initialFrame),
             referenceScopeTransform: drag.elementId.startsWith("scope:")
               ? drag.initialScopeTransform ?? undefined
               : undefined
           },
-          drag.historyMergeKey
+          drag.historyMergeKey,
+          rectangleBaseline ? drag.latestSource : undefined
         );
+        if (result.newSource) {
+          drag.latestSource = result.newSource;
+          // Keep the visible scene's validated guides until recompute arrives.
+          // Bypassing snapping should still hide them immediately.
+          if (!snap?.targets) {
+            setSnapLines([]);
+            maybeTriggerSnapFeedback(false);
+          }
+        } else {
+          setSnapLines(lines);
+          maybeTriggerSnapFeedback(lines.length > 0);
+        }
         return;
       }
 
@@ -2103,4 +2148,24 @@ function mergeWorldBounds(a: WorldBounds, b: WorldBounds): WorldBounds {
     pt(Math.max(a.maxX, b.maxX)),
     pt(Math.max(a.maxY, b.maxY))
   );
+}
+
+function rectangleResizeSnapLines(
+  drag: Extract<DragState, { kind: "resize" }>,
+  frame: ResizeFrame | null | undefined
+): SnapLine[] {
+  if (!frame || !drag.snapContext || !drag.snapTargets || !drag.snapPoint) return [];
+  const corners = frame.cornersByRole;
+  const midpoint = (a: WorldPoint, b: WorldPoint) => makeWorldPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
+  const snapPoint = drag.snapPoint;
+  const points = drag.role === "left" || drag.role === "right"
+    ? [midpoint(corners["top-left"].world, corners["bottom-left"].world), midpoint(corners["top-right"].world, corners["bottom-right"].world)]
+    : drag.role === "top" || drag.role === "bottom"
+      ? [midpoint(corners["top-left"].world, corners["top-right"].world), midpoint(corners["bottom-left"].world, corners["bottom-right"].world)]
+      : Object.values(corners).map(corner => corner.world);
+  // The dragged corner can cross the fixed corner and change its frame role.
+  const point = points.reduce((nearest, candidate) =>
+    distanceSquared(candidate, snapPoint) < distanceSquared(nearest, snapPoint) ? candidate : nearest
+  );
+  return pointerSnapLines(drag.snapContext, { ...point, role: "corner" }, drag.snapTargets);
 }

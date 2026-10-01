@@ -1,6 +1,6 @@
 import { px } from "../../coords/scalars.js";
 import type { Px } from "../../coords/scalars.js";
-import type { WorldBounds, WorldPoint } from "../../coords/points.js";
+import type { WorldBounds, WorldPoint, WorldVector } from "../../coords/points.js";
 import type { SceneElement } from "../../semantic/types.js";
 import type { SemanticDependencyGraph } from "../../semantic/dependencies.js";
 
@@ -136,7 +136,7 @@ export type SnapResult = {
   snappedPoint?: WorldPoint;
   snappedDelta?: WorldPoint;
   lines: SnapLine[];
-  /** Candidates that caused this selection snap, retained for guide validation. */
+  /** Candidates that caused this snap, retained for guide validation. */
   targets?: AxisSnapBuckets;
 };
 
@@ -166,7 +166,9 @@ export type SnapSelectionTranslationInput = {
 
 export type SnapHandlePositionInput = {
   context: SnapContext;
-  point: WorldPoint;
+  point: SelectionSnapPoint;
+  /** Optional permitted direction through point (for edges and aspect-locked corners). */
+  direction?: WorldVector | null;
   sourceId?: string;
   allowSelfSnap?: boolean;
   modifiers?: SnapModifiers;

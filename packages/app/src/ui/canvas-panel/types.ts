@@ -1,6 +1,7 @@
 import type { AdornmentOwnerGeometry, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
 import type { EditAction, MoveElementsBaseline, ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { PathRectangleResizeBaseline } from "@tikz-editor/core/edit/actions/resize-element";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import type { AxisSnapBuckets, SelectionGeometry, SnapContext, SnapLine } from "@tikz-editor/core/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement, SceneText } from "@tikz-editor/core/semantic/types";
@@ -156,6 +157,11 @@ export type DragState =
     }
   | {
       kind: "resize";
+      rectangleBaseline: PathRectangleResizeBaseline | null;
+      latestSource: string;
+      snapContext: SnapContext | null;
+      snapTargets?: AxisSnapBuckets;
+      snapPoint?: WorldPoint;
       pointerId: number;
       elementId: string;
       role: ResizeRole;

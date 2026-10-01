@@ -53,7 +53,7 @@ import {
   type MoveElementsBaseline
 } from "./actions/move-arrange-actions.js";
 import { applyReorderElementsAction, buildParentReorderReplacement } from "./actions/reorder-elements.js";
-import { applyResizeElementAction } from "./actions/resize-element.js";
+import { applyResizeElementAction, type PathRectangleResizeBaseline } from "./actions/resize-element.js";
 import {
   applyRotateElementAction,
   type RotateElementAction
@@ -181,6 +181,7 @@ export type EditAction =
   | { kind: "transposeMatrix"; matrixSourceId: string }
   | {
       kind: "resizeElement";
+      rectangleBaseline?: PathRectangleResizeBaseline;
       elementId: string;
       role: ResizeRole;
       newWorld: WorldPoint;

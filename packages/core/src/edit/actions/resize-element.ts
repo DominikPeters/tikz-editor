@@ -14,8 +14,8 @@ import {
 } from "../../semantic/types.js";
 import { pt } from "../../coords/scalars.js";
 import { applyFrameTransform } from "../../coords/frame.js";
-import { frameLocalPoint, worldPoint } from "../../coords/points.js";
-import type { FrameLocalPoint, WorldPoint } from "../../coords/points.js";
+import { frameLocalPoint, worldPoint, worldVector } from "../../coords/points.js";
+import type { FrameLocalPoint, WorldPoint, WorldVector } from "../../coords/points.js";
 import type { FrameTransform } from "../../coords/transforms.js";
 import { frameTransform, worldTransform } from "../../coords/transforms.js";
 import type { CoordinateItem, NodeItem, PathItem, PathOptionItem, Statement, Span } from "../../ast/types.js";
@@ -80,7 +80,14 @@ type ResizeRole =
 
 type NodeWidthResizeStrategy = "minimum-width" | "text-width";
 
+export type PathRectangleResizeBaseline = {
+  source: string;
+  elementId: string;
+  context: PathRectangleResizeContext;
+};
+
 export type ResizeElementAction = {
+  rectangleBaseline?: PathRectangleResizeBaseline;
   elementId: string;
   role: ResizeRole;
   newWorld: WorldPoint;
@@ -141,6 +148,16 @@ export function applyResizeElementAction(
   const elementId = action.elementId.trim();
   if (elementId.length === 0) {
     return { kind: "unsupported", reason: "Missing element id for resizeElement." };
+  }
+
+  if (action.rectangleBaseline) {
+    const baseline = action.rectangleBaseline;
+    if (baseline.elementId !== elementId) {
+      return { kind: "unsupported", reason: "Rectangle resize baseline belongs to another element." };
+    }
+    // The caller owns this drag session and cancels it on unrelated source edits.
+    // Reuse the starting handles instead of reevaluating the figure per event.
+    return applyResizePathRectangle(baseline.source, action, baseline.context);
   }
 
   const resolved = resolvePropertyTarget(source, elementId, parseOptions);
@@ -828,15 +845,28 @@ type PathRectangleResizeResolution =
   | { kind: "not-rectangle" }
   | { kind: "unsupported"; reason: string };
 
-function applyResizePathRectangle(
+/** Prepare from the current rendered snapshot once, at the start of a drag. */
+export function preparePathRectangleResize(
   source: string,
+  statements: readonly Statement[],
+  elements: readonly SceneElement[],
+  editHandles: readonly EditHandle[],
+  elementId: string
+): PathRectangleResizeBaseline | null {
+  if (editHandles.some(handle => handle.sourceRef.sourceId === elementId && handle.kind === "node-position")) return null;
+  const context = resolvePathRectangleResizeContext(statements, elements, editHandles, elementId);
+  return context.kind === "found" ? { source, elementId, context } : null;
+}
+
+/** Project to the actual moving corner/edge before snapping; direction limits constrained motion. */
+export function projectPathRectangleResize(
   action: ResizeElementAction,
   context: PathRectangleResizeContext
-): EditActionResultLike {
+): { point: WorldPoint; direction: WorldVector | null; nextStartWorld: WorldPoint; nextOppositeWorld: WorldPoint } | null {
   const affectsWidth = action.role.includes("left") || action.role.includes("right");
   const affectsHeight = action.role.includes("top") || action.role.includes("bottom");
   if (!affectsWidth && !affectsHeight) {
-    return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
+    return null;
   }
 
   const transform = isFrameLocalCoordinateEditHandle(context.startHandle)
@@ -850,7 +880,7 @@ function applyResizePathRectangle(
     ? context.oppositeHandle.local
     : worldToLocal(context.oppositeHandle.world, transform);
   if (!localPointer || !startLocal || !oppositeLocal) {
-    return { kind: "unsupported", reason: "Could not resolve local geometry for rectangle resize." };
+    return null;
   }
 
   const roleCorners = resolveRectangleRoleCorners(startLocal, oppositeLocal);
@@ -864,6 +894,8 @@ function applyResizePathRectangle(
   let minY = currentMinY;
   let maxY = currentMaxY;
 
+  let movingPoint = localPointer;
+  let direction: WorldVector | null = null;
   if (isRectangleCornerRole(action.role)) {
     const fixedLocal = roleCorners[oppositeRectangleCornerRole(action.role)];
     let movingLocal = localPointer;
@@ -883,12 +915,17 @@ function applyResizePathRectangle(
         const preservedWidth = Math.max(nextWidth, nextHeight / fixedAspectRatio);
         const preservedHeight = preservedWidth * fixedAspectRatio;
         const roleDirection = rectangleCornerDirection(action.role);
+        direction = worldVector(
+          pt(transform.a * roleDirection.x + transform.c * roleDirection.y * fixedAspectRatio),
+          pt(transform.b * roleDirection.x + transform.d * roleDirection.y * fixedAspectRatio)
+        );
         movingLocal = frameLocalPoint(
           pt(fixedLocal.x + roleDirection.x * preservedWidth),
           pt(fixedLocal.y + roleDirection.y * preservedHeight)
         );
       }
     }
+    movingPoint = movingLocal;
     minX = Math.min(fixedLocal.x, movingLocal.x);
     maxX = Math.max(fixedLocal.x, movingLocal.x);
     minY = Math.min(fixedLocal.y, movingLocal.y);
@@ -897,12 +934,16 @@ function applyResizePathRectangle(
     const fixedX = action.role === "left"
       ? (roleCorners["top-right"].x + roleCorners["bottom-right"].x) / 2
       : (roleCorners["top-left"].x + roleCorners["bottom-left"].x) / 2;
+    movingPoint = frameLocalPoint(localPointer.x, pt((currentMinY + currentMaxY) / 2));
+    direction = worldVector(pt(transform.a), pt(transform.b));
     minX = Math.min(fixedX, localPointer.x);
     maxX = Math.max(fixedX, localPointer.x);
   } else if (action.role === "top" || action.role === "bottom") {
     const fixedY = action.role === "top"
       ? (roleCorners["bottom-left"].y + roleCorners["bottom-right"].y) / 2
       : (roleCorners["top-left"].y + roleCorners["top-right"].y) / 2;
+    movingPoint = frameLocalPoint(pt((currentMinX + currentMaxX) / 2), localPointer.y);
+    direction = worldVector(pt(transform.c), pt(transform.d));
     minY = Math.min(fixedY, localPointer.y);
     maxY = Math.max(fixedY, localPointer.y);
   }
@@ -915,6 +956,22 @@ function applyResizePathRectangle(
 
   const nextStartWorld = applyFrameTransform(transform, nextStartLocal);
   const nextOppositeWorld = applyFrameTransform(transform, nextOppositeLocal);
+  return { point: applyFrameTransform(transform, movingPoint), direction, nextStartWorld, nextOppositeWorld };
+}
+
+function applyResizePathRectangle(
+  source: string,
+  action: ResizeElementAction,
+  context: PathRectangleResizeContext
+): EditActionResultLike {
+  if (!action.role.includes("left") && !action.role.includes("right") && !action.role.includes("top") && !action.role.includes("bottom")) {
+    return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
+  }
+  const geometry = projectPathRectangleResize(action, context);
+  if (!geometry) {
+    return { kind: "unsupported", reason: "Could not resolve local geometry for rectangle resize." };
+  }
+  const { nextStartWorld, nextOppositeWorld } = geometry;
   let oppositeRewriteHandle = context.oppositeHandle;
   if (
     isRelativeCoordinateEditHandle(oppositeRewriteHandle) &&
@@ -931,6 +988,9 @@ function applyResizePathRectangle(
     { handle: oppositeRewriteHandle, newWorld: nextOppositeWorld }
   ];
 
+  const restoresBaseline = action.rectangleBaseline &&
+    pointDistanceSquared(nextStartWorld, context.startHandle.world) <= 1e-12 &&
+    pointDistanceSquared(nextOppositeWorld, context.oppositeHandle.world) <= 1e-12;
   const replacementBySpan = new Map<string, { span: Span; text: string }>();
   for (const target of rewriteTargets) {
     const handle = target.handle;
@@ -939,6 +999,7 @@ function applyResizePathRectangle(
       return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
     }
 
+    if (restoresBaseline) continue;
     const text = rewriteCoordinate(target.newWorld, handle, source);
     if (text == null) {
       return { kind: "unsupported", reason: "Could not rewrite one or more rectangle coordinates." };
@@ -964,7 +1025,10 @@ function applyResizePathRectangle(
 
   const replacements = [...replacementBySpan.values()];
   if (replacements.length === 0) {
-    return { kind: "unsupported", reason: "Resize would not change node constraints." };
+    // A baseline no-op can restore the original source after previous updates.
+    return action.rectangleBaseline
+      ? { kind: "success", newSource: source, patches: [], changedSourceIds: [action.elementId] }
+      : { kind: "unsupported", reason: "Resize would not change node constraints." };
   }
 
   const applied = applyTextReplacements(source, replacements);

@@ -5,10 +5,12 @@ import {
   resolveTransformInspectorMutationContextFromOptionEntries
 } from "@tikz-editor/core/edit/property-write-builders";
 import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { preparePathRectangleResize } from "@tikz-editor/core/edit/actions/resize-element";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import type { EditHandle, SceneElement, ScenePath } from "@tikz-editor/core/semantic/types";
 import type { WorldBounds, WorldPoint } from "../coords/types";
-import type { NodeItem } from "@tikz-editor/core/ast/types";
+import type { NodeItem, Span } from "@tikz-editor/core/ast/types";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import { clientToWorldPoint } from "./geometry";
@@ -49,6 +51,7 @@ export type UseCanvasHandleInteractionsArgs = {
   directManipulationDisabledReasonBySourceId?: ReadonlyMap<string, string>;
   snapshot: CanvasSnapshot;
   source: string;
+  nestedFigureSpan?: Span | null;
   setWarning: StateSetter<string | null>;
   setSnapLines: StateSetter<SnapLine[]>;
   logSnapDebug: (input: SnapDebugLogInput) => void;
@@ -113,6 +116,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    nestedFigureSpan,
     setWarning,
     setSnapLines,
     logSnapDebug,
@@ -323,10 +327,30 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         pathElement != null && pathShapeHint == null
       );
       const frameAspectRatio = aspectRatioForResizeFrame(initialFrame);
+      const rectangleBaseline = preparePathRectangleResize(
+        nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
+        statements ?? [], snapshot.scene?.elements ?? [], snapshot.editHandles, sourceId
+      );
+      const snapContext = rectangleBaseline && snapshot.scene
+        ? buildSnapContext({
+            sceneElements: snapshot.scene.elements,
+            selectedSourceIds: [sourceId],
+            dependencies: snapshot.semanticResult?.dependencies,
+            guides: snapGuideInput,
+            // Rectangle resize snaps its moving point; equal-gap candidates are unused.
+            settings: { ...snapSettingsPatch, gaps: { enabled: false } },
+            zoom: canvasTransform.scale,
+            viewportWorld: viewportWorldBounds
+          })
+        : null;
+
 
       setSnapLines([]);
       setDragState({
         kind: "resize",
+        rectangleBaseline,
+        snapContext,
+        latestSource: source,
         pointerId: event.pointerId,
         elementId: sourceId,
         role: normalizedRole,
@@ -353,6 +377,12 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       interactionSvgRef,
       logSnapDebug,
       resizeFramesBySource,
+      nestedFigureSpan,
+      snapGuideInput,
+      snapSettingsPatch,
+      canvasTransform.scale,
+      viewportWorldBounds,
+      snapshot.semanticResult,
       selectedElementIds,
       setDragState,
       setSnapLines,
