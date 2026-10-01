@@ -27,7 +27,7 @@ The fixture catalog lives in `scripts/lib/text-engine-bench-cases.ts`.
 | boxes | Frames, overlaps, color boxes, rules, raised text, phantom/smash, vertical skips and penalties |
 | math | Inline math, scripts, accents, operators, fractions, radicals, extensible delimiters, AMS alphabets, text in math, matrices, cases, aligned math, display equations, display align, Beamer sans math |
 | resources | Resolved/missing graphics, contextual image dimensions, color resolver revisions, graphic resolver revisions |
-| cache | Source-map cold layout, shifted source maps with shared layout, paragraph width changes with shared IR, remeasurement after cache eviction |
+| cache | Source-map cold layout, shifted source maps with shared layout, paragraph width changes with shared IR, repeated fractions at different source positions, remeasurement after cache eviction |
 | editing | Character-by-character append, insertion, deletion, backspace, undo/redo, styled wrapped text, incomplete-to-complete math |
 | fallback | Incomplete list literal rendering, unsupported-command rejection, empty input |
 
@@ -246,3 +246,87 @@ snapshot of `be61f1be` plus this pass passed all 289 test files (4,218 tests; fi
 skipped), with two workers and a 30-second test timeout. The final compatibility
 adjustments also passed 25 targeted tests. Typechecking, the coordinate-type guard,
 production lint, and lint for the new tests passed in that snapshot.
+
+## Report ownership and math projection fixes
+
+Two existing cache bugs were reproduced. A frequently reused render entry could
+retain its SVG while losing its paragraph and vertical-layout reports after the
+independent registries filled. Math-box keys omitted equation-tag source spans and
+other outer source metadata, and colon-separated keys could alias different label
+and content pairs. Both caused stale or missing editing metadata despite a valid
+rendered result.
+
+Render entries now own their reports, and eviction removes all three together.
+Render results and editor snapshots carry an explicit layout context, which the
+canvas uses for caret and selection lookups. The legacy active-context getter stays
+available for compatibility but is deprecated. Context ownership uses local object
+identity; future worker receivers must reconstruct the corresponding registries.
+
+A render scope retains entries used by the current scene through evaluation and SVG
+emission, even when that scene exceeds the reusable-cache budget. Incremental scopes
+carry forward visible entries from the previous result, preserving paragraph IDs
+when an equivalent cache entry has since been recreated. After rendering, retention
+keeps only the current scene's keys and releases the previous scope reference.
+Contexts from another engine cannot contribute entries. These visible entries live
+as long as their result or snapshot, independently of the reuse budgets below.
+Deck contexts likewise retain the active frame's reports directly, so standalone
+registry limits cannot discard metadata for a large visible frame.
+
+The remaining text caches use the shared weighted LRU implementation:
+
+| Cache | Entries | Estimated budget |
+| --- | ---: | ---: |
+| Render entries, per engine | 2,048 | 32 MiB |
+| Shared paragraph layouts, per engine | 512 | 16 MiB |
+| Validation results, per engine | 512 | 1 MiB |
+| Standalone paragraph reports, per context | 4,096 | 32 MiB |
+| Standalone vertical layouts, per context | 4,096 | 32 MiB |
+| Final math boxes, per provider | 256 | 4 MiB |
+| Relative math layouts, per provider | 128 | 2 MiB |
+| Math layout admission keys, per provider | 256 | 128 KiB |
+
+Estimates count owned metadata and strings, excluding shared font and asset tables;
+they are cache accounting limits rather than measurements of resident heap. Render
+and standalone report caches allow one oversized entry so a single large render
+remains usable. Later insertions evict that entry normally. Math caches initialize
+only when the provider receives a math request.
+
+Math parsing and natural layout are separate from request-specific width, labels,
+source projection, caret maps, and SVG assembly. Repeated content can reuse an
+immutable relative layout after its second use. Templates accept content up to
+4,096 UTF-16 units with safely translatable integer positions. Structured final-box
+keys include all source and label metadata, preserve exact numeric values, and
+snapshot caller-owned tag spans without freezing the caller's objects.
+
+This is a correctness and ownership refactor, with mixed performance results.
+Three alternating-order, fresh-process comparisons against `65aae90b`, using the
+same expanded 69-case catalog at 40 samples (5,280 measured calls), increased the
+median sum from 1,969 ms to 2,225 ms, **13.0% slower**. No tests ran concurrently,
+but other agents were active on the machine; the aggregate includes scheduler,
+allocation, and GC variability and describes this catalog rather than frame time.
+
+| Workload / phase | Before median (ms) | After median (ms) |
+| --- | ---: | ---: |
+| Tiny word / cold | 0.196 | 0.234 |
+| Wrapped paragraph, 150pt / cold | 1.178 | 1.021 |
+| Long paragraph, 120pt / cold | 6.199 | 6.604 |
+| Paragraph width changes / new state | 0.761 | 0.744 |
+| Repeated fractions with source projection / cold | 0.831 | 0.945 |
+
+A separate single pair of focused runs used longer sample sets: the tiny-word
+median at 500 samples fell from 0.1193 to 0.1115 ms (6.6% faster), while the
+long-paragraph median at 100 samples rose from 5.852 to 6.127 ms (4.7% slower).
+These focused runs do not establish an aggregate speedup or erase the catalog
+regression. Further performance work should measure report accounting and math
+projection overhead before expanding caching again.
+
+Validation matched all 528 captured engine states against the previous source,
+normalizing only opaque keys and paragraph IDs, and matched 2,394 math-provider
+comparisons across formulas, styles, sizes, source positions, widths, and failures.
+An isolated snapshot of `65aae90b` plus this pass passed 295 test files (4,251 tests;
+five skipped), typechecking, the coordinate-type guard, and production lint. Five
+browser caret/editing tests passed, including nested Beamer pictures, rotated and
+single-line labels, wrapped display math, and align-row equation tags. Two additional
+deck tests passed after the active-frame ownership change, covering title/list
+edits, undo/redo, rendered caret navigation, and selection. The final source-span
+ownership adjustment passed all 12 targeted regression tests.

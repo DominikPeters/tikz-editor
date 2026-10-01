@@ -2,6 +2,32 @@ import { describe, expect, it } from "vitest";
 import { TexWeightedLruCache } from "../packages/core/src/text/tex/cache.js";
 
 describe("bounded TeX LRU cache", () => {
+  it("releases owned metadata on eviction, replacement, and explicit deletion", () => {
+    const released: [string, number][] = [];
+    const cache = new TexWeightedLruCache<string, number>(2, 100, {
+      onEvict: (key, value) => released.push([key, value]),
+    });
+    cache.set("a", 1, 10);
+    cache.set("b", 2, 10);
+    cache.set("a", 3, 10);
+    expect([...cache.values()]).toEqual([2, 3]);
+    cache.set("c", 4, 10);
+    cache.delete("a");
+    expect(released).toEqual([["a", 1], ["b", 2], ["a", 3]]);
+    expect([...cache.values()]).toEqual([4]);
+  });
+
+  it("can retain one oversized render while evicting its other entries", () => {
+    const cache = new TexWeightedLruCache<string, number>(10, 100, { retainOversizedEntry: true });
+    cache.set("small", 1, 10);
+    expect(cache.set("large", 2, 200)).toBe(true);
+    expect(cache.get("small")).toBeUndefined();
+    expect(cache.get("large")).toBe(2);
+    cache.set("next", 3, 10);
+    expect(cache.get("large")).toBeUndefined();
+    expect([...cache.values()]).toEqual([3]);
+  });
+
   it("retains recently read entries and evicts by count", () => {
     const cache = new TexWeightedLruCache<string, number>(2, 100);
     cache.set("a", 1, 10);

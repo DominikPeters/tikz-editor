@@ -1,7 +1,4 @@
-import {
-  registerParagraphLayoutReports,
-  type ParagraphLayoutReport,
-} from "./knuth-plass/index.js";
+import type { ParagraphLayoutReport } from "./knuth-plass/index.js";
 import { preloadEnglishHyphenator } from "./knuth-plass/paragraph/hyphenate.js";
 import {
   computerModernTexMetricProvider,
@@ -26,7 +23,6 @@ import {
   type TexLength,
   type TexVListY,
 } from "./tex/coordinates.js";
-import { registerTexVListLayouts } from "./tex/vlist/index.js";
 import { collectTexGraphicsPlacements } from "./tex/vlist/graphics-placements.js";
 import {
   remapParagraphLayoutReportSourceMap,
@@ -40,6 +36,7 @@ import type {
   NodeTextMeasureRequest,
   NodeTextParagraphAlignment,
   NodeTextRenderPayload,
+  NodeTextRenderScope,
   NodeTextValidationIssue,
 } from "./types.js";
 import {
@@ -53,6 +50,7 @@ import {
   type TextLayoutContext,
 } from "./layout-context.js";
 import { TexWeightedLruCache } from "./tex/cache.js";
+import { estimateVListLayoutBytes } from "./layout-cache-size.js";
 
 export { renderTexVListSvgMetadata };
 
@@ -64,6 +62,9 @@ type CachedRenderEntry = {
   readonly midLineYPt: number;
   readonly paragraphId: string;
   readonly renderSourceText: string;
+  readonly report: ParagraphLayoutReport;
+  readonly vlistLayout: TexVListLayout;
+  readonly retainedBytes: number;
 };
 
 type TextFontOptions = {
@@ -78,6 +79,7 @@ type TexSharedLayout = {
   readonly contentWidthPt: TexLength;
   readonly renderFont: ResolvedTexFont;
   readonly isSingleNaturalLine: boolean;
+  readonly retainedBytes: number;
 };
 
 const TEX_TEXT_BASE_FONT_SIZE = 10;
@@ -89,8 +91,15 @@ const RENDER_CACHE_LIMIT = 2048;
 const TEX_LAYOUT_CACHE_LIMIT = 512;
 const VALIDATION_CACHE_LIMIT = 512;
 const SOURCE_MAP_KEY_CACHE_BYTES = 4 * 1024 * 1024;
+const RENDER_CACHE_BYTES = 32 * 1024 * 1024;
+const TEX_LAYOUT_CACHE_BYTES = 16 * 1024 * 1024;
+const VALIDATION_CACHE_BYTES = 1024 * 1024;
 let sharedEnginePromise: Promise<NodeTextEngine> | null = null;
 const profiledEnginePromises = new WeakMap<TexMathFontProfile, Promise<NodeTextEngine>>();
+const retainedEntriesByContext = new WeakMap<TextLayoutContext, {
+  readonly owner: object;
+  readonly entries: ReadonlyMap<string, CachedRenderEntry>;
+}>();
 
 export type TexNodeTextEngineOptions = {
   /**
@@ -122,10 +131,22 @@ async function initializeEngine(
 ): Promise<NodeTextEngine> {
   await preloadEnglishHyphenator();
 
-  const layoutContext = createTextLayoutContext();
-  const renderCache = new Map<string, CachedRenderEntry>();
-  const layoutCache = new Map<string, TexSharedLayout>();
-  const validationCache = new Map<string, NodeTextValidationIssue | null>();
+  const entriesByParagraph = new Map<string, CachedRenderEntry>();
+  const renderCache = new TexWeightedLruCache<string, CachedRenderEntry>(RENDER_CACHE_LIMIT, RENDER_CACHE_BYTES, {
+    retainOversizedEntry: true,
+    onEvict: (_key, entry) => entriesByParagraph.delete(entry.paragraphId),
+  });
+  const layoutCache = new TexWeightedLruCache<string, TexSharedLayout>(TEX_LAYOUT_CACHE_LIMIT, TEX_LAYOUT_CACHE_BYTES);
+  const validationCache = new TexWeightedLruCache<string, NodeTextValidationIssue | null>(VALIDATION_CACHE_LIMIT, VALIDATION_CACHE_BYTES);
+  // Reports are owned by live render entries rather than a separately evicted
+  // registry. Dropping a render entry drops its metadata in the same operation.
+  const layoutContext = createTextLayoutContext({
+    getParagraphReports: () => [...entriesByParagraph.values()].map((entry) => entry.report),
+    getVListLayouts: () => [...entriesByParagraph.values()].map((entry) => ({ paragraphId: entry.paragraphId, layout: entry.vlistLayout })),
+    getVListLayout: (paragraphId) => entriesByParagraph.get(paragraphId)?.vlistLayout ?? null,
+  });
+  const owner = {};
+  let activeScope: { readonly context: TextLayoutContext; readonly entries: Map<string, CachedRenderEntry>; readonly byParagraph: Map<string, CachedRenderEntry>; readonly previous: ReadonlyMap<string, CachedRenderEntry> | null } | null = null;
   const sourceMapKeys = new TexWeightedLruCache<string, string>(RENDER_CACHE_LIMIT, SOURCE_MAP_KEY_CACHE_BYTES);
   let sourceMapSequence = 0n;
   let paragraphSequence = 0n;
@@ -134,14 +155,52 @@ async function initializeEngine(
   const nextParagraphId = () => `tex:${++paragraphSequence}`;
 
   return {
+    layoutContext,
+    createRenderScope(previousContext): NodeTextRenderScope {
+      const previous = previousContext ? retainedEntriesByContext.get(previousContext) : undefined;
+      const scopeEntries = new Map<string, CachedRenderEntry>();
+      const byParagraph = new Map<string, CachedRenderEntry>();
+      const ownedEntries = () => {
+        const merged = new Map(entriesByParagraph);
+        for (const [id, entry] of byParagraph) merged.set(id, entry);
+        return merged.values();
+      };
+      const context = createTextLayoutContext({
+        getParagraphReports: () => [...ownedEntries()].map((entry) => entry.report),
+        getVListLayouts: () => [...ownedEntries()].map((entry) => ({ paragraphId: entry.paragraphId, layout: entry.vlistLayout })),
+        getVListLayout: (paragraphId) => (byParagraph.get(paragraphId) ?? entriesByParagraph.get(paragraphId))?.vlistLayout ?? null,
+      });
+      const scope = { context, entries: scopeEntries, byParagraph, previous: previous?.owner === owner ? previous.entries : null };
+      retainedEntriesByContext.set(context, { owner, entries: scopeEntries });
+      return {
+        layoutContext: context,
+        run(operation) {
+          const parent = activeScope;
+          activeScope = scope;
+          try { return operation(); } finally { activeScope = parent; }
+        },
+        retain(cacheKeys) {
+          const retained = new Map<string, CachedRenderEntry>();
+          for (const key of cacheKeys) {
+            const entry = scopeEntries.get(key) ?? scope.previous?.get(key) ?? renderCache.get(key);
+            if (entry) retained.set(key, entry);
+          }
+          scopeEntries.clear();
+          byParagraph.clear();
+          for (const [key, entry] of retained) {
+            scopeEntries.set(key, entry);
+            byParagraph.set(entry.paragraphId, entry);
+          }
+          scope.previous = null;
+        },
+      };
+    },
     validate(text: string): NodeTextValidationIssue | null {
       const cached = validationCache.get(text);
-      if (cached !== undefined || validationCache.has(text)) {
-        return cached ?? null;
-      }
+      if (cached !== undefined) return cached;
       const prepared = normalizeTexTextInput(text);
       if (prepared.text.trim().length === 0) {
-        setCappedMapValue(validationCache, text, null, VALIDATION_CACHE_LIMIT);
+        validationCache.set(text, null, text.length * 2 + 64);
         return null;
       }
       const fallbackReason = getSimpleTexFallbackReason(
@@ -154,12 +213,12 @@ async function initializeEngine(
           message: fallbackReason,
         }
         : null;
-      setCappedMapValue(validationCache, text, issue, VALIDATION_CACHE_LIMIT);
+      validationCache.set(text, issue, text.length * 2 + (issue?.message.length ?? 0) * 2 + 128);
       return issue;
     },
 
     measure(request: NodeTextMeasureRequest) {
-      setActiveTextLayoutContext(layoutContext);
+      setActiveTextLayoutContext(activeScope?.context ?? layoutContext);
       const prepared = normalizeTexTextInput(request.text, {
         fontStyle: request.fontStyle,
         fontWeight: request.fontWeight,
@@ -213,10 +272,9 @@ async function initializeEngine(
         ? layoutCacheKey
         : `${layoutCacheKey}|sm:${sourceMapKey}`;
 
-      let entry = getCappedMapValue(renderCache, cacheKey) ?? null;
+      let entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey) ?? null;
       if (!entry) {
         entry = buildTexTextCacheEntry({
-          layoutContext,
           cacheKey,
           layoutCacheKey,
           layoutCache,
@@ -235,8 +293,12 @@ async function initializeEngine(
         if (!entry) {
           return null;
         }
-        setCappedMapValue(renderCache, cacheKey, entry, RENDER_CACHE_LIMIT);
+        if (renderCache.set(cacheKey, entry, cacheKey.length * 2 + entry.retainedBytes)) {
+          entriesByParagraph.set(entry.paragraphId, entry);
+        }
       }
+      activeScope?.entries.set(cacheKey, entry);
+      activeScope?.byParagraph.set(entry.paragraphId, entry);
 
       return {
         cacheKey: entry.payload.cacheKey,
@@ -251,15 +313,20 @@ async function initializeEngine(
     },
 
     renderFromCache(cacheKey: string): NodeTextRenderPayload | null {
-      setActiveTextLayoutContext(layoutContext);
-      return getCappedMapValue(renderCache, cacheKey)?.payload ?? null;
+      setActiveTextLayoutContext(activeScope?.context ?? layoutContext);
+      const entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
+      if (entry) {
+        activeScope?.entries.set(cacheKey, entry);
+        activeScope?.byParagraph.set(entry.paragraphId, entry);
+      }
+      return entry?.payload ?? null;
     },
   };
 }
 
 function buildTexSharedLayout(params: {
   readonly layoutCacheKey: string;
-  readonly layoutCache: Map<string, TexSharedLayout>;
+  readonly layoutCache: TexWeightedLruCache<string, TexSharedLayout>;
   readonly sourceText: string;
   readonly textWidthPt: number | null;
   readonly font: TextFontOptions;
@@ -270,7 +337,7 @@ function buildTexSharedLayout(params: {
   readonly mathFontProfile?: TexMathFontProfile;
   readonly nextParagraphId: () => string;
 }): TexSharedLayout | null {
-  const cached = getCappedMapValue(params.layoutCache, params.layoutCacheKey);
+  const cached = params.layoutCache.get(params.layoutCacheKey);
   if (cached) {
     return cached;
   }
@@ -410,21 +477,18 @@ function buildTexSharedLayout(params: {
     renderFont,
     isSingleNaturalLine:
       isNaturalWidthLayout && !hasExplicitLineBreaks() && report.lines.length === 1,
+    // Conservative estimate of owned layout structures, excluding shared font
+    // tables. Avoid a second traversal of every glyph/caret graph on cold paths.
+    retainedBytes: params.sourceText.length * 256 + estimateVListLayoutBytes(vlistLayout),
   };
-  setCappedMapValue(
-    params.layoutCache,
-    params.layoutCacheKey,
-    shared,
-    TEX_LAYOUT_CACHE_LIMIT
-  );
+  params.layoutCache.set(params.layoutCacheKey, shared, params.layoutCacheKey.length * 2 + shared.retainedBytes);
   return shared;
 }
 
 function buildTexTextCacheEntry(params: {
-  readonly layoutContext: TextLayoutContext;
   readonly cacheKey: string;
   readonly layoutCacheKey: string;
-  readonly layoutCache: Map<string, TexSharedLayout>;
+  readonly layoutCache: TexWeightedLruCache<string, TexSharedLayout>;
   readonly sourceText: string;
   readonly textWidthPt: number | null;
   readonly font: TextFontOptions;
@@ -466,11 +530,6 @@ function buildTexTextCacheEntry(params: {
       paragraphId,
     })),
   };
-  registerParagraphLayoutReports(params.layoutContext, [report]);
-  registerTexVListLayouts(params.layoutContext, [{
-    paragraphId,
-    layout: vlistLayout,
-  }]);
 
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
@@ -523,6 +582,9 @@ function buildTexTextCacheEntry(params: {
     midLineYPt: 0,
     paragraphId,
     renderSourceText: params.sourceText,
+    report,
+    vlistLayout,
+    retainedBytes: shared.retainedBytes * 2 + body.length * 2 + params.sourceText.length * 2 + 256,
   };
 }
 
@@ -740,32 +802,4 @@ function measurementKey(
     fontWeight: font.fontWeight,
     fontFamily: font.fontFamily,
   });
-}
-
-function setCappedMapValue<K, V>(
-  map: Map<K, V>,
-  key: K,
-  value: V,
-  limit: number
-): void {
-  if (map.has(key)) {
-    map.delete(key);
-  }
-  map.set(key, value);
-  while (map.size > limit) {
-    const oldest = map.keys().next();
-    if (oldest.done) {
-      break;
-    }
-    map.delete(oldest.value);
-  }
-}
-
-function getCappedMapValue<K, V>(map: Map<K, V>, key: K): V | undefined {
-  const value = map.get(key);
-  if (value !== undefined) {
-    map.delete(key);
-    map.set(key, value);
-  }
-  return value;
 }

@@ -49,9 +49,7 @@ SceneElement
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
 import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
-import { getActiveTextLayoutContext } from "@tikz-editor/core/text/layout-context";
-import { registerParagraphLayoutReports } from "@tikz-editor/core/text/knuth-plass";
-import { registerTexVListLayouts } from "@tikz-editor/core/text/tex/vlist/index";
+import { createTextLayoutContext } from "@tikz-editor/core/text/layout-context";
 import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
@@ -514,22 +512,21 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!deckActiveFrame) {
       return null;
     }
-    const context = {};
-    registerParagraphLayoutReports(
-      context,
-      deckActiveFrame.layout.paragraphs.map((paragraph) => paragraph.report)
-    );
-    registerTexVListLayouts(
-      context,
-      deckActiveFrame.layout.paragraphs.map((paragraph) => ({
-        paragraphId: paragraph.paragraphId,
-        layout: paragraph.vlistLayout
-      }))
-    );
-    return context;
+    const paragraphs = deckActiveFrame.layout.paragraphs;
+    const reports = paragraphs.map((paragraph) => paragraph.report);
+    const layouts = paragraphs.map((paragraph) => ({
+      paragraphId: paragraph.paragraphId,
+      layout: paragraph.vlistLayout
+    }));
+    const layoutsByParagraph = new Map(layouts.map((entry) => [entry.paragraphId, entry.layout]));
+    return createTextLayoutContext({
+      getParagraphReports: () => reports,
+      getVListLayouts: () => layouts,
+      getVListLayout: (paragraphId) => layoutsByParagraph.get(paragraphId) ?? null,
+    });
   }, [deckActiveFrame]);
   const textLayoutContext =
-    deckTextLayoutContext ?? getActiveTextLayoutContext();
+    deckTextLayoutContext ?? snapshot.textLayoutContext ?? null;
   const deckSvgResult = useMemo(
     () =>
       deckActiveFrame

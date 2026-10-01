@@ -190,4 +190,5 @@ export const TEXT_ENGINE_BENCH_CASES: readonly TextEngineBenchCase[] = [
       request: textBenchRequest(paragraph.replaceAll("{i}", token), { textWidthPt }),
     })),
   },
+  fixture("repeated fractions with source projection", "cache", String.raw`State {i}: $\frac{x_1}{\sqrt{1+y^2}}$ and $\frac{x_1}{\sqrt{1+y^2}}$ then $\frac{x_1}{\sqrt{1+y^2}}$ finally $\frac{x_1}{\sqrt{1+y^2}}$.`, { request: { textWidthPt: 180 }, requiredSvg: mathSvg }),
 ];

@@ -18,6 +18,8 @@ import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditHandle, SceneFigure } from "@tikz-editor/core/semantic/types";
 import { renderTikzToSvgAsync, type RenderDiagnostic } from "@tikz-editor/core/render/index";
 import type { NodeTextEngine } from "@tikz-editor/core/text/types";
+import type { TextLayoutContext } from "@tikz-editor/core/text/layout-context";
+import { runTextRenderOperation, retainSceneTextLayout } from "@tikz-editor/core/text/render-scope";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
@@ -52,6 +54,8 @@ export type SessionSnapshot = {
   svgModel: SvgRenderModel | null;
   parseResult: ParseTikzResult | null;
   semanticResult: EvaluateTikzResult | null;
+  /** Local report owner. Worker receivers must reconstruct their report registries. */
+  textLayoutContext?: TextLayoutContext | null;
   /**
    * Identifies the path-free graphics preview bundle prepared for this
    * document revision. Thumbnail workers register the bundle separately.
@@ -155,6 +159,7 @@ function resolveSvgPadding(source: string, activeRootId: string | null | undefin
   }
 }
 let previousSvgModel: SvgRenderModel | null = null;
+let previousTextLayoutContext: TextLayoutContext | null = null;
 let incrementalWarmSource: string | null = null;
 
 export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
@@ -169,6 +174,7 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
     svgModel: null,
     parseResult: null,
     semanticResult: null,
+    textLayoutContext: null,
     graphicsPreviewBundleKey: null,
     incremental: null,
     deck: null
@@ -246,6 +252,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         svgModel: result.svg.model,
         parseResult: result.parse,
         semanticResult: result.semantic,
+        textLayoutContext: result.textLayoutContext,
         graphicsPreviewBundleKey: result.graphicsPreviewBundleKey,
         deck: null,
         incremental: {
@@ -343,6 +350,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     }
     phases.primeParse = performance.now() - phaseStartedAt;
     previousSvgModel = result.svg.model;
+    previousTextLayoutContext = result.textLayoutContext;
 
     const snapshot: SessionSnapshot = {
       source: request.source,
@@ -355,6 +363,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       svgModel: result.svg.model,
       parseResult: result.parse,
       semanticResult: result.semantic,
+      textLayoutContext: result.textLayoutContext,
       graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
       incremental: null,
       deck: null
@@ -380,6 +389,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     incrementalParseSession?.reset();
     incrementalWarmSource = null;
     previousSvgModel = null;
+    previousTextLayoutContext = null;
     const snapshot: SessionSnapshot = {
       source: request.source,
       revision,
@@ -391,6 +401,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       svgModel: null,
       parseResult: null,
       semanticResult: null,
+      textLayoutContext: null,
       graphicsPreviewBundleKey: null,
       incremental: null,
       deck: null
@@ -597,6 +608,7 @@ async function computeDeckSnapshot(
     svgModel: null,
     parseResult: null,
     semanticResult: null,
+    textLayoutContext: null,
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
     incremental: null,
     deck: {
@@ -712,6 +724,7 @@ async function computeNestedTikzSnapshot(
     svgModel: result.svg.model,
     parseResult: result.parse,
     semanticResult: result.semantic,
+    textLayoutContext: result.textLayoutContext,
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
     incremental: null,
     deck: null
@@ -752,11 +765,13 @@ async function computeSnapshotIncremental(
   renderDiagnostics: RenderDiagnostic[];
   phaseDurationsMs: Record<string, number>;
   graphicsPreviewBundleKey: string;
+  textLayoutContext: TextLayoutContext | null;
 }> {
   const phases: Record<string, number> = {};
   let phaseStartedAt = performance.now();
   const maybeTextEngine = getTextEngine();
   const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
+  const textScope = textEngine.createRenderScope?.(previousTextLayoutContext);
   phases.textEngine = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
   const graphicsContext = await prepareDocumentGraphicsContext({
@@ -789,7 +804,7 @@ async function computeSnapshotIncremental(
   let reusePreviousModel = previousSvgModel;
 
   phaseStartedAt = performance.now();
-  let incremental = session.evaluate({
+  let incremental = runTextRenderOperation(textScope, () => session.evaluate({
     figure: parseResult.figure,
     source: parseResult.source,
     options: { sourceFingerprint, textEngine, graphicsResolver },
@@ -798,7 +813,7 @@ async function computeSnapshotIncremental(
       sourcePatches: patches,
       trigger
     }
-  });
+  }));
   phases.semantic = performance.now() - phaseStartedAt;
   let semanticResult = incremental.semantic;
   let incrementalStats = incremental.stats;
@@ -812,12 +827,12 @@ async function computeSnapshotIncremental(
   phases.geometryInvalidation = performance.now() - phaseStartedAt;
 
   phaseStartedAt = performance.now();
-  let svgResult = emitSvg(semanticResult.scene, {
+  let svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
     padding: svgPadding,
     textEngine,
     viewBox: renderViewBox ?? undefined,
     reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
-  });
+  }));
   phases.emitSvg = performance.now() - phaseStartedAt;
   reusePreviousModel = svgResult.model;
 
@@ -826,7 +841,7 @@ async function computeSnapshotIncremental(
   phases.flushText = performance.now() - phaseStartedAt;
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
     phaseStartedAt = performance.now();
-    incremental = session.evaluate({
+    incremental = runTextRenderOperation(textScope, () => session.evaluate({
       figure: parseResult.figure,
       source: parseResult.source,
       options: { sourceFingerprint, textEngine, graphicsResolver },
@@ -835,7 +850,7 @@ async function computeSnapshotIncremental(
         sourcePatches: patches,
         trigger
       }
-    });
+    }));
     phases.semanticAfterTextFlush = performance.now() - phaseStartedAt;
     semanticResult = incremental.semantic;
     incrementalStats = incremental.stats;
@@ -850,17 +865,19 @@ async function computeSnapshotIncremental(
     affectedSourceIdsForReuse = mergeSourceIds(dependencyAffectedSourceIds, texAffectedSourceIds);
     phases.geometryInvalidationAfterTextFlush = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
-    svgResult = emitSvg(semanticResult.scene, {
+    svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
       padding: svgPadding,
       textEngine,
       viewBox: renderViewBox ?? undefined,
       reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
-    });
+    }));
     phases.emitSvgAfterTextFlush = performance.now() - phaseStartedAt;
     reusePreviousModel = svgResult.model;
   }
 
   previousSvgModel = reusePreviousModel;
+  retainSceneTextLayout(textScope, semanticResult.scene);
+  previousTextLayoutContext = textScope?.layoutContext ?? textEngine.layoutContext ?? null;
   incrementalWarmSource = source;
 
   return {
@@ -871,7 +888,8 @@ async function computeSnapshotIncremental(
     semanticStats: incrementalStats,
     renderDiagnostics: [],
     phaseDurationsMs: phases,
-    graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey
+    graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+    textLayoutContext: previousTextLayoutContext
   };
 }
 

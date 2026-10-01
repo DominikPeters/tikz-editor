@@ -1,6 +1,7 @@
 import type { TextSourceMap } from "./source-map.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { TexGraphicsPlacement } from "./tex/vlist/types.js";
+import type { TextLayoutContext } from "./layout-context.js";
 
 export type NodeTextFontStyle = "normal" | "italic";
 export type NodeTextFontWeight = "normal" | "bold";
@@ -75,6 +76,10 @@ export type NodeTextRenderInfo =
     };
 
 export type NodeTextEngine = {
+  /** Local owner of caret/selection reports; carry it with rendered results. */
+  readonly layoutContext?: TextLayoutContext;
+  /** Keep visible text alive independently of the engine's reusable cache. */
+  createRenderScope?(previousContext?: TextLayoutContext | null): NodeTextRenderScope;
   validate(text: string): NodeTextValidationIssue | null;
   measure(request: NodeTextMeasureRequest): NodeTextMetrics | null;
   renderFromCache(cacheKey: string): NodeTextRenderPayload | null;
@@ -84,3 +89,10 @@ export type NodeTextEngine = {
    */
   flushPending?(): Promise<readonly string[]>;
 };
+
+export interface NodeTextRenderScope {
+  readonly layoutContext: TextLayoutContext;
+  /** Synchronous capture; engine identity stays stable for incremental checkpoints. */
+  run<T>(operation: () => T): T;
+  retain(cacheKeys: readonly string[]): void;
+}

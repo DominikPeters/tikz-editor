@@ -1,4 +1,7 @@
 import type { ParagraphLayoutReport } from "./paragraph/report.js";
+import { getTextLayoutReportProvider } from "../layout-context.js";
+import { TexWeightedLruCache } from "../tex/cache.js";
+import { estimateParagraphReportBytes } from "../layout-cache-size.js";
 
 interface ParagraphReportProvider {
   linebreaks?: {
@@ -7,11 +10,10 @@ interface ParagraphReportProvider {
 }
 
 const reportsByLayoutContext =
-  new WeakMap<object, Map<string, ParagraphLayoutReport>>();
+  new WeakMap<object, TexWeightedLruCache<string, ParagraphLayoutReport>>();
 
-// Paragraph ids derive from position-anchored cache keys, so edits and drag
-// frames register fresh ids continually; cap the registry instead of growing
-// for the session lifetime.
+// Standalone reports have bounded storage. Render/frame reports are owned by
+// their entries and supplied through the layout context's provider.
 const REPORT_REGISTRY_LIMIT = 4096;
 
 export function getParagraphLayoutReports(
@@ -32,6 +34,12 @@ export function getParagraphLayoutReports(
       }
     }
   }
+  const owned = getTextLayoutReportProvider(layoutContext)?.getParagraphReports();
+  if (owned) {
+    const byId = new Map(reports.map((report) => [report.paragraphId, report]));
+    for (const report of owned) byId.set(report.paragraphId, report);
+    return [...byId.values()];
+  }
   return reports;
 }
 
@@ -48,17 +56,9 @@ export function registerParagraphLayoutReports(
   }
   const existing =
     reportsByLayoutContext.get(layoutContext) ??
-    new Map<string, ParagraphLayoutReport>();
+    new TexWeightedLruCache<string, ParagraphLayoutReport>(REPORT_REGISTRY_LIMIT, 32 * 1024 * 1024, { retainOversizedEntry: true });
   for (const report of reports) {
-    existing.delete(report.paragraphId);
-    existing.set(report.paragraphId, report);
-  }
-  while (existing.size > REPORT_REGISTRY_LIMIT) {
-    const oldest = existing.keys().next();
-    if (oldest.done) {
-      break;
-    }
-    existing.delete(oldest.value);
+    existing.set(report.paragraphId, report, estimateParagraphReportBytes(report));
   }
   reportsByLayoutContext.set(layoutContext, existing);
 }

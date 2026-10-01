@@ -1,4 +1,7 @@
 import type { TexVListLayout } from "./types.js";
+import { getTextLayoutReportProvider } from "../../layout-context.js";
+import { TexWeightedLruCache } from "../cache.js";
+import { estimateVListLayoutBytes } from "../../layout-cache-size.js";
 
 export interface RegisteredTexVListLayout {
   readonly paragraphId: string;
@@ -6,11 +9,10 @@ export interface RegisteredTexVListLayout {
 }
 
 const texVListLayoutsByContext =
-  new WeakMap<object, Map<string, TexVListLayout>>();
+  new WeakMap<object, TexWeightedLruCache<string, RegisteredTexVListLayout>>();
 
-// Paragraph ids derive from position-anchored cache keys, so edits and drag
-// frames register fresh ids continually; cap the registry instead of growing
-// for the session lifetime.
+// Standalone layouts use this registry; render/frame layouts share the
+// lifetime of their owned entries through a context provider.
 const TEX_VLIST_REGISTRY_LIMIT = 4096;
 
 export function registerTexVListLayouts(
@@ -26,19 +28,11 @@ export function registerTexVListLayouts(
   }
   const existing =
     texVListLayoutsByContext.get(layoutContext) ??
-    new Map<string, TexVListLayout>();
+    new TexWeightedLruCache<string, RegisteredTexVListLayout>(TEX_VLIST_REGISTRY_LIMIT, 32 * 1024 * 1024, { retainOversizedEntry: true });
   for (const entry of layouts) {
     if (entry.paragraphId.length > 0) {
-      existing.delete(entry.paragraphId);
-      existing.set(entry.paragraphId, entry.layout);
+      existing.set(entry.paragraphId, entry, entry.paragraphId.length * 2 + estimateVListLayoutBytes(entry.layout));
     }
-  }
-  while (existing.size > TEX_VLIST_REGISTRY_LIMIT) {
-    const oldest = existing.keys().next();
-    if (oldest.done) {
-      break;
-    }
-    existing.delete(oldest.value);
   }
   texVListLayoutsByContext.set(layoutContext, existing);
 }
@@ -50,13 +44,12 @@ export function getTexVListLayouts(
     return [];
   }
   const layouts = texVListLayoutsByContext.get(layoutContext);
-  if (!layouts) {
-    return [];
-  }
-  return [...layouts.entries()].map(([paragraphId, layout]) => ({
-    paragraphId,
-    layout,
-  }));
+  const registered = [...(layouts?.values() ?? [])];
+  const owned = getTextLayoutReportProvider(layoutContext)?.getVListLayouts();
+  if (!owned) return registered;
+  const byId = new Map(registered.map((entry) => [entry.paragraphId, entry]));
+  for (const entry of owned) byId.set(entry.paragraphId, entry);
+  return [...byId.values()];
 }
 
 export function getTexVListLayout(
@@ -66,5 +59,6 @@ export function getTexVListLayout(
   if (!layoutContext || typeof layoutContext !== "object" || !paragraphId) {
     return null;
   }
-  return texVListLayoutsByContext.get(layoutContext)?.get(paragraphId) ?? null;
+  return getTextLayoutReportProvider(layoutContext)?.getVListLayout(paragraphId) ??
+    texVListLayoutsByContext.get(layoutContext)?.get(paragraphId)?.layout ?? null;
 }

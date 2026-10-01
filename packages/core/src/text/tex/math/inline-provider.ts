@@ -61,6 +61,20 @@ import {
 import {
   normalizeTexMathAtomClasses,
 } from "./spacing.js";
+import { TexWeightedLruCache, freezeTexCacheValue } from "../cache.js";
+import { translateTexMathSourceGraph } from "./source-projection.js";
+
+type MathBoxLayout = {
+  readonly list: TexMathList;
+  readonly hlist: TexMathHList;
+  readonly fontProfile: TexMathFontProfile;
+};
+
+type MathBoxCaches = {
+  readonly boxes: TexWeightedLruCache<string, TexMathBox | null>;
+  readonly layouts: TexWeightedLruCache<string, MathBoxLayout>;
+  readonly seenLayouts: TexWeightedLruCache<string, true>;
+};
 
 const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
 const TEX_DISPLAY_ALIGNMENT_MIN_ALIGN_SEP_PT = 10;
@@ -87,13 +101,18 @@ export function createTexDerivedInlineMathBoxProvider(
   const configuredFontProfile = options.fontProfile;
   const baseAtPt = texLength(options.baseAtPt ?? 10);
   const renderInlineSvg = !options.deferInlineSvg;
-  const cache = new Map<string, TexMathBox | null>();
+  let cache: MathBoxCaches | undefined;
+  const getCache = () => cache ??= {
+    boxes: new TexWeightedLruCache(256, 4 * 1024 * 1024),
+    layouts: new TexWeightedLruCache(128, 2 * 1024 * 1024),
+    seenLayouts: new TexWeightedLruCache(256, 128 * 1024),
+  };
   return {
     getInlineMathBox: (params) => {
-      return getMathBox(params, "text", cache, configuredFontProfile, baseAtPt, renderInlineSvg);
+      return getMathBox(params, "text", getCache(), configuredFontProfile, baseAtPt, renderInlineSvg);
     },
     getDisplayMathBox: (params) => {
-      return getMathBox(params, "display", cache, configuredFontProfile, baseAtPt);
+      return getMathBox(params, "display", getCache(), configuredFontProfile, baseAtPt);
     },
     getDisplayMathAlignment: (params) => {
       return getDisplayMathAlignment(params, configuredFontProfile, baseAtPt);
@@ -114,38 +133,46 @@ function getMathBox(
     readonly displayLabel?: TexMathDisplayLabel;
   },
   style: "text" | "display",
-  cache: Map<string, TexMathBox | null>,
+  cache: MathBoxCaches,
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: TexLength,
   renderSvg = true
 ): TexMathBox | null {
-  const key = `${style}:${params.delimiter}:${params.contentStart}:${params.targetWidth ?? "natural"}:${params.displayLabel?.text ?? ""}:${params.content}`;
-  const cached = cache.get(key);
+  const requestedLabel = params.displayLabel ? {
+    ...params.displayLabel,
+    sourceSpan: { ...params.displayLabel.sourceSpan },
+    textSourceSpan: { ...params.displayLabel.textSourceSpan },
+  } : undefined;
+  // Final projections include every source/label field. Structured keys also
+  // prevent a colon in label/content text from aliasing another request.
+  const key = JSON.stringify([
+    style, params.delimiter, params.source, params.content,
+    sourceNumberKey(params.sourceStart), sourceNumberKey(params.sourceEnd),
+    sourceNumberKey(params.contentStart), sourceNumberKey(params.contentEnd),
+    params.targetWidth === undefined ? null : sourceNumberKey(params.targetWidth),
+    requestedLabel ? [
+      requestedLabel.text, requestedLabel.explicit ?? null,
+      sourceNumberKey(requestedLabel.sourceSpan.start), sourceNumberKey(requestedLabel.sourceSpan.end),
+      sourceNumberKey(requestedLabel.textSourceSpan.start), sourceNumberKey(requestedLabel.textSourceSpan.end),
+    ] : null,
+  ]);
+  const cached = cache.boxes.get(key);
   if (cached !== undefined) {
     return cached;
   }
-  const parsed = parseMathBoxContent(params, style);
-  if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-    cache.set(key, null);
+  const layout = getMathBoxLayout(params, style, cache, configuredFontProfile, baseAtPt);
+  if (!layout) {
+    cache.boxes.set(key, null, key.length * 2 + 64);
     return null;
   }
-  const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
-  const laidOut = layoutTexMathList(parsed.list, {
-    style,
-    fontProfile,
-    baseAtPt,
-  });
-  if (!laidOut.supported) {
-    cache.set(key, null);
-    return null;
-  }
+  const { list, hlist: naturalHList, fontProfile } = layout;
   const measuredHList = style === "display" &&
     params.targetWidth !== undefined &&
-    laidOut.hlist.width > params.targetWidth
-    ? setTexMathHListWidth(laidOut.hlist, params.targetWidth)
-    : laidOut.hlist;
+    naturalHList.width > params.targetWidth
+    ? setTexMathHListWidth(naturalHList, params.targetWidth)
+    : naturalHList;
   const displayLabel = style === "display"
-    ? displayLabelForMathList(parsed.list) ?? (displayTagSuppressedForMathList(parsed.list) ? null : params.displayLabel ?? null)
+    ? displayLabelForMathList(list) ?? (displayTagSuppressedForMathList(list) ? null : requestedLabel ?? null)
     : null;
   const hlist = displayLabel
     ? addDisplayMathTag(measuredHList, displayLabel, params.targetWidth ?? measuredHList.width, fontProfile, baseAtPt)
@@ -165,13 +192,56 @@ function getMathBox(
     caretMap,
     caretStops: projectInlineMathCaretStops(caretMap, hlist.width),
     constructRanges: buildInlineMathConstructRanges(hlist),
-    breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
+    breakpoints: buildInlineMathBreakpoints(list, hlist),
     svgBody: renderSvg ? renderTexMathHListSvgBody(hlist, { fontProfile }) : undefined,
     hlist,
     fontProfile,
   } satisfies TexMathBox;
-  cache.set(key, box);
+  cache.boxes.set(key, box, key.length * 2 + params.content.length * 512 +
+    (box.svgBody?.length ?? 0) * 2 + caretMap.entries.length * 128 + 256);
   return box;
+}
+
+function sourceNumberKey(value: number): string {
+  return Object.is(value, -0) ? "-0" : String(value);
+}
+
+function getMathBoxLayout(
+  params: { readonly delimiter: string; readonly content: string; readonly contentStart: number },
+  style: "text" | "display",
+  cache: MathBoxCaches,
+  configuredFontProfile: TexMathFontProfile | undefined,
+  baseAtPt: TexLength
+): MathBoxLayout | null {
+  const cacheable = params.content.length <= 4096 && Number.isSafeInteger(params.contentStart) &&
+    !Object.is(params.contentStart, -0) &&
+    Number.isSafeInteger(params.contentStart + params.content.length);
+  const key = cacheable ? JSON.stringify([style, params.delimiter, params.content]) : null;
+  const cached = key === null ? undefined : cache.layouts.get(key);
+  if (cached) {
+    // Only the layout graph is reusable. Labels, target width, outer spans,
+    // caret projection and SVG are assembled for the current request.
+    const projected = params.contentStart === 0
+      ? cached : translateTexMathSourceGraph({ list: cached.list, hlist: cached.hlist }, params.contentStart);
+    return { list: projected.list, hlist: projected.hlist, fontProfile: cached.fontProfile };
+  }
+  const parsed = parseMathBoxContent(params, style);
+  if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) return null;
+  const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
+  const laidOut = layoutTexMathList(parsed.list, { style, fontProfile, baseAtPt });
+  if (!laidOut.supported) return null;
+  if (key !== null) {
+    if (cache.seenLayouts.get(key)) {
+      // Copy before freezing: no caller-owned profile/font state is retained in
+      // this owned graph. Coordinates in the template are relative to content.
+      const relative = translateTexMathSourceGraph({ list: parsed.list, hlist: laidOut.hlist }, -params.contentStart);
+      const bytes = freezeTexCacheValue(relative);
+      cache.layouts.set(key, { ...relative, fontProfile }, bytes + key.length * 2);
+    } else {
+      cache.seenLayouts.set(key, true, key.length * 2 + 64);
+    }
+  }
+  return { list: parsed.list, hlist: laidOut.hlist, fontProfile };
 }
 
 function displayLabelForMathList(list: TexMathList): TexMathAlignedRowLabel | null {

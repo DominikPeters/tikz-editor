@@ -7,6 +7,8 @@ import type { EmitSvgOptions, EmitSvgResult } from "../svg/index.js";
 import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { NodeTextEngine } from "../text/types.js";
+import type { TextLayoutContext } from "../text/layout-context.js";
+import { runTextRenderOperation, retainSceneTextLayout } from "../text/render-scope.js";
 import type { NodeItem, TikzFigure } from "../ast/types.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
 
@@ -35,11 +37,15 @@ export type RenderTikzToSvgResult = {
   semantic: EvaluateTikzResult;
   svg: EmitSvgResult;
   renderDiagnostics: RenderDiagnostic[];
+  /** Local owner of editing reports for this result's text. */
+  textLayoutContext: TextLayoutContext | null;
 };
 
 export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): RenderTikzToSvgResult {
   const parseResult = parseTikz(source, opts.parse);
-  const semanticResult = (opts.semanticEvaluator ?? evaluateTikzFigure)(
+  const textScope = opts.evaluate?.textEngine?.createRenderScope?.();
+  const svgScope = opts.svg?.textEngine === opts.evaluate?.textEngine ? textScope : opts.svg?.textEngine?.createRenderScope?.();
+  const semanticResult = runTextRenderOperation(textScope, () => (opts.semanticEvaluator ?? evaluateTikzFigure)(
     parseResult.figure,
     parseResult.source,
     {
@@ -47,14 +53,17 @@ export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): R
       graphicsResolver:
         opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
     }
-  );
-  const svgResult = emitSvg(semanticResult.scene, opts.svg);
+  ));
+  const svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, opts.svg));
+  retainSceneTextLayout(textScope, semanticResult.scene);
+  if (svgScope !== textScope) retainSceneTextLayout(svgScope, semanticResult.scene);
 
   return {
     parse: parseResult,
     semantic: semanticResult,
     svg: svgResult,
-    renderDiagnostics: []
+    renderDiagnostics: [],
+    textLayoutContext: textScope?.layoutContext ?? opts.evaluate?.textEngine?.layoutContext ?? svgScope?.layoutContext ?? opts.svg?.textEngine?.layoutContext ?? null,
   };
 }
 
@@ -97,23 +106,28 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
     ...opts.svg,
     textEngine: opts.svg?.textEngine ?? textEngine
   };
+  const textScope = evaluateOpts.textEngine?.createRenderScope?.();
+  const svgScope = svgOpts.textEngine === evaluateOpts.textEngine ? textScope : svgOpts.textEngine?.createRenderScope?.();
 
   const parseResult = parseTikz(source, parseOpts);
   const semanticEvaluator = opts.semanticEvaluator ?? evaluateTikzFigure;
-  let semanticResult = semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts);
-  let svgResult = emitSvg(semanticResult.scene, svgOpts);
+  let semanticResult = runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
+  let svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
 
   const flushedPendingTextKeys = await textEngine?.flushPending?.();
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
-    semanticResult = semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts);
-    svgResult = emitSvg(semanticResult.scene, svgOpts);
+    semanticResult = runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
+    svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
   }
+  retainSceneTextLayout(textScope, semanticResult.scene);
+  if (svgScope !== textScope) retainSceneTextLayout(svgScope, semanticResult.scene);
 
   return {
     parse: parseResult,
     semantic: semanticResult,
     svg: svgResult,
-    renderDiagnostics
+    renderDiagnostics,
+    textLayoutContext: textScope?.layoutContext ?? evaluateOpts.textEngine?.layoutContext ?? svgScope?.layoutContext ?? svgOpts.textEngine?.layoutContext ?? null,
   };
 }
 

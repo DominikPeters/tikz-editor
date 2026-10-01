@@ -15,7 +15,12 @@ export class TexWeightedLruCache<K, V> {
 
   public constructor(
     private readonly maxEntries: number,
-    private readonly maxBytes: number
+    private readonly maxBytes: number,
+    private readonly options: {
+      readonly onEvict?: (key: K, value: V) => void;
+      /** Preserve immediate rendering of a single result larger than the budget. */
+      readonly retainOversizedEntry?: boolean;
+    } = {}
   ) {}
 
   public get(key: K): V | undefined {
@@ -28,25 +33,35 @@ export class TexWeightedLruCache<K, V> {
     return entry.value;
   }
 
-  public set(key: K, value: V, bytes: number): void {
-    const previous = this.entries.get(key);
-    if (previous) {
-      this.bytes -= previous.bytes;
-      this.entries.delete(key);
-      this.unlink(previous);
-    }
-    if (!Number.isFinite(bytes) || bytes < 0 || bytes > this.maxBytes) return;
+  public set(key: K, value: V, bytes: number): boolean {
+    this.delete(key);
+    if (!Number.isFinite(bytes) || bytes < 0 ||
+      (bytes > this.maxBytes && !this.options.retainOversizedEntry)) return false;
     const entry = { key, value, bytes, previous: null, next: null };
     this.entries.set(key, entry);
     this.append(entry);
     this.bytes += bytes;
-    while (this.entries.size > this.maxEntries || this.bytes > this.maxBytes) {
+    while (this.entries.size > this.maxEntries ||
+      (this.bytes > this.maxBytes && this.entries.size > 1)) {
       const oldest = this.oldest;
       if (!oldest) break;
-      this.entries.delete(oldest.key);
-      this.unlink(oldest);
-      this.bytes -= oldest.bytes;
+      this.delete(oldest.key);
     }
+    return this.entries.has(key);
+  }
+
+  public delete(key: K): boolean {
+    const entry = this.entries.get(key);
+    if (!entry) return false;
+    this.entries.delete(key);
+    this.unlink(entry);
+    this.bytes -= entry.bytes;
+    this.options.onEvict?.(key, entry.value);
+    return true;
+  }
+
+  public *values(): IterableIterator<V> {
+    for (let entry = this.oldest; entry; entry = entry.next) yield entry.value;
   }
 
   private unlink(entry: TexCacheEntry<K, V>): void {
