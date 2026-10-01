@@ -3372,6 +3372,21 @@ export const CanvasPanel = memo(function CanvasPanel({
   return (
     <>
       <CanvasPanelView
+        beamerLinks={deckActiveFrame && !textEditingSession && toolMode === "select" && snapshot.source === source
+          ? deckActiveFrame.layout.paragraphs.flatMap((paragraph) => (paragraph.links ?? []).map((link) => ({
+              ...link,
+              bounds: { ...link.bounds, x: link.bounds.x + paragraph.bounds.x, y: link.bounds.y + paragraph.bounds.y },
+            })))
+          : []}
+        onBeamerLinkActivate={(destination) => {
+          if (destination.kind === "external") {
+            void platform.window?.openExternalUrl?.(destination.url);
+          } else {
+            selectDeckObject(null);
+            dispatch({ type: "SET_DECK_STEP", rootId: destination.frameId, step: destination.step });
+            dispatch({ type: "SET_ACTIVE_ROOT", rootId: destination.frameId });
+          }
+        }}
         prefersNonBlinkingTextInsertionIndicator={prefersNonBlinkingTextInsertionIndicator}
         showRulers={showRulers}
         viewportSize={viewportSize}

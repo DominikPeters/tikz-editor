@@ -1,0 +1,274 @@
+import type { Span } from "../ast/types.js";
+import type { Diagnostic } from "../diagnostics/types.js";
+import {
+  concatMappedText, createGeneratedMappedText, projectInputRange, sliceMappedText,
+  type MappedText,
+} from "../text/source-map.js";
+import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
+import type { TexVListLayout } from "../text/tex/vlist/types.js";
+import { getTexSyntaxIndex, matchTexSyntaxEnvironments, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
+import {
+  beamerOverlaySpecContains, resolveBeamerOverlaySpanVisibility, scanBeamerFrameOverlays,
+  type BeamerOverlaySpec,
+} from "./overlay.js";
+import type { BeamerDocumentModel, BeamerRect } from "./types.js";
+
+export type BeamerLinkDestination =
+  | { kind: "frame"; frameId: string; step: number }
+  | { kind: "external"; url: string };
+
+export type BeamerLinkRegion = {
+  /** Bounds relative to the containing paragraph. */
+  bounds: BeamerRect;
+  destination: BeamerLinkDestination;
+  label: string;
+};
+
+type CitationEntry = { label: string; destination: BeamerLinkDestination };
+export type BeamerReferenceIndex = {
+  targets: ReadonlyMap<string, BeamerLinkDestination>;
+  citations: ReadonlyMap<string, CitationEntry>;
+  specs: ReadonlyMap<number, BeamerOverlaySpec>;
+  diagnostics: readonly Diagnostic[];
+};
+
+export type BeamerReferenceContext = BeamerReferenceIndex & {
+  step: number;
+  /** Owned by the current render; the prepared document index stays immutable. */
+  renderDiagnostics: Diagnostic[];
+};
+
+/** Beamer's frame labels also define label<1>, label<2>, ... destinations. */
+export function buildBeamerReferenceIndex(
+  document: BeamerDocumentModel,
+  syntax: TexSyntaxIndex
+): BeamerReferenceIndex {
+  const targets = new Map<string, BeamerLinkDestination>();
+  const citations = new Map<string, CitationEntry>();
+  const specs = new Map<number, BeamerOverlaySpec>();
+  const diagnostics: Diagnostic[] = [];
+  const source = syntax.source;
+  const bibliographies = [...matchTexSyntaxEnvironments(syntax).values()].filter((env) => env.name === "thebibliography");
+  const addTarget = (name: string, destination: BeamerLinkDestination, span: Span) => {
+    if (!name) return;
+    if (targets.has(name)) {
+      diagnostics.push({ severity: "warning", code: "beamer-duplicate-target", message: `Duplicate link target '${name}'; the first destination is used.`, span });
+    } else targets.set(name, destination);
+  };
+  for (const frame of document.frames) {
+    const overlays = scanBeamerFrameOverlays(source, frame, syntax);
+    for (const entry of overlays.referenceSpecs) specs.set(entry.sourceStart, entry.spec);
+    const destination = (step: number): BeamerLinkDestination => ({ kind: "frame", frameId: frame.id, step });
+    const frameLabel = frame.options?.label;
+    if (frameLabel) {
+      addTarget(frameLabel, destination(1), frame.span);
+      for (let step = 1; step <= overlays.stepCount; step += 1) {
+        addTarget(`${frameLabel}<${step}>`, destination(step), frame.span);
+      }
+    }
+    const counters = new Map<number, number>();
+    for (const command of syntax.controlsIn(frame.bodySpan)) {
+      if (!["label", "hypertarget", "bibitem"].includes(command.name)) continue;
+      const overlay = syntax.argumentAfter(command.span.to, "overlay", frame.bodySpan.to);
+      let cursor = overlay?.span.to ?? command.span.to;
+      const optional = command.name === "bibitem" ? syntax.argumentAfter(cursor, "optional", frame.bodySpan.to) : null;
+      cursor = optional?.span.to ?? cursor;
+      const argument = syntax.argumentAfter(cursor, "required", frame.bodySpan.to);
+      if (!argument?.complete) continue;
+      const key = source.slice(argument.contentSpan.from, argument.contentSpan.to).trim();
+      const spec = specs.get(command.span.from);
+      // Respect enclosing \only, \uncover, pauses, and bibliography item overlays.
+      const firstVisible = Array.from({ length: overlays.stepCount }, (_, index) => index + 1).find((step) =>
+        (spec ? beamerOverlaySpecContains(spec, step) : command.name !== "label" || step === 1) &&
+        resolveBeamerOverlaySpanVisibility(overlays, command.span, step) === "visible"
+      );
+      if (firstVisible == null) continue;
+      if (command.name !== "bibitem") {
+        addTarget(key, destination(firstVisible), command.span);
+        continue;
+      }
+      const bibliography = bibliographies.find((env) => env.contentSpan.from <= command.span.from && command.span.to <= env.contentSpan.to);
+      if (!bibliography) continue;
+      // An explicit label does not advance LaTeX's enumiv counter.
+      const count = counters.get(bibliography.span.from) ?? 0;
+      const label = optional
+        ? source.slice(optional.contentSpan.from, optional.contentSpan.to)
+        : String(count + 1);
+      if (!optional) counters.set(bibliography.span.from, count + 1);
+      if (citations.has(key)) {
+        diagnostics.push({ severity: "warning", code: "beamer-duplicate-citation", message: `Duplicate bibliography key '${key}'; the first entry is used.`, span: command.span });
+      } else citations.set(key, { label, destination: destination(firstVisible) });
+      addTarget(`beamerbib${key}`, destination(firstVisible), command.span);
+    }
+  }
+  return { targets, citations, specs, diagnostics };
+}
+
+type LinkSpan = { span: Span; destination: BeamerLinkDestination; label: string };
+export type BeamerReferenceProjection = { mapped: MappedText; links: LinkSpan[]; bibliography: boolean };
+
+/**
+ * Lower document references into native text/list primitives. Authored link
+ * text keeps its exact source mapping; generated citation labels belong to the
+ * original citation command. Link spans use the resulting layout coordinates,
+ * so two keys in one citation remain independently clickable.
+ */
+export function projectBeamerReferences(mapped: MappedText, context: BeamerReferenceContext): BeamerReferenceProjection {
+  if (!/\\(?:hyperlink|hyperref|hypertarget|href|url|label|cite|bibitem|newblock|beamer(?:goto|return|skip)?button|begin)(?![A-Za-z@])/u.test(mapped.text)) {
+    return { mapped, links: [], bibliography: false };
+  }
+  const syntax = getTexSyntaxIndex(mapped.text, beamerDocumentParser);
+  const environments = [...matchTexSyntaxEnvironments(syntax).values()];
+  const bibliographies = new Map(environments.filter((env) => env.name === "thebibliography").map((env) => [env.span.from, env]));
+  const parts: MappedText[] = [];
+  const links: LinkSpan[] = [];
+  let length = 0;
+  let bibliography = false;
+  const sourceSpan = (span: Span): Span | undefined => {
+    const hit = projectInputRange(mapped.sourceMap, span.from, span.to);
+    return hit.kind === "source-range" ? { from: hit.from, to: hit.to } : undefined;
+  };
+  const append = (part: MappedText) => { parts.push(part); length += part.text.length; };
+  const generated = (text: string, owner: Span) => {
+    append(createGeneratedMappedText(text, "Beamer reference", sourceSpan(owner)));
+  };
+  const raw = (span: Span) => mapped.text.slice(span.from, span.to);
+  const warn = (code: string, message: string, span: Span) => {
+    const projected = sourceSpan(span);
+    if (!projected) return;
+    if (!context.renderDiagnostics.some((entry) => entry.code === code && entry.span?.from === projected?.from && entry.message === message)) {
+      context.renderDiagnostics.push({ severity: "warning", code, message, span: projected });
+    }
+  };
+  const target = (key: string, span: Span): BeamerLinkDestination | undefined => {
+    const found = context.targets.get(key);
+    if (!found) warn("beamer-unresolved-link", `Unknown link target '${key}'.`, span);
+    return found;
+  };
+  const visit = (from: number, to: number, depth = 0): void => {
+    if (depth > 64) { append(sliceMappedText(mapped, from, to)); return; }
+    let cursor = from;
+    for (const command of syntax.controlsIn({ from, to })) {
+      if (command.span.from < cursor) continue;
+      const env = bibliographies.get(command.span.from);
+      if (env && env.span.to <= to) {
+        const width = syntax.argumentAfter(env.begin.span.to, "required", env.end.span.from);
+        if (!width?.complete) continue;
+        append(sliceMappedText(mapped, cursor, command.span.from));
+        bibliography = true;
+        generated("\\begin{description}", { from: env.begin.span.from, to: width.span.to });
+        visit(width.span.to, env.end.span.from, depth + 1);
+        generated("\\end{description}", env.end.span);
+        cursor = env.span.to;
+        continue;
+      }
+      if (command.name === "newblock") {
+        append(sliceMappedText(mapped, cursor, command.span.from));
+        generated("\\par ", command.span);
+        cursor = command.span.to;
+        continue;
+      }
+      const names = ["hyperlink", "hyperref", "href", "url", "hypertarget", "label", "cite", "bibitem", "beamerbutton", "beamergotobutton", "beamerreturnbutton", "beamerskipbutton"];
+      if (!names.includes(command.name)) continue;
+      const overlay = syntax.argumentAfter(command.span.to, "overlay", to);
+      let argumentStart = overlay?.span.to ?? command.span.to;
+      const optional = ["hyperref", "cite", "bibitem"].includes(command.name) ? syntax.argumentAfter(argumentStart, "optional", to) : null;
+      argumentStart = optional?.span.to ?? argumentStart;
+      const first = syntax.argumentAfter(argumentStart, "required", to);
+      if (!first?.complete || (command.name === "hyperref" && !optional?.complete)) continue;
+      const second = ["hyperlink", "href", "hypertarget"].includes(command.name) ? syntax.argumentAfter(first.span.to, "required", to) : null;
+      if (["hyperlink", "href", "hypertarget"].includes(command.name) && !second?.complete) continue;
+      if (command.name === "bibitem" && !environments.some((candidate) => candidate.name === "thebibliography" && candidate.contentSpan.from <= command.span.from && command.span.to <= candidate.contentSpan.to)) continue;
+      const invocation = { from: command.span.from, to: second?.span.to ?? first.span.to };
+      append(sliceMappedText(mapped, cursor, command.span.from));
+      const original = sourceSpan(command.span);
+      const spec = original ? context.specs.get(original.from) : undefined;
+      const active = !spec || beamerOverlaySpecContains(spec, context.step);
+      const key = raw(first.contentSpan).trim();
+      if (command.name === "label") {
+        // Labels have no typeset content.
+      } else if (command.name === "bibitem") {
+        const label = context.citations.get(key)?.label ?? "?";
+        generated(`\\item[{\\textnormal{[${label}]}}] `, invocation);
+      } else if (command.name === "cite") {
+        generated("[", invocation);
+        key.split(",").forEach((entryKey, index) => {
+          if (index) generated(", ", invocation);
+          const entry = context.citations.get(entryKey.trim());
+          const start = length;
+          generated(`{${entry?.label ?? "?"}}`, invocation);
+          if (entry) links.push({ span: { from: start, to: length }, destination: entry.destination, label: `Citation ${entryKey.trim()}` });
+          else warn("beamer-unresolved-citation", `Unknown bibliography key '${entryKey.trim()}'.`, invocation);
+        });
+        if (optional) { generated(", ", invocation); visit(optional.contentSpan.from, optional.contentSpan.to, depth + 1); }
+        generated("]", invocation);
+      } else if (command.name === "hypertarget") {
+        if (active && second) { generated("{", invocation); visit(second.contentSpan.from, second.contentSpan.to, depth + 1); generated("}", invocation); }
+      } else if (command.name.endsWith("button")) {
+        generated("\\fbox{", invocation);
+        visit(first.contentSpan.from, first.contentSpan.to, depth + 1);
+        generated("}", invocation);
+      } else {
+        const content = second?.contentSpan ?? first.contentSpan;
+        const destination = command.name === "href" || command.name === "url"
+          ? (/^(?:https?:|mailto:)/iu.test(key) ? { kind: "external" as const, url: key } : undefined)
+          : target(command.name === "hyperref" && optional ? raw(optional.contentSpan).trim() : key, invocation);
+        if (!destination && (command.name === "href" || command.name === "url")) warn("beamer-unsupported-link-url", "Only http, https, and mailto links can be opened.", invocation);
+        generated("{", invocation);
+        const start = length;
+        if (command.name === "url") {
+          generated("\\texttt{", invocation);
+          // URL punctuation is literal, not TeX math/alignment syntax.
+          generated(raw(content).replace(/[\\{}%#$&_~^]/gu, (char) => ({ "\\": "\\textbackslash{}", "~": "\\textasciitilde{}", "^": "\\textasciicircum{}" })[char] ?? `\\${char}`), invocation);
+          generated("}", invocation);
+        } else visit(content.from, content.to, depth + 1);
+        if (destination && active) links.push({ span: { from: start, to: length }, destination, label: key });
+        generated("}", invocation);
+      }
+      cursor = invocation.to;
+    }
+    append(sliceMappedText(mapped, cursor, to));
+  };
+  visit(0, mapped.text.length);
+  return { mapped: concatMappedText(parts), links, bibliography };
+}
+
+/** Keep every wrapped line separately clickable; never cover neighboring prose. */
+export function layoutBeamerLinks(
+  projection: BeamerReferenceProjection,
+  report: ParagraphLayoutReport<"layout">,
+  layout: TexVListLayout<"layout">,
+  hiddenSpans: readonly Span[]
+): BeamerLinkRegion[] {
+  const regions: BeamerLinkRegion[] = [];
+  const placements = new Map(layout.linePlacements.map((entry) => [entry.lineIndex, entry]));
+  for (const link of projection.links) {
+    for (const line of report.lines) {
+      const placement = placements.get(line.lineIndex);
+      if (!placement) continue;
+      const lineRegions: BeamerLinkRegion[] = [];
+      for (const segment of line.segments) {
+        const start = segment.sourceStartRaw;
+        const end = segment.sourceEndRaw;
+        if (start == null || end == null || start >= link.span.to || end <= link.span.from || segment.width <= 0) continue;
+        const hit = projectInputRange(projection.mapped.sourceMap, start, end);
+        if (hit.kind === "source-range" && hiddenSpans.some((hidden) => hidden.from <= hit.from && hit.to <= hidden.to)) continue;
+        const offset = line.segments.some((entry) => entry.role === "list-label") ? 0 : Math.max(0, placement.x - line.xStart);
+        const bounds = { x: segment.x + offset, y: placement.y, width: segment.width, height: line.ascent + line.descent };
+        const previous = lineRegions.at(-1);
+        if (previous && Math.abs(previous.bounds.x + previous.bounds.width - bounds.x) < 0.01) {
+          previous.bounds.width = bounds.x + bounds.width - previous.bounds.x;
+          continue;
+        }
+        lineRegions.push({
+          bounds,
+          destination: link.destination,
+          label: link.label,
+        });
+      }
+      regions.push(...lineRegions);
+    }
+  }
+  return regions;
+}

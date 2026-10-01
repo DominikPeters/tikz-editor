@@ -93,6 +93,8 @@ export const FEATURE_IDS = [
   "text_includegraphics",
   "beamer_document_scan",
   "beamer_source_placeholders",
+  "beamer_hyperlinks",
+  "beamer_manual_bibliography",
   "render_pipeline"
 ] as const;
 

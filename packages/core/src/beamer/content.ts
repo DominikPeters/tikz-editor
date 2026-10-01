@@ -1219,6 +1219,7 @@ function findUnsupportedEnvironmentEndIndex(
       "uncoverenv",
       "visibleenv",
       "invisibleenv",
+      "thebibliography",
     ].includes(begin.name) ||
     BLOCK_ENVIRONMENTS.has(begin.name as BeamerBlockEnvironment) ||
     isProofEnvironment(begin.name) ||

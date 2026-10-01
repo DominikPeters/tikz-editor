@@ -70,6 +70,7 @@ export type BeamerOverlayModel = {
   readonly commands: readonly BeamerOverlayCommand[];
   readonly items: readonly BeamerOverlayItem[];
   readonly pauses: readonly BeamerOverlayPause[];
+  readonly referenceSpecs: readonly { sourceStart: number; spec: BeamerOverlaySpec }[];
   readonly stepCount: number;
 };
 
@@ -82,6 +83,7 @@ export type BeamerOverlayTextProjection = {
 };
 
 type PendingSpec =
+  | { readonly kind: "reference"; readonly sourceOrder: number; readonly rawSpec: BeamerDelimitedSourceValue }
   | {
       readonly kind: "command";
       readonly sourceOrder: number;
@@ -130,10 +132,15 @@ export function scanBeamerFrameOverlays(
   const pending: PendingSpec[] = [];
   const controls = beamerControlSequencesIn(context, frame.bodySpan);
   const listRanges = beamerListRanges(context, frame.bodySpan);
-  const itemControls = controls.filter((command) => command.name === "item");
+  const itemControls = controls.filter((command) => command.name === "item" || command.name === "bibitem");
   const explicitItemCommands = new Set<number>();
 
   for (const command of controls) {
+    if (["label", "hypertarget", "hyperlink"].includes(command.name)) {
+      const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+      if (rawSpec) pending.push({ kind: "reference", sourceOrder: command.from, rawSpec });
+      continue;
+    }
     const overlayKind = OVERLAY_COMMANDS.get(command.name);
     if (overlayKind) {
       const parsed = parseOverlayCommand(
@@ -173,7 +180,7 @@ export function scanBeamerFrameOverlays(
       });
       continue;
     }
-    if (command.name !== "item") {
+    if (command.name !== "item" && command.name !== "bibitem") {
       continue;
     }
     const overlay = beamerOverlayArgumentAfter(
@@ -242,6 +249,7 @@ export function scanBeamerFrameOverlays(
 
   pending.sort((left, right) => left.sourceOrder - right.sourceOrder);
   const commands: BeamerOverlayCommand[] = [];
+  const referenceSpecs: { sourceStart: number; spec: BeamerOverlaySpec }[] = [];
   const items: BeamerOverlayItem[] = [];
   const pauseStarts: Array<{
     span: Span;
@@ -262,6 +270,8 @@ export function scanBeamerFrameOverlays(
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
       commands.push({ ...entry.command, spec: resolved.spec });
+    } else if (entry.kind === "reference") {
+      referenceSpecs.push({ sourceStart: entry.sourceOrder, spec: resolved.spec });
     } else {
       items.push({
         commandSpan: entry.commandSpan,
@@ -286,6 +296,7 @@ export function scanBeamerFrameOverlays(
     commands,
     items,
     pauses,
+    referenceSpecs,
     stepCount,
   };
 }
@@ -626,7 +637,8 @@ function beamerListRanges(
     if (
       token.name !== "itemize" &&
       token.name !== "enumerate" &&
-      token.name !== "description"
+      token.name !== "description" &&
+      token.name !== "thebibliography"
     ) {
       continue;
     }
