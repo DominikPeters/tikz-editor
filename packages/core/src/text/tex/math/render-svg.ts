@@ -1,4 +1,5 @@
-import type { ResolvedTexFont } from "../fonts/types.js";
+import type { GeneratedTexFont, ResolvedTexFont } from "../fonts/types.js";
+import { texGlyphSvgPath } from "../fonts/glyph-svg.js";
 import {
   texHBoxX,
   texHBoxY,
@@ -69,18 +70,17 @@ export function texMathGlyphVisualBounds(
   const scale = font.atPt / 10;
   const glyphX = translateTexHBoxX(hboxOriginX, item.x);
   const glyphY = translateTexHBoxY(hboxOriginY, item.y);
-  const points = svgPathControlPoints(d).map((point) => ({
-    x: glyphX + point.x * scale,
-    y: glyphY + point.y * scale,
-  }));
-  if (!points.length) {
-    return null;
-  }
+  const bounds = glyphControlPointBounds(font.data, item.code, d);
+  if (!bounds) return null;
+  const x1 = glyphX + bounds.xMin * scale;
+  const x2 = glyphX + bounds.xMax * scale;
+  const y1 = glyphY + bounds.yMin * scale;
+  const y2 = glyphY + bounds.yMax * scale;
   return {
-    xStart: texHBoxX(Math.min(...points.map((point) => point.x))),
-    xEnd: texHBoxX(Math.max(...points.map((point) => point.x))),
-    yStart: texHBoxY(Math.min(...points.map((point) => point.y))),
-    yEnd: texHBoxY(Math.max(...points.map((point) => point.y))),
+    xStart: texHBoxX(Math.min(x1, x2)),
+    xEnd: texHBoxX(Math.max(x1, x2)),
+    yStart: texHBoxY(Math.min(y1, y2)),
+    yEnd: texHBoxY(Math.max(y1, y2)),
   };
 }
 
@@ -158,7 +158,7 @@ function renderMathGlyphPath(
   originX: TexHBoxX,
   originY: TexHBoxY
 ): string {
-  const d = font.data.glyphs?.[String(item.code)] ?? "";
+  const d = texGlyphSvgPath(font, item.code);
   if (!d) {
     return "";
   }
@@ -173,7 +173,7 @@ function renderMathGlyphPath(
     item.color
       ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
       : "",
-    ` d="${escapeXmlAttribute(d)}"`,
+    ` d="${d}"`,
     ` transform="translate(${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)} ${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}) scale(${formatSvgNumber(scale)})" />`,
   ].join("");
 }
@@ -190,12 +190,55 @@ function formatSvgNumber(value: number): string {
   if (!Number.isFinite(value)) {
     return "0";
   }
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
   return Number(value.toFixed(6)).toString();
 }
 
 interface PathPoint {
   readonly x: number;
   readonly y: number;
+}
+
+interface GlyphControlPointBounds {
+  readonly xMin: number;
+  readonly xMax: number;
+  readonly yMin: number;
+  readonly yMax: number;
+}
+
+const controlPointBounds = new WeakMap<GeneratedTexFont, Map<number, {
+  readonly source: string;
+  readonly bounds: GlyphControlPointBounds | null;
+}>>();
+
+function glyphControlPointBounds(
+  font: GeneratedTexFont,
+  code: number,
+  source: string
+): GlyphControlPointBounds | null {
+  let glyphs = controlPointBounds.get(font);
+  const cached = glyphs?.get(code);
+  if (cached?.source === source) return cached.bounds;
+  const points = svgPathControlPoints(source);
+  let xMin = Infinity;
+  let xMax = -Infinity;
+  let yMin = Infinity;
+  let yMax = -Infinity;
+  for (const point of points) {
+    xMin = Math.min(xMin, point.x);
+    xMax = Math.max(xMax, point.x);
+    yMin = Math.min(yMin, point.y);
+    yMax = Math.max(yMax, point.y);
+  }
+  const bounds = points.length ? { xMin, xMax, yMin, yMax } : null;
+  if (!glyphs) {
+    glyphs = new Map();
+    controlPointBounds.set(font, glyphs);
+  }
+  glyphs.set(code, { source, bounds });
+  return bounds;
 }
 
 function svgPathControlPoints(d: string): PathPoint[] {

@@ -895,6 +895,15 @@ export interface SimpleTexSourceProjectionPolicy {
 }
 
 export function simpleTexSourceHasLineBreak(text: string): boolean {
+  // These are the three command spellings accepted by scanSimpleTexLineBreak.
+  // A possible match still goes through the IR to exclude math and comments.
+  if (
+    !text.includes("\\\\") &&
+    !text.includes("\\newline") &&
+    !text.includes("\\linebreak")
+  ) {
+    return false;
+  }
   return collectSimpleTexPolicyRanges(
     parseSimpleTexParagraphIr(text).nodes,
     "line-break"

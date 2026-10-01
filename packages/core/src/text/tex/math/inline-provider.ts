@@ -77,6 +77,8 @@ const TEX_MULTLINE_TAG_GAP_PT = 10;
 export interface TexDerivedInlineMathBoxProviderOptions {
   readonly fontProfile?: TexMathFontProfile;
   readonly baseAtPt?: number;
+  /** Skip unused inline SVG when the paragraph renderer consumes the hlist. */
+  readonly deferInlineSvg?: boolean;
 }
 
 export function createTexDerivedInlineMathBoxProvider(
@@ -84,10 +86,11 @@ export function createTexDerivedInlineMathBoxProvider(
 ): TexMathBoxProvider {
   const configuredFontProfile = options.fontProfile;
   const baseAtPt = texLength(options.baseAtPt ?? 10);
+  const renderInlineSvg = !options.deferInlineSvg;
   const cache = new Map<string, TexMathBox | null>();
   return {
     getInlineMathBox: (params) => {
-      return getMathBox(params, "text", cache, configuredFontProfile, baseAtPt);
+      return getMathBox(params, "text", cache, configuredFontProfile, baseAtPt, renderInlineSvg);
     },
     getDisplayMathBox: (params) => {
       return getMathBox(params, "display", cache, configuredFontProfile, baseAtPt);
@@ -113,7 +116,8 @@ function getMathBox(
   style: "text" | "display",
   cache: Map<string, TexMathBox | null>,
   configuredFontProfile: TexMathFontProfile | undefined,
-  baseAtPt: TexLength
+  baseAtPt: TexLength,
+  renderSvg = true
 ): TexMathBox | null {
   const key = `${style}:${params.delimiter}:${params.contentStart}:${params.targetWidth ?? "natural"}:${params.displayLabel?.text ?? ""}:${params.content}`;
   const cached = cache.get(key);
@@ -162,7 +166,7 @@ function getMathBox(
     caretStops: projectInlineMathCaretStops(caretMap, hlist.width),
     constructRanges: buildInlineMathConstructRanges(hlist),
     breakpoints: buildInlineMathBreakpoints(parsed.list, hlist),
-    svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }),
+    svgBody: renderSvg ? renderTexMathHListSvgBody(hlist, { fontProfile }) : undefined,
     hlist,
     fontProfile,
   } satisfies TexMathBox;

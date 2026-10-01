@@ -21,7 +21,7 @@ interface WorkGlyph {
   readonly code: number;
   readonly sourceStart: number;
   readonly sourceEnd: number;
-  readonly components: readonly number[];
+  readonly components?: readonly number[];
 }
 
 type LigKernRule =
@@ -38,7 +38,9 @@ export function shapeOt1Text(
   const items = applyLigKernProgram(encoded, font);
   const width = roundTexPt(texLength(items.reduce((sum, item) => sum + item.width, 0)));
   const sourceEnd = options.sourceEnd ?? sourceStart + text.length;
-  const caretStops = buildCaretStops(sourceStart, sourceEnd, font, items);
+  const caretStops = options.includeCaretStops === false
+    ? []
+    : buildCaretStops(sourceStart, sourceEnd, font, items);
 
   return {
     text,
@@ -66,25 +68,18 @@ function applyLigKernProgram(encoded: readonly Ot1EncodedChar[], font: ResolvedT
   };
 
   for (const char of encoded) {
-    const next: WorkGlyph = {
-      code: char.code,
-      sourceStart: char.sourceStart,
-      sourceEnd: char.sourceEnd,
-      components: [char.code],
-    };
-
     if (!current) {
-      current = next;
+      current = char;
       continue;
     }
 
-    const rule = ligKernRule(rules, current.code, next.code);
+    const rule = ligKernRule(rules, current.code, char.code);
     if (rule?.kind === "lig") {
       current = {
         code: rule.out,
         sourceStart: current.sourceStart,
-        sourceEnd: next.sourceEnd,
-        components: [...current.components, ...next.components],
+        sourceEnd: char.sourceEnd,
+        components: [...(current.components ?? [current.code]), char.code],
       };
       continue;
     }
@@ -93,12 +88,12 @@ function applyLigKernProgram(encoded: readonly Ot1EncodedChar[], font: ResolvedT
     if (rule?.kind === "kern") {
       items.push({
         kind: "kern",
-        sourceStart: next.sourceStart,
-        sourceEnd: next.sourceStart,
+        sourceStart: char.sourceStart,
+        sourceEnd: char.sourceStart,
         width: roundTexPt(tfmToPt(font, rule.width)),
       } satisfies TexKern);
     }
-    current = next;
+    current = char;
   }
 
   emitCurrent();
@@ -117,7 +112,7 @@ function createGlyphBox(glyph: WorkGlyph, font: ResolvedTexFont): TexGlyphBox {
     height: roundTexPt(tfmToPt(font, metric.height)),
     depth: roundTexPt(tfmToPt(font, metric.depth)),
     italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
-    components: glyph.components,
+    components: glyph.components ?? [glyph.code],
   };
 }
 
@@ -197,7 +192,7 @@ function buildCaretStops(
       const local = item.sourceStart - sourceStart;
       x = roundTexPt(texHBoxX(x + item.width));
       if (local >= 0 && local < stops.length) {
-        stops[local] = { sourceOffset: item.sourceStart, x };
+        updateCaretStop(stops, local, item.sourceStart, x);
       }
       continue;
     }
@@ -205,11 +200,17 @@ function buildCaretStops(
     const localStart = item.sourceStart - sourceStart;
     const localEnd = item.sourceEnd - sourceStart;
     if (localStart >= 0 && localStart < stops.length) {
-      stops[localStart] = { sourceOffset: item.sourceStart, x: roundTexPt(x) };
+      updateCaretStop(stops, localStart, item.sourceStart, roundTexPt(x));
     }
 
     const internalStops = localEnd - localStart;
-    if (internalStops > 0) {
+    if (internalStops === 1 && item.components.length === 1) {
+      // An ordinary character has a single end stop. Its component-width
+      // ratio is exactly one, so avoid another metric lookup and two arrays.
+      if (localEnd >= 0 && localEnd < stops.length) {
+        updateCaretStop(stops, localEnd, item.sourceEnd, roundTexPt(texHBoxX(x + item.width)));
+      }
+    } else if (internalStops > 0) {
       const componentWidths = item.components.map((code) => tfmToPt(font, getCharMetric(font, code).width));
       const componentTotal = componentWidths.reduce((sum, width) => sum + width, 0);
       let internalX: TexHBoxX = x;
@@ -220,11 +221,28 @@ function buildCaretStops(
           : item.width / internalStops));
         const local = localStart + index;
         if (local >= 0 && local < stops.length) {
-          stops[local] = { sourceOffset: sourceStart + local, x: roundTexPt(internalX) };
+          updateCaretStop(stops, local, sourceStart + local, roundTexPt(internalX));
         }
       }
     }
     x = roundTexPt(texHBoxX(x + item.width));
   }
   return stops;
+}
+
+function updateCaretStop(
+  stops: { sourceOffset: number; x: TexHBoxX }[],
+  index: number,
+  sourceOffset: number,
+  x: TexHBoxX
+): void {
+  // These objects are private until shaping returns; update rather than
+  // allocating a replacement at both ends of every glyph and kern.
+  const stop = stops[index];
+  if (stop) {
+    stop.sourceOffset = sourceOffset;
+    stop.x = x;
+  } else {
+    stops[index] = { sourceOffset, x };
+  }
 }

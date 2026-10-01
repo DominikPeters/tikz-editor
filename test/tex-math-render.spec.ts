@@ -123,6 +123,32 @@ function findCaretEntry(
 }
 
 describe("TeX math SVG rendering", () => {
+  it("can defer inline SVG while retaining layout and caret geometry", () => {
+    const source = String.raw`$\frac{x^2}{y}$`;
+    const params = {
+      source,
+      content: source.slice(1, -1),
+      delimiter: "dollar" as const,
+      sourceStart: 0,
+      sourceEnd: source.length,
+      contentStart: 1,
+      contentEnd: source.length - 1,
+    };
+    const eager = createTexDerivedInlineMathBoxProvider().getInlineMathBox(params);
+    const provider = createTexDerivedInlineMathBoxProvider({ deferInlineSvg: true });
+    const deferred = provider.getInlineMathBox(params);
+    if (!eager?.svgBody || !deferred?.hlist) {
+      throw new Error("Expected renderable inline math boxes.");
+    }
+
+    expect(deferred.svgBody).toBeUndefined();
+    expect({ ...deferred, svgBody: eager.svgBody }).toEqual(eager);
+    expect(renderTexMathHListSvgBody(deferred.hlist, { fontProfile: deferred.fontProfile })).toBe(eager.svgBody);
+    expect(provider.getInlineMathBox(params)).toBe(deferred);
+    const display = provider.getDisplayMathBox?.({ ...params, delimiter: "double-dollar" });
+    expect(display?.svgBody).toContain('data-tex-math-hlist="true"');
+  });
+
   it("defines canonical 2-D caret map entries for TeX-derived math", () => {
     const caretMap = {
       sourceStart: 0,

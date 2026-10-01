@@ -23,6 +23,7 @@ import {
   type TexVListY,
 } from "./coordinates.js";
 import { luaLatexDefaultTextFontProfile } from "./fonts/text-profile.js";
+import { texGlyphSvgPath } from "./fonts/glyph-svg.js";
 import type {
   ResolvedTexFont,
   TexMetricProvider,
@@ -689,15 +690,24 @@ function renderTexGlyphRun(
   const shaped = metricProvider.shapeText(
     text,
     font,
-    sourceSpan ? { sourceStart: sourceSpan.start } : undefined
+    {
+      ...(sourceSpan ? { sourceStart: sourceSpan.start } : {}),
+      includeCaretStops: false,
+    }
   );
   const pieces: string[] = [];
+  let placement: TexGlyphSvgPlacement | undefined;
   let cursor = texHBoxX(x);
   for (const item of shaped.items) {
     if (item.kind === "kern") {
       cursor = texHBoxX(cursor + item.width);
       continue;
     }
+    if (item.code === 32) {
+      cursor = texHBoxX(cursor + item.width);
+      continue;
+    }
+    placement ??= texGlyphSvgPlacement(font, baseline);
     const glyphItem = sourceSpan && text.length === 1
       ? { ...item, sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end }
       : item;
@@ -706,7 +716,8 @@ function renderTexGlyphRun(
       font,
       cursor,
       baseline,
-      Boolean(sourceSpan)
+      Boolean(sourceSpan),
+      placement
     ));
     cursor = texHBoxX(cursor + item.width);
   }
@@ -739,21 +750,36 @@ function renderTexGlyphPath(
   font: ResolvedTexFont,
   x: TexHBoxX,
   baseline: TexHBoxY,
-  sourceBacked = false
+  sourceBacked = false,
+  placement?: TexGlyphSvgPlacement
 ): string {
   if (item.code === 32) {
     return "";
   }
-  const d = font.data.glyphs?.[String(item.code)] ?? "";
+  const d = texGlyphSvgPath(font, item.code);
   if (!d) {
     return "";
   }
-  const scale = font.atPt / 10;
-  const scaleSuffix = Math.abs(scale - 1) > 1e-6 ? ` scale(${formatPt(scale)})` : "";
+  const formatted = placement ?? texGlyphSvgPlacement(font, baseline);
   const sourceAttrs = sourceBacked
     ? ` data-source-start="${item.sourceStart}" data-source-end="${item.sourceEnd}"`
     : "";
-  return `<path data-tex-font="${escapeXmlAttribute(font.id)}" data-tex-glyph="${item.code}"${sourceAttrs} d="${escapeXmlAttribute(d)}" transform="translate(${formatPt(x)} ${formatPt(baseline)})${scaleSuffix}" />`;
+  return `<path data-tex-font="${formatted.fontId}" data-tex-glyph="${item.code}"${sourceAttrs} d="${d}" transform="translate(${formatPt(x)} ${formatted.baseline})${formatted.scaleSuffix}" />`;
+}
+
+type TexGlyphSvgPlacement = {
+  readonly fontId: string;
+  readonly baseline: string;
+  readonly scaleSuffix: string;
+};
+
+function texGlyphSvgPlacement(font: ResolvedTexFont, baseline: TexHBoxY): TexGlyphSvgPlacement {
+  const scale = font.atPt / 10;
+  return {
+    fontId: escapeXmlAttribute(font.id),
+    baseline: formatPt(baseline),
+    scaleSuffix: Math.abs(scale - 1) > 1e-6 ? ` scale(${formatPt(scale)})` : "",
+  };
 }
 
 function texAlignAttributeValue(alignment: TexParagraphAlignment): string {
@@ -771,6 +797,9 @@ function texAlignAttributeValue(alignment: TexParagraphAlignment): string {
 }
 
 function formatPt(value: number): string {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
   return Number(value.toFixed(6)).toString();
 }
 

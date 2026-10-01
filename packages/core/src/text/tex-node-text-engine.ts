@@ -75,6 +75,7 @@ type TexSharedLayout = {
   readonly vlistLayout: TexVListLayout<"layout">;
   readonly contentWidthPt: TexLength;
   readonly renderFont: ResolvedTexFont;
+  readonly isSingleNaturalLine: boolean;
 };
 
 const TEX_TEXT_BASE_FONT_SIZE = 10;
@@ -249,6 +250,9 @@ function buildTexSharedLayout(params: {
   }
 
   const isNaturalWidthLayout = params.textWidthPt == null;
+  let explicitLineBreaks: boolean | undefined;
+  const hasExplicitLineBreaks = () =>
+    explicitLineBreaks ??= hasExplicitMultilineBreaks(params.sourceText);
   const layoutWidthPt = texLength(
     params.textWidthPt ?? TEX_NATURAL_TEXT_LAYOUT_WIDTH_PT
   );
@@ -278,6 +282,7 @@ function buildTexSharedLayout(params: {
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: params.fontSizePt,
+      deferInlineSvg: true,
       ...(params.mathFontProfile
         ? { fontProfile: params.mathFontProfile }
         : {}),
@@ -300,7 +305,7 @@ function buildTexSharedLayout(params: {
   if (
     !layout.supported &&
     params.alignment === "ragged-left" &&
-    hasExplicitMultilineBreaks(params.sourceText)
+    hasExplicitLineBreaks()
   ) {
     // The breaker can reject very wide ragged-left forced-line paragraphs
     // because their left skip has effectively unbounded stretch. Centering
@@ -340,7 +345,7 @@ function buildTexSharedLayout(params: {
   if (
     isNaturalWidthLayout &&
     params.alignment &&
-    hasExplicitMultilineBreaks(params.sourceText)
+    hasExplicitLineBreaks()
   ) {
     // A centered or right-aligned paragraph has no feasible solution at the
     // deliberately enormous discovery width. First discover the longest
@@ -364,7 +369,7 @@ function buildTexSharedLayout(params: {
     ? shrinkTexParagraphReportToWidth(
       baseReport,
       contentWidthPt,
-      hasExplicitMultilineBreaks(params.sourceText)
+      hasExplicitLineBreaks()
         ? "fixed-lines"
         : undefined
     )
@@ -372,7 +377,14 @@ function buildTexSharedLayout(params: {
   const vlistLayout = isNaturalWidthLayout
     ? shrinkTexVListLayoutToWidth(baseVListLayout, contentWidthPt, report)
     : baseVListLayout;
-  const shared = { report, vlistLayout, contentWidthPt, renderFont };
+  const shared: TexSharedLayout = {
+    report,
+    vlistLayout,
+    contentWidthPt,
+    renderFont,
+    isSingleNaturalLine:
+      isNaturalWidthLayout && !hasExplicitLineBreaks() && report.lines.length === 1,
+  };
   setCappedMapValue(
     params.layoutCache,
     params.layoutCacheKey,
@@ -436,9 +448,7 @@ function buildTexTextCacheEntry(params: {
   const baselineMetrics = texNormalBaselineMetrics(renderFont);
   const lineHeightPt = baselineMetrics.baselineskip;
   const singleNaturalLine =
-    params.textWidthPt == null &&
-    !hasExplicitMultilineBreaks(params.sourceText) &&
-    report.lines.length === 1
+    shared.isSingleNaturalLine
       ? report.lines[0]
       : undefined;
   const firstLineTop = texVListPlacedLineTop(
@@ -654,6 +664,11 @@ function normalizeTexTextInput(
 function normalizeRestrictedHorizontalModeInput(
   input: ReturnType<typeof normalizeTexTextInput>
 ): ReturnType<typeof normalizeTexTextInput> {
+  // Only a source-backed \\par node can be removed by this policy. Avoid
+  // parsing every ordinary label, including render-cache hits, to prove absence.
+  if (!input.text.includes("\\par")) {
+    return input;
+  }
   const normalized = projectSimpleTexSourceByPolicy(input.text, {
     removeControlParagraphBreaks: true,
   });

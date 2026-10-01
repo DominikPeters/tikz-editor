@@ -129,6 +129,12 @@ interface BreakpointBest {
   choice: ActiveChoice;
 }
 
+interface CandidateStream {
+  iterator: Generator<BreakCandidate, void>;
+  current: BreakCandidate | null;
+  exhausted: boolean;
+}
+
 type FitnessClass = 0 | 1 | 2 | 3; // very loose, loose, decent, tight
 
 const MAX_RUNS_FOR_DP = 3000;
@@ -360,19 +366,18 @@ function textSliceWidth(
   return endWidth - startWidth;
 }
 
-function generateCandidates(
+function* generateCandidates(
   model: ParagraphModel,
   startCursor: Cursor,
   forcedPenalties: Map<number, ForcedPenalty>,
   spacePenalties: Map<number, SpacePenalty>,
   glueMetrics: Map<number, GlueMetrics>,
   textPenalties: Map<number, TextPenalty[]>
-): BreakCandidate[] {
-  const candidates: BreakCandidate[] = [];
+): Generator<BreakCandidate, void> {
   const cursor = normalizeCursor(model, startCursor, forcedPenalties);
 
   if (cursor.runIndex >= model.runs.length) {
-    return candidates;
+    return;
   }
 
   let naturalWidth = 0;
@@ -418,7 +423,7 @@ function generateCandidates(
           ? discretionary.replaceEnd
           : textPenalty.splitOffset;
         const pendingText = discretionary?.postBreakText ?? undefined;
-        candidates.push({
+        yield {
           endRun: runIndex,
           endTextOffset: textPenalty.splitOffset,
           naturalWidth: naturalWidth + prefixWidth + preBreakWidth,
@@ -453,7 +458,7 @@ function generateCandidates(
               ? model.measurement.measureText(pendingText, run.wrapper)
               : undefined,
           }, forcedPenalties),
-        });
+        };
       }
 
       const remaining = textSliceWidth(model, run, offset, run.text.length);
@@ -472,7 +477,7 @@ function generateCandidates(
       if (forcedPenalty) {
         const isEmptyLine = runIndex === cursor.runIndex && lastNonSpaceRun < cursor.runIndex;
         const forcedWidth = isEmptyLine ? runWidth(model, runIndex) : 0;
-        candidates.push({
+        yield {
           endRun: isEmptyLine ? runIndex : Math.max(cursor.runIndex, runIndex - 1),
           endTextOffset: null,
           naturalWidth: isEmptyLine ? forcedWidth : naturalWidthWithoutTrailingSpaces,
@@ -494,7 +499,7 @@ function generateCandidates(
             runIndex: runIndex + 1,
             textOffset: 0,
           }, forcedPenalties),
-        });
+        };
         stoppedAtForcedBoundary = true;
         break;
       }
@@ -502,7 +507,7 @@ function generateCandidates(
       const spacePenalty = spacePenalties.get(runIndex);
       const previousRun = runIndex > 0 ? model.runs[runIndex - 1] : null;
       if (spacePenalty && previousRun && previousRun.kind !== 'space') {
-        candidates.push({
+        yield {
           endRun: runIndex - 1,
           endTextOffset: null,
           naturalWidth,
@@ -523,7 +528,7 @@ function generateCandidates(
             runIndex: runIndex + 1,
             textOffset: 0,
           }, forcedPenalties),
-        });
+        };
       }
 
       const width = runWidth(model, runIndex);
@@ -548,7 +553,7 @@ function generateCandidates(
       const spacePenalty = spacePenalties.get(runIndex);
       const previousRun = runIndex > 0 ? model.runs[runIndex - 1] : null;
       if (spacePenalty && previousRun && previousRun.kind !== 'space') {
-        candidates.push({
+        yield {
           endRun: Math.max(cursor.runIndex, runIndex - 1),
           endTextOffset: null,
           naturalWidth,
@@ -569,7 +574,7 @@ function generateCandidates(
             runIndex: runIndex + 1,
             textOffset: 0,
           }, forcedPenalties),
-        });
+        };
       }
       continue;
     }
@@ -586,7 +591,7 @@ function generateCandidates(
   }
 
   if (!stoppedAtForcedBoundary && lastNonSpaceRun >= cursor.runIndex) {
-    candidates.push({
+    yield {
       endRun: lastNonSpaceRun,
       endTextOffset: null,
       naturalWidth: naturalWidthWithoutTrailingSpaces,
@@ -598,10 +603,10 @@ function generateCandidates(
       breakPenalty: -10_000,
       flagged: false,
       nextCursor: { runIndex: model.runs.length, textOffset: 0 },
-    });
+    };
   }
 
-  return candidates;
+  return;
 }
 
 function lineIndentWidth(
@@ -858,6 +863,35 @@ function breakpointKeyForCandidate(candidate: BreakCandidate): string {
     return `hyphen:${candidate.break.runIndex}:${candidate.break.splitOffset ?? -1}`;
   }
   return `${candidate.break.kind}:${candidate.break.runIndex}`;
+}
+
+function candidateAtBreakpoint(
+  stream: CandidateStream,
+  breakpointIndex: number,
+  breakpointIndices: ReadonlyMap<string, number>
+): BreakCandidate | null {
+  // Both the global breakpoints and each state's candidates advance in source
+  // order. Keep only the next candidate instead of rebuilding the full suffix
+  // for every breakpoint (and repeatedly measuring the same text slices).
+  while (!stream.exhausted) {
+    if (stream.current === null) {
+      const next = stream.iterator.next();
+      if (next.done) {
+        stream.exhausted = true;
+        return null;
+      }
+      stream.current = next.value;
+    }
+    const candidateIndex = breakpointIndices.get(breakpointKeyForCandidate(stream.current));
+    if (candidateIndex === breakpointIndex) {
+      return stream.current;
+    }
+    if (candidateIndex !== undefined && candidateIndex > breakpointIndex) {
+      return null;
+    }
+    stream.current = null;
+  }
+  return null;
 }
 
 function collectBreakpoints(params: {
@@ -1169,6 +1203,8 @@ export function breakWithDp(
     textPenalties,
   });
   const states = new Map<number, ActiveState>();
+  const candidateStreams = new Map<number, CandidateStream>();
+  const breakpointIndices = new Map(breakpoints.map((breakpoint, index) => [breakpoint.key, index]));
   let activeStates: ActiveState[] = [];
   let nextStateId = 1;
   const rootState: ActiveState = {
@@ -1191,7 +1227,7 @@ export function breakWithDp(
       }
     | null = null;
 
-  for (const breakpoint of breakpoints) {
+  for (const [breakpointIndex, breakpoint] of breakpoints.entries()) {
     if (activeStates.length === 0) {
       break;
     }
@@ -1204,14 +1240,18 @@ export function breakWithDp(
 
     for (let stateIndex = 0; stateIndex < activeStates.length; stateIndex++) {
       const state = activeStates[stateIndex];
-      const candidate = generateCandidates(
-        model,
-        state.cursor,
-        forcedPenalties,
-        spacePenalties,
-        glueMetrics,
-        textPenalties
-      ).find((item) => breakpointKeyForCandidate(item) === breakpoint.key);
+      let stream = candidateStreams.get(state.id);
+      if (!stream) {
+        stream = {
+          iterator: generateCandidates(
+            model, state.cursor, forcedPenalties, spacePenalties, glueMetrics, textPenalties
+          ),
+          current: null,
+          exhausted: false,
+        };
+        candidateStreams.set(state.id, stream);
+      }
+      const candidate = candidateAtBreakpoint(stream, breakpointIndex, breakpointIndices);
       if (!candidate) {
         continue;
       }
@@ -1373,8 +1413,12 @@ export function breakWithDp(
     }
 
     if (breakpoint.kind === 'forced') {
+      candidateStreams.clear();
       activeStates = newStates;
     } else {
+      for (const stateId of deactivatedStateIds) {
+        candidateStreams.delete(stateId);
+      }
       activeStates = [
         ...activeStates.filter((state) => !deactivatedStateIds.has(state.id)),
         ...newStates,

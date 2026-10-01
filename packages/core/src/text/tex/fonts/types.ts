@@ -89,6 +89,8 @@ export interface ShapeTexTextOptions {
   readonly sourceStart?: number;
   /** Source end for a synthesized single-character run (for example \\'{e}). */
   readonly sourceEnd?: number;
+  /** Allow providers to omit caret arrays for glyph-only rendering. */
+  readonly includeCaretStops?: boolean;
 }
 
 export interface ResolveTexFontOptions {

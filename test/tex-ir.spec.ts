@@ -56,6 +56,7 @@ describe("simple TeX paragraph IR", () => {
       })
     ).toBe(String.raw`Alpha Beta \paragraph{kept}`);
     expect(simpleTexSourceHasLineBreak(String.raw`$x\\y$ % \\`)).toBe(false);
+    expect(simpleTexSourceHasLineBreak("Alpha\nBeta\n\nGamma")).toBe(false);
   });
 
   it("classifies an unmatched math delimiter as malformed literal source", () => {
@@ -68,6 +69,20 @@ describe("simple TeX paragraph IR", () => {
         sourceEnd: 1,
       }),
     ]);
+  });
+
+  it.each([String.raw`\\`, String.raw`\newline`, String.raw`\linebreak[4]`])(
+    "checks possible %s breaks through the IR",
+    (command) => {
+      expect(simpleTexSourceHasLineBreak(`Alpha ${command} Beta`)).toBe(true);
+      expect(simpleTexSourceHasLineBreak(`$x${command}y$`)).toBe(false);
+      expect(simpleTexSourceHasLineBreak(`Alpha % ${command}\nBeta`)).toBe(false);
+    }
+  );
+
+  it("keeps other controls out of explicit line-break analysis", () => {
+    expect(simpleTexSourceHasLineBreak(String.raw`\textbf{Alpha} $\frac{a}{b}$`)).toBe(false);
+    expect(simpleTexSourceHasLineBreak(String.raw`\newliner \linebreaker`)).toBe(false);
   });
 
   it("parses mbox as an inline text hbox node", () => {

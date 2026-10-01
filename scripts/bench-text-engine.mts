@@ -1,193 +1,88 @@
 /**
- * Benchmark the node-text engine measure() hot path.
+ * Native TeX measure() benchmarks. See design/text-engine-benchmarks.md.
  *
- * The editor re-measures a label on every keystroke (each edit produces a new
- * cache key), so the number that matters is the COLD measure() latency per
- * unique string. Warm (cache-hit) latency is reported for reference.
- *
- * Usage:
- *   npx tsx scripts/bench-text-engine.mts                 # native TeX path
- *   npx tsx scripts/bench-text-engine.mts --json out.json # also write JSON results
+ *   npm run bench:text-engine
+ *   npm run bench:text-engine -- --group math --samples 100 --json /tmp/text-bench.json
+ *   npm run bench:text-engine -- --list
  */
-
 import { performance } from "node:perf_hooks";
 import { writeFileSync } from "node:fs";
+import { parseBenchOptions, runTextEngineBenchCase } from "./lib/text-engine-bench.js";
+import { TEXT_ENGINE_BENCH_CASES, beamerBenchMathProfile } from "./lib/text-engine-bench-cases.js";
 
-const argv = process.argv.slice(2);
-const jsonIndex = argv.indexOf("--json");
-const jsonPath = jsonIndex >= 0 ? argv[jsonIndex + 1] ?? null : null;
-const samplesIndex = argv.indexOf("--samples");
-const SAMPLES = samplesIndex >= 0 ? Number(argv[samplesIndex + 1]) : 40;
-const onlyIndex = argv.indexOf("--only");
-const only = onlyIndex >= 0 ? argv[onlyIndex + 1] ?? null : null;
-
-const { createTexNodeTextEngine } = await import(
-  "../packages/core/src/text/tex-node-text-engine.js"
-);
-
-type BenchCase = {
-  name: string;
-  /** `{i}` is replaced with a zero-padded counter so every sample is a cold cache miss of identical shape. */
-  template: string;
-  textWidthPt: number | null;
-  alignment?: "ragged-right" | "ragged-left" | "center" | "justified";
-};
-
-const CASES: BenchCase[] = [
-  { name: "tiny word", template: "n{i}", textWidthPt: null },
-  { name: "short label", template: "state q{i}", textWidthPt: null },
-  { name: "inline math short", template: "$x_{{i}}$", textWidthPt: null },
-  { name: "inline math", template: "cost $O(n \\log n) + {i}$", textWidthPt: null },
-  { name: "styled text", template: "\\textbf{server {i}} node", textWidthPt: null },
-  {
-    name: "sentence (natural width)",
-    template: "The quick brown fox {i} jumps over the lazy dog near the river bank.",
-    textWidthPt: null,
-  },
-  {
-    name: "paragraph wrapped 150pt",
-    template:
-      "Consider a weighted directed graph {i} whose vertices represent voters and whose " +
-      "edges encode delegation choices; we study the complexity of finding an " +
-      "assignment that maximizes total welfare subject to rationality constraints.",
-    textWidthPt: 150,
-  },
-  {
-    name: "paragraph wrapped 150pt + math",
-    template:
-      "For every $\\varepsilon > 0$ there is an integer {i} such that the mechanism is " +
-      "$\\varepsilon$-approximately strategyproof and runs in $O(n^2 \\log n)$ time on " +
-      "profiles with $n$ voters and $m$ alternatives.",
-    textWidthPt: 150,
-  },
-  {
-    name: "explicit multiline",
-    template: "first line {i}\\\\second line\\\\third and final line",
-    textWidthPt: null,
-  },
-  // Matrix-of-math-nodes cells reach the engine as `$...$` text because the
-  // semantic layer desugars math cells before measurement.
-  { name: "matrix math cell", template: "$\\sum_{k=1}^{n} k^2 + {i}$", textWidthPt: null },
-];
-
-function instantiate(template: string, i: number): string {
-  return template.replaceAll("{i}", String(i % 90 + 10));
+const options = parseBenchOptions(process.argv.slice(2));
+if (options.help) {
+  console.log(`Usage: npm run bench:text-engine -- [options]
+  --samples <n>     Independent requests or edit sequences per case (default 40)
+  --only <text>     Filter case names (case insensitive)
+  --group <name>    Filter a feature group; see --list
+  --list            List matching cases without initializing the engine
+  --json <path>     Write timings, workload metadata, and environment to JSON
+  --help            Show this help`);
+  process.exit(0);
 }
 
-function quantile(sorted: number[], q: number): number {
-  if (sorted.length === 0) return Number.NaN;
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+const activeCases = TEXT_ENGINE_BENCH_CASES.map((benchCase, index) => ({ benchCase, index }))
+  .filter(({ benchCase }) =>
+    (!options.only || benchCase.name.toLowerCase().includes(options.only.toLowerCase())) &&
+    (!options.group || benchCase.group === options.group)
+  );
+if (activeCases.length === 0) {
+  throw new Error("No benchmark cases match the filters. Use --list to see available cases.");
+}
+if (options.list) {
+  for (const { benchCase } of activeCases) {
+    console.log(`${benchCase.group.padEnd(12)} ${benchCase.mode.padEnd(13)} ${benchCase.name}`);
+  }
+  process.exit(0);
 }
 
+const { createTexNodeTextEngine } = await import("../packages/core/src/text/tex-node-text-engine.js");
 const initStart = performance.now();
-const engine = await createTexNodeTextEngine();
+const defaultEngine = await createTexNodeTextEngine();
 const initMs = performance.now() - initStart;
-
-// Warm up the JIT on strings outside the sample space.
-for (const benchCase of CASES) {
-  for (let w = 0; w < 3; w += 1) {
-    engine.measure({
-      text: instantiate(benchCase.template, 900 + w).replaceAll(/\d+/g, (d) => `${d}${w}`),
-      textWidthPt: benchCase.textWidthPt,
-      ...(benchCase.alignment ? { alignment: benchCase.alignment } : {}),
-      fontStyle: "normal",
-      fontWeight: "normal",
-      fontFamily: "serif",
-      fontSizePt: 10,
-    });
-  }
-}
-await engine.flushPending?.();
-
-type CaseResult = {
-  name: string;
-  samples: number;
-  nulls: number;
-  coldMs: { min: number; median: number; mean: number; p95: number; max: number };
-  warmMs: { median: number };
-};
-
-const results: CaseResult[] = [];
-
-const activeCases = only ? CASES.filter((c) => c.name.includes(only)) : CASES;
-for (const benchCase of activeCases) {
-  const cold: number[] = [];
-  let nulls = 0;
-  const requests: Parameters<typeof engine.measure>[0][] = [];
-  for (let i = 0; i < SAMPLES; i += 1) {
-    requests.push({
-      text: instantiate(benchCase.template, i),
-      textWidthPt: benchCase.textWidthPt,
-      ...(benchCase.alignment ? { alignment: benchCase.alignment } : {}),
-      fontStyle: "normal",
-      fontWeight: "normal",
-      fontFamily: "serif",
-      fontSizePt: 10,
-    });
-  }
-  for (const request of requests) {
-    const t0 = performance.now();
-    const metrics = engine.measure(request);
-    const t1 = performance.now();
-    cold.push(t1 - t0);
-    if (!metrics) nulls += 1;
-  }
-  // Warm pass: identical strings now hit the render cache.
-  const warm: number[] = [];
-  for (const request of requests) {
-    const t0 = performance.now();
-    engine.measure(request);
-    const t1 = performance.now();
-    warm.push(t1 - t0);
-  }
-  cold.sort((a, b) => a - b);
-  warm.sort((a, b) => a - b);
-  results.push({
-    name: benchCase.name,
-    samples: SAMPLES,
-    nulls,
-    coldMs: {
-      min: cold[0],
-      median: quantile(cold, 0.5),
-      mean: cold.reduce((s, v) => s + v, 0) / cold.length,
-      p95: quantile(cold, 0.95),
-      max: cold[cold.length - 1],
-    },
-    warmMs: { median: quantile(warm, 0.5) },
-  });
+const engineInitMs: Record<string, number> = { default: initMs };
+let beamerEngine: typeof defaultEngine | undefined;
+if (activeCases.some(({ benchCase }) => benchCase.engine === "beamer")) {
+  const start = performance.now();
+  beamerEngine = await createTexNodeTextEngine({ mathFontProfile: beamerBenchMathProfile });
+  engineInitMs.beamer = performance.now() - start;
 }
 
-const arm = "native-tex";
-const fmt = (v: number) => v.toFixed(3).padStart(9);
-
-console.log(`\narm: ${arm}   engine init: ${initMs.toFixed(0)} ms   samples/case: ${SAMPLES}`);
+console.log(`\narm: native-tex   engine init: ${initMs.toFixed(1)} ms   samples/case: ${options.samples}`);
+console.log("Times in ms. Misses, edit revisits, and immediate cache hits are measured separately.");
 console.log(
-  "case".padEnd(34) +
-    "min".padStart(9) +
-    "median".padStart(10) +
-    "mean".padStart(10) +
-    "p95".padStart(10) +
-    "max".padStart(10) +
-    "warm".padStart(9) +
-    "  nulls"
+  "case".padEnd(48) + "mode".padEnd(14) +
+  "miss p50".padStart(10) + "p95".padStart(10) + "revisit".padStart(10) + "warm p50".padStart(10) + "  outcomes"
 );
-for (const r of results) {
+const results = [];
+for (const { benchCase, index } of activeCases) {
+  const engine = benchCase.engine === "beamer" ? beamerEngine : defaultEngine;
+  if (!engine) throw new Error("Beamer benchmark engine was not initialized.");
+  const result = runTextEngineBenchCase(engine, benchCase, options.samples, index);
+  results.push(result);
+  const misses = result.coldMs ?? result.editMs ?? result.layoutReuseMs;
   console.log(
-    r.name.padEnd(34) +
-      fmt(r.coldMs.min) +
-      fmt(r.coldMs.median).padStart(10) +
-      fmt(r.coldMs.mean).padStart(10) +
-      fmt(r.coldMs.p95).padStart(10) +
-      fmt(r.coldMs.max).padStart(10) +
-      fmt(r.warmMs.median) +
-      (r.nulls > 0 ? `  ${r.nulls}` : "")
+    result.name.padEnd(48) + result.mode.padEnd(14) +
+    (misses?.median.toFixed(3) ?? "—").padStart(10) +
+    (misses?.p95.toFixed(3) ?? "—").padStart(10) +
+    (result.revisitMs?.median.toFixed(3) ?? "—").padStart(10) +
+    (result.warmMs?.median.toFixed(3) ?? "—").padStart(10) +
+    `  native=${result.native} literal=${result.literals} null=${result.nulls}`
   );
 }
 
-if (jsonPath) {
-  writeFileSync(jsonPath, JSON.stringify({ arm, initMs, samples: SAMPLES, results }, null, 2));
-  console.log(`\nwrote ${jsonPath}`);
+if (options.jsonPath) {
+  writeFileSync(options.jsonPath, JSON.stringify({
+    schemaVersion: 2,
+    arm: "native-tex",
+    measuredAt: new Date().toISOString(),
+    environment: { node: process.version, platform: process.platform, arch: process.arch },
+    initMs,
+    engineInitMs,
+    samples: options.samples,
+    filters: { only: options.only, group: options.group },
+    results,
+  }, null, 2) + "\n");
+  console.log(`\nwrote ${options.jsonPath}`);
 }

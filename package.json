@@ -100,6 +100,7 @@
     "debug:multiline": "npm run -w @tikz-editor/web debug:multiline --",
     "bench:incremental-drag": "node scripts/benchmark-incremental-drag.mjs",
     "bench:beamer-frontend": "node scripts/benchmark-beamer-frontend.mjs",
+    "bench:text-engine": "node --import tsx scripts/bench-text-engine.mts",
     "profile:web": "npm run -w @tikz-editor/web profile --",
     "profile:web:analyze": "npm run -w @tikz-editor/web profile:analyze --",
     "profile:web:compare": "npm run -w @tikz-editor/web profile:compare --",

@@ -72,6 +72,30 @@ function layoutAndRender(
 }
 
 describe("public TeX SVG renderer", () => {
+  it("supports metric providers that ignore the rendering-only caret hint", () => {
+    const { body, report, vlistLayout } = layoutAndRender("office AV é", {
+      paragraphId: "tex:custom-render-provider",
+      sourceOffset: 200,
+    });
+    const metricProvider = {
+      resolveFont: computerModernTexMetricProvider.resolveFont.bind(computerModernTexMetricProvider),
+      shapeText: (
+        text: string,
+        font?: Parameters<typeof computerModernTexMetricProvider.shapeText>[1],
+        options?: Parameters<typeof computerModernTexMetricProvider.shapeText>[2]
+      ) => computerModernTexMetricProvider.shapeText(text, font, {
+        sourceStart: options?.sourceStart,
+        sourceEnd: options?.sourceEnd,
+      }),
+    };
+    expect(renderTexParagraphSvgBody(report, {
+      lineHeightPt: texLength(12),
+      vlistLayout,
+      metricProvider,
+      alignment: "ragged-right",
+    })).toBe(body);
+  });
+
   it("preserves the existing node-text SVG output", () => {
     const source = String.raw`Alpha \begin{itemize}\item Beta\end{itemize} \[x+y\]`;
     const direct = layoutAndRender(source, {

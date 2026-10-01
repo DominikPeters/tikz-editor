@@ -91,7 +91,10 @@ export function buildTexParagraphReport(params: {
     width: params.runWidths.get(run.runIndex) ?? texLength(0),
     text: run.kind === "text" || run.kind === "space" ? run.text : undefined,
   }));
-  const builtLines = params.lines.map((line) => buildTexLineReport(line, params));
+  // Coalescing probes and final segment construction may inspect the same
+  // math box several times. Normalize it once within this report build.
+  const lineParams = { ...params, mathBoxes: new WeakMap<object, TexMathBox>() };
+  const builtLines = params.lines.map((line) => buildTexLineReport(line, lineParams));
   return {
     report: {
       paragraphId: params.paragraphId,
@@ -122,6 +125,7 @@ function buildTexLineReport(
     runWidths: ReadonlyMap<number, TexLength>;
     lineLabels: ReadonlyMap<number, TexLineLabel>;
     font: ResolvedTexFont;
+    mathBoxes: WeakMap<object, TexMathBox>;
   }
 ): { readonly report: LineReport<"layout">; readonly lineBox: TexLineBox } {
   const segments: LineReport<"layout">["segments"] = [];
@@ -233,7 +237,7 @@ function buildTexLineReport(
       }
       const naturalWidth = params.runWidths.get(run.runIndex) ?? texLength(0);
       const width = adjustedTexGlueWidth(naturalWidth, run.texGlue, line.glueSetRatio ?? 0);
-      const box = texMathBoxFromWrapper(run.wrapper);
+      const box = texMathBoxFromWrapper(run.wrapper, params.mathBoxes);
       ascent = texLength(Math.max(ascent, box?.height ?? texLength(0)));
       descent = texLength(Math.max(descent, box?.depth ?? texLength(0)));
       segments.push({
@@ -392,20 +396,23 @@ function buildTexLineReport(
     break: breakReport,
     segments,
   };
-  const sourceStarts = segments.flatMap((segment) =>
-    segment.sourceStartRaw === undefined
-      ? []
-      : [Number(segment.sourceStartRaw)]
-  );
-  const sourceEnds = segments.flatMap((segment) =>
-    segment.sourceEndRaw === undefined ? [] : [Number(segment.sourceEndRaw)]
-  );
+  let sourceStart = Infinity;
+  let sourceEnd = -Infinity;
+  let hasSourceStart = false;
+  let hasSourceEnd = false;
+  for (const segment of segments) {
+    if (segment.sourceStartRaw !== undefined) {
+      hasSourceStart = true;
+      sourceStart = Math.min(sourceStart, Number(segment.sourceStartRaw));
+    }
+    if (segment.sourceEndRaw !== undefined) {
+      hasSourceEnd = true;
+      sourceEnd = Math.max(sourceEnd, Number(segment.sourceEndRaw));
+    }
+  }
   const sourceSpan =
-    sourceStarts.length > 0 && sourceEnds.length > 0
-      ? {
-          start: Math.min(...sourceStarts),
-          end: Math.max(...sourceEnds),
-        }
+    hasSourceStart && hasSourceEnd
+      ? { start: sourceStart, end: sourceEnd }
       : undefined;
   return {
     report,
@@ -431,6 +438,7 @@ function coalescedSameLineMathSegment(
   params: {
     runs: readonly ParagraphRun[];
     runWidths: ReadonlyMap<number, TexLength>;
+    mathBoxes: WeakMap<object, TexMathBox>;
   },
   x: TexLineX,
   omitLineInitialOperator: boolean
@@ -444,7 +452,7 @@ function coalescedSameLineMathSegment(
   if (firstRun?.kind !== "math") {
     return null;
   }
-  const firstBox = texMathBoxFromWrapper(firstRun.wrapper);
+  const firstBox = texMathBoxFromWrapper(firstRun.wrapper, params.mathBoxes);
   const rootBox = firstBox?.rootBox ?? null;
   if (rootBox === null) {
     return null;
@@ -480,7 +488,7 @@ function coalescedSameLineMathSegment(
     if (run.kind !== "math") {
       break;
     }
-    const box = texMathBoxFromWrapper(run.wrapper);
+    const box = texMathBoxFromWrapper(run.wrapper, params.mathBoxes);
     if (box?.rootBox !== rootBox) {
       break;
     }
@@ -606,7 +614,8 @@ function texLineHasInlineListLabel(line: LineReport<"layout">): boolean {
 }
 
 function texMathBoxFromWrapper(
-  wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"]
+  wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"],
+  cache: WeakMap<object, TexMathBox>
 ): TexMathBox | null {
   if (!wrapper || typeof wrapper !== "object") {
     return null;
@@ -614,6 +623,10 @@ function texMathBoxFromWrapper(
   const box = wrapper.texMathBox;
   if (!box || typeof box !== "object") {
     return null;
+  }
+  const cached = cache.get(box);
+  if (cached) {
+    return cached;
   }
   const typedBox = box as {
     readonly source?: unknown;
@@ -637,7 +650,7 @@ function texMathBoxFromWrapper(
     readonly rootBox?: unknown;
     readonly graphics?: unknown;
   };
-  return {
+  const normalized: TexMathBox = {
     source: typeof typedBox.source === "string" ? typedBox.source : "",
     content: typeof typedBox.content === "string" ? typedBox.content : "",
     sourceStart: Number(typedBox.sourceStart) || 0,
@@ -675,6 +688,8 @@ function texMathBoxFromWrapper(
       ? typedBox.graphics as readonly TexGraphicsBox[]
       : undefined,
   };
+  cache.set(box, normalized);
+  return normalized;
 }
 
 function buildTexLineLabelSegments(

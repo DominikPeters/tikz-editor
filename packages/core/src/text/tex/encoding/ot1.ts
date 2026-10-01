@@ -12,6 +12,20 @@ export function encodeOt1Text(
   const encoded: Ot1EncodedChar[] = [];
   for (let index = 0; index < text.length;) {
     const localStart = index;
+    const ascii = text.charCodeAt(index);
+    if (ascii >= 0x20 && ascii <= 0x7e && !isCombiningMark(text.charCodeAt(index + 1))) {
+      // A standalone ASCII character is already NFC. Keep the cluster path
+      // below for letters followed by combining marks and for Unicode input.
+      index += 1;
+      encoded.push({
+        code: ascii,
+        sourceStart: sourceStart + localStart,
+        sourceEnd: sourceEndOverride !== undefined && localStart === 0 && index === text.length
+          ? sourceEndOverride
+          : sourceStart + index,
+      });
+      continue;
+    }
     const firstCodePoint = text.codePointAt(index);
     if (firstCodePoint === undefined) {
       break;
@@ -28,20 +42,20 @@ export function encodeOt1Text(
       index += next > 0xffff ? 2 : 1;
     }
     const cluster = text.slice(localStart, index).normalize("NFC");
-    const codePoints = [...cluster].map((char) => char.codePointAt(0));
     const clusterSourceEnd =
       sourceEndOverride !== undefined && localStart === 0 && index === text.length
         ? sourceEndOverride
         : sourceStart + index;
-    for (const codePoint of codePoints) {
-    if (codePoint === undefined) {
-      continue;
-    }
-    encoded.push({
-      code: encodeOt1CodePoint(codePoint),
-      sourceStart: sourceStart + localStart,
-      sourceEnd: clusterSourceEnd,
-    });
+    for (const char of cluster) {
+      const codePoint = char.codePointAt(0);
+      if (codePoint === undefined) {
+        continue;
+      }
+      encoded.push({
+        code: encodeOt1CodePoint(codePoint),
+        sourceStart: sourceStart + localStart,
+        sourceEnd: clusterSourceEnd,
+      });
     }
   }
   return encoded;
