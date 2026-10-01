@@ -2,6 +2,7 @@ import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit } from "../../edit-execution";
 import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
+import { buildSelectionRects } from "../builds-panel/build-selection";
 import {
 Suspense,
 lazy,
@@ -510,6 +511,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   // same SVG pipeline. Scene and edit handles are empty, so tikz
   // interactions are inert; the reducer additionally rejects edit actions.
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
+  const deckBuildSelectionRects = useMemo(() => {
+    if (!deckActiveFrame || !deckBuildSelection || snapshot.source !== source ||
+      deckBuildSelection.documentId !== activeDocumentId ||
+      deckBuildSelection.frameId !== deckActiveFrame.frameId ||
+      deckBuildSelection.step !== deckActiveFrame.step ||
+      deckBuildSelection.sourceRevision !== sourceRevision) return [];
+    return buildSelectionRects(deckActiveFrame.layout, source, deckBuildSelection.contentSpans);
+  }, [activeDocumentId, deckActiveFrame, deckBuildSelection, snapshot.source, source, sourceRevision]);
   const deckTextLayoutContext = useMemo(() => {
     if (!deckActiveFrame) {
       return null;
@@ -3475,6 +3485,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         marqueeBounds={marqueeBounds}
         selectionBoxes={selectionBoxes}
         deckObjectSelectionBox={deckObjectSelectionBox}
+        deckBuildSelectionRects={deckBuildSelectionRects}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}
         selectionStrokeWidth={selectionStrokeWidth}

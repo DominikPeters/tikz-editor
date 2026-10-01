@@ -57,6 +57,8 @@ export type BeamerOverlayItem = {
   readonly spec: BeamerOverlaySpec;
   readonly overlaySpan: Span;
   readonly contentSpan: Span;
+  /** Present when this item inherits the enclosing list's default spec. */
+  readonly defaultListSpan?: Span;
 };
 
 export type BeamerOverlayPause = {
@@ -96,6 +98,7 @@ type PendingSpec =
       readonly overlaySpan: Span;
       readonly contentSpan: Span;
       readonly rawSpec: BeamerDelimitedSourceValue;
+      readonly defaultListSpan?: Span;
     }
   | {
       readonly kind: "pause";
@@ -236,6 +239,7 @@ export function scanBeamerFrameOverlays(
           to: peers[index + 1]?.from ?? list.contentTo,
         },
         rawSpec: defaultSpec,
+        defaultListSpan: { from: list.from, to: list.to },
       });
     }
   }
@@ -268,6 +272,7 @@ export function scanBeamerFrameOverlays(
         listItemIndex: entry.listItemIndex,
         overlaySpan: entry.overlaySpan,
         contentSpan: entry.contentSpan,
+        ...(entry.defaultListSpan ? { defaultListSpan: entry.defaultListSpan } : {}),
         spec: resolved.spec,
       });
     }
@@ -745,7 +750,8 @@ function overlayEnvironmentSpecs(
         },
       });
     }
-    index = endIndex;
+    // Nested environments can have independent overlay rules. Keep scanning
+    // their boundaries, including when their parent has its own spec.
   }
   return result;
 }

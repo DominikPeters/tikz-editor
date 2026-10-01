@@ -99,6 +99,7 @@ export const APP_MENU_COMMAND_IDS = {
   TOGGLE_INSPECTOR_PANEL: "view.toggle-inspector-panel",
   TOGGLE_OBJECTS_PANEL: "view.toggle-objects-panel",
   TOGGLE_STYLES_PANEL: "view.toggle-styles-panel",
+  TOGGLE_BUILDS_PANEL: "view.toggle-builds-panel",
   TOGGLE_FIGURES_PANEL: "view.toggle-figures-panel",
   TOGGLE_ASSISTANT_PANEL: "view.toggle-assistant-panel",
   TOGGLE_DEV_PANEL: "view.toggle-dev-panel",

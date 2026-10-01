@@ -560,6 +560,7 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.TOGGLE_STYLES_PANEL,
         label: "Styles Panel"
       },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL, label: "Builds Panel" },
       {
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL,

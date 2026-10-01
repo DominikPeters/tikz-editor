@@ -306,6 +306,14 @@ export const capabilityFixtures: Record<string, string> = {
 \begin{document}
 \begin{frame}Before.\begin{tcolorbox}Unsupported body\end{tcolorbox}After.\end{frame}
 \end{document}`,
+  beamer_builds: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\begin{itemize}[<+->]\item First\item Second\end{itemize}
+\only<2->{\begin{block}{Result}Proof.\end{block}}
+\alt<2>{During}{Otherwise}
+\end{frame}
+\end{document}`,
   beamer_document_scan: String.raw`\documentclass{beamer}
 \begin{document}
 \section{Introduction}

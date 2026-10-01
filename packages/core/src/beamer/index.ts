@@ -1,4 +1,15 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
+export {
+  buildBeamerBuildModel,
+  beamerBuildStateAt,
+  beamerBuildSpecPatch,
+  firstVisibleBeamerBuildStep,
+  isExplicitBeamerBuildSpec,
+  reconcileBeamerBuildRow,
+  type BeamerBuildModel,
+  type BeamerBuildRow,
+  type BeamerBuildState,
+} from "./builds.js";
 export { parseBeamerFrameBody } from "./content.js";
 export {
   beamerCaretAtomBeside,

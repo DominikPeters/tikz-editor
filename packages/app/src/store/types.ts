@@ -183,6 +183,18 @@ export type CanvasTextEditMask = {
   sourceRevision: number;
 };
 
+/** Source-backed build selection; canvas geometry must match revision and step. */
+export type DeckBuildSelection = {
+  documentId: string;
+  frameId: string;
+  sourceRevision: number;
+  rowId: string;
+  step: number;
+  sourceSpan: { from: number; to: number };
+  contentSpans: readonly { from: number; to: number }[];
+  revealSource: boolean;
+};
+
 /**
  * A selected deck object (block, column, list, item, graphic, embedded
  * tikzpicture). Object ids are only stable within one rendered frame layout;
@@ -224,6 +236,7 @@ export type WorkspaceEphemeralState = {
   deckStepByRootKey: Record<string, number>;
   /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
   deckObjectSelection: DeckObjectSelection | null;
+  deckBuildSelection: DeckBuildSelection | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -244,8 +257,9 @@ export type WorkspaceEphemeralState = {
   showObjectsPanel: boolean;
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
+  showBuildsPanel: boolean;
   showAssistantPanel: boolean;
-  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant";
+  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
 
   // ── debug ─────────────────────────────────────────────────────────────────────
   showDevPanel: boolean;
@@ -321,6 +335,7 @@ export type EditorState = {
   deckStepByRootKey: Record<string, number>;
   /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
   deckObjectSelection: DeckObjectSelection | null;
+  deckBuildSelection: DeckBuildSelection | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -341,8 +356,9 @@ export type EditorState = {
   showObjectsPanel: boolean;
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
+  showBuildsPanel: boolean;
   showAssistantPanel: boolean;
-  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant";
+  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
 
   // ── debug ─────────────────────────────────────────────────────────────────────
   showDevPanel: boolean;
@@ -430,7 +446,7 @@ export type EditorAction =
   | { type: "COMPUTE_REQUESTED"; requestId: string; documentId?: string }
   | { type: "SNAPSHOT_READY"; requestId: string; snapshot: SessionSnapshot; documentId?: string }
   | { type: "REORDER_TABS"; fromId: string; toId: string }
-  | { type: "SET_RIGHT_SIDEBAR_TAB"; tab: "inspector" | "objects" | "styles" | "assistant" }
+  | { type: "SET_RIGHT_SIDEBAR_TAB"; tab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
   | {
       type: "ASSISTANT_THREAD_READY";
       documentId?: string;
@@ -479,6 +495,7 @@ export type EditorAction =
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
   | { type: "SET_ACTIVE_INSPECTOR_EDIT"; documentId: string | null }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
+  | { type: "SET_DECK_BUILD_SELECTION"; selection: DeckBuildSelection | null }
   | { type: "SET_DECK_STEP"; rootId: string; step: number }
   | { type: "SET_DECK_OBJECT_SELECTION"; frameId: string; objectId: string | null }
   | { type: "TOGGLE_CANVAS_AID"; aid: CanvasAid }
@@ -491,7 +508,7 @@ export type EditorAction =
   | { type: "SET_CANVAS_STATUS_HINT"; hint: string | null }
   // Layout
   | { type: "TOGGLE_PANEL"; panel: "source" | "inspector" }
-  | { type: "SYNC_LAYOUT_STATE"; sourceVisible: boolean; inspectorVisible: boolean; objectsVisible: boolean; stylesVisible: boolean; figuresVisible: boolean; assistantVisible: boolean; activeRightTab: "inspector" | "objects" | "styles" | "assistant" }
+  | { type: "SYNC_LAYOUT_STATE"; sourceVisible: boolean; inspectorVisible: boolean; objectsVisible: boolean; stylesVisible: boolean; figuresVisible: boolean; buildsVisible?: boolean; assistantVisible: boolean; activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
   // Debug
   | { type: "TOGGLE_DEV_PANEL" }
   | { type: "SET_SNAP_DEBUG"; snapDebug: DeveloperSnapDebugState | null; log?: DeveloperLogEntry }

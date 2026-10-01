@@ -76,6 +76,7 @@ function initialUiState(): WorkspaceEphemeralState {
     creationFillColor: DEFAULT_CREATION_FILL_COLOR,
     deckStepByRootKey: {},
     deckObjectSelection: null,
+    deckBuildSelection: null,
     fitToContentRequestToken: 0,
     fitToContentModeActive: true,
     canvasFitToContentScale: null,
@@ -89,6 +90,7 @@ function initialUiState(): WorkspaceEphemeralState {
     showObjectsPanel: true,
     showStylesPanel: true,
     showFiguresPanel: false,
+    showBuildsPanel: false,
     showAssistantPanel: false,
     rightSidebarTab: "inspector",
     showDevPanel: false,
@@ -1330,6 +1332,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ui = { ...ui, activeSourceScrubSourceId: action.sourceId };
       break;
 
+    case "SET_DECK_BUILD_SELECTION": {
+      if (action.selection && (
+        action.selection.documentId !== workspace.activeDocumentId ||
+        action.selection.frameId !== workspace.documents[workspace.activeDocumentId].activeRootId ||
+        action.selection.sourceRevision !== workspace.documents[workspace.activeDocumentId].sourceRevision
+      )) return state;
+      if (!action.selection && !ui.deckBuildSelection) return state;
+      ui = { ...ui, deckBuildSelection: action.selection,
+        deckObjectSelection: action.selection ? null : ui.deckObjectSelection };
+      break;
+    }
+
     case "SET_DECK_STEP": {
       const key = rootKey(workspace.activeDocumentId, action.rootId);
       const step = Math.max(1, Math.round(action.step));
@@ -1349,6 +1363,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ui = {
         ...ui,
         activeCanvasTextEditSourceId: action.sourceId,
+        deckBuildSelection: action.sourceId != null ? null : ui.deckBuildSelection,
         canvasTextEditMask: null,
         deckObjectSelection:
           action.sourceId != null ? null : ui.deckObjectSelection
@@ -1365,15 +1380,15 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
               objectId: action.objectId
             };
       if (
-        (ui.deckObjectSelection == null && selection == null) ||
+        ui.deckBuildSelection == null && ((ui.deckObjectSelection == null && selection == null) ||
         (ui.deckObjectSelection != null &&
           ui.deckObjectSelection.documentId === selection?.documentId &&
           ui.deckObjectSelection.frameId === selection.frameId &&
-          ui.deckObjectSelection.objectId === selection.objectId)
+          ui.deckObjectSelection.objectId === selection.objectId))
       ) {
         return state;
       }
-      ui = { ...ui, deckObjectSelection: selection };
+      ui = { ...ui, deckObjectSelection: selection, deckBuildSelection: null };
       break;
     }
 
@@ -1449,6 +1464,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         showObjectsPanel: action.objectsVisible,
         showStylesPanel: action.stylesVisible,
         showFiguresPanel: action.figuresVisible,
+        showBuildsPanel: action.buildsVisible ?? ui.showBuildsPanel,
         showAssistantPanel: action.assistantVisible,
         rightSidebarTab: action.activeRightTab,
       };

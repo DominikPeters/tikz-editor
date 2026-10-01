@@ -771,6 +771,7 @@ export function SourcePanel() {
     documentKind,
     activeDocumentId,
     deckObjectSelection,
+    deckBuildSelection,
     showSourcePanel,
     lastEditPatches,
     lastEditPatchBaseRevision,
@@ -788,6 +789,7 @@ export function SourcePanel() {
     documentKind: s.documentKind,
     activeDocumentId: s.activeDocumentId,
     deckObjectSelection: s.deckObjectSelection,
+    deckBuildSelection: s.deckBuildSelection,
     showSourcePanel: s.showSourcePanel,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
@@ -1102,6 +1104,20 @@ export function SourcePanel() {
     view.dispatch({ effects: highlightCompartment.reconfigure(buildHighlightExtension(darkMode)) });
   }, [darkMode]);
 
+
+  useEffect(() => {
+    const view = viewRef.current;
+    const selected = deckBuildSelection;
+    if (!view || !showSourcePanel || selected?.documentId !== activeDocumentId || selected.frameId !== activeRootId ||
+      selected.sourceRevision !== sourceRevision ||
+      (view.hasFocus && !selected.revealSource)) return;
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: selected.sourceSpan.from, head: selected.sourceSpan.to },
+      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true
+    });
+    if (selected.revealSource) view.focus();
+  }, [activeDocumentId, activeRootId, deckBuildSelection, showSourcePanel, sourceRevision]);
 
   const revealedPlaceholderSelectionRef = useRef<typeof deckObjectSelection>(null);
   useEffect(() => {

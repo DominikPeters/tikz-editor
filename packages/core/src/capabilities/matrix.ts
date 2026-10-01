@@ -658,6 +658,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
+  beamer_builds: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "not-applicable",
+    edit: "partial",
+    fixtures: ["beamer_builds"],
+    notes:
+      "Source-backed build inventory and effective per-step states for supported Beamer overlays, including branches, nested rules, pauses and inherited list defaults. Explicit numeric specs can be patched; relative and advanced rules remain source edits. Unsupported rules are identified without inferred visibility."
+  },
   beamer_document_scan: {
     parser: "stable",
     semantic: "none",

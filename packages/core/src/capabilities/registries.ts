@@ -14,4 +14,5 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
 export const parserFeatureRegistry = featuresSupportedBy("parser");
 export const semanticFeatureRegistry = featuresSupportedBy("semantic");
 export const svgFeatureRegistry = featuresSupportedBy("svg");
+// Includes source-based Beamer build edits, which have no TikZ SVG feature.
 export const editFeatureRegistry = featuresSupportedBy("edit");
