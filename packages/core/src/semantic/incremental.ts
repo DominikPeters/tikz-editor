@@ -32,6 +32,7 @@ import type {
   SceneFigure
 } from "./types.js";
 import { MAIN_SCENE_LAYER } from "./types.js";
+import type { NodeTextEngine } from "../text/types.js";
 import type { StyleSourceRef } from "./style-chain.js";
 
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
@@ -617,7 +618,8 @@ function evaluateSelectively(args: {
     previous.source,
     run.source,
     nextFragments,
-    run.context.sourceFingerprint
+    run.context.sourceFingerprint,
+    run.context.textEngine
   );
   const suffixSourceIds = currentFragments
     .slice(corridorEndIndex + 1)
@@ -701,7 +703,8 @@ function assembleSelectiveSemanticResult(args: {
       currentSourceSpan,
       run.source,
       sourceFingerprint,
-      foreignSpanShift
+      foreignSpanShift,
+      run.context.textEngine
     );
     elements.push(...materialized.elements);
     editHandles.push(...materialized.editHandles);
@@ -1091,7 +1094,8 @@ function materializeFragmentForCurrentSource(
   currentSourceSpan: Span,
   source: string,
   sourceFingerprint: string,
-  foreignSpanShift: ForeignSpanShiftResolver
+  foreignSpanShift: ForeignSpanShiftResolver,
+  textEngine: NodeTextEngine | null
 ): Pick<SemanticStatementFragment, "elements" | "editHandles"> {
   if (fragment.sourceFingerprint === sourceFingerprint) {
     return {
@@ -1106,6 +1110,16 @@ function materializeFragmentForCurrentSource(
     ownSourceId: fragment.sourceId,
     resolveForeignDelta: foreignSpanShift
   });
+  if (delta !== 0) {
+    for (const element of elements) {
+      if (element.kind !== "Text" || element.textRenderInfo?.mode !== "tex") continue;
+      const info = element.textRenderInfo;
+      const rebased = textEngine?.rebaseSource?.(info.cacheKey, delta);
+      if (!rebased) throw new Error("Text source projection requires semantic replay");
+      element.textRenderInfo = { ...info, cacheKey: rebased.cacheKey, paragraphId: rebased.paragraphId,
+        ...(rebased.graphicsPlacements?.length ? { graphicsPlacements: rebased.graphicsPlacements } : {}) };
+    }
+  }
   retargetElementsSourceFingerprint(elements, sourceFingerprint);
 
   const editHandles = structuredClone(fragment.editHandles);
@@ -1131,7 +1145,8 @@ function materializeFragmentsForCache(
   previousSource: string,
   currentSource: string,
   fragments: readonly SemanticStatementFragment[],
-  sourceFingerprint: string
+  sourceFingerprint: string,
+  textEngine: NodeTextEngine | null
 ): SemanticStatementFragment[] {
   const foreignSpanShift = createForeignSpanShiftResolver(previousSource, currentSource);
   return fragments.map((fragment) => {
@@ -1150,7 +1165,8 @@ function materializeFragmentsForCache(
       currentSourceSpan,
       currentSource,
       sourceFingerprint,
-      foreignSpanShift
+      foreignSpanShift,
+      textEngine
     );
     const diagnostics = structuredClone(fragment.diagnostics);
     shiftSpansDeep(diagnostics, currentSourceSpan.from - fragment.sourceSpan.from);

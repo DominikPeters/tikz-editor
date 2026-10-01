@@ -16,12 +16,12 @@ import {
 import { emitSvg, type EmitSvgOptions, type EmitSvgResult, type SvgRenderModel } from "@tikz-editor/core/svg/index";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditHandle, SceneFigure } from "@tikz-editor/core/semantic/types";
-import { renderTikzToSvgAsync, type RenderDiagnostic } from "@tikz-editor/core/render/index";
+import { renderTikzToSvgAsync, createRenderNodeTextValidator, type RenderDiagnostic } from "@tikz-editor/core/render/index";
 import type { NodeTextEngine } from "@tikz-editor/core/text/types";
 import type { TextLayoutContext } from "@tikz-editor/core/text/layout-context";
 import { runTextRenderOperation, retainSceneTextLayout } from "@tikz-editor/core/text/render-scope";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
-import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
+import { resolveFigureBoundsFromFigure } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
 import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 import { parseDocumentRootId, type DocumentRootRef } from "@tikz-editor/core/document/root-id";
@@ -127,6 +127,8 @@ export type ComputeRequest = {
   patchBaseRevision?: number | null;
   trigger?: IncrementalSemanticTrigger;
   kind?: "render" | "prewarm";
+  /** Source-editor renders infer changed statements against the last completed parse. */
+  inferSourceChanges?: boolean;
   renderViewBox?: SvgViewBox | null;
   /**
    * Span of an active canvas text-editing session. Structure is parsed with
@@ -151,13 +153,10 @@ let incrementalParseSession: IncrementalParseSession | null = null;
 let textEnginePromise: Promise<NodeTextEngine> | null = null;
 let resolvedTextEngine: NodeTextEngine | null = null;
 
-function resolveSvgPadding(source: string, activeRootId: string | null | undefined): number {
-  try {
-    return resolveFigureBoundsState(source, { activeFigureId: activeRootId }).mode === "fixed" ? 0 : 18;
-  } catch {
-    return 18;
-  }
+function resolveSvgPadding(parse: ParseTikzResult): number {
+  return resolveFigureBoundsFromFigure(parse.figure).mode === "fixed" ? 0 : 18;
 }
+let incrementalDocumentId: string | undefined;
 let previousSvgModel: SvgRenderModel | null = null;
 let previousTextLayoutContext: TextLayoutContext | null = null;
 let incrementalWarmSource: string | null = null;
@@ -192,6 +191,14 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
   const computeStartedAt = performance.now();
 
   try {
+    if (incrementalDocumentId !== request.documentId) {
+      incrementalDocumentId = request.documentId;
+      incrementalParseSession?.reset();
+      incrementalSemanticSession?.reset();
+      previousSvgModel = null;
+      previousTextLayoutContext = null;
+      incrementalWarmSource = null;
+    }
     if (detectDocumentKind(request.source) === "beamer") {
       const rootRef = request.activeRootId
         ? parseDocumentRootId(request.activeRootId)
@@ -228,7 +235,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         diagnostics: []
       };
     }
-    if (changedSourceIds.length > 0) {
+    if (!request.textEditMaskSpan && (changedSourceIds.length > 0 || request.inferSourceChanges)) {
       const result = await computeSnapshotIncremental(
         request.source,
         request.sourceRevision ?? null,
@@ -239,7 +246,8 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         trigger,
         sourceFingerprint,
         request.documentFileRef ?? null,
-        request.renderViewBox ?? null
+        request.renderViewBox ?? null,
+        request.inferSourceChanges ?? false
       );
       const snapshot: SessionSnapshot = {
         source: request.source,
@@ -257,7 +265,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         deck: null,
         incremental: {
           trigger,
-          changedSourceIds,
+          changedSourceIds: result.changedSourceIds,
           parseStrategy: result.parseStats.strategy,
           parseFallbackReason: result.parseStats.fallbackReason,
           parsePatchApplication: result.parseStats.patchApplication,
@@ -278,7 +286,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         kind: requestKind,
         trigger,
         durationMs: performance.now() - computeStartedAt,
-        changedSourceCount: changedSourceIds.length,
+        changedSourceCount: result.changedSourceIds.length,
         incremental: true,
         parseStrategy: result.parseStats.strategy,
         parseFallbackReason: result.parseStats.fallbackReason ?? null,
@@ -332,7 +340,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
           options,
           hints: { trigger: "other" }
         }).semantic,
-      svg: { padding: resolveSvgPadding(request.source, request.activeRootId) },
+      svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse) }),
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
@@ -710,7 +718,7 @@ async function computeNestedTikzSnapshot(
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
     evaluate: { graphicsResolver: graphicsContext.resolver },
-    svg: { padding: resolveSvgPadding(masked, null) },
+    svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse) }),
     textEngine
   });
   const snapshot: SessionSnapshot = {
@@ -755,9 +763,11 @@ async function computeSnapshotIncremental(
   trigger: IncrementalSemanticTrigger,
   sourceFingerprint: string | undefined,
   documentFileRef: DocumentFileRef | null,
-  renderViewBox: SvgViewBox | null
+  renderViewBox: SvgViewBox | null,
+  inferChanges = false
 ): Promise<{
   parse: ParseTikzResult;
+  changedSourceIds: string[];
   semantic: EvaluateTikzResult;
   svg: EmitSvgResult;
   parseStats: IncrementalParseStats;
@@ -790,11 +800,19 @@ async function computeSnapshotIncremental(
     patches,
     patchBaseRevision,
     changedSourceIds,
-    trigger
+    trigger,
+    inferChanges,
+    nodeTextValidator: createRenderNodeTextValidator(source, textEngine)
   });
+  // The parser may have rebased coalesced edits. All downstream consumers must
+  // use that same transition, rather than the last queued keystroke/frame.
+  if (parseIncremental.changes) {
+    patches = parseIncremental.changes.patches;
+    changedSourceIds = parseIncremental.changes.changedSourceIds;
+  }
   phases.parse = performance.now() - phaseStartedAt;
   const parseResult = parseIncremental.parse;
-  const svgPadding = resolveSvgPadding(parseResult.source, parseResult.activeFigureId);
+  const svgPadding = resolveSvgPadding(parseResult);
   phaseStartedAt = performance.now();
   const session = getIncrementalSemanticSession();
   // A parser fallback may include changes outside the supplied edit targets.
@@ -882,6 +900,7 @@ async function computeSnapshotIncremental(
 
   return {
     parse: parseResult,
+    changedSourceIds,
     semantic: semanticResult,
     svg: svgResult,
     parseStats: parseIncremental.stats,

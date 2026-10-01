@@ -5,6 +5,65 @@ import type { SourcePatch } from "../packages/core/src/edit/types.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
 
 describe("incremental parser session", () => {
+  it("infers coalesced source edits and exposes a current syntax tree", () => {
+    const source = String.raw`\begin{tikzpicture}
+      \node (a) at (0,0) {First};
+      \node (b) at (2,0) {Second};
+    \end{tikzpicture}`;
+    const session = createIncrementalParseSession();
+    session.prime(parseWithContext(source), { includeContextDefinitions: true, sourceRevision: 1 });
+    const next = source.replace("First", "A longer label");
+    const result = session.evaluate({ source: next, sourceRevision: 12, includeContextDefinitions: true, inferChanges: true });
+    expect(result.stats.strategy).toBe("incremental");
+    expect(result.stats.reparsedStatementCount).toBe(1);
+    expect(result.changes?.patches).toEqual([computeSinglePatch(source, next)]);
+    expect(result.parse.figure).toEqual(parseWithContext(next).figure);
+    const syntaxSpans = (parse: ReturnType<typeof parseTikz>) => {
+      const spans: string[] = [];
+      parse.tree.iterate({ enter(node) { spans.push(`${node.name}:${node.from}:${node.to}`); } });
+      return spans;
+    };
+    expect(syntaxSpans(result.parse)).toEqual(syntaxSpans(parseWithContext(next)));
+    expect(result.parse.tree.length).toBe(parseWithContext(next).tree.length);
+  });
+
+  it("fully parses structural source edits that would introduce duplicate item IDs", () => {
+    const source = String.raw`\begin{tikzpicture}
+      \draw (0,0) -- (1,0);
+      \node at (2,0) {Existing};
+    \end{tikzpicture}`;
+    const session = createIncrementalParseSession();
+    session.prime(parseWithContext(source), { includeContextDefinitions: true });
+    const next = source.replace("-- (1,0)", "-- (1,0) node {New}");
+    const result = session.evaluate({ source: next, includeContextDefinitions: true, inferChanges: true });
+    expect(result.stats.fallbackReason).toBe("statement-structure-changed");
+    expect(result.parse.figure).toEqual(parseWithContext(next).figure);
+  });
+
+  it("keeps text validation when an inferred edit needs a full parse", () => {
+    const source = String.raw`\begin{tikzpicture}\node {valid};\end{tikzpicture}`;
+    const session = createIncrementalParseSession();
+    session.prime(parseWithContext(source), { includeContextDefinitions: true });
+    const next = source.replace("valid", "invalid");
+    const nodeTextValidator = ({ node }: { node: { text: string } }) => node.text === "invalid" ? { message: "Invalid text" } : null;
+    const result = session.evaluate({ source: next, includeContextDefinitions: true, inferChanges: true, nodeTextValidator });
+    expect(result.parse.diagnostics).toEqual(parseTikz(next, { includeContextDefinitions: true, nodeTextValidator }).diagnostics);
+    expect(result.parse.diagnostics).toHaveLength(1);
+  });
+
+  it("fully parses newly introduced foreach identities inside a node", () => {
+    const source = String.raw`\begin{tikzpicture}
+      \path (0,0) -- (2,0) node {A};
+      \path (0,1) -- (2,1) node foreach \p in {0.25,0.75} [pos=\p] {\p};
+    \end{tikzpicture}`;
+    const session = createIncrementalParseSession();
+    session.prime(parseWithContext(source), { includeContextDefinitions: true });
+    const next = source.replace("node {A}", String.raw`node foreach \q in {0.2,0.8} [pos=\q] {A}`);
+    const result = session.evaluate({ source: next, includeContextDefinitions: true, inferChanges: true });
+    expect(result.stats.fallbackReason).toBe("statement-structure-changed");
+    expect(result.parse.figure).toEqual(parseWithContext(next).figure);
+  });
+
   it("reuses a primed parse when callers rely on default options", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);

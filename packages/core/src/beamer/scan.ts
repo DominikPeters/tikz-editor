@@ -904,6 +904,9 @@ function scanBeamerTheoremTemplate(
 export function scanBeamerDocumentClass(
   source: string
 ): BeamerDocumentClassModel | null {
+  // This literal control word is required by the grammar. Ordinary snippets
+  // need no document syntax index just to classify their editing mode.
+  if (!source.includes("\\documentclass")) return null;
   const context = createBeamerSyntaxContext(source);
   const controls = beamerControlSequencesIn(context, {
     from: 0,

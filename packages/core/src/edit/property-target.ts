@@ -15,6 +15,35 @@ import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/nodes/matrix.js";
 import { incrementProfilingCounter } from "../profiling.js";
 import { findPathStatementById } from "./statement-find.js";
+import { walkPathItems } from "../ast/walk.js";
+
+// A parse result owns its target index. Normal targets no longer walk every
+// preceding path (and all their items) for each object in the scene.
+const targetStatementsByParse = new WeakMap<ParseTikzResult, Map<string, Statement>>();
+
+function targetStatements(parse: ParseTikzResult): Map<string, Statement> {
+  let index = targetStatementsByParse.get(parse);
+  if (index) return index;
+  index = new Map();
+  const visit = (statements: readonly Statement[]) => {
+    for (const statement of statements) {
+      index.set(statement.id, statement);
+      if (statement.kind === "Scope") visit(statement.body);
+      if (statement.kind === "Path") {
+        const add = (item: { id?: string }) => { if (item.id) index.set(item.id, statement); };
+        walkPathItems(statement.items, { onPathItem: add, onNode: add });
+      }
+    }
+  };
+  visit(parse.figure.body);
+  targetStatementsByParse.set(parse, index);
+  return index;
+}
+
+export function findPathStatementInParseResult(parse: ParseTikzResult, sourceId: string): PathStatement | null {
+  const statement = targetStatements(parse).get(sourceId);
+  return statement?.kind === "Path" && statement.id === sourceId ? statement : null;
+}
 
 export type PropertyTargetKind =
   | "figure"
@@ -160,7 +189,8 @@ function resolveNormalizedPropertyTarget(
     return { kind: "found", target: treeChildTarget };
   }
 
-  const target = findTargetInStatements(parseResult.figure.body, source, normalizedId);
+  const owner = targetStatements(parseResult).get(normalizedId);
+  const target = findTargetInStatements(owner ? [owner] : parseResult.figure.body, source, normalizedId);
   if (!target) {
     return { kind: "not-found", reason: `No editable source target found for ${normalizedId}` };
   }

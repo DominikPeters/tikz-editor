@@ -81,6 +81,29 @@ export type MappedText = {
   readonly sourceMap: TextSourceMap;
 };
 
+/** Translate source coordinates without changing the text or its projection policy. */
+export function translateTextSourceMap(map: TextSourceMap, delta: number): TextSourceMap {
+  const range = (span: TextSourceRange): TextSourceRange => ({ from: span.from + delta, to: span.to + delta });
+  const projection = (origin: TextSourceProjection): TextSourceProjection => {
+    switch (origin.kind) {
+      case "direct": return { ...origin, ...range(origin) };
+      case "macro-argument": return { ...origin, ...range(origin), invocation: range(origin.invocation), definition: origin.definition && range(origin.definition) };
+      case "macro-generated": return { ...origin, invocation: range(origin.invocation), definition: origin.definition && range(origin.definition) };
+      case "generated": return { ...origin, owner: origin.owner && range(origin.owner) };
+      case "unmapped": return origin;
+    }
+  };
+  return {
+    inputText: map.inputText,
+    charOrigins: map.charOrigins.map(projection),
+    boundaryOrigins: map.boundaryOrigins.map((anchor) => {
+      if (anchor.kind === "offset") return { ...anchor, offset: anchor.offset + delta };
+      if (anchor.kind === "range") return { ...anchor, ...range(anchor), projection: anchor.projection && projection(anchor.projection) };
+      return anchor;
+    })
+  };
+}
+
 export function createIdentityMappedText(text: string, sourceOffset = 0): MappedText {
   const charOrigins = Array.from({ length: text.length }, (_, index): TextSourceProjection => ({
     kind: "direct",

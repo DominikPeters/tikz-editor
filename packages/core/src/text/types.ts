@@ -82,6 +82,8 @@ export type NodeTextEngine = {
   createRenderScope?(previousContext?: TextLayoutContext | null): NodeTextRenderScope;
   validate(text: string): NodeTextValidationIssue | null;
   measure(request: NodeTextMeasureRequest): NodeTextMetrics | null;
+  /** Reuse layout after an unchanged text fragment moves within the source. */
+  rebaseSource?(cacheKey: string, delta: number): NodeTextMetrics | null;
   renderFromCache(cacheKey: string): NodeTextRenderPayload | null;
   /**
    * Resolve pending async renders and return the cache keys that became available

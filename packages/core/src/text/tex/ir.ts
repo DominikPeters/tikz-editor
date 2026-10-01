@@ -1042,6 +1042,9 @@ export function analyzeSimpleTexResources(
   text: string
 ): SimpleTexResourceManifest {
   const graphics: SimpleTexGraphicsResource[] = [];
+  // An absence check belongs to the resource frontend; possible occurrences
+  // still go through the grammar, including comments and opaque environments.
+  if (!text.includes("\\includegraphics")) return { graphics };
   // Resource discovery is a document-level superset operation: Beamer's
   // overlay-qualified \includegraphics form must remain discoverable while
   // all actual command and argument boundaries still come from the CST.

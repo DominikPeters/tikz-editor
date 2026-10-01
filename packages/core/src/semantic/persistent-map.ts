@@ -1,4 +1,5 @@
 const DELETED = Symbol("persistent-map-deleted");
+const MAX_LOOKUP_LAYERS = 64;
 
 type EntryValue<V> = V | typeof DELETED;
 
@@ -108,6 +109,7 @@ export class PersistentMap<K, V> implements Map<K, V> {
     key: K
   ): { found: true; value: V } | { found: false } {
     let state: PersistentMapState<K, V> | null = this.state;
+    let layers = 0;
     while (state) {
       // A materialized map already folds in this layer and all ancestors, so
       // it caps the chain walk for maps that fork once per drag frame.
@@ -123,6 +125,10 @@ export class PersistentMap<K, V> implements Map<K, V> {
           return { found: false };
         }
         return { found: true, value: entry as V };
+      }
+      if (++layers >= MAX_LOOKUP_LAYERS) {
+        const map = this.materialize();
+        return map.has(key) ? { found: true, value: map.get(key) as V } : { found: false };
       }
       state = state.parent;
     }
@@ -144,28 +150,30 @@ function createRootState<K, V>(): PersistentMapState<K, V> {
 }
 
 function materializeState<K, V>(state: PersistentMapState<K, V>): Map<K, V> {
+  if (state.materialized) return state.materialized;
   const pending: PersistentMapState<K, V>[] = [];
   let current: PersistentMapState<K, V> | null = state;
   while (current && !current.materialized) {
     pending.push(current);
     current = current.parent;
   }
-  let materialized = current?.materialized ?? new Map<K, V>();
+  // Only the requested version needs a flat map. Copying and caching every
+  // ancestor here made one iteration allocate quadratic storage after a long
+  // sequence of snapshots. Older snapshots remain lazy and independent.
+  const materialized = new Map(current?.materialized);
   for (let index = pending.length - 1; index >= 0; index -= 1) {
     const layer = pending[index];
     if (!layer) {
       continue;
     }
-    const next = new Map(materialized);
     for (const [key, entry] of layer.entries) {
       if (entry === DELETED) {
-        next.delete(key);
+        materialized.delete(key);
       } else {
-        next.set(key, entry);
+        materialized.set(key, entry);
       }
     }
-    layer.materialized = next;
-    materialized = next;
   }
+  state.materialized = materialized;
   return materialized;
 }

@@ -4,11 +4,6 @@ import type {
   SvgRenderPart,
   SvgViewBox
 } from "@tikz-editor/core/svg/index";
-import {
-  nextPartIdInOrder,
-  removePartOrder,
-  upsertPartOrder
-} from "@tikz-editor/core/svg/order";
 import { fmt } from "./geometry";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -20,7 +15,6 @@ export class SvgDomPatcher {
   private readonly elementByPartId = new Map<string, SVGElement>();
   private readonly fingerprintByPartId = new Map<string, string>();
   private readonly domParser = new DOMParser();
-  private partOrder: string[] = [];
 
   constructor(private readonly host: HTMLElement) {
     this.rootSvg = document.createElementNS(SVG_NS, "svg");
@@ -45,19 +39,22 @@ export class SvgDomPatcher {
   dispose(): void {
     this.elementByPartId.clear();
     this.fingerprintByPartId.clear();
-    this.partOrder = [];
     if (this.host.contains(this.rootSvg)) {
       this.rootSvg.remove();
     }
   }
 
   applyOperations(operations: readonly SvgPatchOp[]): void {
+    const changedParts = operations.flatMap((operation) =>
+      operation.kind === "upsertPart" && this.fingerprintByPartId.get(operation.part.partId) !== operation.part.fingerprint
+        ? [operation.part] : []);
+    const parsed = this.parsePartElements(changedParts);
     for (const operation of operations) {
-      this.applyOperation(operation);
+      this.applyOperation(operation, parsed);
     }
   }
 
-  private applyOperation(operation: SvgPatchOp): void {
+  private applyOperation(operation: SvgPatchOp, parsed: ReadonlyMap<SvgRenderPart, SVGElement>): void {
     switch (operation.kind) {
       case "replaceAll":
         this.replaceAll(operation.model);
@@ -72,7 +69,7 @@ export class SvgDomPatcher {
         this.removePart(operation.partId);
         return;
       case "upsertPart":
-        this.upsertPart(operation.part, operation.afterPartId);
+        this.upsertPart(operation.part, operation.afterPartId, parsed.get(operation.part));
         return;
     }
   }
@@ -82,15 +79,16 @@ export class SvgDomPatcher {
     this.replaceDefs(model.defs);
     this.elementByPartId.clear();
     this.fingerprintByPartId.clear();
-    this.partOrder = [];
     this.contentLayer.replaceChildren();
+    const parsed = this.parsePartElements(model.parts);
+    const content = document.createDocumentFragment();
     for (const part of model.parts) {
-      const element = this.parsePartElement(part);
-      this.contentLayer.appendChild(element);
+      const element = parsed.get(part)!;
+      content.appendChild(element);
       this.elementByPartId.set(part.partId, element);
       this.fingerprintByPartId.set(part.partId, part.fingerprint);
-      this.partOrder.push(part.partId);
     }
+    this.contentLayer.appendChild(content);
   }
 
   private replaceDefs(defs: readonly string[]): void {
@@ -108,17 +106,15 @@ export class SvgDomPatcher {
     }
     this.elementByPartId.delete(partId);
     this.fingerprintByPartId.delete(partId);
-    this.partOrder = removePartOrder(this.partOrder, partId);
   }
 
-  private upsertPart(part: SvgRenderPart, afterPartId: string | null): void {
+  private upsertPart(part: SvgRenderPart, afterPartId: string | null, parsed?: SVGElement): void {
     const existing = this.elementByPartId.get(part.partId);
     const existingFingerprint = this.fingerprintByPartId.get(part.partId);
-    const nextOrder = upsertPartOrder(this.partOrder, part.partId, afterPartId);
 
     let element = existing;
     if (!element || existingFingerprint !== part.fingerprint) {
-      const replacement = this.parsePartElement(part);
+      const replacement = parsed ?? this.parsePartElement(part);
       if (element?.parentNode === this.contentLayer) {
         this.contentLayer.replaceChild(replacement, element);
       } else {
@@ -129,18 +125,36 @@ export class SvgDomPatcher {
       this.fingerprintByPartId.set(part.partId, part.fingerprint);
     }
 
-    const beforePartId = nextPartIdInOrder(nextOrder, part.partId);
-    const beforeNode = beforePartId ? this.elementByPartId.get(beforePartId) ?? null : null;
-    if (beforePartId && !beforeNode) {
-      throw new Error(`Missing anchor node for part ${beforePartId}`);
-    }
-    if (beforeNode && beforeNode.parentNode !== this.contentLayer) {
-      throw new Error(`Anchor node ${beforePartId} is detached from the content layer`);
-    }
+    // The DOM already owns the part order. Using its sibling links avoids
+    // filtering/copying the complete order array for each changed part.
+    const anchor = afterPartId && afterPartId !== part.partId ? this.elementByPartId.get(afterPartId) : null;
+    let beforeNode = afterPartId == null ? this.contentLayer.firstChild : anchor?.nextSibling ?? null;
+    if (beforeNode === element) beforeNode = element.nextSibling;
     if (element.parentNode !== this.contentLayer || element.nextSibling !== beforeNode) {
       this.contentLayer.insertBefore(element, beforeNode);
     }
-    this.partOrder = nextOrder;
+  }
+
+  private parsePartElements(parts: readonly SvgRenderPart[]): Map<SvgRenderPart, SVGElement> {
+    const elements = new Map<SvgRenderPart, SVGElement>();
+    if (parts.length === 0) return elements;
+    // Each render part normally has one root. Parse them in one XML document,
+    // retaining the per-part fallback for malformed or multi-root fragments.
+    const parsed = this.domParser.parseFromString(
+      `<svg xmlns="${SVG_NS}" xmlns:xlink="http://www.w3.org/1999/xlink">${parts.map((part) => part.markup).join("")}</svg>`,
+      "image/svg+xml"
+    );
+    const children = Array.from(parsed.documentElement.children);
+    if (!parsed.querySelector("parsererror") && children.length === parts.length && children.every(isSvgElementNode)) {
+      parts.forEach((part, index) => {
+        const element = children[index];
+        element.setAttribute("data-part-id", part.partId);
+        elements.set(part, element);
+      });
+    } else {
+      for (const part of parts) elements.set(part, this.parsePartElement(part));
+    }
+    return elements;
   }
 
   private parsePartElement(part: SvgRenderPart): SVGElement {

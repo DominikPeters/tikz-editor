@@ -42,6 +42,7 @@ import type {
 import {
   createIdentityMappedText,
   mapTransformedTextWithFallback,
+  translateTextSourceMap,
   type TextSourceMap,
 } from "./source-map.js";
 import {
@@ -132,6 +133,9 @@ async function initializeEngine(
   await preloadEnglishHyphenator();
 
   const entriesByParagraph = new Map<string, CachedRenderEntry>();
+  // Requests live exactly as long as their render entries, including scene-owned
+  // entries outside the reusable cache. Resolvers keep their original revisions.
+  const requestsByEntry = new WeakMap<CachedRenderEntry, NodeTextMeasureRequest>();
   const renderCache = new TexWeightedLruCache<string, CachedRenderEntry>(RENDER_CACHE_LIMIT, RENDER_CACHE_BYTES, {
     retainOversizedEntry: true,
     onEvict: (_key, entry) => entriesByParagraph.delete(entry.paragraphId),
@@ -154,7 +158,7 @@ async function initializeEngine(
   // hashes of source maps or layout keys cannot provide that guarantee.
   const nextParagraphId = () => `tex:${++paragraphSequence}`;
 
-  return {
+  const engine: NodeTextEngine = {
     layoutContext,
     createRenderScope(previousContext): NodeTextRenderScope {
       const previous = previousContext ? retainedEntriesByContext.get(previousContext) : undefined;
@@ -293,6 +297,12 @@ async function initializeEngine(
         if (!entry) {
           return null;
         }
+        entry = { ...entry, retainedBytes: entry.retainedBytes + request.text.length * 2 +
+          (request.sourceMap ? request.sourceMap.charOrigins.length * 160 + request.sourceMap.boundaryOrigins.length * 96 : 0) + 128 };
+        requestsByEntry.set(entry, {
+          ...request,
+          sourceMap: request.sourceMap ? structuredClone(request.sourceMap) : undefined
+        });
         if (renderCache.set(cacheKey, entry, cacheKey.length * 2 + entry.retainedBytes)) {
           entriesByParagraph.set(entry.paragraphId, entry);
         }
@@ -312,6 +322,18 @@ async function initializeEngine(
       };
     },
 
+    rebaseSource(cacheKey, delta) {
+      const entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
+      const request = entry && requestsByEntry.get(entry);
+      if (!request?.sourceMap) return null;
+      // Foreign macro definition spans do not necessarily move with the node.
+      // Let semantic replay handle those projections conservatively.
+      const isMacro = (origin: { kind: string }) => origin.kind === "macro-argument" || origin.kind === "macro-generated";
+      if (request.sourceMap.charOrigins.some(isMacro) || request.sourceMap.boundaryOrigins.some((anchor) =>
+        anchor.kind === "range" && (anchor.policy === "macro" || (anchor.projection && isMacro(anchor.projection))))) return null;
+      return engine.measure({ ...request, sourceMap: translateTextSourceMap(request.sourceMap, delta) });
+    },
+
     renderFromCache(cacheKey: string): NodeTextRenderPayload | null {
       setActiveTextLayoutContext(activeScope?.context ?? layoutContext);
       const entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
@@ -322,6 +344,7 @@ async function initializeEngine(
       return entry?.payload ?? null;
     },
   };
+  return engine;
 }
 
 function buildTexSharedLayout(params: {

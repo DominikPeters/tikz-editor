@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { createIdentityMappedText } from "../packages/core/src/text/source-map.js";
+import { getTextLayoutReportProvider } from "../packages/core/src/text/layout-context.js";
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 import { createTexNodeTextEngine } from "../packages/core/src/text/tex-node-text-engine.js";
 
@@ -15,6 +17,30 @@ function request(text: string, fontSizePt = 10) {
 }
 
 describe("native TeX node text engine", () => {
+  it("rebases retained text reports and SVG without changing the previous scene", async () => {
+    const engine = await createTexNodeTextEngine();
+    const text = String.raw`Alpha $x^2$ and beta`;
+    const input = { ...request(text), textWidthPt: 50, sourceMap: createIdentityMappedText(text, 200).sourceMap };
+    const firstScope = engine.createRenderScope!();
+    const first = firstScope.run(() => engine.measure(input))!;
+    firstScope.retain([first.cacheKey]);
+    const firstBody = firstScope.run(() => engine.renderFromCache(first.cacheKey))!.body;
+    const reportsBefore = JSON.stringify(getTextLayoutReportProvider(firstScope.layoutContext)?.getVListLayout(first.paragraphId!));
+    const nextScope = engine.createRenderScope!(firstScope.layoutContext);
+    const shifted = nextScope.run(() => engine.rebaseSource!(first.cacheKey, 37))!;
+    const canonical = nextScope.run(() => engine.measure({ ...input, sourceMap: createIdentityMappedText(text, 237).sourceMap }))!;
+    expect(shifted).toEqual(canonical);
+    expect(shifted.width).toBe(first.width);
+    expect(shifted.height).toBe(first.height);
+    expect(nextScope.run(() => engine.renderFromCache(shifted.cacheKey))!.body).toContain('data-source-start="237"');
+    expect(firstScope.run(() => engine.renderFromCache(first.cacheKey))!.body).toBe(firstBody);
+    expect(JSON.stringify(getTextLayoutReportProvider(firstScope.layoutContext)?.getVListLayout(first.paragraphId!))).toBe(reportsBefore);
+    const restored = nextScope.run(() => engine.rebaseSource!(shifted.cacheKey, -37));
+    expect(restored?.cacheKey).toBe(first.cacheKey);
+    const unprojected = engine.measure(request("Unprojected"))!;
+    expect(engine.rebaseSource!(unprojected.cacheKey, 37)).toBeNull();
+  });
+
   it("measures and renders supported text without an external renderer", async () => {
     const engine = await createTexNodeTextEngine();
     const metrics = engine.measure(request(String.raw`Cost $O(n^2)$`));

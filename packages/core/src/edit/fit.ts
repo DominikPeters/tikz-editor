@@ -2,8 +2,7 @@ import type { OptionListAst } from "../options/types.js";
 import type { PathStatement } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import { normalizeOptionKey } from "./option-key.js";
-import { resolvePropertyTargetFromParseResult, type PropertyTarget } from "./property-target.js";
-import { findPathStatementById } from "./statement-find.js";
+import { findPathStatementInParseResult, resolvePropertyTargetFromParseResult, type PropertyTarget } from "./property-target.js";
 
 export const FIT_DIRECT_MANIPULATION_BLOCK_REASON =
   "This node uses fit; drag move/resize/rotate is disabled. Edit fit=(...) targets instead.";
@@ -29,7 +28,7 @@ export function sourceUsesFitNodeFromParseResult(
   if (!parseResult || sourceId.trim().length === 0) {
     return false;
   }
-  const statement = findPathStatementById(parseResult.figure.body, sourceId);
+  const statement = findPathStatementInParseResult(parseResult, sourceId);
   if (statement && pathStatementUsesFit(statement)) {
     return true;
   }

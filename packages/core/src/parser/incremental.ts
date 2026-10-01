@@ -1,4 +1,5 @@
 import type { Tree } from "@lezer/common";
+import { parseSyntax } from "@tikz-editor/lezer-tikz";
 
 import { FeatureFlags } from "../ast/features.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -7,7 +8,8 @@ import type { ParseTikzOptions, ParseTikzResult } from "./index.js";
 import type { SourcePatch } from "../edit/types.js";
 import {
   getCachedContextDefinitions,
-  resolveActiveFigureSpan
+  resolveActiveFigureSpan,
+  resolveParseWindowSource
 } from "./shared.js";
 import { parseTikz } from "./index.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
@@ -47,11 +49,16 @@ export type IncrementalParseEvaluateInput = {
   patchBaseRevision?: number | null;
   changedSourceIds?: readonly string[];
   trigger?: IncrementalParseTrigger;
+  /** Infer a source edit against the last evaluated revision, after coalescing. */
+  inferChanges?: boolean;
+  nodeTextValidator?: ParseTikzOptions["nodeTextValidator"];
 };
 
 export type IncrementalParseEvaluateResult = {
   parse: ParseTikzResult;
   stats: IncrementalParseStats;
+  /** Changes relative to the cached parse, including any coalesced edits. */
+  changes?: { patches: SourcePatch[]; changedSourceIds: string[] };
 };
 
 export type IncrementalParseSession = {
@@ -113,8 +120,18 @@ export function createIncrementalParseSession(): IncrementalParseSession {
     let patches = normalizePatches(input.patches ?? []);
     let patchApplication: IncrementalParseStats["patchApplication"] =
       patches.length > 0 ? "direct" : undefined;
-    const changedSourceIds = normalizeSourceIds(input.changedSourceIds ?? []);
-    if (cached && patches.length > 0) {
+    let changedSourceIds = normalizeSourceIds(input.changedSourceIds ?? []);
+    if (input.inferChanges && cached) {
+      const currentCache = cached;
+      patches = deriveSingleSourcePatch(currentCache.source, input.source);
+      changedSourceIds = normalizeSourceIds(patches.flatMap((patch) => {
+        const owner = findContainingStatementRef(currentCache.statementRefsBySourceId, patch.oldSpan);
+        return owner ? [owner.sourceId] : [];
+      }));
+      // These patches already refer to the actual cached revision.
+      patchApplication = patches.length > 0 ? "rebased" : undefined;
+    }
+    if (!input.inferChanges && cached && patches.length > 0) {
       const currentCache = cached;
       const patchBaseMatchesCache = revisionsMatch(input.patchBaseRevision, currentCache.sourceRevision);
       const patchesApplyToCached =
@@ -149,6 +166,22 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       };
     }
 
+    const fallbackToFull = (reason: IncrementalParseFallbackReason): IncrementalParseEvaluateResult => {
+      const parse = parseTikz(input.source, {
+        recover: true, activeFigureId, includeContextDefinitions,
+        nodeTextValidator: input.nodeTextValidator
+      });
+      cached = buildCache(parse, {
+        activeFigureId: activeFigureId ?? parse.activeFigureId,
+        includeContextDefinitions, sourceRevision: input.sourceRevision ?? null,
+        treeFresh: true
+      });
+      return { parse, stats: {
+        strategy: "full", fallbackReason: reason, patchApplication,
+        reparsedStatementCount: countStatements(parse.figure.body), reusedStatementCount: 0
+      } };
+    };
+
     const fallback = decideFallbackReason({
       cached,
       inputSource: input.source,
@@ -157,52 +190,8 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       patches,
       changedSourceIds
     });
-    if (fallback) {
-      const parse = parseTikz(input.source, {
-        recover: true,
-        activeFigureId,
-        includeContextDefinitions,
-      });
-      cached = buildCache(parse, {
-        activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions,
-        sourceRevision: input.sourceRevision ?? null,
-        treeFresh: true
-      });
-      return {
-        parse,
-        stats: {
-          strategy: "full",
-          fallbackReason: fallback,
-          patchApplication,
-          reparsedStatementCount: countStatements(parse.figure.body),
-          reusedStatementCount: 0
-        }
-      };
-    }
-
-    if (!cached) {
-      const parse = parseTikz(input.source, {
-        recover: true,
-        activeFigureId,
-        includeContextDefinitions,
-      });
-      cached = buildCache(parse, {
-        activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions,
-        sourceRevision: input.sourceRevision ?? null,
-        treeFresh: true
-      });
-      return {
-        parse,
-        stats: {
-          strategy: "full",
-          fallbackReason: "no-previous-cache",
-          patchApplication,
-          reparsedStatementCount: countStatements(parse.figure.body),
-          reusedStatementCount: 0
-        }
-      };
+    if (fallback || !cached) {
+      return fallbackToFull(fallback ?? "no-previous-cache");
     }
 
     try {
@@ -210,7 +199,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       for (const sourceId of changedSourceIds) {
         const ref = cached.statementRefsBySourceId.get(sourceId);
         if (!ref) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-source-id-mismatch", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-source-id-mismatch");
         }
         changedRefs.set(sourceId, ref);
       }
@@ -218,10 +207,10 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       for (const patch of patches) {
         const owner = findContainingStatementRef(cached.statementRefsBySourceId, patch.oldSpan);
         if (!owner) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-overlaps-unknown-statement", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-overlaps-unknown-statement");
         }
         if (!changedRefs.has(owner.sourceId)) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-source-id-mismatch", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-source-id-mismatch");
         }
       }
 
@@ -231,7 +220,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
         activeFigureId ?? cached.activeFigureId
       );
       if (!nextActiveFigureSpan) {
-        return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "active-figure-unresolved", patchApplication, input.sourceRevision ?? null);
+        return fallbackToFull("active-figure-unresolved");
       }
 
       const nextFigure = shiftSpansDeep(structuredClone(cached.figure), patches);
@@ -241,22 +230,28 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       for (const sourceId of changedSourceIds) {
         const previousRef = cached.statementRefsBySourceId.get(sourceId);
         if (!previousRef) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "patch-source-id-mismatch", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("patch-source-id-mismatch");
         }
         const nextSpan = shiftSpanThroughPatches(previousRef.span, patches);
         const snippet = input.source.slice(nextSpan.from, nextSpan.to);
-        const parsedSnippet = parseStatementSnippet(snippet);
+        const parsedSnippet = parseStatementSnippet(snippet, input.nodeTextValidator);
         if (parsedSnippet.parse.figure.body.length !== 1) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-structure-changed", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-structure-changed");
         }
         if (parsedSnippet.hasParseError) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-parse-error", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-parse-error");
         }
 
         const replacement = parsedSnippet.parse.figure.body.at(0);
         const previousStatement = getStatementAtPath(nextFigure, previousRef.parentPath, previousRef.index);
         if (!replacement || replacement.kind !== previousStatement?.kind) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-structure-changed", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-structure-changed");
+        }
+
+        // New/deleted path items can change generated IDs in other statements.
+        // Source edits must then rebuild ownership from the complete document.
+        if (input.inferChanges && identityStructure(previousStatement) !== identityStructure(replacement)) {
+          return fallbackToFull("statement-structure-changed");
         }
 
         const rebasedStatement = shiftSpansDeep(replacement, nextSpan.from - SNIPPET_PREFIX.length);
@@ -265,7 +260,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
 
         const partition = partitionDiagnostics(parsedSnippet.parse.diagnostics, parsedSnippet.parse.figure.body);
         if (partition.global.length > 0) {
-          return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "statement-global-diagnostics", patchApplication, input.sourceRevision ?? null);
+          return fallbackToFull("statement-global-diagnostics");
         }
         const localDiagnostics = partition.localBySourceId.get(replacement.id) ?? [];
         for (const diagnostic of localDiagnostics) {
@@ -302,6 +297,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       cached = nextCache;
       return {
         parse: createParseResultFromCache(nextCache, input.source),
+        changes: { patches, changedSourceIds },
         stats: {
           strategy: "incremental",
           patchApplication,
@@ -310,48 +306,30 @@ export function createIncrementalParseSession(): IncrementalParseSession {
         }
       };
     } catch {
-      return fallbackToFull(input.source, activeFigureId, includeContextDefinitions, "runtime-error", patchApplication, input.sourceRevision ?? null);
+      return fallbackToFull("runtime-error");
     }
   };
-
-  function fallbackToFull(
-    source: string,
-    activeFigureId: string | null | undefined,
-    includeContextDefinitions: boolean,
-    reason: IncrementalParseFallbackReason,
-    patchApplication: IncrementalParseStats["patchApplication"],
-    sourceRevision: number | null
-  ): IncrementalParseEvaluateResult {
-    const parse = parseTikz(source, {
-      recover: true,
-      activeFigureId,
-      includeContextDefinitions,
-    });
-      cached = buildCache(parse, {
-        activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions,
-        sourceRevision,
-        treeFresh: true
-      });
-    return {
-      parse,
-      stats: {
-        strategy: "full",
-        fallbackReason: reason,
-        patchApplication,
-        reparsedStatementCount: countStatements(parse.figure.body),
-        reusedStatementCount: 0
-      }
-    };
-  }
 
   return {
     evaluate,
     prime,
-    reset: () => {
-      cached = null;
-    }
+    reset: () => { cached = null; }
   };
+}
+
+
+function identityStructure(statement: Statement): string {
+  const items = (entries: readonly PathItem[]): string => entries.map((item) => {
+    const clauses = "foreachClauses" in item ? item.foreachClauses?.map((clause) => clause.kind).join(",") ?? "" : "";
+    if (item.kind === "ChildOperation") return `${item.kind}[${clauses}](${items(item.body)})`;
+    if (item.kind === "ToOperation" || item.kind === "EdgeOperation" || item.kind === "EdgeFromParentOperation") {
+      return `${item.kind}(${items(item.nodes ?? [])};${"pics" in item ? items(item.pics ?? []) : ""})`;
+    }
+    return `${item.kind}[${clauses}]`;
+  }).join("|");
+  if (statement.kind === "Scope") return `Scope(${statement.body.map(identityStructure).join("|")})`;
+  if (statement.kind === "Path") return `Path(${items(statement.items)})`;
+  return statement.kind;
 }
 
 function alignStatementIds(previous: Statement, next: Statement): void {
@@ -404,12 +382,19 @@ function alignPathItems(previous: readonly PathItem[], next: PathItem[]): void {
       alignPathItems(previousItem.body, nextItem.body);
       continue;
     }
+    if (previousItem.kind === "PicOperation" && nextItem.kind === "PicOperation") {
+      alignClauseIds(previousItem.foreachClauses, nextItem.foreachClauses);
+      continue;
+    }
     if (
       (previousItem.kind === "ToOperation" && nextItem.kind === "ToOperation") ||
       (previousItem.kind === "EdgeOperation" && nextItem.kind === "EdgeOperation") ||
       (previousItem.kind === "EdgeFromParentOperation" && nextItem.kind === "EdgeFromParentOperation")
     ) {
       alignNodeItems(previousItem.nodes, nextItem.nodes);
+      if ("pics" in previousItem && "pics" in nextItem) {
+        alignPathItems(previousItem.pics ?? [], nextItem.pics ?? []);
+      }
     }
   }
 }
@@ -514,12 +499,12 @@ function decideFallbackReason(input: {
   return null;
 }
 
-function parseStatementSnippet(snippet: string): {
+function parseStatementSnippet(snippet: string, nodeTextValidator?: ParseTikzOptions["nodeTextValidator"]): {
   parse: ParseTikzResult;
   hasParseError: boolean;
 } {
   const source = `${SNIPPET_PREFIX}${snippet}\n${SNIPPET_SUFFIX.slice(1)}`;
-  const parse = parseTikz(source, { recover: true });
+  const parse = parseTikz(source, { recover: true, nodeTextValidator });
   return {
     parse,
     hasParseError: parse.diagnostics.some((diagnostic) => diagnostic.severity === "error")
@@ -529,7 +514,13 @@ function parseStatementSnippet(snippet: string): {
 function createParseResultFromCache(cache: CachedIncrementalParseState, source: string): ParseTikzResult {
   return {
     source,
-    tree: cache.tree,
+    get tree() {
+      if (!cache.treeFresh) {
+        cache.tree = parseSyntax(resolveParseWindowSource(source, cache.activeFigureSpan));
+        cache.treeFresh = true;
+      }
+      return cache.tree;
+    },
     figure: cache.figure,
     figures: cache.figures,
     activeFigureId: cache.activeFigureId,
@@ -651,6 +642,9 @@ function shiftDiagnosticPartition(
       shiftDiagnosticThroughPatchesInPlace(diagnostic, patches);
     }
     localBySourceId.set(sourceId, nextDiagnostics);
+  }
+  for (const [sourceId, diagnostics] of replacements) {
+    if (!localBySourceId.has(sourceId)) localBySourceId.set(sourceId, structuredClone(diagnostics));
   }
   const global = structuredClone(partition.global);
   for (const diagnostic of global) {

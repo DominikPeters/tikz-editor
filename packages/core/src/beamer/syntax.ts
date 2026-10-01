@@ -5,6 +5,7 @@ import type { SourcePatch } from "../edit/types.js";
 import type { Tree } from "@lezer/common";
 import {
   buildTexSyntaxIndex,
+  getTexSyntaxIndex,
   type TexSyntaxArgumentKind,
   type TexSyntaxDelimitedArgument,
   type TexSyntaxIndex,
@@ -37,6 +38,9 @@ export function createBeamerSyntaxContext(
     patches?: readonly SourcePatch[];
   } = {}
 ): BeamerSyntaxContext {
+  if (structuralMasks.length === 0 && !incremental.previousTree) {
+    return { source, syntax: getTexSyntaxIndex(source, beamerDocumentParser) };
+  }
   const parseSource = applyStructuralMasks(source, structuralMasks);
   return {
     source,

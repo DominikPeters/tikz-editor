@@ -24,7 +24,11 @@ export type SetFigureBoundsAction =
 
 export function resolveFigureBoundsState(source: string, parseOptions: EditParseOptions = {}): FigureBoundsState {
   const parsed = parseTikzForEdit(source, parseOptions);
-  const statement = firstGeometryStatement(parsed.figure.body);
+  return resolveFigureBoundsFromFigure(parsed.figure);
+}
+
+export function resolveFigureBoundsFromFigure(figure: TikzFigure): FigureBoundsState {
+  const statement = firstGeometryStatement(figure.body);
   if (statement?.kind !== "Path") {
     return { mode: "auto" };
   }
@@ -37,7 +41,7 @@ export function applySetFigureBoundsAction(
   parseOptions: EditParseOptions = {}
 ): EditActionResult {
   const parsed = parseTikzForEdit(source, parseOptions);
-  const current = resolveFigureBoundsState(source, parseOptions);
+  const current = resolveFigureBoundsFromFigure(parsed.figure);
 
   if (action.mode === "auto") {
     if (current.mode !== "fixed") {

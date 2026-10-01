@@ -3,6 +3,29 @@ import { describe, expect, it } from "vitest";
 import { PersistentMap } from "../../packages/core/src/semantic/persistent-map.js";
 
 describe("PersistentMap", () => {
+  it("materializes long checkpoint histories with linear retained storage", () => {
+    const map = new PersistentMap<number, number | undefined>();
+    const snapshots = [];
+    for (let index = 0; index < 500; index += 1) {
+      map.set(index, index === 10 ? undefined : index);
+      snapshots.push(map.snapshot());
+    }
+    expect([...map.keys()]).toEqual(Array.from({ length: 500 }, (_, index) => index));
+    expect(snapshots.reduce((total, snapshot) => total + (snapshot.materialized?.size ?? 0), 0)).toBeLessThanOrEqual(500);
+    expect(map.has(10)).toBe(true);
+    expect(map.get(10)).toBeUndefined();
+    map.restore(snapshots[249]);
+    expect(map.has(499)).toBe(false);
+    expect(map.get(0)).toBe(0);
+    map.delete(10);
+    map.set(500, 500);
+    expect(map.size).toBe(250);
+    const old = new PersistentMap(snapshots[249]);
+    expect(old.has(10)).toBe(true);
+    expect(old.has(500)).toBe(false);
+    expect(new PersistentMap(snapshots[499]).size).toBe(500);
+  });
+
   it("restores older snapshots after subsequent writes", () => {
     const map = new PersistentMap<string, number>();
     map.set("a", 1);

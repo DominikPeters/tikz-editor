@@ -21,6 +21,8 @@ export type RenderTikzOptions = {
     options: EvaluateOptions
   ) => EvaluateTikzResult;
   svg?: EmitSvgOptions;
+  /** Resolve source-dependent output options from the render's existing parse. */
+  svgOptionsFromParse?: (parse: ParseTikzResult) => EmitSvgOptions;
   textEngine?: NodeTextEngine | null;
   /** Shared document-local graphics resolver for every rendering layer. */
   graphicsResolver?: DocumentGraphicsResolver;
@@ -43,8 +45,9 @@ export type RenderTikzToSvgResult = {
 
 export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): RenderTikzToSvgResult {
   const parseResult = parseTikz(source, opts.parse);
+  const svgOptions = { ...opts.svg, ...opts.svgOptionsFromParse?.(parseResult) };
   const textScope = opts.evaluate?.textEngine?.createRenderScope?.();
-  const svgScope = opts.svg?.textEngine === opts.evaluate?.textEngine ? textScope : opts.svg?.textEngine?.createRenderScope?.();
+  const svgScope = svgOptions.textEngine === opts.evaluate?.textEngine ? textScope : svgOptions.textEngine?.createRenderScope?.();
   const semanticResult = runTextRenderOperation(textScope, () => (opts.semanticEvaluator ?? evaluateTikzFigure)(
     parseResult.figure,
     parseResult.source,
@@ -54,7 +57,7 @@ export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): R
         opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
     }
   ));
-  const svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, opts.svg));
+  const svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOptions));
   retainSceneTextLayout(textScope, semanticResult.scene);
   if (svgScope !== textScope) retainSceneTextLayout(svgScope, semanticResult.scene);
 
@@ -63,7 +66,7 @@ export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): R
     semantic: semanticResult,
     svg: svgResult,
     renderDiagnostics: [],
-    textLayoutContext: textScope?.layoutContext ?? opts.evaluate?.textEngine?.layoutContext ?? svgScope?.layoutContext ?? opts.svg?.textEngine?.layoutContext ?? null,
+    textLayoutContext: textScope?.layoutContext ?? opts.evaluate?.textEngine?.layoutContext ?? svgScope?.layoutContext ?? svgOptions.textEngine?.layoutContext ?? null,
   };
 }
 
@@ -78,21 +81,13 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
   if (shouldCreateDefaultTextEngine) {
     textEngine = await createTexNodeTextEngine();
   }
-  const hasUserMacros = containsUserMacroDefinitions(source);
 
   const parseOpts: ParseTikzOptions = {
     ...opts.parse,
     includeContextDefinitions: opts.parse?.includeContextDefinitions ?? true,
     nodeTextValidator:
       opts.parse?.nodeTextValidator ??
-      (hasExplicitTextEngine && textEngine && !hasUserMacros
-        ? ({ node }) => {
-            if (isMatrixNode(node)) {
-              return null;
-            }
-            return textEngine?.validate(normalizeNodeTextForValidation(node.text)) ?? null;
-          }
-        : undefined)
+      (hasExplicitTextEngine ? createRenderNodeTextValidator(source, textEngine) : undefined)
   };
 
   const evaluateOpts: EvaluateOptions = {
@@ -102,14 +97,15 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
       opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
   };
 
+  const parseResult = parseTikz(source, parseOpts);
+  const outputOptions = { ...opts.svg, ...opts.svgOptionsFromParse?.(parseResult) };
   const svgOpts: EmitSvgOptions = {
-    ...opts.svg,
-    textEngine: opts.svg?.textEngine ?? textEngine
+    ...outputOptions,
+    textEngine: outputOptions.textEngine ?? textEngine
   };
   const textScope = evaluateOpts.textEngine?.createRenderScope?.();
   const svgScope = svgOpts.textEngine === evaluateOpts.textEngine ? textScope : svgOpts.textEngine?.createRenderScope?.();
 
-  const parseResult = parseTikz(source, parseOpts);
   const semanticEvaluator = opts.semanticEvaluator ?? evaluateTikzFigure;
   let semanticResult = runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
   let svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
@@ -129,6 +125,17 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
     renderDiagnostics,
     textLayoutContext: textScope?.layoutContext ?? evaluateOpts.textEngine?.layoutContext ?? svgScope?.layoutContext ?? svgOpts.textEngine?.layoutContext ?? null,
   };
+}
+
+/** Share text diagnostics between full renders and incremental statement parses. */
+export function createRenderNodeTextValidator(
+  source: string,
+  textEngine: NodeTextEngine | null | undefined
+): ParseTikzOptions["nodeTextValidator"] {
+  if (!textEngine || containsUserMacroDefinitions(source)) return undefined;
+  return ({ node }) => isMatrixNode(node)
+    ? null
+    : textEngine.validate(normalizeNodeTextForValidation(node.text));
 }
 
 function containsUserMacroDefinitions(source: string): boolean {

@@ -573,7 +573,7 @@ function collectDeclaredColorStatements(source: string, tree: Tree): DeclaredCol
   return declarations;
 }
 
-function sourceMayContainDeclaredColors(source: string): boolean {
+export function sourceMayContainDeclaredColors(source: string): boolean {
   return source.includes("\\colorlet") || source.includes("\\definecolor");
 }
 

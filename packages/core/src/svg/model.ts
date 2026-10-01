@@ -28,6 +28,7 @@ export type SvgModelPartInput = {
   sourceId: string;
   elementId: string | null;
   markup: string;
+  textRenderKey?: string;
 };
 
 export type SvgModelBuilder = {
@@ -56,7 +57,8 @@ export function createSvgModelBuilder(): SvgModelBuilder {
       elementId: input.elementId,
       order: parts.length,
       markup: input.markup,
-      fingerprint: input.fingerprint
+      fingerprint: input.fingerprint,
+      ...(input.textRenderKey != null ? { textRenderKey: input.textRenderKey } : {})
     };
     parts.push(part);
     return part;
@@ -76,6 +78,7 @@ export function createSvgModelBuilder(): SvgModelBuilder {
       sourceId: input.sourceId,
       elementId: input.elementId,
       markup: input.markup,
+      textRenderKey: input.textRenderKey,
       fingerprint: input.markup
     });
   };
@@ -83,6 +86,7 @@ export function createSvgModelBuilder(): SvgModelBuilder {
   const addExistingPart = (part: SvgRenderPart): SvgRenderPart => {
     return addPartWithId(part.partId, {
       sourceId: part.sourceId,
+      textRenderKey: part.textRenderKey,
       elementId: part.elementId,
       markup: part.markup,
       fingerprint: part.fingerprint

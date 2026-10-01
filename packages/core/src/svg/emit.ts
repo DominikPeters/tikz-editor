@@ -179,6 +179,9 @@ export function emitSvgModel(
   const elementClipChainsById = new Map<string, readonly SceneClipPath[]>(
     scene.elements.map((element) => [element.id, element.clipChain ?? []])
   );
+  const textRenderKeys = new Map(scene.elements.flatMap((element) =>
+    element.kind === "Text" && element.textRenderInfo?.mode === "tex"
+      ? [[element.id, element.textRenderInfo.cacheKey] as const] : []));
 
   const appendPart = (
     basePartId: string,
@@ -198,6 +201,7 @@ export function emitSvgModel(
       sourceId,
       elementId,
       markup: wrappedMarkup,
+      textRenderKey: elementId ? textRenderKeys.get(elementId) : undefined,
     });
   };
 
@@ -2178,7 +2182,8 @@ function tryReuseElementParts(
   for (const part of reusableParts) {
     if (
       part.sourceId !== element.sourceRef.sourceId ||
-      part.elementId !== element.id
+      part.elementId !== element.id ||
+      part.textRenderKey !== (element.kind === "Text" && element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.cacheKey : undefined)
     ) {
       return false;
     }

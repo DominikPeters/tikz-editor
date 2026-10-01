@@ -20,6 +20,8 @@ export type SvgRenderPart = {
   order: number;
   markup: string;
   fingerprint: string;
+  /** Text source projections can change while geometry remains reusable. */
+  textRenderKey?: string;
 };
 
 export type SvgRenderModel = {

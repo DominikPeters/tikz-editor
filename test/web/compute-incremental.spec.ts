@@ -14,9 +14,8 @@ function normalizeForSceneComparison<T>(value: T): T {
       }
       // Native text cache keys are anchored to the node's source-map position
       // (`|sm:<identity>`), with an engine-local paragraph id.
-      // Selective replay reuses measures taken at the pre-edit position, so
-      // these anchors legitimately differ from a canonical recompute; the
-      // unanchored key still compares mode/text/width/font identity.
+      // Allocation histories may differ from a canonical recompute; compare
+      // mode/text/width/font identity here and source projections in the SVG.
       if (key === "cacheKey" && typeof currentValue === "string") {
         return currentValue.replace(/\|sm:[a-z0-9]+$/, "");
       }
@@ -29,6 +28,42 @@ function normalizeForSceneComparison<T>(value: T): T {
 }
 
 describe("computeSnapshot incremental parser integration", () => {
+  it("incrementally renders ordinary source edits with unchanged dependent geometry", async () => {
+    const source = String.raw`\begin{tikzpicture}
+      \node[draw] (a) at (0,0) {Alpha};
+      \node[draw] (b) at (3,0) {Beta};
+      \draw (a) -- (b);
+      \node at (6,0) {Unrelated};
+    \end{tikzpicture}`;
+    const documentId = "typing-incremental";
+    await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0, activeRootId: "figure:0" });
+    const next = source.replace("Alpha", "A much longer label");
+    const incremental = await computeSnapshot({ id: "typed", documentId, source: next, sourceRevision: 10, activeRootId: "figure:0", inferSourceChanges: true });
+    const canonical = await computeSnapshot({ id: "canonical", documentId, source: next, sourceRevision: 10, activeRootId: "figure:0" });
+    expect(incremental.snapshot.incremental?.parseStrategy).toBe("incremental");
+    expect(incremental.snapshot.incremental?.reparsedStatementCount).toBe(1);
+    expect(incremental.snapshot.incremental?.recomputedStatementCount).toBeLessThan(4);
+    expect(normalizeForSceneComparison(incremental.snapshot.scene)).toEqual(normalizeForSceneComparison(canonical.snapshot.scene));
+    expect(incremental.snapshot.parseResult?.diagnostics).toEqual(canonical.snapshot.parseResult?.diagnostics);
+    expect(incremental.snapshot.svg?.svg).toBe(canonical.snapshot.svg?.svg);
+  });
+
+  it("rebases semantic source spans across dropped source revisions", async () => {
+    const source = String.raw`\begin{tikzpicture}
+      \draw (0,0) rectangle (1,1);
+      \node at (3,0) {Later};
+    \end{tikzpicture}`;
+    const documentId = "typing-coalesced";
+    await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0, activeRootId: "figure:0" });
+    const skipped = source.replace("(1,1)", "(1.25,1)");
+    const next = skipped.replace("(1.25,1)", "(1.345,1)");
+    const result = await computeSnapshot({ id: "typed", documentId, source: next, sourceRevision: 2, activeRootId: "figure:0", changedSourceIds: ["path:0"], patches: deriveSingleSourcePatch(skipped, next), patchBaseRevision: 1 });
+    const canonical = await computeSnapshot({ id: "canonical", documentId, source: next, sourceRevision: 2, activeRootId: "figure:0" });
+    expect(result.snapshot.incremental?.parsePatchApplication).toBe("rebased");
+    expect(normalizeForSceneComparison(result.snapshot.scene)).toEqual(normalizeForSceneComparison(canonical.snapshot.scene));
+    expect(result.snapshot.editHandles).toEqual(canonical.snapshot.editHandles);
+  });
+
   it("keeps path endpoint handles rewritable across consecutive incremental drag frames", async () => {
     const documentId = "consecutive-handle-drag-doc";
     const source = String.raw`\begin{tikzpicture}

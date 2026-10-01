@@ -1036,6 +1036,7 @@ export function App() {
       id: crypto.randomUUID(),
       documentId: activeDocumentId,
       kind: "render",
+      inferSourceChanges: true,
       source,
       sourceRevision,
       documentFileRef: activeDocumentFileRef,

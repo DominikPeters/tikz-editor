@@ -271,7 +271,8 @@ describe("computeSnapshot edge orchestration", () => {
     };
 
     vi.doMock("@tikz-editor/core/render/index", () => ({
-      renderTikzToSvgAsync: vi.fn(async () => fullResult)
+      renderTikzToSvgAsync: vi.fn(async () => fullResult),
+      createRenderNodeTextValidator: vi.fn(() => undefined)
     }));
     vi.doMock("@tikz-editor/core/text/tex-node-text-engine", () => ({
       createTexNodeTextEngine: vi.fn(async () => textEngine)
