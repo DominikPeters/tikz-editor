@@ -407,6 +407,13 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   const bindings: CommandBindings = {
+    // Canvas overlay commands bind to the source object captured when its menu opens.
+    [APP_MENU_COMMAND_IDS.OVERLAY_NEXT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_FROM]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_ONLY]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_THROUGH]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_EDIT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_REMOVE]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.NEW_DOCUMENT]: {
       enabled: true,
       run: () => { dispatch({ type: "NEW_DOCUMENT" }); }

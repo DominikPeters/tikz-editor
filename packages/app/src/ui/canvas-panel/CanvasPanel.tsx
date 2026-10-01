@@ -69,6 +69,7 @@ import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/doc
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { CanvasPanelView } from "./CanvasPanelView";
+import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
 import {
 appendFreehandToolPoint,
@@ -2832,6 +2833,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch
   });
 
+  const deckOverlayMenu = useDeckOverlayContextMenu({
+    index: deckObjectIndex, selected: deckSelectedObject, frame: deckActiveFrame,
+    viewportRef, svgRef: interactionSvgRef, bindings: commandRuntime.bindings,
+    closeText: closeTextEditingSession, editObject: applyDeckObjectEdit,
+  });
+
   const { onElementContextMenu, onCanvasContextMenu } = useCanvasSelectionInteractions({
     openCanvasContextMenuAt,
     closeTextEditingSession,
@@ -3392,12 +3399,18 @@ export const CanvasPanel = memo(function CanvasPanel({
         leftRulerRef={leftRulerRef}
         onTopRulerPointerDown={onTopRulerPointerDown}
         onLeftRulerPointerDown={onLeftRulerPointerDown}
-        onCanvasContextMenu={onCanvasContextMenu}
+        onCanvasContextMenu={(event) => { if (!deckOverlayMenu.onContextMenu(event)) onCanvasContextMenu(event); }}
         rulers={rulers}
         LEFT_RULER_DRAG_SOURCE_WIDTH_PX={LEFT_RULER_DRAG_SOURCE_WIDTH_PX}
         toolMode={toolMode}
         viewportRef={viewportRef}
         onViewportKeyDown={(event) => {
+          if (deckSelectedObject && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
+            event.preventDefault();
+            const rect = viewportRef.current?.getBoundingClientRect();
+            deckOverlayMenu.openForObject(deckSelectedObject, (rect?.left ?? 0) + 24, (rect?.top ?? 0) + 24);
+            return;
+          }
           if (handleDeckObjectViewportKey(event)) {
             return;
           }
@@ -3478,7 +3491,9 @@ export const CanvasPanel = memo(function CanvasPanel({
         draggableSourceIds={draggableSourceIds}
         hitRegionCursorByTargetId={pendingNodePositionHitRegionCursorByTargetId}
         onElementPointerDown={onElementPointerDown}
-        onElementContextMenu={onElementContextMenu}
+        onElementContextMenu={(event, id, region, handle) => {
+          if (!deckOverlayMenu.onContextMenu(event, region)) onElementContextMenu(event, id, region, handle);
+        }}
         onElementDoubleClick={onElementDoubleClick}
         onHoverChange={(id: string | null) => { dispatch({ type: "SET_HOVERED_ELEMENT", id }); }}
         nodePositionLinks={nodePositionLinks}
@@ -3539,6 +3554,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         nestedFigureBreadcrumb={nestedFigureBreadcrumb}
         RULER_SIZE={RULER_SIZE}
       />
+      {deckOverlayMenu.menu}
       {equationModalTarget ? (
         <Suspense fallback={null}>
           <EquationModal

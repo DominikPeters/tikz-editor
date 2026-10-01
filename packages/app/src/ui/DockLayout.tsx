@@ -168,7 +168,7 @@ function sanitizeLayout(json: IJsonModel): IJsonModel {
     if (!isAssistantAvailable() && node.type === "tab" && node.component === "assistant") {
       return null;
     }
-    let next = node;
+    let next = node.type === "tab" && node.component === "builds" ? { ...node, name: "Overlays" } : node;
     if (node.type === "tabset" && typeof node.id === "string" && (HOME_TABSET_IDS as readonly string[]).includes(node.id)) {
       next = { ...next, enableDeleteWhenEmpty: false };
     }
@@ -510,7 +510,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
           canvas: "Canvas",
           "figure-navigator": "Figures",
           inspector: "Inspector",
-          builds: "Builds",
+          builds: "Overlays",
           objects: "Objects",
           styles: "Styles",
           assistant: "Assistant",
@@ -583,7 +583,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
     const exists = m.getNodeById(PANEL_IDS.builds) != null;
     if (deckMode && !exists) {
       const target = m.getNodeById("right-tabset") ? "right-tabset" : m.getFirstTabSet().getId();
-      m.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.builds, name: "Builds", component: "builds" }, target, DockLocation.CENTER, -1, false));
+      m.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }, target, DockLocation.CENTER, -1, false));
       syncLayoutStateToStore(m, dispatchRef.current);
     } else if (!deckMode && exists) {
       m.doAction(Actions.deleteTab(PANEL_IDS.builds));

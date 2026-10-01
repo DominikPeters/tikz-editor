@@ -46,11 +46,29 @@ export function BuildsPanel() {
   const focusBoundary = useRef<{ rowId: string; boundary: BeamerBuildBoundary } | null>(null);
   const [menu, setMenu] = useState<{ rowId: string; step: number; documentId: string; frameId: string; revision: number; anchor: BuildTimingMenuAnchor } | null>(null);
   const closeMenu = useCallback(() => { setMenu(null); }, []);
-  const selected = model && activeSelection && activeSelection.rowId === selection?.rowId && selection.documentId === documentId
-    ? reconcileBeamerBuildRow(selection.model, selection.rowId, model) : null;
+  const selected = model && activeSelection?.documentId === documentId && activeSelection.frameId === frameId
+    ? activeSelection.sourceRevision === sourceRevision
+      ? model.rows.find((row) => row.id === activeSelection.rowId) ?? null
+      : activeSelection.rowId === selection?.rowId && selection.documentId === documentId
+        ? reconcileBeamerBuildRow(selection.model, selection.rowId, model) : null
+    : null;
   const step = Math.min(requestedStep, model?.stepCount ?? 1);
   const page = Math.min(pageOverride ?? Math.floor((step - 1) / PAGE_SIZE), Math.floor(((model?.stepCount ?? 1) - 1) / PAGE_SIZE));
   const steps = drag?.steps ?? Array.from({ length: Math.min(PAGE_SIZE, (model?.stepCount ?? 1) - page * PAGE_SIZE) }, (_, index) => page * PAGE_SIZE + index + 1);
+
+  useEffect(() => {
+    setPageOverride(null);
+    if (!model || !activeSelection) return;
+    const parents = new Set<string>();
+    let row = model.rows.find((candidate) => candidate.id === activeSelection.rowId);
+    while (row?.parentId) {
+      parents.add(row.parentId);
+      row = model.rows.find((candidate) => candidate.id === row!.parentId);
+    }
+    if (parents.size) setCollapsed((current) => new Set([...current].filter((id) => !parents.has(id))));
+    // External canvas selection should reveal its row, including collapsed owners.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSelection?.rowId]);
 
   useEffect(() => {
     const target = focusBoundary.current;
@@ -125,17 +143,17 @@ export function BuildsPanel() {
   return (
     <SidePanel className={inspector.panel}>
       <SidePanel.Header>
-        Builds
+        Overlays
         {model && model.stepCount > PAGE_SIZE ? <div className={inspector.multiArrangeGroup}>
-          <button type="button" className={inspector.multiArrangeIconButton} aria-label="Earlier build steps" title="Earlier build steps" disabled={page === 0} onClick={() => { setPageOverride(page - 1); }}><RiArrowLeftSLine size={14} /></button>
-          <button type="button" className={inspector.multiArrangeIconButton} aria-label="Later build steps" title="Later build steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}><RiArrowRightSLine size={14} /></button>
+          <button type="button" className={inspector.multiArrangeIconButton} aria-label="Earlier overlay steps" title="Earlier overlay steps" disabled={page === 0} onClick={() => { setPageOverride(page - 1); }}><RiArrowLeftSLine size={14} /></button>
+          <button type="button" className={inspector.multiArrangeIconButton} aria-label="Later overlay steps" title="Later overlay steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}><RiArrowRightSLine size={14} /></button>
         </div> : null}
       </SidePanel.Header>
       <SidePanel.Content className={css.content}>
-        {!model ? <p className={inspector.hint}>Select a slide to view its builds.</p>
-          : model.rows.length === 0 ? <p className={inspector.hint}>No builds on this slide.</p>
+        {!model ? <p className={inspector.hint}>Select a slide to view its overlays.</p>
+          : model.rows.length === 0 ? <p className={inspector.hint}>No overlays on this slide.</p>
             : <>
-              <table ref={tableRef} className={css.timeline} aria-label="Slide builds">
+              <table ref={tableRef} className={css.timeline} aria-label="Slide overlays">
                 <thead><tr><th scope="col">Content</th>{hasTimeline ? steps.map((value) => <th scope="col" key={value}>
                   <button type="button" aria-label={`Preview step ${value}`} aria-pressed={step === value} onClick={() => { preview(value); }}>{value}</button>
                 </th>) : <th scope="col" colSpan={steps.length} />}</tr></thead>
@@ -198,7 +216,7 @@ export function BuildsPanel() {
             </>}
       </SidePanel.Content>
       {model && selected ? <SidePanel.Footer className={css.details}>
-        <section aria-label="Build rule">
+        <section aria-label="Overlay rule">
           <SidePanel.SectionHeader>
             <span className={css.detailTitle} title={selected.label}>{selected.label}</span>
             {canSetTiming(selected) ? <button type="button" className={objects.iconButton} aria-label="Timing actions" title="Timing actions" aria-haspopup="menu" aria-expanded={openMenu != null}
@@ -210,7 +228,7 @@ export function BuildsPanel() {
             applyPatch(patch);
           }} /> : selected.spec ? <div className={inspector.property}>
             <span className={inspector.propertyLabel}>Steps</span>
-            <output className={css.value} aria-label="Build steps">{selected.provenance === "list-default" ? selected.spec.resolved : selected.spec.source.value}</output>
+            <output className={css.value} aria-label="Overlay steps">{selected.provenance === "list-default" ? selected.spec.resolved : selected.spec.source.value}</output>
           </div> : null}
           {ancestors(selected).map((parent) => <div key={parent.id} className={inspector.property}>
             <span className={inspector.propertyLabel}>{parent.kind === "list" ? "List default" : "Within"}</span>
@@ -239,7 +257,7 @@ function BuildRuleEditor({ value, disabled, onApply }: { value: string; disabled
   };
   return <div className={inspector.property}>
     <label className={inspector.propertyLabel} htmlFor={`${errorId}-input`}>Steps</label>
-    <input id={`${errorId}-input`} className={inspector.textInput} aria-label="Build steps" value={draft} disabled={disabled} aria-invalid={!valid} aria-describedby={!valid ? errorId : undefined} spellCheck={false} placeholder="2-, 1,3, or 2-4"
+    <input id={`${errorId}-input`} className={inspector.textInput} aria-label="Overlay steps" value={draft} disabled={disabled} aria-invalid={!valid} aria-describedby={!valid ? errorId : undefined} spellCheck={false} placeholder="2-, 1,3, or 2-4"
       onChange={(event) => { setDraft(event.target.value); }}
       onBlur={() => { if (!skipBlur.current) commit(); skipBlur.current = false; }}
       onKeyDown={(event) => {

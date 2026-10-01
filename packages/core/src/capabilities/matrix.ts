@@ -665,7 +665,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "partial",
     fixtures: ["beamer_builds"],
     notes:
-      "Source-backed build inventory and effective per-step states for supported Beamer overlays, including branches, nested rules, pauses and inherited list defaults. Numeric specs support direct edits and from/only/through timing commands. Single numeric visibility ranges support boundary dragging with transient source previews and one undo commit. Relative, inverted and branching rules retain their own editing semantics."
+      "Source-backed overlay inventory and effective per-step states for supported Beamer overlays, including branches, nested rules, pauses and inherited list defaults. Canvas object menus add/remove visibility rules for blocks, items and figures, and navigate shared/complex owners to the Overlays panel. Numeric specs support direct edits and from/only/through timing commands. Single numeric visibility ranges support boundary dragging with transient source previews and one undo commit. Relative, inverted and branching rules retain their own editing semantics."
   },
   beamer_document_scan: {
     parser: "stable",

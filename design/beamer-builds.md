@@ -1,7 +1,7 @@
-# Beamer Builds panel
+# Beamer Overlays panel
 
-The Builds tab is available beside the Inspector on a Beamer slide. View →
-Builds Panel reopens it. It projects the current frame's authored overlay
+The Overlays tab is available beside the Inspector on a Beamer slide. View →
+Overlays Panel reopens it. It projects the current frame's authored overlay
 rules directly from source; it does not store a separate animation model.
 
 ## Rows and labels
@@ -86,9 +86,27 @@ focus states use the existing theme tokens.
   general caveat paragraphs are omitted. Validation appears only for an invalid
   field draft and tells the user how to correct it.
 
-This version edits existing rules. Adding rules is available through the
-existing block/item Inspector fields or source. Build reordering and new-rule
-insertion are not implemented in this panel.
+## Canvas context menu
+
+The canvas object menu has an Overlays submenu for blocks, list items, images,
+and whole TikZ figures. Appear on next step assigns `N+1-` and previews that
+step; Show from / Only on / Show through use the current preview step. Existing
+numeric rules are patched in place. New block/item rules use native overlay
+arguments; figures use an `\uncover` wrapper, retaining their space.
+
+Edit in Overlays opens the panel and selects the source rule. Remove overlay
+rule removes the object's own numeric visibility rule without removing its
+content or surrounding comments. Shared, inherited, relative and branching
+rules expose navigation to their owner instead of silently changing neighbors.
+Right-click keeps a selected object when the click is inside its bounds;
+otherwise it selects the clicked object, with its outline identifying the target.
+The Context Menu key and Shift+F10 open the selected object's menu. Commands
+use the same definitions on web and native desktop menus, guard source revision,
+document/frame and preview step, and enter normal undo history.
+
+The user-facing name is Overlays. Existing internal panel IDs remain stable so
+saved layouts still open the same panel; their displayed tab names are migrated.
+Overlay reordering is not implemented.
 
 ## Implementation and checks
 

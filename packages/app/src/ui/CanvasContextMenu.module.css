@@ -58,7 +58,10 @@
 
 .submenuTrigger {
   cursor: default;
+  width: 100%;
 }
+
+.item:focus-visible { outline: 1px solid var(--text-muted); outline-offset: -2px; }
 
 .item:hover:not(:disabled) {
   background: var(--btn-hover-bg);

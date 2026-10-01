@@ -38,7 +38,7 @@ export function BuildTimingMenu({ anchor, step, onApply, onClose }: {
     { action: "only", label: `Only on step ${step}` },
     { action: "through", label: `Show through step ${step}` },
   ];
-  return createPortal(<div ref={ref} className={`${css.root} ${css.menu}`} style={{ left: position.x, top: position.y }} role="menu" aria-label="Build timing"
+  return createPortal(<div ref={ref} className={`${css.root} ${css.menu}`} style={{ left: position.x, top: position.y }} role="menu" aria-label="Overlay timing"
     onKeyDown={(event) => {
       const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
       const current = buttons.indexOf(document.activeElement as HTMLButtonElement);

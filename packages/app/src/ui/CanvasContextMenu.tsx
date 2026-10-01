@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   CANVAS_CONTEXT_MENU_DEFINITION,
@@ -15,6 +15,34 @@ type ContextMenuInheritedStyle = CSSProperties & {
   "--app-ui-font-size"?: string;
   "--app-ui-scale"?: string;
 };
+
+function navigateMenu(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (!(event.target instanceof HTMLElement)) return;
+  const menu = event.target.closest('[role="menu"]');
+  const buttons = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+    .filter((button) => !button.disabled && button.closest('[role="menu"]') === menu);
+  const index = buttons.indexOf(event.target as HTMLButtonElement);
+  if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    event.preventDefault(); event.stopPropagation();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  } else if (event.key === "ArrowLeft" && menu?.parentElement?.classList.contains(css.submenuPopup)) {
+    event.preventDefault(); event.stopPropagation();
+    const trigger = menu.parentElement.previousElementSibling;
+    if (trigger instanceof HTMLButtonElement) trigger.focus();
+  }
+}
+
+function positionSubmenu(element: HTMLDivElement) {
+  const popup = element.querySelector<HTMLDivElement>(`.${css.submenuPopup}`);
+  if (!popup) return;
+  popup.style.left = ""; popup.style.right = ""; popup.style.top = "";
+  const bounds = popup.getBoundingClientRect();
+  if (bounds.right > window.innerWidth - 4) {
+    popup.style.left = "auto"; popup.style.right = "calc(100% - 2px)";
+  }
+  if (bounds.bottom > window.innerHeight - 4) popup.style.top = `${-5 - (bounds.bottom - window.innerHeight + 4)}px`;
+}
 
 function ContextMenuPopup({
   items,
@@ -34,7 +62,7 @@ function ContextMenuPopup({
   );
 
   return (
-    <div className={css.menu} role="menu">
+    <div className={css.menu} role="menu" onKeyDown={navigateMenu}>
       {items.map((item, index) => {
         const itemKey = `${path}-${index}`;
         if (item.kind === "separator") {
@@ -43,18 +71,27 @@ function ContextMenuPopup({
 
         if (item.kind === "submenu") {
           return (
-            <div key={`${itemKey}-submenu`} className={css.submenu}>
-              <div
+            <div key={`${itemKey}-submenu`} className={css.submenu}
+              onPointerEnter={(event) => { positionSubmenu(event.currentTarget); }}
+              onFocus={(event) => { positionSubmenu(event.currentTarget); }}>
+              <button type="button"
                 className={[css.item, css.submenuTrigger, hasCheckItems ? "" : css.itemNoCheck]
                   .filter(Boolean)
                   .join(" ")}
                 role="menuitem"
                 aria-haspopup="menu"
+                onClick={(event) => { event.currentTarget.nextElementSibling?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus(); }}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault(); event.stopPropagation();
+                    event.currentTarget.nextElementSibling?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+                  }
+                }}
               >
                 {hasCheckItems ? <span className={css.check} /> : null}
                 <span className={css.label}>{item.label}</span>
                 <span className={css.submenuArrow}>›</span>
-              </div>
+              </button>
 
               <div className={css.submenuPopup}>
                 <ContextMenuPopup
@@ -177,6 +214,10 @@ export function CanvasContextMenu({
   }, [anchor, containerRef, open, target]);
 
   useEffect(() => {
+    if (open) menuRootRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [open]);
+
+  useEffect(() => {
     if (!open) {
       return;
     }
@@ -202,13 +243,21 @@ export function CanvasContextMenu({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault(); event.stopPropagation();
         onClose();
+        containerRef.current?.focus();
       }
     }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => { window.removeEventListener("keydown", onKeyDown); };
-  }, [onClose, open]);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("blur", onClose);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("blur", onClose);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [containerRef, onClose, open]);
 
   if (!open) {
     return null;

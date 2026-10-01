@@ -32,14 +32,14 @@ function selectTarget(): void {
   act(() => { target!.click(); });
 }
 function inputValue(value: string): void {
-  const input = host.querySelector<HTMLInputElement>('[aria-label="Build steps"]')!;
+  const input = host.querySelector<HTMLInputElement>('[aria-label="Overlay steps"]')!;
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 function inputKey(key: string): void {
-  const input = host.querySelector<HTMLInputElement>('input[aria-label="Build steps"]')!;
+  const input = host.querySelector<HTMLInputElement>('input[aria-label="Overlay steps"]')!;
   act(() => {
     input.focus();
     input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -192,8 +192,8 @@ describe("Builds panel", () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("Use steps or ranges");
     const inherited = Array.from(host.querySelectorAll("button")).find((element) => element.textContent?.startsWith("Bullet · Beta"))!;
     act(() => { inherited.click(); });
-    expect(host.querySelector('input[aria-label="Build steps"]')).toBeNull();
-    expect(host.querySelector('output[aria-label="Build steps"]')?.textContent).toBe("2-");
+    expect(host.querySelector('input[aria-label="Overlay steps"]')).toBeNull();
+    expect(host.querySelector('output[aria-label="Overlay steps"]')?.textContent).toBe("2-");
     act(() => { button("Edit in source").click(); });
     const selected = useEditorStore.getState().deckBuildSelection!;
     expect(SOURCE.slice(selected.sourceSpan.from, selected.sourceSpan.to)).toBe("<+->");
@@ -205,7 +205,7 @@ describe("Builds panel", () => {
     selectTarget();
     inputValue("9-");
     act(() => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: SOURCE.replace("{Target}", "{Renamed}") }); });
-    expect(host.querySelector<HTMLInputElement>('[aria-label="Build steps"]')?.value).toBe("2-");
+    expect(host.querySelector<HTMLInputElement>('[aria-label="Overlay steps"]')?.value).toBe("2-");
     expect(host.querySelector('[data-selected="true"]')?.textContent).toContain("Renamed");
     expect(useEditorStore.getState().deckBuildSelection?.sourceRevision).toBe(useEditorStore.getState().sourceRevision);
   });
@@ -213,7 +213,7 @@ describe("Builds panel", () => {
   it("does not retain a build selection on another frame or document", () => {
     selectTarget();
     act(() => { useEditorStore.getState().dispatch({ type: "SET_ACTIVE_ROOT", rootId: "frame:1" }); });
-    expect(host.textContent).toContain("No builds on this slide");
+    expect(host.textContent).toContain("No overlays on this slide");
     expect(useEditorStore.getState().deckBuildSelection).toBeNull();
     act(() => { useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT" }); });
     expect(host.textContent).toContain("Select a slide");
@@ -249,14 +249,14 @@ describe("Builds panel", () => {
     selectTarget();
     inputValue("3-");
     act(() => {
-      const input = host.querySelector<HTMLInputElement>('input[aria-label="Build steps"]')!;
+      const input = host.querySelector<HTMLInputElement>('input[aria-label="Overlay steps"]')!;
       input.focus();
       input.blur();
     });
     expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3->"));
     inputValue("8-");
     inputKey("Escape");
-    expect(host.querySelector<HTMLInputElement>('input[aria-label="Build steps"]')!.value).toBe("3-");
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="Overlay steps"]')!.value).toBe("3-");
     expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3->"));
     act(() => { useEditorStore.getState().dispatch({ type: "UNDO" }); });
     expect(useEditorStore.getState().source).toBe(SOURCE);
@@ -264,10 +264,10 @@ describe("Builds panel", () => {
 
   it("navigates from an inherited item to its shared default", () => {
     act(() => { button("Bullet · Beta").click(); });
-    const owner = host.querySelector<HTMLButtonElement>('section[aria-label="Build rule"] button')!;
+    const owner = host.querySelector<HTMLButtonElement>('section[aria-label="Overlay rule"] button')!;
     act(() => { owner.click(); });
     expect(host.querySelector('[data-selected="true"]')?.textContent).toContain("List ·");
-    expect(host.querySelector('output[aria-label="Build steps"]')?.textContent).toBe("+-");
+    expect(host.querySelector('output[aria-label="Overlay steps"]')?.textContent).toBe("+-");
     expect(useEditorStore.getState().source).toBe(SOURCE);
   });
 
