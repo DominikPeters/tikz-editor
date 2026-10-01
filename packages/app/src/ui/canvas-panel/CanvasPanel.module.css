@@ -1197,3 +1197,26 @@
     print-color-adjust: exact;
   }
 }
+
+.deckColumnDivider {
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+}
+.deckDividerHit { stroke: transparent; pointer-events: stroke; }
+.deckDividerLine {
+  stroke: var(--accent-dark);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0;
+}
+.deckDividerGrip { fill: var(--accent-dark); pointer-events: none; opacity: 0; }
+.deckColumnDivider:hover .deckDividerLine,
+.deckColumnDivider[data-visible="true"] .deckDividerLine { opacity: 0.35; }
+.deckColumnDivider:hover .deckDividerGrip,
+.deckColumnDivider[data-visible="true"] .deckDividerGrip,
+.deckColumnDivider:focus-visible .deckDividerGrip,
+.deckColumnDivider:focus-visible .deckDividerLine { opacity: 1; }
+.deckImageCorner { outline: none; touch-action: none; }
+.deckImageCorner:focus-visible .handle { stroke-width: 2px; vector-effect: non-scaling-stroke; }

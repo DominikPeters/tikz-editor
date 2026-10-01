@@ -68,6 +68,7 @@ import { rootKey } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
+import { DeckResizeOverlay } from "./DeckResizeOverlay";
 import { CanvasPanelView } from "./CanvasPanelView";
 import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
@@ -3500,6 +3501,9 @@ export const CanvasPanel = memo(function CanvasPanel({
         marqueeBounds={marqueeBounds}
         selectionBoxes={selectionBoxes}
         deckObjectSelectionBox={deckObjectSelectionBox}
+        deckResizeOverlay={<DeckResizeOverlay source={snapshot.source} layout={deckActiveFrame?.layout ?? null}
+          index={deckObjectIndex} selected={deckSelectedObject} scale={canvasTransform.scale}
+          svgRef={interactionSvgRef} closeText={closeTextEditingSession} />}
         deckBuildSelectionRects={deckBuildSelectionRects}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}

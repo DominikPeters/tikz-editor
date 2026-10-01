@@ -106,3 +106,6 @@ export type * from "./content-types.js";
 export type * from "./overlay.js";
 export type * from "./theorems.js";
 export type * from "./theme/index.js";
+
+export { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarget, beamerImageResizePatches,
+  type BeamerColumnDivider, type BeamerImageResizeTarget } from "./deck-resize.js";

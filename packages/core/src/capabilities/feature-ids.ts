@@ -92,6 +92,7 @@ export const FEATURE_IDS = [
   "svg_text",
   "text_includegraphics",
   "beamer_document_scan",
+  "beamer_direct_resize", // Source-backed column dividers and image corners.
   "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.
   "beamer_source_placeholders",
   "render_pipeline"

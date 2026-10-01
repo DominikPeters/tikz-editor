@@ -34,6 +34,7 @@ import {
   type TexListLayoutProfile,
   type TexMetricProvider,
 } from "../text/tex/index.js";
+import { resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { collectBeamerEditScopes } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
@@ -2550,7 +2551,7 @@ async function prepareColumnContent(params: {
     theme,
     macroBindings,
   } = params;
-  const width = resolveColumnWidth(column.width.value, textWidth);
+  const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth) ?? textWidth;
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(theme);
@@ -3659,15 +3660,6 @@ function mappedTemplateText(primitive: Extract<
     "Beamer template-generated text",
     primitive.source.sourceSpan
   );
-}
-
-function resolveColumnWidth(expression: string, textWidth: number): number {
-  const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*\\textwidth$/.exec(
-    expression
-  );
-  return match
-    ? Math.max(0, Number(match[1]) * textWidth)
-    : textWidth;
 }
 
 function resolveEmDimension(value: string): number {

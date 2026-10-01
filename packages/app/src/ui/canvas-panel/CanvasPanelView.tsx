@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject
 } from "react";
 import type { AppMenuCommandId } from "../../app-menu";
@@ -135,6 +136,7 @@ type CanvasPanelViewProps = {
   /** Visible geometry for the selected build, in world coordinates. */
   deckBuildSelectionRects?: readonly { x: number; y: number; width: number; height: number }[];
   /** Selected deck object outline (object layer), in world coordinates. */
+  deckResizeOverlay: ReactNode;
   deckObjectSelectionBox: {
     objectId: string;
     kind: string;
@@ -268,6 +270,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     marqueeBounds,
     selectionBoxes,
     deckObjectSelectionBox,
+    deckResizeOverlay,
     deckBuildSelectionRects,
     adornmentHighlightBoxes,
     selectedAdornmentConnectors,
@@ -715,6 +718,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                     />
                   </g>
                 ) : null}
+
+                {deckResizeOverlay}
 
                 {deckBuildSelectionRects?.length ? (
                   <g className={css.selectionOverlay} data-testid="deck-build-selection" pointerEvents="none">

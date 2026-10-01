@@ -658,6 +658,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
+  beamer_direct_resize: {
+    parser: "not-applicable",
+    semantic: "not-applicable",
+    svg: "not-applicable",
+    edit: "partial",
+    fixtures: ["beamer_direct_resize"],
+    notes: "Canvas dividers resize adjacent columns together while preserving their combined width and authored units. Selected resolved images resize proportionally using their existing width/height or scale options. Gestures preview source changes and commit one undo step; complex dimensions remain source-editable. Column widths resolve absolute units and textwidth, linewidth, columnwidth, and paperwidth references."
+  },
   beamer_builds: {
     parser: "partial",
     semantic: "not-applicable",
