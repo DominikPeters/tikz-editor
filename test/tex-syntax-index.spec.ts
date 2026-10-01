@@ -1,3 +1,4 @@
+/* eslint @typescript-eslint/no-base-to-string: ["warn", { "ignoredTypeNames": ["Tree"] }] -- Lezer implements Tree.toString() but omits it from its declarations. */
 import {
   beamerDocumentParser,
   texDocumentParser,

@@ -30,7 +30,7 @@ function theoremNodes(source: string): BeamerTheoremBodyNode[] {
   const document = scanBeamerDocument(source);
   return parseBeamerFrameBody({
     source,
-    frame: document.frames[0]!,
+    frame: document.frames[0],
     document,
   }).children.filter(
     (node): node is BeamerTheoremBodyNode => node.kind === "theorem"
@@ -74,7 +74,7 @@ describe("Beamer theorem families", () => {
     const document = scanBeamerDocument(source);
     const nodes = parseBeamerFrameBody({
       source,
-      frame: document.frames[0]!,
+      frame: document.frames[0],
       document,
     }).children.filter(
       (node): node is BeamerTheoremBodyNode => node.kind === "theorem"
@@ -122,7 +122,7 @@ describe("Beamer theorem families", () => {
       },
     ]);
 
-    const named = nodes[0]!;
+    const named = nodes[0];
     const mappedNamedOffset = named.titleMapped.text.indexOf("Named");
     const sourceNamedOffset = SOURCE.indexOf("Named");
     expect(
@@ -152,15 +152,15 @@ describe("Beamer theorem families", () => {
     const result = await renderBeamerFramePages(source);
     const trace = (page: number) =>
       buildNativeBeamerPageTrace(
-        result.pages[page]!,
+        result.pages[page],
         computerModernTexMetricProvider
       );
     const visibleBody = (page: number) =>
       trace(page).lines.some((line) => line.text.includes("Examplebody"));
 
     expect(result.stepCount).toBe(2);
-    expect(result.pages[0]!.layout.contentBounds).toEqual(
-      result.pages[1]!.layout.contentBounds
+    expect(result.pages[0].layout.contentBounds).toEqual(
+      result.pages[1].layout.contentBounds
     );
     expect(visibleBody(0)).toBe(false);
     expect(
@@ -220,7 +220,7 @@ describe("Beamer theorem families", () => {
 
     expect(resolveBeamerTheoremCounterSeed(
       document,
-      document.frames[1]!.span.from
+      document.frames[1].span.from
     )).toEqual([{ counter: "theorem", value: 1 }]);
   });
 });

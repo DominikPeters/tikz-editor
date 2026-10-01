@@ -41,7 +41,7 @@ function Harness(props: {
   maxToRender?: number;
   onUpdate: (value: ReadonlyMap<string, string>) => void;
 }) {
-  const thumbnails = useFigureThumbnails(props.source, props.figures as any, {
+  const thumbnails = useFigureThumbnails(props.source, props.figures, {
     documentKey: props.documentKey,
     graphicsPreviewBundleKey: props.graphicsPreviewBundleKey,
     priorityFigureIds: props.priorityFigureIds,

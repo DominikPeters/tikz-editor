@@ -18,7 +18,7 @@ describe("Beamer frame content frontend", () => {
     const document = scanBeamerDocument(source);
     const ir = parseBeamerFrameBody({
       source,
-      frame: document.frames[0]!,
+      frame: document.frames[0],
     });
 
     expect(ir.diagnostics).toEqual([]);
@@ -44,12 +44,12 @@ describe("Beamer frame content frontend", () => {
     const document = scanBeamerDocument(source);
     const ir = parseBeamerFrameBody({
       source,
-      frame: document.frames[1]!,
+      frame: document.frames[1],
     });
 
     expect(ir.diagnostics).toEqual([]);
     expect(ir.children).toHaveLength(1);
-    const columns = ir.children[0]!;
+    const columns = ir.children[0];
     expect(columns.kind).toBe("columns");
     if (columns.kind !== "columns") {
       throw new Error("Expected columns.");
@@ -92,9 +92,9 @@ describe("Beamer frame content frontend", () => {
     const document = scanBeamerDocument(source);
     const ir = parseBeamerFrameBody({
       source,
-      frame: document.frames[0]!,
+      frame: document.frames[0],
     });
-    const columns = ir.children[0]!;
+    const columns = ir.children[0];
     expect(columns.kind).toBe("columns");
     if (columns.kind !== "columns") {
       throw new Error("Expected columns.");
@@ -117,7 +117,7 @@ describe("Beamer frame content frontend", () => {
     const document = scanBeamerDocument(source);
     const ir = parseBeamerFrameBody({
       source,
-      frame: document.frames[0]!,
+      frame: document.frames[0],
     });
 
     expect(ir.children).toEqual([
@@ -135,12 +135,12 @@ describe("Beamer frame content frontend", () => {
     const document = scanBeamerDocument(source);
     const ir = parseBeamerFrameBody({
       source,
-      frame: document.frames[15]!,
+      frame: document.frames[15],
     });
 
     expect(ir.diagnostics).toEqual([]);
     expect(ir.children).toHaveLength(1);
-    const tikz = ir.children[0]!;
+    const tikz = ir.children[0];
     expect(tikz).toMatchObject({
       kind: "tikzpicture",
       horizontalAlignment: "center",
@@ -161,7 +161,7 @@ describe("Beamer frame content frontend", () => {
     const document = scanBeamerDocument(source);
     const takeaways = parseBeamerFrameBody({
       source,
-      frame: document.frames[19]!,
+      frame: document.frames[19],
     });
 
     expect(takeaways.diagnostics).toEqual([]);
@@ -169,7 +169,7 @@ describe("Beamer frame content frontend", () => {
       "paragraph",
       "columns",
     ]);
-    const columns = takeaways.children[1]!;
+    const columns = takeaways.children[1];
     expect(columns.kind).toBe("columns");
     if (columns.kind !== "columns") {
       throw new Error("Expected columns.");
@@ -180,7 +180,7 @@ describe("Beamer frame content frontend", () => {
         column.children.map((node) => node.kind)
       )
     ).toEqual([["block"], ["block"], ["block"]]);
-    const blocks = columns.columns.map((column) => column.children[0]!);
+    const blocks = columns.columns.map((column) => column.children[0]);
     for (const block of blocks) {
       expect(block.kind).toBe("block");
       if (block.kind !== "block") {
@@ -198,7 +198,7 @@ describe("Beamer frame content frontend", () => {
 
     const pitfalls = parseBeamerFrameBody({
       source,
-      frame: document.frames[18]!,
+      frame: document.frames[18],
     });
     expect(pitfalls.children.map((node) => node.kind)).toEqual([
       "paragraph",

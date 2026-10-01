@@ -59,7 +59,7 @@ describe("prepared Beamer document", () => {
     const source = readFileSync(KKT_FIXTURE_PATH, "utf8");
     const prepared = prepareBeamerDocument(source);
     expect(prepared.document.frames.length).toBeGreaterThan(0);
-    expect(prepared.document.frames[0]!.id).toBe("frame:0");
+    expect(prepared.document.frames[0].id).toBe("frame:0");
     expect(prepared.theme.id).toBeTruthy();
   });
 
@@ -103,7 +103,7 @@ describe("prepared Beamer document", () => {
     }
 
     for (const [resultIndex, result] of results.entries()) {
-      const frameIndex = frameIndexes[resultIndex]!;
+      const frameIndex = frameIndexes[resultIndex];
       expect(result.document).toBe(prepared.document);
       expect(result.frame).toBe(prepared.document.frames[frameIndex]);
     }

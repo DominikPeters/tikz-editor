@@ -179,7 +179,7 @@ Fraction:
         paragraphs: [],
         embeddedTikz: [],
       },
-    } as never, computerModernTexMetricProvider);
+    }, computerModernTexMetricProvider);
 
     expect(trace.rectangles).toEqual([{
       id: "frame:0:list:0:marker:0",
@@ -206,7 +206,7 @@ Fraction:
         paragraphs: [],
         embeddedTikz: [],
       },
-    } as never, computerModernTexMetricProvider);
+    }, computerModernTexMetricProvider);
 
     expect(trace.rectangles).toEqual([{
       id: "frame:0:headline:section:hook-horizontal",

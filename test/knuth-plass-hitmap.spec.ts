@@ -13,7 +13,6 @@ import {
 import {
   registerParagraphLayoutReports
 } from "../packages/core/src/text/knuth-plass/report-registry.js";
-import { parseSourceSpans } from "../packages/core/src/text/knuth-plass/editor/sourceParser.js";
 import { clientPoint, px } from "../packages/core/src/coords/index.js";
 import {
   createTexDerivedInlineMathBoxProvider,
@@ -320,25 +319,6 @@ function makeSegmentedSingleLineReport(
     externalFallbackUsed: false,
     linebreakingMode: "feasible"
   });
-}
-
-function attributes(initial: Record<string, unknown> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    get: (name: string) => values.get(name),
-    set: (name: string, value: unknown) => {
-      values.set(name, value);
-    },
-    values
-  };
-}
-
-function wrapperNode(kind: string, attrs = attributes()): any {
-  return {
-    kind,
-    attributes: attrs,
-    isKind: (candidate: string) => candidate === kind
-  };
 }
 
 describe("knuth-plass hitmap line ranges", () => {

@@ -14,7 +14,7 @@ function plan(source: string, frameIndex = 0) {
   const page = resolveBeamerPageGeometry(document, theme);
   return planBeamerFrameChrome({
     document,
-    frame: document.frames[frameIndex]!,
+    frame: document.frames[frameIndex],
     frameIndex,
     totalFrames: document.frames.length,
     navigation: createBeamerFrameNavigationSnapshot(document, frameIndex),

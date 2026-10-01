@@ -1353,7 +1353,7 @@ describe("focus surface", () => {
           bounds: { x: 0, y: 0, width: 10, height: 10 }
         }
       ]
-    } as unknown as EditableTextTarget;
+    };
   }
 
   it("defaults scope sessions to canvas focus and node sessions to bar focus", () => {
@@ -1512,7 +1512,7 @@ describe("structural edits", () => {
     expect(edited.state.session?.selectionStart).toBe(4);
     expect(edited.state.session?.selectionEnd).toBe(4);
     expect(edited.effects).toHaveLength(1);
-    const effect = edited.effects[0]!;
+    const effect = edited.effects[0];
     expect(effect.type).toBe("apply_source_patch");
     expect(effect.nextSource).toContain("heABllCDo");
   });

@@ -67,7 +67,7 @@ describe("headless Beamer frame renderer", () => {
       (paragraph) => paragraph.role === "headline"
     );
     const firstLinePosition = (paragraph: (typeof headline)[number]) => {
-      const line = paragraph.report.lines[0]!;
+      const line = paragraph.report.lines[0];
       const placement = paragraph.vlistLayout.linePlacements.find(
         (candidate) => candidate.lineIndex === line.lineIndex
       )!;
@@ -84,15 +84,15 @@ describe("headless Beamer frame renderer", () => {
       "frame:0:headline:section",
       "frame:0:headline:subsection",
     ]);
-    expect(firstLinePosition(headline[0]!)).toEqual({
+    expect(firstLinePosition(headline[0])).toEqual({
       x: expect.closeTo(189.947056, 6),
       baselineY: expect.closeTo(7.059586, 6),
     });
-    expect(firstLinePosition(headline[1]!)).toEqual({
+    expect(firstLinePosition(headline[1])).toEqual({
       x: expect.closeTo(232.957039, 6),
       baselineY: expect.closeTo(7.059586, 6),
     });
-    const sectionVListReport = headline[0]!.vlistLayout.reports.find(
+    const sectionVListReport = headline[0].vlistLayout.reports.find(
       (report) =>
         "paragraphId" in report &&
         report.paragraphId === "frame:0:headline:section"
@@ -122,7 +122,7 @@ describe("headless Beamer frame renderer", () => {
       (paragraph) => paragraph.role === "subtitle"
     )!;
     const baseline = (paragraph: typeof title) => {
-      const line = paragraph.report.lines[0]!;
+      const line = paragraph.report.lines[0];
       const placement = paragraph.vlistLayout.linePlacements.find(
         (candidate) => candidate.lineIndex === line.lineIndex
       )!;
@@ -300,7 +300,7 @@ describe("headless Beamer frame renderer", () => {
   it("applies Beamer math substitutions and PGF picture bounds inside embedded TikZ", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 7 });
-    const tikz = result.layout.embeddedTikz[0]!;
+    const tikz = result.layout.embeddedTikz[0];
 
     expect(tikz.model.parts.some((part) =>
       part.markup.includes('data-tex-font="lmsans10-oblique"')
@@ -544,7 +544,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     const secondColumn = result.layout.items.find(
       (item) => item.id === "frame:4:columns:0:column:1"
     )!;
-    const tikz = result.layout.embeddedTikz[0]!;
+    const tikz = result.layout.embeddedTikz[0];
 
     expect(baselines).toEqual([
       expect.closeTo(94.032506, 6),
@@ -571,7 +571,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     const title = result.layout.paragraphs.find(
       (paragraph) => paragraph.role === "frame-title"
     )!;
-    const titleLine = title.report.lines[0]!;
+    const titleLine = title.report.lines[0];
     const titlePlacement = title.vlistLayout.linePlacements.find(
       (placement) => placement.lineIndex === titleLine.lineIndex
     )!;
@@ -664,21 +664,21 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     expect(bodyParagraphs).toHaveLength(3);
     expect(
       source.slice(
-        bodyParagraphs[0]!.sourceSpan.from,
-        bodyParagraphs[0]!.sourceSpan.to
+        bodyParagraphs[0].sourceSpan.from,
+        bodyParagraphs[0].sourceSpan.to
       )
     ).toContain("Write the constraint");
-    expect(bodyParagraphs[0]!.bounds.y).toBeLessThan(columns.bounds.y);
+    expect(bodyParagraphs[0].bounds.y).toBeLessThan(columns.bounds.y);
     const baseline = (paragraph: (typeof bodyParagraphs)[number], index: number) => {
-      const line = paragraph.report.lines[index]!;
+      const line = paragraph.report.lines[index];
       const placement = paragraph.vlistLayout.linePlacements.find(
         (candidate) => candidate.lineIndex === line.lineIndex
       )!;
       return paragraph.bounds.y + Number(placement.y) + Number(line.ascent);
     };
-    expect(baseline(bodyParagraphs[0]!, 0)).toBeCloseTo(99.958734, 6);
+    expect(baseline(bodyParagraphs[0], 0)).toBeCloseTo(99.958734, 6);
     expect(columns.bounds.y).toBeCloseTo(194.881934, 6);
-    expect(baseline(bodyParagraphs[1]!, 0)).toBeCloseTo(202.601684, 6);
+    expect(baseline(bodyParagraphs[1], 0)).toBeCloseTo(202.601684, 6);
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
@@ -703,7 +703,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
         paragraph.paragraphId === "frame:19:column:0:block:0:body"
     )!;
     const baseline = (paragraph: typeof body, lineIndex: number) => {
-      const line = paragraph.report.lines[lineIndex]!;
+      const line = paragraph.report.lines[lineIndex];
       const placement = paragraph.vlistLayout.linePlacements.find(
         (candidate) => candidate.lineIndex === line.lineIndex
       )!;
@@ -739,10 +739,10 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     const shadowWidth = Number(roundedShadow?.[3]);
     const shadowHeight = Number(roundedShadow?.[4]);
     const shadowRadius = Number(roundedShadow?.[5]);
-    expect(shadowX - blocks[0]!.bounds.x).toBeCloseTo(2.5, 3);
-    expect(shadowY - blocks[0]!.bounds.y).toBeCloseTo(2.5, 3);
-    expect(shadowWidth).toBeCloseTo(blocks[0]!.bounds.width, 3);
-    expect(blocks[0]!.bounds.height - shadowHeight).toBeCloseTo(
+    expect(shadowX - blocks[0].bounds.x).toBeCloseTo(2.5, 3);
+    expect(shadowY - blocks[0].bounds.y).toBeCloseTo(2.5, 3);
+    expect(shadowWidth).toBeCloseTo(blocks[0].bounds.width, 3);
+    expect(blocks[0].bounds.height - shadowHeight).toBeCloseTo(
       shadowRadius,
       3
     );
@@ -776,7 +776,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
         .filter((segment) => segment.kind === "space")
         .map((segment) => Number(segment.width))
     ).toEqual([1, 1]);
-    const pageNumberLine = pageNumber.report.lines[0]!;
+    const pageNumberLine = pageNumber.report.lines[0];
     const pageNumberPlacement = pageNumber.vlistLayout.linePlacements.find(
       (placement) => placement.lineIndex === pageNumberLine.lineIndex
     )!;
@@ -793,7 +793,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     const body = result.layout.paragraphs.find(
       (paragraph) => paragraph.role === "body"
     )!;
-    const bodyLine = body.report.lines[0]!;
+    const bodyLine = body.report.lines[0];
     const bodyPlacement = body.vlistLayout.linePlacements.find(
       (placement) => placement.lineIndex === bodyLine.lineIndex
     )!;

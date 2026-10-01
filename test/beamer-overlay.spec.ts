@@ -60,7 +60,7 @@ After pause.`);
     const document = scanBeamerDocument(source);
     const ir = parseBeamerFrameBody({
       source,
-      frame: document.frames[0]!,
+      frame: document.frames[0],
     });
 
     expect(ir.overlays.commands.map((command) => ({
@@ -83,12 +83,12 @@ suffix.`);
 
     expect(result.stepCount).toBe(2);
     expect(result.pages.map((page) => page.layout.step)).toEqual([1, 2]);
-    expect(tracedText(result.pages[0]!)).not.toContain("deliberately");
-    expect(tracedText(result.pages[1]!)).toContain("deliberately");
-    const firstBody = result.pages[0]!.layout.paragraphs.find(
+    expect(tracedText(result.pages[0])).not.toContain("deliberately");
+    expect(tracedText(result.pages[1])).toContain("deliberately");
+    const firstBody = result.pages[0].layout.paragraphs.find(
       (paragraph) => paragraph.role === "body"
     )!;
-    const secondBody = result.pages[1]!.layout.paragraphs.find(
+    const secondBody = result.pages[1].layout.paragraphs.find(
       (paragraph) => paragraph.role === "body"
     )!;
     expect(firstBody.report.lines.length).toBeLessThan(
@@ -101,10 +101,10 @@ suffix.`);
 Always visible.
 \uncover<2->{Covered material remains in the vertical list.}`);
     const result = await renderBeamerFramePages(source);
-    const firstBody = result.pages[0]!.layout.paragraphs.find(
+    const firstBody = result.pages[0].layout.paragraphs.find(
       (paragraph) => paragraph.role === "body"
     )!;
-    const secondBody = result.pages[1]!.layout.paragraphs.find(
+    const secondBody = result.pages[1].layout.paragraphs.find(
       (paragraph) => paragraph.role === "body"
     )!;
 
@@ -113,9 +113,9 @@ Always visible.
       secondBody.report.lines.map((line) => line.width)
     );
     expect(firstBody.hiddenSourceSpans).toHaveLength(1);
-    expect(tracedText(result.pages[0]!)).not.toContain("Covered");
-    expect(tracedText(result.pages[1]!)).toContain("Covered");
-    expect(result.pages[0]!.svg.svg).toContain('visibility="hidden"');
+    expect(tracedText(result.pages[0])).not.toContain("Covered");
+    expect(tracedText(result.pages[1])).toContain("Covered");
+    expect(result.pages[0].svg.svg).toContain('visibility="hidden"');
   });
 
   it("projects item overlays without removing their list geometry", async () => {
@@ -132,15 +132,15 @@ Always visible.
     );
 
     expect(markerCounts).toEqual([1, 2]);
-    expect(tracedText(result.pages[0]!)).toContain("Alpha");
-    expect(tracedText(result.pages[0]!)).not.toContain("Beta");
-    expect(tracedText(result.pages[1]!)).toContain("Beta");
+    expect(tracedText(result.pages[0])).toContain("Alpha");
+    expect(tracedText(result.pages[0])).not.toContain("Beta");
+    expect(tracedText(result.pages[1])).toContain("Beta");
     expect(
-      result.pages[0]!.layout.paragraphs.find(
+      result.pages[0].layout.paragraphs.find(
         (paragraph) => paragraph.role === "body"
       )?.bounds
     ).toEqual(
-      result.pages[1]!.layout.paragraphs.find(
+      result.pages[1].layout.paragraphs.find(
         (paragraph) => paragraph.role === "body"
       )?.bounds
     );
@@ -161,8 +161,8 @@ Always visible.
         item.kind === "list-marker" && item.visibility !== "hidden"
       ).length
     )).toEqual([1, 2, 3]);
-    expect(tracedText(result.pages[0]!)).not.toContain("Beta");
-    expect(tracedText(result.pages[2]!)).toContain("Gamma");
+    expect(tracedText(result.pages[0])).not.toContain("Beta");
+    expect(tracedText(result.pages[2])).toContain("Gamma");
   });
 
   it("applies remove and keep-space semantics to structural environments", async () => {
@@ -175,14 +175,14 @@ Always visible.
 \end{uncoverenv}`);
     const result = await renderBeamerFramePages(source);
     const blocks = (pageIndex: number) =>
-      result.pages[pageIndex]!.layout.items.filter(
+      result.pages[pageIndex].layout.items.filter(
         (item) => item.kind === "block" && item.visibility !== "hidden"
       );
 
     expect(result.stepCount).toBe(3);
     expect(blocks(0)).toHaveLength(0);
     expect(
-      result.pages[0]!.layout.items.filter(
+      result.pages[0].layout.items.filter(
         (item) => item.kind === "block" && item.visibility === "hidden"
       )
     ).toHaveLength(1);
@@ -192,11 +192,11 @@ Always visible.
     expect(blocks(2).map((block) => block.id)).toEqual([
       expect.stringContaining(":block:"),
     ]);
-    expect(tracedContentText(result.pages[1]!)).toContain("Onlyonpagetwo");
-    expect(tracedContentText(result.pages[1]!)).not.toContain(
+    expect(tracedContentText(result.pages[1])).toContain("Onlyonpagetwo");
+    expect(tracedContentText(result.pages[1])).not.toContain(
       "Paintedfrompagethree"
     );
-    expect(tracedContentText(result.pages[2]!)).toContain(
+    expect(tracedContentText(result.pages[2])).toContain(
       "Paintedfrompagethree"
     );
   });
@@ -216,15 +216,15 @@ Intro prose.
     // paint suppressed) on page one, painted on page two. The begin/end
     // tokens are block structure, not overlay syntax to strip.
     const blockItems = (pageIndex: number) =>
-      result.pages[pageIndex]!.layout.items.filter(
+      result.pages[pageIndex].layout.items.filter(
         (item) => item.kind === "block"
       );
     expect(blockItems(0)).toHaveLength(1);
-    expect(blockItems(0)[0]!.visibility).toBe("hidden");
+    expect(blockItems(0)[0].visibility).toBe("hidden");
     expect(blockItems(1)).toHaveLength(1);
-    expect(blockItems(1)[0]!.visibility).not.toBe("hidden");
-    expect(tracedContentText(result.pages[1]!)).toContain("Actedblock");
-    expect(tracedContentText(result.pages[1]!)).toContain("Insideitem");
+    expect(blockItems(1)[0].visibility).not.toBe("hidden");
+    expect(tracedContentText(result.pages[1])).toContain("Actedblock");
+    expect(tracedContentText(result.pages[1])).toContain("Insideitem");
     // The title parses behind the spec — no missing-title diagnostic.
     expect(
       result.diagnostics.filter(
@@ -244,13 +244,13 @@ After pause.`);
     const result = await renderBeamerFramePages(source);
 
     expect(result.stepCount).toBe(2);
-    expect(tracedText(result.pages[0]!)).toContain("Otherwise");
-    expect(tracedText(result.pages[0]!)).toContain("Before");
-    expect(tracedText(result.pages[0]!)).toContain("Hiddenontwo");
-    expect(tracedText(result.pages[0]!)).not.toContain("Afterpause");
-    expect(tracedText(result.pages[1]!)).toContain("During");
-    expect(tracedText(result.pages[1]!)).toContain("At");
-    expect(tracedText(result.pages[1]!)).not.toContain("Hiddenontwo");
-    expect(tracedText(result.pages[1]!)).toContain("Afterpause");
+    expect(tracedText(result.pages[0])).toContain("Otherwise");
+    expect(tracedText(result.pages[0])).toContain("Before");
+    expect(tracedText(result.pages[0])).toContain("Hiddenontwo");
+    expect(tracedText(result.pages[0])).not.toContain("Afterpause");
+    expect(tracedText(result.pages[1])).toContain("During");
+    expect(tracedText(result.pages[1])).toContain("At");
+    expect(tracedText(result.pages[1])).not.toContain("Hiddenontwo");
+    expect(tracedText(result.pages[1])).toContain("Afterpause");
   });
 });
