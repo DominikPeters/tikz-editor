@@ -2641,6 +2641,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const { onElementPointerDown, onElementDoubleClick } = useCanvasElementInteractions({
+    nestedFigureSpan,
     svgResult,
     toolMode,
     selectedElementIds,

@@ -42,14 +42,27 @@ type MoveRewriteBatchResult = Exclude<EditActionResultLike, { kind: "error" }>;
 export type AlignElementsAction = { elementIds: string[]; mode: AlignMode };
 export type DistributeElementsAction = { elementIds: string[]; axis: DistributeAxis };
 
+/** Immutable source and handles captured at the start of an element drag. */
+export type MoveElementsBaseline = {
+  source: string;
+  editHandles: EditHandle[];
+  sourceFingerprint?: string;
+};
+
 export function applyMoveElementsAction(
   source: string,
   editHandles: EditHandle[],
   elementIds: readonly string[],
   delta: WorldPoint,
   formatPrecision: DragFormatPrecision | undefined,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  baseline?: MoveElementsBaseline
 ): EditActionResultLike {
+  if (baseline) {
+    source = baseline.source;
+    editHandles = baseline.editHandles;
+    parseOptions = { ...parseOptions, sourceFingerprint: baseline.sourceFingerprint };
+  }
   const normalizedIds = normalizeElementIds(elementIds);
   if (normalizedIds.length === 0) {
     return { kind: "unsupported", reason: "No element ids were provided for moveElements" };
@@ -78,6 +91,12 @@ export function applyMoveElementsAction(
   const matrixElementIdSet = new Set(matrixElementIds);
   const treeRootElementIdSet = new Set(treeRootElementIds);
   const changedSourceIds = expandChangedSourceIdsForMovedElements(parsed.figure.body, normalizedIds);
+  // Returning a drag to its origin must also preserve the original spelling
+  // and precision of coordinates, including values that cannot be formatted
+  // exactly by the normal coordinate writer.
+  if (baseline && Math.abs(delta.x) < 1e-6 && Math.abs(delta.y) < 1e-6) {
+    return { kind: "success", newSource: source, patches: [], changedSourceIds };
+  }
   const nonMatrixElementIds = normalizedIds.filter(
     (elementId) => !matrixElementIdSet.has(elementId) && !scopeElementIdSet.has(elementId) && !treeRootElementIdSet.has(elementId)
   );

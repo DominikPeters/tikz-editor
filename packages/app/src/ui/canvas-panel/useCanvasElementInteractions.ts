@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { clientPoint, px, pt, worldBounds, worldVector } from "@tikz-editor/core/coords/index";
-import { buildSnapContext, collectSelectionGeometryFromBounds, collectSourceWorldBounds, type SnapBounds, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import { clientPoint, px, pt, worldVector } from "@tikz-editor/core/coords/index";
+import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
+import type { Span } from "@tikz-editor/core/ast/types";
+import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import type { EditHandle, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { ClientPoint, WorldBounds, WorldPoint } from "../coords/types";
 import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "@tikz-editor/core/edit/path-editing";
@@ -28,6 +30,7 @@ import type {
 } from "./types";
 import type { HitRegion } from "./hit-regions";
 import { parseWindowRootId } from "../../root-inventory";
+import { collectElementDragGeometry } from "./element-drag-geometry";
 
 export type UseCanvasElementInteractionsArgs = {
   svgResult: CanvasSnapshot["svg"];
@@ -43,6 +46,7 @@ export type UseCanvasElementInteractionsArgs = {
   directManipulationDisabledReasonBySourceId?: ReadonlyMap<string, string>;
   snapshot: CanvasSnapshot;
   source: string;
+  nestedFigureSpan?: Span | null;
   setWarning: StateSetter<string | null>;
   onBucketFillRegion: (region: HitRegion | undefined) => void;
   setSnapLines: StateSetter<SnapLine[]>;
@@ -87,6 +91,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    nestedFigureSpan,
     setWarning,
     onBucketFillRegion,
     setSnapLines,
@@ -169,44 +174,14 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: snapExcludedSourceIds,
+            dependencies: snapshot.semanticResult?.dependencies,
             guides: snapGuideInput,
             settings: snapSettingsPatch,
             zoom: canvasTransform.scale,
             viewportWorld: viewportWorldBounds
           })
         : null;
-      const worldBoundsBySource = snapshot.scene
-        ? collectSourceWorldBounds(snapshot.scene.elements)
-        : new Map<string, SnapBounds>();
-      const worldInteractionBoundsBySource = new Map<string, SnapBounds>(worldBoundsBySource);
-      for (const scopeId of scopeOverlay.scopesById.keys()) {
-        let mergedBounds: WorldBounds | null = null;
-        for (const [sourceId, sourceBounds] of worldBoundsBySource.entries()) {
-          const ancestors = scopeOverlay.ancestorScopeIdsBySourceId.get(sourceId) ?? [];
-          if (!ancestors.includes(scopeId)) {
-            continue;
-          }
-          mergedBounds = mergedBounds
-            ? worldBounds(
-                pt(Math.min(mergedBounds.minX, sourceBounds.minX)),
-                pt(Math.min(mergedBounds.minY, sourceBounds.minY)),
-                pt(Math.max(mergedBounds.maxX, sourceBounds.maxX)),
-                pt(Math.max(mergedBounds.maxY, sourceBounds.maxY))
-              )
-            : worldBounds(sourceBounds.minX, sourceBounds.minY, sourceBounds.maxX, sourceBounds.maxY);
-        }
-        if (!mergedBounds) {
-          continue;
-        }
-        worldInteractionBoundsBySource.set(scopeId, Object.assign(worldBounds(
-          mergedBounds.minX,
-          mergedBounds.minY,
-          mergedBounds.maxX,
-          mergedBounds.maxY
-        ), { sourceId: scopeId }));
-      }
-
-      const initialSelection = collectSelectionGeometryFromBounds(worldInteractionBoundsBySource, draggedIds);
+      const initialSelection = collectElementDragGeometry(snapshot.scene?.elements ?? [], draggedIds, scopeOverlay);
       const selectionAnchorRatio = initialSelection
         ? selectionAnchorRatioFromPoint(initialSelection.bounds, world)
         : null;
@@ -222,6 +197,12 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
             ? options.adornmentDragFromText === true
             : undefined,
         lastAppliedTotalDelta: worldVector(pt(0), pt(0)),
+        baseline: {
+          source: nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
+          editHandles: snapshot.editHandles,
+          sourceFingerprint: parseOptions.sourceFingerprint
+        },
+        latestSource: source,
         snapContext,
         initialSelection,
         selectionAnchorRatio,
@@ -242,6 +223,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     },
     [
       canvasTransform.scale,
+      nestedFigureSpan,
+      parseOptions.sourceFingerprint,
       directManipulationDisabledReasonBySourceId,
       draggableSourceIds,
       logSnapDebug,
@@ -252,6 +235,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       snapGuideInput,
       snapSettingsPatch,
       snapshot.scene,
+      snapshot.editHandles,
+      snapshot.semanticResult,
       snapshot.source,
       source,
       viewportWorldBounds

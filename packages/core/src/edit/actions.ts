@@ -49,7 +49,8 @@ import {
 import {
   applyAlignElementsAction,
   applyDistributeElementsAction,
-  applyMoveElementsAction
+  applyMoveElementsAction,
+  type MoveElementsBaseline
 } from "./actions/move-arrange-actions.js";
 import { applyReorderElementsAction, buildParentReorderReplacement } from "./actions/reorder-elements.js";
 import { applyResizeElementAction } from "./actions/resize-element.js";
@@ -106,10 +107,11 @@ export type ReorderDirection = "sendToBack" | "sendBackward" | "bringForward" | 
 export { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 export { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
 export { PROPERTY_WRITE_CLEANUP_NOOP_REASON };
+export type { MoveElementsBaseline };
 
 export type EditAction =
   | { kind: "moveElement"; elementId: string; delta: WorldPoint; formatPrecision?: DragFormatPrecision }
-  | { kind: "moveElements"; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision }
+  | { kind: "moveElements"; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision; baseline?: MoveElementsBaseline }
   | { kind: "alignElements"; elementIds: string[]; mode: AlignMode }
   | { kind: "distributeElements"; elementIds: string[]; axis: DistributeAxis }
   | { kind: "moveHandle"; handleId: string; newWorld: WorldPoint }
@@ -273,7 +275,15 @@ export function applyEditAction(
       case "moveElement":
         return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision);
       case "moveElements":
-        return applyMoveElements(source, editHandles, action.elementIds, action.delta, parseOptions, action.formatPrecision);
+        return applyMoveElements(
+          source,
+          editHandles,
+          action.elementIds,
+          action.delta,
+          parseOptions,
+          action.formatPrecision,
+          action.baseline
+        );
       case "alignElements":
         return applyAlignElements(source, action, parseOptions);
       case "distributeElements":
@@ -812,9 +822,10 @@ function applyMoveElements(
   elementIds: readonly string[],
   delta: WorldPoint,
   parseOptions: EditParseOptions = {},
-  formatPrecision?: DragFormatPrecision
+  formatPrecision?: DragFormatPrecision,
+  baseline?: MoveElementsBaseline
 ): EditActionResult {
-  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions);
+  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline);
 }
 
 function applyAlignElements(

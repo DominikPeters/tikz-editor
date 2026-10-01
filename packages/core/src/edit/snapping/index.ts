@@ -4,6 +4,7 @@ import type { WorldPoint } from "../../coords/points.js";
 import { buildSnapContext, resolveSnapSettings } from "./context.js";
 import { createGapSnapLines, collectGapSnaps } from "./gap-snaps.js";
 import {
+  SNAP_EPSILON,
   translateBounds,
   translatePoints
 } from "./geometry.js";
@@ -20,6 +21,7 @@ import {
 } from "./point-snaps.js";
 import type {
   Axis,
+  AxisSnapCandidate,
   AxisSnapBuckets,
   GapSnapCandidate,
   SelectionGeometry,
@@ -78,7 +80,8 @@ export function snapSelectionTranslation(input: SnapSelectionTranslationInput): 
   return {
     offset: snap.offset,
     snappedDelta: worldPoint(pt(input.rawDelta.x + snap.offset.x), pt(input.rawDelta.y + snap.offset.y)),
-    lines: snap.lines
+    lines: snap.lines,
+    targets: snap.targets
   };
 }
 
@@ -219,7 +222,7 @@ function runSelectionSnapPasses({
   selection: SelectionGeometry;
   includeGaps: boolean;
   enabledAxis: Axis | null | undefined;
-}): { offset: WorldPoint; lines: SnapLine[] } {
+}): { offset: WorldPoint; lines: SnapLine[]; targets: AxisSnapBuckets } {
   const thresholdWorld = settings.thresholdPx / context.zoom;
 
   const firstPass = collectPointGridAndGapSnaps({
@@ -233,32 +236,60 @@ function runSelectionSnapPasses({
   });
 
   const offset = worldPoint(pt(firstPass.nearest.x[0]?.offset ?? 0), pt(firstPass.nearest.y[0]?.offset ?? 0));
+  const targets = {
+    x: firstPass.nearest.x.filter((target) => Math.abs(target.offset - offset.x) <= SNAP_EPSILON),
+    y: firstPass.nearest.y.filter((target) => Math.abs(target.offset - offset.y) <= SNAP_EPSILON)
+  };
 
   const snappedSelection: SelectionGeometry = {
     bounds: translateBounds(selection.bounds, offset),
     snapPoints: translatePoints(selection.snapPoints, offset)
   };
 
+  return {
+    offset,
+    targets,
+    lines: selectionSnapLines(context, snappedSelection, targets, settings)
+  };
+}
+
+/** Validate retained targets against the geometry actually produced by an edit. */
+export function selectionSnapLines(
+  context: SnapContext,
+  selection: SelectionGeometry,
+  targets: AxisSnapBuckets,
+  settings: SnapSettings = context.settings
+): SnapLine[] {
   const secondPass = collectPointGridAndGapSnaps({
     context,
     settings,
-    selection: snappedSelection,
-    includeGaps,
-    enabledAxis,
+    selection,
+    includeGaps: true,
     thresholdWorld: 0,
     clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
+  for (const axis of ["x", "y"] as const) {
+    secondPass.nearest[axis] = secondPass.nearest[axis].filter((candidate) =>
+      targets[axis].some((target) => sameSnapTarget(candidate, target))
+    );
+  }
 
   const pointLines = createPointSnapLines(secondPass.nearest);
   const gapLines = createGapSnapLines(
-    snappedSelection.bounds,
+    selection.bounds,
     collectGapCandidates(secondPass.nearest)
   );
 
-  return {
-    offset,
-    lines: [...pointLines, ...gapLines]
-  };
+  return [...pointLines, ...gapLines];
+}
+
+function sameSnapTarget(candidate: AxisSnapCandidate, target: AxisSnapCandidate): boolean {
+  if (candidate.kind === "gap" || target.kind === "gap") {
+    return candidate.kind === "gap" && target.kind === "gap" &&
+      candidate.direction === target.direction && candidate.gap === target.gap;
+  }
+  return candidate.kind === target.kind && candidate.sourceId === target.sourceId &&
+    candidate.role === target.role && Math.abs(candidate.key - target.key) <= SNAP_EPSILON;
 }
 
 function collectPointGridAndGapSnaps({

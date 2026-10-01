@@ -20,6 +20,7 @@ import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-
 import {
   snapHandlePosition,
   snapSelectionTranslation,
+  selectionSnapLines,
   snapToolPointer,
   type SnapLine
 } from "@tikz-editor/core/edit/snapping";
@@ -56,6 +57,7 @@ import {
   resolveToolCreateCurrentWorld
 } from "./interaction-helpers";
 import { resolveHandleDragAction, shouldCommitHandleAnchorOnPointerUp } from "./handle-drag-actions";
+import { collectElementDragGeometry } from "./element-drag-geometry";
 import { resolveEndpointAnchorSnap } from "./endpoint-anchor-snap";
 import { clientToWorldPoint, distanceSquared, worldToSvgPoint } from "./geometry";
 import { PATH_TOOL_BEND_DRAG_THRESHOLD_PX } from "./path-tool";
@@ -144,6 +146,25 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   } = params;
   const wasSnappedRef = useRef(false);
   const worldListenersRef = useRef<CanvasWorldListeners | null>(null);
+
+  // Source formatting may slightly change a requested snap. Only show guides
+  // when the recomputed scene actually satisfies the retained targets.
+  useLayoutEffect(() => {
+    const drag = dragRef.current;
+    if (drag?.kind !== "element" || !drag.snapContext || !drag.snapTargets) return;
+    if (source !== drag.latestSource) {
+      setSnapLines([]);
+      return;
+    }
+    // While recomputing, the old scene is still visible and its validated
+    // guides remain correct. Refresh them when the new scene arrives.
+    if (snapshotSource !== source) return;
+    const selection = collectElementDragGeometry(snapshotScene?.elements ?? [], drag.elementIds, scopeOverlay);
+    const lines = selection ? selectionSnapLines(drag.snapContext, selection, drag.snapTargets) : [];
+    setSnapLines(lines);
+    if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
+    wasSnappedRef.current = lines.length > 0;
+  }, [dragRef, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback]);
 
   useLayoutEffect(() => {
     function sameIdsAsCurrentSelection(ids: readonly string[]): boolean {
@@ -810,6 +831,12 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
             return;
           }
         }
+        // A source edit outside this drag invalidates its immutable baseline.
+        if (source !== drag.latestSource) {
+          setSnapLines([]);
+          setDragState(null);
+          return;
+        }
         const rawTotalDelta = makeWorldVector(world.x - drag.startWorld.x, world.y - drag.startWorld.y);
         const snapped = drag.snapContext && drag.initialSelection
           ? snapSelectionTranslation({
@@ -821,15 +848,17 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           : {
               snappedDelta: makeWorldPoint(rawTotalDelta.x, rawTotalDelta.y),
               offset: undefined,
+              targets: undefined,
               lines: [] as SnapLine[]
             };
         const totalDelta = snapped.snappedDelta
           ? makeWorldVector(snapped.snappedDelta.x, snapped.snappedDelta.y)
           : rawTotalDelta;
-        const actualTotalDelta = drag.lastAppliedTotalDelta;
-        const incremental = makeWorldVector(totalDelta.x - actualTotalDelta.x, totalDelta.y - actualTotalDelta.y);
-        setSnapLines(snapped.lines);
-        maybeTriggerSnapFeedback(snapped.lines.length > 0);
+        drag.snapTargets = snapped.targets;
+        const currentSelection = collectElementDragGeometry(snapshotScene?.elements ?? [], drag.elementIds, scopeOverlay);
+        const currentLines = drag.snapContext && currentSelection && snapped.targets
+          ? selectionSnapLines(drag.snapContext, currentSelection, snapped.targets)
+          : [];
         logSnapDebug({
           phase: "drag-element-move",
           snapshotMatchesSource: true,
@@ -838,10 +867,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           rawDelta: makeWorldPoint(rawTotalDelta.x, rawTotalDelta.y),
           snappedDelta: makeWorldPoint(totalDelta.x, totalDelta.y),
           offset: snapped.offset,
-          lines: snapped.lines
+          lines: currentLines
         });
 
-        if (Math.abs(incremental.x) < 1e-6 && Math.abs(incremental.y) < 1e-6) {
+        if (Math.abs(totalDelta.x - drag.lastAppliedTotalDelta.x) < 1e-6 &&
+            Math.abs(totalDelta.y - drag.lastAppliedTotalDelta.y) < 1e-6) {
+          setSnapLines(currentLines);
+          maybeTriggerSnapFeedback(currentLines.length > 0);
           return;
         }
 
@@ -849,14 +881,18 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           {
             kind: "moveElements",
             elementIds: drag.elementIds,
-            delta: makeWorldPoint(incremental.x, incremental.y),
+            delta: makeWorldPoint(totalDelta.x, totalDelta.y),
+            baseline: drag.baseline,
             formatPrecision
           },
           drag.historyMergeKey
         );
-        if (result.sourceChanged) {
+        if (result.newSource) {
+          drag.latestSource = result.newSource;
           drag.lastAppliedTotalDelta = totalDelta;
         }
+        setSnapLines(currentLines);
+        maybeTriggerSnapFeedback(currentLines.length > 0);
         return;
       }
 

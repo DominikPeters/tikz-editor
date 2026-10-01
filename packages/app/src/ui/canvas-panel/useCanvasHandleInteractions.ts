@@ -174,6 +174,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: [handle.sourceRef.sourceId],
+            dependencies: snapshot.semanticResult?.dependencies,
             guides: snapGuideInput,
             settings: snapSettingsPatch,
             zoom: canvasTransform.scale,
@@ -225,6 +226,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       snapshot.editHandles,
       snapshot.parseResult,
       snapshot.scene,
+      snapshot.semanticResult,
       snapshot.source,
       source,
       svgResult,

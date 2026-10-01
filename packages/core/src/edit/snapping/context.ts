@@ -1,4 +1,5 @@
 import { buildVisibleGaps } from "./gap-snaps.js";
+import { collectGeometryInvalidation } from "../../semantic/dependencies.js";
 import {
   boundsIntersect,
   collectSourceReferenceBounds,
@@ -46,6 +47,18 @@ export function buildSnapContext(input: BuildSnapContextInput): SnapContext {
   const settings = resolveSnapSettings(input.settings);
   const zoom = Math.max(input.zoom, 1e-6);
   const selectedSet = new Set(input.selectedSourceIds);
+  // Matrix cells and geometry that depends on the selection move with it.
+  // They must never become stationary references at their drag-start positions.
+  for (const element of input.sceneElements) {
+    if (element.matrixCell && selectedSet.has(element.matrixCell.matrixSourceId)) {
+      selectedSet.add(element.sourceRef.sourceId);
+      selectedSet.add(element.matrixCell.cellSourceId);
+    }
+  }
+  if (input.dependencies) {
+    const affected = collectGeometryInvalidation(input.dependencies, { changedSourceIds: [...selectedSet] });
+    for (const sourceId of affected.affectedSourceIds) selectedSet.add(sourceId);
+  }
   const viewportWorld = input.viewportWorld ?? null;
   const viewportPaddingWorld = settings.viewportPaddingPx / zoom;
   const viewportFilter = viewportWorld ? expandBounds(viewportWorld, viewportPaddingWorld) : null;
@@ -77,7 +90,7 @@ export function buildSnapContext(input: BuildSnapContextInput): SnapContext {
   return {
     zoom,
     viewportWorld,
-    selectedSourceIds: [...input.selectedSourceIds],
+    selectedSourceIds: [...selectedSet],
     guides,
     referencePoints,
     referenceBounds,
