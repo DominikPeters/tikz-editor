@@ -83,7 +83,7 @@ describe("default desktop bridge", () => {
     expect(mocks.invoke.mock.calls).toEqual([
       ["desktop_show_about_panel", undefined],
       ["desktop_check_latex_available", undefined],
-      ["desktop_compile_tikz", { latexDocument: "\\documentclass{standalone}" }],
+      ["desktop_compile_tikz", { latexDocument: "\\documentclass{standalone}", sourceDirectory: null }],
       ["desktop_read_last_compile_log", undefined]
     ]);
   });
