@@ -112,15 +112,7 @@ describe("computeSnapshot edge orchestration", () => {
     const rendered = await computeSnapshot({
       id: "full-default-kind",
       documentId: "doc-1",
-      source: "\\begin{tikzpicture}\\end{tikzpicture}",
-      changedSourceIds: [" path:0 ", "", "path:0"],
-      patches: [
-        {
-          oldSpan: { from: 1, to: 2 },
-          newSpan: { from: 1, to: 3 },
-          replacement: "xx"
-        }
-      ]
+      source: "\\begin{tikzpicture}\\end{tikzpicture}"
     });
 
     expect(rendered.id).toBe("full-default-kind");

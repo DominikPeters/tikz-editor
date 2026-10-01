@@ -42,6 +42,7 @@ function shouldDebounceWorkspaceSave(action: EditorAction, previous: EditorState
   }
   if (action.type === "APPLY_EDIT_ACTION") {
     return (
+      action.recordInHistory === false ||
       action.parseOptions?.propertyWriteMode === "drag-frame" ||
       action.parseOptions?.propertyWriteMode === "drag-end" ||
       previous.activeCanvasDragKind != null ||

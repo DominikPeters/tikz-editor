@@ -15,7 +15,6 @@ import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 export type IncrementalParseTrigger = "drag-element" | "drag-handle" | "other";
 
 export type IncrementalParseFallbackReason =
-  | "non-drag-trigger"
   | "missing-patches"
   | "no-previous-cache"
   | "source-unchanged-active-figure-mismatch"
@@ -111,7 +110,6 @@ export function createIncrementalParseSession(): IncrementalParseSession {
   const evaluate = (input: IncrementalParseEvaluateInput): IncrementalParseEvaluateResult => {
     const activeFigureId = input.activeFigureId;
     const includeContextDefinitions = input.includeContextDefinitions ?? false;
-    const trigger = input.trigger ?? "other";
     let patches = normalizePatches(input.patches ?? []);
     let patchApplication: IncrementalParseStats["patchApplication"] =
       patches.length > 0 ? "direct" : undefined;
@@ -157,8 +155,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
       activeFigureId,
       includeContextDefinitions,
       patches,
-      changedSourceIds,
-      trigger
+      changedSourceIds
     });
     if (fallback) {
       const parse = parseTikz(input.source, {
@@ -469,11 +466,7 @@ function decideFallbackReason(input: {
   includeContextDefinitions: boolean;
   patches: SourcePatch[];
   changedSourceIds: string[];
-  trigger: IncrementalParseTrigger;
 }): IncrementalParseFallbackReason | null {
-  if (input.trigger !== "drag-element" && input.trigger !== "drag-handle") {
-    return "non-drag-trigger";
-  }
   if (!input.cached) {
     return "no-previous-cache";
   }
@@ -738,7 +731,10 @@ function shiftSpan(span: Span, delta: number): Span {
 
 function shiftSpanThroughPatches(span: Span, patches: readonly SourcePatch[]): Span {
   let next = { ...span };
-  for (const patch of patches) {
+  // All old spans refer to the same source. Apply right to left so a
+  // replacement cannot shift a span into the range of a later patch.
+  for (let index = patches.length - 1; index >= 0; index--) {
+    const patch = patches[index];
     next = shiftSpanThroughSinglePatch(next, patch);
   }
   return next;
@@ -746,7 +742,7 @@ function shiftSpanThroughPatches(span: Span, patches: readonly SourcePatch[]): S
 
 function shiftSpanThroughSinglePatch(span: Span, patch: SourcePatch): Span {
   const oldSpan = patch.oldSpan;
-  const newSpan = patch.newSpan;
+  const newSpan = { from: oldSpan.from, to: oldSpan.from + patch.replacement.length };
   const delta = width(newSpan) - width(oldSpan);
   if (span.to <= oldSpan.from) {
     return span;

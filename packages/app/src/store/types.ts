@@ -10,6 +10,7 @@ import type {
   AssistantTurnStatus
 } from "../platform/types";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
+import type { DeferredPropertyCleanup, PropertyCleanupTask } from "../property-cleanup-request";
 
 export type ToolMode =
   | "select"
@@ -117,6 +118,7 @@ export type FileRevision = {
 export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-needed" | "error";
 
 export type DocumentSession = {
+  pendingPropertyCleanup?: DeferredPropertyCleanup;
   id: string;
   title: string;
   source: string;
@@ -200,6 +202,7 @@ export type WorkspaceEphemeralState = {
   activeCanvasDragKind: CanvasDragKind | null;
   /** Source id currently being edited via source-number scrubbing. */
   activeSourceScrubSourceId: string | null;
+  activeInspectorEditDocumentId: string | null;
   /** Source id currently being edited through the canvas text popup. */
   activeCanvasTextEditSourceId: string | null;
   /** Structural mask for the active canvas text-editing session (see type). */
@@ -296,6 +299,7 @@ export type EditorState = {
   activeCanvasDragKind: CanvasDragKind | null;
   /** Source id currently being edited via source-number scrubbing. */
   activeSourceScrubSourceId: string | null;
+  activeInspectorEditDocumentId: string | null;
   /** Source id currently being edited through the canvas text popup. */
   activeCanvasTextEditSourceId: string | null;
   /** Structural mask for the active canvas text-editing session (see type). */
@@ -377,6 +381,7 @@ export type EditorAction =
     }
   | {
       type: "APPLY_EDIT_ACTION";
+      documentId?: string;
       action: EditAction | DeckEditAction;
       historyMergeKey?: string;
       parseOptions?: {
@@ -409,8 +414,16 @@ export type EditorAction =
       };
     }
   | {
+      type: "QUEUE_PROPERTY_CLEANUP";
+      documentId: string;
+      task: PropertyCleanupTask;
+      historyMergeKey: string;
+    }
+  | {
       type: "SET_SOURCE_TRANSIENT";
       documentId?: string;
+      expectedSourceRevision?: number;
+      expectedSource?: string;
       source: string;
       changedSourceIds?: string[] | null;
     }
@@ -464,6 +477,7 @@ export type EditorAction =
   | { type: "SET_ADD_MATRIX_PRESET"; rows: number; columns: number }
   | { type: "SET_CREATION_STROKE_COLOR"; value: string }
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
+  | { type: "SET_ACTIVE_INSPECTOR_EDIT"; documentId: string | null }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
   | { type: "SET_DECK_STEP"; rootId: string; step: number }
   | { type: "SET_DECK_OBJECT_SELECTION"; frameId: string; objectId: string | null }

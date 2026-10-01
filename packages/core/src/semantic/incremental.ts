@@ -51,7 +51,6 @@ export type IncrementalSemanticHints = {
 };
 
 export type IncrementalSemanticFallbackReason =
-  | "non-drag-trigger"
   | "missing-changed-source-ids"
   | "no-previous-cache"
   | "statement-structure-changed"
@@ -168,7 +167,7 @@ export function createIncrementalSemanticSession(
     const statementCount = run.expandedFigureBody.length;
     const statementIds = run.expandedFigureBody.map((statement) => statement.id);
     const hints = input.hints ?? {};
-    const dragTriggered = isDragTrigger(hints.trigger);
+    const incrementalRequested = (hints.changedSourceIds?.length ?? 0) > 0;
     const statefulGraphicsState = resolveContainsStatefulGraphicsState(input.source, hints, cached);
 
     if (statefulGraphicsState) {
@@ -190,7 +189,7 @@ export function createIncrementalSemanticSession(
         statementIds,
         fallback,
         checkpointRecipe,
-        dragTriggered
+        incrementalRequested
       );
       cached = full.cached;
       return full.output;
@@ -906,21 +905,11 @@ function captureDeferredSemanticCheckpoints(
   }
 }
 
-function isDragTrigger(
-  trigger: IncrementalSemanticTrigger | undefined
-): boolean {
-  return trigger === "drag-element" || trigger === "drag-handle";
-}
-
 function decideFallbackReason(
   hints: IncrementalSemanticHints,
   cached: CachedSemanticRun | null,
   statementIds: readonly string[]
 ): IncrementalSemanticFallbackReason | null {
-  const trigger = hints.trigger ?? "other";
-  if (trigger !== "drag-element" && trigger !== "drag-handle") {
-    return "non-drag-trigger";
-  }
   if (!hints.changedSourceIds || hints.changedSourceIds.length === 0) {
     return "missing-changed-source-ids";
   }

@@ -171,3 +171,24 @@ it("restores authored node dimensions when a resize returns to its initial size"
   }
   expect(source).toBe(geometry.source);
 });
+
+it("reuses calc dependency prefixes and does not evaluate an unrelated suffix while dragging", () => {
+  const geometry = prepare(String.raw`\coordinate (a) at (0,0);
+\draw ($(a)+(1,0)$) -- ($(a)+(2,1)$);
+` + Array.from({ length: 50 }, (_, i) => `\\node at (${i},10) {Unrelated ${i}};`).join("\n"));
+  const evaluate = vi.spyOn(evaluator, "evaluateTikzFigure");
+  const statement = vi.spyOn(evaluator, "evaluateSemanticStatementByIndex");
+  let current = geometry.source;
+  for (const delta of [wp(cm(1), cm(2)), wp(cm(3), cm(4))]) {
+    const result = applyEditAction(current, [], { kind: "moveElements", elementIds: ["path:1"], delta }, { geometry });
+    if (result.kind !== "success") throw new Error(JSON.stringify(result));
+    expectPatchesReconstructSource(current, result);
+    current = result.newSource;
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(statement.mock.calls.every(([, index]) => index <= 1)).toBe(true);
+  }
+  expect(statement.mock.calls.filter(([, index]) => index === 0)).toHaveLength(1);
+  const final = evaluator.evaluateTikzFigure(parseTikz(current).figure, current);
+  const handles = final.editHandles.filter(handle => handle.sourceRef.sourceId === "path:1");
+  expect(handles.map(handle => [handle.world.x / cm(1), handle.world.y / cm(1)])).toEqual([[4, 4], [5, 5]]);
+});

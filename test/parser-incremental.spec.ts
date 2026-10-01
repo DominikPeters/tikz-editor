@@ -386,8 +386,8 @@ describe("incremental parser session", () => {
       patches: [patch],
       changedSourceIds: [statementId]
     });
-    expect(nonDrag.stats.strategy).toBe("full");
-    expect(nonDrag.stats.fallbackReason).toBe("non-drag-trigger");
+    expect(nonDrag.stats.strategy).toBe("incremental");
+    expect(nonDrag.stats.fallbackReason).toBeUndefined();
 
     session.prime(seeded, { activeFigureId: seeded.activeFigureId, includeContextDefinitions: true });
     expect(session.evaluate({

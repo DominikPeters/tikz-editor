@@ -66,8 +66,7 @@ describe("semantic incremental evaluation", () => {
       }
     });
     expect(nonDragResult.stats).toMatchObject({
-      strategy: "full",
-      fallbackReason: "non-drag-trigger"
+      strategy: "incremental"
     });
 
     const structure = createIncrementalSemanticSession();

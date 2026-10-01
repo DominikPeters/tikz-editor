@@ -59,3 +59,58 @@ export function patchesMatchSourceTransition(
   const applied = applySourcePatches(previous, patches);
   return applied.kind === "success" && applied.source === next;
 }
+
+/** Compose sequential edit steps without turning separate changes into one broad replacement. */
+export function composeSourcePatches(source: string, steps: readonly (readonly SourcePatch[])[]): SourcePatch[] {
+  type Piece = { from: number; to: number } | { text: string };
+  const pieces: Piece[] = [{ from: 0, to: source.length }];
+  const length = (piece: Piece) => "text" in piece ? piece.text.length : piece.to - piece.from;
+  const split = (offset: number): number => {
+    let position = 0;
+    for (let index = 0; index < pieces.length; index++) {
+      const piece = pieces[index];
+      if (offset === position) return index;
+      const size = length(piece);
+      if (offset < position + size) {
+        const cut = offset - position;
+        pieces.splice(index, 1, ...("text" in piece
+          ? [{ text: piece.text.slice(0, cut) }, { text: piece.text.slice(cut) }]
+          : [{ from: piece.from, to: piece.from + cut }, { from: piece.from + cut, to: piece.to }]));
+        return index + 1;
+      }
+      position += size;
+    }
+    if (offset !== position) throw new Error("Patch offset is outside the current source.");
+    return pieces.length;
+  };
+  for (const patches of steps) {
+    // Each step's old spans share one source; replacing from the end keeps them valid.
+    for (const patch of [...patches].reverse().sort((a, b) => b.oldSpan.from - a.oldSpan.from || b.oldSpan.to - a.oldSpan.to)) {
+      const from = split(patch.oldSpan.from);
+      const to = split(patch.oldSpan.to);
+      pieces.splice(from, to - from, { text: patch.replacement });
+    }
+  }
+  const result: SourcePatch[] = [];
+  let oldFrom = 0;
+  let newFrom = 0;
+  let replacement = "";
+  const flush = (oldTo: number) => {
+    if (source.slice(oldFrom, oldTo) !== replacement) {
+      result.push({ oldSpan: { from: oldFrom, to: oldTo },
+        newSpan: { from: newFrom, to: newFrom + replacement.length }, replacement });
+    }
+    newFrom += replacement.length;
+    replacement = "";
+  };
+  for (const piece of pieces) {
+    if ("text" in piece) replacement += piece.text;
+    else {
+      flush(piece.from);
+      oldFrom = piece.to;
+      newFrom += length(piece);
+    }
+  }
+  flush(source.length);
+  return result;
+}

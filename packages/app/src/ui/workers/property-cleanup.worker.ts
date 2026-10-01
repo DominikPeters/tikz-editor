@@ -1,7 +1,8 @@
-import { cleanupIdiomaticPropertyWrites } from "@tikz-editor/core/edit/property-write-planner";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
+import type { PropertyCleanupTask } from "../../property-cleanup-request";
+import { certifyPropertyCleanup } from "../../property-cleanup";
 
-export type PropertyCleanupRequest = { requestId: number; source: string; elementIds: string[]; activeFigureId?: string | null };
+export type PropertyCleanupRequest = PropertyCleanupTask & { requestId: number };
 export type PropertyCleanupResponse = { requestId: number; result: EditActionResult | null };
 
 const workerContext = self as unknown as {
@@ -10,10 +11,9 @@ const workerContext = self as unknown as {
 };
 workerContext.onmessage = ({ data }) => {
   try {
-    workerContext.postMessage({ requestId: data.requestId, result: cleanupIdiomaticPropertyWrites(data.source,
-      { activeFigureId: data.activeFigureId, propertyWriteMode: "drag-end" }, data.elementIds) });
+    workerContext.postMessage({ requestId: data.requestId, result: certifyPropertyCleanup(data) });
   } catch {
-    // Cleanup is optional; the source written during the gesture is valid.
+    // Cleanup is optional; the source written during the edit is valid.
     workerContext.postMessage({ requestId: data.requestId, result: null });
   }
 };

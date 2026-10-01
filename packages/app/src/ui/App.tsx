@@ -1,3 +1,4 @@
+import { useDeferredPropertyCleanup } from "./useDeferredPropertyCleanup";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -221,6 +222,7 @@ function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string 
 }
 
 export function App() {
+  useDeferredPropertyCleanup();
   const {
     source,
     sourceRevision,
@@ -236,6 +238,7 @@ export function App() {
     lastEditPatchBaseRevision,
     activeCanvasDragKind,
     activeSourceScrubSourceId,
+    activeInspectorEditDocumentId,
     activeDeckStep,
     textEditMaskSpan,
     dispatch
@@ -262,6 +265,7 @@ export function App() {
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
+    activeInspectorEditDocumentId: s.activeInspectorEditDocumentId,
     textEditMaskSpan:
       s.canvasTextEditMask?.documentId === s.activeDocumentId &&
       s.canvasTextEditMask.sourceRevision === s.sourceRevision
@@ -987,15 +991,15 @@ export function App() {
     [activeSourceScrubSourceId, lastEditChangedSourceIds]
   );
   const trigger = computeTrigger(activeCanvasDragKind, activeSourceScrubSourceId);
-  const isDragComputeTrigger = trigger === "drag-element" || trigger === "drag-handle";
+  const isInteractiveEdit = trigger === "drag-element" || trigger === "drag-handle" || activeInspectorEditDocumentId === activeDocumentId;
   useLayoutEffect(() => {
-    if (!isDragComputeTrigger) {
+    if (!isInteractiveEdit) {
       setDragRenderViewBox(null);
       return;
     }
     setDragRenderViewBox((current) => current ?? snapshot.svg?.viewBox ?? null);
-  }, [isDragComputeTrigger, snapshot.svg?.viewBox]);
-  const renderViewBox = isDragComputeTrigger ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
+  }, [isInteractiveEdit, snapshot.svg?.viewBox]);
+  const renderViewBox = isInteractiveEdit ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
   const typingComputeDelay = trigger === "other" && changedSourceIds == null
     ? (source.length > 80_000 ? 220 : 120)
     : null;

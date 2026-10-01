@@ -701,36 +701,15 @@ describe("editor-commands", () => {
     }, "left");
 
     expect(didRotate).toBe(true);
-    expect(dispatch).toHaveBeenCalledTimes(2);
-    const first = dispatch.mock.calls[0]?.[0];
-    const second = dispatch.mock.calls[1]?.[0];
-    expect(first).toMatchObject({
-      type: "APPLY_EDIT_ACTION",
-      action: {
-        kind: "setProperty",
-        elementId: "path:0",
-        level: "command",
-        key: "rotate",
-        value: "180",
-        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
-      }
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(dispatch.mock.calls[0]?.[0]).toMatchObject({
+      type: "APPLY_EDIT_ACTION", action: { kind: "setProperties", actions: [
+        { kind: "setProperty", elementId: "path:0", level: "command", key: "rotate", value: "180",
+          clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"] },
+        { kind: "setProperty", elementId: "path:1", level: "command", key: "rotate", value: "90",
+          clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"] }
+      ] }
     });
-    expect(second).toMatchObject({
-      type: "APPLY_EDIT_ACTION",
-      action: {
-        kind: "setProperty",
-        elementId: "path:1",
-        level: "command",
-        key: "rotate",
-        value: "90",
-        clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
-      }
-    });
-    expect(first?.type).toBe("APPLY_EDIT_ACTION");
-    expect(second?.type).toBe("APPLY_EDIT_ACTION");
-    if (first?.type === "APPLY_EDIT_ACTION" && second?.type === "APPLY_EDIT_ACTION") {
-      expect(first.historyMergeKey).toBe(second.historyMergeKey);
-    }
   });
 
   it("flipSelection negates xscale while preserving existing yscale", () => {
@@ -753,14 +732,14 @@ describe("editor-commands", () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenNthCalledWith(1, expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: expect.objectContaining({
+      action: expect.objectContaining({ kind: "setProperties", actions: [expect.objectContaining({
         kind: "setProperty",
         elementId: "path:0",
         level: "command",
         key: "xscale",
         value: "-2",
         clearKeys: expect.arrayContaining(["scale", "/tikz/scale", "/tikz/xscale"])
-      })
+      })] })
     }));
   });
 
@@ -784,13 +763,13 @@ describe("editor-commands", () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: expect.objectContaining({
+      action: expect.objectContaining({ kind: "setProperties", actions: [expect.objectContaining({
         kind: "setProperty",
         elementId: "path:0",
         level: "command",
         key: "yscale",
         value: "-1"
-      })
+      })] })
     }));
   });
 
@@ -845,13 +824,13 @@ describe("editor-commands", () => {
     expect(dispatch).toHaveBeenCalled();
     expect(dispatch).toHaveBeenNthCalledWith(1, expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: expect.objectContaining({
+      action: expect.objectContaining({ kind: "setProperties", actions: [expect.objectContaining({
         kind: "setProperty",
         elementId: "scope:0",
         level: "command",
         key: "rotate",
         value: "90"
-      })
+      })] })
     }));
   });
 
@@ -876,14 +855,11 @@ describe("editor-commands", () => {
       .map((call) => call[0])
       .filter((action): action is Extract<EditorAction, { type: "APPLY_EDIT_ACTION" }> => action?.type === "APPLY_EDIT_ACTION");
     expect(actions).toHaveLength(1);
-    expect(actions[0]?.action).toMatchObject({
-      kind: "setProperty",
-      key: "rotate",
-      value: "-90"
-    });
-    expect(actions[0]?.action.kind).toBe("setProperty");
-    if (actions[0]?.action.kind === "setProperty") {
-      expect(actions[0].action.elementId).toMatch(/^node:/);
+    expect(actions[0]?.action).toMatchObject({ kind: "setProperties", actions: [{
+      kind: "setProperty", key: "rotate", value: "-90"
+    }] });
+    if (actions[0]?.action.kind === "setProperties") {
+      expect(actions[0].action.actions[0].elementId).toMatch(/^node:/);
     }
 
     let updated = source;

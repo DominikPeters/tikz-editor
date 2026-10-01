@@ -227,7 +227,7 @@ export function applyMoveElementsAction(
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);
 
-  const calcCorrected = correctMovedCalcDependencies(source, currentSource, editHandles, movedSourceDeltas, parseOptions);
+  const calcCorrected = correctMovedCalcDependencies(source, currentSource, editHandles, movedSourceDeltas, parseOptions, geometry);
   if (calcCorrected == null) {
     return { kind: "unsupported", reason: "Could not preserve dependencies between the selected calc coordinates." };
   }

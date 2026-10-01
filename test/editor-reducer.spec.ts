@@ -581,7 +581,7 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
     expect(next.lastEditChangedSourceIds).toEqual(["elem-1"]);
   });
 
-  it("keeps source patches for path-attached node moves while disabling changed-id incremental render", () => {
+  it("keeps source patches and incremental target hints for path-attached node moves", () => {
     const source = "\\draw (0,0) -- node[above] {r} (1,0);";
     const oldNodeSyntax = "node[above]";
     const oldNodeFrom = source.indexOf(oldNodeSyntax);
@@ -611,11 +611,11 @@ describe("editorReducer – APPLY_EDIT_ACTION", () => {
             replacement: "node[pos=0.6,above]"
           }
         ],
-        changedSourceIds: ["node:0:2"]
+        changedSourceIds: ["path:0"]
       }
     });
 
-    expect(next.lastEditChangedSourceIds).toBeNull();
+    expect(next.lastEditChangedSourceIds).toEqual(["path:0"]);
     expect(next.lastEditPatches).toHaveLength(1);
     expect(applySourcePatches(source, next.lastEditPatches ?? [])).toBe(next.source);
   });

@@ -1,4 +1,6 @@
-import { useDeferredPropertyCleanup } from "./useDeferredPropertyCleanup";
+import { beginDocumentEdit } from "../../edit-session";
+import { executeDocumentEdit } from "../../edit-execution";
+import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import {
 Suspense,
@@ -19,7 +21,6 @@ import {
 ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
 PROPERTY_WRITE_CLEANUP_NOOP_REASON,
-applyEditAction,
 preflightPositionNodeRelativeToAction,
 type EditAction,
 type EditActionResult
@@ -65,7 +66,6 @@ import { resolveBucketFillEdit } from "./bucket-fill";
 import { rootKey } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
-import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { CanvasPanelView } from "./CanvasPanelView";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
@@ -831,6 +831,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   const setDragState = useCallback(
     (next: DragState | null) => {
+      if (next && "latestSource" in next) next.editSession = beginDocumentEdit(useEditorStore.getState());
       dragRef.current = next;
       if (!next) {
         setNodeAnchorOverlay(null);
@@ -1755,43 +1756,13 @@ export const CanvasPanel = memo(function CanvasPanel({
   const applyActionWithFeedback = useCallback(
     (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
-      const sourceFingerprint = sourceForEdit === source
-        ? editParseOptions.sourceFingerprint
-        : buildEditParseOptions({
-            documentId: activeDocumentId,
-            sourceRevision,
-            source: sourceForEdit,
-            activeRootId,
-            snapshot,
-            analysis: "none"
-          }).sourceFingerprint;
-      // Nested figure mode applies against the masked document; the drag
-      // preview's evolving override source only changes inside the picture,
-      // so the span end shifts by exactly the length delta.
-      const maskedForEdit = nestedFigureSpan
-        ? maskSourceOutsideSpan(sourceForEdit, {
-            from: nestedFigureSpan.from,
-            to: nestedFigureSpan.to + (sourceForEdit.length - source.length)
-          })
-        : sourceForEdit;
-      let result = applyEditAction(maskedForEdit, snapshot.editHandles, action, {
+      const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot }, action, {
         geometry,
-        evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
-        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
+        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame" },
+        evaluateOptions: { textEngine: textEngineRef.current },
+        nestedFigureSpan: nestedFigureSpan ? { from: nestedFigureSpan.from,
+          to: nestedFigureSpan.to + (sourceForEdit.length - source.length) } : null
       });
-      if (
-        nestedFigureSpan &&
-        (result.kind === "success" || result.kind === "partial")
-      ) {
-        // Patches carry absolute spans; replaying them onto the unmasked
-        // document yields the real next source.
-        const replayed = applySourcePatches(sourceForEdit, result.patches);
-        if (replayed.kind !== "success") {
-          setWarning("Edit action skipped: the figure edit did not apply cleanly.");
-          return { sourceChanged: false };
-        }
-        result = { ...result, newSource: replayed.source };
-      }
 
       if (result.kind === "success" || result.kind === "partial") {
         if (result.kind === "partial") {
@@ -3219,10 +3190,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch({ type: "SELECT", id: selectedId, additive: false });
   }, [dispatch, snapshot.scene, snapshot.source, source]);
 
-  const schedulePropertyCleanup = useDeferredPropertyCleanup({
-    documentId: activeDocumentId, source, sourceRevision,
-    activeFigureId: editParseOptions.activeFigureId, nestedFigureSpan, dragRef, dispatch
-  });
+  const schedulePropertyCleanup = useCallback<SchedulePropertyCleanup>((cleanupSource, elementIds, historyMergeKey) => {
+    dispatch({ type: "QUEUE_PROPERTY_CLEANUP", documentId: activeDocumentId, historyMergeKey,
+      task: { source: cleanupSource, elementIds, activeFigureId: editParseOptions.activeFigureId,
+        nestedFigureSpan: nestedFigureSpan ? { from: nestedFigureSpan.from, to: nestedFigureSpan.to + cleanupSource.length - source.length } : null }
+    });
+  }, [activeDocumentId, dispatch, editParseOptions.activeFigureId, nestedFigureSpan, source.length]);
   const dragControllerConfig = useMemo(() => ({
     schedulePropertyCleanup,
     applyActionWithFeedback,

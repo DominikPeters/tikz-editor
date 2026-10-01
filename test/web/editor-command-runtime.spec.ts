@@ -236,7 +236,7 @@ describe("editor-command-runtime", () => {
     expect(ran).toBe(true);
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       type: "APPLY_EDIT_ACTION",
-      action: {
+      action: { kind: "setProperties", actions: [{
         kind: "setProperty",
         elementId: "path:0",
         level: "command",
@@ -244,7 +244,7 @@ describe("editor-command-runtime", () => {
         value: "180",
         propertyId: "transform.rotate",
         clearKeys: ["/tikz/rotate", "rotate around", "/tikz/rotate around"]
-      }
+      }] }
     }));
   });
 

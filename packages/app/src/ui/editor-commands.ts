@@ -1,3 +1,4 @@
+import type { EditAction } from "@tikz-editor/core/edit/actions";
 import { applyEditAction, type ReorderDirection } from "@tikz-editor/core/edit/actions";
 import { getEditActionAvailability } from "@tikz-editor/core/edit/action-availability";
 import { pt, worldPoint } from "@tikz-editor/core/coords/index";
@@ -407,18 +408,7 @@ export function groupSelection(context: SelectionCommandContext): boolean {
     kind: "groupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
-    parseOptions: parseOptionsForContext(context)
-  });
-  if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
-    return false;
-  }
-
-  context.dispatch({
-    type: "APPLY_EDIT_ACTION",
-    action,
-    precomputedResult
-  });
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action });
   return true;
 }
 
@@ -1546,8 +1536,7 @@ function transformSelection(
   }
 
   const elementIds = [...context.selectedElementIds];
-  const mergeKey = `transform:${Date.now().toString(36)}`;
-  let dispatched = false;
+  const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
   const parseOptions = parseOptionsForContext(context);
 
   for (const elementId of elementIds) {
@@ -1562,24 +1551,21 @@ function transformSelection(
       resolveNextValue(transformContext.values, key)
     );
     for (const mutation of mutations) {
-      context.dispatch({
-        type: "APPLY_EDIT_ACTION",
-        historyMergeKey: mergeKey,
-        action: {
-          kind: "setProperty",
-          elementId: targetId,
-          level: "command",
-          key: mutation.key,
-          value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
-          clearKeys: mutation.clearKeys
-        }
+      actions.push({
+        kind: "setProperty",
+        elementId: targetId,
+        level: "command",
+        key: mutation.key,
+        value: mutation.value,
+        propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        clearKeys: mutation.clearKeys
       });
-      dispatched = true;
     }
   }
 
-  return dispatched;
+  if (actions.length === 0) return false;
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "setProperties", actions } });
+  return true;
 }
 
 function normalizeSignedDeg(degrees: number): number {

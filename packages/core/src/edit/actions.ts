@@ -89,7 +89,7 @@ import {
   type PositionNodeRelativeToAction
 } from "./actions/node-positioning-actions.js";
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "./parse-options.js";
-import { patchesMatchSourceTransition } from "./source-patches.js";
+import { composeSourcePatches, patchesMatchSourceTransition } from "./source-patches.js";
 import type { SemanticPropertyId } from "./property-registry.js";
 import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/flatten.js";
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
@@ -112,7 +112,20 @@ export { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-nod
 export { PROPERTY_WRITE_CLEANUP_NOOP_REASON };
 export type { MoveElementsBaseline };
 
+export type SetPropertyEditAction = {
+  kind: "setProperty";
+  elementId: string;
+  level: StyleLevel;
+  key: string;
+  value: string;
+  propertyId?: SemanticPropertyId;
+  clearKeys?: string[];
+  commentMode?: "disable" | "enable";
+  commentSourceText?: string;
+};
+
 export type EditAction =
+  | { kind: "setProperties"; actions: readonly SetPropertyEditAction[] }
   | { kind: "moveElement"; elementId: string; delta: WorldPoint; formatPrecision?: DragFormatPrecision }
   | { kind: "moveElements"; bypassSnapping?: boolean; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision; baseline?: MoveElementsBaseline }
   | { kind: "alignElements"; elementIds: string[]; mode: AlignMode }
@@ -127,17 +140,7 @@ export type EditAction =
   | { kind: "setPathPointKind"; elementId: string; handleId: string; pointKind: PathPointKind }
   | { kind: "appendToPath"; elementId: string; end: "start" | "end"; segmentSource: string }
   | { kind: "insertPathPoint"; elementId: string; segmentIndex: number; point: WorldPoint }
-  | {
-      kind: "setProperty";
-      elementId: string;
-      level: StyleLevel;
-      key: string;
-      value: string;
-      propertyId?: SemanticPropertyId;
-      clearKeys?: string[];
-      commentMode?: "disable" | "enable";
-      commentSourceText?: string;
-    }
+  | SetPropertyEditAction
   | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
@@ -318,6 +321,27 @@ export function applyEditAction(
         return applyDistributeElementsAction(source, action, parseOptions, geometry);
       case "setProperty":
         return applySetProperty(source, action, parseOptions);
+      case "setProperties": {
+        let nextSource = source;
+        const steps: SourcePatch[][] = [];
+        const changedSourceIds = new Set<string>();
+        const skippedHandles: string[] = [];
+        for (const property of action.actions) {
+          const result = applySetProperty(nextSource, property, parseOptions);
+          if (result.kind === "unsupported" && result.reason === "setProperty would not change the source.") continue;
+          if (result.kind !== "success" && result.kind !== "partial") return result;
+          const normalized = normalizeResultPatches(nextSource, result);
+          if (normalized.kind !== "success" && normalized.kind !== "partial") return normalized;
+          steps.push(normalized.patches);
+          nextSource = result.newSource;
+          for (const id of result.changedSourceIds ?? [property.elementId]) changedSourceIds.add(id);
+          if (result.kind === "partial") skippedHandles.push(...result.skippedHandles);
+        }
+        const patches = composeSourcePatches(source, steps);
+        return skippedHandles.length > 0
+          ? { kind: "partial", newSource: nextSource, patches, changedSourceIds: [...changedSourceIds], skippedHandles, reason: "Some property targets could not be edited." }
+          : { kind: "success", newSource: nextSource, patches, changedSourceIds: [...changedSourceIds] };
+      }
       case "rotateElement":
         return applyRotateElementAction(source, action, evaluateOptions, parseOptions, geometry);
       case "updateNodeText":

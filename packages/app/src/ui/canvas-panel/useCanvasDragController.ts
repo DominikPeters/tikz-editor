@@ -1,3 +1,6 @@
+import { canContinueDocumentEdit, trackDocumentEdit } from "../../edit-session";
+import { useEditorStore } from "../../store/store";
+import { createFrameEditQueue } from "../frame-edit-queue";
 import { applyEditAction } from "@tikz-editor/core/edit/actions";
 import { resolveResizeFrameForSource } from "./resize-frames";
 import { snapToolCreatePointer } from "./tool-pointer-snap";
@@ -158,7 +161,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   // when the recomputed scene actually satisfies the retained targets.
   useLayoutEffect(() => {
     const drag = dragRef.current;
-    if (drag && "latestSource" in drag && source !== drag.latestSource) {
+    if (drag && "latestSource" in drag && (source !== drag.latestSource || (drag.editSession && !canContinueDocumentEdit(drag.editSession, useEditorStore.getState())))) {
       setDragState(null);
       setSnapLines([]);
       setDragTooltip(null);
@@ -193,7 +196,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
 
   useLayoutEffect(() => {
     function applyGestureAction(drag: Extract<DragState, { latestSource: string }>, action: Parameters<ApplyActionWithFeedbackFn>[0]) {
+      if (drag.editSession && !canContinueDocumentEdit(drag.editSession, useEditorStore.getState())) return { sourceChanged: false };
       const result = applyActionWithFeedback(action, drag.historyMergeKey, drag.latestSource, drag.geometry);
+      if (drag.editSession) trackDocumentEdit(drag.editSession, useEditorStore.getState());
       if (result.newSource != null) {
         drag.latestSource = result.newSource;
         drag.didEdit = true;
@@ -1385,32 +1390,37 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   ]);
 
   useEffect(() => {
-    let pendingMove: PointerEvent | null = null;
     let movingDrag: DragState | null = null;
-    let frame: number | null = null;
-    const flushMove = () => {
-      if (frame != null) cancelAnimationFrame(frame);
-      frame = null;
-      const event = pendingMove;
-      pendingMove = null;
-      if (event) worldListenersRef.current?.onPointerMove(event);
-    };
+    const queue = createFrameEditQueue<DragState, PointerEvent>((owner, event) => {
+      if (dragRef.current !== owner) return;
+      if ("latestSource" in owner && owner.editSession && !canContinueDocumentEdit(owner.editSession, useEditorStore.getState())) return;
+      worldListenersRef.current?.onPointerMove(event);
+      if ("latestSource" in owner && owner.editSession) trackDocumentEdit(owner.editSession, useEditorStore.getState());
+    });
     const onPointerMove = (event: PointerEvent) => {
       const drag = dragRef.current;
       if (drag && "latestSource" in drag && drag.pointerId === event.pointerId) {
         movingDrag = drag;
-        pendingMove = event;
-        frame ??= requestAnimationFrame(flushMove);
+        queue.push(drag, event);
       } else {
         worldListenersRef.current?.onPointerMove(event);
       }
     };
     const onPointerUp = (event: PointerEvent) => {
       const drag = dragRef.current;
-      if (drag && movingDrag === drag && "latestSource" in drag && drag.pointerId === event.pointerId && event.type !== "pointercancel") {
-        pendingMove = event;
+      if (drag?.pointerId !== event.pointerId) return;
+      if ("latestSource" in drag && drag.editSession && !canContinueDocumentEdit(drag.editSession, useEditorStore.getState())) {
+        queue.cancel();
+        setDragState(null);
+        setSnapLines([]);
+        setDragTooltip(null);
+        return;
       }
-      flushMove();
+      if (event.type === "pointercancel") queue.cancel();
+      else {
+        if (movingDrag === drag && "latestSource" in drag) queue.push(drag, event);
+        queue.flush();
+      }
       worldListenersRef.current?.onPointerUp(event);
       movingDrag = null;
     };
@@ -1424,14 +1434,14 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     window.addEventListener("keyup", onKeyUp, true);
 
     return () => {
-      if (frame != null) cancelAnimationFrame(frame);
+      queue.cancel();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
     };
-  }, [dragRef]);
+  }, [dragRef, setDragState, setSnapLines, setDragTooltip]);
 }
 
 function propertyCleanupElementIdsForDrag(drag: DragState): string[] {

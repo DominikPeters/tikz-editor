@@ -1,7 +1,7 @@
-import { createEditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
-import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
+import { executeDocumentEdit, resolveNestedEditSpan } from "../edit-execution";
+import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
-import { applyDeckEditAction, isDeckEditAction } from "@tikz-editor/core/beamer/index";
+import { isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
   DocumentSession,
   EditorAction,
@@ -11,10 +11,8 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import type { AssistantItem } from "../platform/types";
-import { buildEditParseOptions } from "../edit-parse-options";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
 import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
-import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import {
   createDocumentSession,
@@ -55,6 +53,7 @@ function initialUiState(): WorkspaceEphemeralState {
     hoveredElementId: null,
     activeCanvasDragKind: null,
     activeSourceScrubSourceId: null,
+    activeInspectorEditDocumentId: null,
     activeCanvasTextEditSourceId: null,
     canvasTextEditMask: null,
     showGrid: true,
@@ -755,7 +754,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
 
     case "APPLY_EDIT_ACTION": {
-      const documentId = activeId;
+      const documentId = action.documentId ?? activeId;
       const activeDoc = readDocument(workspace.documents, documentId);
       if (!activeDoc) {
         return state;
@@ -792,91 +791,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         (action.precomputedSource == null || action.precomputedSource === activeDoc.source)
       ) {
         result = action.precomputedResult;
-      } else if (isDeckEditAction(action.action)) {
-        // Deck targets resolve against the rendered frame layout — the deck
-        // analog of the stale-handle guard: refuse while the snapshot lags.
-        const deckFrame = activeDoc.snapshot.deck?.activeFrame;
-        if (!deckFrame || activeDoc.snapshot.source !== activeDoc.source) {
-          workspace = updateDocument(workspace, documentId, (doc) =>
-            applyEditWarningToDocument(doc, "Edit action skipped: the slide layout is still catching up."));
-          break;
-        }
-        result = applyDeckEditAction(activeDoc.source, deckFrame.layout, action.action);
-      } else if (nestedTikzRootActive) {
-        // Nested figure editing: the snapshot was computed from the masked
-        // document, so the action must be applied against the same masked
-        // text — statement ids and spans then match the edit handles
-        // exactly. The resulting patches carry absolute spans; replaying
-        // them onto the unmasked document yields the real next source.
-        const snapshot = activeDoc.snapshot;
-        const figure =
-          snapshot.figures.find((candidate) => candidate.id === snapshot.activeRootId) ??
-          (snapshot.figures.length > 0 ? snapshot.figures[0] : null);
-        if (figure == null || snapshot.source !== activeDoc.source) {
-          workspace = updateDocument(workspace, documentId, (doc) =>
-            applyEditWarningToDocument(doc, "Edit action skipped: the figure is still catching up."));
-          break;
-        }
-        const maskedSource = maskSourceOutsideSpan(activeDoc.source, figure.span);
-        const parseOptions = buildEditParseOptions({
-          documentId,
-          sourceRevision: activeDoc.sourceRevision,
-          source: maskedSource,
-          activeRootId: snapshot.activeRootId,
-          snapshot,
-          analysis: "none",
-          overrides: {
-            indentSize: action.parseOptions?.indentSize,
-            propertyWriteMode:
-              action.parseOptions?.propertyWriteMode ??
-              (action.recordInHistory === false ? "preview" : "commit")
-          }
-        });
-        const { sourceFingerprint } = parseOptions;
-        result = applyEditAction(maskedSource, snapshot.editHandles, action.action, {
-          geometry: snapshot.parseResult && snapshot.semanticResult ? createEditGeometrySession({
-            source: maskedSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult
-          }, { sourceFingerprint }, parseOptions) : undefined,
-          evaluateOptions: { sourceFingerprint },
-          parseOptions
-        });
-        if (result.kind === "success" || result.kind === "partial") {
-          const replayed = applySourcePatches(activeDoc.source, result.patches);
-          if (replayed.kind !== "success") {
-            workspace = updateDocument(workspace, documentId, (doc) =>
-              applyEditWarningToDocument(doc, "Edit action skipped: the figure edit did not apply cleanly."));
-            break;
-          }
-          result = { ...result, newSource: replayed.source };
-        }
       } else {
-        const parseOptions = buildEditParseOptions({
-          documentId,
-          sourceRevision: activeDoc.sourceRevision,
-          source: activeDoc.source,
-          activeRootId: activeDoc.activeRootId,
-          snapshot: activeDoc.snapshot,
-          analysis: "none",
-          overrides: {
-            indentSize: action.parseOptions?.indentSize,
-            propertyWriteMode:
-              action.parseOptions?.propertyWriteMode ??
-              (action.recordInHistory === false ? "preview" : "commit")
-          }
+        result = executeDocumentEdit({ ...activeDoc, documentId }, action.action, {
+          parseOptions: { ...action.parseOptions,
+            propertyWriteMode: action.parseOptions?.propertyWriteMode ?? (action.recordInHistory === false ? "preview" : "commit") }
         });
-        const { sourceFingerprint } = parseOptions;
-        result = applyEditAction(
-          activeDoc.source,
-          activeDoc.snapshot.editHandles,
-          action.action,
-          {
-            geometry: activeDoc.snapshot.source === activeDoc.source && activeDoc.snapshot.parseResult && activeDoc.snapshot.semanticResult
-              ? createEditGeometrySession({ source: activeDoc.source, parsed: activeDoc.snapshot.parseResult, semantic: activeDoc.snapshot.semanticResult },
-                { sourceFingerprint }, parseOptions) : undefined,
-            evaluateOptions: { sourceFingerprint },
-            parseOptions
-          }
-        );
       }
 
       if (result.kind !== "success" && result.kind !== "partial") {
@@ -893,9 +812,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
       const actionWarning = result.kind === "partial" ? result.reason : null;
       const incrementalChangedSourceIds =
-        action.action.kind === "movePathAttachedNode"
-          ? null
-          : isDeckEditAction(action.action)
+        isDeckEditAction(action.action)
             // Deck edits reconcile immediately (like session text edits):
             // an empty list skips the typing debounce without claiming an
             // incremental hint.
@@ -973,7 +890,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         action.action.kind === "moveHandle" || action.action.kind === "connectHandle" || action.action.kind === "moveAdornment" ? "move-handle" :
         action.action.kind === "splitPath" || action.action.kind === "joinPaths" || action.action.kind === "toggleClosedPath" ||
         action.action.kind === "deletePathPoint" || action.action.kind === "setPathPointKind" ? "path-edit" :
-        action.action.kind === "setProperty" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" || action.action.kind === "cleanupPropertyWrites" ||
+        action.action.kind === "setProperty" || action.action.kind === "setProperties" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" || action.action.kind === "cleanupPropertyWrites" ||
         action.action.kind === "positionNodeRelativeTo" || action.action.kind === "convertNodePositionToAbsolute" ? "set-property" :
         action.action.kind === "alignElements" ? "align" :
         action.action.kind === "distributeElements" ? "distribute" :
@@ -987,7 +904,16 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         "resize";
 
       const truncated = activeDoc.history.slice(0, activeDoc.historyIndex + 1);
-      const mergeKey = action.historyMergeKey;
+      const properties = action.action.kind === "setProperty" ? [action.action]
+        : action.action.kind === "setProperties" ? action.action.actions : undefined;
+      const mergeKey = action.historyMergeKey ?? (properties ? `property:${documentId}:${activeDoc.sourceRevision + 1}` : undefined);
+      const pendingPropertyCleanup = properties && mergeKey ? {
+        source: result.newSource, originalSource: activeDoc.source, properties,
+        elementIds: [...new Set(properties.map(property => property.elementId))],
+        activeFigureId: nestedTikzRootActive ? activeDoc.snapshot.parseResult?.activeFigureId : activeDoc.activeRootId ?? undefined,
+        nestedFigureSpan: nestedTikzRootActive ? resolveNestedEditSpan({ ...activeDoc, documentId }) : null,
+        sourceRevision: activeDoc.sourceRevision + 1, historyMergeKey: mergeKey
+      } : undefined;
       const lastIndex = truncated.length - 1;
       const lastEntry = truncated.at(lastIndex);
 
@@ -1007,6 +933,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         workspace = updateDocument(workspace, documentId, (doc) => ({
           ...doc,
           source: result.newSource,
+          pendingPropertyCleanup,
           sourceRevision: doc.sourceRevision + 1,
           lastEditChangedSourceIds: incrementalChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
@@ -1041,6 +968,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       workspace = updateDocument(workspace, documentId, (doc) => ({
         ...doc,
         source: result.newSource,
+        pendingPropertyCleanup,
         sourceRevision: doc.sourceRevision + 1,
         lastEditChangedSourceIds: incrementalChangedSourceIds,
         lastEditChangeToken: doc.lastEditChangeToken + 1,
@@ -1158,23 +1086,33 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
+    case "QUEUE_PROPERTY_CLEANUP": {
+      workspace = updateDocument(workspace, action.documentId, doc => doc.source !== action.task.source ? doc : ({
+        ...doc, pendingPropertyCleanup: { ...action.task, sourceRevision: doc.sourceRevision, historyMergeKey: action.historyMergeKey }
+      }));
+      break;
+    }
+
     case "SET_SOURCE_TRANSIENT": {
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       workspace = updateDocument(workspace, documentId, (doc) => {
-        if (doc.assistantLockReason) {
+        if (doc.assistantLockReason ||
+          (action.expectedSourceRevision != null && doc.sourceRevision !== action.expectedSourceRevision) ||
+          (action.expectedSource != null && doc.source !== action.expectedSource)) {
           return doc;
         }
         if (action.source === doc.source) {
           return doc;
         }
+        const patches = deriveSingleSourcePatch(doc.source, action.source);
         return {
           ...doc,
           source: action.source,
           sourceRevision: doc.sourceRevision + 1,
           lastEditChangedSourceIds: action.changedSourceIds ?? null,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
-          lastEditPatches: null,
-          lastEditPatchBaseRevision: null,
+          lastEditPatches: patches,
+          lastEditPatchBaseRevision: patches?.length ? doc.sourceRevision : null,
           lastEditWarningMessage: null,
           lastEditWarningToken:
             doc.lastEditWarningMessage != null
@@ -1381,6 +1319,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ui = { ...ui, creationFillColor: nextValue };
       break;
     }
+
+    case "SET_ACTIVE_INSPECTOR_EDIT":
+      if (ui.activeInspectorEditDocumentId === action.documentId) return state;
+      ui = { ...ui, activeInspectorEditDocumentId: action.documentId };
+      break;
 
     case "SET_ACTIVE_SOURCE_SCRUB":
       if (ui.activeSourceScrubSourceId === action.sourceId) return state;

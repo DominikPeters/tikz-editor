@@ -1,4 +1,4 @@
-import type { SchedulePropertyCleanup } from "./useDeferredPropertyCleanup";
+import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
 import type { ApplyActionWithFeedbackFn } from "./types";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";

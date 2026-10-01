@@ -91,7 +91,7 @@ export type DeckSnapshot = {
 };
 
 export type SessionSnapshotIncrementalInfo = {
-  trigger: Extract<IncrementalSemanticTrigger, "drag-element" | "drag-handle">;
+  trigger: IncrementalSemanticTrigger;
   changedSourceIds: string[];
   parseStrategy: IncrementalParseStats["strategy"];
   parseFallbackReason: IncrementalParseStats["fallbackReason"];
@@ -209,7 +209,6 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     const trigger = request.trigger ?? "other";
     const changedSourceIds = normalizeChangedSourceIds(request.changedSourceIds ?? []);
     const patches = normalizePatches(request.patches ?? []);
-    const isDragTrigger = trigger === "drag-element" || trigger === "drag-handle";
     const sourceFingerprint = buildSourceRevisionFingerprint({
       documentId: request.documentId,
       sourceRevision: request.sourceRevision,
@@ -223,7 +222,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         diagnostics: []
       };
     }
-    if (isDragTrigger && changedSourceIds.length > 0) {
+    if (changedSourceIds.length > 0) {
       const result = await computeSnapshotIncremental(
         request.source,
         request.sourceRevision ?? null,
@@ -740,7 +739,7 @@ async function computeSnapshotIncremental(
   changedSourceIds: string[],
   patches: SourcePatch[],
   patchBaseRevision: number | null,
-  trigger: Extract<IncrementalSemanticTrigger, "drag-element" | "drag-handle">,
+  trigger: IncrementalSemanticTrigger,
   sourceFingerprint: string | undefined,
   documentFileRef: DocumentFileRef | null,
   renderViewBox: SvgViewBox | null
@@ -783,6 +782,9 @@ async function computeSnapshotIncremental(
   const svgPadding = resolveSvgPadding(parseResult.source, parseResult.activeFigureId);
   phaseStartedAt = performance.now();
   const session = getIncrementalSemanticSession();
+  // A parser fallback may include changes outside the supplied edit targets.
+  // Rebuild semantics and SVG in that case instead of trusting narrower hints.
+  if (parseIncremental.stats.strategy === "full") session.reset();
   phases.getSemanticSession = performance.now() - phaseStartedAt;
   let reusePreviousModel = previousSvgModel;
 
@@ -814,7 +816,7 @@ async function computeSnapshotIncremental(
     padding: svgPadding,
     textEngine,
     viewBox: renderViewBox ?? undefined,
-    reuse: buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse)
+    reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
   });
   phases.emitSvg = performance.now() - phaseStartedAt;
   reusePreviousModel = svgResult.model;
@@ -852,7 +854,7 @@ async function computeSnapshotIncremental(
       padding: svgPadding,
       textEngine,
       viewBox: renderViewBox ?? undefined,
-      reuse: buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse)
+      reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
     });
     phases.emitSvgAfterTextFlush = performance.now() - phaseStartedAt;
     reusePreviousModel = svgResult.model;

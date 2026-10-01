@@ -33,6 +33,7 @@ export function createEditGeometrySession(
   evaluateOptions: EvaluateOptions = {},
   parseOptions: EditParseOptions = {}
 ): EditGeometrySession {
+  let boundsBySource: EditGeometrySession["boundsBySource"] | undefined;
   const evaluators = new Map<number, (source: string) => SceneElement[]>();
   const statementIndex = (sourceId: string): number | undefined => {
     const direct = snapshot.semantic.sourceStatementFirstIndexBySourceId[sourceId];
@@ -80,7 +81,7 @@ export function createEditGeometrySession(
   };
   return {
     ...snapshot,
-    boundsBySource: collectSourceWorldBounds(snapshot.semantic.scene.elements),
+    get boundsBySource() { return boundsBySource ??= collectSourceWorldBounds(snapshot.semantic.scene.elements); },
     prepare,
     measure(source, sourceId) {
       if (source === snapshot.source) return snapshot.semantic.scene.elements;

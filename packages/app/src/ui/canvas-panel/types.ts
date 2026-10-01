@@ -1,3 +1,4 @@
+import type { DocumentEditSession } from "../../edit-session";
 import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { AdornmentOwnerGeometry, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
@@ -129,6 +130,7 @@ export type DragState =
       lastAppliedTotalDelta: WorldVector;
       baseline: MoveElementsBaseline;
       latestSource: string;
+      editSession?: DocumentEditSession;
       snapTargets?: AxisSnapBuckets;
       adornmentDrag?: {
         ownerPoint: WorldPoint;
@@ -167,6 +169,7 @@ export type DragState =
       didEdit?: boolean;
       rectangleBaseline: PathRectangleResizeBaseline | null;
       latestSource: string;
+      editSession?: DocumentEditSession;
       snapContext: SnapContext | null;
       snapTargets?: AxisSnapBuckets;
       snapPoint?: WorldPoint;
@@ -209,6 +212,7 @@ export type DragState =
       lastPointerWorld: WorldPoint;
       preEditBaselineSource: string;
       latestSource: string;
+      editSession?: DocumentEditSession;
       historyMergeKey: string;
     }
   | {
@@ -216,6 +220,7 @@ export type DragState =
       geometry?: EditGeometrySession;
       didEdit?: boolean;
       latestSource: string;
+      editSession?: DocumentEditSession;
       snapTargets?: AxisSnapBuckets;
       pointerId: number;
       handleId: string;
