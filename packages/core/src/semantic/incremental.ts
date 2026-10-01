@@ -20,6 +20,7 @@ import {
   createSemanticEvaluationRun,
   evaluateSemanticStatementByIndex,
   finalizeSemanticEvaluationRun,
+  rememberGeometryCheckpoints,
   type EvaluateTikzResult
 } from "./evaluate.js";
 import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
@@ -36,9 +37,7 @@ import type { StyleSourceRef } from "./style-chain.js";
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
 export type IncrementalSemanticReplayMode = "full" | "suffix" | "selective";
 export type IncrementalSemanticCheckpointPreparation =
-  | "deferred"
   | "captured-during-evaluation"
-  | "captured-from-deferred"
   | "reused";
 
 export type IncrementalSemanticHints = {
@@ -104,26 +103,13 @@ type SemanticStatementFragment = {
   effectSummary: SemanticStatementEffectSummary;
 };
 
-type SemanticCheckpointRecipe = {
-  figure: TikzFigure;
-  source: string;
-  options: EvaluateOptions;
-};
-
-type DeferredSemanticCheckpoints = {
-  kind: "deferred";
-  recipe: SemanticCheckpointRecipe;
-};
-
 type CapturedSemanticCheckpoints = {
   kind: "captured";
   checkpointsBeforeStatement: Map<number, SemanticContextSnapshot>;
   featureUsageBeforeStatement: Map<number, FeatureUsage>;
 };
 
-type SemanticCheckpointCache =
-  | DeferredSemanticCheckpoints
-  | CapturedSemanticCheckpoints;
+type SemanticCheckpointCache = CapturedSemanticCheckpoints;
 
 type CachedSemanticRun = {
   source: string;
@@ -158,25 +144,17 @@ export function createIncrementalSemanticSession(
       ...defaultOptions,
       ...input.options
     };
-    const checkpointRecipe: SemanticCheckpointRecipe = {
-      figure: input.figure,
-      source: input.source,
-      options: { ...options }
-    };
     const run = createSemanticEvaluationRun(input.figure, input.source, options);
     const statementCount = run.expandedFigureBody.length;
     const statementIds = run.expandedFigureBody.map((statement) => statement.id);
     const hints = input.hints ?? {};
-    const incrementalRequested = (hints.changedSourceIds?.length ?? 0) > 0;
     const statefulGraphicsState = resolveContainsStatefulGraphicsState(input.source, hints, cached);
 
     if (statefulGraphicsState) {
       const full = evaluateFullyAndCache(
         run,
         statementIds,
-        "stateful-graphics-state",
-        checkpointRecipe,
-        false
+        "stateful-graphics-state"
       );
       cached = full.cached;
       return full.output;
@@ -187,9 +165,7 @@ export function createIncrementalSemanticSession(
       const full = evaluateFullyAndCache(
         run,
         statementIds,
-        fallback,
-        checkpointRecipe,
-        incrementalRequested
+        fallback
       );
       cached = full.cached;
       return full.output;
@@ -198,6 +174,17 @@ export function createIncrementalSemanticSession(
     const previous = cached!;
 
     const changedSourceIds = normalizeChangedSourceIds(hints.changedSourceIds ?? []);
+    // Children inherit a changed scope's options. Include their resource users
+    // in invalidation too, including paths outside the scope that use its nodes.
+    for (const sourceId of changedSourceIds.slice()) {
+      const index = previous.sourceStatementFirstIndexBySourceId.get(sourceId);
+      if (index == null || run.scopeSteps.get(run.expandedFigureBody[index]) !== "enter") continue;
+      const scopeId = run.expandedFigureBody[index].id;
+      for (let i = index + 1; i < statementCount; i++) {
+        if (run.expandedFigureBody[i].id === `${scopeId}:leave`) break;
+        changedSourceIds.push(previous.statementFragments[i].sourceId);
+      }
+    }
     const invalidation = collectGeometryInvalidation(previous.dependencies, {
       changedSourceIds
     });
@@ -205,9 +192,7 @@ export function createIncrementalSemanticSession(
       const full = evaluateFullyAndCache(
         run,
         statementIds,
-        "opaque-dependency",
-        checkpointRecipe,
-        true
+        "opaque-dependency"
       );
       cached = full.cached;
       return full.output;
@@ -216,40 +201,27 @@ export function createIncrementalSemanticSession(
     const affectedStatementIndices = invalidation.affectedSourceIds
       .map((sourceId) => previous.sourceStatementFirstIndexBySourceId.get(sourceId) ?? null)
       .filter((index): index is number => index != null && index >= 0 && index < statementCount);
+    // Changing scope options or their dependencies affects every statement in
+    // the scope, even when those statements consume no named resources directly.
+    for (const index of affectedStatementIndices.slice()) {
+      const statement = run.expandedFigureBody[index];
+      if (run.scopeSteps.get(statement) !== "enter") continue;
+      const end = run.expandedFigureBody.findIndex((candidate, i) => i > index && candidate.id === `${statement.id}:leave`);
+      for (let i = index + 1; i <= end; i++) affectedStatementIndices.push(i);
+    }
     if (affectedStatementIndices.length === 0) {
       const full = evaluateFullyAndCache(
         run,
         statementIds,
-        "unmapped-affected-source",
-        checkpointRecipe,
-        true
+        "unmapped-affected-source"
       );
       cached = full.cached;
       return full.output;
     }
 
     const checkpointInterval = previous.checkpointInterval;
-    let checkpointPreparation: IncrementalSemanticCheckpointPreparation = "reused";
-    let preparedCheckpoints: CapturedSemanticCheckpoints;
-    if (previous.checkpointCache.kind === "captured") {
-      preparedCheckpoints = previous.checkpointCache;
-    } else {
-      const captured = captureDeferredSemanticCheckpoints(previous);
-      if (!captured) {
-        const full = evaluateFullyAndCache(
-          run,
-          statementIds,
-          "checkpoint-missing",
-          checkpointRecipe,
-          true
-        );
-        cached = full.cached;
-        return full.output;
-      }
-      previous.checkpointCache = captured;
-      preparedCheckpoints = captured;
-      checkpointPreparation = "captured-from-deferred";
-    }
+    const checkpointPreparation = "reused" as const;
+    const preparedCheckpoints = previous.checkpointCache;
     const earliestAffectedIndex = Math.min(...affectedStatementIndices);
     const restoreIndex = findCheckpointIndexAtOrBefore(
       preparedCheckpoints.checkpointsBeforeStatement,
@@ -259,9 +231,7 @@ export function createIncrementalSemanticSession(
       const full = evaluateFullyAndCache(
         run,
         statementIds,
-        "checkpoint-missing",
-        checkpointRecipe,
-        true
+        "checkpoint-missing"
       );
       cached = full.cached;
       return full.output;
@@ -273,9 +243,7 @@ export function createIncrementalSemanticSession(
       const full = evaluateFullyAndCache(
         run,
         statementIds,
-        "feature-checkpoint-missing",
-        checkpointRecipe,
-        true
+        "feature-checkpoint-missing"
       );
       cached = full.cached;
       return full.output;
@@ -320,9 +288,7 @@ export function createIncrementalSemanticSession(
           const full = evaluateFullyAndCache(
             createSemanticEvaluationRun(input.figure, input.source, options),
             statementIds,
-            "runtime-error",
-            checkpointRecipe,
-            true
+            "runtime-error"
           );
           cached = full.cached;
           return full.output;
@@ -349,9 +315,7 @@ export function createIncrementalSemanticSession(
       const full = evaluateFullyAndCache(
         createSemanticEvaluationRun(input.figure, input.source, options),
         statementIds,
-        "runtime-error",
-        checkpointRecipe,
-        true
+        "runtime-error"
       );
       cached = full.cached;
       return full.output;
@@ -369,21 +333,21 @@ export function createIncrementalSemanticSession(
 function evaluateFullyAndCache(
   run: ReturnType<typeof createSemanticEvaluationRun>,
   statementIds: string[],
-  fallbackReason: IncrementalSemanticFallbackReason,
-  checkpointRecipe: SemanticCheckpointRecipe,
-  captureCheckpoints: boolean
+  fallbackReason: IncrementalSemanticFallbackReason
 ): {
   output: IncrementalSemanticEvaluateResult;
   cached: CachedSemanticRun;
 } {
   const statementCount = run.expandedFigureBody.length;
-  const checkpointInterval = DEFAULT_CHECKPOINT_INTERVAL;
+  const checkpointInterval = Math.max(DEFAULT_CHECKPOINT_INTERVAL, Math.ceil(statementCount / 128));
   const statementFragments: SemanticStatementFragment[] = [];
   const checkpointsBeforeStatement = new Map<number, SemanticContextSnapshot>();
   const featureUsageBeforeStatement = new Map<number, FeatureUsage>();
+  run.captureGeometryCheckpoints = false;
+  run.geometryCheckpoints = checkpointsBeforeStatement;
 
   for (let statementIndex = 0; statementIndex < statementCount; statementIndex += 1) {
-    if (captureCheckpoints && shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
+    if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
       checkpointsBeforeStatement.set(
         statementIndex,
         snapshotSemanticContext(run.context, { editHandlesMode: "length" })
@@ -393,13 +357,11 @@ function evaluateFullyAndCache(
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     statementFragments.push(createStatementFragment(evaluated));
   }
-  if (captureCheckpoints) {
-    checkpointsBeforeStatement.set(
-      statementCount,
-      snapshotSemanticContext(run.context, { editHandlesMode: "length" })
-    );
-    featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(run.featureUsage));
-  }
+  checkpointsBeforeStatement.set(
+    statementCount,
+    snapshotSemanticContext(run.context, { editHandlesMode: "length" })
+  );
+  featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(run.featureUsage));
 
   const semantic = finalizeSemanticEvaluationRun(
     run,
@@ -412,16 +374,7 @@ function evaluateFullyAndCache(
     statementFragments,
     editHandles: semantic.editHandles,
     checkpointInterval,
-    checkpointCache: captureCheckpoints
-      ? {
-          kind: "captured",
-          checkpointsBeforeStatement,
-          featureUsageBeforeStatement
-        }
-      : {
-          kind: "deferred",
-          recipe: checkpointRecipe
-        },
+    checkpointCache: { kind: "captured", checkpointsBeforeStatement, featureUsageBeforeStatement },
     dependencies: semantic.dependencies,
     sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
     finalFeatureUsage: cloneFeatureUsage(semantic.featureUsage)
@@ -438,9 +391,7 @@ function evaluateFullyAndCache(
         corridorEndStatementIndex: null,
         affectedStatementCount: statementCount,
         fallbackReason,
-        checkpointPreparation: captureCheckpoints
-          ? "captured-during-evaluation"
-          : "deferred",
+        checkpointPreparation: "captured-during-evaluation",
         checkpointCount: checkpointsBeforeStatement.size
       }
     },
@@ -498,6 +449,8 @@ function evaluateIncrementalSuffix(args: {
     previousCheckpoints.featureUsageBeforeStatement,
     restoreIndex
   );
+  run.captureGeometryCheckpoints = false;
+  run.geometryCheckpoints = checkpointsBeforeStatement;
 
   for (let statementIndex = restoreIndex; statementIndex < statementCount; statementIndex += 1) {
     if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
@@ -602,6 +555,8 @@ function evaluateSelectively(args: {
     previousCheckpoints.featureUsageBeforeStatement,
     restoreIndex
   );
+  run.captureGeometryCheckpoints = false;
+  run.geometryCheckpoints = checkpointsBeforeStatement;
 
   for (let statementIndex = restoreIndex; statementIndex <= corridorEndIndex; statementIndex += 1) {
     if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
@@ -638,9 +593,14 @@ function evaluateSelectively(args: {
         )
       );
     }
-    applyStatementEffectSummary(run.context, fragment.effectSummary, {
-      sourceId: fragment.sourceId
-    });
+    if (fragment.effectSummary.entersScope) {
+      // Resolve the unchanged scope options against the current enclosing frame.
+      // Its graphical children can still reuse their recorded effects/geometry.
+      nextFragments[statementIndex] = createStatementFragment(evaluateSemanticStatementByIndex(run, statementIndex));
+    } else {
+      applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.sourceId });
+      run.context.editHandles.push(...fragment.editHandles);
+    }
   }
   const finalFeatureUsage = mergeFeatureUsageAfterSelectiveReplay(
     previous.finalFeatureUsage,
@@ -768,7 +728,7 @@ function assembleSelectiveSemanticResult(args: {
   }
   scene.requiredTikzLibraries = listContextRequiredLibraries(run.context);
 
-  return {
+  const result: EvaluateTikzResult = {
     scene,
     diagnostics,
     featureUsage: finalFeatureUsage,
@@ -780,6 +740,8 @@ function assembleSelectiveSemanticResult(args: {
     symbolDependencyEdges: listContextSymbolDependencyEdges(run.context),
     unresolvedSymbols: listContextUnresolvedSymbols(run.context)
   };
+  rememberGeometryCheckpoints(result, run.geometryCheckpoints);
+  return result;
 }
 
 function createStatementFragment(
@@ -847,62 +809,6 @@ function countFragmentEditHandles(
     count += fragments[index]?.editHandles.length ?? 0;
   }
   return count;
-}
-
-function captureDeferredSemanticCheckpoints(
-  previous: CachedSemanticRun
-): CapturedSemanticCheckpoints | null {
-  if (previous.checkpointCache.kind === "captured") {
-    return previous.checkpointCache;
-  }
-
-  try {
-    const { recipe } = previous.checkpointCache;
-    const run = createSemanticEvaluationRun(
-      recipe.figure,
-      recipe.source,
-      recipe.options
-    );
-    const statementIds = run.expandedFigureBody.map((statement) => statement.id);
-    if (!sameStatementIds(previous.statementIds, statementIds)) {
-      return null;
-    }
-
-    const checkpointsBeforeStatement = new Map<number, SemanticContextSnapshot>();
-    const featureUsageBeforeStatement = new Map<number, FeatureUsage>();
-    const statementCount = run.expandedFigureBody.length;
-    for (let statementIndex = 0; statementIndex < statementCount; statementIndex += 1) {
-      if (shouldCaptureCheckpoint(statementIndex, previous.checkpointInterval)) {
-        checkpointsBeforeStatement.set(
-          statementIndex,
-          snapshotSemanticContext(run.context, { editHandlesMode: "length" })
-        );
-        featureUsageBeforeStatement.set(
-          statementIndex,
-          cloneFeatureUsage(run.featureUsage)
-        );
-      }
-      evaluateSemanticStatementByIndex(run, statementIndex);
-    }
-    if (run.context.editHandles.length !== previous.editHandles.length) {
-      return null;
-    }
-    checkpointsBeforeStatement.set(
-      statementCount,
-      snapshotSemanticContext(run.context, { editHandlesMode: "length" })
-    );
-    featureUsageBeforeStatement.set(
-      statementCount,
-      cloneFeatureUsage(run.featureUsage)
-    );
-    return {
-      kind: "captured",
-      checkpointsBeforeStatement,
-      featureUsageBeforeStatement
-    };
-  } catch {
-    return null;
-  }
 }
 
 function decideFallbackReason(

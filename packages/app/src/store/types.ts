@@ -1,3 +1,4 @@
+import type { EditingIdentityState, IdentityMove } from "../editing-identities";
 import type { SessionSnapshot } from "../compute";
 import type { EditAction, EditActionResult } from "@tikz-editor/core/edit/actions";
 import type { DeckEditAction } from "@tikz-editor/core/beamer/index";
@@ -73,6 +74,10 @@ export type CanvasTransform = {
 };
 
 export type HistoryEntry = {
+  identityRootsBefore?: Record<string, EditingIdentityState>;
+  identityRootsAfter?: Record<string, EditingIdentityState>;
+  identitiesBefore?: EditingIdentityState;
+  identitiesAfter?: EditingIdentityState;
   kind:
     | "move"
     | "move-handle"
@@ -118,6 +123,13 @@ export type FileRevision = {
 export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-needed" | "error";
 
 export type DocumentSession = {
+  /** Session-only identities for every figure visited in this document. */
+  editingIdentityRoots?: Record<string, EditingIdentityState>;
+  editingIdentities?: EditingIdentityState;
+  /** Monotonic for this document session, including discarded undo branches. */
+  nextEditingIdentityId?: number;
+  pendingIdentityMoves?: IdentityMove[];
+  editingTargetsStale?: boolean;
   pendingPropertyCleanup?: DeferredPropertyCleanup;
   id: string;
   title: string;

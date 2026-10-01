@@ -178,7 +178,7 @@ describe("interaction-helpers resize projection", () => {
 });
 
 describe("resolveHandleIdForDrag", () => {
-  it("rebinds to nearest same-kind handle when source ids are renumbered", () => {
+  it("refuses to redirect an edit to a nearby handle after IDs change", () => {
     const drag: any = {
       kind: "handle",
       handleId: "old-handle",
@@ -193,8 +193,8 @@ describe("resolveHandleIdForDrag", () => {
 
     const resolved = resolveHandleIdForDrag(drag, handles);
 
-    expect(resolved).toBe("line-h");
-    expect(drag.handleId).toBe("line-h");
-    expect(drag.sourceId).toBe("path:1");
+    expect(resolved).toBeNull();
+    expect(drag.handleId).toBe("old-handle");
+    expect(drag.sourceId).toBe("path:0");
   });
 });

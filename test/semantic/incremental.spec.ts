@@ -87,7 +87,7 @@ describe("semantic incremental evaluation", () => {
     });
   });
 
-  it("defers checkpoint capture until an eligible drag and reuses it on later frames", () => {
+  it("captures bounded checkpoints during rendering and reuses them from the first drag", () => {
     let source = makeIsolatedNodeFigure();
     const session = createIncrementalSemanticSession();
     const seededParsed = parseTikz(source, { recover: true });
@@ -102,8 +102,8 @@ describe("semantic incremental evaluation", () => {
       source,
       hints: { trigger: "other" }
     });
-    expect(seeded.stats.checkpointPreparation).toBe("deferred");
-    expect(seeded.stats.checkpointCount).toBe(0);
+    expect(seeded.stats.checkpointPreparation).toBe("captured-during-evaluation");
+    expect(seeded.stats.checkpointCount).toBeGreaterThan(0);
 
     source = source.replace("(10,10)", "(10.4,10.2)");
     const firstParsed = parseTikz(source, { recover: true });
@@ -117,7 +117,7 @@ describe("semantic incremental evaluation", () => {
     });
     expect(firstDrag.semantic).toEqual(evaluateTikzFigure(firstParsed.figure, source));
     expect(firstDrag.stats.strategy).toBe("incremental");
-    expect(firstDrag.stats.checkpointPreparation).toBe("captured-from-deferred");
+    expect(firstDrag.stats.checkpointPreparation).toBe("reused");
     expect(firstDrag.stats.checkpointCount).toBeGreaterThan(0);
 
     source = source.replace("(10.4,10.2)", "(10.8,10.4)");

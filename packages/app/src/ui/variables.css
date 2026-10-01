@@ -46,7 +46,7 @@
   --color-error:   #bf2c29;
   --color-warning: #a06010;
   --color-ok:      #268040;
-  --color-snap:    #ff4d4f; /* pink/red for canvas snap lines */
+  --color-snap:    #86658c; /* muted plum for canvas alignment */
 
   /* Tooltips & Overlays */
   --tooltip-dark-bg: rgba(30, 30, 30, 0.9);
@@ -121,7 +121,7 @@
   --color-error:   #e05555;
   --color-warning: #c07830;
   --color-ok:      #40a060;
-  --color-snap:    #ff6b6b;
+  --color-snap:    #b79bbb;
 
   /* Tooltips & Overlays */
   --tooltip-dark-bg: rgba(10, 10, 10, 0.95);

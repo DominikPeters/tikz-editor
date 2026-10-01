@@ -1,3 +1,4 @@
+import { nextEditHandleId } from "../edit-handles.js";
 import type { NodeItem, PathStatement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint } from "../../coords/points.js";
@@ -591,8 +592,8 @@ export function evaluateNodeItem(
 
       const sourceText = context.source.slice(rp.span.from, rp.span.to);
       context.editHandles.push({
-        id: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
-        runtimeId: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
+        id: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
+        runtimeId: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
         sourceRef: {
           sourceId: nodeHandleSourceId,
           sourceSpan: rp.span,
@@ -656,9 +657,9 @@ export function evaluateNodeItem(
 
   if (pathAttachmentMetadata) {
     const sourceText = context.source.slice(item.span.from, item.span.to);
-      context.editHandles.push({
-        id: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
-        runtimeId: `handle:${nodeHandleSourceId}:node-position:${context.editHandles.length}`,
+    context.editHandles.push({
+      id: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
+      runtimeId: nextEditHandleId(context, nodeHandleSourceId, "node-position"),
       sourceRef: {
         sourceId: nodeHandleSourceId,
         sourceSpan: item.optionsSpan ?? item.span,

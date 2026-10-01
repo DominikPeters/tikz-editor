@@ -49,7 +49,7 @@ export function collectGridSnaps({
     return;
   }
 
-  for (const point of selectionPoints) {
+  for (const [selectionIndex, point] of selectionPoints.entries()) {
     if (enabledAxis !== "y") {
       const gridX = roundSnapValue(Math.round(point.x / gridStep) * gridStep);
       const offsetX = gridX - point.x;
@@ -62,6 +62,7 @@ export function collectGridSnaps({
 
         nearest.x.push({
           kind: "grid",
+          selectionIndex,
           axis: "x",
           from: worldPoint(pt(point.x), pt(point.y)),
           to: worldPoint(pt(gridX), pt(point.y)),
@@ -84,6 +85,7 @@ export function collectGridSnaps({
 
         nearest.y.push({
           kind: "grid",
+          selectionIndex,
           axis: "y",
           from: worldPoint(pt(point.x), pt(point.y)),
           to: worldPoint(pt(point.x), pt(gridY)),

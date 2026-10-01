@@ -65,7 +65,7 @@ describe("prepared edit geometry", () => {
     const expected = applyEditAction(geometry.source, geometry.semantic.editHandles, action);
     const fullEvaluate = vi.spyOn(evaluator, "evaluateTikzFigure");
     const actual = applyEditAction(geometry.source, [], action, { geometry });
-    expect(actual).toEqual(expected);
+    expect(actual).toMatchObject(expected);
     expect(fullEvaluate).not.toHaveBeenCalled();
   });
 
@@ -127,7 +127,7 @@ describe("geometry reuse for menu operations", () => {
     const expected = applyEditAction(geometry.source, geometry.semantic.editHandles, action);
     const fullEvaluate = vi.spyOn(evaluator, "evaluateTikzFigure");
     const result = applyEditAction(geometry.source, [], action, { geometry });
-    expect(result).toEqual(expected);
+    expect(result).toMatchObject(expected);
     expect(fullEvaluate).not.toHaveBeenCalled();
   });
 

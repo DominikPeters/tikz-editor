@@ -46,6 +46,7 @@ export function applyReorderElementsAction(
     trackedSpansById.set(ref.id, { ...ref.span });
   }
 
+  const identitySpans = new Map(initialSnapshot.all.map(ref => [ref.id, { ...ref.span }]));
   let currentSource = source;
   const patches: SourcePatch[] = [];
 
@@ -89,6 +90,17 @@ export function applyReorderElementsAction(
         continue;
       }
 
+      for (const [id, span] of identitySpans) {
+        const owner = parentRefs.find(ref => ref.span.from <= span.from && ref.span.to >= span.to);
+        const destination = owner ? replacement.newSpansById.get(owner.id) : undefined;
+        if (owner && destination) {
+          const delta = destination.from - owner.span.from;
+          identitySpans.set(id, { from: span.from + delta, to: span.to + delta });
+        } else {
+          const [shifted] = shiftSpansAfterReplacement([span], appliedReplacement.oldSpan, appliedReplacement.newSpan);
+          if (shifted) identitySpans.set(id, shifted);
+        }
+      }
       patches.push(...applied.patches);
       currentSource = applied.source;
 
@@ -119,6 +131,7 @@ export function applyReorderElementsAction(
   return {
     kind: "success",
     newSource: currentSource,
+    identityMoves: initialSnapshot.all.map(ref => ({ oldSpan: ref.span, newSpan: identitySpans.get(ref.id)! })),
     patches,
     selectedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
     changedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : normalizedIds

@@ -25,7 +25,7 @@ export function correctMovedCalcDependencies(
     other.sourceRef.sourceSpan.from === handle.sourceRef.sourceSpan.from &&
     other.sourceRef.sourceSpan.to === handle.sourceRef.sourceSpan.to))) return null;
   if (calcHandles.length === 0 || (deltas.size === 1 && selectedHandles.length === 1)) return updatedSource;
-  const key = selectedHandles.map(handle => handle.id).join("\n");
+  const key = JSON.stringify([[...deltas.keys()].sort(), selectedHandles.map(handle => handle.id)]);
   let cache = geometry ? replayBaselines.get(geometry) : undefined;
   if (geometry && !cache) {
     cache = new Map();
@@ -33,7 +33,7 @@ export function correctMovedCalcDependencies(
   }
   let baseline = cache?.get(key);
   if (!baseline) {
-    baseline = prepareBaseline(source, selectedHandles, calcHandles, parseOptions);
+    baseline = prepareBaseline(source, selectedHandles, calcHandles, deltas, parseOptions);
     if (!baseline) return null;
     cache?.set(key, baseline);
   }
@@ -72,14 +72,19 @@ export function correctMovedCalcDependencies(
 }
 
 /** Preserve the unchanged prefix once per gesture; never evaluate the unrelated suffix. */
-function prepareBaseline(source: string, selected: readonly EditHandle[], calc: readonly EditHandle[], parseOptions: EditParseOptions) {
+function prepareBaseline(source: string, selected: readonly EditHandle[], calc: readonly EditHandle[], deltas: ReadonlyMap<string, WorldPoint>, parseOptions: EditParseOptions) {
   const run = createSemanticEvaluationRun(parseTikzForEdit(source, parseOptions).figure, source);
   const indices = new Map(selected.map(handle => [handle.id, run.expandedFigureBody.findIndex(statement => {
+    if (run.scopeSteps.has(statement)) return false;
     const span = run.sourceStatementSpanById.get(statement.id) ?? statement.span;
     return span.from <= handle.sourceRef.sourceSpan.from && span.to >= handle.sourceRef.sourceSpan.to;
   })]));
   if ([...indices.values()].some(index => index < 0)) return;
-  const firstIndex = Math.min(...indices.values());
+  // A moved ancestor changes the frame in which its children are evaluated.
+  // Restore before that scope's entry, not inside its old transform.
+  const movedScopes = run.expandedFigureBody.flatMap((statement, index) =>
+    run.scopeSteps.get(statement) === "enter" && deltas.has(statement.id) ? [index] : []);
+  const firstIndex = Math.min(...indices.values(), ...movedScopes);
   const lastIndex = Math.max(...calc.map(handle => indices.get(handle.id)!));
   for (let i = 0; i < firstIndex; i++) evaluateSemanticStatementByIndex(run, i);
   const checkpoint = snapshotSemanticContext(run.context, { editHandlesMode: "length" });

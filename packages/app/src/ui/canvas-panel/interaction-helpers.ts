@@ -209,43 +209,15 @@ export function resolveHandleIdForDrag(
   drag: Extract<DragState, { kind: "handle" }>,
   handles: EditHandle[]
 ): string | null {
-  const direct = handles.find((handle) => handle.id === drag.handleId);
-  if (direct) {
-    return direct.id;
-  }
-
-  const best = findClosestHandleMatch(handles, drag.lastKnownWorld, (handle) => handle.kind === drag.handleKind);
-
-  if (!best) {
-    return null;
-  }
-
-  drag.handleId = best.id;
-  drag.sourceId = best.sourceRef.sourceId;
-  drag.lastKnownWorld = { ...best.world };
-  return best.id;
-}
-
-function findClosestHandleMatch(
-  handles: readonly EditHandle[],
-  target: WorldPoint,
-  predicate: (handle: EditHandle) => boolean
-): EditHandle | null {
-  let best: EditHandle | null = null;
-  let bestDistSq = Number.POSITIVE_INFINITY;
-  for (const handle of handles) {
-    if (!predicate(handle)) {
-      continue;
-    }
-    const dx = handle.world.x - target.x;
-    const dy = handle.world.y - target.y;
-    const distSq = dx * dx + dy * dy;
-    if (distSq < bestDistSq) {
-      bestDistSq = distSq;
-      best = handle;
-    }
-  }
-  return best;
+  const matches = handles.filter(handle => handle.kind === drag.handleKind && (
+    drag.handleEditingId ? handle.editingId === drag.handleEditingId
+      : handle.id === drag.handleId && handle.sourceRef.sourceId === drag.sourceId
+  ));
+  if (matches.length !== 1) return null;
+  const match = matches[0];
+  drag.handleId = match.id;
+  drag.sourceId = match.sourceRef.sourceId;
+  return match.id;
 }
 
 function constrainRectCornerToSquare(startWorld: WorldPoint, cornerWorld: WorldPoint): WorldPoint {

@@ -223,6 +223,8 @@ export type SemanticStatementSuffixSkipKind =
   | "unsafe";
 
 export type SemanticStatementEffectSummary = {
+  exitsScope?: boolean;
+  entersScope?: boolean;
   producesNamedCoordinates: Array<{ key: string; point: WorldPoint }>;
   producesNamedNodeGeometries: Array<{ key: string; geometry: NamedNodeGeometry }>;
   producesNamedPaths: string[];
@@ -890,6 +892,7 @@ export function applyStatementEffectSummary(
   summary: SemanticStatementEffectSummary,
   options: { sourceId?: string } = {}
 ): void {
+  if (summary.exitsScope) { popFrame(context); return; }
   const sourceId = options.sourceId;
   if (sourceId) {
     context.dependencyBuilder.ensureSourceNode(sourceId);

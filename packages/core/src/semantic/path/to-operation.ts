@@ -1,3 +1,4 @@
+import { nextEditHandleId } from "../edit-handles.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -750,8 +751,8 @@ function pushSyntheticCurveHandle(args: {
 }): void {
   const syntheticSpan = makeSyntheticHandleSpan(args.context);
   args.context.editHandles.push({
-    id: `handle:${args.statementId}:${args.kind}:${args.context.editHandles.length}`,
-    runtimeId: `handle:${args.statementId}:${args.kind}:${args.context.editHandles.length}`,
+    id: nextEditHandleId(args.context, args.statementId, args.kind),
+    runtimeId: nextEditHandleId(args.context, args.statementId, args.kind),
     sourceRef: {
       sourceId: args.statementId,
       sourceSpan: syntheticSpan,

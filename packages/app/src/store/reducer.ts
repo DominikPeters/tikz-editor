@@ -1,3 +1,4 @@
+import { reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
 import { executeDocumentEdit, resolveNestedEditSpan } from "../edit-execution";
 import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
@@ -210,7 +211,7 @@ function updateDocument(
   if (!current) {
     return workspace;
   }
-  const next = updater(current);
+  const next = updateDocumentIdentities(current, updater(current));
   if (next === current) {
     return workspace;
   }
@@ -557,9 +558,32 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
               previousRootCount: snapshotRoots(doc.snapshot).length,
               roots: snapshotRoots(action.snapshot)
             });
+        const matchesCurrent = action.snapshot.source === doc.source;
+        const identities = matchesCurrent ? reconcileEditingIdentities(doc.editingIdentityRoots?.[action.snapshot.activeRootId ?? ""] ?? doc.editingIdentities, action.snapshot, doc.id, doc.nextEditingIdentityId) : undefined;
+        const byIdentity = new Map(identities?.entries.map(entry => [entry.id, entry.sourceId]));
+        const roots = identities ? { ...doc.editingIdentityRoots, [identities.rootId ?? ""]: { ...identities, selection: null } } : doc.editingIdentityRoots;
+        const history = [...doc.history];
+        if (identities) {
+          const currentEntry = history.at(doc.historyIndex < 0 ? history.length : doc.historyIndex);
+          if (currentEntry?.sourceAfter === doc.source) history[doc.historyIndex] = { ...currentEntry, identitiesAfter: identities, identityRootsAfter: roots };
+          const undoneEntry = history.at(doc.historyIndex + 1);
+          if (undoneEntry?.sourceBefore === doc.source) history[doc.historyIndex + 1] = { ...undoneEntry, identitiesBefore: identities, identityRootsBefore: roots };
+        }
+        const recoveredSelection = identities?.selection?.flatMap(id => byIdentity.get(id) ?? []);
+        const selectedElementIds = recoveredSelection && (recoveredSelection.length !== doc.selectedElementIds.size ||
+          recoveredSelection.some(id => !doc.selectedElementIds.has(id)))
+          ? new Set(recoveredSelection) : doc.selectedElementIds;
         return {
           ...doc,
-          snapshot: action.snapshot,
+          history: identities ? history : doc.history,
+          editingIdentityRoots: roots,
+          nextEditingIdentityId: identities?.nextId ?? doc.nextEditingIdentityId,
+          editingTargetsStale: matchesCurrent ? false : doc.editingTargetsStale,
+          editingIdentities: identities ? { ...identities, selection: null } : doc.editingIdentities,
+          selectedElementIds,
+          focusedScopeId: identities && doc.editingIdentities?.focused
+            ? byIdentity.get(doc.editingIdentities.focused) ?? null : doc.focusedScopeId,
+          snapshot: identities ? withEditingHandleIdentities(action.snapshot, identities) : action.snapshot,
           activeRootId: rootSelection.activeRootId,
           hasInitializedRootSelection: rootSelection.hasInitializedRootSelection,
           pendingRequestId: isCurrentPendingRequest ? null : doc.pendingRequestId,
@@ -764,6 +788,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         action.expectedDocumentRevision.sourceRevision !== activeDoc.sourceRevision ||
         action.precomputedSource !== activeDoc.source
       )) return state;
+      const resultOwnsGesture = documentId === state.activeDocumentId && state.activeCanvasDragKind != null && action.precomputedSource === activeDoc.source &&
+        action.precomputedResult?.geometryBaseSource != null && action.precomputedResult.identityMoves != null;
+      if (activeDoc.editingIdentities && activeDoc.editingTargetsStale && activeDoc.snapshot.source !== activeDoc.source && !resultOwnsGesture) {
+        workspace = updateDocument(workspace, documentId, doc => applyEditWarningToDocument(doc, "The figure is still catching up with the source edit."));
+        break;
+      }
       if (activeDoc.assistantLockReason) {
         return state;
       }
@@ -810,6 +840,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         break;
       }
 
+      const editingTargetsStale = ![
+        "moveElement", "moveElements", "moveHandle", "resizeElement", "rotateElement", "setProperty", "setProperties",
+        "alignElements", "distributeElements", "updateNodeText", "cleanupPropertyWrites", "movePathAttachedNode"
+      ].includes(action.action.kind);
       const actionWarning = result.kind === "partial" ? result.reason : null;
       const incrementalChangedSourceIds =
         isDeckEditAction(action.action)
@@ -864,6 +898,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         workspace = updateDocument(workspace, documentId, (doc) => ({
           ...doc,
           source: result.newSource,
+          pendingIdentityMoves: result.identityMoves,
+          editingTargetsStale,
           sourceRevision: doc.sourceRevision + 1,
           lastEditChangedSourceIds: incrementalChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
@@ -933,6 +969,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         workspace = updateDocument(workspace, documentId, (doc) => ({
           ...doc,
           source: result.newSource,
+          pendingIdentityMoves: result.identityMoves,
+          editingTargetsStale,
           pendingPropertyCleanup,
           sourceRevision: doc.sourceRevision + 1,
           lastEditChangedSourceIds: incrementalChangedSourceIds,
@@ -968,6 +1006,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       workspace = updateDocument(workspace, documentId, (doc) => ({
         ...doc,
         source: result.newSource,
+        pendingIdentityMoves: result.identityMoves,
+        editingTargetsStale,
         pendingPropertyCleanup,
         sourceRevision: doc.sourceRevision + 1,
         lastEditChangedSourceIds: incrementalChangedSourceIds,
@@ -1137,6 +1177,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       workspace = updateDocument(workspace, activeId, (current) => ({
         ...current,
         source: entry.sourceBefore,
+        editingIdentityRoots: entry.identityRootsBefore,
+        editingIdentities: entry.identitiesBefore ? { ...entry.identitiesBefore, nextId: Math.max(entry.identitiesBefore.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
         sourceRevision: current.sourceRevision + 1,
         lastEditChangedSourceIds: null,
         lastEditChangeToken: current.lastEditChangeToken + 1,
@@ -1169,6 +1211,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       workspace = updateDocument(workspace, activeId, (current) => ({
         ...current,
         source: entry.sourceAfter,
+        editingIdentityRoots: entry.identityRootsAfter,
+        editingIdentities: entry.identitiesAfter ? { ...entry.identitiesAfter, nextId: Math.max(entry.identitiesAfter.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
         sourceRevision: current.sourceRevision + 1,
         lastEditChangedSourceIds: null,
         lastEditChangeToken: current.lastEditChangeToken + 1,

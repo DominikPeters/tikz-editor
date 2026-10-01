@@ -73,6 +73,7 @@ export type SelectionSnapPoint = WorldPoint & {
 
 export type SnapBounds = WorldBounds & {
   sourceId: string;
+  sourceIds?: string[];
 };
 
 export type Gap = {
@@ -99,8 +100,9 @@ export type SnapContext = {
   viewportWorld: WorldBounds | null;
   selectedSourceIds: string[];
   guides: SnapGuides;
-  referencePoints: SnapPoint[];
-  referenceBounds: SnapBounds[];
+  /** Immutable arrays let candidate indexes be reused for the whole gesture. */
+  referencePoints: readonly SnapPoint[];
+  referenceBounds: readonly SnapBounds[];
   visibleGaps: {
     horizontal: Gap[];
     vertical: Gap[];
@@ -118,6 +120,8 @@ export type SnapLine =
        * the distinct reference elements on the line, for labelling.
        */
       type: "points";
+      primary?: { from: WorldPoint; to: WorldPoint; sourceId?: string };
+      referenceBounds?: SnapBounds[];
       axis: Axis;
       role?: SnapPointRole;
       points: WorldPoint[];
@@ -127,9 +131,11 @@ export type SnapLine =
       type: "gap";
       direction: "horizontal" | "vertical";
       gapKind: "center" | "equal";
+      sourceIds?: string[];
+      referenceBounds?: SnapBounds[];
       segments: Array<[WorldPoint, WorldPoint]>;
     }
-  | { type: "pointer"; axis: Axis; from: WorldPoint; to: WorldPoint; sourceIds?: string[] };
+  | { type: "pointer"; referenceBounds?: SnapBounds[]; axis: Axis; from: WorldPoint; to: WorldPoint; sourceIds?: string[] };
 
 export type SnapResult = {
   offset: WorldPoint;
@@ -156,6 +162,7 @@ export type BuildSnapContextInput = {
 };
 
 export type SnapSelectionTranslationInput = {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   selection: SelectionGeometry;
   rawDelta: WorldPoint;
@@ -165,6 +172,7 @@ export type SnapSelectionTranslationInput = {
 };
 
 export type SnapHandlePositionInput = {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   point: SelectionSnapPoint;
   /** Optional permitted direction through point (for edges and aspect-locked corners). */
@@ -185,6 +193,7 @@ export type SnapKeyboardNudgeInput = {
 export type SnapToolPointerKind = "node" | "line-end" | "rect-corner" | "circle-edge";
 
 export type SnapToolPointerInput = {
+  previousTargets?: AxisSnapBuckets;
   context: SnapContext;
   pointer: WorldPoint;
   kind: SnapToolPointerKind;
@@ -194,6 +203,7 @@ export type SnapToolPointerInput = {
 };
 
 export type PointSnapCandidate = {
+  selectionIndex?: number;
   kind: "point" | "grid" | "guide";
   axis: Axis;
   from: WorldPoint;

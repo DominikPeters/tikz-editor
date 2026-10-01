@@ -1,6 +1,7 @@
 import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
 import type { EditGeometrySession } from "./geometry-session.js";
+import { advanceIdentityMoves, collectIdentitySpans, geometryIdentityMoves, type IdentityMove } from "./identity-provenance.js";
 import type {
   EditHandle,
   EvaluateOptions
@@ -203,19 +204,8 @@ export type EditAction =
       };
     };
 
-export type EditActionResult =
-  | { kind: "success"; newSource: string; patches: SourcePatch[]; selectedSourceIds?: string[]; changedSourceIds?: string[] }
-  | {
-      kind: "partial";
-      newSource: string;
-      patches: SourcePatch[];
-      skippedHandles: string[];
-      reason: string;
-      selectedSourceIds?: string[];
-      changedSourceIds?: string[];
-    }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
+export type { EditActionResultLike as EditActionResult } from "./result-types.js";
+import type { EditActionResultLike as EditActionResult } from "./result-types.js";
 
 const DEFAULT_DUPLICATE_OFFSET_PT = 0.25 * PT_PER_CM;
 const GENERATED_NODE_NAME_RE = /(?:^|[^A-Za-z0-9_-])(node\d+)(?![A-Za-z0-9_-])/g;
@@ -404,11 +394,21 @@ export function applyEditAction(
         return applyResizeElementAction(source, action, evaluateOptions, parseOptions, geometry);
     }
   })();
-  const result = geometry && rawResult.kind === "unsupported" && (
+  let result = geometry && rawResult.kind === "unsupported" && (
     rawResult.reason === ADORNMENT_EDIT_NOOP_REASON ||
     rawResult.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON ||
     rawResult.reason === "rotateElement would not change the source."
   ) ? { kind: "success" as const, newSource: source, patches: [] } : rawResult;
+  if (geometry && (result.kind === "success" || result.kind === "partial") && (
+    result.identityMoves || ["moveHandle", "connectHandle", "moveElement", "moveElements", "resizeElement", "rotateElement",
+      "setProperty", "setProperties", "alignElements", "distributeElements", "updateNodeText", "cleanupPropertyWrites", "movePathAttachedNode"].includes(action.kind)
+  )) {
+    const baselineResult = normalizeResultPatches(source, result);
+    if (baselineResult.kind === "success" || baselineResult.kind === "partial") {
+      result = { ...result, identityMoves: geometryIdentityMoves(geometry, currentSource, result.newSource,
+        baselineResult.patches, result.identityMoves), geometryBaseSource: geometry.source };
+    }
+  }
   return normalizeResultPatches(currentSource, result);
 }
 
@@ -617,6 +617,15 @@ function applyConnectHandle(
   );
   const reorderedPatches = reordered ? reordered.patches : [];
   const newSource = reordered?.source ?? updated.source;
+  let identityMoves = collectIdentitySpans(parseTikzForEdit(source, parseOptions).figure.body);
+  if (nameResolution.insertedSpan) {
+    const from = nameResolution.insertedSpan.from;
+    identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: nameResolution.insertedSpan,
+      newSpan: { from, to: from + nameResolution.insertedLength },
+      replacement: nameResolution.source.slice(from, from + nameResolution.insertedLength) }]);
+  }
+  identityMoves = advanceIdentityMoves(identityMoves, [{ oldSpan: adjustedHandleSpan, newSpan: updated.changedSpan, replacement }]);
+  if (reordered) identityMoves = advanceIdentityMoves(identityMoves, reordered.patches, reordered.identityMoves);
   const patches = nameResolution.insertedSpan
     ? [computeMinimalReplacementPatch(source, newSource)]
     : [
@@ -631,6 +640,7 @@ function applyConnectHandle(
     kind: "success",
     newSource,
     patches,
+    identityMoves,
     // Reordering can renumber statement source ids, so avoid stale id hints.
     // Returning [] forces the drag path to use full recompute for this frame.
     changedSourceIds: reordered || nameResolution.insertedSpan ? [] : [handle.sourceRef.sourceId]
@@ -994,7 +1004,7 @@ function moveStatementAfterNamedDefinition(
   movingStatementId: string,
   name: string,
   parseOptions: EditParseOptions = {}
-): { source: string; patches: SourcePatch[] } | null {
+): { source: string; patches: SourcePatch[]; identityMoves: IdentityMove[] } | null {
   const snapshot = parseStatementSnapshot(source, parseOptions);
   const movingRef = snapshot.byId.get(movingStatementId);
   if (!movingRef) {
@@ -1049,7 +1059,11 @@ function moveStatementAfterNamedDefinition(
 
   return {
     source: applied.source,
-    patches: applied.patches
+    patches: applied.patches,
+    identityMoves: parentRefs.flatMap(ref => {
+      const newSpan = replacement.newSpansById.get(ref.id);
+      return newSpan ? [{ oldSpan: ref.span, newSpan }] : [];
+    })
   };
 }
 

@@ -2,6 +2,7 @@ import type { ParseTikzResult } from "../parser/index.js";
 import type { EvaluateOptions, SceneElement } from "../semantic/types.js";
 import {
   createSemanticEvaluationRun,
+  getGeometryCheckpoints,
   evaluateSemanticStatementByIndex,
   type EvaluateTikzResult
 } from "../semantic/evaluate.js";
@@ -25,8 +26,8 @@ export type EditGeometrySession = EditGeometrySnapshot & {
 /**
  * Reuse the rendered snapshot for direct edits. Layout-dependent edits replay
  * only the containing statement, with its original styles, symbols and RNG state.
- * A scope is the replay unit for a node inside a scope; later statements are not
- * needed to measure that node. Candidate sources must only change that unit.
+ * Ordinary scopes have explicit entry/exit steps, so nested nodes replay alone.
+ * Expanded templates remain atomic. Candidate sources must only change that unit.
  */
 export function createEditGeometrySession(
   snapshot: EditGeometrySnapshot,
@@ -52,7 +53,10 @@ export function createEditGeometrySession(
     const baseline = createSemanticEvaluationRun(snapshot.parsed.figure, snapshot.source, evaluateOptions);
     const statement = baseline.expandedFigureBody[index];
     if (!statement) throw new Error(`No statement at geometry index ${index}`);
-    for (let i = 0; i < index; i++) evaluateSemanticStatementByIndex(baseline, i);
+    const checkpoints = getGeometryCheckpoints(snapshot.semantic);
+    const restoreIndex = checkpoints ? Math.max(-1, ...[...checkpoints.keys()].filter(i => i <= index)) : -1;
+    if (restoreIndex >= 0) restoreSemanticContext(baseline.context, checkpoints!.get(restoreIndex)!, { editHandleSource: snapshot.semantic.editHandles });
+    for (let i = Math.max(0, restoreIndex); i < index; i++) evaluateSemanticStatementByIndex(baseline, i);
     const checkpoint = snapshotSemanticContext(baseline.context, { editHandlesMode: "length" });
     const prefixHandles = baseline.context.editHandles.slice();
     const sourceSpan = baseline.sourceStatementSpanById.get(statement.id) ?? statement.span;
@@ -67,11 +71,18 @@ export function createEditGeometrySession(
       }
       const parsed = parseTikzForEdit(source, { ...parseOptions, analysisSession: null, analysisView: null });
       const run = createSemanticEvaluationRun(parsed.figure, source, evaluateOptions);
+      run.captureGeometryCheckpoints = false;
       if (run.expandedFigureBody[index]?.id !== statement.id) {
         throw new Error("Prepared geometry cannot measure a structural edit.");
       }
       restoreSemanticContext(run.context, checkpoint, { editHandleSource: prefixHandles });
       const elements = evaluateSemanticStatementByIndex(run, index).elements;
+      if (run.scopeSteps.get(run.expandedFigureBody[index]) === "enter") {
+        for (let i = index + 1; i < run.expandedFigureBody.length; i++) {
+          elements.push(...evaluateSemanticStatementByIndex(run, i).elements);
+          if (run.expandedFigureBody[i].id === `${statement.id}:leave`) break;
+        }
+      }
       // Node resize tries several candidates per frame. Keep recent candidates,
       // without retaining every source string for the lifetime of a long drag.
       if (cache.size >= 24) cache.delete(cache.keys().next().value!);

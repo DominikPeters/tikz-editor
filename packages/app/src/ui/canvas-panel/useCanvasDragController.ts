@@ -171,6 +171,15 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       if (snapshotSource !== source) return;
       const currentHandleId = resolveHandleIdForDrag({ ...drag }, snapshotEditHandles);
       const handle = snapshotEditHandles.find(handle => handle.id === currentHandleId);
+      if (!handle) {
+        setDragState(null);
+        setSnapLines([]);
+        setNodeAnchorOverlay(null);
+        setDragTooltip(null);
+        setWarning("The edited handle changed. Start a new drag.");
+        wasSnappedRef.current = false;
+        return;
+      }
       setSnapLines(handle && drag.snapContext && drag.snapTargets
         ? pointerSnapLines(drag.snapContext, handle.world, drag.snapTargets) : []);
       return;
@@ -192,7 +201,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     setSnapLines(lines);
     if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
     wasSnappedRef.current = lines.length > 0;
-  }, [dragRef, snapshotEditHandles, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip]);
+  }, [dragRef, snapshotEditHandles, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip, setNodeAnchorOverlay, setWarning]);
 
   useLayoutEffect(() => {
     function applyGestureAction(drag: Extract<DragState, { latestSource: string }>, action: Parameters<ApplyActionWithFeedbackFn>[0]) {
@@ -380,8 +389,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       }
 
       if (drag.kind === "tool-create") {
-        const snapped = snapToolCreatePointer({ context: drag.snapContext, start: drag.startWorld,
+        const snapped = snapToolCreatePointer({ context: drag.snapContext, previousTargets: drag.previousToolTargets, start: drag.startWorld,
           pointer: world, mode: drag.toolMode, shiftKey: event.shiftKey, bypass: ctrlOrMeta });
+        drag.previousToolTargets = "targets" in snapped ? snapped.targets : undefined;
         let nextRawWorld = snapped.snappedPoint ?? world;
         let endpointAnchorOverlay: NodeAnchorOverlayState | null = null;
         if (drag.toolMode === "addLine" || drag.toolMode === "addArrow") {
@@ -454,11 +464,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const snapped = drag.snapContext
           ? snapToolPointer({
               context: drag.snapContext,
+              previousTargets: drag.previousToolTargets,
               pointer: world,
               kind: "line-end",
               modifiers: { ctrlOrMeta }
             })
           : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
+        drag.previousToolTargets = "targets" in snapped ? snapped.targets : undefined;
         drag.rawCurrentWorld = snapped.snappedPoint ?? world;
         drag.currentWorld = drag.rawCurrentWorld;
         setBezierBendDraft({ ...drag });
@@ -484,11 +496,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const snapped = drag.snapContext
           ? snapToolPointer({
               context: drag.snapContext,
+              previousTargets: drag.previousToolTargets,
               pointer: world,
               kind: "line-end",
               modifiers: { ctrlOrMeta }
             })
           : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
+        drag.previousToolTargets = "targets" in snapped ? snapped.targets : undefined;
         drag.rawBendWorld = snapped.snappedPoint ?? world;
         drag.bendWorld = drag.rawBendWorld;
         if (!drag.isBending) {
@@ -577,6 +591,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         }, rectangleBaseline.context) : projectResizePointer(drag, world, event.shiftKey);
         const snap = projected && drag.snapContext ? snapHandlePosition({
           context: drag.snapContext,
+          previousTargets: drag.snapTargets,
           point: { ...projected.point, role: "corner" },
           direction: projected.direction,
           modifiers: { ctrlOrMeta }
@@ -914,6 +929,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const snapped = drag.snapContext && drag.initialSelection
           ? snapSelectionTranslation({
               context: drag.snapContext,
+              previousTargets: drag.snapTargets,
               selection: drag.initialSelection,
               rawDelta: makeWorldPoint(rawTotalDelta.x, rawTotalDelta.y),
               modifiers: { ctrlOrMeta }
@@ -972,9 +988,11 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       const resolvedHandleId = drag.geometry ? drag.handleId : resolveHandleIdForDrag(drag, snapshotEditHandles);
       if (!resolvedHandleId) {
         drag.activeEndpointAnchor = null;
+        setDragState(null);
+        setSnapLines([]);
         setNodeAnchorOverlay(null);
         setDragTooltip(null);
-        setWarning("Handle is no longer available after recompute. Release and drag again.");
+        setWarning("The edited handle changed. Start a new drag.");
         maybeTriggerSnapFeedback(false);
         return;
       }
@@ -982,6 +1000,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       const snapped = drag.snapContext
         ? snapHandlePosition({
             context: drag.snapContext,
+            previousTargets: drag.snapTargets,
             point: world,
             sourceId: drag.sourceId,
             modifiers: { ctrlOrMeta }
@@ -1097,8 +1116,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               : drag.activeEndpointAnchor
             : null;
         const finalWorldPointerWorld = finalEndpointAnchor?.world ?? rawFinalWorld;
-        const snapped = snapToolCreatePointer({ context: drag.snapContext, start: drag.startWorld,
+        const snapped = snapToolCreatePointer({ context: drag.snapContext, previousTargets: drag.previousToolTargets, start: drag.startWorld,
           pointer: finalWorldPointerWorld, mode: drag.toolMode, shiftKey: event.shiftKey, bypass: ctrlOrMeta });
+        drag.previousToolTargets = "targets" in snapped ? snapped.targets : undefined;
         const snappedWorld = snapped.snappedPoint ?? finalWorldPointerWorld;
         let finalWorld = resolveToolCreateCurrentWorld(
           drag.startWorld,
@@ -1198,11 +1218,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const snapped = drag.snapContext
           ? snapToolPointer({
               context: drag.snapContext,
+              previousTargets: drag.previousToolTargets,
               pointer: rawFinalWorld,
               kind: "line-end",
               modifiers: { ctrlOrMeta }
             })
           : { snappedPoint: rawFinalWorld, lines: [] as SnapLine[] };
+        drag.previousToolTargets = "targets" in snapped ? snapped.targets : undefined;
         const finalBend = snapped.snappedPoint ?? rawFinalWorld;
         setSnapLines(snapped.lines);
         setToolCursorWorld(finalBend);
@@ -1239,11 +1261,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const snapped = drag.snapContext
           ? snapToolPointer({
               context: drag.snapContext,
+              previousTargets: drag.previousToolTargets,
               pointer: rawFinalBend,
               kind: "line-end",
               modifiers: { ctrlOrMeta }
             })
           : { snappedPoint: rawFinalBend, lines: [] as SnapLine[] };
+        drag.previousToolTargets = "targets" in snapped ? snapped.targets : undefined;
         const finalBend = snapped.snappedPoint ?? rawFinalBend;
         const thresholdWorld = PATH_TOOL_BEND_DRAG_THRESHOLD_PX / Math.max(drag.snapContext?.zoom ?? 1, 1e-3);
         const asBezier =

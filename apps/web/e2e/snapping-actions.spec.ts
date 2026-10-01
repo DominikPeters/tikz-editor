@@ -36,7 +36,7 @@ async function event(page: Page, kind: "pointermove" | "pointerup", point: { x: 
 test.beforeEach(async ({ page }) => { await resetStorageBeforeNavigation(page); await gotoApp(page); });
 
 for (const example of [
-  { name: "node", body: String.raw`\draw (0,2) rectangle (2,0);\node[draw,inner sep=0,outer sep=0,minimum width=2cm,minimum height=1cm] at (4,.5) {};`, id: "path:1", dy: .94, expected: /minimum height=85\.3582677pt/ },
+  { name: "node", body: String.raw`\draw (0,2) rectangle (2,0);\node[draw,inner sep=0,outer sep=0,minimum width=2cm,minimum height=1cm] at (4,.5) {};`, id: "path:1", dy: .94, expected: /minimum height=[\d.]+pt/ },
   { name: "circle", body: String.raw`\draw (0,3) rectangle (2,1);\draw (4,1) circle (1cm);`, id: "path:1", dy: .94, expected: /circle \(2cm\)/ },
   { name: "ellipse", body: String.raw`\draw (0,3) rectangle (2,1);\draw (4,1) ellipse (1cm and .5cm);`, id: "path:1", dy: 1.44, expected: /ellipse \(1cm and 2cm\)/ },
   { name: "scope", body: String.raw`\draw (0,3) rectangle (2,1);\begin{scope}\draw (3,2) rectangle (5,1);\end{scope}`, id: "scope:1", dy: .94, expected: /yscale=/ }
@@ -51,6 +51,10 @@ for (const example of [
       await expectSourceCanvasConsistency(page);
     }
     await expect.poll(() => readSource(page)).toMatch(example.expected);
+    if (example.name === "node") {
+      const height = Number((await readSource(page)).match(/minimum height=([\d.]+)pt/)?.[1]);
+      expect(height).toBeCloseTo(3 * ptPerCm, 5);
+    }
     await expect(page.locator("g[class*='snapOverlay']")).toHaveCount(1);
     const profile = await page.evaluate(() => (window as TestWindow).__TIKZ_EDITOR_APP_TEST_API__.getProfilingSnapshot());
     const edits = profile.computeTimings.filter(timing => (timing.changedSourceCount ?? 0) > 0);

@@ -215,6 +215,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         handleId: handle.id,
         sourceId: handle.sourceRef.sourceId,
         handleKind: handle.kind,
+        handleEditingId: handle.editingId,
         cursor: handleCursor,
         lastKnownWorld: { ...handle.world },
         snapContext,

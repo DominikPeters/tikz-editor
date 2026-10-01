@@ -22,8 +22,8 @@ export function createEditHandle(
   const base = {
     // Keep IDs stable across coordinate text rewrites by avoiding source-span offsets.
     // This allows ongoing drags to continue after recompute snapshots.
-    id: `handle:${sourceId}:${kind}:${context.editHandles.length}`,
-    runtimeId: `handle:${sourceId}:${kind}:${context.editHandles.length}`,
+    id: nextEditHandleId(context, sourceId, kind),
+    runtimeId: nextEditHandleId(context, sourceId, kind),
     sourceRef: {
       sourceId,
       sourceSpan,
@@ -99,4 +99,21 @@ function determineRewriteMode(evaluated: EvaluatedCoordinate): "direct" | "delta
   if (form === "cartesian" || form === "polar" || form === "xyz") return "direct";
   // named, calc, explicit world-only (perpendicular/intersection), unknown
   return "unsupported";
+}
+
+// Counters follow the handle array, so restoring a compact checkpoint rebuilds
+// them from that prefix. Appending handles for another object cannot renumber us.
+const handleCounters = new WeakMap<SemanticContext, { handles: EditHandle[]; count: number; byOwner: Map<string, number> }>();
+export function nextEditHandleId(context: SemanticContext, sourceId: string, kind: string): string {
+  let state = handleCounters.get(context);
+  if (state?.handles !== context.editHandles || state.count > context.editHandles.length) {
+    state = { handles: context.editHandles, count: 0, byOwner: new Map() };
+    handleCounters.set(context, state);
+  }
+  for (; state.count < context.editHandles.length; state.count++) {
+    const handle = context.editHandles[state.count];
+    const key = `${handle.sourceRef.sourceId}:${handle.kind}`;
+    state.byOwner.set(key, (state.byOwner.get(key) ?? 0) + 1);
+  }
+  return `handle:${sourceId}:${kind}:${state.byOwner.get(`${sourceId}:${kind}`) ?? 0}`;
 }

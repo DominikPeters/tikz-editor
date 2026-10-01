@@ -307,16 +307,13 @@
   opacity: 0.85;
 }
 
-.snapGapArrowHead {
-  fill: var(--color-snap);
-}
-
 .snapGapLabelRect {
-  fill: var(--color-snap);
+  fill: var(--bg-pane);
+  stroke: var(--border);
 }
 
 .snapGapLabelText {
-  fill: #fff;
+  fill: var(--text-muted);
   font-family: var(--font-ui, sans-serif);
   pointer-events: none;
   user-select: none;
@@ -1196,4 +1193,17 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+}
+
+.snapReference {
+  fill: none;
+  stroke: var(--color-snap);
+  stroke-dasharray: 3 3;
+  opacity: .45;
+  vector-effect: non-scaling-stroke;
+}
+.snapReferencePoint {
+  fill: var(--bg-pane);
+  stroke: var(--color-snap);
+  vector-effect: non-scaling-stroke;
 }

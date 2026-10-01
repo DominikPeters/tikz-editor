@@ -1,3 +1,4 @@
+import { nextEditHandleId } from "../edit-handles.js";
 import type { PathItem, PathOptionItem, Span } from "../../ast/types.js";
 import { frameLocalPoint, worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -79,8 +80,8 @@ export function resolveNodeTargetPoint(
     const insertionOffset = resolveImplicitNodePlacementInsertionOffset(item, context.source);
     const implicitWorldPoint = defaultPoint ?? context.currentPoint ?? wp(0, 0);
     context.editHandles.push({
-      id: `handle:${handleSourceId}:node-position:${context.editHandles.length}`,
-      runtimeId: `handle:${handleSourceId}:node-position:${context.editHandles.length}`,
+      id: nextEditHandleId(context, handleSourceId, "node-position"),
+      runtimeId: nextEditHandleId(context, handleSourceId, "node-position"),
       sourceRef: {
         sourceId: handleSourceId,
         sourceSpan: { from: insertionOffset, to: insertionOffset },

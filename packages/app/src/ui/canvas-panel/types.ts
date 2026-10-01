@@ -224,6 +224,7 @@ export type DragState =
       snapTargets?: AxisSnapBuckets;
       pointerId: number;
       handleId: string;
+      handleEditingId?: string;
       sourceId: string;
       handleKind: EditHandle["kind"];
       cursor: string;
@@ -259,6 +260,7 @@ export type DragState =
       currentWorld: WorldPoint;
       activeEndpointAnchor: NodeAnchorTarget | null;
       snapContext: SnapContext | null;
+      previousToolTargets?: AxisSnapBuckets;
     }
   | {
       kind: "tool-bezier-bend";
@@ -268,6 +270,7 @@ export type DragState =
       rawCurrentWorld: WorldPoint;
       currentWorld: WorldPoint;
       snapContext: SnapContext | null;
+      previousToolTargets?: AxisSnapBuckets;
     }
   | {
       kind: "tool-path-segment";
@@ -280,6 +283,7 @@ export type DragState =
       bendWorld: WorldPoint;
       isBending: boolean;
       snapContext: SnapContext | null;
+      previousToolTargets?: AxisSnapBuckets;
     }
   | {
       kind: "tool-freehand";

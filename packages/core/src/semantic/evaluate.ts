@@ -62,6 +62,8 @@ import {
   withDependencySource,
   writeContextColorAlias,
   writeContextMacroBinding,
+  snapshotSemanticContext,
+  type SemanticContextSnapshot,
   type SemanticContext,
   type SemanticStatementEffectSummary,
   type SemanticStatementSuffixSkipKind,
@@ -165,6 +167,9 @@ export type SemanticEvaluationRun = {
   templateLocalIdByExpandedId: Map<string, string>;
   rootFramePushed: boolean;
   baseDiagnosticsCount: number;
+  scopeSteps: WeakMap<Statement, "enter" | "leave">;
+  geometryCheckpoints: Map<number, SemanticContextSnapshot>;
+  captureGeometryCheckpoints: boolean;
 };
 
 function pushStyleDiagnostics(
@@ -320,13 +325,18 @@ export function createSemanticEvaluationRun(
     pushStyleDiagnostics(diagnostics, rootDelta.diagnostics, "Figure option issue", figureSourceRef.sourceSpan ?? figure.span);
   }
 
+  const scopeSteps = new WeakMap<Statement, "enter" | "leave">();
+  const evaluationBody = splitScopeSteps(activeExpandedFigureBody, scopeSteps, expanded.statementAttribution, expanded.statementSourceMaps);
   return {
     figure,
     source,
     context,
+    scopeSteps,
+    geometryCheckpoints: new Map(),
+    captureGeometryCheckpoints: true,
     diagnostics,
     featureUsage,
-    expandedFigureBody: activeExpandedFigureBody,
+    expandedFigureBody: evaluationBody,
     sourceStatementSpanById: buildSourceStatementSpanById(figure.body),
     statementAttribution: expanded.statementAttribution,
     statementSourceMaps: expanded.statementSourceMaps,
@@ -347,6 +357,13 @@ export function evaluateSemanticStatementByIndex(
   if (!statement) {
     throw new Error(`Statement index ${statementIndex} is out of bounds`);
   }
+  // Sparse checkpoints are retained with this revision, never with later source.
+  // Cap their count for very large generated figures.
+  const interval = Math.max(8, Math.ceil(run.expandedFigureBody.length / 128));
+  if (run.captureGeometryCheckpoints && statementIndex % interval === 0) {
+    run.geometryCheckpoints.set(statementIndex, snapshotSemanticContext(run.context, { editHandlesMode: "length" }));
+  }
+  const scopeStep = run.scopeSteps.get(statement);
   const handleStart = run.context.editHandles.length;
   const diagnosticsStart = run.diagnostics.length;
   const beforeCurrentPoint = run.context.currentPoint ? { ...run.context.currentPoint } : null;
@@ -355,7 +372,10 @@ export function evaluateSemanticStatementByIndex(
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(
       { rng: run.context.mathRandom },
-      () => evaluateStatement(statement, run.context, run.diagnostics, run.featureUsage, run.statementMacroAttribution)
+      () => {
+        if (scopeStep === "leave") { popFrame(run.context); return []; }
+        return evaluateStatement(statement, run.context, run.diagnostics, run.featureUsage, run.statementMacroAttribution, scopeStep === "enter");
+      }
     )
   );
   const sourceId = run.statementAttribution.get(statement)?.sourceId ?? statement.id;
@@ -415,7 +435,9 @@ export function evaluateSemanticStatementByIndex(
     effectSummary.opaque = true;
     effectSummary.opaqueReasons = opaqueReasons;
   }
-  effectSummary.suffixSkipKind = classifyStatementSuffixSkipKind(statement, opaqueReasons);
+  effectSummary.suffixSkipKind = scopeStep === "leave" ? "safe" : classifyStatementSuffixSkipKind(statement, opaqueReasons);
+  if (scopeStep === "enter") effectSummary.entersScope = true;
+  if (scopeStep === "leave") effectSummary.exitsScope = true;
   return {
     statementId: statement.id,
     sourceId,
@@ -494,7 +516,7 @@ export function finalizeSemanticEvaluationRun(
   }
   const requiredTikzLibraries = listContextRequiredLibraries(run.context);
 
-  return {
+  const result: EvaluateTikzResult = {
     scene: {
       kind: "SceneFigure",
       span: run.figure.span,
@@ -521,6 +543,8 @@ export function finalizeSemanticEvaluationRun(
     symbolDependencyEdges: listContextSymbolDependencyEdges(run.context),
     unresolvedSymbols: listContextUnresolvedSymbols(run.context)
   };
+  rememberGeometryCheckpoints(result, run.geometryCheckpoints);
+  return result;
 }
 
 function buildSourceStatementFirstIndexBySourceId(run: SemanticEvaluationRun): Record<string, number> {
@@ -878,7 +902,8 @@ function evaluateStatement(
   context: ReturnType<typeof createSemanticContext>,
   diagnostics: Diagnostic[],
   featureUsage: FeatureUsage,
-  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>
+  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>,
+  enterScopeOnly = false
 ): SceneElement[] {
   if (statement.kind === "Path") {
     markFeature(featureUsage, "path_statement", "supported");
@@ -1187,6 +1212,7 @@ function evaluateStatement(
     });
     pushStyleDiagnostics(diagnostics, resolved.diagnostics, "Scope option issue", statement.span);
     pushStyleDiagnostics(diagnostics, backgroundDiagnostics, "Scope background option issue", statement.span);
+    if (enterScopeOnly) return [];
     const nested = statement.body.flatMap((entry) =>
       evaluateStatement(entry, context, diagnostics, featureUsage, statementMacroAttribution)
     );
@@ -3593,4 +3619,31 @@ function parseBoolish(raw: string): boolean | null {
 
 function normalizeLabelPinPosition(raw: string): string {
   return stripWrappingBraces(raw).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Local replay state stays out of serializable scene snapshots. */
+const geometryCheckpoints = new WeakMap<EvaluateTikzResult, ReadonlyMap<number, SemanticContextSnapshot>>();
+export function rememberGeometryCheckpoints(result: EvaluateTikzResult, checkpoints: ReadonlyMap<number, SemanticContextSnapshot>): void {
+  geometryCheckpoints.set(result, checkpoints);
+}
+export function getGeometryCheckpoints(result: EvaluateTikzResult): ReadonlyMap<number, SemanticContextSnapshot> | undefined {
+  return geometryCheckpoints.get(result);
+}
+
+function splitScopeSteps(
+  body: readonly Statement[],
+  steps: WeakMap<Statement, "enter" | "leave">,
+  attribution: WeakMap<Statement, ForeachStatementAttribution>,
+  sourceMaps: WeakMap<Statement, ExpansionSourceMap>
+): Statement[] {
+  return body.flatMap(statement => {
+    // Expansion finalization owns the entire attributed subtree.
+    const origin = attribution.get(statement);
+    if (statement.kind !== "Scope" || (origin && (origin.foreachStack.length > 0 || origin.sourceId !== statement.id)) || sourceMaps.has(statement)) return [statement];
+    const enter = { ...statement };
+    const leave = { ...statement, id: `${statement.id}:leave`, body: [], options: undefined };
+    steps.set(enter, "enter");
+    steps.set(leave, "leave");
+    return [enter, ...splitScopeSteps(statement.body, steps, attribution, sourceMaps), leave];
+  });
 }

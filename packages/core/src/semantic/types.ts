@@ -540,6 +540,8 @@ export type EditHandlePathAttachmentContext = {
 };
 
 type EditHandleBase = {
+  /** Document-session identity, assigned by the editor after reconciliation. */
+  editingId?: string;
   id: string;
   runtimeId: string;
   sourceRef: SourceRef;
