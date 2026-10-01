@@ -60,7 +60,7 @@ export function normalizePathPosition(position: number): number {
   if (!Number.isFinite(position)) {
     return 0.5;
   }
-  return Math.max(0, Math.min(1, position));
+  return position;
 }
 
 export function resolvePathPositionFraction(options: OptionListAst | undefined): number | null {
@@ -90,7 +90,8 @@ export function resolvePathPositionPreset(
   segment: PlacementSegment | null,
   options: { normalizedThreshold?: number; worldThresholdPt?: number } = {}
 ): { preset: PathPositionPreset | null; snappedT: number } {
-  const clamped = normalizePathPosition(position);
+  const normalized = normalizePathPosition(position);
+  if (normalized < 0 || normalized > 1) return { preset: null, snappedT: normalized };
   const normalizedThreshold = options.normalizedThreshold ?? 0.03;
   const worldThresholdPt = options.worldThresholdPt ?? 10;
   const segmentLength = segment ? approximatePlacementSegmentLength(segment) : null;
@@ -100,7 +101,7 @@ export function resolvePathPositionPreset(
 
   let best: { preset: PathPositionPreset; t: number; delta: number } | null = null;
   for (const preset of PATH_POSITION_PRESETS) {
-    const delta = Math.abs(clamped - preset.t);
+    const delta = Math.abs(normalized - preset.t);
     if (delta > threshold) {
       continue;
     }
@@ -109,7 +110,7 @@ export function resolvePathPositionPreset(
     }
   }
 
-  return best ? { preset: best.preset, snappedT: best.t } : { preset: null, snappedT: clamped };
+  return best ? { preset: best.preset, snappedT: best.t } : { preset: null, snappedT: normalized };
 }
 
 export function approximatePlacementSegmentLength(segment: PlacementSegment): number {
@@ -135,21 +136,21 @@ export function approximatePlacementSegmentLength(segment: PlacementSegment): nu
 }
 
 export function pointAtPlacementSegment(segment: PlacementSegment, t: number): WorldPoint {
-  const clamped = normalizePathPosition(t);
+  const normalized = normalizePathPosition(t);
   if (segment.kind === "line") {
-    return interpolate(segment.from, segment.to, clamped);
+    return interpolate(segment.from, segment.to, normalized);
   }
   if (segment.kind === "hv") {
-    if (clamped <= 0.5) {
-      return interpolate(segment.from, segment.bend, clamped * 2);
+    if (normalized <= 0.5) {
+      return interpolate(segment.from, segment.bend, normalized * 2);
     }
-    return interpolate(segment.bend, segment.to, (clamped - 0.5) * 2);
+    return interpolate(segment.bend, segment.to, (normalized - 0.5) * 2);
   }
   if (segment.kind === "cubic") {
-    return cubicPoint(segment.from, segment.c1, segment.c2, segment.to, clamped);
+    return cubicPoint(segment.from, segment.c1, segment.c2, segment.to, normalized);
   }
   const center = arcCenter(segment.from, segment.params);
-  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * clamped;
+  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * normalized;
   const radians = (angle * Math.PI) / 180;
   return worldPoint(
     pt(center.x + segment.params.rx * Math.cos(radians)),
@@ -158,28 +159,28 @@ export function pointAtPlacementSegment(segment: PlacementSegment, t: number): W
 }
 
 export function tangentAtPlacementSegment(segment: PlacementSegment, t: number): WorldVector {
-  const clamped = normalizePathPosition(t);
+  const normalized = normalizePathPosition(t);
   if (segment.kind === "line") {
     return worldVector(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
   }
   if (segment.kind === "hv") {
-    if (clamped < 0.5) {
+    if (normalized < 0.5) {
       return worldVector(segment.bend.x - segment.from.x, segment.bend.y - segment.from.y);
     }
     return worldVector(segment.to.x - segment.bend.x, segment.to.y - segment.bend.y);
   }
   if (segment.kind === "cubic") {
-    const u = 1 - clamped;
+    const u = 1 - normalized;
     return worldVector(
       3 * u * u * (segment.c1.x - segment.from.x) +
-        6 * u * clamped * (segment.c2.x - segment.c1.x) +
-        3 * clamped * clamped * (segment.to.x - segment.c2.x),
+        6 * u * normalized * (segment.c2.x - segment.c1.x) +
+        3 * normalized * normalized * (segment.to.x - segment.c2.x),
       3 * u * u * (segment.c1.y - segment.from.y) +
-        6 * u * clamped * (segment.c2.y - segment.c1.y) +
-        3 * clamped * clamped * (segment.to.y - segment.c2.y)
+        6 * u * normalized * (segment.c2.y - segment.c1.y) +
+        3 * normalized * normalized * (segment.to.y - segment.c2.y)
     );
   }
-  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * clamped;
+  const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * normalized;
   const radians = (angle * Math.PI) / 180;
   const delta = segment.params.endAngle >= segment.params.startAngle ? 1 : -1;
   return worldVector(
@@ -188,13 +189,19 @@ export function tangentAtPlacementSegment(segment: PlacementSegment, t: number):
   );
 }
 
-export function closestPointOnPlacementSegment(segment: PlacementSegment, point: WorldPoint): { t: number; point: WorldPoint } {
+export function closestPointOnPlacementSegment(
+  segment: PlacementSegment,
+  point: WorldPoint,
+  options: { extrapolate?: boolean; referenceT?: number } = {}
+): { t: number; point: WorldPoint } {
+  const extrapolate = options.extrapolate ?? false;
+  const referenceT = normalizePathPosition(options.referenceT ?? 0.5);
   if (segment.kind === "line") {
-    return closestPointOnLine(point, segment.from, segment.to);
+    return closestPointOnLine(point, segment.from, segment.to, extrapolate ? -Infinity : 0, extrapolate ? Infinity : 1);
   }
   if (segment.kind === "hv") {
-    const first = closestPointOnLine(point, segment.from, segment.bend);
-    const second = closestPointOnLine(point, segment.bend, segment.to);
+    const first = closestPointOnLine(point, segment.from, segment.bend, extrapolate ? -Infinity : 0, 1);
+    const second = closestPointOnLine(point, segment.bend, segment.to, 0, extrapolate ? Infinity : 1);
     const firstDist = distanceSquared(point, first.point);
     const secondDist = distanceSquared(point, second.point);
     return firstDist <= secondDist
@@ -202,7 +209,10 @@ export function closestPointOnPlacementSegment(segment: PlacementSegment, point:
       : { t: 0.5 + second.t * 0.5, point: second.point };
   }
   if (segment.kind === "cubic") {
-    return closestPointOnCubic(point, segment.from, segment.c1, segment.c2, segment.to);
+    return closestPointOnCubic(point, segment.from, segment.c1, segment.c2, segment.to,
+      extrapolate ? Math.min(0, referenceT - 1) : 0,
+      extrapolate ? Math.max(1, referenceT + 1) : 1,
+      referenceT);
   }
 
   const center = arcCenter(segment.from, segment.params);
@@ -212,13 +222,20 @@ export function closestPointOnPlacementSegment(segment: PlacementSegment, point:
     segment.params.rx * dy,
     segment.params.ry * dx
   ) * 180 / Math.PI;
+  if (extrapolate) {
+    const sweep = segment.params.endAngle - segment.params.startAngle;
+    const referenceAngle = segment.params.startAngle + sweep * referenceT;
+    const angle = rawAngle + 360 * Math.round((referenceAngle - rawAngle) / 360);
+    const t = Math.abs(sweep) < 1e-12 ? referenceT : (angle - segment.params.startAngle) / sweep;
+    return { t, point: pointAtPlacementSegment(segment, t) };
+  }
   const angle = normalizeDegrees(rawAngle);
   const start = normalizeDegrees(segment.params.startAngle);
   const end = normalizeDegrees(segment.params.endAngle);
   const delta = normalizeSignedAngle(segment.params.endAngle - segment.params.startAngle);
   const sweepPositive = delta >= 0;
   const candidateAngle = clampAngleToArc(angle, start, end, sweepPositive);
-  const normalized = delta === 0 ? 0 : normalizePathPosition((candidateAngle - segment.params.startAngle) / delta);
+  const normalized = delta === 0 ? 0 : Math.max(0, Math.min(1, (candidateAngle - segment.params.startAngle) / delta));
   return { t: normalized, point: pointAtPlacementSegment(segment, normalized) };
 }
 
@@ -512,22 +529,29 @@ function distance(a: WorldPoint, b: WorldPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function closestPointOnLine(p: WorldPoint, a: WorldPoint, b: WorldPoint): { t: number; point: WorldPoint } {
+function closestPointOnLine(p: WorldPoint, a: WorldPoint, b: WorldPoint, minT = 0, maxT = 1): { t: number; point: WorldPoint } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lengthSq = dx * dx + dy * dy;
   if (lengthSq < 1e-12) {
     return { t: 0, point: { ...a } };
   }
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+  const t = Math.max(minT, Math.min(maxT, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
   return { t, point: interpolate(a, b, t) };
 }
 
-function closestPointOnCubic(p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: WorldPoint, c3: WorldPoint): { t: number; point: WorldPoint } {
-  let bestT = 0;
-  let bestDistSq = Number.POSITIVE_INFINITY;
+function closestPointOnCubic(
+  p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: WorldPoint, c3: WorldPoint,
+  minT = 0, maxT = 1, referenceT = 0.5
+): { t: number; point: WorldPoint } {
+  let bestT = Math.max(minT, Math.min(maxT, referenceT));
+  let bestDistSq = distanceSquared(p, cubicPoint(c0, c1, c2, c3, bestT));
+  if (bestDistSq < 1e-12) {
+    return { t: bestT, point: cubicPoint(c0, c1, c2, c3, bestT) };
+  }
+  const step = (maxT - minT) / 32;
   for (let index = 0; index <= 32; index += 1) {
-    const t = index / 32;
+    const t = minT + index * step;
     const point = cubicPoint(c0, c1, c2, c3, t);
     const currentDistSq = distanceSquared(p, point);
     if (currentDistSq < bestDistSq) {
@@ -535,8 +559,8 @@ function closestPointOnCubic(p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: 
       bestT = t;
     }
   }
-  let lo = Math.max(0, bestT - 1 / 32);
-  let hi = Math.min(1, bestT + 1 / 32);
+  let lo = Math.max(minT, bestT - step);
+  let hi = Math.min(maxT, bestT + step);
   for (let index = 0; index < 18; index += 1) {
     const mid1 = lo + (hi - lo) / 3;
     const mid2 = hi - (hi - lo) / 3;
@@ -548,7 +572,8 @@ function closestPointOnCubic(p: WorldPoint, c0: WorldPoint, c1: WorldPoint, c2: 
       lo = mid1;
     }
   }
-  const t = (lo + hi) / 2;
+  const refinedT = (lo + hi) / 2;
+  const t = distanceSquared(p, cubicPoint(c0, c1, c2, c3, refinedT)) < bestDistSq ? refinedT : bestT;
   return { t, point: cubicPoint(c0, c1, c2, c3, t) };
 }
 

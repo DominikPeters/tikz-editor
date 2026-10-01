@@ -74,6 +74,9 @@ export function applyMovePathAttachedNodeAction(
   action: MovePathAttachedNodeAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
+  if (!Number.isFinite(action.pos)) {
+    return { kind: "error", message: "Path-attached node position must be a finite number." };
+  }
   const resolved = resolvePropertyTarget(source, action.nodeId, parseOptions);
   if (resolved.kind !== "found" || resolved.target.kind !== "node-item") {
     return { kind: "unsupported", reason: "Selected path-attached node could not be resolved for drag editing." };

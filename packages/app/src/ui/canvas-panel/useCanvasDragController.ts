@@ -797,6 +797,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
                     return Math.max(0, initialDirectionalOffset - initialDistancePt);
                   })(),
                 segment: handle.pathAttachmentContext.segment,
+                position: handle.pathAttachmentContext.pos,
                 regime: handle.pathAttachmentContext.regime,
                 lastPreviewDelta: makeWorldVector(0, 0)
               };
@@ -808,8 +809,12 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               rawWorld.x - pathAttachedNodeDrag.pointerOffsetFromCenter.x,
               rawWorld.y - pathAttachedNodeDrag.pointerOffsetFromCenter.y
             );
-            const closest = closestPointOnPlacementSegment(pathAttachedNodeDrag.segment, desiredCenter);
+            const closest = closestPointOnPlacementSegment(pathAttachedNodeDrag.segment, desiredCenter, {
+              extrapolate: true,
+              referenceT: pathAttachedNodeDrag.position
+            });
             const snapped = ctrlOrMeta ? { snappedT: closest.t, preset: null } : resolvePathPositionPreset(closest.t, pathAttachedNodeDrag.segment);
+            pathAttachedNodeDrag.position = snapped.snappedT;
             const targetWorldPoint = pointAtPlacementSegment(pathAttachedNodeDrag.segment, snapped.snappedT);
             const currentCenter =
               resolvePrimarySourceCenter(snapshotScene?.elements ?? [], pathAttachedNodeDrag.nodeId) ??

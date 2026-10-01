@@ -228,7 +228,7 @@ describe("semantic node helper coverage", () => {
   it("resolves node placement fractions and segment interpolation variants", () => {
     expect(resolveNodePositionFraction(undefined)).toBeNull();
     expect(resolveNodePositionFraction(parseOptionListRaw("[very near start]"))).toBeCloseTo(0.125);
-    expect(resolveNodePositionFraction(parseOptionListRaw("[near start,near end,at end,pos=2]"))).toBe(1);
+    expect(resolveNodePositionFraction(parseOptionListRaw("[near start,near end,at end,pos=2]"))).toBe(2);
     expect(resolveNodePositionFraction(parseOptionListRaw("[pos=bad]"))).toBeNull();
 
     expect(pointAtPlacementSegment({ kind: "line", from: wp(0, 0), to: wp(10, 0) }, 0.25).x).toBeCloseTo(2.5);

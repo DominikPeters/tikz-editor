@@ -53,10 +53,10 @@ function style(...lists: OptionListAst[]): StyleChainEntry {
 describe("path-attached helpers", () => {
   it("normalizes path positions from presets and pos options", () => {
     expect(normalizePathPosition(Number.NaN)).toBe(0.5);
-    expect(normalizePathPosition(-1)).toBe(0);
-    expect(normalizePathPosition(2)).toBe(1);
+    expect(normalizePathPosition(-1)).toBe(-1);
+    expect(normalizePathPosition(2)).toBe(2);
     expect(resolvePathPositionFraction(undefined)).toBeNull();
-    expect(resolvePathPositionFraction(options(flag("near start"), kv("pos", "{1.2}")))).toBe(1);
+    expect(resolvePathPositionFraction(options(flag("near start"), kv("pos", "{1.2}")))).toBe(1.2);
     expect(resolvePathPositionFraction(options(kv("pos", "bad"), flag("near end")))).toBe(0.75);
   });
 
@@ -69,6 +69,8 @@ describe("path-attached helpers", () => {
     expect(resolvePathPositionPreset(0.126, shortLine).preset).toBe("very near start");
     expect(resolvePathPositionPreset(0.55, longLine).preset).toBeNull();
     expect(resolvePathPositionPreset(Number.POSITIVE_INFINITY, null).snappedT).toBe(0.5);
+    expect(resolvePathPositionPreset(-0.01, shortLine)).toEqual({ preset: null, snappedT: -0.01 });
+    expect(resolvePathPositionPreset(1.01, shortLine)).toEqual({ preset: null, snappedT: 1.01 });
   });
 
   it("samples line, hv, cubic, and arc placement segments", () => {
@@ -93,6 +95,7 @@ describe("path-attached helpers", () => {
     expect(tangentAtPlacementSegment(hv, 0.25)).toMatchObject({ x: 10, y: 0 });
     expect(tangentAtPlacementSegment(hv, 0.75)).toMatchObject({ x: 0, y: 10 });
     expect(tangentAtPlacementSegment(cubic, 0.5).x).toBeGreaterThan(0);
+    expect(tangentAtPlacementSegment(cubic, 2)).toMatchObject({ x: -120, y: -90 });
     expect(tangentAtPlacementSegment(arc, 0.5).x).toBeLessThan(0);
     expect(tangentAtPlacementSegment({ ...arc, params: { ...arc.params, startAngle: 90, endAngle: 0 } }, 0.5).x).toBeGreaterThan(0);
   });
@@ -119,6 +122,28 @@ describe("path-attached helpers", () => {
         p(0, 0)
       ).t
     ).toBe(0);
+  });
+
+  it("projects drags onto extrapolated segments while keeping ordinary closest-point queries bounded", () => {
+    const line: PlacementSegment = { kind: "line", from: p(0, 0), to: p(10, 0) };
+    expect(closestPointOnPlacementSegment(line, p(20, 4)).t).toBe(1);
+    expect(closestPointOnPlacementSegment(line, p(20, 4), { extrapolate: true }).t).toBe(2);
+    expect(closestPointOnPlacementSegment(line, p(-5, 4), { extrapolate: true }).t).toBe(-0.5);
+    const segments: PlacementSegment[] = [
+      { kind: "hv", operator: "-|", from: p(0, 0), bend: p(10, 0), to: p(10, 10) },
+      { kind: "cubic", from: p(0, 0), c1: p(0, 10), c2: p(10, 10), to: p(10, 0) },
+      { kind: "arc", from: p(10, 0), to: p(0, 10), params: { startAngle: 0, endAngle: 90, rx: 10, ry: 10 } },
+      { kind: "arc", from: p(0, 10), to: p(10, 0), params: { startAngle: 90, endAngle: 0, rx: 10, ry: 10 } }
+    ];
+    for (const segment of segments) {
+      for (const t of [-0.5, 2, 5.25]) {
+        const target = pointAtPlacementSegment(segment, t);
+        const projected = closestPointOnPlacementSegment(segment, target, { extrapolate: true, referenceT: t });
+        expect(projected.t).toBeCloseTo(t, 3);
+        expect(projected.point.x).toBeCloseTo(target.x, 2);
+        expect(projected.point.y).toBeCloseTo(target.y, 2);
+      }
+    }
   });
 
   it("resolves auto, swap, sloped, and explicit path-attached regimes", () => {
