@@ -69,9 +69,8 @@ export function formatScrubNumber(value: number, precision: number, minDisplayPr
 }
 
 export function fractionDigits(text: string): number {
-  const dotIndex = text.indexOf(".");
-  if (dotIndex === -1) {
-    return 0;
-  }
-  return text.length - dotIndex - 1;
+  const [mantissa, exponent = "0"] = text.toLowerCase().split("e");
+  const dotIndex = mantissa.indexOf(".");
+  const digits = dotIndex === -1 ? 0 : mantissa.length - dotIndex - 1;
+  return Math.min(100, Math.max(0, digits - Number(exponent)));
 }

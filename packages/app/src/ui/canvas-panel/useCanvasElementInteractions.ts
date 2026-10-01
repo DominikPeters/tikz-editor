@@ -482,7 +482,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
           (handle: EditHandle) =>
             handle.sourceRef.sourceId === resolvedTargetId &&
             handle.kind === "node-position" &&
-            handle.pathAttachmentContext != null
+            (handle.pathAttachmentContext != null || handle.rewriteMode === "calc")
         );
         if (
           supportsDeferredTextDrag &&

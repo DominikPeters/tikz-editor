@@ -876,6 +876,7 @@ ForeachKw { @specialize<Identifier, "foreach"> }
     CommandName,
     Dollar,
     Number,
+    ".",
     Identifier,
     Comment,
     space
@@ -974,7 +975,7 @@ ForeachKw { @specialize<Identifier, "foreach"> }
 
   Dollar { "$" }
 
-  Number { $[0-9]+ ("." $[0-9]+)? }
+  Number { ($[0-9]+ ("." $[0-9]*)? | "." $[0-9]+) ($[eE] $[+\-]? $[0-9]+)? }
 
   Identifier { $[A-Za-z] $[-A-Za-z0-9_:@]* }
 

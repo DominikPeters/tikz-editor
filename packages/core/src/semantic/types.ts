@@ -600,10 +600,21 @@ export type WorldCoordinateEditHandle = CoordinateEditHandleBase & {
   relativeBase?: never;
 };
 
+/** Calc results are world points; their additive offsets use the active frame. */
+export type CalcCoordinateEditHandle = CoordinateEditHandleBase & {
+  coordinateForm: "calc";
+  coordinateSpace: "world-only";
+  rewriteMode: "calc";
+  frame: FrameTransform;
+  local?: never;
+  relativeBase?: never;
+};
+
 export type CoordinateEditHandle =
   | FrameLocalCoordinateEditHandle
   | RelativeCoordinateEditHandle
-  | WorldCoordinateEditHandle;
+  | WorldCoordinateEditHandle
+  | CalcCoordinateEditHandle;
 
 export type CurveControlEditHandle = EditHandleBase & {
   handleType: "curve-control";
