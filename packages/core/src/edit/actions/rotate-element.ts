@@ -1,3 +1,4 @@
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, Statement, Span } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
@@ -69,7 +70,8 @@ export function applyRotateElementAction(
   currentSource: string,
   action: RotateElementAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   const elementId = action.elementId.trim();
   if (elementId.length === 0) {
@@ -81,7 +83,7 @@ export function applyRotateElementAction(
 
   const baselineSource = action.baselineSource ?? currentSource;
   const result = action.mode === "center-pivot"
-    ? applyCenterPivotRotate(baselineSource, action, evaluateOptions, parseOptions)
+    ? applyCenterPivotRotate(baselineSource, action, evaluateOptions, parseOptions, geometry)
     : applyPropertyRotate(baselineSource, action, parseOptions);
   if (result.kind === "success" && baselineSource !== currentSource) {
     return {
@@ -125,9 +127,10 @@ function applyCenterPivotRotate(
   source: string,
   action: RotateElementAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
-  const baseline = buildBaselineContext(source, evaluateOptions, parseOptions);
+  const baseline = geometry?.source === source ? geometry : buildBaselineContext(source, evaluateOptions, parseOptions);
   const context = resolveCenterPivotRotateContext(
     baseline.parsed.figure.body,
     baseline.semantic.scene.elements,

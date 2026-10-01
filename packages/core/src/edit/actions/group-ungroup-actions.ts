@@ -1,3 +1,4 @@
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
@@ -19,7 +20,8 @@ import { parseTikzForEdit } from "../parse-options.js";
 export function applyGroupElementsAction(
   source: string,
   elementIds: readonly string[],
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   const statementIds = normalizeStatementIds(elementIds);
   if (statementIds.length < 2) {
@@ -51,7 +53,7 @@ export function applyGroupElementsAction(
   const selectedOrdered = parentRefs.filter((ref) => selectedIdSet.has(ref.id));
 
   const siblingIds = parentRefs.map((ref) => ref.id);
-  const constraints = collectSiblingDependencyConstraints(source, siblingIds, parseOptions);
+  const constraints = collectSiblingDependencyConstraints(source, siblingIds, parseOptions, geometry);
   const unselectedIds = siblingIds.filter((id) => !selectedIdSet.has(id));
   const oldIndexById = new Map<string, number>();
   for (let index = 0; index < siblingIds.length; index += 1) {
@@ -281,13 +283,14 @@ function preservesDependencyOrder(
 function collectSiblingDependencyConstraints(
   source: string,
   siblingIds: readonly string[],
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): DependencyConstraint[] {
   const siblingIdSet = new Set(siblingIds);
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const semantic = evaluateTikzFigure(parsed.figure, source);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
   return collectConstraintsFromDependencyGraph(semantic.dependencies, siblingIdSet);
 }
 

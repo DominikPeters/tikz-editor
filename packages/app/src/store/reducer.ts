@@ -1,3 +1,4 @@
+import { createEditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
 import { applyDeckEditAction, isDeckEditAction } from "@tikz-editor/core/beamer/index";
@@ -759,6 +760,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (!activeDoc) {
         return state;
       }
+      if (action.expectedDocumentRevision && (
+        action.expectedDocumentRevision.documentId !== documentId ||
+        action.expectedDocumentRevision.sourceRevision !== activeDoc.sourceRevision ||
+        action.precomputedSource !== activeDoc.source
+      )) return state;
       if (activeDoc.assistantLockReason) {
         return state;
       }
@@ -828,6 +834,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         });
         const { sourceFingerprint } = parseOptions;
         result = applyEditAction(maskedSource, snapshot.editHandles, action.action, {
+          geometry: snapshot.parseResult && snapshot.semanticResult ? createEditGeometrySession({
+            source: maskedSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult
+          }, { sourceFingerprint }, parseOptions) : undefined,
           evaluateOptions: { sourceFingerprint },
           parseOptions
         });
@@ -861,6 +870,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           activeDoc.snapshot.editHandles,
           action.action,
           {
+            geometry: activeDoc.snapshot.source === activeDoc.source && activeDoc.snapshot.parseResult && activeDoc.snapshot.semanticResult
+              ? createEditGeometrySession({ source: activeDoc.source, parsed: activeDoc.snapshot.parseResult, semantic: activeDoc.snapshot.semanticResult },
+                { sourceFingerprint }, parseOptions) : undefined,
             evaluateOptions: { sourceFingerprint },
             parseOptions
           }
@@ -982,12 +994,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (
         mergeKey &&
         lastEntry?.mergeKey === mergeKey &&
-        lastEntry.kind === historyKind
+        (lastEntry.kind === historyKind || action.action.kind === "cleanupPropertyWrites")
       ) {
         const nextHistory = [...truncated];
         nextHistory[lastIndex] = {
           ...lastEntry,
-          label: actionLabel(historyKind),
+          label: lastEntry.label,
           forward: result.patches,
           sourceAfter: result.newSource,
           selectedElementIdsAfter: [...nextSelection]

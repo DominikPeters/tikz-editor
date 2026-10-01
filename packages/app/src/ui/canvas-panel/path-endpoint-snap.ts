@@ -17,12 +17,14 @@ export type PathEndpointSnap = {
  * Returns the nearest matching endpoint, or null.
  */
 export function resolvePathEndpointSnap(input: {
+  bypass?: boolean;
   pointerWorld: WorldPoint;
   zoom: number;
   editHandles: readonly EditHandle[];
   source: string;
   parseOptions?: EditParseOptions;
 }): PathEndpointSnap | null {
+  if (input.bypass) return null;
   const zoom = Math.max(input.zoom, 1e-6);
   const snapRadius = ENDPOINT_SNAP_RADIUS_PX / zoom;
   const snapRadiusSq = snapRadius * snapRadius;

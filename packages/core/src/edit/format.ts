@@ -4,7 +4,7 @@ export type NumberFormatOptions = {
   fractionDigits?: number;
 };
 
-export type DragFormatPrecision = "default" | "fine";
+export type DragFormatPrecision = "default" | "fine" | "snapped";
 
 export const NUMBER_FORMAT_PRESETS = {
   pointDimension: { fractionDigits: 0 },
@@ -14,10 +14,12 @@ export const NUMBER_FORMAT_PRESETS = {
 } as const satisfies Record<string, NumberFormatOptions>;
 
 export function pointDimensionFormatOptions(precision: DragFormatPrecision | undefined): NumberFormatOptions {
+  if (precision === "snapped") return { fractionDigits: 7 };
   return precision === "fine" ? NUMBER_FORMAT_PRESETS.pointDimensionFine : NUMBER_FORMAT_PRESETS.pointDimension;
 }
 
 export function pointDistanceFormatOptions(precision: DragFormatPrecision | undefined): NumberFormatOptions {
+  if (precision === "snapped") return { fractionDigits: 7 };
   return precision === "fine" ? NUMBER_FORMAT_PRESETS.pointDistanceFine : NUMBER_FORMAT_PRESETS.pointDistance;
 }
 

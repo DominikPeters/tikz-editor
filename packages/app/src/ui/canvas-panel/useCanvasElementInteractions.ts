@@ -1,3 +1,4 @@
+import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clientPoint, px, pt, worldVector } from "@tikz-editor/core/coords/index";
 import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
@@ -46,6 +47,7 @@ export type UseCanvasElementInteractionsArgs = {
   directManipulationDisabledReasonBySourceId?: ReadonlyMap<string, string>;
   snapshot: CanvasSnapshot;
   source: string;
+  prepareEditGeometry: () => EditGeometrySession | undefined;
   nestedFigureSpan?: Span | null;
   setWarning: StateSetter<string | null>;
   onBucketFillRegion: (region: HitRegion | undefined) => void;
@@ -91,6 +93,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    prepareEditGeometry,
     nestedFigureSpan,
     setWarning,
     onBucketFillRegion,
@@ -189,6 +192,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
 
       setDragState({
         kind: "element",
+        geometry: prepareEditGeometry(),
         pointerId,
         elementIds: draggedIds,
         startWorld: world,
@@ -239,6 +243,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       snapshot.semanticResult,
       snapshot.source,
       source,
+      prepareEditGeometry,
       viewportWorldBounds
     ]
   );

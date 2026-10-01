@@ -958,6 +958,8 @@ test("diamond east-handle stays under cursor while dragging inward", async ({ pa
   const start = await readRightmostResizeHandleCenter(page);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
+  // This checks resize geometry; bypass magnetic snapping during the drag.
+  await page.keyboard.down("Control");
 
   for (const deltaX of [-4, -8, -12, -16]) {
     const cursor = { x: start.x + deltaX, y: start.y };
@@ -969,6 +971,7 @@ test("diamond east-handle stays under cursor while dragging inward", async ({ pa
   }
 
   await page.mouse.up();
+  await page.keyboard.up("Control");
 });
 
 test("diamond east-handle stays under cursor while dragging outward", async ({ page }) => {
@@ -996,6 +999,8 @@ test("diamond east-handle stays under cursor while dragging outward", async ({ p
   const start = await readRightmostResizeHandleCenter(page);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
+  // This checks resize geometry; bypass magnetic snapping during the drag.
+  await page.keyboard.down("Control");
 
   for (const deltaX of [4, 8, 12, 16]) {
     const cursor = { x: start.x + deltaX, y: start.y };
@@ -1007,6 +1012,7 @@ test("diamond east-handle stays under cursor while dragging outward", async ({ p
   }
 
   await page.mouse.up();
+  await page.keyboard.up("Control");
 });
 
 test("circle shapes can be resized with handles", async ({ page }) => {

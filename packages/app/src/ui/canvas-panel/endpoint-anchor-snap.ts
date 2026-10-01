@@ -20,13 +20,14 @@ export type MatrixCellAnchorHint = {
 };
 
 export function resolveEndpointAnchorSnap(input: {
+  bypass?: boolean;
   pointerWorld: WorldPoint;
   zoom: number;
   nodeAnchorTargets: readonly NodeAnchorTarget[];
   matrixCellAnchorHints?: readonly MatrixCellAnchorHint[];
 }): EndpointAnchorSnapResult {
   const zoom = Math.max(input.zoom, 1e-6);
-  if (input.nodeAnchorTargets.length === 0) {
+  if (input.bypass || input.nodeAnchorTargets.length === 0) {
     return {
       visibleAnchors: [],
       snappedAnchor: null

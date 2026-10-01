@@ -1,3 +1,5 @@
+import { useDeferredPropertyCleanup } from "./useDeferredPropertyCleanup";
+import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import {
 Suspense,
 lazy,
@@ -1032,6 +1034,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
     ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
     : null;
+  const prepareEditGeometry = useCallback(() => {
+    if (!snapshot.parseResult || !snapshot.semanticResult || snapshot.source !== source) return;
+    return createEditGeometrySession({
+      source: nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
+      parsed: snapshot.parseResult,
+      semantic: snapshot.semanticResult
+    }, { textEngine: textEngineRef.current }, editParseOptions);
+  }, [snapshot, source, nestedFigureSpan, editParseOptions]);
+
   const resolvePendingNodePositionTargetStatus = useMemo(() => {
     if (!pendingNodePositionTargetPick) {
       return null;
@@ -1054,6 +1065,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         targetNodeSourceId: targetSourceId
       };
       const preflight = preflightPositionNodeRelativeToAction(source, action, {
+        geometry: prepareEditGeometry(),
         evaluateOptions: { sourceFingerprint, textEngine: activeTextEngine },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
@@ -1085,6 +1097,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       return status;
     };
   }, [
+    prepareEditGeometry,
     activeTextEngine,
     editParseOptions,
     pendingNodePositionTargetPick,
@@ -1740,7 +1753,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const applyActionWithFeedback = useCallback(
-    (action: EditAction, historyMergeKey?: string, sourceOverride?: string): ApplyActionFeedback => {
+    (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
       const sourceFingerprint = sourceForEdit === source
         ? editParseOptions.sourceFingerprint
@@ -1762,6 +1775,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           })
         : sourceForEdit;
       let result = applyEditAction(maskedForEdit, snapshot.editHandles, action, {
+        geometry,
         evaluateOptions: { sourceFingerprint, textEngine: textEngineRef.current },
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
       });
@@ -2641,6 +2655,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const { onElementPointerDown, onElementDoubleClick } = useCanvasElementInteractions({
+    prepareEditGeometry,
     nestedFigureSpan,
     svgResult,
     toolMode,
@@ -2718,6 +2733,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     onResizeHandlePointerDown,
     onRotateHandlePointerDown
   } = useCanvasHandleInteractions({
+    scopeOverlay,
+    prepareEditGeometry,
+    nodeAnchorTargets,
+    matrixCellAnchorHints,
     svgResult,
     toolMode,
     viewportRef,
@@ -3200,7 +3219,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch({ type: "SELECT", id: selectedId, additive: false });
   }, [dispatch, snapshot.scene, snapshot.source, source]);
 
+  const schedulePropertyCleanup = useDeferredPropertyCleanup({
+    documentId: activeDocumentId, source, sourceRevision,
+    activeFigureId: editParseOptions.activeFigureId, nestedFigureSpan, dragRef, dispatch
+  });
   const dragControllerConfig = useMemo(() => ({
+    schedulePropertyCleanup,
     applyActionWithFeedback,
     dispatch,
     dispatchCanvasTransform,
@@ -3242,6 +3266,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     creationFillColor,
     onSnapFeedback: performSnapHapticFeedback
   }), [
+    schedulePropertyCleanup,
     applyActionWithFeedback,
     appendFreehandSamplePoint,
     commitPathToolSegment,

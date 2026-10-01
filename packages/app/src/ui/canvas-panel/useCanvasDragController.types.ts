@@ -1,4 +1,5 @@
-import type { EditAction } from "@tikz-editor/core/edit/actions";
+import type { SchedulePropertyCleanup } from "./useDeferredPropertyCleanup";
+import type { ApplyActionWithFeedbackFn } from "./types";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/index";
@@ -8,7 +9,6 @@ import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 import type { ResizeFrame } from "./resize-frames";
 import type { PathToolGestureSegment } from "./path-tool";
 import type {
-  ApplyActionFeedback,
   DragState,
   DragTooltipState,
   GridResizeSnapConfig,
@@ -22,7 +22,8 @@ import type { WorldPoint } from "../coords/types";
 import type { EditorAction } from "../../store/types";
 
 export type UseCanvasDragControllerParams = {
-  applyActionWithFeedback: (action: EditAction, mergeKey?: string, sourceOverride?: string) => ApplyActionFeedback;
+  schedulePropertyCleanup: SchedulePropertyCleanup;
+  applyActionWithFeedback: ApplyActionWithFeedbackFn;
   dispatch: (action: EditorAction) => void;
   dispatchCanvasTransform: (transform: { translateX: number; translateY: number; scale: number }) => void;
   logSnapDebug: (input: SnapDebugLogInput) => void;

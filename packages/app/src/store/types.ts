@@ -385,6 +385,8 @@ export type EditorAction =
       };
       /** False for transient UI previews that should not affect undo/redo history. */
       recordInHistory?: boolean;
+      /** Reject deferred results after any intervening document edit. */
+      expectedDocumentRevision?: { documentId: string; sourceRevision: number };
       precomputedSource?: string;
       precomputedResult?: Extract<EditActionResult, { kind: "success" | "partial" }>;
       /**

@@ -26,6 +26,7 @@ export type MovePathAttachedNodeAction = {
   hostPathSourceId: string;
   segmentLocator?: string;
   pos: number;
+  snapToPreset?: boolean;
   preserveRegime: true;
   sideUpdate?: {
     kind: "explicit-direction";
@@ -81,7 +82,7 @@ export function applyMovePathAttachedNodeAction(
   const regime = resolvePathAttachedNodeRegime(resolved.target.options);
 
   const mutations = new Map<string, OptionMutation>();
-  applyPositionMutations(mutations, normalizePathPosition(action.pos));
+  applyPositionMutations(mutations, normalizePathPosition(action.pos), action.snapToPreset);
   applySideMutations(mutations, regime, action.sideUpdate);
   applyDistanceMutations(mutations, regime, action);
 
@@ -171,10 +172,11 @@ export function resolveDraggedPathAttachedNodeDirection(
 
 function applyPositionMutations(
   mutations: Map<string, OptionMutation>,
-  rawPosition: number
+  rawPosition: number,
+  snapToPreset = true
 ): void {
   const position = normalizePathPosition(rawPosition);
-  const snapped = resolvePathPositionPreset(position, null);
+  const snapped = snapToPreset ? resolvePathPositionPreset(position, null) : { preset: null };
   for (const key of POSITION_OPTION_KEYS) {
     mutations.set(key, { kind: "remove" });
   }
@@ -185,7 +187,7 @@ function applyPositionMutations(
     mutations.set(snapped.preset, { kind: "set", value: "" });
     return;
   }
-  mutations.set("pos", { kind: "set", value: formatNumber(position) });
+  mutations.set("pos", { kind: "set", value: formatNumber(position, { fractionDigits: 6 }) });
 }
 
 function applySideMutations(

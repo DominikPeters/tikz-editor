@@ -23,11 +23,3 @@ export function resolveHandleDragAction(input: {
     newWorld: input.newWorld
   };
 }
-
-export function shouldCommitHandleAnchorOnPointerUp(input: {
-  snapshotSource: string;
-  source: string;
-  activeEndpointAnchor: NodeAnchorTarget | null;
-}): boolean {
-  return input.snapshotSource === input.source && input.activeEndpointAnchor != null;
-}

@@ -20,10 +20,11 @@ import { formatCoordinate, formatPolarCoordinate } from "./style.js";
 export function rewriteCoordinate(
   newWorld: WorldPoint,
   handle: EditHandle,
-  source: string
+  source: string,
+  bypassSnapping = false
 ): string | null {
   if (handle.rewriteMode === "positioning") {
-    return rewritePositioning(newWorld, handle);
+    return rewritePositioning(newWorld, handle, bypassSnapping);
   }
 
   if (handle.rewriteMode === "unsupported") {
@@ -289,19 +290,22 @@ function signedPairForDirection(
 
 function rewritePositioning(
   newWorld: WorldPoint,
-  handle: EditHandle
+  handle: EditHandle,
+  bypassSnapping: boolean
 ): string | null {
   if (handle.handleType !== "node-positioning") {
     return null;
   }
-  return rewritePositioningFromContext(newWorld, handle.positioningContext);
+  return rewritePositioningFromContext(newWorld, handle.positioningContext, undefined, bypassSnapping);
 }
 
 export function rewritePositioningFromContext(
   newWorld: WorldPoint,
   ctx: EditHandlePositioningContext,
-  formatOptions?: NumberFormatOptions
+  formatOptions?: NumberFormatOptions,
+  bypassSnapping = false
 ): string | null {
+  const cardinalSnapRatio = bypassSnapping ? 0 : CARDINAL_SNAP_RATIO;
   const centerDeltaWorld = wp(newWorld.x - ctx.targetCenter.x, newWorld.y - ctx.targetCenter.y);
   const c2cXcm = centerDeltaWorld.x * CM_PER_PT;
   const c2cYcm = centerDeltaWorld.y * CM_PER_PT;
@@ -327,8 +331,8 @@ export function rewritePositioningFromContext(
       x: (absCx < 1e-6 ? currentSigns.x : Math.sign(c2cXcm)) as -1 | 0 | 1,
       y: (absCy < 1e-6 ? currentSigns.y : Math.sign(c2cYcm)) as -1 | 0 | 1
     };
-    const horizontalDominant = absCy <= Math.max(absCx * CARDINAL_SNAP_RATIO, 1e-6);
-    const verticalDominant = absCx <= Math.max(absCy * CARDINAL_SNAP_RATIO, 1e-6);
+    const horizontalDominant = absCy <= Math.max(absCx * cardinalSnapRatio, 1e-6);
+    const verticalDominant = absCx <= Math.max(absCy * cardinalSnapRatio, 1e-6);
     const candidateDirections: string[] = [];
 
     if (horizontalDominant) {
@@ -368,7 +372,7 @@ export function rewritePositioningFromContext(
       if (expected.x === 0 || expected.y === 0) {
         const axial = Math.max(absShiftXcm, absShiftYcm);
         const orthogonal = expected.x === 0 ? absShiftXcm : absShiftYcm;
-        const maxOrthogonal = Math.max(axial * CARDINAL_SNAP_RATIO, 1e-6);
+        const maxOrthogonal = Math.max(axial * cardinalSnapRatio, 1e-6);
         if (orthogonal > maxOrthogonal) {
           continue;
         }

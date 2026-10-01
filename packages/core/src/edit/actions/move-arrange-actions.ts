@@ -1,3 +1,4 @@
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
@@ -56,7 +57,8 @@ export function applyMoveElementsAction(
   delta: WorldPoint,
   formatPrecision: DragFormatPrecision | undefined,
   parseOptions: EditParseOptions = {},
-  baseline?: MoveElementsBaseline
+  baseline?: MoveElementsBaseline,
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   if (baseline) {
     source = baseline.source;
@@ -146,7 +148,8 @@ export function applyMoveElementsAction(
       matrixElementIds,
       delta,
       matrixPlacementHandlesBySource,
-      parseOptions
+      parseOptions,
+      geometry
     );
     if (byMatrixPlacement.kind === "success" || byMatrixPlacement.kind === "partial") {
       currentSource = byMatrixPlacement.newSource;
@@ -165,7 +168,8 @@ export function applyMoveElementsAction(
       currentSource,
       treeRootElementIds,
       delta,
-      parseOptions
+      parseOptions,
+      geometry
     );
     if (byTreeRootPlacement.kind === "success" || byTreeRootPlacement.kind === "partial") {
       currentSource = byTreeRootPlacement.newSource;
@@ -236,7 +240,8 @@ export function applyMoveElementsAction(
 export function applyAlignElementsAction(
   source: string,
   action: AlignElementsAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   const normalizedIds = normalizeElementIds(action.elementIds);
   if (normalizedIds.length < 2) {
@@ -246,8 +251,8 @@ export function applyAlignElementsAction(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const semantic = evaluateTikzFigure(parsed.figure, source);
-  const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
+  const boundsBySource = geometry?.boundsBySource ?? collectSourceWorldBounds(semantic.scene.elements);
   const plan = planAlignDeltas(boundsBySource, normalizedIds, action.mode);
   if (plan.kind === "unsupported") {
     return plan;
@@ -259,7 +264,8 @@ export function applyAlignElementsAction(
 export function applyDistributeElementsAction(
   source: string,
   action: DistributeElementsAction,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  geometry?: EditGeometrySession
 ): EditActionResultLike {
   const normalizedIds = normalizeElementIds(action.elementIds);
   if (normalizedIds.length < 3) {
@@ -269,8 +275,8 @@ export function applyDistributeElementsAction(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const semantic = evaluateTikzFigure(parsed.figure, source);
-  const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
+  const boundsBySource = geometry?.boundsBySource ?? collectSourceWorldBounds(semantic.scene.elements);
   const plan = planDistributeDeltas(boundsBySource, normalizedIds, action.axis);
   if (plan.kind === "unsupported") {
     return plan;
@@ -321,7 +327,7 @@ function applyMoveElementsUsingHandleRewrites(
     }
 
     const newWorld: WorldPoint = worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y));
-    const text = rewriteCoordinate(newWorld, handle, source);
+    const text = rewriteCoordinate(newWorld, handle, source, parseOptions.bypassSnapping);
     if (text != null) {
       pending.push({ span: handle.sourceRef.sourceSpan, text });
     } else {
@@ -370,7 +376,8 @@ function applyMoveMatrixElementsWithPlacementRewrite(
   elementIds: readonly string[],
   delta: WorldPoint,
   placementHandlesBySource: ReadonlyMap<string, EditHandle>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): MoveRewriteBatchResult {
   let currentSource = source;
   const patches: SourcePatch[] = [];
@@ -379,7 +386,7 @@ function applyMoveMatrixElementsWithPlacementRewrite(
 
   for (const elementId of elementIds) {
     const placementHandle = placementHandlesBySource.get(elementId);
-    const rewrite = rewriteSingleMatrixPlacement(currentSource, elementId, delta, placementHandle, parseOptions);
+    const rewrite = rewriteSingleMatrixPlacement(currentSource, elementId, delta, placementHandle, parseOptions, geometry);
     if (rewrite.kind === "unsupported") {
       failedElementIds.push(elementId);
       failureReasons.push(rewrite.reason);
@@ -747,7 +754,8 @@ function applyMoveTreeRootElementsWithPlacementRewrite(
   source: string,
   elementIds: readonly string[],
   delta: WorldPoint,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): MoveRewriteBatchResult {
   let currentSource = source;
   const patches: SourcePatch[] = [];
@@ -755,7 +763,7 @@ function applyMoveTreeRootElementsWithPlacementRewrite(
   const failureReasons: string[] = [];
 
   for (const elementId of elementIds) {
-    const rewrite = rewriteSingleTreeRootPlacement(currentSource, elementId, delta, parseOptions);
+    const rewrite = rewriteSingleTreeRootPlacement(currentSource, elementId, delta, parseOptions, geometry);
     if (rewrite.kind === "unsupported") {
       failedElementIds.push(elementId);
       failureReasons.push(rewrite.reason);
@@ -795,7 +803,8 @@ function rewriteSingleMatrixPlacement(
   elementId: string,
   delta: WorldPoint,
   placementHandle: EditHandle | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): MatrixPlacementRewriteResult {
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
@@ -809,8 +818,8 @@ function rewriteSingleMatrixPlacement(
     return { kind: "unsupported", reason: `Could not resolve matrix node for ${elementId}` };
   }
 
-  const semantic = evaluateTikzFigure(parsed.figure, source);
-  const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
+  const boundsBySource = geometry?.boundsBySource ?? collectSourceWorldBounds(semantic.scene.elements);
   const bounds = boundsBySource.get(elementId);
   if (!bounds) {
     return { kind: "unsupported", reason: `Could not resolve semantic bounds for matrix ${elementId}` };
@@ -897,7 +906,8 @@ function rewriteSingleTreeRootPlacement(
   source: string,
   elementId: string,
   delta: WorldPoint,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): MatrixPlacementRewriteResult {
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
@@ -911,14 +921,14 @@ function rewriteSingleTreeRootPlacement(
     return { kind: "unsupported", reason: `Tree root ${elementId} has no root node to move` };
   }
 
-  const semantic = evaluateTikzFigure(parsed.figure, source);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source);
   const placementHandle = semantic.editHandles.find(
     (handle) => handle.sourceRef.sourceId === elementId && handle.kind === "node-position"
   );
   const currentPlacementWorld =
     placementHandle?.world ??
     (() => {
-      const boundsBySource = collectSourceWorldBounds(semantic.scene.elements);
+      const boundsBySource = geometry?.boundsBySource ?? collectSourceWorldBounds(semantic.scene.elements);
       const bounds = boundsBySource.get(elementId);
       if (!bounds) {
         return null;

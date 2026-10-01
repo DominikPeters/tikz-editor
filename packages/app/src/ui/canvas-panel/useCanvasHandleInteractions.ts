@@ -1,3 +1,6 @@
+import { collectSnapExcludedSourceIds } from "./useCanvasElementInteractions";
+import type { ScopeOverlayIndex } from "./scope-overlay";
+import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { useCallback, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clientPoint as makeClientPoint, px } from "@tikz-editor/core/coords/index";
 import {
@@ -8,7 +11,8 @@ import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettings
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import { preparePathRectangleResize } from "@tikz-editor/core/edit/actions/resize-element";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
-import type { EditHandle, SceneElement, ScenePath } from "@tikz-editor/core/semantic/types";
+import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath } from "@tikz-editor/core/semantic/types";
+import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 import type { WorldBounds, WorldPoint } from "../coords/types";
 import type { NodeItem, Span } from "@tikz-editor/core/ast/types";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
@@ -51,6 +55,10 @@ export type UseCanvasHandleInteractionsArgs = {
   directManipulationDisabledReasonBySourceId?: ReadonlyMap<string, string>;
   snapshot: CanvasSnapshot;
   source: string;
+  scopeOverlay: ScopeOverlayIndex;
+  prepareEditGeometry: () => EditGeometrySession | undefined;
+  nodeAnchorTargets: readonly NodeAnchorTarget[];
+  matrixCellAnchorHints: readonly MatrixCellAnchorHint[];
   nestedFigureSpan?: Span | null;
   setWarning: StateSetter<string | null>;
   setSnapLines: StateSetter<SnapLine[]>;
@@ -116,6 +124,10 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
     directManipulationDisabledReasonBySourceId,
     snapshot,
     source,
+    scopeOverlay,
+    prepareEditGeometry,
+    nodeAnchorTargets,
+    matrixCellAnchorHints,
     nestedFigureSpan,
     setWarning,
     setSnapLines,
@@ -180,7 +192,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
             selectedSourceIds: [handle.sourceRef.sourceId],
             dependencies: snapshot.semanticResult?.dependencies,
             guides: snapGuideInput,
-            settings: snapSettingsPatch,
+            settings: { ...snapSettingsPatch, gaps: { enabled: false } },
             zoom: canvasTransform.scale,
             viewportWorld: viewportWorldBounds
           })
@@ -195,6 +207,10 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
 
       setDragState({
         kind: "handle",
+        geometry: prepareEditGeometry(),
+        nodeAnchorTargets,
+        matrixCellAnchorHints,
+        latestSource: source,
         pointerId: event.pointerId,
         handleId: handle.id,
         sourceId: handle.sourceRef.sourceId,
@@ -233,6 +249,9 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       snapshot.semanticResult,
       snapshot.source,
       source,
+      prepareEditGeometry,
+      nodeAnchorTargets,
+      matrixCellAnchorHints,
       svgResult,
       toolMode,
       snapGuideInput,
@@ -331,13 +350,13 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
         statements ?? [], snapshot.scene?.elements ?? [], snapshot.editHandles, sourceId
       );
-      const snapContext = rectangleBaseline && snapshot.scene
+      const snapContext = snapshot.scene
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
-            selectedSourceIds: [sourceId],
+            selectedSourceIds: collectSnapExcludedSourceIds([sourceId], scopeOverlay, snapshot.scene.elements),
             dependencies: snapshot.semanticResult?.dependencies,
             guides: snapGuideInput,
-            // Rectangle resize snaps its moving point; equal-gap candidates are unused.
+            // Resize snaps the moving point; equal-gap candidates are unused.
             settings: { ...snapSettingsPatch, gaps: { enabled: false } },
             zoom: canvasTransform.scale,
             viewportWorld: viewportWorldBounds
@@ -346,14 +365,20 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
 
 
       setSnapLines([]);
+      const geometry = prepareEditGeometry();
+      if (snapshot.editHandles.some(handle => handle.sourceRef.sourceId === sourceId && handle.kind === "node-position")) {
+        geometry?.prepare(sourceId);
+      }
       setDragState({
         kind: "resize",
+        geometry,
         rectangleBaseline,
         snapContext,
         latestSource: source,
         pointerId: event.pointerId,
         elementId: sourceId,
         role: normalizedRole,
+        movingCornerRole: normalizedRole !== role && isCornerResizeRole(role) ? role : undefined,
         cursor: cursor || resizeCursorForRole(normalizedRole),
         preserveAspectRatio: isCircleResizeSource
           ? 1
@@ -377,6 +402,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       interactionSvgRef,
       logSnapDebug,
       resizeFramesBySource,
+      scopeOverlay,
       nestedFigureSpan,
       snapGuideInput,
       snapSettingsPatch,
@@ -395,6 +421,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       snapshot.source,
       parseOptions,
       source,
+      prepareEditGeometry,
       svgResult,
       toolMode,
       viewportRef
@@ -502,6 +529,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       setSnapLines([]);
       setDragState({
         kind: "rotate",
+        geometry: prepareEditGeometry(),
         pointerId: event.pointerId,
         elementId: rotateTargetId,
         sourceId,
@@ -543,6 +571,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       setWarning,
       snapshot.source,
       source,
+      prepareEditGeometry,
       svgResult,
       toolMode,
       viewportRef

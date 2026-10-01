@@ -1,3 +1,6 @@
+import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
+import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
+import type { EditGeometrySession } from "./geometry-session.js";
 import type {
   EditHandle,
   EvaluateOptions
@@ -111,10 +114,10 @@ export type { MoveElementsBaseline };
 
 export type EditAction =
   | { kind: "moveElement"; elementId: string; delta: WorldPoint; formatPrecision?: DragFormatPrecision }
-  | { kind: "moveElements"; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision; baseline?: MoveElementsBaseline }
+  | { kind: "moveElements"; bypassSnapping?: boolean; elementIds: string[]; delta: WorldPoint; formatPrecision?: DragFormatPrecision; baseline?: MoveElementsBaseline }
   | { kind: "alignElements"; elementIds: string[]; mode: AlignMode }
   | { kind: "distributeElements"; elementIds: string[]; axis: DistributeAxis }
-  | { kind: "moveHandle"; handleId: string; newWorld: WorldPoint }
+  | { kind: "moveHandle"; bypassSnapping?: boolean; handleId: string; newWorld: WorldPoint }
   | { kind: "connectHandle"; handleId: string; nodeName: string; nodeSourceId?: string; anchor: string }
   | { kind: "splitPath"; elementId: string; handleId: string }
   | { kind: "joinPaths"; elementIds: [string, string] }
@@ -215,6 +218,7 @@ const DEFAULT_DUPLICATE_OFFSET_PT = 0.25 * PT_PER_CM;
 const GENERATED_NODE_NAME_RE = /(?:^|[^A-Za-z0-9_-])(node\d+)(?![A-Za-z0-9_-])/g;
 
 export type EditActionApplyOptions = {
+  geometry?: EditGeometrySession;
   evaluateOptions?: EvaluateOptions;
   parseOptions?: EditParseOptions;
 };
@@ -228,7 +232,8 @@ export function preflightPositionNodeRelativeToAction(
     source,
     action,
     options.evaluateOptions,
-    options.parseOptions ?? {}
+    options.parseOptions ?? {},
+    options.geometry
   );
   return {
     ...preflight,
@@ -249,12 +254,33 @@ export function applyEditAction(
   action: EditAction,
   options: EditActionApplyOptions = {}
 ): EditActionResult {
+  const currentSource = source;
   const evaluateOptions = options.evaluateOptions;
-  const parseOptions = options.parseOptions ?? {};
+  let parseOptions = options.parseOptions ?? {};
+  const geometry = options.geometry;
+  // Gesture positions are absolute (or total deltas). Always write from the
+  // immutable baseline, then adapt patches to the current source below.
+  if (geometry) {
+    source = geometry.source;
+    editHandles = geometry.semantic.editHandles;
+    parseOptions = {
+      ...parseOptions,
+      analysisView: null,
+      analysisSession: null,
+      sourceFingerprint: geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint,
+      preparedParse: { source, activeFigureId: parseOptions.activeFigureId, result: geometry.parsed }
+    };
+  }
+  if ("bypassSnapping" in action) parseOptions = { ...parseOptions, bypassSnapping: action.bypassSnapping };
   const rawResult = (() : EditActionResult => {
     switch (action.kind) {
-      case "moveHandle":
+      case "moveHandle": {
+        const initial = geometry?.semantic.editHandles.find(handle => handle.id === action.handleId);
+        if (initial && Math.hypot(initial.world.x - action.newWorld.x, initial.world.y - action.newWorld.y) < 1e-9) {
+          return { kind: "success", newSource: source, patches: [], changedSourceIds: [initial.sourceRef.sourceId] };
+        }
         return applyMoveHandle(source, editHandles, action.handleId, action.newWorld, parseOptions);
+      }
       case "connectHandle":
         return applyConnectHandle(source, editHandles, action.handleId, action.nodeName, action.nodeSourceId, action.anchor, parseOptions);
       case "splitPath":
@@ -274,7 +300,7 @@ export function applyEditAction(
       case "insertPathPoint":
         return applyInsertPathPointAction(source, editHandles, action, parseOptions);
       case "moveElement":
-        return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision);
+        return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision, undefined, geometry);
       case "moveElements":
         return applyMoveElements(
           source,
@@ -283,16 +309,17 @@ export function applyEditAction(
           action.delta,
           parseOptions,
           action.formatPrecision,
-          action.baseline
+          action.baseline,
+          geometry
         );
       case "alignElements":
-        return applyAlignElements(source, action, parseOptions);
+        return applyAlignElementsAction(source, action, parseOptions, geometry);
       case "distributeElements":
-        return applyDistributeElements(source, action, parseOptions);
+        return applyDistributeElementsAction(source, action, parseOptions, geometry);
       case "setProperty":
         return applySetProperty(source, action, parseOptions);
       case "rotateElement":
-        return applyRotateElementAction(source, action, evaluateOptions, parseOptions);
+        return applyRotateElementAction(source, action, evaluateOptions, parseOptions, geometry);
       case "updateNodeText":
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":
@@ -320,13 +347,13 @@ export function applyEditAction(
       case "addNodeAdornment":
         return applyAddNodeAdornmentAction(source, action, parseOptions);
       case "positionNodeRelativeTo":
-        return applyPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions);
+        return applyPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions, geometry);
       case "convertNodePositionToAbsolute":
-        return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions);
+        return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions, geometry);
       case "reorderElements":
         return applyReorderElementsAction(source, action.elementIds, action.direction, parseOptions);
       case "groupElements":
-        return applyGroupElements(source, action, parseOptions);
+        return applyGroupElementsAction(source, action.elementIds, parseOptions, geometry);
       case "ungroupElements":
         return applyUngroupElements(source, action, parseOptions);
       case "repeatElements":
@@ -350,10 +377,15 @@ export function applyEditAction(
       case "transposeMatrix":
         return applyTransposeMatrixAction(source, action, parseOptions);
       case "resizeElement":
-        return applyResizeElement(source, action, evaluateOptions, parseOptions);
+        return applyResizeElementAction(source, action, evaluateOptions, parseOptions, geometry);
     }
   })();
-  return normalizeResultPatches(source, rawResult);
+  const result = geometry && rawResult.kind === "unsupported" && (
+    rawResult.reason === ADORNMENT_EDIT_NOOP_REASON ||
+    rawResult.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON ||
+    rawResult.reason === "rotateElement would not change the source."
+  ) ? { kind: "success" as const, newSource: source, patches: [] } : rawResult;
+  return normalizeResultPatches(currentSource, result);
 }
 
 function normalizeResultPatches(source: string, result: EditActionResult): EditActionResult {
@@ -824,25 +856,10 @@ function applyMoveElements(
   delta: WorldPoint,
   parseOptions: EditParseOptions = {},
   formatPrecision?: DragFormatPrecision,
-  baseline?: MoveElementsBaseline
+  baseline?: MoveElementsBaseline,
+  geometry?: EditGeometrySession
 ): EditActionResult {
-  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline);
-}
-
-function applyAlignElements(
-  source: string,
-  action: Extract<EditAction, { kind: "alignElements" }>,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyAlignElementsAction(source, action, parseOptions);
-}
-
-function applyDistributeElements(
-  source: string,
-  action: Extract<EditAction, { kind: "distributeElements" }>,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyDistributeElementsAction(source, action, parseOptions);
+  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline, geometry);
 }
 
 function applyPasteStatements(
@@ -873,14 +890,6 @@ function applyDuplicateElements(
 
 function applyDuplicateAdornment(source: string, targetId: string, parseOptions: EditParseOptions): EditActionResult {
   return applyDuplicateAdornmentAction(source, targetId, parseOptions);
-}
-
-function applyGroupElements(
-  source: string,
-  action: Extract<EditAction, { kind: "groupElements" }>,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyGroupElementsAction(source, action.elementIds, parseOptions);
 }
 
 function applyUngroupElements(
@@ -1108,15 +1117,6 @@ function applyUpdateNodeText(
     ],
     changedSourceIds: [action.elementId.trim()]
   };
-}
-
-function applyResizeElement(
-  source: string,
-  action: Extract<EditAction, { kind: "resizeElement" }>,
-  evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
-): EditActionResult {
-  return applyResizeElementAction(source, action, evaluateOptions, parseOptions);
 }
 
 function applyAddElement(

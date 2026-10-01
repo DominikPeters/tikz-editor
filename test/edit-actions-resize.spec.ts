@@ -1,3 +1,4 @@
+import { applyMatrix } from "../packages/core/src/semantic/transform.js";
 import { describe, expect, it } from "vitest";
 import type { NodeTextEngine } from "../packages/core/src/text/types.js";
 import { applyEditAction } from "../packages/core/src/edit/actions.js";
@@ -951,7 +952,7 @@ describe("applyEditAction – resizeElement", () => {
       kind: "resizeElement",
       elementId: "path:0",
       role: "top-right",
-      newWorld: corner
+      newWorld: nodeBoxPath.transform ? applyMatrix(nodeBoxPath.transform, corner) : corner
     });
 
     expect(result.kind).toBe("success");

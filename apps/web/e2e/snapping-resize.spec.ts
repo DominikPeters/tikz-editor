@@ -37,7 +37,10 @@ async function startResize(page: Page) {
   return start;
 }
 
+const lastPointer = new WeakMap<Page, { x: number; y: number; ctrlKey?: boolean; shiftKey?: boolean }>();
+
 async function moveResize(page: Page, start: { x: number; y: number }, dx: number, dy: number, modifiers: { ctrlKey?: boolean; shiftKey?: boolean } = {}) {
+  lastPointer.set(page, { x: start.x + dx * ptPerCm, y: start.y - dy * ptPerCm, ...modifiers });
   await page.evaluate(init => window.dispatchEvent(new PointerEvent("pointermove", init)), {
     ...pointer, ...modifiers, clientX: start.x + dx * ptPerCm, clientY: start.y - dy * ptPerCm
   });
@@ -45,7 +48,10 @@ async function moveResize(page: Page, start: { x: number; y: number }, dx: numbe
 }
 
 async function finishResize(page: Page) {
-  await page.evaluate(pointer => window.dispatchEvent(new PointerEvent("pointerup", { ...pointer, buttons: 0 })), pointer);
+  const last = lastPointer.get(page)!;
+  await page.evaluate(init => window.dispatchEvent(new PointerEvent("pointerup", init)), {
+    ...pointer, ...last, clientX: last.x, clientY: last.y, buttons: 0
+  });
   await expectSourceCanvasConsistency(page, { assertNoActiveCanvasDrag: true });
 }
 
@@ -99,6 +105,7 @@ test("rectangle resize consumes pointer updates that arrive before recompute fin
       }));
     }
   }, { pointer, start, ptPerCm });
+  lastPointer.set(page, { x: start.x + .1 * ptPerCm, y: start.y - .94 * ptPerCm });
   await expect.poll(() => readSource(page)).toContain("(3,3) rectangle (5,1)");
   await expectSourceCanvasConsistency(page);
   await expect(page.locator("g[class*='snapOverlay']")).toHaveCount(1);

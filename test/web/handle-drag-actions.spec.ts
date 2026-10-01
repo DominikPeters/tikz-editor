@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  resolveHandleDragAction,
-  shouldCommitHandleAnchorOnPointerUp
-} from "../../packages/app/src/ui/canvas-panel/handle-drag-actions.js";
+import { resolveHandleDragAction } from "../../packages/app/src/ui/canvas-panel/handle-drag-actions.js";
 import {
   isAdditiveSelectionModifier,
   isResizeHandleAdditiveSelectionModifier
@@ -54,31 +51,4 @@ describe("handle drag actions", () => {
     });
   });
 
-  it("only retries the anchor commit on pointer up when the snapshot is current", () => {
-    expect(
-      shouldCommitHandleAnchorOnPointerUp({
-        snapshotSource: "\\draw (0,0) -- (A.east);",
-        source: "\\draw (0,0) -- (A.east);",
-        activeEndpointAnchor: {
-          nodeName: "A",
-          anchor: "east",
-          world: wp(1, 2),
-          tier: "basic"
-        }
-      })
-    ).toBe(true);
-
-    expect(
-      shouldCommitHandleAnchorOnPointerUp({
-        snapshotSource: "\\draw (0,0) -- (1,1);",
-        source: "\\draw (0,0) -- (A.east);",
-        activeEndpointAnchor: {
-          nodeName: "A",
-          anchor: "east",
-          world: wp(1, 2),
-          tier: "basic"
-        }
-      })
-    ).toBe(false);
-  });
 });

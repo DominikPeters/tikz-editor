@@ -1,3 +1,4 @@
+import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { AdornmentOwnerGeometry, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
 import type { EditAction, MoveElementsBaseline, ResizeRole } from "@tikz-editor/core/edit/actions";
@@ -17,6 +18,7 @@ import type { ToolCreateMode } from "../tool-config";
 import type { ClientPoint, SvgBounds, SvgPoint, ViewportBounds, ViewportPoint, WorldBounds, WorldPoint, WorldVector } from "../coords/types";
 import type { HitRegion } from "./hit-regions";
 import type { ResizeFrame } from "./resize-frames";
+import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 
 export type GuideOrientation = "vertical" | "horizontal";
 
@@ -37,7 +39,8 @@ export type CanvasEditParseOptions = EditParseOptions;
 export type ApplyActionWithFeedbackFn = (
   action: EditAction,
   historyMergeKey?: string,
-  sourceOverride?: string
+  sourceOverride?: string,
+  geometry?: EditGeometrySession
 ) => ApplyActionFeedback;
 
 export type CanvasContextMenuState = {
@@ -117,6 +120,8 @@ export type MagnifierState = {
 export type DragState =
   | {
       kind: "element";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
       pointerId: number;
       elementIds: string[];
       startWorld: WorldPoint;
@@ -157,6 +162,8 @@ export type DragState =
     }
   | {
       kind: "resize";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
       rectangleBaseline: PathRectangleResizeBaseline | null;
       latestSource: string;
       snapContext: SnapContext | null;
@@ -165,6 +172,7 @@ export type DragState =
       pointerId: number;
       elementId: string;
       role: ResizeRole;
+      movingCornerRole?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
       cursor: string;
       preserveAspectRatio: number | null;
       initialFrame: ResizeFrame;
@@ -182,6 +190,8 @@ export type DragState =
     }
   | {
       kind: "rotate";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
       pointerId: number;
       elementId: string;
       sourceId: string;
@@ -202,6 +212,10 @@ export type DragState =
     }
   | {
       kind: "handle";
+      geometry?: EditGeometrySession;
+      didEdit?: boolean;
+      latestSource: string;
+      snapTargets?: AxisSnapBuckets;
       pointerId: number;
       handleId: string;
       sourceId: string;
@@ -212,6 +226,8 @@ export type DragState =
       gridResizeSnap: GridResizeSnapConfig | null;
       historyMergeKey: string;
       activeEndpointAnchor: NodeAnchorTarget | null;
+      nodeAnchorTargets: readonly NodeAnchorTarget[];
+      matrixCellAnchorHints: readonly MatrixCellAnchorHint[];
     }
   | {
       kind: "pan";

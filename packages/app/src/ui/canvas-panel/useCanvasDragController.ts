@@ -1,3 +1,8 @@
+import { applyEditAction } from "@tikz-editor/core/edit/actions";
+import { resolveResizeFrameForSource } from "./resize-frames";
+import { snapToolCreatePointer } from "./tool-pointer-snap";
+import { projectResizePointer } from "./resize-constraints";
+import type { ApplyActionWithFeedbackFn } from "./types";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { AdornmentOwnerGeometry } from "@tikz-editor/core/ast/types";
 import {
@@ -58,7 +63,7 @@ import {
   snapPointDeltaToAxisStepMultiples,
   resolveToolCreateCurrentWorld
 } from "./interaction-helpers";
-import { resolveHandleDragAction, shouldCommitHandleAnchorOnPointerUp } from "./handle-drag-actions";
+import { resolveHandleDragAction } from "./handle-drag-actions";
 import { collectElementDragGeometry } from "./element-drag-geometry";
 import { resolveEndpointAnchorSnap } from "./endpoint-anchor-snap";
 import { clientToWorldPoint, distanceSquared, worldToSvgPoint } from "./geometry";
@@ -67,7 +72,6 @@ import { resolveAddShapeOriginFromDrag } from "./add-shape-draft";
 import { angleDeg, normalizeSignedDeg, resolveDraggedRotateDeg } from "./rotate-handle";
 import type { ResizeFrame } from "./resize-frames";
 import { resolveScopeAwareMarqueeSelection } from "./scope-overlay";
-import { toolCreateSnapKind } from "../tool-config";
 import type {
   DragState,
   GridResizeSnapConfig
@@ -106,6 +110,7 @@ function makeWorldVector(x: number, y: number): WorldVector {
 export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   const {
     applyActionWithFeedback,
+    schedulePropertyCleanup,
     dispatch,
     dispatchCanvasTransform,
     logSnapDebug,
@@ -153,25 +158,29 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   // when the recomputed scene actually satisfies the retained targets.
   useLayoutEffect(() => {
     const drag = dragRef.current;
-    if (drag?.kind === "resize" && drag.rectangleBaseline) {
-      if (source !== drag.latestSource) {
-        setDragState(null);
-        setSnapLines([]);
-        setDragTooltip(null);
-        return;
-      }
+    if (drag && "latestSource" in drag && source !== drag.latestSource) {
+      setDragState(null);
+      setSnapLines([]);
+      setDragTooltip(null);
+      return;
+    }
+    if (drag?.kind === "handle") {
       if (snapshotSource !== source) return;
-      const lines = rectangleResizeSnapLines(drag, liveResizeFramesRef.current.get(drag.elementId));
+      const currentHandleId = resolveHandleIdForDrag({ ...drag }, snapshotEditHandles);
+      const handle = snapshotEditHandles.find(handle => handle.id === currentHandleId);
+      setSnapLines(handle && drag.snapContext && drag.snapTargets
+        ? pointerSnapLines(drag.snapContext, handle.world, drag.snapTargets) : []);
+      return;
+    }
+    if (drag?.kind === "resize") {
+      if (snapshotSource !== source) return;
+      const lines = resizeSnapLines(drag, liveResizeFramesRef.current.get(drag.elementId));
       setSnapLines(lines);
       if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
       wasSnappedRef.current = lines.length > 0;
       return;
     }
     if (drag?.kind !== "element" || !drag.snapContext || !drag.snapTargets) return;
-    if (source !== drag.latestSource) {
-      setSnapLines([]);
-      return;
-    }
     // While recomputing, the old scene is still visible and its validated
     // guides remain correct. Refresh them when the new scene arrives.
     if (snapshotSource !== source) return;
@@ -180,9 +189,18 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     setSnapLines(lines);
     if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
     wasSnappedRef.current = lines.length > 0;
-  }, [dragRef, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip]);
+  }, [dragRef, snapshotEditHandles, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip]);
 
   useLayoutEffect(() => {
+    function applyGestureAction(drag: Extract<DragState, { latestSource: string }>, action: Parameters<ApplyActionWithFeedbackFn>[0]) {
+      const result = applyActionWithFeedback(action, drag.historyMergeKey, drag.latestSource, drag.geometry);
+      if (result.newSource != null) {
+        drag.latestSource = result.newSource;
+        drag.didEdit = true;
+      }
+      return result;
+    }
+
     function sameIdsAsCurrentSelection(ids: readonly string[]): boolean {
       const currentSelection = selectedElementIdsRef.current;
       if (currentSelection.size !== ids.length) {
@@ -287,17 +305,15 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         return;
       }
 
-      const ok = applyActionWithFeedback(
+      const ok = applyGestureAction(drag,
         {
           kind: "rotateElement",
           elementId: drag.sourceId,
           targetId: rotateMode === "property" ? drag.elementId : drag.sourceId,
           angleDeg: nextRotate,
           mode: rotateMode,
-          baselineSource: drag.preEditBaselineSource
-        },
-        drag.historyMergeKey,
-        drag.latestSource
+          baselineSource: drag.geometry?.source ?? drag.preEditBaselineSource
+        }
       );
       if (ok.sourceChanged) {
         drag.lastAppliedRotateDeg = nextRotate;
@@ -359,20 +375,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       }
 
       if (drag.kind === "tool-create") {
-        const snapKind = toolCreateSnapKind(drag.toolMode);
-        const snapped = drag.snapContext
-          ? snapToolPointer({
-              context: drag.snapContext,
-              pointer: world,
-              kind: snapKind,
-              anchor: drag.startWorld,
-              modifiers: { ctrlOrMeta }
-            })
-          : { snappedPoint: world, offset: undefined, lines: [] as SnapLine[] };
+        const snapped = snapToolCreatePointer({ context: drag.snapContext, start: drag.startWorld,
+          pointer: world, mode: drag.toolMode, shiftKey: event.shiftKey, bypass: ctrlOrMeta });
         let nextRawWorld = snapped.snappedPoint ?? world;
         let endpointAnchorOverlay: NodeAnchorOverlayState | null = null;
         if (drag.toolMode === "addLine" || drag.toolMode === "addArrow") {
           endpointAnchorOverlay = resolveEndpointAnchorSnap({
+            bypass: event.ctrlKey || event.metaKey,
             pointerWorld: world,
             zoom: drag.snapContext?.zoom ?? 1,
             nodeAnchorTargets,
@@ -418,8 +427,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           rows
         });
         setToolCursorWorld(drag.currentWorld);
-        setSnapLines(snapped.lines);
-        maybeTriggerSnapFeedback(snapped.lines.length > 0 || endpointAnchorOverlay?.snappedAnchor != null);
+        const lines = drag.snapContext && snapped.targets ? pointerSnapLines(drag.snapContext, drag.currentWorld, snapped.targets) : [];
+        setSnapLines(lines);
+        maybeTriggerSnapFeedback(lines.length > 0 || endpointAnchorOverlay?.snappedAnchor != null);
         logSnapDebug({
           phase: "drag-tool-create-move",
           snapshotMatchesSource: snapshotSource === source,
@@ -428,7 +438,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           rawPoint: world,
           snappedPoint: drag.currentWorld,
           offset: snapped.offset,
-          lines: snapped.lines
+          lines
         });
         return;
       }
@@ -537,7 +547,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         return;
       }
 
-      if (!svgResult || (snapshotSource !== source && drag.kind !== "resize")) {
+      if (!svgResult) {
         setNodeAnchorOverlay(null);
         setSnapLines([]);
         maybeTriggerSnapFeedback(false);
@@ -559,18 +569,18 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const projected = rectangleBaseline ? projectPathRectangleResize({
           elementId: drag.elementId, role: drag.role, newWorld: world,
           preserveAspect: event.shiftKey
-        }, rectangleBaseline.context) : null;
+        }, rectangleBaseline.context) : projectResizePointer(drag, world, event.shiftKey);
         const snap = projected && drag.snapContext ? snapHandlePosition({
           context: drag.snapContext,
           point: { ...projected.point, role: "corner" },
           direction: projected.direction,
           modifiers: { ctrlOrMeta }
         }) : null;
-        const newWorld = snap?.snappedPoint ?? world;
+        const newWorld = snap?.snappedPoint ?? projected?.point ?? world;
         drag.snapTargets = snap?.targets;
         drag.snapPoint = snap?.snappedPoint;
         const liveFrame = liveResizeFramesRef.current.get(drag.elementId) ?? null;
-        const lines = rectangleResizeSnapLines(drag, liveFrame);
+        const lines = resizeSnapLines(drag, liveFrame);
         const liveDimensions = liveFrame ? resolveFrameBasis(liveFrame) : null;
         const dimensions = liveDimensions
           ? { width: liveDimensions.width, height: liveDimensions.height }
@@ -602,29 +612,44 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           lines
         });
 
-        const result = applyActionWithFeedback(
-          {
-            kind: "resizeElement",
-            elementId: drag.elementId,
-            role: drag.role,
-            newWorld,
-            rectangleBaseline: rectangleBaseline ?? undefined,
-            preserveAspect: event.shiftKey,
-            preserveAspectRatio: rectangleBaseline ? undefined : drag.preserveAspectRatio ?? undefined,
-            formatPrecision,
-            referenceBounds: resizeFrameWorldBounds(drag.initialFrame),
-            referenceScopeTransform: drag.elementId.startsWith("scope:")
-              ? drag.initialScopeTransform ?? undefined
-              : undefined
-          },
-          drag.historyMergeKey,
-          rectangleBaseline ? drag.latestSource : undefined
-        );
+        const action = {
+          kind: "resizeElement" as const,
+          elementId: drag.elementId,
+          role: drag.role,
+          newWorld,
+          rectangleBaseline: rectangleBaseline ?? undefined,
+          preserveAspect: event.shiftKey,
+          formatPrecision: (drag.snapTargets && (drag.snapTargets.x.length || drag.snapTargets.y.length) ? "snapped" : formatPrecision),
+          referenceBounds: resizeFrameWorldBounds(drag.initialFrame),
+          referenceScopeTransform: drag.elementId.startsWith("scope:")
+            ? drag.initialScopeTransform ?? undefined
+            : undefined
+        } satisfies Parameters<ApplyActionWithFeedbackFn>[0];
+        // A node's text/layout can prevent a requested size. Test the affected
+        // statement before accepting its snap; cached candidates are reused by
+        // the actual write below.
+        if (drag.geometry && drag.snapTargets && drag.snapPoint &&
+            drag.geometry.semantic.editHandles.some(handle => handle.sourceRef.sourceId === drag.elementId && handle.kind === "node-position")) {
+          const preview = applyEditAction(drag.geometry.source, [], action, {
+            geometry: drag.geometry, parseOptions: { propertyWriteMode: "drag-frame" }
+          });
+          const frame = preview.kind === "success" || preview.kind === "partial"
+            ? resolveResizeFrameForSource(drag.geometry.measure(preview.newSource, drag.elementId),
+              drag.geometry.semantic.editHandles, drag.elementId, currentSvg.viewBox) : null;
+          const actualPoint = frame ? resizeFrameSnapPoint(drag, frame) : null;
+          if (!actualPoint || (["x", "y"] as const).some(axis => drag.snapTargets![axis].length > 0 && Math.abs(actualPoint[axis] - drag.snapPoint![axis]) > 1e-6)) {
+            action.newWorld = projected?.point ?? world;
+            action.formatPrecision = formatPrecision;
+            drag.snapTargets = undefined;
+            drag.snapPoint = undefined;
+          }
+        }
+        const result = applyGestureAction(drag, action);
         if (result.newSource) {
           drag.latestSource = result.newSource;
           // Keep the visible scene's validated guides until recompute arrives.
           // Bypassing snapping should still hide them immediately.
-          if (!snap?.targets) {
+          if (!drag.snapTargets) {
             setSnapLines([]);
             maybeTriggerSnapFeedback(false);
           }
@@ -707,7 +732,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               ? rawWorld
               : applyAdornmentWorldPointerOffset(rawWorld, adornmentDrag.pointerOffsetFromReference);
             const placement = resolveAdornmentDragPlacement(placementWorldPoint, adornmentDrag.ownerPoint, adornmentDrag.ownerGeometry, {
-              allowCenter: adornmentDrag.allowCenter,
+              allowCenter: adornmentDrag.allowCenter && !ctrlOrMeta,
               textDrag: adornmentDrag.textDrag
             });
             if (!placement) {
@@ -717,7 +742,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
             }
             setSnapLines([]);
             maybeTriggerSnapFeedback(false);
-            applyActionWithFeedback(
+            applyGestureAction(drag,
               {
                 kind: "moveAdornment",
                 targetId: parsedTarget.id,
@@ -726,8 +751,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
                 angleRaw: placement.angleRaw,
                 distancePt: placement.distancePt,
                 formatPrecision
-              },
-              drag.historyMergeKey
+              }
             );
             return;
           }
@@ -785,7 +809,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               rawWorld.y - pathAttachedNodeDrag.pointerOffsetFromCenter.y
             );
             const closest = closestPointOnPlacementSegment(pathAttachedNodeDrag.segment, desiredCenter);
-            const snapped = resolvePathPositionPreset(closest.t, pathAttachedNodeDrag.segment);
+            const snapped = ctrlOrMeta ? { snappedT: closest.t, preset: null } : resolvePathPositionPreset(closest.t, pathAttachedNodeDrag.segment);
             const targetWorldPoint = pointAtPlacementSegment(pathAttachedNodeDrag.segment, snapped.snappedT);
             const currentCenter =
               resolvePrimarySourceCenter(snapshotScene?.elements ?? [], pathAttachedNodeDrag.nodeId) ??
@@ -852,35 +876,29 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               sideUpdate = undefined;
             }
             const placementKey =
-              `${formatNumber(snapped.snappedT)}:${sideUpdate == null ? "neutral" : sideUpdate.kind}:${sideUpdate == null ? "" : sideUpdate.kind === "auto-side" ? sideUpdate.side : sideUpdate.direction}` +
+              `${formatNumber(snapped.snappedT, { fractionDigits: 6 })}:${sideUpdate == null ? "neutral" : sideUpdate.kind}:${sideUpdate == null ? "" : sideUpdate.kind === "auto-side" ? sideUpdate.side : sideUpdate.direction}` +
               (distanceUpdatePt == null ? "" : `:${formatNumber(distanceUpdatePt)}:${formatPrecision ?? "default"}`);
             setSnapLines([]);
             maybeTriggerSnapFeedback(Boolean(snapped.preset));
             if (pathAttachedNodeDrag.lastAppliedPlacementKey === placementKey) {
               return;
             }
-            applyActionWithFeedback(
+            applyGestureAction(drag,
               {
                 kind: "movePathAttachedNode",
                 nodeId: pathAttachedNodeDrag.nodeId,
                 hostPathSourceId: pathAttachedNodeDrag.hostPathSourceId,
                 pos: snapped.snappedT,
+                snapToPreset: !ctrlOrMeta,
                 preserveRegime: true,
                 sideUpdate,
                 distanceUpdatePt,
                 formatPrecision
-              },
-              drag.historyMergeKey
+              }
             );
             pathAttachedNodeDrag.lastAppliedPlacementKey = placementKey;
             return;
           }
-        }
-        // A source edit outside this drag invalidates its immutable baseline.
-        if (source !== drag.latestSource) {
-          setSnapLines([]);
-          setDragState(null);
-          return;
         }
         const rawTotalDelta = makeWorldVector(world.x - drag.startWorld.x, world.y - drag.startWorld.y);
         const snapped = drag.snapContext && drag.initialSelection
@@ -922,15 +940,15 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           return;
         }
 
-        const result = applyActionWithFeedback(
+        const result = applyGestureAction(drag,
           {
             kind: "moveElements",
+            bypassSnapping: ctrlOrMeta,
             elementIds: drag.elementIds,
             delta: makeWorldPoint(totalDelta.x, totalDelta.y),
             baseline: drag.baseline,
             formatPrecision
-          },
-          drag.historyMergeKey
+          }
         );
         if (result.newSource) {
           drag.latestSource = result.newSource;
@@ -941,7 +959,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         return;
       }
 
-      const resolvedHandleId = resolveHandleIdForDrag(drag, snapshotEditHandles);
+      const resolvedHandleId = drag.geometry ? drag.handleId : resolveHandleIdForDrag(drag, snapshotEditHandles);
       if (!resolvedHandleId) {
         drag.activeEndpointAnchor = null;
         setNodeAnchorOverlay(null);
@@ -963,10 +981,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       let endpointAnchorOverlay: NodeAnchorOverlayState | null = null;
       if (drag.handleKind === "path-point") {
         endpointAnchorOverlay = resolveEndpointAnchorSnap({
+          bypass: event.ctrlKey || event.metaKey,
           pointerWorld: world,
           zoom: drag.snapContext?.zoom ?? 1,
-          nodeAnchorTargets,
-          matrixCellAnchorHints
+          // Connection edits can reorder statements and rename source IDs.
+          // Resolve targets in the same baseline as the handle being edited.
+          nodeAnchorTargets: drag.nodeAnchorTargets,
+          matrixCellAnchorHints: drag.matrixCellAnchorHints
         });
         drag.activeEndpointAnchor = endpointAnchorOverlay.snappedAnchor;
         if (endpointAnchorOverlay.snappedAnchor) {
@@ -981,9 +1002,14 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       }
       setNodeAnchorOverlay(endpointAnchorOverlay && endpointAnchorOverlay.visibleAnchors.length > 0 ? endpointAnchorOverlay : null);
       setDragTooltip(null);
-      setSnapLines(snapped.lines);
+      drag.snapTargets = "targets" in snapped ? snapped.targets : undefined;
+      const currentHandleId = resolveHandleIdForDrag({ ...drag }, snapshotEditHandles);
+      const currentPoint = snapshotEditHandles.find(handle => handle.id === currentHandleId)?.world ?? drag.lastKnownWorld;
+      const handleLines = drag.snapContext && drag.snapTargets
+        ? pointerSnapLines(drag.snapContext, currentPoint, drag.snapTargets) : [];
+      setSnapLines(handleLines);
       maybeTriggerSnapFeedback(
-        snapped.lines.length > 0 ||
+        handleLines.length > 0 ||
           endpointAnchorOverlay?.snappedAnchor != null ||
           pointChanged(beforeGridResizeWorld, nextWorld)
       );
@@ -998,14 +1024,12 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         lines: snapped.lines
       });
 
-      const ok = applyActionWithFeedback(
-        resolveHandleDragAction({
-          handleId: resolvedHandleId,
-          newWorld: nextWorld,
-          activeEndpointAnchor: drag.activeEndpointAnchor
-        }),
-        drag.historyMergeKey
-      );
+      const handleAction = resolveHandleDragAction({
+        handleId: resolvedHandleId,
+        newWorld: nextWorld,
+        activeEndpointAnchor: drag.activeEndpointAnchor
+      });
+      const ok = applyGestureAction(drag, handleAction.kind === "moveHandle" ? { ...handleAction, bypassSnapping: ctrlOrMeta } : handleAction);
       if (ok.sourceChanged) {
         drag.lastKnownWorld = nextWorld;
       }
@@ -1054,6 +1078,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           drag.toolMode === "addLine" || drag.toolMode === "addArrow"
             ? world
               ? resolveEndpointAnchorSnap({
+                  bypass: event.ctrlKey || event.metaKey,
                   pointerWorld: world,
                   zoom: drag.snapContext?.zoom ?? 1,
                   nodeAnchorTargets,
@@ -1062,16 +1087,8 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
               : drag.activeEndpointAnchor
             : null;
         const finalWorldPointerWorld = finalEndpointAnchor?.world ?? rawFinalWorld;
-        const snapKind = toolCreateSnapKind(drag.toolMode);
-        const snapped = drag.snapContext
-          ? snapToolPointer({
-              context: drag.snapContext,
-              pointer: finalWorldPointerWorld,
-              kind: snapKind,
-              anchor: drag.startWorld,
-              modifiers: { ctrlOrMeta }
-            })
-          : { snappedPoint: finalWorldPointerWorld, lines: [] as SnapLine[] };
+        const snapped = snapToolCreatePointer({ context: drag.snapContext, start: drag.startWorld,
+          pointer: finalWorldPointerWorld, mode: drag.toolMode, shiftKey: event.shiftKey, bypass: ctrlOrMeta });
         const snappedWorld = snapped.snappedPoint ?? finalWorldPointerWorld;
         let finalWorld = resolveToolCreateCurrentWorld(
           drag.startWorld,
@@ -1257,37 +1274,9 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         return;
       }
 
-      if (
-        drag.kind === "handle" &&
-        shouldCommitHandleAnchorOnPointerUp({
-          snapshotSource,
-          source,
-          activeEndpointAnchor: drag.activeEndpointAnchor
-        })
-      ) {
-        const resolvedHandleId = resolveHandleIdForDrag(drag, snapshotEditHandles);
-        if (resolvedHandleId && drag.activeEndpointAnchor) {
-          applyActionWithFeedback(
-            {
-              kind: "connectHandle",
-              handleId: resolvedHandleId,
-              nodeName: drag.activeEndpointAnchor.nodeName,
-              nodeSourceId: drag.activeEndpointAnchor.nodeSourceId,
-              anchor: drag.activeEndpointAnchor.anchor
-            },
-            drag.historyMergeKey
-          );
-        }
-      }
-
       const cleanupElementIds = propertyCleanupElementIdsForDrag(drag);
-      if ("historyMergeKey" in drag && typeof drag.historyMergeKey === "string" && cleanupElementIds.length > 0) {
-        dispatch({
-          type: "APPLY_EDIT_ACTION",
-          action: { kind: "cleanupPropertyWrites", elementIds: cleanupElementIds },
-          historyMergeKey: drag.historyMergeKey,
-          parseOptions: { propertyWriteMode: "drag-end" }
-        });
+      if ("historyMergeKey" in drag && drag.didEdit && cleanupElementIds.length > 0) {
+        schedulePropertyCleanup(drag.latestSource, cleanupElementIds, drag.historyMergeKey);
       }
 
       setNodeAnchorOverlay(null);
@@ -1348,6 +1337,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     };
   }, [
     applyActionWithFeedback,
+    schedulePropertyCleanup,
     creationFillColor,
     creationStrokeColor,
     dispatch,
@@ -1390,8 +1380,35 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   ]);
 
   useEffect(() => {
-    const onPointerMove = (event: PointerEvent) => worldListenersRef.current?.onPointerMove(event);
-    const onPointerUp = (event: PointerEvent) => worldListenersRef.current?.onPointerUp(event);
+    let pendingMove: PointerEvent | null = null;
+    let movingDrag: DragState | null = null;
+    let frame: number | null = null;
+    const flushMove = () => {
+      if (frame != null) cancelAnimationFrame(frame);
+      frame = null;
+      const event = pendingMove;
+      pendingMove = null;
+      if (event) worldListenersRef.current?.onPointerMove(event);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (drag && "latestSource" in drag && drag.pointerId === event.pointerId) {
+        movingDrag = drag;
+        pendingMove = event;
+        frame ??= requestAnimationFrame(flushMove);
+      } else {
+        worldListenersRef.current?.onPointerMove(event);
+      }
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (drag && movingDrag === drag && "latestSource" in drag && drag.pointerId === event.pointerId && event.type !== "pointercancel") {
+        pendingMove = event;
+      }
+      flushMove();
+      worldListenersRef.current?.onPointerUp(event);
+      movingDrag = null;
+    };
     const onKeyDown = (event: KeyboardEvent) => worldListenersRef.current?.onKeyDown(event);
     const onKeyUp = (event: KeyboardEvent) => worldListenersRef.current?.onKeyUp(event);
 
@@ -1402,13 +1419,14 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     window.addEventListener("keyup", onKeyUp, true);
 
     return () => {
+      if (frame != null) cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
     };
-  }, []);
+  }, [dragRef]);
 }
 
 function propertyCleanupElementIdsForDrag(drag: DragState): string[] {
@@ -2150,15 +2168,22 @@ function mergeWorldBounds(a: WorldBounds, b: WorldBounds): WorldBounds {
   );
 }
 
-function rectangleResizeSnapLines(
+function resizeSnapLines(
   drag: Extract<DragState, { kind: "resize" }>,
   frame: ResizeFrame | null | undefined
 ): SnapLine[] {
   if (!frame || !drag.snapContext || !drag.snapTargets || !drag.snapPoint) return [];
+  return pointerSnapLines(drag.snapContext, { ...resizeFrameSnapPoint(drag, frame), role: "corner" }, drag.snapTargets);
+}
+
+function resizeFrameSnapPoint(
+  drag: Pick<Extract<DragState, { kind: "resize" }>, "role" | "movingCornerRole" | "snapPoint">,
+  frame: ResizeFrame
+): WorldPoint {
   const corners = frame.cornersByRole;
   const midpoint = (a: WorldPoint, b: WorldPoint) => makeWorldPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
-  const snapPoint = drag.snapPoint;
-  const points = drag.role === "left" || drag.role === "right"
+  const snapPoint = drag.snapPoint ?? frame.centerWorld;
+  const points = drag.movingCornerRole ? Object.values(corners).map(corner => corner.world) : drag.role === "left" || drag.role === "right"
     ? [midpoint(corners["top-left"].world, corners["bottom-left"].world), midpoint(corners["top-right"].world, corners["bottom-right"].world)]
     : drag.role === "top" || drag.role === "bottom"
       ? [midpoint(corners["top-left"].world, corners["top-right"].world), midpoint(corners["bottom-left"].world, corners["bottom-right"].world)]
@@ -2167,5 +2192,5 @@ function rectangleResizeSnapLines(
   const point = points.reduce((nearest, candidate) =>
     distanceSquared(candidate, snapPoint) < distanceSquared(nearest, snapPoint) ? candidate : nearest
   );
-  return pointerSnapLines(drag.snapContext, { ...point, role: "corner" }, drag.snapTargets);
+  return point;
 }

@@ -1,3 +1,4 @@
+import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
@@ -93,16 +94,18 @@ export function applyPositionNodeRelativeToAction(
   source: string,
   action: PositionNodeRelativeToAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResult {
-  return preflightPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions).result;
+  return preflightPositionNodeRelativeToAction(source, action, evaluateOptions, parseOptions, geometry).result;
 }
 
 export function preflightPositionNodeRelativeToAction(
   source: string,
   action: PositionNodeRelativeToAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): PositionNodeRelativeToPreflight {
   const nodeResolution = resolveEditableNodeRef(source, action.nodeId, parseOptions);
   if (nodeResolution.kind !== "found") {
@@ -124,7 +127,7 @@ export function preflightPositionNodeRelativeToAction(
   }
 
   const parsed = parseTikzForEdit(source, parseOptions);
-  const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source, evaluateOptions);
   const placement = resolveRelativePlacementContext({
     semantic,
     nodeSourceId: nodeResolution.nodeRef.nodeSourceId,
@@ -196,7 +199,8 @@ export function applyConvertNodePositionToAbsoluteAction(
   source: string,
   action: ConvertNodePositionToAbsoluteAction,
   evaluateOptions: EvaluateOptions | undefined,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResult {
   const nodeResolution = resolveEditableNodeRef(source, action.nodeId, parseOptions);
   if (nodeResolution.kind !== "found") {
@@ -204,7 +208,7 @@ export function applyConvertNodePositionToAbsoluteAction(
   }
 
   const parsed = parseTikzForEdit(source, parseOptions);
-  const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
+  const semantic = geometry?.semantic ?? evaluateTikzFigure(parsed.figure, source, evaluateOptions);
   if (hasPathAttachment(semantic.scene.elements, nodeResolution.nodeRef.nodeSourceId)) {
     return { kind: "unsupported", reason: "Path-attached nodes cannot be converted to absolute positioning." };
   }
