@@ -664,7 +664,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "not-applicable",
     edit: "partial",
     fixtures: ["beamer_direct_resize"],
-    notes: "Canvas dividers resize adjacent columns together while preserving their combined width and authored units. Selected resolved images resize proportionally using their existing width/height or scale options. Gestures preview source changes and commit one undo step; complex dimensions remain source-editable. Column widths resolve absolute units and textwidth, linewidth, columnwidth, and paperwidth references."
+    notes: "Canvas dividers resize adjacent columns together while preserving their combined width and authored units. Selected resolved images resize proportionally using their existing width/height or scale options. Explicit vertical spacing exposes draggable bands in frames, columns, blocks, and paragraphs. Numeric vspace edits preserve units and stars; smallskip/medskip/bigskip convert to fixed vspace only when resized. Flexible fills and complex dimensions remain source-editable. Gestures preview source changes and commit one undo step. Column widths resolve absolute units and textwidth, linewidth, columnwidth, and paperwidth references."
   },
   beamer_builds: {
     parser: "partial",

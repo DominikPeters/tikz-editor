@@ -424,6 +424,7 @@ function glueItemFromSimpleTexVerticalGlue(
     size: relativeUnitPt == null
       ? item.size
       : texLength(item.relativeSize!.value * relativeUnitPt),
+    ...(relativeUnitPt != null ? { relativeUnitPt: texLength(relativeUnitPt) } : {}),
     stretch: item.stretch,
     shrink: item.shrink,
     stretchOrder: item.stretchOrder,

@@ -109,3 +109,5 @@ export type * from "./theme/index.js";
 
 export { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarget, beamerImageResizePatches,
   type BeamerColumnDivider, type BeamerImageResizeTarget } from "./deck-resize.js";
+
+export { beamerSpacingTargets, beamerSpacingResizePatches, type BeamerSpacingTarget } from "./deck-spacing.js";

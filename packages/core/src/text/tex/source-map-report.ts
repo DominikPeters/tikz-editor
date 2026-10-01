@@ -381,7 +381,11 @@ function remapTexVListItem(item: TexVListItem, sourceMap: TextSourceMap): TexVLi
         sourceSpan: sourceSpan ?? item.sourceSpan,
         paragraph: {
           ...item.paragraph,
-          sourceSpan: mapTexSourceSpan(item.paragraph.sourceSpan, sourceMap)
+          sourceSpan: mapTexSourceSpan(item.paragraph.sourceSpan, sourceMap),
+          verticalAdjustments: item.paragraph.verticalAdjustments?.map((adjustment) => ({
+            ...adjustment,
+            ...(adjustment.sourceSpan ? { sourceSpan: mapTexSourceSpan(adjustment.sourceSpan, sourceMap) } : {}),
+          }))
         }
       };
     case "hbox":

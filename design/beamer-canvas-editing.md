@@ -743,11 +743,29 @@ foundation; full status paragraph in the Object layer section above.
     `canvas-panel/DeckResizeOverlay.tsx`, and `canvas-panel/useDeckResize.ts`.
     Regression coverage: `test/beamer-direct-resize.spec.ts` and
     `test/web/deck-resize.spec.ts`.
-  - **Remaining direct manipulation**: glue bands (vertical glue
-    enters the caret-traversal/select-then-delete domain; hover reveals
-    the band — decided 2026-07-31 — covering `\vspace`/`\smallskip`/
-    `\medskip`/`\bigskip`/`\vfill`), tier-3 selection promotion (text
-    drags crossing containers promote to object selection), and the
+  - **Spacing handles — implemented 2026-10-02**: hovering an explicit
+    vertical gap reveals a band and an edge grip in the existing canvas
+    accent color. Dragging vertically or pressing Up/Down changes the gap;
+    Shift gives larger keyboard steps. Zero and negative gaps expose an
+    edge handle without intercepting the overlapping text. Geometry comes
+    from frame flow, column flow, and paragraph layout, including block
+    bodies and inline spacing attached to a line.
+
+    Existing `\vspace` commands retain their units, star, and surrounding
+    source formatting. Resizing `\smallskip`, `\medskip`, or `\bigskip`
+    replaces that command with `\vspace{…pt}`; clicking or returning to
+    the starting size preserves the named command. Handles share the
+    direct-resize preview, cancellation, and single-undo transaction.
+    Implicit theme/list gaps, flexible `\vfill`, complex dimensions, and
+    hidden or macro-owned material do not expose spacing handles.
+
+    Implementation: `beamer/deck-spacing.ts`, `beamer/spacing.ts`, and the
+    shared direct-resize overlay and gesture hook. Regression coverage:
+    `test/beamer-spacing.spec.ts`, `test/web/deck-resize.spec.ts`, and
+    `apps/web/e2e/beamer-spacing.spec.ts`.
+  - **Remaining direct manipulation**: glue caret traversal and
+    select-then-delete, flexible `\vfill` handles, tier-3 selection
+    promotion (text drags crossing containers promote to object selection), and the
     nested-TikZ breadcrumb editor — the largest single item; design
     settled 2026-07-31, see "Nested TikZ figure editing".
 - **Stage 4 — gap closing**: the deliberate gaps accumulated across

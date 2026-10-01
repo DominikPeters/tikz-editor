@@ -1220,3 +1220,24 @@
 .deckColumnDivider:focus-visible .deckDividerLine { opacity: 1; }
 .deckImageCorner { outline: none; touch-action: none; }
 .deckImageCorner:focus-visible .handle { stroke-width: 2px; vector-effect: non-scaling-stroke; }
+
+.deckSpacingHandle { cursor: ns-resize; outline: none; touch-action: none; }
+.deckSpacingBand { fill: var(--accent-dark); opacity: 0; pointer-events: none; }
+.deckSpacingEdges {
+  fill: none;
+  stroke: var(--accent-dark);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  pointer-events: none;
+}
+.deckSpacingGrip { fill: var(--accent-dark); opacity: 0; pointer-events: none; }
+.deckSpacingHandle:hover .deckSpacingBand,
+.deckSpacingHandle:focus-visible .deckSpacingBand,
+.deckSpacingHandle[data-active="true"] .deckSpacingBand { opacity: 0.08; }
+.deckSpacingHandle:hover .deckSpacingEdges,
+.deckSpacingHandle:focus-visible .deckSpacingEdges,
+.deckSpacingHandle[data-active="true"] .deckSpacingEdges { opacity: 0.35; }
+.deckSpacingHandle:hover .deckSpacingGrip,
+.deckSpacingHandle:focus-visible .deckSpacingGrip,
+.deckSpacingHandle[data-active="true"] .deckSpacingGrip { opacity: 1; }

@@ -350,6 +350,8 @@ export interface TexGlueItem {
   readonly scopePath?: readonly TexVBoxRole[];
   readonly origin?: TexGlueOrigin;
   readonly size: TexLength;
+  /** Resolved em/ex unit retained for editing zero-valued source glue. */
+  readonly relativeUnitPt?: TexLength;
   readonly stretch?: TexLength;
   readonly shrink?: TexLength;
   readonly stretchOrder?: TexGlueOrder;
@@ -458,6 +460,7 @@ export interface TexVListBoxReportItem {
   readonly listItem?: TexVBoxListItemLayout;
   readonly glue?: {
     readonly size: TexLength;
+    readonly relativeUnitPt?: TexLength;
     readonly stretch?: TexLength;
     readonly shrink?: TexLength;
     readonly stretchOrder?: TexGlueOrder;

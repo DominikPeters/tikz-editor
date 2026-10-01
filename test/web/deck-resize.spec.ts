@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import React, { act, useMemo, useRef } from "react";
+import React, { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildBeamerObjectIndex, prepareBeamerDocument, type BeamerFrameLayout } from "../../packages/core/src/beamer/index.js";
@@ -26,7 +26,7 @@ const closeText = () => {};
 function Harness() {
   const ref = useRef<SVGSVGElement>(null);
   const selection = useEditorStore(s => s.deckObjectSelection);
-  const index = useMemo(() => buildBeamerObjectIndex({ ...layout, source: renderedSource }), [layout, renderedSource]);
+  const index = buildBeamerObjectIndex({ ...layout, source: renderedSource });
   return React.createElement("svg", { ref }, React.createElement(DeckResizeOverlay, { source: renderedSource, layout, index,
     selected: index.byId.get(selection?.objectId ?? "") ?? null, svgRef: ref, scale: 2, closeText }));
 }
@@ -146,5 +146,71 @@ describe("canvas resize gestures", () => {
     act(() => { dispatch({ type: "CODE_EDITED", source: SOURCE + "\n% typing" }); });
     begin(); pointer("pointerup", 40);
     expect(useEditorStore.getState().source).toBe(SOURCE + "\n% typing");
+  });
+});
+
+
+describe("spacing handle gestures", () => {
+  async function setup(command = "\\medskip") {
+    const source = SOURCE.replace("\\begin{columns}[T]", `${command}\n\\begin{columns}[T]`);
+    act(() => { dispatch({ type: "CODE_EDITED", source }); });
+    await renderSnapshot();
+    expect(host.querySelectorAll('[data-testid="deck-spacing-handle"]')).toHaveLength(1);
+    return source;
+  }
+  it("keeps a named skip intact when clicked or dragged back to its origin", async () => {
+    const source = await setup();
+    const history = useEditorStore.getState().history.length;
+    begin("deck-spacing-handle"); pointer("pointerup", 0);
+    expect(useEditorStore.getState().source).toBe(source);
+    begin("deck-spacing-handle"); pointer("pointermove", 0, 40); flush();
+    expect(useEditorStore.getState().source).toContain("\\vspace{26pt}");
+    pointer("pointerup", 0, 0);
+    expect(useEditorStore.getState().source).toBe(source);
+    expect(useEditorStore.getState().history.length).toBe(history);
+  });
+  it("previews conversion, keeps the handle through reflow, and commits one undo step", async () => {
+    const source = await setup();
+    const history = useEditorStore.getState().history.length;
+    const handle = host.querySelector('[data-testid="deck-spacing-handle"]');
+    begin("deck-spacing-handle"); pointer("pointermove", 0, 20); flush();
+    expect(useEditorStore.getState().source).toContain("\\vspace{16pt}");
+    await renderSnapshot();
+    expect(host.querySelector('[data-testid="deck-spacing-handle"]')).toBe(handle);
+    pointer("pointerup", 0, 40); await renderSnapshot();
+    const final = useEditorStore.getState().source;
+    expect(final).toBe(source.replace("\\medskip", "\\vspace{26pt}"));
+    expect(useEditorStore.getState().history.length).toBe(history + 1);
+    act(() => { dispatch({ type: "UNDO" }); }); expect(useEditorStore.getState().source).toBe(source);
+    act(() => { dispatch({ type: "REDO" }); }); expect(useEditorStore.getState().source).toBe(final);
+  });
+  it("restores the original named skip on Escape", async () => {
+    const source = await setup("\\bigskip");
+    begin("deck-spacing-handle"); pointer("pointermove", 0, 40); flush();
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    pointer("pointerup", 0, 80);
+    expect(useEditorStore.getState().source).toBe(source);
+  });
+  it("keeps a zero spacing's star and relative unit", async () => {
+    await setup("\\vspace*{0em}");
+    begin("deck-spacing-handle"); pointer("pointerup", 0, -20);
+    expect(useEditorStore.getState().source).toContain("\\vspace*{-0.9132em}");
+    await renderSnapshot();
+    expect(host.querySelector('[data-testid="deck-spacing-handle"]')?.getAttribute("aria-valuenow")).toBe("-0.9132");
+  });
+  it("supports vertical keyboard nudges and ignores horizontal arrows", async () => {
+    const source = await setup("\\smallskip");
+    const handle = host.querySelector('[data-testid="deck-spacing-handle"]')!;
+    act(() => { handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
+    expect(useEditorStore.getState().source).toBe(source);
+    act(() => { handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true })); });
+    expect(useEditorStore.getState().source).toBe(source.replace("\\smallskip", "\\vspace{13pt}"));
+  });
+  it("does not commit over a source edit made during a spacing drag", async () => {
+    const source = await setup();
+    begin("deck-spacing-handle"); pointer("pointermove", 0, 40); flush();
+    act(() => { dispatch({ type: "CODE_EDITED", source: source + "\n% User edit" }); });
+    pointer("pointerup", 0, 60);
+    expect(useEditorStore.getState().source).toBe(source + "\n% User edit");
   });
 });

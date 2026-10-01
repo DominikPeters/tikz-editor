@@ -309,9 +309,10 @@ export const capabilityFixtures: Record<string, string> = {
   beamer_direct_resize: String.raw`\documentclass{beamer}
 \begin{document}\begin{frame}
 \begin{columns}
-\begin{column}{.55\textwidth}Left\end{column}
+\begin{column}{.55\textwidth}Left\par\medskip Below\end{column}
 \begin{column}{.42\textwidth}\includegraphics[width=.8\linewidth]{demo.png}\end{column}
 \end{columns}
+\vspace{3pt}
 \end{frame}\end{document}`,
   beamer_builds: String.raw`\documentclass{beamer}
 \begin{document}

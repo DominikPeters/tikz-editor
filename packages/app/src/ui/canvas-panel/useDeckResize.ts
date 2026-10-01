@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clientPoint, px } from "@tikz-editor/core/coords/index";
-import { beamerColumnResizePatches, beamerImageResizePatches, type BeamerColumnDivider, type BeamerFrameLayout, type BeamerImageResizeTarget } from "@tikz-editor/core/beamer/index";
+import { beamerColumnResizePatches, beamerImageResizePatches, beamerSpacingResizePatches, type BeamerSpacingTarget, type BeamerColumnDivider, type BeamerFrameLayout, type BeamerImageResizeTarget } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { beginDocumentEdit, canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit, type DocumentEditSession } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
@@ -8,6 +8,7 @@ import { rootKey } from "../../root-key";
 import { clientToSvgPoint } from "./geometry";
 
 export type DeckResizeTarget = { kind: "columns"; divider: BeamerColumnDivider }
+  | { kind: "spacing"; spacing: BeamerSpacingTarget }
   | { kind: "image"; image: BeamerImageResizeTarget; corner: "nw" | "ne" | "sw" | "se" };
 type Session = {
   edit: DocumentEditSession;
@@ -19,6 +20,7 @@ type Session = {
 
 function patchesFor(source: string, target: DeckResizeTarget, dx: number, dy: number): SourcePatch[] {
   if (target.kind === "columns") return beamerColumnResizePatches(source, target.divider, dx);
+  if (target.kind === "spacing") return beamerSpacingResizePatches(source, target.spacing, dy);
   const { width, height } = target.image.bounds;
   const sx = target.corner.endsWith("e") ? 1 : -1;
   const sy = target.corner.startsWith("s") ? 1 : -1;

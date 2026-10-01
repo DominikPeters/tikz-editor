@@ -4675,12 +4675,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
           sourceOffset
         ) ||
         (
-          node.command === "vspace" &&
+          ["vspace", "smallskip", "medskip", "bigskip"].includes(node.command) &&
           horizontalModeResumedAfterDisplay &&
           hasFollowingInlineMaterial(index + 1)
         )
       ) {
-        if (node.command !== "vspace") {
+        // LaTeX defines the named skips as \vspace of their skip registers.
+        if (!["vspace", "smallskip", "medskip", "bigskip"].includes(node.command)) {
           unsupportedCommand = true;
           abortScan = true;
           break;
