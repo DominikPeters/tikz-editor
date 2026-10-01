@@ -193,6 +193,10 @@ export const capabilityFixtures: Record<string, string> = {
   \path coordinate (p1) at (1,0);
   \draw (0,0) -- (p1);
 \end{tikzpicture}`,
+  calc_coordinates: String.raw`\begin{tikzpicture}
+  \coordinate (C) at (1,2);
+  \node at ($(C)+(.33,.11)$) {Label};
+\end{tikzpicture}`,
   graph_operation: String.raw`\begin{tikzpicture}
   \graph [nodes={draw,circle}] { a -> b -> {c, d} };
 \end{tikzpicture}`,

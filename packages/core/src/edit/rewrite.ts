@@ -12,6 +12,7 @@ import { ptToCm } from "../coords/source.js";
 import { worldToLocal, worldDeltaToLocalDelta, localToSourceUnits } from "./coords.js";
 import { CM_PER_PT, formatNumber, type NumberFormatOptions } from "./format.js";
 import { formatCoordinate, formatPolarCoordinate } from "./style.js";
+import { rewriteCalcCoordinate } from "./rewrite-calc.js";
 
 /**
  * Compute a replacement source string for moving a handle to a new world position.
@@ -22,6 +23,10 @@ export function rewriteCoordinate(
   handle: EditHandle,
   source: string
 ): string | null {
+  if (handle.rewriteMode === "calc") {
+    return rewriteCalcCoordinate(newWorld, handle, source);
+  }
+
   if (handle.rewriteMode === "positioning") {
     return rewritePositioning(newWorld, handle);
   }

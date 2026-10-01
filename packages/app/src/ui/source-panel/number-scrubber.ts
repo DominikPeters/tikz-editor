@@ -1,5 +1,5 @@
 import { syntaxTree } from "@codemirror/language";
-import type { Extension } from "@codemirror/state";
+import { Annotation, type Extension } from "@codemirror/state";
 import type { EditorView} from "@codemirror/view";
 import { ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
@@ -13,6 +13,8 @@ import {
 interface NumberScrubberOptions {
   onScrubStateChange?: (state: { isActive: boolean; from: number | null; to: number | null }) => void;
 }
+
+const numberScrubTransaction = Annotation.define<boolean>();
 
 type ScrubKind = "coordinate" | "length" | "angle" | "scale" | "opacity" | "numeric";
 
@@ -138,7 +140,7 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
       }
 
       update(update: ViewUpdate): void {
-        if (this.active && update.docChanged) {
+        if (this.active && update.docChanged && !update.transactions.some(transaction => transaction.annotation(numberScrubTransaction))) {
           this.active.from = update.changes.mapPos(this.active.from, 1);
           this.active.to = update.changes.mapPos(this.active.to, -1);
         }
@@ -202,6 +204,7 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
 
         this.pending = null;
         event.preventDefault();
+        this.view.focus();
         this.active = {
           from: pending.target.from,
           to: pending.target.to,
@@ -250,7 +253,8 @@ export function numberScrubber(options: NumberScrubberOptions = {}): Extension {
         }
 
         this.view.dispatch({
-          changes: { from: active.from, to: active.to, insert: nextText }
+          changes: { from: active.from, to: active.to, insert: nextText },
+          annotations: numberScrubTransaction.of(true)
         });
         active.to = active.from + nextText.length;
         active.lastText = nextText;
@@ -372,7 +376,7 @@ function findNumberNode(view: EditorView, position: number): SyntaxNode | null {
 function buildScrubTarget(view: EditorView, numberNode: SyntaxNode): ScrubTarget | null {
   const doc = view.state.doc;
   const rawText = doc.sliceString(numberNode.from, numberNode.to);
-  if (!/^\d+(?:\.\d+)?$/u.test(rawText)) {
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u.test(rawText)) {
     return null;
   }
 

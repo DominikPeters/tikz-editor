@@ -56,6 +56,7 @@ export const FEATURE_IDS = [
   "matrix_node",
   "fit_node",
   "named_coordinates",
+  "calc_coordinates",
   "graph_operation",
   "plot_operation",
   "to_operation",

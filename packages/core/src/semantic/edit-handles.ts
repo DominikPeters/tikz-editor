@@ -37,6 +37,18 @@ export function createEditHandle(
     rewriteTargetHandleId: opts.rewriteTargetHandleId
   } as const;
 
+  if (evaluated.coordinateForm === "calc" && evaluated.frame && !evaluated.relativePrefix) {
+    return {
+      ...base,
+      coordinateForm: "calc",
+      transform: worldTransform(evaluated.frame.a, evaluated.frame.b, evaluated.frame.c, evaluated.frame.d, evaluated.frame.e, evaluated.frame.f),
+      handleType: "coordinate",
+      coordinateSpace: "world-only",
+      frame: evaluated.frame,
+      rewriteMode: "calc"
+    };
+  }
+
   if (evaluated.kind === "transformed") {
     const frame = evaluated.frame;
     const local = evaluated.local;

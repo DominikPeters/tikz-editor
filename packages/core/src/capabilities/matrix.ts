@@ -409,6 +409,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["coordinate_operation"]
   },
+  calc_coordinates: {
+    parser: "stable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["calc_coordinates"],
+    notes: "Visual translation preserves calc expressions by editing a numeric Cartesian offset or appending one. Relative calc coordinates, singular transforms, and shared expanded source are not rewritten."
+  },
   graph_operation: {
     parser: "stable",
     semantic: "partial",

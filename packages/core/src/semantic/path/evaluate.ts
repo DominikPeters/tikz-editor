@@ -1863,6 +1863,9 @@ export function evaluatePathStatement(
         evaluateTurnCoordinate(item, builder.currentPointLogical ?? context.currentPoint, frameTransform, builder.lastPlacementSegment) ??
         evaluateCoordinate(item, context);
       const handleKind = statement.command === "node" ? "node-position" : "path-point";
+      if (item.form === "calc") {
+        markFeature("calc_coordinates", evaluated.world ? "supported" : "unsupported");
+      }
       const rewriteTargetHandleId =
         handleKind === "path-point" && evaluated.coordinateForm === "named"
           ? resolveNamedCoordinateRewriteHandleId(item.x, context)

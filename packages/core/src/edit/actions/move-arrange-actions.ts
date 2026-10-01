@@ -15,7 +15,8 @@ import {
   buildTransformSetPropertyMutations,
   resolveTransformInspectorMutationContextFromOptionEntries
 } from "../property-write-builders.js";
-import { replaceSpan } from "../patch.js";
+import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
+import { correctMovedCalcDependencies } from "../calc-move.js";
 import { resolvePropertyTarget, type PropertyTarget } from "../property-target.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { applyTextReplacements } from "../statement-ops.js";
@@ -118,6 +119,7 @@ export function applyMoveElementsAction(
   const reasons: string[] = [];
   let movedAny = false;
   const movedPathShapeDeltas = new Map<string, WorldPoint>();
+  const movedSourceDeltas = new Map<string, WorldPoint>();
 
   if (nonMatrixElementIds.length > 0) {
     const byHandles = applyMoveElementsUsingHandleRewrites(currentSource, editHandles, nonMatrixElementIds, delta, parseOptions);
@@ -130,6 +132,7 @@ export function applyMoveElementsAction(
       movedAny = true;
       for (const elementId of nonMatrixElementIds) {
         movedPathShapeDeltas.set(elementId, delta);
+        movedSourceDeltas.set(elementId, delta);
       }
       if (byHandles.kind === "partial") {
         skippedHandles.push(...byHandles.skippedHandles);
@@ -152,6 +155,7 @@ export function applyMoveElementsAction(
       currentSource = byMatrixPlacement.newSource;
       patches.push(...byMatrixPlacement.patches);
       movedAny = true;
+      for (const elementId of matrixElementIds) movedSourceDeltas.set(elementId, delta);
       if (byMatrixPlacement.kind === "partial") {
         reasons.push(byMatrixPlacement.reason);
       }
@@ -171,6 +175,7 @@ export function applyMoveElementsAction(
       currentSource = byTreeRootPlacement.newSource;
       patches.push(...byTreeRootPlacement.patches);
       movedAny = true;
+      for (const elementId of treeRootElementIds) movedSourceDeltas.set(elementId, delta);
       if (byTreeRootPlacement.kind === "partial") {
         reasons.push(byTreeRootPlacement.reason);
       }
@@ -191,6 +196,9 @@ export function applyMoveElementsAction(
       currentSource = byScopeTransform.newSource;
       patches.push(...byScopeTransform.patches);
       movedAny = true;
+      for (const sourceId of expandChangedSourceIdsForMovedElements(parsed.figure.body, scopeElementIds)) {
+        movedSourceDeltas.set(sourceId, delta);
+      }
       if (byScopeTransform.kind === "partial") {
         reasons.push(byScopeTransform.reason);
       }
@@ -214,6 +222,15 @@ export function applyMoveElementsAction(
   );
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);
+
+  const calcCorrected = correctMovedCalcDependencies(source, currentSource, editHandles, movedSourceDeltas, parseOptions);
+  if (calcCorrected == null) {
+    return { kind: "unsupported", reason: "Could not preserve dependencies between the selected calc coordinates." };
+  }
+  if (calcCorrected !== currentSource) {
+    currentSource = calcCorrected;
+    patches.splice(0, patches.length, computeMinimalReplacementPatch(source, currentSource));
+  }
 
   const uniqueReasons = uniqueStrings(reasons);
   if (uniqueReasons.length > 0 || skippedHandles.length > 0) {
@@ -1099,6 +1116,15 @@ function applyElementDeltaMapStrict(
   );
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);
+
+  const calcCorrected = correctMovedCalcDependencies(source, currentSource, editHandles, deltasBySource, parseOptions);
+  if (calcCorrected == null) {
+    return { kind: "unsupported", reason: "Could not preserve dependencies between the arranged calc coordinates." };
+  }
+  if (calcCorrected !== currentSource) {
+    currentSource = calcCorrected;
+    patches.splice(0, patches.length, computeMinimalReplacementPatch(source, currentSource));
+  }
 
   return {
     kind: "success",

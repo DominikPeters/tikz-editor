@@ -85,7 +85,10 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       frame.transform
     );
     return evaluatedCalc.point
-      ? worldOnlyCoordinate("calc", evaluatedCalc.point, evaluatedCalc.diagnostics, item.relativePrefix === "++", "calc")
+      ? {
+          ...worldOnlyCoordinate("calc", evaluatedCalc.point, evaluatedCalc.diagnostics, item.relativePrefix === "++", "calc", item.relativePrefix),
+          frame: asFrameTransform(frame.transform)
+        }
       : invalidCoordinate("calc", evaluatedCalc.diagnostics, item.relativePrefix === "++");
   }
 
