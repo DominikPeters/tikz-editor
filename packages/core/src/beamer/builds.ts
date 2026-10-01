@@ -269,6 +269,40 @@ export function beamerBuildSpecPatch(model: BeamerBuildModel, rowId: string, val
   return { oldSpan, newSpan: { from: oldSpan.from, to: oldSpan.from + replacement.length }, replacement };
 }
 
+export type BeamerBuildTimingAction = "from" | "only" | "through";
+export type BeamerBuildBoundary = "start" | "end";
+
+/** These commands describe visibility, so inverted and branching rules use the text field. */
+export function canEditBeamerBuildTiming(row: BeamerBuildRow): boolean {
+  return row.editable && (!row.command || ["only", "uncover", "visible"].includes(row.command.kind));
+}
+
+export function beamerBuildTimingPatch(model: BeamerBuildModel, rowId: string, action: BeamerBuildTimingAction, step: number): SourcePatch | null {
+  const row = model.rows.find((candidate) => candidate.id === rowId);
+  if (!row || !canEditBeamerBuildTiming(row) || !Number.isSafeInteger(step) || step < 1) return null;
+  return beamerBuildSpecPatch(model, rowId, action === "from" ? `${step}-` : action === "through" ? `-${step}` : String(step));
+}
+
+/** A single authored interval; never flatten disjoint or relative specifications. */
+export function beamerBuildRange(row: BeamerBuildRow): { from: number; to: number | null } | null {
+  if (!canEditBeamerBuildTiming(row) || !row.spec || row.spec.source.value.includes(",")) return null;
+  const interval = row.spec.intervals[0];
+  return interval ? { from: interval.from, to: interval.to } : null;
+}
+
+export function beamerBuildBoundaryPatch(model: BeamerBuildModel, rowId: string, boundary: BeamerBuildBoundary, step: number): SourcePatch | null {
+  const row = model.rows.find((candidate) => candidate.id === rowId);
+  const range = row ? beamerBuildRange(row) : null;
+  if (!row?.spec || !range || !Number.isSafeInteger(step) || step < 1 || (boundary === "end" && range.to == null)) return null;
+  const from = boundary === "start" ? Math.min(step, range.to ?? Number.MAX_SAFE_INTEGER) : range.from;
+  const to = boundary === "end" ? Math.max(step, range.from) : range.to;
+  if (from === range.from && to === range.to) return null;
+  // Preserve an omitted lower bound when moving only the upper bound.
+  const value = to == null ? `${from}-` : boundary === "end" && row.spec.source.value.trim().startsWith("-")
+    ? `-${to}` : from === to ? String(from) : `${from}-${to}`;
+  return beamerBuildSpecPatch(model, rowId, value);
+}
+
 /** Keep selection through ordinary source edits; never identify rows by label. */
 export function reconcileBeamerBuildRow(previous: BeamerBuildModel, rowId: string, next: BeamerBuildModel): BeamerBuildRow | null {
   const row = previous.rows.find((candidate) => candidate.id === rowId);

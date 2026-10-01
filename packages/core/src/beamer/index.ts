@@ -1,6 +1,12 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
 export {
   buildBeamerBuildModel,
+  canEditBeamerBuildTiming,
+  beamerBuildTimingPatch,
+  beamerBuildRange,
+  beamerBuildBoundaryPatch,
+  type BeamerBuildTimingAction,
+  type BeamerBuildBoundary,
   beamerBuildStateAt,
   beamerBuildSpecPatch,
   firstVisibleBeamerBuildStep,

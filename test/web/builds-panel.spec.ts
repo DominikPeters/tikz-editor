@@ -45,6 +45,15 @@ function inputKey(key: string): void {
     input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
   });
 }
+function pointer(type: string, x: number, pointerId = 1): Event {
+  const event = new MouseEvent(type, { bubbles: true, button: 0, clientX: x });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
+  return event;
+}
+function beginDrag(): void {
+  selectTarget();
+  act(() => { host.querySelector<HTMLButtonElement>('[data-boundary="start"]')!.dispatchEvent(pointer("pointerdown", 100)); });
+}
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -63,6 +72,95 @@ afterEach(() => {
 });
 
 describe("Builds panel", () => {
+  it("sets timing from a cell's context menu and undoes one source patch", () => {
+    const cell = host.querySelector<HTMLButtonElement>('[aria-label="Text · Target, step 1: Absent"]')!;
+    act(() => { cell.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 100, clientY: 100 })); });
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.activeElement?.textContent).toBe("Show from step 1");
+    const only = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((entry) => entry.textContent === "Only on step 1")!;
+    act(() => { only.click(); });
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<1>"));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    act(() => { useEditorStore.getState().dispatch({ type: "UNDO" }); });
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+  });
+
+  it("dismisses stale timing menus after source changes", () => {
+    selectTarget();
+    act(() => { host.querySelector<HTMLButtonElement>('[aria-label="Timing actions"]')!.click(); });
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    act(() => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: SOURCE.replace("Target", "Renamed") }); });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(useEditorStore.getState().source).toContain("Renamed");
+  });
+
+  it("previews boundary drags in source, commits once, and uses the release position", () => {
+    const historyLength = useEditorStore.getState().history.length;
+    beginDrag();
+    act(() => { window.dispatchEvent(pointer("pointermove", 124)); });
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3->"));
+    expect(useEditorStore.getState().history.length).toBe(historyLength);
+    act(() => { window.dispatchEvent(pointer("pointerup", 148)); });
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<4->"));
+    expect(useEditorStore.getState().history.length).toBe(historyLength + 1);
+    act(() => { useEditorStore.getState().dispatch({ type: "UNDO" }); });
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+    act(() => { useEditorStore.getState().dispatch({ type: "REDO" }); });
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<4->"));
+  });
+
+  it.each(["Escape", "pointercancel", "blur"])("cancels boundary drags on %s without creating history", (reason) => {
+    const historyLength = useEditorStore.getState().history.length;
+    beginDrag();
+    act(() => { window.dispatchEvent(pointer("pointermove", 148)); });
+    act(() => {
+      window.dispatchEvent(reason === "Escape" ? new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+        : reason === "pointercancel" ? pointer("pointercancel", 148) : new Event("blur"));
+    });
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+    expect(useEditorStore.getState().history.length).toBe(historyLength);
+    expect(useEditorStore.getState().activeInspectorEditDocumentId).toBeNull();
+    act(() => { window.dispatchEvent(pointer("pointerup", 172)); });
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+  });
+
+  it("does not overwrite an external edit during a boundary drag", () => {
+    beginDrag();
+    act(() => { window.dispatchEvent(pointer("pointermove", 124)); });
+    const external = useEditorStore.getState().source.replace("Target", "Renamed");
+    act(() => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: external }); });
+    act(() => { window.dispatchEvent(pointer("pointerup", 148)); });
+    expect(useEditorStore.getState().source).toBe(external);
+  });
+
+  it("restores a transient edit when switching documents", () => {
+    const documentId = useEditorStore.getState().activeDocumentId;
+    beginDrag();
+    act(() => { window.dispatchEvent(pointer("pointermove", 124)); });
+    act(() => { useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT" }); });
+    expect(useEditorStore.getState().documents[documentId].source).toBe(SOURCE);
+    expect(useEditorStore.getState().activeDocumentId).not.toBe(documentId);
+  });
+
+  it("supports keyboard boundary edits and preserves handle focus", () => {
+    selectTarget();
+    act(() => { host.querySelector<HTMLButtonElement>('[data-boundary="start"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); });
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3->"));
+    expect((document.activeElement as HTMLElement).dataset.boundary).toBe("start");
+  });
+
+  it("opens, navigates, and dismisses a timing menu with the keyboard", () => {
+    const cell = host.querySelector<HTMLButtonElement>('[aria-label="Text · Target, step 1: Absent"]')!;
+    act(() => { cell.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true })); });
+    expect(document.activeElement?.textContent).toBe("Show from step 1");
+    act(() => { document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+    expect(document.activeElement?.textContent).toBe("Only on step 1");
+    act(() => { document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(cell);
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+  });
+
   it("lists invisible content, selects its source, and previews without source changes", () => {
     expect(host.querySelectorAll('[data-testid="build-row"]')).toHaveLength(4);
     selectTarget();

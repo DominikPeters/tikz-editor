@@ -45,6 +45,22 @@ the Inspector. This replaces only the contents of the existing angle
 brackets, through the normal revision-checked source patch and undo history.
 Changing source discards an uncommitted field draft.
 
+Right-clicking a timeline cell offers **Show from step**, **Only on step**, and
+**Show through step**. The selected rule's Timing actions menu provides the
+same commands for the current preview step. Cell menus also open with the
+Context Menu key or Shift+F10 and support arrow-key navigation. Source changes
+invalidate an open menu.
+
+Selecting a single numeric visibility interval exposes its start and finite
+end handles. Dragging a handle snaps to steps, updates source and the slide
+preview live, and commits one undo entry on release. Escape, pointer cancellation,
+window blur, unmounting, or switching documents cancels the gesture. Intervening
+source edits are never overwritten. Arrow keys on a focused handle move it one
+step, including beyond the current page. Endpoints cannot cross. Open-ended
+rules expose only their start; disjoint intervals remain editable in the Steps
+field. These visibility gestures apply to only/uncover/visible rules and explicit
+items; inverted and branching rules keep the existing specification editor.
+
 Relative specifications, mode/action rules, pauses, and unsupported commands
 use source editing. They are never flattened to numeric rules. The renderer's
 existing coverage still determines preview fidelity; rules with unknown
@@ -60,6 +76,8 @@ focus states use the existing theme tokens.
 - Rows identify content; indentation and disclosure controls express ownership.
 - Step headers and cells select the preview. A compact key explains the three
   visible states. List defaults have no fake timeline cells.
+- Timing commands appear in a context menu; boundary handles appear only on
+  the selected, editable interval.
 - Page controls appear only when the steps extend beyond the current page.
 - The selected rule's controls stay visible below the scrolling timeline.
   A Steps field edits the rule, owner links navigate to shared/enclosing rules,
@@ -69,8 +87,8 @@ focus states use the existing theme tokens.
   field draft and tells the user how to correct it.
 
 This version edits existing rules. Adding rules is available through the
-existing block/item Inspector fields or source. Timeline dragging, build
-reordering, and new-rule insertion are not implemented.
+existing block/item Inspector fields or source. Build reordering and new-rule
+insertion are not implemented in this panel.
 
 ## Implementation and checks
 

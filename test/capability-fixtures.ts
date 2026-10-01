@@ -311,6 +311,7 @@ export const capabilityFixtures: Record<string, string> = {
 \begin{frame}
 \begin{itemize}[<+->]\item First\item Second\end{itemize}
 \only<2->{\begin{block}{Result}Proof.\end{block}}
+\uncover<2-4>{Finite interval}
 \alt<2>{During}{Otherwise}
 \end{frame}
 \end{document}`,

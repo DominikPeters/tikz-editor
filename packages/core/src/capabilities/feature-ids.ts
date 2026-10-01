@@ -92,7 +92,7 @@ export const FEATURE_IDS = [
   "svg_text",
   "text_includegraphics",
   "beamer_document_scan",
-  "beamer_builds",
+  "beamer_builds", // Source inventory, numeric timing commands, and boundary edits.
   "beamer_source_placeholders",
   "render_pipeline"
 ] as const;

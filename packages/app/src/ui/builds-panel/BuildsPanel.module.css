@@ -18,7 +18,7 @@
 
 .timeline th:first-child { width: auto; text-align: left; }
 .timeline thead th:not(:first-child) { width: 24px; }
-.timeline td { text-align: center; }
+.timeline td { text-align: center; position: relative; }
 
 .timeline thead button,
 .timeline td[data-state] button {
@@ -75,8 +75,28 @@
 .timeline td[data-state="removed"] { color: var(--text-muted); }
 
 .timeline button:focus-visible {
-  outline: 1px solid var(--border-strong);
+  outline: 1px solid var(--text-muted);
   outline-offset: -1px;
+}
+
+.timeline td[data-state] button.boundary {
+  position: absolute;
+  top: 7px;
+  width: 7px;
+  height: 16px;
+  border: 1px solid var(--text-muted);
+  border-radius: 2px;
+  background: var(--bg-pane);
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.boundary[data-boundary="start"] { left: -2px; }
+.boundary[data-boundary="end"] { right: -2px; }
+.timeline td[data-state] button.boundary:hover,
+.timeline td[data-state] button.boundary:focus-visible {
+  background: var(--toggle-active-bg);
+  border-color: var(--text-muted);
 }
 
 .legend {

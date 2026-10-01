@@ -1,7 +1,11 @@
-import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react";
+import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine, RiMoreLine } from "@remixicon/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   beamerBuildSpecPatch,
+  beamerBuildBoundaryPatch,
+  beamerBuildRange,
+  beamerBuildTimingPatch,
+  canEditBeamerBuildTiming,
   beamerBuildStateAt,
   buildBeamerBuildModel,
   firstVisibleBeamerBuildStep,
@@ -9,7 +13,9 @@ import {
   reconcileBeamerBuildRow,
   type BeamerBuildModel,
   type BeamerBuildRow,
+  type BeamerBuildBoundary,
 } from "@tikz-editor/core/beamer/index";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { useEditorStore } from "../../store/store";
 import { rootKey } from "../../root-key";
 import { getDockLayoutHandle } from "../DockLayout";
@@ -17,6 +23,8 @@ import { SidePanel } from "../SidePanel";
 import inspector from "../inspector-panel/InspectorPanel.module.css";
 import objects from "../objects-panel/ObjectsPanel.module.css";
 import css from "./BuildsPanel.module.css";
+import { BuildTimingMenu, type BuildTimingMenuAnchor } from "./BuildTimingMenu";
+import { useBuildBoundaryDrag } from "./useBuildBoundaryDrag";
 
 const PAGE_SIZE = 4;
 
@@ -33,11 +41,25 @@ export function BuildsPanel() {
   const [selection, setSelection] = useState<{ documentId: string; model: BeamerBuildModel; rowId: string } | null>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [pageOverride, setPageOverride] = useState<number | null>(null);
+  const { drag, begin: beginBoundaryDrag } = useBuildBoundaryDrag();
+  const tableRef = useRef<HTMLTableElement>(null);
+  const focusBoundary = useRef<{ rowId: string; boundary: BeamerBuildBoundary } | null>(null);
+  const [menu, setMenu] = useState<{ rowId: string; step: number; documentId: string; frameId: string; revision: number; anchor: BuildTimingMenuAnchor } | null>(null);
+  const closeMenu = useCallback(() => { setMenu(null); }, []);
   const selected = model && activeSelection && activeSelection.rowId === selection?.rowId && selection.documentId === documentId
     ? reconcileBeamerBuildRow(selection.model, selection.rowId, model) : null;
   const step = Math.min(requestedStep, model?.stepCount ?? 1);
   const page = Math.min(pageOverride ?? Math.floor((step - 1) / PAGE_SIZE), Math.floor(((model?.stepCount ?? 1) - 1) / PAGE_SIZE));
-  const steps = Array.from({ length: Math.min(PAGE_SIZE, (model?.stepCount ?? 1) - page * PAGE_SIZE) }, (_, index) => page * PAGE_SIZE + index + 1);
+  const steps = drag?.steps ?? Array.from({ length: Math.min(PAGE_SIZE, (model?.stepCount ?? 1) - page * PAGE_SIZE) }, (_, index) => page * PAGE_SIZE + index + 1);
+
+  useEffect(() => {
+    const target = focusBoundary.current;
+    if (!target) return;
+    const button = Array.from(tableRef.current?.querySelectorAll<HTMLButtonElement>("button[data-boundary]") ?? [])
+      .find((element) => element.dataset.rowId === target.rowId && element.dataset.boundary === target.boundary);
+    button?.focus();
+    focusBoundary.current = null;
+  }, [page, sourceRevision]);
 
   const publishSelection = useCallback((row: BeamerBuildRow, revealSource = false) => {
     if (!model) return;
@@ -76,6 +98,18 @@ export function BuildsPanel() {
     if (layout && !layout.getModel().getNodeById("source")) layout.togglePanel("source");
     publishSelection(row, true);
   };
+  const applyPatch = (patch: SourcePatch | null) => {
+    if (patch && !locked && !drag) dispatch({ type: "APPLY_SOURCE_PATCHES", documentId, baseRevision: sourceRevision, patches: [patch], changedSourceIds: [] });
+  };
+  const canSetTiming = (row: BeamerBuildRow) => !!model && !locked && !drag && canEditBeamerBuildTiming(row) &&
+    (row.kind === "list" || beamerBuildStateAt(model, row, step).visibility !== "unknown");
+  const openTimingMenu = (row: BeamerBuildRow, value: number, trigger: HTMLElement, x?: number, y?: number) => {
+    if (!model || !canSetTiming(row)) return;
+    select(row);
+    const bounds = trigger.getBoundingClientRect();
+    setMenu({ rowId: row.id, step: value, documentId, frameId: model.frameId, revision: sourceRevision,
+      anchor: { trigger, x: x ?? bounds.left, y: y ?? bounds.bottom } });
+  };
   const rowById = new Map(model?.rows.map((row) => [row.id, row]));
   const ancestors = (row: BeamerBuildRow): BeamerBuildRow[] => {
     const result: BeamerBuildRow[] = [];
@@ -86,6 +120,7 @@ export function BuildsPanel() {
   const firstVisible = selected && model ? firstVisibleBeamerBuildStep(model, selected) : null;
   const hasTimeline = model?.rows.some((row) => row.kind !== "list" &&
     steps.every((value) => beamerBuildStateAt(model, row, value).visibility !== "unknown"));
+  const openMenu = model && menu && !locked && !drag && menu.documentId === documentId && menu.frameId === frameId && menu.revision === sourceRevision ? menu : null;
 
   return (
     <SidePanel className={inspector.panel}>
@@ -100,7 +135,7 @@ export function BuildsPanel() {
         {!model ? <p className={inspector.hint}>Select a slide to view its builds.</p>
           : model.rows.length === 0 ? <p className={inspector.hint}>No builds on this slide.</p>
             : <>
-              <table className={css.timeline} aria-label="Slide builds">
+              <table ref={tableRef} className={css.timeline} aria-label="Slide builds">
                 <thead><tr><th scope="col">Content</th>{hasTimeline ? steps.map((value) => <th scope="col" key={value}>
                   <button type="button" aria-label={`Preview step ${value}`} aria-pressed={step === value} onClick={() => { preview(value); }}>{value}</button>
                 </th>) : <th scope="col" colSpan={steps.length} />}</tr></thead>
@@ -109,6 +144,7 @@ export function BuildsPanel() {
                   const expandable = model.rows.some((child) => child.parentId === row.id);
                   const cells = steps.map((value) => beamerBuildStateAt(model, row, value));
                   const sourceOnly = row.kind !== "list" && cells.some((cell) => cell.visibility === "unknown");
+                  const range = selected?.id === row.id && !locked ? beamerBuildRange(row) : null;
                   return <tr key={row.id} data-testid="build-row" data-build-id={row.id} data-selected={selected?.id === row.id}>
                     <th scope="row"><div className={css.rowLabel} style={{ paddingLeft: Math.min(parents.length, 5) * 10 }}>
                       {expandable ? <button type="button" className={`${objects.iconButton} ${css.disclosure}`} aria-label={`${collapsed.has(row.id) ? "Expand" : "Collapse"} ${row.label}`} aria-expanded={!collapsed.has(row.id)} onClick={() => {
@@ -123,9 +159,36 @@ export function BuildsPanel() {
                     </td> : steps.map((value, index) => {
                       const cell = cells[index];
                       return <td key={value} data-state={cell.visibility} title={`Step ${value}: ${cell.label}`}>
-                        <button type="button" aria-label={`${row.label}, step ${value}: ${cell.label}`} onClick={() => { select(row); preview(value); }}>
+                        <button type="button" aria-label={`${row.label}, step ${value}: ${cell.label}`} onClick={() => { select(row); preview(value); }}
+                          onContextMenu={(event) => {
+                            if (!canSetTiming(row)) return;
+                            event.preventDefault();
+                            openTimingMenu(row, value, event.currentTarget, event.clientX, event.clientY);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                              event.preventDefault(); openTimingMenu(row, value, event.currentTarget);
+                            }
+                          }}>
                           {cell.visibility === "visible" ? "●" : cell.visibility === "hidden" ? "○" : "—"}
                         </button>
+                        {range ? (["start", "end"] as const).filter((boundary) => (boundary === "start" ? range.from : range.to) === value).map((boundary) =>
+                          <button key={boundary} type="button" className={css.boundary} data-boundary={boundary} data-row-id={row.id}
+                            aria-label={`${boundary === "start" ? "Start" : "End"} step for ${row.label}`}
+                            title={`${boundary === "start" ? "Start" : "End"} step ${value} · Drag or use arrow keys`}
+                            onPointerDown={(event) => { beginBoundaryDrag(event, model, row, boundary, steps); }}
+                            onClick={(event) => { event.stopPropagation(); }}
+                            onKeyDown={(event) => {
+                              if (drag || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+                              event.preventDefault(); event.stopPropagation();
+                              const next = Math.max(1, value + (event.key === "ArrowRight" ? 1 : -1));
+                              const patch = beamerBuildBoundaryPatch(model, row.id, boundary, next);
+                              if (!patch) return;
+                              focusBoundary.current = { rowId: row.id, boundary };
+                              setPageOverride(Math.floor((next - 1) / PAGE_SIZE));
+                              applyPatch(patch);
+                            }} />
+                        ) : null}
                       </td>;
                     })}
                   </tr>;
@@ -136,11 +199,15 @@ export function BuildsPanel() {
       </SidePanel.Content>
       {model && selected ? <SidePanel.Footer className={css.details}>
         <section aria-label="Build rule">
-          <SidePanel.SectionHeader><span className={css.detailTitle} title={selected.label}>{selected.label}</span></SidePanel.SectionHeader>
+          <SidePanel.SectionHeader>
+            <span className={css.detailTitle} title={selected.label}>{selected.label}</span>
+            {canSetTiming(selected) ? <button type="button" className={objects.iconButton} aria-label="Timing actions" title="Timing actions" aria-haspopup="menu" aria-expanded={openMenu != null}
+              onClick={(event) => { openTimingMenu(selected, step, event.currentTarget); }}><RiMoreLine size={14} /></button> : null}
+          </SidePanel.SectionHeader>
           <SidePanel.SectionBody>
-          {selected.editable && selected.spec ? <BuildRuleEditor key={`${selected.id}:${selected.spec.source.value}:${sourceRevision}`} value={selected.spec.source.value} disabled={locked} onApply={(value) => {
+          {selected.editable && selected.spec ? <BuildRuleEditor key={`${selected.id}:${selected.spec.source.value}:${sourceRevision}`} value={selected.spec.source.value} disabled={locked || drag != null} onApply={(value) => {
             const patch = beamerBuildSpecPatch(model, selected.id, value);
-            if (patch) dispatch({ type: "APPLY_SOURCE_PATCHES", documentId, baseRevision: sourceRevision, patches: [patch], changedSourceIds: [] });
+            applyPatch(patch);
           }} /> : selected.spec ? <div className={inspector.property}>
             <span className={inspector.propertyLabel}>Steps</span>
             <output className={css.value} aria-label="Build steps">{selected.provenance === "list-default" ? selected.spec.resolved : selected.spec.source.value}</output>
@@ -156,6 +223,8 @@ export function BuildsPanel() {
           </SidePanel.SectionBody>
         </section>
       </SidePanel.Footer> : null}
+      {model && openMenu ? <BuildTimingMenu anchor={openMenu.anchor} step={openMenu.step} onClose={closeMenu}
+        onApply={(action) => { applyPatch(beamerBuildTimingPatch(model, openMenu.rowId, action, openMenu.step)); }} /> : null}
     </SidePanel>
   );
 }

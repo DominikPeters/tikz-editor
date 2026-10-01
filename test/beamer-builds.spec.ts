@@ -3,6 +3,7 @@ import {
   beamerBuildSpecPatch, beamerBuildStateAt, buildBeamerBuildModel,
   firstVisibleBeamerBuildStep, isExplicitBeamerBuildSpec, reconcileBeamerBuildRow,
   renderBeamerFramePages, scanBeamerDocument,
+  beamerBuildTimingPatch, beamerBuildBoundaryPatch, beamerBuildRange,
 } from "../packages/core/src/beamer/index.js";
 import { buildSelectionRects } from "../packages/app/src/ui/builds-panel/build-selection.js";
 import { buildNativeBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
@@ -24,6 +25,43 @@ function rowFor(model: ReturnType<typeof modelFor>, label: string) {
 }
 
 describe("source-backed Beamer builds", () => {
+  it("sets numeric timing without changing content, comments, or other rules", () => {
+    const source = deck(String.raw`% Keep me.
+\only<1,3-4>{Target} \uncover<2->{Other}`);
+    const model = modelFor(source);
+    const row = model.rows[0];
+    for (const [action, value] of [["from", "3-"], ["only", "3"], ["through", "-3"]] as const) {
+      const patch = beamerBuildTimingPatch(model, row.id, action, 3)!;
+      expect(source.slice(0, patch.oldSpan.from) + patch.replacement + source.slice(patch.oldSpan.to)).toBe(source.replace("<1,3-4>", `<${value}>`));
+    }
+  });
+
+  it("moves a single interval boundary without crossing or inventing an open end", () => {
+    const model = modelFor(deck(String.raw`\only<2-4>{Closed}\only<2->{Open}\only<-4>{Until}\only<2>{Single}`));
+    expect(beamerBuildBoundaryPatch(model, model.rows[0].id, "start", 9)?.replacement).toBe("4");
+    expect(beamerBuildBoundaryPatch(model, model.rows[0].id, "end", 1)?.replacement).toBe("2");
+    expect(beamerBuildBoundaryPatch(model, model.rows[1].id, "start", 3)?.replacement).toBe("3-");
+    expect(beamerBuildBoundaryPatch(model, model.rows[1].id, "end", 4)).toBeNull();
+    expect(beamerBuildBoundaryPatch(model, model.rows[2].id, "end", 5)?.replacement).toBe("-5");
+    expect(beamerBuildBoundaryPatch(model, model.rows[2].id, "start", 2)?.replacement).toBe("2-4");
+    expect(beamerBuildBoundaryPatch(model, model.rows[3].id, "end", 4)?.replacement).toBe("2-4");
+    expect(beamerBuildBoundaryPatch(model, model.rows[0].id, "start", 2)).toBeNull();
+    expect(beamerBuildBoundaryPatch(model, model.rows[0].id, "end", NaN)).toBeNull();
+  });
+
+  it("does not apply visibility shortcuts to relative, inherited, inverted or branching rules", () => {
+    const model = modelFor(deck(String.raw`\only<+->{Relative}\invisible<2>{Inverse}\alt<2>{First}{Second}
+\begin{itemize}[<2->]\item Inherited\end{itemize}`));
+    for (const row of model.rows.filter((entry) => entry.kind !== "list")) {
+      expect(beamerBuildTimingPatch(model, row.id, "from", 3)).toBeNull();
+      expect(beamerBuildRange(row)).toBeNull();
+    }
+    const shared = model.rows.find((row) => row.kind === "list")!;
+    expect(beamerBuildTimingPatch(model, shared.id, "from", 3)?.replacement).toBe("3-");
+    const disjoint = modelFor(deck(String.raw`\only<1,3>{Disjoint}`));
+    expect(beamerBuildRange(disjoint.rows[0])).toBeNull();
+  });
+
   it("labels source content and keeps disappearing content in the inventory", () => {
     const model = modelFor(deck(String.raw`\begin{itemize}
 \item<2-> Second point
