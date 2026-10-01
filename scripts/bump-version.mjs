@@ -9,14 +9,19 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 const packageJsonUpdates = [
   { file: "package.json" },
+  { file: "packages/lezer-tex/package.json" },
   { file: "packages/lezer-tikz/package.json" },
   {
     file: "packages/lang-tikz/package.json",
-    internalDependencies: ["@tikz-editor/lezer-tikz"],
+    internalDependencies: ["@tikz-editor/lezer-tex", "@tikz-editor/lezer-tikz"],
   },
   {
     file: "packages/core/package.json",
-    internalDependencies: ["@tikz-editor/lezer-tikz"],
+    internalDependencies: ["@tikz-editor/lezer-tex", "@tikz-editor/lezer-tikz"],
+  },
+  {
+    file: "packages/tex-fuzz/package.json",
+    internalDependencies: ["@tikz-editor/core"],
   },
   {
     file: "packages/app/package.json",
