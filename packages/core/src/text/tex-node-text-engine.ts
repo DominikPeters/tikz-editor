@@ -56,6 +56,17 @@ import { estimateVListLayoutBytes } from "./layout-cache-size.js";
 export { renderTexVListSvgMetadata };
 
 type CachedRenderEntry = {
+  readonly cacheKey: string;
+  readonly layoutCacheKey: string;
+  readonly sourceMap?: TextSourceMap;
+  readonly layout: CachedTextLayout;
+  readonly canRenderLocalSource: boolean;
+  readonly paragraphId: string;
+  readonly retainedBytes: number;
+};
+
+/** Geometry and SVG use paragraph-local coordinates and outlive source bindings. */
+type CachedTextLayout = {
   readonly payload: NodeTextRenderPayload;
   readonly baseWidthPt: number;
   readonly baseHeightPt: number;
@@ -63,8 +74,10 @@ type CachedRenderEntry = {
   readonly midLineYPt: number;
   readonly paragraphId: string;
   readonly renderSourceText: string;
-  readonly report: ParagraphLayoutReport;
-  readonly vlistLayout: TexVListLayout;
+  readonly report: ParagraphLayoutReport<"layout">;
+  readonly vlistLayout: TexVListLayout<"layout">;
+  readonly lineHeightPt: TexLength;
+  readonly requestedAlignment: NodeTextParagraphAlignment | null;
   readonly retainedBytes: number;
 };
 
@@ -133,21 +146,19 @@ async function initializeEngine(
   await preloadEnglishHyphenator();
 
   const entriesByParagraph = new Map<string, CachedRenderEntry>();
-  // Requests live exactly as long as their render entries, including scene-owned
-  // entries outside the reusable cache. Resolvers keep their original revisions.
-  const requestsByEntry = new WeakMap<CachedRenderEntry, NodeTextMeasureRequest>();
   const renderCache = new TexWeightedLruCache<string, CachedRenderEntry>(RENDER_CACHE_LIMIT, RENDER_CACHE_BYTES, {
     retainOversizedEntry: true,
-    onEvict: (_key, entry) => entriesByParagraph.delete(entry.paragraphId),
+    onEvict: (_key, entry) => { if (entriesByParagraph.get(entry.paragraphId) === entry) entriesByParagraph.delete(entry.paragraphId); },
   });
   const layoutCache = new TexWeightedLruCache<string, TexSharedLayout>(TEX_LAYOUT_CACHE_LIMIT, TEX_LAYOUT_CACHE_BYTES);
   const validationCache = new TexWeightedLruCache<string, NodeTextValidationIssue | null>(VALIDATION_CACHE_LIMIT, VALIDATION_CACHE_BYTES);
   // Reports are owned by live render entries rather than a separately evicted
   // registry. Dropping a render entry drops its metadata in the same operation.
   const layoutContext = createTextLayoutContext({
-    getParagraphReports: () => [...entriesByParagraph.values()].map((entry) => entry.report),
-    getVListLayouts: () => [...entriesByParagraph.values()].map((entry) => ({ paragraphId: entry.paragraphId, layout: entry.vlistLayout })),
-    getVListLayout: (paragraphId) => entriesByParagraph.get(paragraphId)?.vlistLayout ?? null,
+    getParagraphReport: (paragraphId) => { const entry = entriesByParagraph.get(paragraphId); return entry ? resolveTextReports(entry).report : null; },
+    getParagraphReports: () => [...entriesByParagraph.values()].map((entry) => resolveTextReports(entry).report),
+    getVListLayouts: () => [...entriesByParagraph.values()].map((entry) => ({ paragraphId: entry.paragraphId, layout: resolveTextReports(entry).vlistLayout })),
+    getVListLayout: (paragraphId) => { const entry = entriesByParagraph.get(paragraphId); return entry ? resolveTextReports(entry).vlistLayout : null; },
   });
   const owner = {};
   let activeScope: { readonly context: TextLayoutContext; readonly entries: Map<string, CachedRenderEntry>; readonly byParagraph: Map<string, CachedRenderEntry>; readonly previous: ReadonlyMap<string, CachedRenderEntry> | null } | null = null;
@@ -158,21 +169,60 @@ async function initializeEngine(
   // hashes of source maps or layout keys cannot provide that guarantee.
   const nextParagraphId = () => `tex:${++paragraphSequence}`;
 
+  function bindingKey(layoutCacheKey: string, sourceMap: TextSourceMap | undefined): string {
+    let sourceMapKey: string | null = null;
+    if (sourceMap) {
+      const serialized = JSON.stringify([
+        sourceMap.inputText.length,
+        sourceMap.charOrigins,
+        sourceMap.boundaryOrigins,
+      ]);
+      sourceMapKey = sourceMapKeys.get(serialized) ?? null;
+      if (sourceMapKey === null) {
+        if (serialized.length * 2 + 64 <= SOURCE_MAP_KEY_CACHE_BYTES) {
+          // Exact string equality interns maps; tokens are never recycled.
+          // Evicting an interned map can cause a miss, never a false hit.
+          sourceMapKey = (++sourceMapSequence).toString(36);
+          sourceMapKeys.set(serialized, sourceMapKey, serialized.length * 2 + 64);
+        } else {
+          // Very large maps retain exact lookup without another cache copy.
+          sourceMapKey = serialized;
+        }
+      }
+    }
+    return sourceMapKey === null
+      ? layoutCacheKey
+      : `${layoutCacheKey}|sm:${sourceMapKey}`;
+
+  }
+  function findEntry(cacheKey: string): CachedRenderEntry | undefined {
+    return activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
+  }
+  function retainEntry(entry: CachedRenderEntry): void {
+    activeScope?.entries.set(entry.cacheKey, entry);
+    activeScope?.byParagraph.set(entry.paragraphId, entry);
+  }
+  function metrics(entry: CachedRenderEntry) {
+    const layout = entry.layout;
+    return { cacheKey: entry.cacheKey, renderKey: entry.canRenderLocalSource ? layout.payload.cacheKey : entry.cacheKey,
+      width: layout.baseWidthPt, height: layout.baseHeightPt, baselineY: layout.baseLineYPt,
+      midLineY: layout.midLineYPt, paragraphId: entry.paragraphId, renderSourceText: layout.renderSourceText,
+      graphicsPlacements: layout.vlistLayout.graphicsPlacements.length
+        ? resolveTextReports(entry).vlistLayout.graphicsPlacements : layout.vlistLayout.graphicsPlacements };
+  }
+
   const engine: NodeTextEngine = {
     layoutContext,
     createRenderScope(previousContext): NodeTextRenderScope {
       const previous = previousContext ? retainedEntriesByContext.get(previousContext) : undefined;
       const scopeEntries = new Map<string, CachedRenderEntry>();
       const byParagraph = new Map<string, CachedRenderEntry>();
-      const ownedEntries = () => {
-        const merged = new Map(entriesByParagraph);
-        for (const [id, entry] of byParagraph) merged.set(id, entry);
-        return merged.values();
-      };
+      const ownedEntries = () => byParagraph.values();
       const context = createTextLayoutContext({
-        getParagraphReports: () => [...ownedEntries()].map((entry) => entry.report),
-        getVListLayouts: () => [...ownedEntries()].map((entry) => ({ paragraphId: entry.paragraphId, layout: entry.vlistLayout })),
-        getVListLayout: (paragraphId) => (byParagraph.get(paragraphId) ?? entriesByParagraph.get(paragraphId))?.vlistLayout ?? null,
+        getParagraphReport: (paragraphId) => { const entry = byParagraph.get(paragraphId); return entry ? resolveTextReports(entry).report : null; },
+        getParagraphReports: () => [...ownedEntries()].map((entry) => resolveTextReports(entry).report),
+        getVListLayouts: () => [...ownedEntries()].map((entry) => ({ paragraphId: entry.paragraphId, layout: resolveTextReports(entry).vlistLayout })),
+        getVListLayout: (paragraphId) => { const entry = byParagraph.get(paragraphId); return entry ? resolveTextReports(entry).vlistLayout : null; },
       });
       const scope = { context, entries: scopeEntries, byParagraph, previous: previous?.owner === owner ? previous.entries : null };
       retainedEntriesByContext.set(context, { owner, entries: scopeEntries });
@@ -252,29 +302,7 @@ async function initializeEngine(
         request.graphicsResolver?.cacheKey ?? null,
         request.colorResolver?.cacheKey ?? null
       );
-      let sourceMapKey: string | null = null;
-      if (layoutInput.sourceMap) {
-        const serialized = JSON.stringify([
-          layoutInput.sourceMap.inputText.length,
-          layoutInput.sourceMap.charOrigins,
-          layoutInput.sourceMap.boundaryOrigins,
-        ]);
-        sourceMapKey = sourceMapKeys.get(serialized) ?? null;
-        if (sourceMapKey === null) {
-          if (serialized.length * 2 + 64 <= SOURCE_MAP_KEY_CACHE_BYTES) {
-            // Exact string equality interns maps; tokens are never recycled.
-            // Evicting an interned map can cause a miss, never a false hit.
-            sourceMapKey = (++sourceMapSequence).toString(36);
-            sourceMapKeys.set(serialized, sourceMapKey, serialized.length * 2 + 64);
-          } else {
-            // Very large maps retain exact lookup without another cache copy.
-            sourceMapKey = serialized;
-          }
-        }
-      }
-      const cacheKey = sourceMapKey === null
-        ? layoutCacheKey
-        : `${layoutCacheKey}|sm:${sourceMapKey}`;
+      const cacheKey = bindingKey(layoutCacheKey, layoutInput.sourceMap);
 
       let entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey) ?? null;
       if (!entry) {
@@ -297,51 +325,48 @@ async function initializeEngine(
         if (!entry) {
           return null;
         }
-        entry = { ...entry, retainedBytes: entry.retainedBytes + request.text.length * 2 +
-          (request.sourceMap ? request.sourceMap.charOrigins.length * 160 + request.sourceMap.boundaryOrigins.length * 96 : 0) + 128 };
-        requestsByEntry.set(entry, {
-          ...request,
-          sourceMap: request.sourceMap ? structuredClone(request.sourceMap) : undefined
-        });
         if (renderCache.set(cacheKey, entry, cacheKey.length * 2 + entry.retainedBytes)) {
           entriesByParagraph.set(entry.paragraphId, entry);
         }
       }
-      activeScope?.entries.set(cacheKey, entry);
-      activeScope?.byParagraph.set(entry.paragraphId, entry);
-
-      return {
-        cacheKey: entry.payload.cacheKey,
-        width: entry.baseWidthPt,
-        height: entry.baseHeightPt,
-        baselineY: entry.baseLineYPt,
-        midLineY: entry.midLineYPt,
-        paragraphId: entry.paragraphId,
-        renderSourceText: entry.renderSourceText,
-        graphicsPlacements: entry.payload.graphicsPlacements,
-      };
+      retainEntry(entry);
+      return metrics(entry);
     },
 
     rebaseSource(cacheKey, delta) {
-      const entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
-      const request = entry && requestsByEntry.get(entry);
-      if (!request?.sourceMap) return null;
-      // Foreign macro definition spans do not necessarily move with the node.
-      // Let semantic replay handle those projections conservatively.
+      const previous = findEntry(cacheKey);
+      if (!previous?.sourceMap) return null;
+      // Definition locations can move independently of an invocation. Semantic
+      // replay supplies a fresh binding for those cases.
       const isMacro = (origin: { kind: string }) => origin.kind === "macro-argument" || origin.kind === "macro-generated";
-      if (request.sourceMap.charOrigins.some(isMacro) || request.sourceMap.boundaryOrigins.some((anchor) =>
+      if (previous.sourceMap.charOrigins.some(isMacro) || previous.sourceMap.boundaryOrigins.some((anchor) =>
         anchor.kind === "range" && (anchor.policy === "macro" || (anchor.projection && isMacro(anchor.projection))))) return null;
-      return engine.measure({ ...request, sourceMap: translateTextSourceMap(request.sourceMap, delta) });
+      const sourceMap = translateTextSourceMap(previous.sourceMap, delta);
+      const nextKey = bindingKey(previous.layoutCacheKey, sourceMap);
+      let entry = findEntry(nextKey);
+      if (!entry) {
+        entry = { ...previous, cacheKey: nextKey, sourceMap };
+        if (renderCache.set(nextKey, entry, nextKey.length * 2 + entry.retainedBytes)) {
+          entriesByParagraph.set(entry.paragraphId, entry);
+        }
+      }
+      retainEntry(entry);
+      return metrics(entry);
+    },
+
+    renderLayoutFromCache(cacheKey) {
+      setActiveTextLayoutContext(activeScope?.context ?? layoutContext);
+      const entry = findEntry(cacheKey);
+      if (entry) retainEntry(entry);
+      return entry ? (entry.canRenderLocalSource ? entry.layout.payload : resolveTextPayload(entry)) : null;
     },
 
     renderFromCache(cacheKey: string): NodeTextRenderPayload | null {
       setActiveTextLayoutContext(activeScope?.context ?? layoutContext);
-      const entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
-      if (entry) {
-        activeScope?.entries.set(cacheKey, entry);
-        activeScope?.byParagraph.set(entry.paragraphId, entry);
-      }
-      return entry?.payload ?? null;
+      const entry = findEntry(cacheKey);
+      if (!entry) return null;
+      retainEntry(entry);
+      return resolveTextPayload(entry);
     },
   };
   return engine;
@@ -531,14 +556,8 @@ function buildTexTextCacheEntry(params: {
 
   const { contentWidthPt, renderFont } = shared;
   const paragraphId = params.nextParagraphId();
-  const report = {
-    ...remapParagraphLayoutReportSourceMap(shared.report, params.sourceMap),
-    paragraphId,
-  };
-  const remappedVList = remapTexVListLayoutSourceMap(
-    shared.vlistLayout,
-    params.sourceMap
-  );
+  const report = { ...shared.report, paragraphId };
+  const remappedVList = shared.vlistLayout;
   const vlistLayout = {
     ...remappedVList,
     reports: remappedVList.reports.map((candidate) =>
@@ -587,9 +606,10 @@ function buildTexTextCacheEntry(params: {
     alignment: params.requestedAlignment,
   });
 
-  return {
+  const layout: CachedTextLayout = {
     payload: {
       cacheKey: params.cacheKey,
+      sourceCoordinateSpace: "layout",
       viewBox: {
         x: 0,
         y: 0,
@@ -607,8 +627,57 @@ function buildTexTextCacheEntry(params: {
     renderSourceText: params.sourceText,
     report,
     vlistLayout,
-    retainedBytes: shared.retainedBytes * 2 + body.length * 2 + params.sourceText.length * 2 + 256,
+    lineHeightPt,
+    requestedAlignment: params.requestedAlignment,
+    retainedBytes: shared.retainedBytes + body.length * 2 + params.sourceText.length * 2 + 256,
   };
+  return { cacheKey: params.cacheKey, layoutCacheKey: params.layoutCacheKey, sourceMap: params.sourceMap ? structuredClone(params.sourceMap) : undefined,
+    layout, paragraphId, canRenderLocalSource: isDirectTextSourceMap(params.sourceMap),
+    // Conservative per-binding accounting includes retained shared layout and
+    // a possible resolved report; eviction never leaves an unbounded side cache.
+    retainedBytes: layout.retainedBytes * 2 + (params.sourceMap ? params.sourceMap.charOrigins.length * 160 + params.sourceMap.boundaryOrigins.length * 96 : 0) };
+}
+
+/** Uniform direct projection preserves DOM segment topology. Macro/generated
+ * projections can split segments, so their SVG uses the resolved report. */
+function isDirectTextSourceMap(map: TextSourceMap | undefined): boolean {
+  if (!map) return true;
+  const first = map.charOrigins[0];
+  if (first?.kind !== "direct") return false;
+  return map.charOrigins.every((origin, index) => origin.kind === "direct" &&
+    origin.from === first.from + index && origin.to === first.from + index + 1) &&
+    map.boundaryOrigins.every((anchor, index) => anchor.kind === "offset" && anchor.offset === first.from + index);
+}
+
+const projectedReports = new WeakMap<CachedRenderEntry, { report: ParagraphLayoutReport; vlistLayout: TexVListLayout }>();
+const projectedPayloads = new WeakMap<CachedRenderEntry, NodeTextRenderPayload>();
+
+/** Resolve only when an editor asks for caret/selection data in this snapshot. */
+function resolveTextReports(entry: CachedRenderEntry) {
+  let resolved = projectedReports.get(entry);
+  if (resolved) return resolved;
+  const report = remapParagraphLayoutReportSourceMap(entry.layout.report, entry.sourceMap);
+  const mapped = remapTexVListLayoutSourceMap(entry.layout.vlistLayout, entry.sourceMap);
+  const vlistLayout = { ...mapped, reports: mapped.reports.map(candidate =>
+    "paragraphId" in candidate && candidate.paragraphId === entry.paragraphId ? report : candidate) };
+  resolved = { report, vlistLayout };
+  projectedReports.set(entry, resolved);
+  return resolved;
+}
+
+/** Compatibility/export API: document-coordinate SVG is produced on demand. */
+function resolveTextPayload(entry: CachedRenderEntry): NodeTextRenderPayload {
+  if (!entry.sourceMap) return entry.layout.payload;
+  let payload = projectedPayloads.get(entry);
+  if (!payload) {
+    const { report, vlistLayout } = resolveTextReports(entry);
+    payload = { ...entry.layout.payload, cacheKey: entry.cacheKey, sourceCoordinateSpace: "document",
+      body: renderTexParagraphSvgBody(report, { lineHeightPt: entry.layout.lineHeightPt, vlistLayout,
+        metricProvider: computerModernTexMetricProvider, alignment: entry.layout.requestedAlignment }),
+      graphicsPlacements: vlistLayout.graphicsPlacements };
+    projectedPayloads.set(entry, payload);
+  }
+  return payload;
 }
 
 export function renderTexParagraphDebugSvgBody(params: {

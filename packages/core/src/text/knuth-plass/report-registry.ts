@@ -16,6 +16,16 @@ const reportsByLayoutContext =
 // their entries and supplied through the layout context's provider.
 const REPORT_REGISTRY_LIMIT = 4096;
 
+export function getParagraphLayoutReport(layoutContext: unknown, paragraphId: string): ParagraphLayoutReport | null {
+  const provider = getTextLayoutReportProvider(layoutContext);
+  if (!provider?.getParagraphReport) {
+    return getParagraphLayoutReports(layoutContext).find(report => report.paragraphId === paragraphId) ?? null;
+  }
+  return provider.getParagraphReport(paragraphId) ??
+    (layoutContext && typeof layoutContext === "object"
+      ? reportsByLayoutContext.get(layoutContext)?.get(paragraphId) : undefined) ?? null;
+}
+
 export function getParagraphLayoutReports(
   layoutContext: unknown
 ): ParagraphLayoutReport[] {

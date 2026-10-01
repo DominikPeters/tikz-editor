@@ -14,7 +14,7 @@ export function createTexFuzzFreshEngine(): Promise<NodeTextEngine> {
 
 function canonicalSnapshot(value: unknown): string {
   return JSON.stringify(value, (key: string, current: unknown): unknown => {
-    if (key === "paragraphId" || key === "cacheKey") return;
+    if (key === "paragraphId" || key === "cacheKey" || key === "renderKey") return;
     return typeof current === "string"
       ? current.replace(/data-paragraph-id="[^"]*"/g, 'data-paragraph-id="owned"') : current;
   });

@@ -179,9 +179,12 @@ export function emitSvgModel(
   const elementClipChainsById = new Map<string, readonly SceneClipPath[]>(
     scene.elements.map((element) => [element.id, element.clipChain ?? []])
   );
+  const renderLocalText = opts.textSourceCoordinates === "layout" && opts.textEngine?.renderLayoutFromCache != null;
   const textRenderKeys = new Map(scene.elements.flatMap((element) =>
     element.kind === "Text" && element.textRenderInfo?.mode === "tex"
-      ? [[element.id, element.textRenderInfo.cacheKey] as const] : []));
+      ? [[element.id, renderLocalText
+        ? `layout:${element.textRenderInfo.renderKey ?? element.textRenderInfo.cacheKey}`
+        : `document:${element.textRenderInfo.cacheKey}`] as const] : []));
 
   const appendPart = (
     basePartId: string,
@@ -510,7 +513,7 @@ export function emitSvgModel(
     let preparedGeometry: PreparedElementGeometry | undefined;
     if (reuseContext) {
       preparedGeometry = registerDefsForElement(element);
-      if (tryReuseElementParts(modelBuilder, reuseContext, element)) {
+      if (tryReuseElementParts(modelBuilder, reuseContext, element, textRenderKeys.get(element.id))) {
         continue;
       }
     }
@@ -760,9 +763,9 @@ export function emitSvgModel(
       ? worldTransformToSvgTransform(element.transform, viewBox)
       : null;
     if (element.textRenderInfo?.mode === "tex") {
-      const rendered =
-        opts.textEngine?.renderFromCache(element.textRenderInfo.cacheKey) ??
-        null;
+      const rendered = renderLocalText && opts.textEngine?.renderLayoutFromCache
+        ? opts.textEngine.renderLayoutFromCache(element.textRenderInfo.cacheKey)
+        : opts.textEngine?.renderFromCache(element.textRenderInfo.cacheKey) ?? null;
       if (!rendered) {
         diagnostics.push({
           code: "missing-tex-text-render",
@@ -797,7 +800,7 @@ export function emitSvgModel(
             : "";
         const renderedSvg = `<svg data-source-id="${escapeAttr(
           element.sourceRef.sourceId
-        )}" data-text-renderer="tex"${paragraphAttr}${layoutKindAttr}${sceneTextIdAttr} x="${fmt(
+        )}" data-text-renderer="tex"${renderLocalText && rendered.sourceCoordinateSpace ? ` data-source-coordinate-space="${rendered.sourceCoordinateSpace}"` : ""}${paragraphAttr}${layoutKindAttr}${sceneTextIdAttr} x="${fmt(
           x
         )}" y="${fmt(y)}" width="${fmt(textBlockWidth)}" height="${fmt(
           textBlockHeight
@@ -2170,7 +2173,8 @@ function createSvgModelReuseContext(
 function tryReuseElementParts(
   modelBuilder: ReturnType<typeof createSvgModelBuilder>,
   context: SvgModelReuseContext,
-  element: SceneElement
+  element: SceneElement,
+  textRenderKey: string | undefined
 ): boolean {
   if (context.affectedSourceIds.has(element.sourceRef.sourceId)) {
     return false;
@@ -2183,7 +2187,7 @@ function tryReuseElementParts(
     if (
       part.sourceId !== element.sourceRef.sourceId ||
       part.elementId !== element.id ||
-      part.textRenderKey !== (element.kind === "Text" && element.textRenderInfo?.mode === "tex" ? element.textRenderInfo.cacheKey : undefined)
+      part.textRenderKey !== textRenderKey
     ) {
       return false;
     }

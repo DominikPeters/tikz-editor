@@ -32,8 +32,10 @@ import type {
   SceneFigure
 } from "./types.js";
 import { MAIN_SCENE_LAYER } from "./types.js";
-import type { NodeTextEngine } from "../text/types.js";
-import type { StyleSourceRef } from "./style-chain.js";
+import type { SourcePatch } from "../edit/types.js";
+import { computeMinimalReplacementPatch } from "../edit/patch.js";
+import { patchesMatchSourceTransition } from "../edit/source-patches.js";
+import { createSceneSourceBinder, createSourceSpanResolver } from "./source-bindings.js";
 
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
 export type IncrementalSemanticReplayMode = "full" | "suffix" | "selective";
@@ -44,6 +46,7 @@ export type IncrementalSemanticCheckpointPreparation =
 export type IncrementalSemanticHints = {
   changedSourceIds?: readonly string[];
   sourcePatches?: readonly {
+    oldSpan?: Span;
     newSpan?: Span;
     replacement: string;
   }[];
@@ -173,6 +176,11 @@ export function createIncrementalSemanticSession(
     }
 
     const previous = cached!;
+    const suppliedPatches = hints.sourcePatches as readonly SourcePatch[] | undefined;
+    const patches = suppliedPatches?.every(patch => patch.oldSpan && patch.newSpan) &&
+      patchesMatchSourceTransition(previous.source, run.source, suppliedPatches)
+      ? suppliedPatches : [computeMinimalReplacementPatch(previous.source, run.source)];
+    const resolveSpan = createSourceSpanResolver(patches);
 
     const changedSourceIds = normalizeChangedSourceIds(hints.changedSourceIds ?? []);
     // Children inherit a changed scope's options. Include their resource users
@@ -256,6 +264,7 @@ export function createIncrementalSemanticSession(
         const selective = evaluateSelectively({
           run,
           previous,
+          resolveSpan,
           statementIds,
           restoreIndex,
           corridorEndIndex: selectivePlan.corridorEndIndex,
@@ -273,6 +282,7 @@ export function createIncrementalSemanticSession(
           const suffix = evaluateIncrementalSuffix({
             run: createSemanticEvaluationRun(input.figure, input.source, options),
             previous,
+            resolveSpan,
             statementIds,
             restoreIndex,
             checkpointInterval,
@@ -301,6 +311,7 @@ export function createIncrementalSemanticSession(
       const suffix = evaluateIncrementalSuffix({
         run,
         previous,
+        resolveSpan,
         statementIds,
         restoreIndex,
         checkpointInterval,
@@ -356,7 +367,7 @@ function evaluateFullyAndCache(
       featureUsageBeforeStatement.set(statementIndex, cloneFeatureUsage(run.featureUsage));
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
-    statementFragments.push(createStatementFragment(evaluated));
+    statementFragments.push(createStatementFragment(evaluated, run.context.sourceFingerprint));
   }
   checkpointsBeforeStatement.set(
     statementCount,
@@ -403,6 +414,7 @@ function evaluateFullyAndCache(
 function evaluateIncrementalSuffix(args: {
   run: ReturnType<typeof createSemanticEvaluationRun>;
   previous: CachedSemanticRun;
+  resolveSpan: (span: Span) => Span;
   statementIds: string[];
   restoreIndex: number;
   checkpointInterval: number;
@@ -419,6 +431,7 @@ function evaluateIncrementalSuffix(args: {
   const {
     run,
     previous,
+    resolveSpan,
     statementIds,
     restoreIndex,
     checkpointInterval,
@@ -434,14 +447,12 @@ function evaluateIncrementalSuffix(args: {
   restoreSemanticContext(run.context, startCheckpoint, {
     editHandleSource: previous.editHandles
   });
-  retargetEditHandlesSourceFingerprint(run.context.editHandles, run.context.sourceFingerprint);
   assignFeatureUsage(run.featureUsage, startFeatureUsage);
-  run.diagnostics.length = run.baseDiagnosticsCount;
-  for (let index = 0; index < restoreIndex; index += 1) {
-    run.diagnostics.push(...previous.statementFragments[index].diagnostics);
-  }
 
-  const nextFragments = previous.statementFragments.slice(0, restoreIndex);
+  const nextFragments = bindFragmentsToCurrentSource(run, previous.statementFragments.slice(0, restoreIndex), resolveSpan);
+  run.context.editHandles = nextFragments.flatMap(fragment => fragment.editHandles);
+  run.diagnostics.length = run.baseDiagnosticsCount;
+  for (const fragment of nextFragments) run.diagnostics.push(...fragment.diagnostics);
   const checkpointsBeforeStatement = cloneCheckpointsBefore(
     previousCheckpoints.checkpointsBeforeStatement,
     restoreIndex
@@ -462,7 +473,7 @@ function evaluateIncrementalSuffix(args: {
       featureUsageBeforeStatement.set(statementIndex, cloneFeatureUsage(run.featureUsage));
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
-    nextFragments[statementIndex] = createStatementFragment(evaluated);
+    nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
   }
   checkpointsBeforeStatement.set(
     statementCount,
@@ -512,6 +523,7 @@ function evaluateIncrementalSuffix(args: {
 function evaluateSelectively(args: {
   run: ReturnType<typeof createSemanticEvaluationRun>;
   previous: CachedSemanticRun;
+  resolveSpan: (span: Span) => Span;
   statementIds: string[];
   restoreIndex: number;
   corridorEndIndex: number;
@@ -528,6 +540,7 @@ function evaluateSelectively(args: {
   const {
     run,
     previous,
+    resolveSpan,
     statementIds,
     restoreIndex,
     corridorEndIndex,
@@ -568,7 +581,7 @@ function evaluateSelectively(args: {
       featureUsageBeforeStatement.set(statementIndex, cloneFeatureUsage(run.featureUsage));
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
-    nextFragments[statementIndex] = createStatementFragment(evaluated);
+    nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
   }
   const previousCorridorHandleCount = countFragmentEditHandles(
     previous.statementFragments,
@@ -597,7 +610,7 @@ function evaluateSelectively(args: {
     if (fragment.effectSummary.entersScope) {
       // Resolve the unchanged scope options against the current enclosing frame.
       // Its graphical children can still reuse their recorded effects/geometry.
-      nextFragments[statementIndex] = createStatementFragment(evaluateSemanticStatementByIndex(run, statementIndex));
+      nextFragments[statementIndex] = createStatementFragment(evaluateSemanticStatementByIndex(run, statementIndex), run.context.sourceFingerprint);
     } else {
       applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.sourceId });
       run.context.editHandles.push(...fragment.editHandles);
@@ -614,13 +627,7 @@ function evaluateSelectively(args: {
   );
   featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(finalFeatureUsage));
 
-  const currentFragments = materializeFragmentsForCache(
-    previous.source,
-    run.source,
-    nextFragments,
-    run.context.sourceFingerprint,
-    run.context.textEngine
-  );
+  const currentFragments = bindFragmentsToCurrentSource(run, nextFragments, resolveSpan);
   const suffixSourceIds = currentFragments
     .slice(corridorEndIndex + 1)
     .map((fragment) => fragment.sourceId);
@@ -636,7 +643,6 @@ function evaluateSelectively(args: {
 
   const semantic = assembleSelectiveSemanticResult({
     run,
-    previousSource: run.source,
     fragments: currentFragments,
     featureUsage: finalFeatureUsage,
     dependencies,
@@ -679,35 +685,19 @@ function evaluateSelectively(args: {
 
 function assembleSelectiveSemanticResult(args: {
   run: ReturnType<typeof createSemanticEvaluationRun>;
-  previousSource: string;
   fragments: readonly SemanticStatementFragment[];
   featureUsage: FeatureUsage;
   dependencies: EvaluateTikzResult["dependencies"];
   sourceStatementFirstIndexBySourceId: ReadonlyMap<string, number>;
 }): EvaluateTikzResult {
-  const { run, previousSource, fragments, featureUsage, dependencies, sourceStatementFirstIndexBySourceId } = args;
-  const sourceFingerprint = run.context.sourceFingerprint;
+  const { run, fragments, featureUsage, dependencies, sourceStatementFirstIndexBySourceId } = args;
   const elements: SceneElement[] = [];
   const editHandles: EditHandle[] = [];
   const diagnostics = run.diagnostics.slice(0, run.baseDiagnosticsCount);
 
-  const foreignSpanShift = createForeignSpanShiftResolver(previousSource, run.source);
-  for (let index = 0; index < fragments.length; index += 1) {
-    const fragment = fragments[index];
-    const currentSourceSpan =
-      locateCurrentSpan(previousSource, run.source, fragment.sourceSpan)
-      ?? run.sourceStatementSpanById.get(fragment.sourceId)
-      ?? fragment.sourceSpan;
-    const materialized = materializeFragmentForCurrentSource(
-      fragment,
-      currentSourceSpan,
-      run.source,
-      sourceFingerprint,
-      foreignSpanShift,
-      run.context.textEngine
-    );
-    elements.push(...materialized.elements);
-    editHandles.push(...materialized.editHandles);
+  for (const fragment of fragments) {
+    elements.push(...fragment.elements);
+    editHandles.push(...fragment.editHandles);
     diagnostics.push(...fragment.diagnostics);
   }
 
@@ -748,13 +738,14 @@ function assembleSelectiveSemanticResult(args: {
 }
 
 function createStatementFragment(
-  evaluated: ReturnType<typeof evaluateSemanticStatementByIndex>
+  evaluated: ReturnType<typeof evaluateSemanticStatementByIndex>,
+  sourceFingerprint: string
 ): SemanticStatementFragment {
   return {
     statementId: evaluated.statementId,
     sourceId: evaluated.sourceId,
     sourceSpan: { ...evaluated.sourceSpan },
-    sourceFingerprint: evaluated.elements[0]?.sourceRef.sourceFingerprint ?? evaluated.editHandles[0]?.sourceRef.sourceFingerprint ?? "",
+    sourceFingerprint,
     elements: evaluated.elements,
     editHandles: evaluated.editHandles,
     diagnostics: evaluated.diagnostics,
@@ -1048,271 +1039,35 @@ function normalizeChangedSourceIds(
   return [...unique];
 }
 
-function retargetElementsSourceFingerprint(
-  elements: SceneElement[],
-  sourceFingerprint: string
-): SceneElement[] {
-  for (let index = 0; index < elements.length; index += 1) {
-    const element = elements[index];
-    if (!element || element.sourceRef.sourceFingerprint === sourceFingerprint) {
-      continue;
-    }
-    elements[index] = {
-      ...element,
-      layer: element.layer || MAIN_SCENE_LAYER,
-      sourceRef: {
-        ...element.sourceRef,
-        sourceFingerprint
-      }
-    };
-  }
-  return elements;
-}
-
-function retargetHandlesSourceFingerprint(
-  handles: EditHandle[],
-  sourceFingerprint: string
-): EditHandle[] {
-  for (let index = 0; index < handles.length; index += 1) {
-    const handle = handles[index];
-    if (!handle || handle.sourceRef.sourceFingerprint === sourceFingerprint) {
-      continue;
-    }
-    handles[index] = {
-      ...handle,
-      sourceRef: {
-        ...handle.sourceRef,
-        sourceFingerprint
-      }
-    };
-  }
-  return handles;
-}
-
-function materializeFragmentForCurrentSource(
-  fragment: SemanticStatementFragment,
-  currentSourceSpan: Span,
-  source: string,
-  sourceFingerprint: string,
-  foreignSpanShift: ForeignSpanShiftResolver,
-  textEngine: NodeTextEngine | null
-): Pick<SemanticStatementFragment, "elements" | "editHandles"> {
-  if (fragment.sourceFingerprint === sourceFingerprint) {
-    return {
-      elements: fragment.elements,
-      editHandles: fragment.editHandles
-    };
-  }
-
-  const delta = currentSourceSpan.from - fragment.sourceSpan.from;
-  const elements = structuredClone(fragment.elements);
-  shiftSpansDeep(elements, delta, {
-    ownSourceId: fragment.sourceId,
-    resolveForeignDelta: foreignSpanShift
-  });
-  if (delta !== 0) {
-    for (const element of elements) {
-      if (element.kind !== "Text" || element.textRenderInfo?.mode !== "tex") continue;
-      const info = element.textRenderInfo;
-      const rebased = textEngine?.rebaseSource?.(info.cacheKey, delta);
-      if (!rebased) throw new Error("Text source projection requires semantic replay");
-      element.textRenderInfo = { ...info, cacheKey: rebased.cacheKey, paragraphId: rebased.paragraphId,
-        ...(rebased.graphicsPlacements?.length ? { graphicsPlacements: rebased.graphicsPlacements } : {}) };
-    }
-  }
-  retargetElementsSourceFingerprint(elements, sourceFingerprint);
-
-  const editHandles = structuredClone(fragment.editHandles);
-  shiftSpansDeep(editHandles, delta);
-  retargetHandlesSourceFingerprint(editHandles, sourceFingerprint);
-  for (let index = 0; index < editHandles.length; index += 1) {
-    const handle = editHandles[index];
-    if (!handle) {
-      continue;
-    }
-    editHandles[index] = {
-      ...handle,
-      sourceText: source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to)
-    };
-  }
-  return {
-    elements,
-    editHandles
-  };
-}
-
-function materializeFragmentsForCache(
-  previousSource: string,
-  currentSource: string,
+/** Eagerly bind compact source metadata; never clone the reusable geometry. */
+function bindFragmentsToCurrentSource(
+  run: ReturnType<typeof createSemanticEvaluationRun>,
   fragments: readonly SemanticStatementFragment[],
-  sourceFingerprint: string,
-  textEngine: NodeTextEngine | null
+  resolveSpan: (span: Span) => Span
 ): SemanticStatementFragment[] {
-  const foreignSpanShift = createForeignSpanShiftResolver(previousSource, currentSource);
-  return fragments.map((fragment) => {
-    const currentSourceSpan =
-      locateCurrentSpan(previousSource, currentSource, fragment.sourceSpan)
-      ?? fragment.sourceSpan;
-    if (fragment.sourceFingerprint === sourceFingerprint) {
-      return {
-        ...fragment,
-        sourceSpan: { ...currentSourceSpan }
-      };
-    }
-
-    const materialized = materializeFragmentForCurrentSource(
-      fragment,
-      currentSourceSpan,
-      currentSource,
-      sourceFingerprint,
-      foreignSpanShift,
-      textEngine
-    );
-    const diagnostics = structuredClone(fragment.diagnostics);
-    shiftSpansDeep(diagnostics, currentSourceSpan.from - fragment.sourceSpan.from);
-    return {
-      ...fragment,
-      sourceSpan: { ...currentSourceSpan },
-      sourceFingerprint,
-      elements: materialized.elements,
-      editHandles: materialized.editHandles,
-      diagnostics
-    };
-  });
-}
-
-function createForeignSpanShiftResolver(previousSource: string, currentSource: string): ForeignSpanShiftResolver {
-  const cache = new Map<string, number | null>();
-  return (sourceRef) => {
-    const span = sourceRef.sourceSpan;
-    if (!span) {
-      return null;
-    }
-    const cacheKey = `${sourceRef.sourceId}:${span.from}:${span.to}`;
-    const cached = cache.get(cacheKey);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const located = locateCurrentSpan(previousSource, currentSource, span);
-    const delta = located ? located.from - span.from : null;
-    cache.set(cacheKey, delta);
-    return delta;
-  };
-}
-
-function locateCurrentSpan(previousSource: string, currentSource: string, previousSpan: Span): Span | null {
-  const text = previousSource.slice(previousSpan.from, previousSpan.to);
-  if (text.length === 0) {
-    return null;
-  }
-  const exact = currentSource.indexOf(text, Math.max(0, previousSpan.from - 32));
-  if (exact >= 0) {
-    return { from: exact, to: exact + text.length };
-  }
-  const fallback = currentSource.indexOf(text);
-  return fallback >= 0 ? { from: fallback, to: fallback + text.length } : null;
-}
-
-type ForeignSpanShiftResolver = (sourceRef: StyleSourceRef) => number | null;
-
-type SpanShiftOptions = {
-  ownSourceId: string;
-  resolveForeignDelta: ForeignSpanShiftResolver;
-};
-
-function shiftSpansDeep<T>(value: T, delta: number, options?: SpanShiftOptions): T {
-  if (delta === 0) {
-    return value;
-  }
-  shiftSpanObjectsInPlace(value, delta, new WeakSet<object>(), options);
-  return value;
-}
-
-function shiftSpanObjectsInPlace(
-  value: unknown,
-  delta: number,
-  visited: WeakSet<object>,
-  options?: SpanShiftOptions
-): void {
-  if (!value || typeof value !== "object") {
-    return;
-  }
-  if (visited.has(value)) {
-    return;
-  }
-  visited.add(value);
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      shiftSpanObjectsInPlace(entry, delta, visited, options);
-    }
-    return;
-  }
-  if (isSpanLike(value)) {
-    value.from += delta;
-    value.to += delta;
-    return;
-  }
-  for (const [key, entry] of Object.entries(value)) {
-    if (key === "identityRef" || (key === "rawOptions" && hasGeneratedStyleSourceRef(value))) {
-      continue;
-    }
-    if (key === "styleChain" && Array.isArray(entry) && options) {
-      visited.add(entry);
-      for (const layer of entry) {
-        shiftStyleChainLayer(layer, delta, visited, options);
+  const sourceFingerprint = run.context.sourceFingerprint;
+  const binder = createSceneSourceBinder(resolveSpan, sourceFingerprint);
+  return fragments.map(fragment => {
+    if (fragment.sourceFingerprint === sourceFingerprint) return fragment;
+    const mappedSpan = resolveSpan(fragment.sourceSpan);
+    // The AST is authoritative for authored statement boundaries. Expansion
+    // fragments use their mapped attribution spans instead of synthetic spans.
+    const sourceSpan = run.sourceStatementSpanById.get(fragment.sourceId) ?? mappedSpan;
+    const delta = mappedSpan.from - fragment.sourceSpan.from;
+    const elements = fragment.elements.map(element => {
+      const bound = binder.element(element);
+      if (bound.kind === "Text" && bound.textRenderInfo?.mode === "tex" && delta !== 0) {
+        const info = bound.textRenderInfo;
+        const rebased = run.context.textEngine?.rebaseSource?.(info.cacheKey, delta);
+        if (!rebased) throw new Error("Text source projection requires semantic replay");
+        bound.textRenderInfo = { ...info, cacheKey: rebased.cacheKey, paragraphId: rebased.paragraphId,
+          ...(rebased.renderKey && { renderKey: rebased.renderKey }),
+          ...(rebased.graphicsPlacements?.length ? { graphicsPlacements: rebased.graphicsPlacements } : {}) };
       }
-      continue;
-    }
-    shiftSpanObjectsInPlace(entry, delta, visited, options);
-  }
-}
-
-/**
- * A style-chain layer can reference a statement other than the one being
- * shifted (a `\tikzset`, a scope, a named style definition). Those spans move
- * with the referenced statement, not with this fragment, so they are shifted
- * by the referenced statement's own delta — or left untouched when that
- * statement cannot be relocated.
- */
-function shiftStyleChainLayer(
-  layer: unknown,
-  ownDelta: number,
-  visited: WeakSet<object>,
-  options: SpanShiftOptions
-): void {
-  if (!layer || typeof layer !== "object") {
-    return;
-  }
-  const sourceRef = (layer as { sourceRef?: StyleSourceRef }).sourceRef;
-  const sourceId = sourceRef?.sourceId;
-  const belongsToOwnStatement =
-    !sourceRef ||
-    !sourceId ||
-    sourceRef.identityRef != null ||
-    sourceId === options.ownSourceId ||
-    sourceId.startsWith(`${options.ownSourceId}:`);
-  if (belongsToOwnStatement) {
-    shiftSpanObjectsInPlace(layer, ownDelta, visited, options);
-    return;
-  }
-  const foreignDelta = options.resolveForeignDelta(sourceRef);
-  if (foreignDelta == null || foreignDelta === 0) {
-    return;
-  }
-  shiftSpanObjectsInPlace(layer, foreignDelta, visited, options);
-}
-
-function hasGeneratedStyleSourceRef(value: object): boolean {
-  const sourceRef = (value as { sourceRef?: { identityRef?: unknown } }).sourceRef;
-  return sourceRef?.identityRef != null;
-}
-
-function isSpanLike(value: object): value is Span {
-  return (
-    "from" in value &&
-    "to" in value &&
-    typeof (value as { from?: unknown }).from === "number" &&
-    typeof (value as { to?: unknown }).to === "number" &&
-    Object.keys(value).every((key) => key === "from" || key === "to")
-  );
+      return bound;
+    });
+    return { ...fragment, sourceSpan, sourceFingerprint, elements,
+      editHandles: fragment.editHandles.map(binder.handle),
+      diagnostics: binder.metadata(fragment.diagnostics) };
+  });
 }

@@ -64,6 +64,8 @@ export type SvgPatchOp =
     };
 
 export type EmitSvgOptions = {
+  /** Canvas previews can retain paragraph-local SVG and resolve source through their layout context. */
+  textSourceCoordinates?: "document" | "layout";
   padding?: number;
   includeXmlns?: boolean;
   textEngine?: NodeTextEngine | null;

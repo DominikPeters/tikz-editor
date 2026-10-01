@@ -12,6 +12,8 @@ import type { TexVListLayout } from "./tex/vlist/types.js";
 export type TextLayoutContext = object;
 
 export interface TextLayoutReportProvider {
+  /** Resolve one paragraph without projecting every report in a dense scene. */
+  getParagraphReport?(paragraphId: string): ParagraphLayoutReport | null;
   getParagraphReports(): readonly ParagraphLayoutReport[];
   getVListLayouts(): readonly RegisteredTexVListLayout[];
   getVListLayout(paragraphId: string): TexVListLayout | null;

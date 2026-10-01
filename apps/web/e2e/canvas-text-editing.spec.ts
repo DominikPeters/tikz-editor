@@ -349,7 +349,9 @@ async function readTexSourceClientPoint(
     const minSourceStart = sourceRanges.length > 0
       ? Math.min(...sourceRanges.map((entry) => entry.start))
       : null;
-    const offsets = debugText
+    const offsets = rendered.getAttribute("data-source-coordinate-space") === "layout"
+      ? [renderOffset]
+      : debugText
       ? [debugText.sourceStart + renderOffset, renderOffset]
       : minSourceStart != null && minSourceStart !== 0
         ? [minSourceStart + renderOffset]
@@ -405,12 +407,17 @@ async function readTexDocumentSourceClientPoint(
     if (!rendered) {
       throw new Error(`Rendered Tex SVG not found for ${sourceId}.`);
     }
+    const debugText = (window as typeof window & { __TIKZ_EDITOR_APP_TEST_API__?: {
+      getSceneTextDebug?: () => Array<{ sourceId: string; sourceStart: number }>;
+    } }).__TIKZ_EDITOR_APP_TEST_API__?.getSceneTextDebug?.().find(text => text.sourceId === sourceId);
+    const offset = rendered.getAttribute("data-source-coordinate-space") === "layout" && debugText
+      ? documentOffset - debugText.sourceStart : documentOffset;
     const candidates = Array.from(
       rendered.querySelectorAll<SVGGraphicsElement>("[data-source-start][data-source-end]")
     ).filter((element) => {
       const start = Number(element.getAttribute("data-source-start"));
       const end = Number(element.getAttribute("data-source-end"));
-      return start <= documentOffset && documentOffset < Math.max(start + 1, end);
+      return start <= offset && offset < Math.max(start + 1, end);
     }).sort((left, right) => {
       const leftSpan = Number(left.getAttribute("data-source-end")) - Number(left.getAttribute("data-source-start"));
       const rightSpan = Number(right.getAttribute("data-source-end")) - Number(right.getAttribute("data-source-start"));

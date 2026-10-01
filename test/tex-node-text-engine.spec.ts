@@ -28,6 +28,12 @@ describe("native TeX node text engine", () => {
     const reportsBefore = JSON.stringify(getTextLayoutReportProvider(firstScope.layoutContext)?.getVListLayout(first.paragraphId!));
     const nextScope = engine.createRenderScope!(firstScope.layoutContext);
     const shifted = nextScope.run(() => engine.rebaseSource!(first.cacheKey, 37))!;
+    nextScope.retain([shifted.cacheKey]);
+    expect(shifted.renderKey).toBe(first.renderKey);
+    expect(shifted.paragraphId).toBe(first.paragraphId);
+    const originalLayout = firstScope.run(() => engine.renderLayoutFromCache!(first.cacheKey));
+    expect(nextScope.run(() => engine.renderLayoutFromCache!(shifted.cacheKey))).toBe(originalLayout);
+    expect(originalLayout?.sourceCoordinateSpace).toBe("layout");
     const canonical = nextScope.run(() => engine.measure({ ...input, sourceMap: createIdentityMappedText(text, 237).sourceMap }))!;
     expect(shifted).toEqual(canonical);
     expect(shifted.width).toBe(first.width);

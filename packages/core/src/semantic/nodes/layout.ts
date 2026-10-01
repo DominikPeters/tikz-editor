@@ -215,6 +215,7 @@ export function resolveNodeLayout(
     textRenderInfo = {
       mode: "tex",
       cacheKey: measuredText.cacheKey,
+      ...(measuredText.renderKey && { renderKey: measuredText.renderKey }),
       paragraphId: measuredText.paragraphId,
       renderSourceText: measuredText.renderSourceText,
       layoutKind,

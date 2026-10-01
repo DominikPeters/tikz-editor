@@ -35,6 +35,8 @@ export type NodeTextColorResolver = {
 
 export type NodeTextMetrics = {
   cacheKey: string;
+  /** Canvas SVG identity; unchanged local layout shares it across source bindings. */
+  renderKey?: string;
   width: number;
   height: number;
   baselineY: number;
@@ -47,6 +49,7 @@ export type NodeTextMetrics = {
 
 export type NodeTextRenderPayload = {
   cacheKey: string;
+  sourceCoordinateSpace?: "layout" | "document";
   viewBox: {
     x: number;
     y: number;
@@ -67,6 +70,7 @@ export type NodeTextRenderInfo =
   | {
       mode: "tex";
       cacheKey: string;
+      renderKey?: string;
       paragraphId: string | null;
       renderSourceText: string;
       layoutKind: NodeTextLayoutKind;
@@ -84,6 +88,9 @@ export type NodeTextEngine = {
   measure(request: NodeTextMeasureRequest): NodeTextMetrics | null;
   /** Reuse layout after an unchanged text fragment moves within the source. */
   rebaseSource?(cacheKey: string, delta: number): NodeTextMetrics | null;
+  /** Canvas payload: local coordinates where projection preserves segment topology,
+   * otherwise document coordinates. Caret reports resolve through the layout context. */
+  renderLayoutFromCache?(cacheKey: string): NodeTextRenderPayload | null;
   renderFromCache(cacheKey: string): NodeTextRenderPayload | null;
   /**
    * Resolve pending async renders and return the cache keys that became available

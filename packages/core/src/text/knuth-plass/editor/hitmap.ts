@@ -43,7 +43,7 @@ import {
   type TexVListX,
   type TexVListY,
 } from '../../tex/coordinates.js';
-import { getParagraphLayoutReports } from '../report-registry.js';
+import { getParagraphLayoutReport } from '../report-registry.js';
 import { clamp } from '../../../utils/math.js';
 import {
   sourceOffsetForSpace,
@@ -612,17 +612,11 @@ function createCaretMappingErrorFactory<T extends ResultBase>(
   } as T);
 }
 
-function readReportsFromLayoutContext(layoutContext: unknown): ParagraphLayoutReport[] {
-  return getParagraphLayoutReports(layoutContext);
-}
-
 function findReportByParagraphId(
   layoutContext: unknown,
   paragraphId: string
-): { report: ParagraphLayoutReport | null; reports: ParagraphLayoutReport[] } {
-  const reports = readReportsFromLayoutContext(layoutContext);
-  const report = reports.find((entry) => entry.paragraphId === paragraphId) ?? null;
-  return { report, reports };
+): { report: ParagraphLayoutReport | null } {
+  return { report: getParagraphLayoutReport(layoutContext, paragraphId) };
 }
 
 function collectLineGeometryElements(

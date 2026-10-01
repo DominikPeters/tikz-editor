@@ -340,7 +340,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
           options,
           hints: { trigger: "other" }
         }).semantic,
-      svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse) }),
+      svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse), textSourceCoordinates: "layout" }),
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
@@ -718,7 +718,7 @@ async function computeNestedTikzSnapshot(
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
     evaluate: { graphicsResolver: graphicsContext.resolver },
-    svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse) }),
+    svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse), textSourceCoordinates: "layout" }),
     textEngine
   });
   const snapshot: SessionSnapshot = {
@@ -847,6 +847,7 @@ async function computeSnapshotIncremental(
   phaseStartedAt = performance.now();
   let svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
     padding: svgPadding,
+    textSourceCoordinates: "layout",
     textEngine,
     viewBox: renderViewBox ?? undefined,
     reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
@@ -885,6 +886,7 @@ async function computeSnapshotIncremental(
     phaseStartedAt = performance.now();
     svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
       padding: svgPadding,
+      textSourceCoordinates: "layout",
       textEngine,
       viewBox: renderViewBox ?? undefined,
       reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined

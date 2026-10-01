@@ -57,8 +57,8 @@ function renderedMspaceAdvances(svg: string): number[] {
   return advances;
 }
 
-function reportForParagraphId(paragraphId: string | null) {
-  const reports = getParagraphLayoutReports(getActiveTextLayoutContext());
+function reportForParagraphId(paragraphId: string | null, context = getActiveTextLayoutContext()) {
+  const reports = getParagraphLayoutReports(context);
   return reports.find((report) => report.paragraphId === paragraphId) ?? null;
 }
 
@@ -1384,20 +1384,24 @@ World};
       capitalAbbreviationText?.kind === "Text"
     ) {
       const ordinaryReport = reportForParagraphId(
-        ordinaryText.textRenderInfo?.mode === "tex" ? ordinaryText.textRenderInfo.paragraphId : null
+        ordinaryText.textRenderInfo?.mode === "tex" ? ordinaryText.textRenderInfo.paragraphId : null,
+        ordinary.textLayoutContext
       );
       const sentenceReport = reportForParagraphId(
-        sentenceText.textRenderInfo?.mode === "tex" ? sentenceText.textRenderInfo.paragraphId : null
+        sentenceText.textRenderInfo?.mode === "tex" ? sentenceText.textRenderInfo.paragraphId : null,
+        sentence.textLayoutContext
       );
       const lowercaseSentenceReport = reportForParagraphId(
         lowercaseSentenceText.textRenderInfo?.mode === "tex"
           ? lowercaseSentenceText.textRenderInfo.paragraphId
-          : null
+          : null,
+        lowercaseSentence.textLayoutContext
       );
       const capitalAbbreviationReport = reportForParagraphId(
         capitalAbbreviationText.textRenderInfo?.mode === "tex"
           ? capitalAbbreviationText.textRenderInfo.paragraphId
-          : null
+          : null,
+        capitalAbbreviation.textLayoutContext
       );
       expect(ordinaryReport).not.toBeNull();
       expect(sentenceReport).not.toBeNull();
