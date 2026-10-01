@@ -14,6 +14,7 @@ export default defineConfig({
     alias: {
       "@tikz-editor/core": path.resolve(__dirname, "../../packages/core/src"),
       "@tikz-editor/lang-tikz": path.resolve(__dirname, "../../packages/lang-tikz/src/index.ts"),
+      "@tikz-editor/lezer-tex": path.resolve(__dirname, "../../packages/lezer-tex/src/index.ts"),
       "@tikz-editor/lezer-tikz": path.resolve(__dirname, "../../packages/lezer-tikz/src/index.ts")
     }
   },

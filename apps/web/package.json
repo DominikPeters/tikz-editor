@@ -4,7 +4,7 @@
   "version": "0.5.2",
   "type": "module",
   "scripts": {
-    "build:package-deps": "npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build",
+    "build:package-deps": "npm run -w @tikz-editor/lezer-tex build && npm run -w @tikz-editor/lezer-tikz build && npm run -w @tikz-editor/lang-tikz build",
     "generate:example-previews": "npm run build:package-deps && node --import tsx scripts/generate-open-example-previews.ts",
     "debug:multiline": "npm run build:package-deps && node --import tsx scripts/capture-multiline-debug.ts",
     "dev": "npm run generate:example-previews && vite",

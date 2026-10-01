@@ -10,6 +10,7 @@ export default defineConfig(({ command }) => ({
       "@tikz-editor/app": new URL("../../packages/app/src/index.ts", import.meta.url).pathname,
       "@tikz-editor/core": new URL("../../packages/core/src", import.meta.url).pathname,
       "@tikz-editor/lang-tikz": new URL("../../packages/lang-tikz/src/index.ts", import.meta.url).pathname,
+      "@tikz-editor/lezer-tex": new URL("../../packages/lezer-tex/src/index.ts", import.meta.url).pathname,
       "@tikz-editor/lezer-tikz": new URL("../../packages/lezer-tikz/src/index.ts", import.meta.url).pathname
     }
   }
