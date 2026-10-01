@@ -38,6 +38,13 @@ function inputValue(value: string): void {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
+function inputKey(key: string): void {
+  const input = host.querySelector<HTMLInputElement>('input[aria-label="Build steps"]')!;
+  act(() => {
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -62,7 +69,7 @@ describe("Builds panel", () => {
     const selected = useEditorStore.getState().deckBuildSelection!;
     expect(SOURCE.slice(selected.sourceSpan.from, selected.sourceSpan.to)).toBe(String.raw`\only<2->{Target}`);
     expect(selected.contentSpans).toEqual([]);
-    act(() => { button("Preview on step 2").click(); });
+    act(() => { host.querySelector<HTMLButtonElement>('[aria-label="Preview step 2"]')!.click(); });
     expect(useEditorStore.getState().deckBuildSelection?.step).toBe(2);
     expect(useEditorStore.getState().deckBuildSelection?.contentSpans).toHaveLength(1);
     expect(useEditorStore.getState().source).toBe(SOURCE);
@@ -71,7 +78,7 @@ describe("Builds panel", () => {
   it("commits a minimal spec edit, with undo and redo", () => {
     selectTarget();
     inputValue("3-5");
-    act(() => { button("Apply").click(); });
+    inputKey("Enter");
     expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3-5>"));
     act(() => { useEditorStore.getState().dispatch({ type: "UNDO" }); });
     expect(useEditorStore.getState().source).toBe(SOURCE);
@@ -82,14 +89,14 @@ describe("Builds panel", () => {
   it("rejects invalid edits and keeps relative defaults in source", () => {
     selectTarget();
     inputValue("4-2");
-    expect(button("Apply").disabled).toBe(true);
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain("positive steps");
+    inputKey("Enter");
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Use steps or ranges");
     const inherited = Array.from(host.querySelectorAll("button")).find((element) => element.textContent?.startsWith("Bullet · Beta"))!;
     act(() => { inherited.click(); });
-    expect(host.querySelector('[aria-label="Build steps"]')).toBeNull();
-    expect(host.textContent).toContain("Inherited from the list default");
-    expect(host.textContent).toContain("Resolved");
-    act(() => { button("Edit rule in source").click(); });
+    expect(host.querySelector('input[aria-label="Build steps"]')).toBeNull();
+    expect(host.querySelector('output[aria-label="Build steps"]')?.textContent).toBe("2-");
+    act(() => { button("Edit in source").click(); });
     const selected = useEditorStore.getState().deckBuildSelection!;
     expect(SOURCE.slice(selected.sourceSpan.from, selected.sourceSpan.to)).toBe("<+->");
     expect(selected.revealSource).toBe(true);
@@ -108,10 +115,10 @@ describe("Builds panel", () => {
   it("does not retain a build selection on another frame or document", () => {
     selectTarget();
     act(() => { useEditorStore.getState().dispatch({ type: "SET_ACTIVE_ROOT", rootId: "frame:1" }); });
-    expect(host.textContent).toContain("no overlay rules");
+    expect(host.textContent).toContain("No builds on this slide");
     expect(useEditorStore.getState().deckBuildSelection).toBeNull();
     act(() => { useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT" }); });
-    expect(host.textContent).toContain("Open a Beamer slide");
+    expect(host.textContent).toContain("Select a slide");
     expect(useEditorStore.getState().deckBuildSelection).toBeNull();
   });
 
@@ -119,7 +126,7 @@ describe("Builds panel", () => {
     act(() => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: SOURCE.replace("<2->", "<1000000->") }); });
     expect(host.querySelectorAll("thead button")).toHaveLength(4);
     selectTarget();
-    act(() => { button("Preview on step 1000000").click(); });
+    act(() => { button("Go to step 1000000").click(); });
     expect(host.querySelectorAll("thead button")).toHaveLength(4);
     expect(useEditorStore.getState().source).toContain("<1000000->");
   });
@@ -138,5 +145,43 @@ describe("Builds panel", () => {
     act(() => { useEditorStore.getState().dispatch({ type: "SET_DECK_OBJECT_SELECTION", frameId: "frame:0", objectId: null }); });
     expect(host.querySelector('[data-selected="true"]')).toBeNull();
     expect(useEditorStore.getState().deckBuildSelection).toBeNull();
+  });
+
+  it("commits on blur and cancels with Escape, like inspector fields", () => {
+    selectTarget();
+    inputValue("3-");
+    act(() => {
+      const input = host.querySelector<HTMLInputElement>('input[aria-label="Build steps"]')!;
+      input.focus();
+      input.blur();
+    });
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3->"));
+    inputValue("8-");
+    inputKey("Escape");
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="Build steps"]')!.value).toBe("3-");
+    expect(useEditorStore.getState().source).toBe(SOURCE.replace("<2->", "<3->"));
+    act(() => { useEditorStore.getState().dispatch({ type: "UNDO" }); });
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+  });
+
+  it("navigates from an inherited item to its shared default", () => {
+    act(() => { button("Bullet · Beta").click(); });
+    const owner = host.querySelector<HTMLButtonElement>('section[aria-label="Build rule"] button')!;
+    act(() => { owner.click(); });
+    expect(host.querySelector('[data-selected="true"]')?.textContent).toContain("List ·");
+    expect(host.querySelector('output[aria-label="Build steps"]')?.textContent).toBe("+-");
+    expect(useEditorStore.getState().source).toBe(SOURCE);
+  });
+
+  it("opens source-only rules directly instead of offering a guessed preview", () => {
+    const source = SOURCE.replace(String.raw`\only<2->{Target}`, String.raw`\alert<2>{Target}`);
+    act(() => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source }); });
+    const row = host.querySelector('[data-testid="build-row"]')!;
+    expect(row.querySelectorAll('td[data-state]')).toHaveLength(0);
+    act(() => { row.querySelector<HTMLButtonElement>("td button")!.click(); });
+    const selected = useEditorStore.getState().deckBuildSelection!;
+    expect(selected.revealSource).toBe(true);
+    expect(source.slice(selected.sourceSpan.from, selected.sourceSpan.to)).toBe("<2>");
+    expect(useEditorStore.getState().source).toBe(source);
   });
 });

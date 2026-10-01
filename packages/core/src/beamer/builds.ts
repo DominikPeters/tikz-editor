@@ -31,7 +31,6 @@ export type BeamerBuildRow = {
   command?: BeamerOverlayCommand;
   provenance: "explicit" | "relative" | "list-default" | "branch" | "pause" | "unsupported";
   editable: boolean;
-  explanation: string;
 };
 
 export type BeamerBuildModel = {
@@ -134,9 +133,6 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
       ruleSpan: spec.source.span,
       editable,
       provenance: editable ? "explicit" as const : relative ? "relative" as const : "unsupported" as const,
-      explanation: editable ? "Edits change only this explicit specification."
-        : relative ? "Relative rule. Its steps depend on the overlay counter; edit it in source."
-          : "Advanced specification. Edit it in source to preserve its meaning.",
     };
   };
 
@@ -157,7 +153,6 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
         label: `${command.kind === "alt" ? ["On matching steps", "Otherwise"][index] : ["Before", "During", "After"][index]} · ${excerpt(branch.value) || "Empty"}`,
         spec: command.spec, ruleSpan: command.spec.source.span,
         provenance: "branch", editable: false,
-        explanation: "This branch is controlled by the enclosing alternative rule.",
       }));
     }
   }
@@ -167,9 +162,6 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
         id: `list:${item.defaultListSpan.from}`, parentId: null, kind: "list",
         sourceSpan: item.defaultListSpan, contentSpans: [],
         label: contentLabel(context, item.defaultListSpan), ...ruleFields(item.spec),
-        explanation: isExplicitBeamerBuildSpec(item.spec.source.value)
-          ? "List default. Changing this rule affects all items that inherit it."
-          : "Shared list default. Each item resolves this rule separately; select an item to see its steps. Edit the default in source.",
       });
     }
     rows.push({
@@ -180,7 +172,6 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
       ...ruleFields(item.spec),
       ...(item.defaultListSpan ? {
         provenance: "list-default" as const, editable: false,
-        explanation: "Inherited from the list default. Select the list to edit the shared rule, or edit the item in source.",
       } : {}),
     });
   }
@@ -190,7 +181,6 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
       sourceSpan: pause.span, contentSpans: [pause.contentSpan], ruleSpan: pause.span,
       label: `Pause before “${excerpt(source.slice(pause.contentSpan.from, pause.contentSpan.to)) || "end of frame"}”`,
       spec: null, provenance: "pause", editable: false,
-      explanation: `Content after this boundary starts at step ${pause.threshold}. Edit the pause in source.`,
     });
   }
 
@@ -207,7 +197,6 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
       contentSpans: body ? [body.contentSpan] : [], ruleSpan: spec.span,
       label: `Source · \\${control.name}${body ? ` · ${excerpt(body.value)}` : ""}`,
       spec: null, provenance: "unsupported", editable: false,
-      explanation: "This overlay command is not supported by the preview. Its behavior is unknown; edit it in source.",
     });
   }
 

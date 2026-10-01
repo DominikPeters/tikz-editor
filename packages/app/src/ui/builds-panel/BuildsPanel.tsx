@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   beamerBuildSpecPatch,
   beamerBuildStateAt,
@@ -13,6 +14,8 @@ import { useEditorStore } from "../../store/store";
 import { rootKey } from "../../root-key";
 import { getDockLayoutHandle } from "../DockLayout";
 import { SidePanel } from "../SidePanel";
+import inspector from "../inspector-panel/InspectorPanel.module.css";
+import objects from "../objects-panel/ObjectsPanel.module.css";
 import css from "./BuildsPanel.module.css";
 
 const PAGE_SIZE = 4;
@@ -49,9 +52,10 @@ export function BuildsPanel() {
 
   useEffect(() => {
     if (selected && selection?.model !== model) setSelection({ documentId, model: model!, rowId: selected.id });
-    if (selected) publishSelection(selected);
-    else dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null });
-  }, [dispatch, documentId, model, publishSelection, selected, selection?.model]);
+    if (selected) {
+      if (activeSelection?.sourceRevision !== sourceRevision || activeSelection.rowId !== selected.id || activeSelection.step !== step) publishSelection(selected);
+    } else dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null });
+  }, [activeSelection, dispatch, documentId, model, publishSelection, selected, selection?.model, sourceRevision, step]);
 
   useEffect(() => () => { dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null }); }, [dispatch]);
 
@@ -65,11 +69,12 @@ export function BuildsPanel() {
     setPageOverride(null);
     dispatch({ type: "SET_DECK_STEP", rootId: model.frameId, step: next });
   };
-  const reveal = () => {
-    if (!selected) return;
+  const reveal = (row: BeamerBuildRow) => {
+    if (!model) return;
+    setSelection({ documentId, model, rowId: row.id });
     const layout = getDockLayoutHandle();
     if (layout && !layout.getModel().getNodeById("source")) layout.togglePanel("source");
-    publishSelection(selected, true);
+    publishSelection(row, true);
   };
   const rowById = new Map(model?.rows.map((row) => [row.id, row]));
   const ancestors = (row: BeamerBuildRow): BeamerBuildRow[] => {
@@ -79,81 +84,109 @@ export function BuildsPanel() {
     return result;
   };
   const firstVisible = selected && model ? firstVisibleBeamerBuildStep(model, selected) : null;
-  const state = selected && model ? beamerBuildStateAt(model, selected, step) : null;
-  const hasUnknown = model?.rows.some((row) => row.kind !== "list" && beamerBuildStateAt(model, row, step).visibility === "unknown");
+  const hasTimeline = model?.rows.some((row) => row.kind !== "list" &&
+    steps.every((value) => beamerBuildStateAt(model, row, value).visibility !== "unknown"));
 
   return (
-    <SidePanel className={css.panel}>
-      <SidePanel.Header>Builds <span>Step {step} / {model?.stepCount ?? 1}</span></SidePanel.Header>
+    <SidePanel className={inspector.panel}>
+      <SidePanel.Header>
+        Builds
+        {model && model.stepCount > PAGE_SIZE ? <div className={inspector.multiArrangeGroup}>
+          <button type="button" className={inspector.multiArrangeIconButton} aria-label="Earlier build steps" title="Earlier build steps" disabled={page === 0} onClick={() => { setPageOverride(page - 1); }}><RiArrowLeftSLine size={14} /></button>
+          <button type="button" className={inspector.multiArrangeIconButton} aria-label="Later build steps" title="Later build steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}><RiArrowRightSLine size={14} /></button>
+        </div> : null}
+      </SidePanel.Header>
       <SidePanel.Content className={css.content}>
-        {!model ? <p className={css.hint}>Open a Beamer slide to inspect its builds.</p>
-          : model.rows.length === 0 ? <p className={css.hint}>This slide has no overlay rules. Select a bullet or block and set its Overlay in the Inspector, or add a rule in Source.</p>
+        {!model ? <p className={inspector.hint}>Select a slide to view its builds.</p>
+          : model.rows.length === 0 ? <p className={inspector.hint}>No builds on this slide.</p>
             : <>
-              <div className={css.pagination}>
-                <button type="button" aria-label="Earlier build steps" disabled={page === 0} onClick={() => { setPageOverride(page - 1); }}>‹</button>
-                <span>Steps {steps[0]}–{steps.at(-1)}</span>
-                <button type="button" aria-label="Later build steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}>›</button>
-              </div>
               <table className={css.timeline} aria-label="Slide builds">
-                <thead><tr><th scope="col">Content</th>{steps.map((value) => <th scope="col" key={value}>
+                <thead><tr><th scope="col">Content</th>{hasTimeline ? steps.map((value) => <th scope="col" key={value}>
                   <button type="button" aria-label={`Preview step ${value}`} aria-pressed={step === value} onClick={() => { preview(value); }}>{value}</button>
-                </th>)}</tr></thead>
+                </th>) : <th scope="col" colSpan={steps.length} />}</tr></thead>
                 <tbody>{model.rows.filter((row) => !ancestors(row).some((parent) => collapsed.has(parent.id))).map((row) => {
                   const parents = ancestors(row);
                   const expandable = model.rows.some((child) => child.parentId === row.id);
+                  const cells = steps.map((value) => beamerBuildStateAt(model, row, value));
+                  const sourceOnly = row.kind !== "list" && cells.some((cell) => cell.visibility === "unknown");
                   return <tr key={row.id} data-testid="build-row" data-build-id={row.id} data-selected={selected?.id === row.id}>
                     <th scope="row"><div className={css.rowLabel} style={{ paddingLeft: Math.min(parents.length, 5) * 10 }}>
-                      {expandable ? <button type="button" className={css.disclosure} aria-label={`${collapsed.has(row.id) ? "Expand" : "Collapse"} ${row.label}`} aria-expanded={!collapsed.has(row.id)} onClick={() => {
+                      {expandable ? <button type="button" className={`${objects.iconButton} ${css.disclosure}`} aria-label={`${collapsed.has(row.id) ? "Expand" : "Collapse"} ${row.label}`} aria-expanded={!collapsed.has(row.id)} onClick={() => {
                         setCollapsed((current) => { const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; });
-                      }}>{collapsed.has(row.id) ? "▸" : "▾"}</button> : null}
-                      <button type="button" className={css.label} title={`${row.label}\nLine ${source.slice(0, row.sourceSpan.from).split("\n").length}`} aria-pressed={selected?.id === row.id} onClick={() => { select(row); }}>
-                        {row.label}<small>{row.provenance === "list-default" ? "From list default" : row.kind === "list" ? "List default" : row.provenance === "relative" ? "Relative rule" : row.kind === "branch" ? "Branch" : row.spec ? `<${row.spec.source.value}>` : row.provenance === "pause" ? "Source boundary" : "Unsupported"}</small>
+                      }}>{collapsed.has(row.id) ? <RiArrowRightSLine size={14} /> : <RiArrowDownSLine size={14} />}</button> : null}
+                      <button type="button" className={`${objects.titleButton} ${css.label}`} title={`${row.label}\nLine ${source.slice(0, row.sourceSpan.from).split("\n").length}`} aria-pressed={selected?.id === row.id} onClick={() => { select(row); }}>
+                        <span className={objects.title}>{row.label}</span>
                       </button>
                     </div></th>
-                    {steps.map((value) => {
-                      const cell = beamerBuildStateAt(model, row, value);
-                      return <td key={value} data-state={row.kind === "list" ? "default" : cell.visibility} title={`Step ${value}: ${cell.label}`}>
+                    {row.kind === "list" ? <td colSpan={steps.length} /> : sourceOnly ? <td colSpan={steps.length}>
+                      <button type="button" className={inspector.moreOptionsToggle} onClick={() => { reveal(row); }}>Edit in source</button>
+                    </td> : steps.map((value, index) => {
+                      const cell = cells[index];
+                      return <td key={value} data-state={cell.visibility} title={`Step ${value}: ${cell.label}`}>
                         <button type="button" aria-label={`${row.label}, step ${value}: ${cell.label}`} onClick={() => { select(row); preview(value); }}>
-                          {row.kind === "list" ? "·" : cell.visibility === "visible" ? "●" : cell.visibility === "hidden" ? "○" : cell.visibility === "removed" ? "—" : "?"}
+                          {cell.visibility === "visible" ? "●" : cell.visibility === "hidden" ? "○" : "—"}
                         </button>
                       </td>;
                     })}
                   </tr>;
                 })}</tbody>
               </table>
-              <p className={css.legend}>● Visible · ○ Covered (space kept) · — Absent</p>
-              {hasUnknown ? <p className={css.hint}>? Unsupported rule. The timeline and preview may be incomplete.</p> : null}
+              {hasTimeline ? <div className={css.legend}><span>● Visible</span><span title="Hidden, with its space retained">○ Covered</span><span>— Absent</span></div> : null}
             </>}
-        {model && selected ? <section className={css.details} aria-label="Build rule">
-          <h3>{selected.label}</h3>
-          <p>{selected.explanation}</p>
-          {selected.spec ? <p className={css.rule}>Source <code>&lt;{selected.spec.source.value}&gt;</code>
-            {selected.kind !== "list" && selected.spec.source.value !== selected.spec.resolved ? <> · Resolved <code>&lt;{selected.spec.resolved}&gt;</code></> : null}</p> : null}
-          {ancestors(selected).filter((parent) => parent.kind !== "list").map((parent) => <p key={parent.id} className={css.hint}>
-            Enclosing: <button type="button" className={css.link} onClick={() => { select(parent); }}>{parent.label}</button>{parent.spec ? ` <${parent.spec.source.value}>` : ""}
-          </p>)}
-          {selected.kind !== "list" && state ? <p data-testid="build-effective-state">Step {step}: <strong>{state.label}</strong>.
-            {firstVisible == null && state.visibility !== "unknown" ? " No step currently makes this content visible." : null}
-          </p> : null}
-          {firstVisible != null && state?.visibility !== "visible" ? <button type="button" onClick={() => { preview(firstVisible); }}>Preview on step {firstVisible}</button> : null}
+      </SidePanel.Content>
+      {model && selected ? <SidePanel.Footer className={css.details}>
+        <section aria-label="Build rule">
+          <SidePanel.SectionHeader><span className={css.detailTitle} title={selected.label}>{selected.label}</span></SidePanel.SectionHeader>
+          <SidePanel.SectionBody>
           {selected.editable && selected.spec ? <BuildRuleEditor key={`${selected.id}:${selected.spec.source.value}:${sourceRevision}`} value={selected.spec.source.value} disabled={locked} onApply={(value) => {
             const patch = beamerBuildSpecPatch(model, selected.id, value);
             if (patch) dispatch({ type: "APPLY_SOURCE_PATCHES", documentId, baseRevision: sourceRevision, patches: [patch], changedSourceIds: [] });
-          }} /> : null}
-          <button type="button" className={css.link} onClick={reveal}>Edit rule in source</button>
-        </section> : null}
-      </SidePanel.Content>
+          }} /> : selected.spec ? <div className={inspector.property}>
+            <span className={inspector.propertyLabel}>Steps</span>
+            <output className={css.value} aria-label="Build steps">{selected.provenance === "list-default" ? selected.spec.resolved : selected.spec.source.value}</output>
+          </div> : null}
+          {ancestors(selected).map((parent) => <div key={parent.id} className={inspector.property}>
+            <span className={inspector.propertyLabel}>{parent.kind === "list" ? "List default" : "Within"}</span>
+            <button type="button" className={`${inspector.moreOptionsToggle} ${css.owner}`} onClick={() => { select(parent); }}>{parent.label}</button>
+          </div>)}
+          <div className={css.actions}>
+            <button type="button" className={inspector.moreOptionsToggle} onClick={() => { reveal(selected); }}>Edit in source</button>
+            {firstVisible != null && !steps.includes(firstVisible) ? <button type="button" className={inspector.moreOptionsToggle} onClick={() => { preview(firstVisible); }}>Go to step {firstVisible}</button> : null}
+          </div>
+          </SidePanel.SectionBody>
+        </section>
+      </SidePanel.Footer> : null}
     </SidePanel>
   );
 }
 
 function BuildRuleEditor({ value, disabled, onApply }: { value: string; disabled: boolean; onApply: (value: string) => void }) {
   const [draft, setDraft] = useState(value);
+  const errorId = useId();
+  const skipBlur = useRef(false);
   const valid = isExplicitBeamerBuildSpec(draft);
-  return <form className={css.editor} onSubmit={(event) => { event.preventDefault(); if (valid && !disabled) onApply(draft); }}>
-    <label>Steps<input aria-label="Build steps" value={draft} disabled={disabled} aria-invalid={!valid} spellCheck={false} placeholder="2-, 1,3, or 2-4" onChange={(event) => { setDraft(event.target.value); }} /></label>
-    <button type="submit" disabled={disabled || !valid || draft.trim() === value}>Apply</button>
-    {!valid ? <p role="alert">Use positive steps or ranges, such as 2-, 1,3, or 2-4.</p> : null}
-    {disabled ? <p>Rule editing is unavailable while another edit is in progress.</p> : null}
-  </form>;
+  const commit = () => {
+    if (valid && !disabled && draft.trim() !== value) onApply(draft);
+  };
+  return <div className={inspector.property}>
+    <label className={inspector.propertyLabel} htmlFor={`${errorId}-input`}>Steps</label>
+    <input id={`${errorId}-input`} className={inspector.textInput} aria-label="Build steps" value={draft} disabled={disabled} aria-invalid={!valid} aria-describedby={!valid ? errorId : undefined} spellCheck={false} placeholder="2-, 1,3, or 2-4"
+      onChange={(event) => { setDraft(event.target.value); }}
+      onBlur={() => { if (!skipBlur.current) commit(); skipBlur.current = false; }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && valid) {
+          event.preventDefault();
+          skipBlur.current = true;
+          commit();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          skipBlur.current = true;
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
+    {!valid ? <span id={errorId} className={css.error} role="alert">Use steps or ranges, such as 2-, 1,3, or 2-4.</span> : null}
+  </div>;
 }
