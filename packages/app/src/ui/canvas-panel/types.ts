@@ -145,6 +145,7 @@ export type DragState =
         initialAnchorOffset: WorldVector;
         initialDistancePt: number;
         initialDirectionalAnchorPt: number;
+        position: number;
         segment: NonNullable<EditHandle["pathAttachmentContext"]>["segment"];
         regime: NonNullable<EditHandle["pathAttachmentContext"]>["regime"];
         lastPreviewDelta?: WorldVector;

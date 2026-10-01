@@ -73,6 +73,9 @@ export function applyMovePathAttachedNodeAction(
   action: MovePathAttachedNodeAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
+  if (!Number.isFinite(action.pos)) {
+    return { kind: "error", message: "Path-attached node position must be a finite number." };
+  }
   const resolved = resolvePropertyTarget(source, action.nodeId, parseOptions);
   if (resolved.kind !== "found" || resolved.target.kind !== "node-item") {
     return { kind: "unsupported", reason: "Selected path-attached node could not be resolved for drag editing." };
@@ -185,7 +188,7 @@ function applyPositionMutations(
     mutations.set(snapped.preset, { kind: "set", value: "" });
     return;
   }
-  mutations.set("pos", { kind: "set", value: formatNumber(position) });
+  mutations.set("pos", { kind: "set", value: formatNumber(position, { fractionDigits: 6 }) });
 }
 
 function applySideMutations(
