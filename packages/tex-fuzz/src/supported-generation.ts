@@ -120,6 +120,12 @@ export class TexFuzzSupportedQuotaError extends Error {
   }
 }
 
+export interface TexFuzzSupportedGenerationOptions {
+  readonly count: number;
+  readonly maximumAttempts?: number;
+  readonly adaptiveNoveltyBudget?: number;
+}
+
 /**
  * Deterministically rejection-samples genuinely generated, fully supported
  * adversarial cases. Accepted feature counts feed back into subsequent
@@ -128,12 +134,31 @@ export class TexFuzzSupportedQuotaError extends Error {
  */
 export function generateFullySupportedTexFuzzCases(
   seed: number,
-  options: {
-    readonly count: number;
-    readonly maximumAttempts?: number;
-    readonly adaptiveNoveltyBudget?: number;
-  }
+  options: TexFuzzSupportedGenerationOptions
 ): TexFuzzSupportedGenerationResult {
+  const sampling = supportedCandidates(seed, options);
+  let step = sampling.next();
+  while (!step.done) step = sampling.next(classifyTexFuzzNativeSupport(step.value).supported);
+  return step.value;
+}
+
+/** Qualify candidates outside the caller, e.g. in a worker with a per-case deadline. */
+export async function generateFullySupportedTexFuzzCasesAsync(
+  seed: number,
+  options: TexFuzzSupportedGenerationOptions,
+  qualify: (candidate: TexFuzzCase) => Promise<boolean>
+): Promise<TexFuzzSupportedGenerationResult> {
+  const sampling = supportedCandidates(seed, options);
+  let step = sampling.next();
+  while (!step.done) step = sampling.next(await qualify(step.value));
+  return step.value;
+}
+
+// Both entry points use the same sampler, preserving seed replay and quota statistics.
+function* supportedCandidates(
+  seed: number,
+  options: TexFuzzSupportedGenerationOptions
+): Generator<TexFuzzCase, TexFuzzSupportedGenerationResult, boolean> {
   const { count } = options;
   const maximumAttempts = options.maximumAttempts ?? Math.max(256, count * 128);
   if (!Number.isSafeInteger(seed) || !Number.isSafeInteger(count) || count < 0
@@ -153,7 +178,7 @@ export function generateFullySupportedTexFuzzCases(
       adaptiveNoveltyBudget: options.adaptiveNoveltyBudget,
     });
     attempts += 1;
-    if (!classifyTexFuzzNativeSupport(candidate).supported) {
+    if (!(yield candidate)) {
       rejectedUnsupported += 1;
       continue;
     }

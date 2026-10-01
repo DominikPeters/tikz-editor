@@ -2,7 +2,7 @@
 
 ## Status
 
-Operational, with completion criteria still open (July 2026).
+Operational, with completion criteria still open (updated October 2026).
 
 The shared package, production-derived registries, recursive text/document/math
 generators, profile and adaptive weighting, malformed mutation, stateful edit
@@ -10,6 +10,40 @@ harness, hard layout invariants, shrinking, replay/artifact formats, batched
 LuaLaTeX support and generated-paragraph geometry oracles, content cache, and
 PR/nightly/soak entry points are now implemented. Existing parser, paragraph,
 inline/display math, visual, and hit-map fuzzers consume the shared generator.
+
+The October 2026 editing-geometry pass adds SVG-anchored assertions to the
+existing hit-map fuzz gate (`npm run test:tex-math:hitmap`). Its 64 generated
+display-alignment cases and 64 mixed-document cases now compare carets and
+selections with source-backed glyph paths, including fractions, scripts, tags,
+wide rows, and nested lists/quotes. The additional probes use translations,
+0.7/1/2.8 zoom, and 0/17/-25/90-degree rotations. Glyph path control-point bounds
+and emitter origins supply the reference geometry; a point returned by the hit
+map does not serve as the click oracle. For unambiguous one-character glyph
+leaves, a painted glyph-center click must resolve to that leaf, its caret must
+use the glyph's baseline x coordinate with its center in the glyph's vertical
+extent, and its highlight must contain the painted path bounds. Existing source
+round trips remain separate checks.
+
+This oracle caught three existing defects during integration:
+
+| Existing editing defect | Detection |
+| --- | --- |
+| Display hit-map origin already included ascent, then caret/selection projection added it again | SVG glyph/overlay comparison fails immediately on generated alignment case 0 |
+| 2D math entries and hit bounds clipped to the declared advance despite overfull painting | Visible glyph selection becomes empty in alignment case 0 and mixed-document case 29 |
+| Rotated full-width prose bounds used to infer height from the shorter painted line width | A click on a display numerator resolves to preceding prose in alignment case 53 |
+
+The fixes preserve top-based synthetic line coordinates, retain painted 2D math
+geometry outside a box's advance while keeping linear caret arrays bounded, and
+use layout-supplied line heights for transformed hit testing. A fixture regression
+in `test/beamer-display-math-geometry.spec.ts` checks the KKT active-set display at
+three zoom levels. Its erroneous vertical shift was exactly 8.2125pt, one ascent.
+The browser regression in `apps/web/e2e/beamer-canvas-text-editing.spec.ts` compares
+that fixture's caret and highlight directly with the painted `g` SVG path.
+
+These checks complement the synchronous native CLI invariants; they execute in
+the hit-map Vitest gate and browser suite because the editor mapping API is
+asynchronous. The synchronous CLI's finite-geometry and repeat checks alone
+cannot detect a shared forward/inverse coordinate error.
 
 The native gate now renders every selected case at 48, 160, and 480pt; checks
 finite geometry, caret/source ranges, deterministic repetition, linear segment
@@ -69,9 +103,10 @@ cases through a batched paragraph oracle. It projects arbitrary generated
 syntax to replayable controlled prose, compares line text and realized
 interword glue, caches observations, bisects compilation failures, emits
 structured artifacts, and fails on new geometry findings. Mutation regressions
-prove that halved glue and dropped final text are detected. The richer legacy
-math/display/visual comparisons remain diagnostic layers and are not yet all
-normalized into this shared finding pipeline.
+prove that halved glue and dropped final text are detected. The math glyph/rule
+trace comparison now also feeds shared finding artifacts and shrinking. It
+remains diagnostic by default; display composition and raster comparisons still
+use the legacy diagnostic runners.
 
 The generated edit-sequence suite runs cases through the real app compute
 adapter and compares genuinely reused parser/semantic stages with a fresh full
@@ -566,8 +601,10 @@ Batching must not weaken isolation:
 
 Differential shrinking should batch all independent candidates from one shrink
 round into one or a few compilations. The shrink algorithm then selects the
-smallest candidate preserving the versioned fingerprint and begins the next
-round. Cache duplicate candidates before constructing a batch.
+smallest candidate preserving the diagnostic class and begins the next round.
+Original fingerprints remain intact in the stored finding; unrelated feature
+tags and indexed loci may disappear from the minimized witness. Cache duplicate
+candidates before constructing a batch.
 
 Use a bounded asynchronous worker pool for independent batches, with separate
 working directories and a shared prewarmed TeX cache. Determine worker count by
@@ -785,6 +822,136 @@ independent unexplained failures.
 - Never part of ordinary CI.
 - Produces only synthetic candidate fixtures and provenance reports.
 
+## October 2026 cache and stress checks
+
+The native CLI adds four complementary checks to the fixed-width invariants:
+
+- **Production cache histories:** repeat, source shifts, exact nearby widths,
+  font changes, incomplete typing, insert/undo/redo, and color resolver revisions
+  run through `createTexNodeTextEngine`. Every state compares metrics, final SVG,
+  paragraph reports, and vertical layout with an independent fresh engine.
+  Interleaved engines and 4,100 churn requests stress eviction and retained
+  visible snapshots. Only opaque keys and paragraph IDs are normalized.
+- **Measured boundaries:** up to three natural line/math widths produce probes
+  at the exact width and ±1/1024pt. The same math provider serves those layouts,
+  exercising both width transitions and request-key reuse.
+- **Content preservation:** document prose joins the exact semantic stream
+  check, including explicit custom list labels. Final SVG paths must paint each
+  visible source-backed single ASCII letter/digit math leaf exactly once.
+  Phantom spans are excluded. This catches loss/duplication in display math,
+  fractions, scripts, and matrices; it does not establish all symbol or rule
+  fidelity.
+- **Source-shift metamorphism:** a leading comment must preserve geometry and
+  painted output while shifting source attribution by its UTF-16 length.
+  This relation applies to supported, unmutated cases.
+
+Generation chooses among three deterministic candidates by rarity of feature
+pairs and triples, in addition to existing single-feature weighting. Scoring
+samples at most 256 evenly spaced pairs and 256 triples per candidate, avoiding
+cubic feedback cost on dense fixtures; the full coverage report still counts
+every combination. Coverage aggregation enumerates identical feature sets once
+with their exact multiplicity, retaining all per-AST and per-source counters.
+This is semantic diversity feedback, not branch coverage.
+Shrinking preserves the
+failure's diagnostic class while allowing unrelated features and indexed loci
+to disappear; stored fingerprints retain their full feature/locus identity.
+Reducers also simplify nested fractions, radicals, scripts, and matrix cells.
+
+Native checks run sequentially in a reusable worker with a default 10-second
+per-case timeout and a 256MiB old-generation heap limit. A timeout or crash
+preserves the original case, selected checks, and budget, restarts the worker,
+and continues the batch. Resource failures are deliberately not shrunk. These
+limits cover native invariant/history execution and support-quota qualification.
+The CLI uses asynchronous rejection sampling with the same seeded sampler as
+its synchronous API, qualifying each candidate at all three widths in the
+worker. A qualification timeout/crash preserves a replayable artifact in
+`support-qualification/` and fails the quota rather than treating a resource
+failure as unsupported syntax. Generation and the lightweight authoring model
+still execute in the parent, with structural/work-count bounds rather than a
+preemptive wall-clock limit. Timing is diagnostic and does not replace
+deterministic work-count assertions.
+
+Shrinking checks its candidate budget before constructing reductions and uses
+one monotonic deadline across all rounds and all work in each batch. Its
+predicate receives that deadline and an abort signal. The native runner kills
+an in-flight worker on cancellation; the async support oracle cancels child
+processes, and both support and paragraph bisection use the remaining time for
+each compilation. Math comparisons and native paragraph comparisons run in
+workers as well. A deadline returns the previous completed reduction with
+`termination: time-budget`, rather than waiting for a whole batch or claiming
+minimality. Evaluation counters describe completed batches; an interrupted
+batch may have started additional work. Candidate construction itself remains
+synchronous and structurally bounded.
+
+The richer math lane selects actual generated math subtrees without projecting
+away their syntax. It reuses the LuaLaTeX glyph/font/rule trace comparison,
+calibrates simple controls, stores the TeX tool banners with findings, and emits
+replayable artifacts in `math-differential/`. Unsupported inputs or failed oracle
+compilations are recorded as uncomparable, never counted as passes. Defaults are
+8 formulas, 0.03pt tolerance, a 20-second compile limit (also subject to the
+native worker's default 10-second case limit), and at most 12 shrink
+candidates/compilations within a shared 10-second shrink deadline. This lane remains diagnostic until its known differences
+are triaged; `--math-oracle-policy fail` requires every sample to compare cleanly
+and fails if LuaLaTeX is missing. `--no-oracle` explicitly disables both TeX lanes.
+
+A local seed-20261001 diagnostic sample compared four intact formulas and
+found two extensible-arrow geometry differences. Shrinking reduced them to
+`$\xrightarrow[a]{a}$` and `$\xleftarrow[x]{1}$`; both reproduce through the
+shared replay CLI. The bundles and tool environment are retained locally in
+`artifacts/tex-fuzz/cache-and-oracle-followup/math-differential/`.
+
+The follow-up fixes those findings against the installed `amsmath.sty` and
+LuaLaTeX. The arrow fill's leaders have zero natural advance; short arrows may
+have no repeated shaft glyphs, and longer arrows center whole leader units in
+the available stretch. `\relbar` retains its paint but has smashed logical
+height/depth, so it must not displace the operator's labels. AMS profile
+selection now includes extensible arrows; measurement stays in scriptstyle,
+while actual limits use the enclosing operator's script style. Empty labels
+omit their limit boxes. Fixed regressions cover widths, centered leaders,
+upper/lower baselines, scriptscript labels, and empty labels. The Lua trace now
+expands centered leaders instead of silently skipping their painted glyphs;
+other leader subtypes explicitly make the trace uncomparable.
+
+Twelve short/long/empty/nested arrow formulas pass the real LuaLaTeX oracle,
+including both original unminimized findings. Painted LuaLaTeX output is saved
+in `artifacts/tex-fuzz/arrow-and-budget-followup/arrows-after/painted-lua.pdf`.
+Both old minimized bundles now replay with `compared: true, reproduces: false`.
+The seed-20261001 sample compares four generated formulas and four projected
+paragraphs with no differential findings. This resolves the two recorded
+arrow findings; it does not establish a clean baseline for all math syntax.
+For example, a separate `abcdefghijk` probe still differs in math-letter italic
+correction, independently of arrows.
+
+Local validation passed 224 focused tests, including mutation canaries, KKT
+geometry, worker recovery, and cache histories. A PR-sized seed-20260711 run
+passed 1,360 native cases: 1,000 valid, 32 fully supported, 100 malformed, 128
+typing prefixes, and 100 projection controls, with 335 metamorphic checks.
+The exact aggregation refactor produced a byte-identical full coverage report
+for that run. Typechecking and production lint also passed.
+
+The arrow/budget follow-up passed 4,333 full-suite tests (6 optional oracle
+checks skipped), with a 30-second per-test ceiling for the full run after a
+contended 15-second run timed out during editor-store startup. The optional
+LuaLaTeX lanes were also run separately. The PR-sized native run again passed
+1,360 cases and 335 metamorphic checks; a forced 1ms qualification budget
+produced a witness that reproduces through the replay CLI. Timeout, crash,
+cancellation, deterministic asynchronous qualification, and deadline-bisection
+canaries pass, as do typechecking and production lint. Reports are under
+`artifacts/tex-fuzz/arrow-and-budget-followup/`.
+
+Useful bounded local runs (build first with `npm run build:tex-fuzz`):
+
+```sh
+node scripts/run-tex-fuzz.mjs --cases 120 --profile document --no-oracle --boundary-cases 24 --engine-history-cases 8
+node scripts/run-tex-fuzz.mjs --cases 40 --supported-cases 8 --math-oracle-cases 8 --math-oracle-policy diagnostic
+node scripts/replay-tex-fuzz.mjs path/to/finding.json
+```
+
+The PR command inherits defaults of 32 boundary cases and 8 engine histories;
+nightly and soak runs request larger samples explicitly. Further opportunities
+include graphic-resolver histories, custom mutable font profiles, parser/IR
+branch feedback, deterministic complexity counters, and a pinned TeX image.
+
 ## Deferred Corpus Mining
 
 Real-paper mining is an optional, later-stage novelty feed. Begin with manual
@@ -836,7 +1003,7 @@ contracts:
 - **Agent B — production registry/coverage:** registry exports, explicit
   exclusions, profiles, pair/triple/depth/boundary accounting, and drift tests.
 - **Agent C — mutation/metamorphic/shrinking breadth:** malformed operations,
-  TeX-calibrated relation domains, fingerprint-preserving reducers, and budget
+  TeX-calibrated relation domains, diagnostic-class-preserving reducers, and budget
   enforcement.
 - **Agent D — generator breadth:** text, math, and document families using the
   production-derived registry and frozen model.
@@ -915,7 +1082,7 @@ project.
 
 - Existing LuaLaTeX runners consume shared cases.
 - Findings include glyph/box/rule traces and stable signatures.
-- AST-aware shrinking preserves signatures.
+- AST-aware shrinking preserves diagnostic classes and records original signatures.
 - Stored findings replay with one command.
 - Differential shrinking respects layer-specific compile/time budgets.
 - Structural and shrink-round cases use calibrated batching with isolation
@@ -947,7 +1114,7 @@ The project can call this design implemented when:
 - valid, malformed, metamorphic, and boundary-targeted profiles share one case
   model; corpus-mutated profiles use it as well if corpus mining is enabled;
 - LuaLaTeX comparisons produce structured, minimized findings;
-- shrinkers preserve failure fingerprints;
+- shrinkers preserve diagnostic classes and retain original failure fingerprints;
 - feature pair/triple, depth, Unicode, font/style, and boundary coverage are
   reported;
 - at least one scheduled diagnostic or soak run has found, minimized, replayed,

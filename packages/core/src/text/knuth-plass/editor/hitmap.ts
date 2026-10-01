@@ -427,6 +427,8 @@ interface LineGeometry {
   reportToSvgScaleX: number;
   screenMatrix: { a: number; b: number; c: number; d: number; e: number; f: number };
   inverseScreenMatrix: { a: number; b: number; c: number; d: number; e: number; f: number };
+  /** Exact line height perpendicular to its baseline, when layout supplied it. */
+  clientNormalHeight?: Px;
 }
 
 interface LineHitMap extends LineGeometry {
@@ -1565,6 +1567,7 @@ function registeredLineGeometry(
       reportToSvgScaleX,
       screenMatrix: lineMatrix,
       inverseScreenMatrix,
+      clientNormalHeight: transformedLineNormalHeight(lineMatrix, lineHeight * reportToSvgScaleX),
     };
   });
 }
@@ -1727,6 +1730,7 @@ function lineClientHeight(
   line: LineGeometry,
   reportLine: ParagraphLayoutReport['lines'][number]
 ): Px {
+  if (line.clientNormalHeight !== undefined) return line.clientNormalHeight;
   const fallback = Math.max(1, line.clientBottom - line.clientTop);
   const reportLineWidth = Number(reportLine.xEnd) - Number(reportLine.xStart);
   if (!Number.isFinite(reportLineWidth) || reportLineWidth <= EPSILON) {
@@ -1748,6 +1752,11 @@ function lineClientHeight(
     return px(fallback);
   }
   return px(Math.max(1, Math.min(fallback, inferredHeight)));
+}
+
+function transformedLineNormalHeight(matrix: ScreenMatrixLike, height: number): Px {
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  return px(Math.max(1, height * Math.abs(determinant) / Math.hypot(matrix.a, matrix.b)));
 }
 
 function clientToLineLocalPoint(
@@ -2932,11 +2941,13 @@ function displayMathLineHitMapFromPositionedItem(params: {
     return [];
   }
   const xEnd = texLineX(xStart + width);
-  const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y + metrics.height);
+  // Synthetic display lines use the same top-left frame as paragraph lines.
+  // mathBaselineYToLineY adds the ascent when projecting caret/selection data.
+  const lineMatrix = translatedScreenMatrix(params.matrix, xStart, y);
   const inverseScreenMatrix = inverseScreenMatrixForLine(lineMatrix, params.lineIndex);
   const bounds = clientRectForLocalBox(
     0,
-    0 - metrics.height,
+    0,
     width,
     totalHeight,
     lineMatrix
@@ -2970,7 +2981,6 @@ function displayMathLineHitMapFromPositionedItem(params: {
   const mathCaretEntryReports = displayMathCaretEntriesForBox(
     source,
     xStart,
-    width,
     params.report.sourceCoordinateSpace
   );
   const mathCaretEntries = normalizeMathCaretEntries(mathCaretEntryReports) ?? [];
@@ -2984,6 +2994,7 @@ function displayMathLineHitMapFromPositionedItem(params: {
     reportToSvgScaleX: params.reportToSvgScaleX,
     screenMatrix: lineMatrix,
     inverseScreenMatrix,
+    clientNormalHeight: transformedLineNormalHeight(lineMatrix, totalHeight * params.reportToSvgScaleX),
     reportLine,
     stopsByX: stops,
     stopsByOffset: [...stops].sort((left, right) => {
@@ -3046,7 +3057,6 @@ function displayMathSyntheticReportLine<Space extends SourceCoordinateSpace>(par
       mathCaretEntries: displayMathCaretEntriesForBox(
         params.source,
         params.xStart,
-        width,
         params.sourceCoordinateSpace
       ),
       mathBreakpoints: displayMathBreakpointsForBox(
@@ -3173,7 +3183,6 @@ function displayMathConstructRangesForBox<Space extends SourceCoordinateSpace>(
 function displayMathCaretEntriesForBox<Space extends SourceCoordinateSpace>(
   box: Pick<TexMathBox, 'caretMap'>,
   x: TexLineX,
-  width: TexLength,
   sourceCoordinateSpace: Space
 ): LineSegmentReport<Space>['mathCaretEntries'] {
   const entries = box.caretMap?.entries;
@@ -3187,7 +3196,7 @@ function displayMathCaretEntriesForBox<Space extends SourceCoordinateSpace>(
       sourceEndRaw: sourceOffsetForSpace(entry.sourceSpan.end, sourceCoordinateSpace),
     } : {}),
     x: projectDisplayMathHBoxXToLine(
-      texHBoxX(Math.max(0, Math.min(width, entry.x))),
+      entry.x,
       x
     ),
     y: projectDisplayMathHBoxYToLine(entry.y),
@@ -3197,11 +3206,11 @@ function displayMathCaretEntriesForBox<Space extends SourceCoordinateSpace>(
     ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
     hitBounds: {
       xStart: projectDisplayMathHBoxXToLine(
-        texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xStart))),
+        entry.hitBounds.xStart,
         x
       ),
       xEnd: projectDisplayMathHBoxXToLine(
-        texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xEnd))),
+        entry.hitBounds.xEnd,
         x
       ),
       yStart: projectDisplayMathHBoxYToLine(entry.hitBounds.yStart),

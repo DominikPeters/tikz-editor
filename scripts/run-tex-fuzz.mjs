@@ -2,18 +2,16 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
-  checkTexFuzzHardInvariants,
-  checkTexFuzzMetamorphicInvariants,
   differentialCanaryCase,
   differentialSupportFingerprint,
-  generateFullySupportedTexFuzzCases,
+  generateFullySupportedTexFuzzCasesAsync,
   generateTexFuzzCase,
   generateTexFuzzEditSequence,
   measureTexFuzzCoverage,
   planTexFuzzArtifacts,
   projectTexFuzzCaseToParagraph,
   texFuzzParagraphOracleWidth,
-  sameTexFuzzFingerprint,
+  sameTexFuzzFailureClass,
   serializeTexFuzzBundle,
   runTexFuzzEditSequence,
   shrinkTexFuzzCase,
@@ -21,12 +19,17 @@ import {
   texFuzzPrefixDamageCases,
   texFuzzSourceUsesUnsupportedLiteral,
   texFuzzRegistryDrift,
+  TexFuzzNoveltyTracker,
+  TEX_FUZZ_NOVELTY_COMBINATION_LIMIT,
+  caseFromTexFuzzAst,
 } from "../packages/tex-fuzz/dist/index.js";
+import { createTexFuzzNativeRunner, runTexFuzzNativeCases } from "./lib/tex-fuzz-native-runner.mjs";
 import {
   calibrateBatchedTexSupportOracle,
   commandExists,
   runBatchedTexSupportOracleAsync,
   selectTexFuzzEscalation,
+  texFuzzOracleEnvironment,
 } from "./lib/tex-fuzz-oracle.mjs";
 import {
   compareTexFuzzParagraphGeometry,
@@ -54,6 +57,13 @@ const { values } = parseArgs({
     "supported-max-attempts": { type: "string", default: "2048" },
     "oracle-sample-cases": { type: "string", default: "64" },
     "oracle-geometry-policy": { type: "string", default: "diagnostic" },
+    "boundary-cases": { type: "string", default: "32" },
+    "engine-history-cases": { type: "string", default: "8" },
+    "engine-churn-requests": { type: "string", default: "4100" },
+    "native-timeout-ms": { type: "string", default: "10000" },
+    "novelty-candidates": { type: "string", default: "3" },
+    "math-oracle-cases": { type: "string", default: "8" },
+    "math-oracle-policy": { type: "string", default: "diagnostic" },
   },
 });
 const count = Number(values.cases);
@@ -69,6 +79,13 @@ const supportedCount = Number(values["supported-cases"]);
 const supportedMaximumAttempts = Number(values["supported-max-attempts"]);
 const oracleSampleCount = Number(values["oracle-sample-cases"]);
 const oracleGeometryPolicy = values["oracle-geometry-policy"];
+const boundaryCount = Number(values["boundary-cases"]);
+const historyCount = Number(values["engine-history-cases"]);
+const churnRequests = Number(values["engine-churn-requests"]);
+const nativeTimeoutMs = Number(values["native-timeout-ms"]);
+const noveltyCandidates = Number(values["novelty-candidates"]);
+const mathOracleCount = Number(values["math-oracle-cases"]);
+const mathOraclePolicy = values["math-oracle-policy"];
 const profiles = new Set(["vertical-slice", "canary", "aggressive", "supported-aggressive", "document", "malformed"]);
 if (!profiles.has(values.profile)) {
   throw new Error(`Unknown --profile ${values.profile}.`);
@@ -85,6 +102,11 @@ if (!Number.isSafeInteger(count) || count <= 0 || !Number.isSafeInteger(seed)
   || !Number.isSafeInteger(supportedCount) || supportedCount < 0
   || !Number.isSafeInteger(supportedMaximumAttempts) || supportedMaximumAttempts < supportedCount
   || !Number.isSafeInteger(oracleSampleCount) || oracleSampleCount < 0
+  || ![boundaryCount, historyCount, churnRequests].every((value) => Number.isSafeInteger(value) && value >= 0)
+  || !Number.isSafeInteger(nativeTimeoutMs) || nativeTimeoutMs <= 0
+  || !Number.isSafeInteger(noveltyCandidates) || noveltyCandidates < 1 || noveltyCandidates > 8
+  || !Number.isSafeInteger(mathOracleCount) || mathOracleCount < 0
+  || !["diagnostic", "fail"].includes(mathOraclePolicy)
   || !["diagnostic", "fail"].includes(oracleGeometryPolicy)) {
   throw new Error("Case counts and --seed must be valid integers; --oracle-workers and --prefix-limit-per-case must be positive.");
 }
@@ -94,15 +116,19 @@ if (drift.missing.length > 0 || drift.staleExclusions.length > 0) {
   throw new Error(`TeX fuzz registry drift: ${JSON.stringify(drift)}`);
 }
 
+const generationStarted = performance.now();
 /** @type {Record<string, number>} */
 const adaptiveFeatureCounts = {};
 /** @type {import("../packages/tex-fuzz/dist/index.js").TexFuzzCase[]} */
 const validGenerated = [];
+const novelty = new TexFuzzNoveltyTracker();
 for (let index = 0; index < count; index += 1) {
-  const caseData = generateTexFuzzCase(seed + index, {
+  const candidates = Array.from({ length: noveltyCandidates }, (_, candidate) => generateTexFuzzCase(seed + index + candidate * count, {
     profile,
     coverageFeedback: index === 0 ? undefined : adaptiveFeatureCounts,
-  });
+  }));
+  const caseData = novelty.choose(candidates);
+  novelty.record(caseData.features);
   const profileMutations = profile === "malformed" ? texFuzzMalformedMutations(caseData) : [];
   const selected = profileMutations[index % Math.max(1, profileMutations.length)]?.case ?? caseData;
   validGenerated.push(selected);
@@ -111,10 +137,23 @@ for (let index = 0; index < count; index += 1) {
   }
 }
 
-const supportedLane = generateFullySupportedTexFuzzCases(seed + count, {
-  count: supportedCount,
-  maximumAttempts: supportedMaximumAttempts,
-});
+const qualificationRunner = createTexFuzzNativeRunner({ timeoutMs: nativeTimeoutMs });
+let supportedLane;
+try {
+  supportedLane = await generateFullySupportedTexFuzzCasesAsync(seed + count, {
+    count: supportedCount, maximumAttempts: supportedMaximumAttempts,
+  }, async (caseData) => {
+    const record = await qualificationRunner.runCase(caseData, { support: true });
+    if (record.observations.length > 0) {
+      const root = resolve(values["artifacts-dir"], "support-qualification");
+      writeFindingArtifacts(root, record.observations.map((observation) => ({ case: caseData, observation })),
+        { node: process.version, runner: "native-support-qualification-v1" });
+      throw new Error(`Native support qualification failed; replay artifacts are in ${root}.`);
+    }
+    if (!record.support) throw new Error("Native support worker returned no classification.");
+    return record.support.supported;
+  });
+} finally { await qualificationRunner.close(); }
 const supportedGenerated = [...supportedLane.cases];
 
 const malformedGenerated = Array.from({ length: malformedCount }, (_, index) => {
@@ -135,15 +174,23 @@ const projectionControls = validGenerated
   .slice(0, Math.min(projectionControlCount, validGenerated.length))
   .map(projectTexFuzzCaseToParagraph);
 const metamorphicCandidates = [...supportedGenerated, ...validGenerated];
-const metamorphicRuns = metamorphicCandidates.slice(0, Math.min(metamorphicCount, metamorphicCandidates.length)).map((caseData) => ({
-  caseData,
-  run: checkTexFuzzMetamorphicInvariants(caseData),
-}));
-const hardFindingRecords = [...[...generated, ...projectionControls].flatMap((caseData) =>
-  checkTexFuzzHardInvariants(caseData).map((observation) => ({ caseData, observation }))
-), ...metamorphicRuns.flatMap(({ caseData, run }) =>
-  run.findings.map((observation) => ({ caseData, observation }))
-)];
+const metamorphicCases = new Set(metamorphicCandidates.slice(0, metamorphicCount));
+const boundaryCases = new Set(metamorphicCandidates.slice(0, boundaryCount));
+const historyCases = new Set(metamorphicCandidates.slice(0, historyCount));
+const firstHistory = metamorphicCandidates[0];
+const generationMs = performance.now() - generationStarted;
+const nativeStarted = performance.now();
+const nativeRecords = await runTexFuzzNativeCases([...generated, ...projectionControls], {
+  timeoutMs: nativeTimeoutMs,
+  checks: (caseData) => ({
+    boundary: boundaryCases.has(caseData), metamorphic: metamorphicCases.has(caseData),
+    history: historyCases.has(caseData), churnRequests: caseData === firstHistory ? churnRequests : 0,
+  }),
+});
+const nativeMs = performance.now() - nativeStarted;
+const hardFindingRecords = nativeRecords.flatMap(({ caseData, observations }) =>
+  observations.map((observation) => ({ caseData, observation }))
+);
 const hardFindings = hardFindingRecords.map(({ observation }) => observation);
 if (hardFindingRecords.length > 0) {
   const bundles = [];
@@ -155,11 +202,19 @@ if (hardFindingRecords.length > 0) {
     record,
   ]));
   for (const { caseData, observation } of representatives.values()) {
-    const shrink = await shrinkTexFuzzCase(caseData, observation, (candidates) => Promise.resolve(
-      candidates.map((candidate) => checkTexFuzzHardInvariants(candidate).find((finding) =>
-        sameTexFuzzFingerprint(finding.fingerprint, observation.fingerprint)
-      ) ?? null)
-    ), { maxCandidates: 500, maxOracleEvaluations: 0, maxTimeMs: 10_000 });
+    const resourceFailure = observation.fingerprint.code.startsWith("native-");
+    const shrink = await shrinkTexFuzzCase(caseData, observation, async (candidates, context) => {
+      const records = await runTexFuzzNativeCases(candidates, {
+        signal: context.signal,
+        timeoutMs: nativeTimeoutMs,
+        checks: () => ({ boundary: true, metamorphic: true,
+          history: observation.fingerprint.code.startsWith("engine-history-"),
+          churnRequests: observation.detail?.churnRequests ?? 0 }),
+      });
+      return records.map(({ observations }) => observations.find((finding) =>
+        sameTexFuzzFailureClass(finding.fingerprint, observation.fingerprint)
+      ) ?? null);
+    }, { maxCandidates: resourceFailure ? 0 : 50, maxOracleEvaluations: 0, maxTimeMs: 10_000 });
     bundles.push({
       case: caseData,
       minimizedCase: shrink.minimizedCase,
@@ -175,19 +230,23 @@ if (hardFindingRecords.length > 0) {
   const environment = {
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
-    runner: "native-hard-invariants-v1",
+    runner: "native-hard-invariants-v3",
   };
-  const artifactPlan = planTexFuzzArtifacts(bundles, environment);
-  mkdirSync(artifactRoot, { recursive: true });
-  for (const planned of artifactPlan.bundles) {
-    const bundlePath = resolve(artifactRoot, planned.witness.bundlePath);
-    mkdirSync(dirname(bundlePath), { recursive: true });
-    writeFileSync(bundlePath, `${JSON.stringify(planned.storedBundle, null, 2)}\n`, "utf8");
-  }
-  writeFileSync(resolve(artifactRoot, "manifest.json"), `${JSON.stringify(artifactPlan.manifest, null, 2)}\n`, "utf8");
+  writeFindingArtifacts(artifactRoot, bundles, environment);
   throw new Error(
     `Generated cases violated ${hardFindings.length} hard invariants; minimized replay artifacts are in ${artifactRoot}.`
   );
+}
+
+function writeFindingArtifacts(root, bundles, environment) {
+  const plan = planTexFuzzArtifacts(bundles, environment);
+  mkdirSync(root, { recursive: true });
+  for (const planned of plan.bundles) {
+    const path = resolve(root, planned.witness.bundlePath);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify(planned.storedBundle, null, 2)}\n`, "utf8");
+  }
+  writeFileSync(resolve(root, "manifest.json"), `${JSON.stringify(plan.manifest, null, 2)}\n`, "utf8");
 }
 
 /**
@@ -258,7 +317,7 @@ if (!values["no-oracle"] && commandExists("lualatex")) {
     }
     const oracle = await runBatchedTexSupportOracleAsync(
       attempted.map((item, index) => ({ id: `shrink-${index}`, source: item.source })),
-      oracleOptions
+      { ...oracleOptions, signal: context.signal, deadline: context.deadline }
     );
     const observations = attempted.map((candidate, index) => {
       const candidateOurs = !texFuzzSourceUsesUnsupportedLiteral(candidate.source);
@@ -363,11 +422,11 @@ if (!values["no-oracle"] && commandExists("lualatex")) {
       const shrunk = await shrinkTexFuzzCase(
         finding.caseData,
         finding.observation,
-        (candidates, context) => {
+        async (candidates, context) => {
           const attemptedCount = Math.min(candidates.length, Math.floor((context.maxOracleEvaluations + 1) / 2));
           const attempted = candidates.slice(0, attemptedCount);
           if (attempted.length === 0) {
-            return Promise.resolve({ observations: candidates.map(() => null), oracleEvaluations: 0, oracleBudgetExhausted: true });
+            return { observations: candidates.map(() => null), oracleEvaluations: 0, oracleBudgetExhausted: true };
           }
           const inputs = attempted.map((candidate, index) => ({
             id: `shrink-paragraph-${index}`,
@@ -376,27 +435,27 @@ if (!values["no-oracle"] && commandExists("lualatex")) {
           }));
           const texBatch = runBatchedTexParagraphOracle(inputs, {
             batchSize: 64,
+            maxTimeMs: Math.max(1, context.deadline - performance.now()),
             cacheDir: resolve(values["oracle-cache-dir"], "paragraph"),
           });
+          const native = await runTexFuzzNativeCases(attempted, {
+            timeoutMs: nativeTimeoutMs, signal: context.signal,
+            checks: (candidate) => ({ paragraphWidth: texFuzzParagraphOracleWidth(candidate) }),
+          });
           const observations = attempted.map((candidate, index) => {
-            const candidateWidth = texFuzzParagraphOracleWidth(candidate);
             const tex = texBatch.observations[index];
-            const ours = core.layoutSimpleTexParagraph(candidate.source, {
-              width: candidateWidth,
-              alignment: "justified",
-              hyphenator: { hyphenate: () => [] },
-            });
-            if (!tex?.supported || !ours.report) return null;
-            const comparison = compareTexFuzzParagraphGeometry(ours.report, tex);
+            const report = native[index].paragraphReport;
+            if (!tex?.supported || !report) return null;
+            const comparison = compareTexFuzzParagraphGeometry(report, tex);
             return !comparison.matches && comparison.code === finding.observation.fingerprint.code
               ? { fingerprint: finding.observation.fingerprint, detail: comparison }
               : null;
           });
-          return Promise.resolve({
+          return {
             observations: [...observations, ...candidates.slice(attempted.length).map(() => null)],
             oracleEvaluations: texBatch.stats.compilations,
             oracleBudgetExhausted: attempted.length < candidates.length,
-          });
+          };
         },
         { maxCandidates: 200, maxOracleEvaluations: 64, maxTimeMs: 20_000 }
       );
@@ -408,17 +467,57 @@ if (!values["no-oracle"] && commandExists("lualatex")) {
       observation,
       oracleEnvironment: paragraphOracle.environment,
     }));
-    const differentialPlan = planTexFuzzArtifacts(differentialBundles, paragraphOracle.environment);
-    mkdirSync(differentialRoot, { recursive: true });
-    for (const planned of differentialPlan.bundles) {
-      const bundlePath = resolve(differentialRoot, planned.witness.bundlePath);
-      mkdirSync(dirname(bundlePath), { recursive: true });
-      writeFileSync(bundlePath, `${JSON.stringify(planned.storedBundle, null, 2)}\n`, "utf8");
-    }
-    writeFileSync(resolve(differentialRoot, "manifest.json"), `${JSON.stringify(differentialPlan.manifest, null, 2)}\n`, "utf8");
+    writeFindingArtifacts(differentialRoot, differentialBundles, paragraphOracle.environment);
     if (oracleGeometryPolicy === "fail") {
       throw new Error(`${paragraphFindings.length} generated paragraph differential findings require triage; see ${differentialRoot}.`);
     }
+  }
+}
+
+async function compareMathCases(cases, context = {}) {
+  const runner = createTexFuzzNativeRunner({ timeoutMs: nativeTimeoutMs, signal: context.signal });
+  const comparisons = [];
+  try {
+    for (const caseData of cases) {
+      context.signal?.throwIfAborted();
+      const timeoutMs = Math.max(1, Math.ceil(Math.min(20_000, (context.deadline ?? Infinity) - performance.now())));
+      const record = await runner.runCase(caseData, { mathOracle: { timeoutMs } });
+      comparisons.push({ caseData, ...(record.mathOracle ?? { compared: false, observation: record.observations[0] }) });
+    }
+  } finally { await runner.close(); }
+  return comparisons;
+}
+
+let mathOracleSummary = { available: false };
+if (!values["no-oracle"] && mathOracleCount > 0 && mathOraclePolicy === "fail" && !commandExists("lualatex")) {
+  throw new Error("The required math glyph oracle is unavailable: lualatex was not found.");
+}
+if (!values["no-oracle"] && mathOracleCount > 0 && commandExists("lualatex")) {
+  const { texFuzzMathOracleCases } = await import("./lib/tex-fuzz-math-oracle.mjs");
+  const controls = ["x", "x^2", String.raw`\frac{x}{y}`].map((content) => caseFromTexFuzzAst([{ kind: "math", content }]));
+  if ((await compareMathCases(controls)).some((result) => result.observation)) throw new Error("Math glyph oracle calibration failed.");
+  const sample = texFuzzMathOracleCases([...supportedGenerated, ...validGenerated], mathOracleCount);
+  const comparisons = await compareMathCases(sample);
+  const findings = comparisons.filter((result) => result.observation);
+  const environment = { ...texFuzzOracleEnvironment("lualatex"), runnerVersion: "lualatex-math-glyph-trace-v2" };
+  const bundles = [];
+  for (const { caseData, observation, compared } of findings) {
+    const shrink = await shrinkTexFuzzCase(caseData, observation, async (candidates, context) => {
+      const attempted = candidates.slice(0, context.maxOracleEvaluations);
+      const results = await compareMathCases(attempted, context);
+      const observations = results.map((result) => result.compared ? result.observation : null);
+      return { observations: [...observations, ...candidates.slice(attempted.length).map(() => null)],
+        oracleEvaluations: attempted.length, oracleBudgetExhausted: attempted.length < candidates.length };
+    }, { maxCandidates: compared ? 12 : 0, maxOracleEvaluations: 12, maxTimeMs: 10_000 });
+    bundles.push({ case: caseData, minimizedCase: shrink.minimizedCase, observation, oracleEnvironment: environment,
+      shrink: { candidatesEvaluated: shrink.candidatesEvaluated, oracleEvaluations: shrink.oracleEvaluations, termination: shrink.termination } });
+  }
+  const root = resolve(values["artifacts-dir"], "math-differential");
+  writeFindingArtifacts(root, bundles, environment);
+  mathOracleSummary = { available: true, cases: sample.length, compared: comparisons.filter((result) => result.compared).length,
+    findings: findings.length, artifacts: root, policy: mathOraclePolicy };
+  if (mathOraclePolicy === "fail" && (findings.length || mathOracleSummary.compared !== sample.length)) {
+    throw new Error(`Math glyph differential findings require triage; see ${root}.`);
   }
 }
 
@@ -438,16 +537,28 @@ const output = {
   },
   supportedGeneration: supportedLane.stats,
   metamorphic: {
-    cases: metamorphicRuns.length,
-    pairs: metamorphicRuns.reduce((sum, item) => sum + item.run.pairCount, 0),
-    checks: metamorphicRuns.reduce((sum, item) => sum + item.run.checks, 0),
-    findings: metamorphicRuns.reduce((sum, item) => sum + item.run.findings.length, 0),
+    cases: nativeRecords.filter((item) => item.metamorphic).length,
+    pairs: nativeRecords.reduce((sum, item) => sum + (item.metamorphic?.pairCount ?? 0), 0),
+    checks: nativeRecords.reduce((sum, item) => sum + (item.metamorphic?.checks ?? 0), 0),
+    findings: nativeRecords.reduce((sum, item) => sum + (item.metamorphic?.findings.length ?? 0), 0),
   },
+  native: {
+    cases: nativeRecords.length, timeoutMs: nativeTimeoutMs, noveltyCandidates,
+    noveltyCombinationLimit: TEX_FUZZ_NOVELTY_COMBINATION_LIMIT,
+    noveltyTracked: novelty.trackedCombinationCounts,
+    boundaryCases: boundaryCases.size, engineHistoryCases: historyCases.size, churnRequests,
+    slowest: [...nativeRecords].sort((a, b) => b.elapsedMs - a.elapsedMs).slice(0, 10)
+      .map(({ caseData, elapsedMs }) => ({ seed: caseData.seed, profile: caseData.profile, elapsedMs })),
+  },
+  timings: { generationMs, nativeMs, coverageMs: 0 },
   drift,
   oracle: oracleSummary,
+  mathOracle: mathOracleSummary,
   bundle,
 };
+const coverageStarted = performance.now();
 const coverage = measureTexFuzzCoverage(generated);
+output.timings.coverageMs = performance.now() - coverageStarted;
 const outPath = resolve(values.out);
 const coveragePath = resolve(values["coverage-out"]);
 mkdirSync(resolve(outPath, ".."), { recursive: true });

@@ -38,8 +38,24 @@ interface MutableCoverage {
 
 export function measureTexFuzzCoverage(cases: readonly TexFuzzCoverageCase[]): TexFuzzCoverage {
   const coverage = emptyMutableCoverage();
+  const featureSets = new Map<string, { features: readonly string[]; count: number }>();
   for (const caseData of cases) {
-    addCase(coverage, caseData);
+    const features = [...new Set(caseData.features)].sort();
+    addCase(coverage, caseData, features);
+    const signature = JSON.stringify(features);
+    const group = featureSets.get(signature);
+    if (group) group.count++;
+    else featureSets.set(signature, { features, count: 1 });
+  }
+  // Dense fixture catalogs often have identical feature sets. Enumerate each
+  // set once with its multiplicity while still visiting every AST/source.
+  for (const { features, count } of featureSets.values()) {
+    combinations(features, 2, (values) => {
+      increment(coverage.featurePairCounts, texFuzzCombinationKey(values), count);
+    });
+    combinations(features, 3, (values) => {
+      increment(coverage.featureTripleCounts, texFuzzCombinationKey(values), count);
+    });
   }
   return freezeCoverage(coverage);
 }
@@ -69,16 +85,83 @@ export function texFuzzCombinationKey(values: readonly string[]): string {
   return JSON.stringify(values);
 }
 
-function addCase(coverage: MutableCoverage, caseData: TexFuzzCoverageCase): void {
+export const TEX_FUZZ_NOVELTY_COMBINATION_LIMIT = 256;
+
+function sampledCombinationKeys(features: readonly string[], size: 2 | 3): readonly string[] {
+  const ways = (count: number, take: number): number => take === 0 ? 1 : take === 1 ? count : count * (count - 1) / 2;
+  const total = size === 2 ? ways(features.length, 2) : features.length * (features.length - 1) * (features.length - 2) / 6;
+  const keys: string[] = [];
+  if (total <= TEX_FUZZ_NOVELTY_COMBINATION_LIMIT) {
+    combinations(features, size, (values) => { keys.push(texFuzzCombinationKey(values)); });
+    return keys;
+  }
+  // Unrank evenly spaced tuples without first enumerating a cubic catalog.
+  for (let sample = 0; sample < TEX_FUZZ_NOVELTY_COMBINATION_LIMIT; sample++) {
+    let rank = Math.floor(sample * total / TEX_FUZZ_NOVELTY_COMBINATION_LIMIT);
+    let start = 0;
+    const values: string[] = [];
+    for (let remaining = size; remaining > 0; remaining--) {
+      for (let index = start; index <= features.length - remaining; index++) {
+        const suffixes = ways(features.length - index - 1, remaining - 1);
+        if (rank >= suffixes) { rank -= suffixes; continue; }
+        values.push(features[index]);
+        start = index + 1;
+        break;
+      }
+    }
+    keys.push(texFuzzCombinationKey(values));
+  }
+  return keys;
+}
+
+/** Candidate feedback samples bounded rare pairs/triples; coverage reporting remains exhaustive. */
+export class TexFuzzNoveltyTracker {
+  private readonly pairs: MutableCounts = {};
+  private readonly triples: MutableCounts = {};
+  private lastKeys: { signature: string; pairs: readonly string[]; triples: readonly string[] } | undefined;
+
+  public get trackedCombinationCounts(): { readonly pairs: number; readonly triples: number } {
+    return { pairs: Object.keys(this.pairs).length, triples: Object.keys(this.triples).length };
+  }
+
+  private keys(features: readonly string[]) {
+    const unique = [...new Set(features)].sort();
+    const signature = JSON.stringify(unique);
+    if (this.lastKeys?.signature === signature) return this.lastKeys;
+    return this.lastKeys = { signature, pairs: sampledCombinationKeys(unique, 2), triples: sampledCombinationKeys(unique, 3) };
+  }
+
+  public record(features: readonly string[]): void {
+    const keys = this.keys(features);
+    for (const key of keys.pairs) increment(this.pairs, key);
+    for (const key of keys.triples) increment(this.triples, key);
+  }
+
+  public choose<T extends { readonly features: readonly string[] }>(candidates: readonly T[]): T {
+    if (candidates.length === 0) throw new RangeError("Novelty selection requires candidates.");
+    const score = (candidate: T) => {
+      const keys = this.keys(candidate.features);
+      let total = 0;
+      for (const [sample, counts] of [[keys.pairs, this.pairs], [keys.triples, this.triples]] as const) {
+        let rarity = 0;
+        for (const key of sample) rarity += 1 / (1 + (counts[key] ?? 0));
+        if (sample.length > 0) total += rarity / sample.length;
+      }
+      return total;
+    };
+    let selected = candidates[0];
+    let best = score(selected);
+    for (const candidate of candidates.slice(1)) {
+      const current = score(candidate);
+      if (current > best) { selected = candidate; best = current; }
+    }
+    return selected;
+  }
+}
+
+function addCase(coverage: MutableCoverage, caseData: TexFuzzCoverageCase, features: readonly string[]): void {
   coverage.caseCount += 1;
-  const features = [...new Set(caseData.features)].sort();
   for (const feature of features) increment(coverage.featureCounts, feature);
-  combinations(features, 2, (values) => {
-    increment(coverage.featurePairCounts, texFuzzCombinationKey(values));
-  });
-  combinations(features, 3, (values) => {
-    increment(coverage.featureTripleCounts, texFuzzCombinationKey(values));
-  });
 
   let maximumDepth = 0;
   const visit = (value: unknown, depth: number): void => {

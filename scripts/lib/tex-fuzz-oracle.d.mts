@@ -15,10 +15,11 @@ export interface TexFuzzOracleRun {
 export interface TexFuzzOracleOptions {
   readonly engine?: string; readonly timeoutMs?: number; readonly batchSize?: number; readonly workers?: number;
   readonly cacheDir?: string; readonly layer?: string; readonly preamble?: string; readonly signal?: AbortSignal;
+  readonly deadline?: number;
 }
 export const TEX_FUZZ_ORACLE_RUNNER_VERSION: string;
 export function commandExists(command: string): boolean;
-export function texFuzzOracleEnvironment(engine?: string): Readonly<Record<string, string>>;
+export function texFuzzOracleEnvironment(engine?: string, options?: { readonly deadline?: number }): Readonly<Record<string, string>>;
 export function partitionTexFuzzBatches<T>(items: readonly T[], size: number): readonly (readonly T[])[];
 export function mapTexFuzzWorkers<T, U>(items: readonly T[], workers: number, visit: (item: T, index: number) => Promise<U>): Promise<readonly U[]>;
 export function runBatchedTexSupportOracle(cases: readonly TexFuzzOracleInput[], options?: TexFuzzOracleOptions): TexFuzzOracleRun;

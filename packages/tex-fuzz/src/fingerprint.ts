@@ -28,6 +28,14 @@ export function sameTexFuzzFingerprint(left: TexFuzzFingerprint, right: TexFuzzF
   return texFuzzFingerprintKey(left) === texFuzzFingerprintKey(right);
 }
 
+/** Shrinking removes features and moves loci; retain the actual diagnostic class. */
+export function sameTexFuzzFailureClass(left: TexFuzzFingerprint, right: TexFuzzFingerprint): boolean {
+  const classify = (value: TexFuzzFingerprint) => texFuzzFingerprintKey({
+    ...value, featureTags: [], structuralLocus: "",
+  });
+  return classify(left) === classify(right);
+}
+
 /**
  * Stable, human-copyable identity for a normalized finding. The prefix makes
  * IDs self-describing and leaves room for a future fingerprint schema.

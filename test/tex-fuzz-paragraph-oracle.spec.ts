@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   compareTexFuzzParagraphGeometry,
@@ -43,6 +46,26 @@ describe("generated TeX paragraph oracle", () => {
       matches: false,
       code: "paragraph-line-text",
     });
+  });
+
+  it("shares a deadline across failed compilation bisection", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tex-fuzz-deadline-test-"));
+    const engine = join(directory, "engine.cjs");
+    const attempts = join(directory, "attempts.txt");
+    writeFileSync(engine, `#!${process.execPath}
+if (process.argv.includes('--version')) { console.log('deadline-test'); process.exit(0); }
+require('node:fs').appendFileSync(${JSON.stringify(attempts)}, 'compile\\n');
+while (true) {}
+`, { mode: 0o755 });
+    try {
+      expect(() => runBatchedTexParagraphOracle([
+        { id: "a", source: "Alpha", width: 160 }, { id: "b", source: "Beta", width: 160 },
+      ], { engine, timeoutMs: 10_000, maxTimeMs: 1000 })).toThrow("deadline exhausted");
+      // Under heavy contention the deadline may expire during environment setup.
+      // In either case, a failed compile must not reset it for bisection.
+      const count = existsSync(attempts) ? readFileSync(attempts, "utf8").trim().split("\n").length : 0;
+      expect(count).toBeLessThanOrEqual(1);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
   it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(

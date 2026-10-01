@@ -4,6 +4,7 @@ import {
   classifyTexFuzzLayoutResultSupport,
   caseFromTexFuzzAst,
   generateFullySupportedTexFuzzCases,
+  generateFullySupportedTexFuzzCasesAsync,
   TexFuzzSupportedQuotaError,
 } from "../packages/tex-fuzz/src/index.js";
 import { texLength } from "../packages/core/src/text/tex/coordinates.js";
@@ -55,6 +56,27 @@ describe("support-aware TeX fuzz generation", () => {
     const first = generateFullySupportedTexFuzzCases(20_260_712, { count: 12 });
     const replay = generateFullySupportedTexFuzzCases(20_260_712, { count: 12 });
     expect(replay).toEqual(first);
+  });
+
+  it("preserves seeded sampling and rejection statistics with asynchronous qualification", async () => {
+    const options = { count: 8 };
+    const sync = generateFullySupportedTexFuzzCases(20_260_712, options);
+    let calls = 0;
+    const isolated = await generateFullySupportedTexFuzzCasesAsync(20_260_712, options, async (candidate) => {
+      calls += 1;
+      return classifyTexFuzzNativeSupport(candidate).supported;
+    });
+    expect(isolated).toEqual(sync);
+    expect(calls).toBe(sync.stats.attempts);
+  });
+
+  it("propagates qualification resource failures instead of counting them as unsupported syntax", async () => {
+    let calls = 0;
+    await expect(generateFullySupportedTexFuzzCasesAsync(42, { count: 2 }, async () => {
+      calls += 1;
+      throw new Error("qualification deadline");
+    })).rejects.toThrow("qualification deadline");
+    expect(calls).toBe(1);
   });
 
   it("fills the quota with distinct, genuinely generated, fully supported cases", () => {

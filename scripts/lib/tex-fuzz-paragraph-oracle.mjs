@@ -183,18 +183,25 @@ function compile(cases, options) {
 /**
  * Batched paragraph oracle with failure bisection and content-addressed cache.
  * @param {readonly ParagraphOracleCase[]} cases
- * @param {{ engine?: string, timeoutMs?: number, batchSize?: number, cacheDir?: string }} [options]
+ * @param {{ engine?: string, timeoutMs?: number, maxTimeMs?: number, batchSize?: number, cacheDir?: string }} [options]
  */
 export function runBatchedTexParagraphOracle(cases, options = {}) {
+  const deadline = performance.now() + (options.maxTimeMs ?? Number.POSITIVE_INFINITY);
+  const remainingTime = () => {
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw new Error("TeX paragraph oracle deadline exhausted.");
+    return Math.max(1, Math.ceil(remaining));
+  };
   const engine = options.engine ?? "lualatex";
   const timeoutMs = options.timeoutMs ?? 30_000;
   const batchSize = options.batchSize ?? 32;
-  const environment = { ...texFuzzOracleEnvironment(engine), paragraphRunner: TEX_FUZZ_PARAGRAPH_ORACLE_VERSION };
+  const environment = { ...texFuzzOracleEnvironment(engine, { deadline }), paragraphRunner: TEX_FUZZ_PARAGRAPH_ORACLE_VERSION };
   const cache = options.cacheDir ? new TexFuzzDiskCache(options.cacheDir) : undefined;
   const stats = { compilations: 0, elapsedMs: 0, bisectedFailures: 0, cacheHits: 0, cacheWrites: 0 };
   /** @type {Map<string, ParagraphOracleObservation>} */
   const observations = new Map();
   const misses = cases.filter((item) => {
+    remainingTime();
     if (!cache) return true;
     const key = texFuzzCacheKey({ source: item.source, preamble: `width=${item.width}`, layer: "paragraph-lines", environment });
     const cached = cache.get(key);
@@ -206,7 +213,8 @@ export function runBatchedTexParagraphOracle(cases, options = {}) {
   /** @param {readonly ParagraphOracleCase[]} batch @returns {ParagraphOracleObservation[]} */
   const execute = (batch) => {
     stats.compilations += 1;
-    const result = compile(batch, { engine, timeoutMs });
+    const result = compile(batch, { engine, timeoutMs: Math.min(timeoutMs, remainingTime()) });
+    remainingTime();
     stats.elapsedMs += result.elapsedMs;
     if (result.ok) return result.observations;
     if (batch.length === 1) return [{ id: batch[0].id, supported: false, lines: [], error: result.error }];
@@ -227,5 +235,6 @@ export function runBatchedTexParagraphOracle(cases, options = {}) {
       }
     });
   }
+  remainingTime();
   return { observations: cases.map((item) => observations.get(item.id)), stats, environment };
 }

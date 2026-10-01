@@ -1,6 +1,9 @@
 import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
+  renderTexParagraphSvgBody,
+  computerModernTexMetricProvider,
+  texLength,
   type TexParagraphLayoutResult,
 } from "@tikz-editor/core/text/tex/index.js";
 import type { TexFuzzCase, TexFuzzNode, TexFuzzObservation } from "./model.js";
@@ -50,6 +53,16 @@ export const TEX_FUZZ_METAMORPHIC_RELATIONS: readonly TexFuzzMetamorphicRelation
     calibrationRequired: false,
     domain: () => true,
     transform: (caseData) => caseData.source,
+  },
+  {
+    id: "leading-comment-source-shift",
+    description: "A complete leading comment preserves paint and shifts source attribution by its length.",
+    expectedRelation: "equal",
+    observables: ["geometry", "paint", "structural-trace"],
+    knownExceptions: ["Only compare canonical supported results; incomplete/literal fallback may paint source spelling."],
+    calibrationRequired: false,
+    domain: (caseData) => caseData.mutations.length === 0,
+    transform: (caseData) => `% fuzz source shift\n${caseData.source}`,
   },
   {
     id: "tie-removes-breakpoint",
@@ -139,6 +152,29 @@ export function checkTexFuzzMetamorphicInvariants(
       checks += 1;
       const original = layout(pair.originalSource, width);
       const transformed = layout(pair.transformedSource, width);
+      if (pair.relationId === "leading-comment-source-shift" && original.supported && transformed.supported
+        && original.report && transformed.report && !original.fallbackReason && !transformed.fallbackReason
+        && ![original, transformed].some((result) => result.report?.lines.some((line) => line.segments.some((segment) => segment.literal)))) {
+        const paint = (result: TexParagraphLayoutResult) => renderTexParagraphSvgBody(result.report!, {
+          lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider, vlistLayout: result.vlistLayout,
+        }).replace(/\sdata-source-[\w-]+="[^"]*"/g, "");
+        const delta = pair.transformedSource.length - pair.originalSource.length;
+        const sourceRanges = (result: TexParagraphLayoutResult, shift: number) => result.report!.lines.flatMap((line) =>
+          line.segments.map((segment) => [
+            segment.sourceStartRaw === undefined ? null : segment.sourceStartRaw - shift,
+            segment.sourceEndRaw === undefined ? null : segment.sourceEndRaw - shift,
+          ])
+        );
+        if (paint(original) !== paint(transformed)
+          || JSON.stringify(sourceRanges(original, 0)) !== JSON.stringify(sourceRanges(transformed, delta))) {
+          findings.push({
+            fingerprint: { version: 1, resultClass: "hard-invariant", code: "metamorphic-source-shift",
+              featureTags: caseData.features, mode: "text", structuralLocus: `metamorphic/source-shift/width-${width}` },
+            detail: { delta, width },
+          });
+        }
+        continue;
+      }
       if (pair.relationId === "repeat-render-determinism") {
         if (JSON.stringify(original.report) !== JSON.stringify(transformed.report)
           || original.supported !== transformed.supported

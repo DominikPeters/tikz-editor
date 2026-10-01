@@ -31,6 +31,7 @@ import {
 import { texVListX } from "../packages/core/src/text/tex/coordinates.js";
 import {
   layoutTexVListFromMeasuredParagraphs,
+  flattenPositionedTexVListItems,
   registerTexVListLayouts,
   texVListBoxLayoutReport,
   type TexVListDocument,
@@ -147,6 +148,10 @@ interface LocalBounds {
   readonly yEnd: number;
 }
 
+interface RenderedMathGlyphBounds extends LocalBounds {
+  readonly baselineX: number;
+}
+
 interface PathPoint {
   readonly x: number;
   readonly y: number;
@@ -163,8 +168,23 @@ function renderedMathGlyphBoundsForText(
   expect(selectedStart).toBeGreaterThanOrEqual(0);
   expect(segment.kind).toBe("math");
   expect(segment.mathSvgBody).toBeTruthy();
-  const glyphBounds: LocalBounds[] = [];
-  for (const pathTagMatch of segment.mathSvgBody?.matchAll(/<path\b[^>]*>/g) ?? []) {
+  const glyphBounds = renderedMathGlyphBoundsForRange(
+    segment.mathSvgBody ?? "", selectedStart, selectedEnd, Number(segment.x), Number(line.ascent)
+  );
+  expect(glyphBounds.length).toBe(selectedText.length);
+  return {
+    xStart: Math.min(...glyphBounds.map((bounds) => bounds.xStart)),
+    xEnd: Math.max(...glyphBounds.map((bounds) => bounds.xEnd)),
+    yStart: Math.min(...glyphBounds.map((bounds) => bounds.yStart)),
+    yEnd: Math.max(...glyphBounds.map((bounds) => bounds.yEnd)),
+  };
+}
+
+function renderedMathGlyphBoundsForRange(
+  svgBody: string, selectedStart: number, selectedEnd: number, originX: number, baselineY: number
+): RenderedMathGlyphBounds[] {
+  const glyphBounds: RenderedMathGlyphBounds[] = [];
+  for (const pathTagMatch of svgBody.matchAll(/<path\b[^>]*>/g)) {
     const attrs = parseSvgAttributes(pathTagMatch[0]);
     const sourceStart = Number(attrs.get("data-source-start"));
     const sourceEnd = Number(attrs.get("data-source-end"));
@@ -182,23 +202,101 @@ function renderedMathGlyphBoundsForText(
     const points = svgPathControlPoints(attrs.get("d") ?? "");
     expect(points.length).toBeGreaterThan(0);
     const transformed = points.map((point) => ({
-      x: Number(segment.x) + (transform!.translateX + point.x * transform!.scale) / 100,
-      y: Number(line.ascent) + (transform!.translateY + point.y * transform!.scale) / 100,
+      x: originX + (transform!.translateX + point.x * transform!.scale) / 100,
+      y: baselineY + (transform!.translateY + point.y * transform!.scale) / 100,
     }));
     glyphBounds.push({
+      baselineX: originX + transform!.translateX / 100,
       xStart: Math.min(...transformed.map((point) => point.x)),
       xEnd: Math.max(...transformed.map((point) => point.x)),
       yStart: Math.min(...transformed.map((point) => point.y)),
       yEnd: Math.max(...transformed.map((point) => point.y)),
     });
   }
-  expect(glyphBounds.length).toBe(selectedText.length);
-  return {
-    xStart: Math.min(...glyphBounds.map((bounds) => bounds.xStart)),
-    xEnd: Math.max(...glyphBounds.map((bounds) => bounds.xEnd)),
-    yStart: Math.min(...glyphBounds.map((bounds) => bounds.yStart)),
-    yEnd: Math.max(...glyphBounds.map((bounds) => bounds.yEnd)),
-  };
+  return glyphBounds;
+}
+
+/** Anchor the editor to painted glyphs, independently of its offset/point round trips. */
+async function expectDisplayMathGeometryMatchesSvg(
+  sourceText: string,
+  report: ParagraphLayoutReport,
+  layout: TexVListLayout,
+  layoutContext: object,
+  containerElement: { getScreenCTM(): { a: number; b: number; c: number; d: number; e: number; f: number } }
+): Promise<void> {
+  const matrix = containerElement.getScreenCTM();
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  const toLocal = (point: { x: number; y: number }) => ({
+    x: (matrix.d * (point.x - matrix.e) - matrix.c * (point.y - matrix.f)) / determinant,
+    y: (-matrix.b * (point.x - matrix.e) + matrix.a * (point.y - matrix.f)) / determinant,
+  });
+  const toClient = (x: number, y: number) => ({
+    x: matrix.a * x + matrix.c * y + matrix.e,
+    y: matrix.b * x + matrix.d * y + matrix.f,
+  });
+  let checked = 0;
+  for (const item of flattenPositionedTexVListItems(layout.items)) {
+    // These are the SVG emitter's origins, not the hit map's synthetic lines.
+    const paints = item.item.kind === "display-math" ? [{
+      svgBody: item.item.box.svgBody ?? "", x: Number(item.x), y: Number(item.y + item.metrics.height),
+    }] : item.item.kind === "hbox" && item.item.role?.kind === "display-align-row"
+      ? item.item.box.renderItems.flatMap((paint) => paint.kind === "tex-math-svg" ? [{
+        svgBody: paint.svgBody, x: Number(item.x + paint.x), y: Number(item.y + paint.baseline),
+      }] : []) : [];
+    for (const paint of paints) {
+      const ranges = new Map<string, { start: number; end: number; count: number }>();
+      for (const match of paint.svgBody.matchAll(/<path\b[^>]*>/g)) {
+        const attrs = parseSvgAttributes(match[0]);
+        const start = Number(attrs.get("data-source-start"));
+        const end = Number(attrs.get("data-source-end"));
+        if (end !== start + 1 || !/^[A-Za-z0-9]$/.test(sourceText.slice(start, end))) continue;
+        const key = `${start}:${end}`;
+        const range = ranges.get(key);
+        ranges.set(key, { start, end, count: (range?.count ?? 0) + 1 });
+      }
+      // Assembled delimiters can paint several glyphs for one source span.
+      // Ordinary one-glyph leaves provide unambiguous caret/selection anchors.
+      for (const { start, end, count } of ranges.values()) {
+        if (count !== 1) continue;
+        const bounds = renderedMathGlyphBoundsForRange(paint.svgBody, start, end, paint.x, paint.y)[0];
+        if (!bounds || bounds.yEnd - bounds.yStart < 0.1) continue;
+        const params = { paragraphId: report.paragraphId, sourceText, containerElement: containerElement as unknown as Element };
+        const label = `${report.paragraphId}: SVG glyph ${sourceText.slice(start, end)} @ ${start}: ${sourceText}`;
+        const point = await getKnuthPlassPointFromOffset(layoutContext, { ...params, offset: start });
+        expect(point.ok, label).toBe(true);
+        const local = toLocal(point.clientPoint!);
+        expect(local.x, label).toBeCloseTo(bounds.baselineX, 4);
+        expect(local.y, label).toBeGreaterThanOrEqual(bounds.yStart - 0.25);
+        expect(local.y, label).toBeLessThanOrEqual(bounds.yEnd + 0.25);
+        const paintedCenter = toClient((bounds.xStart + bounds.xEnd) / 2, (bounds.yStart + bounds.yEnd) / 2);
+        const hit = await getKnuthPlassCaretFromPoint(layoutContext, {
+          ...params, clientPoint: clientPoint(px(paintedCenter.x), px(paintedCenter.y)),
+        });
+        expect(hit.ok, label).toBe(true);
+        expect(hit.offset, label).toBeGreaterThanOrEqual(start);
+        expect(hit.offset, label).toBeLessThanOrEqual(end);
+        const selection = await getKnuthPlassSelectionRects(layoutContext, { ...params, startOffset: start, endOffset: end });
+        expect(selection.ok, label).toBe(true);
+        const corners = [
+          toClient(bounds.xStart, bounds.yStart), toClient(bounds.xEnd, bounds.yStart),
+          toClient(bounds.xStart, bounds.yEnd), toClient(bounds.xEnd, bounds.yEnd),
+        ];
+        expect(selection.rects.some((rect) => {
+          const angle = -rect.rotationDeg * Math.PI / 180;
+          const halfWidth = (rect.bounds.maxX - rect.bounds.minX) / 2;
+          const halfHeight = (rect.bounds.maxY - rect.bounds.minY) / 2;
+          return corners.every((corner) => {
+            const dx = corner.x - rect.center.x;
+            const dy = corner.y - rect.center.y;
+            return Math.abs(dx * Math.cos(angle) - dy * Math.sin(angle)) <= halfWidth + 1e-4 &&
+              Math.abs(dx * Math.sin(angle) + dy * Math.cos(angle)) <= halfHeight + 1e-4;
+          });
+        }), `${label}; painted=${JSON.stringify(bounds)}; selection=${JSON.stringify(selection.rects)}`).toBe(true);
+        checked++;
+      }
+    }
+  }
+  expect(checked, `${report.paragraphId}: no painted display glyph anchors`).toBeGreaterThan(0);
 }
 
 function expectSelectionContainsLineLocalBounds(
@@ -537,6 +635,16 @@ function makeDeterministicRandom(seed: number): () => number {
 
 function pickFuzzItem<T>(items: readonly T[], random: () => number): T {
   return items[Math.floor(random() * items.length) % items.length];
+}
+
+function fuzzMathScreenTransform(index: number) {
+  const scale = [0.7, 1, 2.8][index % 3];
+  const angle = [0, 17, -25, 90][index % 4] * Math.PI / 180;
+  return {
+    a: scale * Math.cos(angle), b: scale * Math.sin(angle),
+    c: -scale * Math.sin(angle), d: scale * Math.cos(angle),
+    e: 19 + index * 3, f: -23 + index * 2,
+  };
 }
 
 function makeFakeInlineMathBoxProvider(
@@ -6195,7 +6303,7 @@ unordered.`;
 
   it("fuzzes registered hit geometry for display alignment rows in mixed vlists", async () => {
     const cases = Array.from({ length: 64 }, (_, index) => buildTexDisplayAlignHitMapFuzzCase(index));
-    for (const testCase of cases) {
+    for (const [caseIndex, testCase] of cases.entries()) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
         width: testCase.width,
@@ -6219,6 +6327,10 @@ unordered.`;
           throw new Error("registered display alignment row fuzz should avoid rendered linebox queries");
         },
       };
+
+      await expectDisplayMathGeometryMatchesSvg(testCase.source, result.report!, result.vlistLayout!, layoutContext, {
+        ...containerElement, getScreenCTM: () => fuzzMathScreenTransform(caseIndex),
+      });
 
       const snapshot = getKnuthPlassVListGeometrySnapshot({
         layoutContext,
@@ -6321,7 +6433,7 @@ unordered.`;
 
   it("fuzzes registered document-level hit geometry for mixed inline and display math", async () => {
     const cases = Array.from({ length: 64 }, (_, index) => buildTexDocumentMathHitMapFuzzCase(index));
-    for (const testCase of cases) {
+    for (const [caseIndex, testCase] of cases.entries()) {
       const result = layoutSimpleTexParagraph(testCase.source, {
         paragraphId: testCase.id,
         width: testCase.width,
@@ -6350,6 +6462,10 @@ unordered.`;
           throw new Error("registered document-level math hit-map fuzz should avoid rendered linebox queries");
         },
       };
+
+      await expectDisplayMathGeometryMatchesSvg(testCase.source, result.report!, result.vlistLayout!, layoutContext, {
+        ...containerElement, getScreenCTM: () => fuzzMathScreenTransform(caseIndex),
+      });
 
       const snapshot = getKnuthPlassVListGeometrySnapshot({
         layoutContext,

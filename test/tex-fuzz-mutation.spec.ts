@@ -13,6 +13,7 @@ import {
   texFuzzMalformedMutations,
   texFuzzShrinkCandidates,
   type TexFuzzObservation,
+  sameTexFuzzFailureClass,
 } from "@tikz-editor/tex-fuzz";
 
 const observation: TexFuzzObservation = {
@@ -27,6 +28,33 @@ const observation: TexFuzzObservation = {
 };
 
 describe("TeX fuzz mutations and relations", () => {
+  it("shrinks real failure classes after unrelated features and indexed loci disappear", async () => {
+    const original = caseFromTexFuzzAst([
+      { kind: "font", command: "textbf", children: [{ kind: "text", value: "Alpha" }] },
+      { kind: "text", value: "Beta" },
+    ]);
+    const diagnostic = (caseData: typeof original): TexFuzzObservation => ({ fingerprint: {
+      ...observation.fingerprint, featureTags: caseData.features,
+      structuralLocus: `root/${caseData.ast.length - 1}`,
+    } });
+    const result = await shrinkTexFuzzCase(original, diagnostic(original), async (candidates) =>
+      candidates.map((candidate) => candidate.source.includes("Beta") ? diagnostic(candidate) : null)
+    );
+    expect(result.minimizedCase.source).toBe("Beta");
+    expect(sameTexFuzzFailureClass(diagnostic(original).fingerprint, diagnostic(result.minimizedCase).fingerprint)).toBe(true);
+  });
+
+  it("offers reductions inside scripts, fractions, and matrix cells", () => {
+    const original = caseFromTexFuzzAst([{ kind: "display-math", delimiter: "bracket", body: {
+      kind: "fraction", command: "frac", numerator: { kind: "script", base: { kind: "atom", value: "a" },
+        superscript: { kind: "atom", value: "2" } },
+      denominator: { kind: "matrix", environment: "matrix", cells: [[{ kind: "atom", value: "b" }, { kind: "atom", value: "c" }]] },
+    } }]);
+    const sources = texFuzzShrinkCandidates(original).map((candidate) => candidate.source);
+    expect(sources).toContain(String.raw`\[\frac{a}{\begin{matrix}b&c\end{matrix}}\]`);
+    expect(sources).toContain(String.raw`\[\frac{{a}^{2}}{b}\]`);
+  });
+
   it("records every typing prefix and labels command and argument boundaries", () => {
     const original = caseFromTexFuzzAst([{
       kind: "font",
@@ -152,7 +180,7 @@ describe("TeX fuzz mutations and relations", () => {
       { kind: "text", value: "Beta" },
     ]);
     const actual = checkTexFuzzMetamorphicInvariants(caseData, { widths: [20, 40] });
-    expect(actual).toMatchObject({ pairCount: 2, checks: 4, findings: [] });
+    expect(actual).toMatchObject({ pairCount: 3, checks: 6, findings: [] });
 
     const sabotaged = checkTexFuzzMetamorphicInvariants(caseData, {
       widths: [20],
@@ -197,6 +225,54 @@ describe("TeX fuzz mutations and relations", () => {
     }), { maxOracleEvaluations: 2 });
     expect(external.oracleEvaluations).toBe(2);
     expect(external.termination).toBe("oracle-budget");
+  });
+
+  it("does no candidate construction when shrinking is disabled for a resource failure", async () => {
+    const original = caseFromTexFuzzAst([{ kind: "text", value: "Alpha" }]);
+    const guarded = { ...original, get ast(): typeof original.ast { throw new Error("Candidate construction must not inspect the AST."); } };
+    const result = await shrinkTexFuzzCase(guarded, observation, async () => {
+      throw new Error("Disabled shrinking must not evaluate candidates.");
+    }, { maxCandidates: 0 });
+    expect(result.minimizedCase).toBe(guarded);
+    expect(result).toMatchObject({ candidatesEvaluated: 0, termination: "candidate-budget" });
+  });
+
+  it("interrupts a hung shrink batch and exposes cancellation to its work", async () => {
+    const original = caseFromTexFuzzAst([{ kind: "text", value: "Alpha" }]);
+    let cancelled = false;
+    const result = await shrinkTexFuzzCase(original, observation, async (_candidates, context) => {
+      expect(context.deadline).toBeGreaterThan(performance.now());
+      context.signal.addEventListener("abort", () => { cancelled = true; }, { once: true });
+      return new Promise(() => {});
+    }, { maxTimeMs: 100 });
+    expect(result).toMatchObject({ termination: "time-budget", minimizedCase: original });
+    expect(cancelled).toBe(true);
+  });
+
+  it("retains the previous reduction when a later batch exhausts the shared deadline", async () => {
+    const original = caseFromTexFuzzAst([
+      { kind: "text", value: "Alpha" }, { kind: "text", value: "Beta" },
+    ]);
+    const deadlines: number[] = [];
+    let retained: typeof original | undefined;
+    const result = await shrinkTexFuzzCase(original, observation, async (candidates, context) => {
+      deadlines.push(context.deadline);
+      if (deadlines.length === 1) {
+        retained = candidates.find((candidate) => candidate.source === "Beta");
+        return candidates.map((candidate) => candidate === retained ? observation : null);
+      }
+      return new Promise(() => {});
+    }, { maxTimeMs: 100 });
+    expect(deadlines).toHaveLength(2);
+    expect(deadlines[1]).toBe(deadlines[0]);
+    expect(result).toMatchObject({ termination: "time-budget", minimizedCase: retained });
+  });
+
+  it("does not suppress predicate failures before the deadline", async () => {
+    const original = caseFromTexFuzzAst([{ kind: "text", value: "Alpha" }]);
+    await expect(shrinkTexFuzzCase(original, observation, async () => {
+      throw new Error("predicate defect");
+    })).rejects.toThrow("predicate defect");
   });
 
   it("rejects predicates that overspend the oracle budget", async () => {

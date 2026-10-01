@@ -2,7 +2,11 @@ import {
   createTexDerivedInlineMathBoxProvider,
   layoutSimpleTexParagraph,
   parseSimpleTexParagraphIr,
+  renderTexParagraphSvgBody,
+  computerModernTexMetricProvider,
+  texLength,
 } from "@tikz-editor/core/text/tex/index.js";
+import { flattenPositionedTexVListItems } from "@tikz-editor/core/text/tex/vlist/index.js";
 import type {
   TexFuzzCase,
   TexFuzzFingerprint,
@@ -174,9 +178,10 @@ function paintedSemanticProse(caseData: TexFuzzCase, result: TexFuzzLayoutResult
     line.segments
       .filter((segment) => segment.sourceKind !== "math")
       .map((segment) => {
-        const range = typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
-          ? { start: segment.sourceStartRaw, end: segment.sourceEndRaw }
-          : null;
+        const range = paintedSegmentRange(result, line.lineIndex, segment);
+        // Automatic list markers are generated paint, not source prose. An
+        // explicit item label has source attribution and remains in the stream.
+        if (caseData.profile === "document" && !range && segment.sourceKind === undefined) return "";
         if (range && controls.hidden.some((span) =>
           range.start >= span.start && range.end <= span.end
         )) return "";
@@ -198,6 +203,24 @@ function paintedSemanticProse(caseData: TexFuzzCase, result: TexFuzzLayoutResult
   // A discarded interword space and an explicit line break are both semantic
   // word boundaries. Empty lines do not add additional prose.
   return normalizeSemanticProse(lines.filter((line) => line.length > 0).join(" "));
+}
+
+function paintedSegmentRange(result: TexFuzzLayoutResult, lineIndex: number, segment: {
+  readonly sourceStartRaw?: number; readonly sourceEndRaw?: number; readonly role?: string;
+}): { start: number; end: number } | null {
+  if (segment.sourceStartRaw !== undefined && segment.sourceEndRaw !== undefined) {
+    return { start: segment.sourceStartRaw, end: segment.sourceEndRaw };
+  }
+  if (segment.role !== "list-label" || !result.vlistLayout) return null;
+  // Custom labels are painted as source-backed hboxes; the combined prose
+  // report's synthetic label segment does not duplicate those source fields.
+  const placement = result.vlistLayout.paragraphPlacements.find((item) => item.lineIndices[0] === lineIndex);
+  if (!placement) return null;
+  return flattenPositionedTexVListItems(result.vlistLayout.items).flatMap(({ item }) =>
+    item.kind === "hbox" && item.role?.kind === "list-label" && item.role.labelKind === "custom"
+      && item.role.blockIndex === placement.blockIndex && item.sourceSpan
+      && item.sourceSpan.end <= placement.sourceSpan.start ? [item.sourceSpan] : []
+  ).sort((left, right) => right.end - left.end)[0] ?? null;
 }
 
 function levenshteinDistance(left: string, right: string): number | null {
@@ -362,13 +385,13 @@ export function checkTexFuzzLayoutResultInvariants(
           add("invalid-math-caret-entry", `paragraph/line/${line.lineIndex}/math`, { entry });
         }
       }
-      if (typeof segment.sourceStartRaw === "number" && typeof segment.sourceEndRaw === "number"
-        && segment.sourceEndRaw > segment.sourceStartRaw) {
+      const paintedRange = paintedSegmentRange(result, line.lineIndex, segment);
+      if (paintedRange && paintedRange.end > paintedRange.start) {
         paintedRanges.push({
           path: `report/${line.lineIndex}/${segmentIndex}`,
           kind: segment.kind,
-          start: segment.sourceStartRaw,
-          end: segment.sourceEndRaw,
+          start: paintedRange.start,
+          end: paintedRange.end,
           text: segment.text,
         });
       }
@@ -391,10 +414,9 @@ export function checkTexFuzzLayoutResultInvariants(
     }
   }
 
-  // Mutated/malformed input has a deliberately stale AST/source map. Document
-  // display and vertical material is checked by its dedicated vlist runners.
+  // Mutated/malformed input has a deliberately stale AST/source map.
   // Unsupported fallback output is not expected to preserve painted leaves.
-  if (caseData.profile !== "malformed" && caseData.profile !== "document"
+  if (caseData.profile !== "malformed" && caseData.mutations.length === 0
     && result.supported && result.fallbackReason === null) {
     for (const obligation of visibleContentObligations(caseData)) {
       if (!paintedRanges.some((range) => rangesOverlap(obligation, range)
@@ -412,8 +434,41 @@ export function checkTexFuzzLayoutResultInvariants(
         ...compactContentDiff(expected, actual),
       });
     }
+    if (!hasLiteralDegradation) {
+      const svgBody = renderTexParagraphSvgBody(result.report, {
+        lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider,
+        vlistLayout: result.vlistLayout,
+      });
+      findings.push(...checkTexFuzzPaintedMathContent(caseData, width, svgBody));
+    }
   }
   return findings;
+}
+
+/** Check generated math leaves against the final SVG, including display vlists. */
+export function checkTexFuzzPaintedMathContent(
+  caseData: TexFuzzCase, width: number, svgBody: string
+): readonly TexFuzzObservation[] {
+  const hidden = semanticControlRanges(caseData).hidden;
+  const leaves = caseData.sourceMap.filter((span) => span.kind === "math.atom" &&
+    /^[A-Za-z0-9]$/.test(caseData.source.slice(span.start, span.end)) &&
+    !hidden.some((range) => span.start >= range.start && span.end <= range.end));
+  const counts = new Map<string, number>();
+  for (const match of svgBody.matchAll(/<path\b[^>]*data-tex-glyph[^>]*>/g)) {
+    const start = match[0].match(/\bdata-source-start="(\d+)"/)?.[1];
+    const end = match[0].match(/\bdata-source-end="(\d+)"/)?.[1];
+    if (start === undefined || end === undefined) continue;
+    const key = `${start}:${end}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return leaves.flatMap((leaf) => {
+    const count = counts.get(`${leaf.start}:${leaf.end}`) ?? 0;
+    if (count === 1) return [];
+    return [{
+      fingerprint: hardFingerprint(caseData, count === 0 ? "math-leaf-paint-loss" : "math-leaf-paint-duplication", `paint/${leaf.path}/width-${width}`),
+      detail: { width, leaf, paintedGlyphs: count },
+    }];
+  });
 }
 
 function layoutInvariantFindings(caseData: TexFuzzCase): readonly TexFuzzObservation[] {

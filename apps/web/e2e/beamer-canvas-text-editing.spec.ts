@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 import {
   gotoApp,
@@ -9,6 +10,7 @@ import {
 } from "./helpers";
 
 const PRIMARY_MOD = process.platform === "darwin" ? "Meta" : "Control";
+const KKT_SOURCE = readFileSync(new URL("../../../test/fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url), "utf8");
 
 const SOURCE = String.raw`\documentclass{beamer}
 \newcommand{\generatedword}{Generated}
@@ -188,6 +190,56 @@ test("opens scope-wide sessions and edits title and list text with undo/redo", a
   const finalSource = titleEdited.replace("List typo", "List fixed");
   await expect.poll(() => readStoreSource(page)).toBe(finalSource);
   await expect.poll(() => readCodeMirrorText(page)).toBe(finalSource);
+});
+
+test("KKT display math caret and highlights align with the rendered glyphs", async ({ page }) => {
+  await setSource(page, KKT_SOURCE);
+  await page.getByRole("button", { name: "Problem form and notation", exact: true }).click();
+  await expect.poll(() => page.locator(
+    '[data-hit-region-target-id^="frame:2:"][data-hit-region-interaction-mode="text"]'
+  ).count()).toBeGreaterThan(0);
+  const textarea = await openScopeContaining(page, "the active set is");
+  const buffer = await textarea.inputValue();
+  const start = buffer.indexOf("g_i(x)=0");
+  expect(start).toBeGreaterThan(0);
+  const documentOffset = KKT_SOURCE.indexOf("g_i(x)=0");
+  const glyph = page.locator(
+    `[data-testid="canvas-svg-layer"] path[data-tex-glyph][data-source-start="${documentOffset}"][data-source-end="${documentOffset + 1}"]`
+  );
+  await expect(glyph).toHaveCount(1);
+  const setSelection = async (end: number) => {
+    await textarea.evaluate((element, selection) => {
+      const input = element as HTMLTextAreaElement;
+      input.focus();
+      input.setSelectionRange(selection.start, selection.end);
+      input.dispatchEvent(new Event("select", { bubbles: true }));
+    }, { start, end });
+  };
+
+  // Compare with the actual painted path, not a point supplied by the hit map.
+  await setSelection(start);
+  await expect.poll(async () => {
+    const painted = await glyph.boundingBox();
+    const caret = await page.getByTestId("canvas-text-selection-caret").boundingBox();
+    if (!painted || !caret) return false;
+    const centerY = caret.y + caret.height / 2;
+    return centerY >= painted.y - 1 && centerY <= painted.y + painted.height + 1;
+  }).toBe(true);
+
+  await setSelection(start + 1);
+  await expect.poll(async () => {
+    const painted = await glyph.boundingBox();
+    if (!painted) return false;
+    const rectangles = page.getByTestId("canvas-text-selection-rect");
+    for (let index = 0; index < await rectangles.count(); index++) {
+      const selected = await rectangles.nth(index).boundingBox();
+      if (selected && selected.x <= painted.x + 1 &&
+        selected.x + selected.width >= painted.x + painted.width - 1 &&
+        selected.y <= painted.y + 1 &&
+        selected.y + selected.height >= painted.y + painted.height - 1) return true;
+    }
+    return false;
+  }).toBe(true);
 });
 
 test("keeps structure stable through transiently invalid source and supports structural edits", async ({ page }) => {

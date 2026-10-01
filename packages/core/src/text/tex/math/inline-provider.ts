@@ -61,8 +61,7 @@ import {
 import {
   normalizeTexMathAtomClasses,
 } from "./spacing.js";
-import { TexWeightedLruCache, freezeTexCacheValue } from "../cache.js";
-import { translateTexMathSourceGraph } from "./source-projection.js";
+import { TexWeightedLruCache } from "../cache.js";
 
 type MathBoxLayout = {
   readonly list: TexMathList;
@@ -72,8 +71,6 @@ type MathBoxLayout = {
 
 type MathBoxCaches = {
   readonly boxes: TexWeightedLruCache<string, TexMathBox | null>;
-  readonly layouts: TexWeightedLruCache<string, MathBoxLayout>;
-  readonly seenLayouts: TexWeightedLruCache<string, true>;
 };
 
 const TEX_DISPLAY_ALIGNMENT_SINGLE_ROW_TRAILING_WIDTH_PT = 10;
@@ -104,8 +101,6 @@ export function createTexDerivedInlineMathBoxProvider(
   let cache: MathBoxCaches | undefined;
   const getCache = () => cache ??= {
     boxes: new TexWeightedLruCache(256, 4 * 1024 * 1024),
-    layouts: new TexWeightedLruCache(128, 2 * 1024 * 1024),
-    seenLayouts: new TexWeightedLruCache(256, 128 * 1024),
   };
   return {
     getInlineMathBox: (params) => {
@@ -160,7 +155,7 @@ function getMathBox(
   if (cached !== undefined) {
     return cached;
   }
-  const layout = getMathBoxLayout(params, style, cache, configuredFontProfile, baseAtPt);
+  const layout = getMathBoxLayout(params, style, configuredFontProfile, baseAtPt);
   if (!layout) {
     cache.boxes.set(key, null, key.length * 2 + 64);
     return null;
@@ -209,38 +204,17 @@ function sourceNumberKey(value: number): string {
 function getMathBoxLayout(
   params: { readonly delimiter: string; readonly content: string; readonly contentStart: number },
   style: "text" | "display",
-  cache: MathBoxCaches,
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: TexLength
 ): MathBoxLayout | null {
-  const cacheable = params.content.length <= 4096 && Number.isSafeInteger(params.contentStart) &&
-    !Object.is(params.contentStart, -0) &&
-    Number.isSafeInteger(params.contentStart + params.content.length);
-  const key = cacheable ? JSON.stringify([style, params.delimiter, params.content]) : null;
-  const cached = key === null ? undefined : cache.layouts.get(key);
-  if (cached) {
-    // Only the layout graph is reusable. Labels, target width, outer spans,
-    // caret projection and SVG are assembled for the current request.
-    const projected = params.contentStart === 0
-      ? cached : translateTexMathSourceGraph({ list: cached.list, hlist: cached.hlist }, params.contentStart);
-    return { list: projected.list, hlist: projected.hlist, fontProfile: cached.fontProfile };
-  }
+  // The node engine creates a provider for each paragraph build. Copying/freezing a reusable
+  // relative graph cost more than parsing/layout for repeated formulas in the
+  // benchmark catalog. Exact final boxes still reuse their complete metadata.
   const parsed = parseMathBoxContent(params, style);
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) return null;
   const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
   const laidOut = layoutTexMathList(parsed.list, { style, fontProfile, baseAtPt });
   if (!laidOut.supported) return null;
-  if (key !== null) {
-    if (cache.seenLayouts.get(key)) {
-      // Copy before freezing: no caller-owned profile/font state is retained in
-      // this owned graph. Coordinates in the template are relative to content.
-      const relative = translateTexMathSourceGraph({ list: parsed.list, hlist: laidOut.hlist }, -params.contentStart);
-      const bytes = freezeTexCacheValue(relative);
-      cache.layouts.set(key, { ...relative, fontProfile }, bytes + key.length * 2);
-    } else {
-      cache.seenLayouts.set(key, true, key.length * 2 + 64);
-    }
-  }
   return { list: parsed.list, hlist: laidOut.hlist, fontProfile };
 }
 
@@ -555,11 +529,13 @@ function buildInlineMathCaretMap(
     entries.push({
       ...entry,
       sourceOffset: Math.max(params.sourceStart, Math.min(params.sourceEnd, Math.floor(entry.sourceOffset))),
-      x: texHBoxX(roundTexPt(Math.max(0, Math.min(hlist.width, entry.x)))),
+      // A packed/overfull box can paint outside its declared advance. Keep
+      // 2-D geometry at the glyph; only the linear caret projection is bounded.
+      x: texHBoxX(roundTexPt(entry.x)),
       y: texHBoxY(roundTexPt(entry.y)),
       height: texLength(roundTexPt(Math.max(0, entry.height))),
       depth: texLength(roundTexPt(Math.max(0, entry.depth))),
-      hitBounds: normalizeCaretHitBounds(entry.hitBounds, hlist.width),
+      hitBounds: normalizeCaretHitBounds(entry.hitBounds),
     });
   };
 
@@ -1116,11 +1092,10 @@ function unionCaretHitBounds(
 }
 
 function normalizeCaretHitBounds(
-  bounds: TexMathCaretEntry["hitBounds"],
-  hlistWidth: TexLength
+  bounds: TexMathCaretEntry["hitBounds"]
 ): TexMathCaretEntry["hitBounds"] {
-  const xStart = Math.max(0, Math.min(hlistWidth, bounds.xStart));
-  const xEnd = Math.max(xStart, Math.min(hlistWidth, bounds.xEnd));
+  const xStart = Math.min(bounds.xStart, bounds.xEnd);
+  const xEnd = Math.max(bounds.xStart, bounds.xEnd);
   const yStart = Math.min(bounds.yStart, bounds.yEnd);
   const yEnd = Math.max(bounds.yStart, bounds.yEnd);
   return {

@@ -14,9 +14,42 @@ import {
   texFuzzCombinationKey,
   texFuzzRegistryAccounting,
   TexFuzzRandom,
+  TexFuzzNoveltyTracker,
+  TEX_FUZZ_NOVELTY_COMBINATION_LIMIT,
 } from "@tikz-editor/tex-fuzz";
 
 describe("TeX fuzz semantic coverage", () => {
+  it("bounds dense novelty feedback while retaining exhaustive coverage reports", () => {
+    const features = Array.from({ length: 40 }, (_, index) => `feature-${index}`);
+    const novelty = new TexFuzzNoveltyTracker();
+    novelty.record(features);
+    expect(novelty.trackedCombinationCounts).toEqual({
+      pairs: TEX_FUZZ_NOVELTY_COMBINATION_LIMIT, triples: TEX_FUZZ_NOVELTY_COMBINATION_LIMIT,
+    });
+    const repeated = { features };
+    const novel = { features: features.map((feature) => `new-${feature}`) };
+    expect(novelty.choose([repeated, novel])).toBe(novel);
+    novelty.record([...features].reverse());
+    expect(novelty.choose([repeated, novel])).toBe(novel);
+    const coverage = measureTexFuzzCoverage([{ features, ast: [], source: "" }]);
+    expect(Object.keys(coverage.featurePairCounts)).toHaveLength(40 * 39 / 2);
+    expect(Object.keys(coverage.featureTripleCounts)).toHaveLength(40 * 39 * 38 / 6);
+  });
+
+  it("selects rare pairs/triples even when every individual feature was seen", () => {
+    const novelty = new TexFuzzNoveltyTracker();
+    novelty.record(["a", "b"]);
+    novelty.record(["a", "c"]);
+    novelty.record(["b", "c"]);
+    novelty.record(["a", "b", "c"]);
+    novelty.record(["d"]);
+    const repeated = { features: ["a", "b", "c"] };
+    const novel = { features: ["a", "b", "d"] };
+    expect(novelty.choose([repeated, novel])).toBe(novel);
+    expect(novelty.choose([novel, repeated])).toBe(novel);
+    expect(novelty.choose([repeated, { features: [...repeated.features] }])).toBe(repeated);
+  });
+
   it("keeps production registry accounting exhaustive and reviewable", () => {
     const accounting = texFuzzRegistryAccounting();
     expect(accounting.missing).toEqual([]);
@@ -84,6 +117,16 @@ describe("TeX fuzz semantic coverage", () => {
     expect(merged.caseCount).toBe(2);
     expect(merged.featureCounts).toEqual({ a: 2, b: 1 });
     expect(merged.featurePairCounts).toEqual({ '["a","b"]': 1 });
+  });
+
+  it("preserves exact repeated-set counts and per-source telemetry when aggregating dense cases", () => {
+    const features = Array.from({ length: 20 }, (_, index) => `feature-${index}`);
+    const cases = [
+      { features, ast: [{ kind: "text" }], source: "café" },
+      { features: [...features].reverse(), ast: [{ kind: "group", children: [{ kind: "text" }] }], source: "β" },
+      { features: features.slice(1), ast: [], source: "x" },
+    ];
+    expect(measureTexFuzzCoverage(cases)).toEqual(mergeTexFuzzCoverage(cases.map((caseData) => measureTexFuzzCoverage([caseData]))));
   });
 });
 

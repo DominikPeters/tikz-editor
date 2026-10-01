@@ -14,7 +14,7 @@ const DEFAULT_PREAMBLE = String.raw`\usepackage{xcolor}
 
 /** @typedef {{ readonly id: string, readonly token: string, readonly source: string }} NormalizedOracleCase */
 /** @typedef {{ readonly id?: string, readonly source: string }} OracleCase */
-/** @typedef {{ readonly engine?: string, readonly timeoutMs?: number, readonly batchSize?: number, readonly workers?: number, readonly cacheDir?: string, readonly layer?: string, readonly preamble?: string, readonly signal?: AbortSignal }} OracleOptions */
+/** @typedef {{ readonly engine?: string, readonly timeoutMs?: number, readonly batchSize?: number, readonly workers?: number, readonly cacheDir?: string, readonly layer?: string, readonly preamble?: string, readonly signal?: AbortSignal, deadline?: number }} OracleOptions */
 /** @typedef {{ readonly id: string, readonly supported: boolean, readonly widthSp?: number, readonly heightSp?: number, readonly depthSp?: number, readonly error?: string }} OracleObservation */
 
 /** @param {readonly NormalizedOracleCase[]} cases @param {string} preamble */
@@ -51,7 +51,7 @@ function parseLog(log, cases) {
   return cases.map(({ token }) => observations.get(token));
 }
 
-/** @param {readonly NormalizedOracleCase[]} cases @param {{ engine: string, timeoutMs: number, preamble: string, signal?: AbortSignal }} options */
+/** @param {readonly NormalizedOracleCase[]} cases @param {{ engine: string, timeoutMs: number, preamble: string, signal?: AbortSignal, deadline?: number }} options */
 function runOneBatch(cases, options) {
   const directory = mkdtempSync(join(tmpdir(), "tikz-tex-fuzz-oracle-"));
   const started = performance.now();
@@ -66,7 +66,7 @@ function runOneBatch(cases, options) {
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
-/** @param {readonly NormalizedOracleCase[]} cases @param {{ engine: string, timeoutMs: number, preamble: string, signal?: AbortSignal }} options */
+/** @param {readonly NormalizedOracleCase[]} cases @param {{ engine: string, timeoutMs: number, preamble: string, signal?: AbortSignal, deadline?: number }} options */
 async function runOneBatchAsync(cases, options) {
   const directory = mkdtempSync(join(tmpdir(), "tikz-tex-fuzz-oracle-"));
   const started = performance.now();
@@ -102,13 +102,15 @@ export async function mapTexFuzzWorkers(items, workers, visit) {
 }
 
 /** @param {string} command */
-export function commandExists(command) { return spawnSync(command, ["--version"], { stdio: "ignore" }).status === 0; }
+export function commandExists(command) { return spawnSync(command, ["--version"], { stdio: "ignore", timeout: 2_000 }).status === 0; }
 
-/** @param {string} [engine] */
-export function texFuzzOracleEnvironment(engine = "lualatex") {
+/** @param {string} [engine] @param {{ deadline?: number }} [options] */
+export function texFuzzOracleEnvironment(engine = "lualatex", options = {}) {
   /** @param {string} command @param {readonly string[]} args */
   const firstLine = (command, args) => {
-    const result = spawnSync(command, args, { encoding: "utf8" });
+    const remaining = (options.deadline ?? Infinity) - performance.now();
+    if (remaining <= 0) throw new Error("TeX oracle environment deadline exhausted.");
+    const result = spawnSync(command, args, { encoding: "utf8", timeout: Math.max(1, Math.ceil(Math.min(2_000, remaining))) });
     if (result.status !== 0) return "unavailable";
     return (String(result.stdout || result.stderr).split(/\r?\n/)[0] || "unknown").trim();
   };
@@ -135,16 +137,25 @@ function cachedObservation(observation) {
   return value;
 }
 
+/** @param {OracleOptions} options */
+function oracleTimeout(options) {
+  options.signal?.throwIfAborted();
+  const remaining = (options.deadline ?? Infinity) - performance.now();
+  if (remaining <= 0) throw new Error("TeX oracle deadline exhausted.");
+  return Math.max(1, Math.ceil(Math.min(options.timeoutMs ?? 30_000, remaining)));
+}
+
 /** @param {readonly OracleCase[]} cases @param {OracleOptions} [options] */
 export function runBatchedTexSupportOracle(cases, options = {}) {
   options.signal?.throwIfAborted();
   const engine = options.engine ?? "lualatex", timeoutMs = options.timeoutMs ?? 30_000;
   const preamble = options.preamble ?? DEFAULT_PREAMBLE, layer = options.layer ?? "support";
-  const environment = { ...texFuzzOracleEnvironment(engine), timeoutMs: String(timeoutMs) }, normalized = normalize(cases);
+  const environment = { ...texFuzzOracleEnvironment(engine, options), timeoutMs: String(timeoutMs) }, normalized = normalize(cases);
   const cache = options.cacheDir ? new TexFuzzDiskCache(options.cacheDir) : undefined;
   const stats = { compilations: 0, elapsedMs: 0, bisectedFailures: 0, cacheHits: 0, cacheMisses: 0, cacheWrites: 0, batches: 0 };
   /** @type {Map<string, OracleObservation>} */ const found = new Map();
   const misses = normalized.filter((item) => {
+    oracleTimeout(options);
     if (!cache) return true;
     const key = texFuzzCacheKey({ source: item.source, preamble, layer, environment });
     const value = cache.get(key);
@@ -153,8 +164,9 @@ export function runBatchedTexSupportOracle(cases, options = {}) {
   });
   /** @param {readonly NormalizedOracleCase[]} batch @returns {OracleObservation[]} */
   const execute = (batch) => {
-    options.signal?.throwIfAborted();
-    stats.compilations++; const result = runOneBatch(batch, { engine, timeoutMs, preamble }); stats.elapsedMs += result.elapsedMs;
+    const boundedTimeout = oracleTimeout(options);
+    stats.compilations++; const result = runOneBatch(batch, { engine, timeoutMs: boundedTimeout, preamble }); stats.elapsedMs += result.elapsedMs;
+    oracleTimeout(options);
     if (result.ok) return result.observations;
     if (batch.length === 1) return [{ id: batch[0].id, supported: false, error: result.error }];
     stats.bisectedFailures++; const middle = Math.floor(batch.length / 2); return [...execute(batch.slice(0, middle)), ...execute(batch.slice(middle))];
@@ -173,11 +185,12 @@ export async function runBatchedTexSupportOracleAsync(cases, options = {}) {
   options.signal?.throwIfAborted();
   const engine = options.engine ?? "lualatex", timeoutMs = options.timeoutMs ?? 30_000;
   const preamble = options.preamble ?? DEFAULT_PREAMBLE, layer = options.layer ?? "support";
-  const environment = { ...texFuzzOracleEnvironment(engine), timeoutMs: String(timeoutMs) }, normalized = normalize(cases);
+  const environment = { ...texFuzzOracleEnvironment(engine, options), timeoutMs: String(timeoutMs) }, normalized = normalize(cases);
   const cache = options.cacheDir ? new TexFuzzDiskCache(options.cacheDir) : undefined;
   const stats = { compilations: 0, elapsedMs: 0, bisectedFailures: 0, cacheHits: 0, cacheMisses: 0, cacheWrites: 0, batches: 0 };
   /** @type {Map<string, OracleObservation>} */ const found = new Map();
   const misses = normalized.filter((item) => {
+    oracleTimeout(options);
     if (!cache) return true;
     const key = texFuzzCacheKey({ source: item.source, preamble, layer, environment }); const value = cache.get(key);
     if (value && typeof value === "object") { stats.cacheHits++; found.set(item.token, { id: item.id, ...value }); return false; }
@@ -185,8 +198,9 @@ export async function runBatchedTexSupportOracleAsync(cases, options = {}) {
   });
   /** @param {readonly NormalizedOracleCase[]} batch @returns {Promise<OracleObservation[]>} */
   const execute = async (batch) => {
-    stats.compilations++; const result = await runOneBatchAsync(batch, { engine, timeoutMs, preamble, signal: options.signal }); stats.elapsedMs += result.elapsedMs;
-    options.signal?.throwIfAborted();
+    const boundedTimeout = oracleTimeout(options);
+    stats.compilations++; const result = await runOneBatchAsync(batch, { engine, timeoutMs: boundedTimeout, preamble, signal: options.signal }); stats.elapsedMs += result.elapsedMs;
+    oracleTimeout(options);
     if (result.ok) return result.observations;
     if (batch.length === 1) return [{ id: batch[0].id, supported: false, error: result.error }];
     stats.bisectedFailures++; const middle = Math.floor(batch.length / 2);

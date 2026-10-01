@@ -4,10 +4,13 @@ import {
   layoutSimpleTexParagraph,
   texLength,
   texLineX,
+  renderTexParagraphSvgBody,
+  computerModernTexMetricProvider,
 } from "@tikz-editor/core/text/tex/index.js";
 import {
   caseFromTexFuzzAst,
   checkTexFuzzLayoutResultInvariants,
+  checkTexFuzzPaintedMathContent,
   generateFullySupportedTexFuzzCases,
   TEX_FUZZ_HARD_INVARIANT_WIDTHS,
 } from "@tikz-editor/tex-fuzz";
@@ -24,6 +27,44 @@ function layout(source: string, width = 160) {
 }
 
 describe("TeX fuzz renderer hard invariants", () => {
+  it("detects prose corruption in supported documents while ignoring automatic list markers", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "text", value: "Before" }, { kind: "paragraph-break", command: "par" },
+      { kind: "environment", name: "itemize", children: [
+        { kind: "item" }, { kind: "text", value: "Alpha" },
+        { kind: "item", label: [{ kind: "text", value: "Tag" }] }, { kind: "text", value: "Beta" },
+      ] }, { kind: "text", value: "After" },
+    ], { profile: "document" });
+    const original = layout(caseData.source);
+    expect(original.supported).toBe(true);
+    expect(checkTexFuzzLayoutResultInvariants(caseData, 160, original)).toEqual([]);
+    const corrupted = structuredClone(original);
+    const segment = corrupted.report!.lines.flatMap((line) => line.segments).find((segment) => segment.text === "Beta")!;
+    segment.text = "Wrong";
+    expect(checkTexFuzzLayoutResultInvariants(caseData, 160, corrupted).map((finding) => finding.fingerprint.code))
+      .toContain("visible-content-mismatch");
+  });
+
+  it("detects dropped and duplicated display math leaves in final SVG paint", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "text", value: "Active set" },
+      { kind: "display-math", delimiter: "bracket", body: { kind: "fraction", command: "frac",
+        numerator: { kind: "atom", value: "x" }, denominator: { kind: "atom", value: "y" } } },
+      { kind: "text", value: "After" },
+    ], { profile: "document" });
+    const result = layout(caseData.source);
+    expect(result.supported).toBe(true);
+    const svg = renderTexParagraphSvgBody(result.report!, { vlistLayout: result.vlistLayout,
+      lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider });
+    expect(checkTexFuzzPaintedMathContent(caseData, 160, svg)).toEqual([]);
+    const leaf = caseData.sourceMap.find((span) => span.kind === "math.atom")!;
+    const glyph = svg.match(new RegExp(`<path\\b[^>]*data-source-start="${leaf.start}"[^>]*>`))![0];
+    expect(checkTexFuzzPaintedMathContent(caseData, 160, svg.replace(glyph, "")).map((finding) => finding.fingerprint.code))
+      .toContain("math-leaf-paint-loss");
+    expect(checkTexFuzzPaintedMathContent(caseData, 160, svg + glyph).map((finding) => finding.fingerprint.code))
+      .toContain("math-leaf-paint-duplication");
+  });
+
   it("detects a silently dropped final segment even if the remaining geometry is made self-consistent", () => {
     const caseData = caseFromTexFuzzAst([
       { kind: "text", value: "Alpha" },

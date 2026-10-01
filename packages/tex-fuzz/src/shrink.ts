@@ -1,8 +1,9 @@
 import { caseFromTexFuzzAst } from "./generate.js";
-import { sameTexFuzzFingerprint } from "./fingerprint.js";
+import { sameTexFuzzFailureClass } from "./fingerprint.js";
 import type {
   TexFuzzCase,
   TexFuzzNode,
+  TexFuzzMathNode,
   TexFuzzObservation,
 } from "./model.js";
 
@@ -27,6 +28,9 @@ export type TexFuzzShrinkPredicate = (
 export interface TexFuzzShrinkPredicateContext {
   /** The most oracle evaluations this batch may spend. Local evaluations are unlimited by this field. */
   readonly maxOracleEvaluations: number;
+  /** Monotonic deadline shared by every evaluation in this batch. */
+  readonly deadline: number;
+  readonly signal: AbortSignal;
 }
 
 export interface TexFuzzShrinkBatchEvaluation {
@@ -50,6 +54,34 @@ function replaceAt(nodes: readonly TexFuzzNode[], index: number, replacements: r
   return [...nodes.slice(0, index), ...replacements, ...nodes.slice(index + 1)];
 }
 
+function mathCandidates(node: TexFuzzMathNode): readonly TexFuzzMathNode[] {
+  const candidates: TexFuzzMathNode[] = [];
+  if (node.kind !== "atom") candidates.push({ kind: "atom", value: "x" });
+  for (const key of ["body", "base", "numerator", "denominator", "degree", "subscript", "superscript", "script", "above", "below"] as const) {
+    if (!(key in node)) continue;
+    const child = (node as unknown as Record<string, TexFuzzMathNode | undefined>)[key];
+    if (!child) continue;
+    candidates.push(child);
+    for (const reduced of mathCandidates(child)) candidates.push({ ...node, [key]: reduced });
+  }
+  if (node.kind === "sequence") {
+    for (const [index, child] of node.items.entries()) {
+      candidates.push(child);
+      for (const reduced of mathCandidates(child)) candidates.push({ ...node,
+        items: node.items.map((item, position) => position === index ? reduced : item) });
+    }
+  }
+  if (node.kind === "matrix") {
+    for (const [rowIndex, row] of node.cells.entries()) for (const [cellIndex, child] of row.entries()) {
+      candidates.push(child);
+      for (const reduced of mathCandidates(child)) candidates.push({ ...node,
+        cells: node.cells.map((cells, index) => index === rowIndex
+          ? cells.map((cell, position) => position === cellIndex ? reduced : cell) : cells) });
+    }
+  }
+  return candidates;
+}
+
 function nodeCandidates(node: TexFuzzNode): readonly TexFuzzNode[] {
   const candidates: TexFuzzNode[] = [];
   if (node.kind === "text" && node.value !== "x") {
@@ -57,6 +89,9 @@ function nodeCandidates(node: TexFuzzNode): readonly TexFuzzNode[] {
   }
   if (node.kind === "math" && node.content !== "x") {
     candidates.push({ kind: "math", content: "x" });
+  }
+  if ((node.kind === "math" || node.kind === "display-math") && node.body) {
+    for (const body of mathCandidates(node.body)) candidates.push({ ...node, body });
   }
   if ("children" in node) {
     if (node.children.length === 1) {
@@ -130,7 +165,7 @@ export async function shrinkTexFuzzCase(
   predicate: TexFuzzShrinkPredicate,
   budget: TexFuzzShrinkBudget = {}
 ): Promise<TexFuzzShrinkResult> {
-  const started = Date.now();
+  const started = performance.now();
   const maxCandidates = budget.maxCandidates ?? 500;
   const maxOracleEvaluations = budget.maxOracleEvaluations ?? Number.POSITIVE_INFINITY;
   const maxTimeMs = budget.maxTimeMs ?? 30_000;
@@ -139,20 +174,46 @@ export async function shrinkTexFuzzCase(
   let oracleEvaluations = 0;
 
   while (true) {
-    if (Date.now() - started >= maxTimeMs) {
+    if (performance.now() - started >= maxTimeMs) {
       return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "time-budget" };
-    }
-    const candidates = texFuzzShrinkCandidates(current);
-    if (candidates.length === 0) {
-      return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "minimal" };
     }
     const remainingCandidates = maxCandidates - candidatesEvaluated;
     if (remainingCandidates <= 0) {
       return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "candidate-budget" };
     }
+    const candidates = texFuzzShrinkCandidates(current);
+    if (candidates.length === 0) {
+      return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "minimal" };
+    }
     const remainingOracle = Math.max(0, maxOracleEvaluations - oracleEvaluations);
     const batch = candidates.slice(0, remainingCandidates);
-    const result = await predicate(batch, { maxOracleEvaluations: remainingOracle });
+    const remainingTime = maxTimeMs - (performance.now() - started);
+    if (remainingTime <= 0) {
+      return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "time-budget" };
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        // Resolve first: predicates may reject immediately in response to abort.
+        resolve(null);
+        controller.abort(new Error("TeX fuzz shrink deadline exhausted."));
+      }, remainingTime);
+    });
+    let result: TexFuzzShrinkBatchResult | null;
+    try {
+      result = await Promise.race([timeout, predicate(batch, {
+        maxOracleEvaluations: remainingOracle, deadline: started + maxTimeMs, signal: controller.signal,
+      })]);
+    } catch (error) {
+      if (performance.now() - started < maxTimeMs) throw error;
+      controller.abort(error);
+      result = null;
+    } finally { clearTimeout(timer); }
+    if (result === null || performance.now() - started >= maxTimeMs) {
+      if (!controller.signal.aborted) controller.abort(new Error("TeX fuzz shrink deadline exhausted."));
+      return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "time-budget" };
+    }
     const observations = isShrinkBatchEvaluation(result) ? result.observations : result;
     const batchOracleEvaluations = isShrinkBatchEvaluation(result) ? result.oracleEvaluations : 0;
     if (observations.length !== batch.length) {
@@ -169,7 +230,7 @@ export async function shrinkTexFuzzCase(
     candidatesEvaluated += batch.length;
     oracleEvaluations += batchOracleEvaluations;
     const preservedIndex = observations.findIndex((observation) =>
-      observation !== null && sameTexFuzzFingerprint(observation.fingerprint, expected.fingerprint)
+      observation !== null && sameTexFuzzFailureClass(observation.fingerprint, expected.fingerprint)
     );
     if (preservedIndex < 0) {
       if (batch.length < candidates.length) {

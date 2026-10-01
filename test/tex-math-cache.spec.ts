@@ -61,14 +61,26 @@ describe("math layout and source projection caches", () => {
     }
   });
 
-  it("shares immutable source-relative layout separately from labels and target widths", () => {
+  it("keeps exact final-box reuse without retaining a source-relative layout graph", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     for (const width of [80, 90]) provider.getDisplayMathBox!({ ...params("x^2"), targetWidth: texLength(width) });
     const third = provider.getDisplayMathBox!({ ...params("x^2"), targetWidth: texLength(100) });
     const fourth = provider.getDisplayMathBox!({ ...params("x^2"), targetWidth: texLength(110) });
     expect(third).not.toBeNull();
-    expect(third?.hlist).toBe(fourth?.hlist);
-    expect(Object.isFrozen(third?.hlist)).toBe(true);
-    expect(Object.isFrozen(third?.hlist?.items[0].sourceSpan)).toBe(true);
+    expect(third?.hlist).not.toBe(fourth?.hlist);
+    expect(third).toEqual(createTexDerivedInlineMathBoxProvider().getDisplayMathBox!({ ...params("x^2"), targetWidth: texLength(100) }));
+    expect(provider.getDisplayMathBox!({ ...params("x^2"), targetWidth: texLength(100) })).toBe(third);
+  });
+
+  it("reconstructs an evicted final box with current source and tag metadata", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const original = { ...params("x^2", 10), displayLabel: label(30) };
+    const first = provider.getDisplayMathBox!(original);
+    for (let index = 0; index < 270; index++) {
+      provider.getDisplayMathBox!({ ...params("x^2", index * 100 + 1000), displayLabel: label(index * 100 + 1050) });
+    }
+    const revisited = provider.getDisplayMathBox!(original);
+    expect(revisited).not.toBe(first);
+    expect(revisited).toEqual(createTexDerivedInlineMathBoxProvider().getDisplayMathBox!(original));
   });
 });

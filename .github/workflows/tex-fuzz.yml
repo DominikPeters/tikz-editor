@@ -28,7 +28,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended
       - name: Shared generator, invariants, coverage, and oracle canary
-        run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed ${{ github.run_number }} --profile document --malformed-cases 500 --prefix-base-cases 8 --prefix-limit-per-case 128 --metamorphic-cases 200 --projection-control-cases 128 --supported-cases 128 --supported-max-attempts 16384 --oracle-sample-cases 128 --oracle-geometry-policy fail --out artifacts/tex-fuzz/nightly-bundle.json --coverage-out artifacts/tex-fuzz/nightly-coverage.json
+        run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed ${{ github.run_number }} --profile document --malformed-cases 500 --prefix-base-cases 8 --prefix-limit-per-case 128 --metamorphic-cases 200 --projection-control-cases 128 --supported-cases 128 --supported-max-attempts 16384 --boundary-cases 128 --engine-history-cases 24 --math-oracle-cases 16 --math-oracle-policy diagnostic --oracle-sample-cases 128 --oracle-geometry-policy fail --out artifacts/tex-fuzz/nightly-bundle.json --coverage-out artifacts/tex-fuzz/nightly-coverage.json
       - name: Oracle batching, cache, timeout, and isolation tests
         run: TEX_FUZZ_ORACLE_TESTS=1 npx vitest run test/tex-fuzz-kernel.spec.ts test/tex-fuzz-oracle-hardening.spec.ts test/tex-fuzz-paragraph-oracle.spec.ts
       - name: Math differential diagnostic sample
@@ -61,7 +61,7 @@ jobs:
       - run: npm ci
       - run: npm run build:tex-fuzz
       - name: Aggressive valid soak
-        run: node scripts/run-tex-fuzz.mjs --cases 30000 --seed ${{ github.run_number }} --profile aggressive --no-oracle --malformed-cases 2000 --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 500 --projection-control-cases 256 --supported-cases 256 --supported-max-attempts 32768 --out artifacts/tex-fuzz/soak-valid-bundle.json --coverage-out artifacts/tex-fuzz/soak-valid-coverage.json
+        run: node scripts/run-tex-fuzz.mjs --cases 30000 --seed ${{ github.run_number }} --profile aggressive --no-oracle --malformed-cases 2000 --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 500 --projection-control-cases 256 --supported-cases 256 --supported-max-attempts 32768 --boundary-cases 256 --engine-history-cases 32 --out artifacts/tex-fuzz/soak-valid-bundle.json --coverage-out artifacts/tex-fuzz/soak-valid-coverage.json
       - name: Malformed typing-state soak
         run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed 20290713 --profile malformed --no-oracle --prefix-base-cases 16 --prefix-limit-per-case 256 --metamorphic-cases 200 --out artifacts/tex-fuzz/soak-malformed-bundle.json --coverage-out artifacts/tex-fuzz/soak-malformed-coverage.json
       - uses: actions/upload-artifact@v4

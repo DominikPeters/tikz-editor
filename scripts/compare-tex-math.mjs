@@ -3,7 +3,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   layoutTexMathList,
   parseTexMath,
@@ -12,7 +13,7 @@ import {
 import { loadTexFuzzModules } from "./lib/tex-fuzz-loader.mjs";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
 
-const { generateTexMathFuzzCase } = await loadTexFuzzModules();
+let generateTexMathFuzzCase;
 
 const matrixEnvironments = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix"];
 const binomialCommands = [String.raw`\binom`, String.raw`\dbinom`, String.raw`\tbinom`];
@@ -100,209 +101,215 @@ const mathtoolsColonRelationCommands = [
   String.raw`\Dashcolon`,
 ];
 
-const args = readArgs();
-const generatedAlignedFormulas = args.alignedFuzzCases > 0
-  ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
-  : [];
-const generatedMathFormulas = args.mathFuzzCases > 0
-  ? generateMathFuzzFormulas(args.mathFuzzCases, args.seed)
-  : [];
-const formulas = args.formulas.length > 0
-  ? args.formulas
-  : generatedMathFormulas.length > 0
-    ? generatedMathFormulas
-  : generatedAlignedFormulas.length > 0
-    ? generatedAlignedFormulas
-  : [
-      "a+1",
-      "x-y",
-      "xy",
-      "a=b",
-      "(z)",
-      "a{b}",
-      "a\\mathinner{b}",
-      "\\frac{1}{2}",
-      "\\frac{x+y}{2}",
-      "\\dfrac{1}{2}",
-      "\\tfrac{1}{2}",
-      "x+\\dfrac{n}{k}+\\tfrac{n}{k}",
-      "\\binom{n}{k}",
-      "\\dbinom{n}{k}",
-      "\\tbinom{n}{k}",
-      "x+\\binom{n}{k}",
-      "x_\\frac{1}{2}",
-      "\\sqrt{x}",
-      "\\sqrt{x+y}",
-      "\\sqrt{\\frac{1}{2}}",
-      "\\sqrt{\\sqrt{\\frac{1}{2}}}",
-      "\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}",
-      "\\overline{x}",
-      "\\underline{x}",
-      "\\overline{x+y}",
-      "\\underline{\\frac{1}{2}}",
-      "a^{\\overline{x}}",
-      "a^{\\underline{x}}",
-      "\\overline{x}^2",
-      "\\left(x\\right)",
-      "\\left(\\frac{1}{2}\\right)",
-      "\\left.\\frac{1}{2}\\right]",
-      "\\left[\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}\\right]",
-      "\\left|x\\right|",
-      "\\left\\Vert x\\right\\Vert",
-      "\\left\\langle x\\right\\rangle",
-      "\\left\\lbrace x\\right\\rbrace",
-      "\\left\\backslash x\\right/",
-      "\\left\\langle\\frac{1}{2}\\right\\rangle",
-      "\\left\\lfloor\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}\\right\\rfloor",
-      "\\hat{x}",
-      "\\bar{x}",
-      "\\vec{x}",
-      "\\tilde{x}",
-      "\\dot{x}",
-      "\\ddot{x}",
-      "\\hat{y}",
-      "\\hat{xy}",
-      "\\hat{\\frac{1}{2}}",
-      "\\text{if}",
-      "x+\\text{if}",
-      "\\text{office}",
-      "\\textrm{if}",
-      "\\textsf{if}",
-      "\\texttt{if}",
-      "\\textnormal{if}",
-      "\\textbf{if}",
-      "\\textbf{\\textmd{if}}",
-      "\\textit{if}",
-      "\\textit{\\textup{if}}",
-      "\\textsl{if}",
-      "\\textsc{if}",
-      "\\emph{if}",
-      "\\mbox{\\textbf{Bold} text}",
-      "\\mbox{\\texttt{if}}",
-      "\\makebox{if}",
-      "\\makebox[20pt][l]{if}",
-      "\\makebox[20pt][c]{if}",
-      "\\makebox[20pt][r]{if}",
-      "\\makebox[24pt][s]{a b}",
-      "\\llap{if}",
-      "\\rlap{if}",
-      "\\fbox{if}",
-      "\\framebox{if}",
-      "\\framebox[24pt][r]{if}",
-      "\\phantom{x}+y",
-      "\\hphantom{x}+y",
-      "\\vphantom{\\frac{1}{2}}+y",
-      "\\mbox{a\\phantom{b}c}",
-      "\\mbox{a\\smash{g}c}",
-      "x_{\\text{if}}",
-      "x_{y_{\\textbf{if}}}",
-      "x_{\\mbox{$y$}}",
-      "x_{\\text{$y$}}",
-      "\\mathrm{ABC123}",
-      "\\mathit{ABC123}",
-      "\\mathbf{ABC123}",
-      "\\mathsf{ABC123}",
-      "\\mathtt{ABC123}",
-      "\\mathcal{ABC}",
-      "\\mathit{a+b}",
-      "\\mathtt{a+b}",
-      "\\mathcal{A+B}",
-      "x_{\\mathbf{i}}",
-      "x_{y_{\\mathsf{i}}}",
-      "x_{\\mathtt{i}}",
-      "x_{y_{\\mathcal{A}}}",
-      "\\alpha+\\beta=\\gamma",
-      "\\Gamma+\\Delta+\\Omega",
-      "x\\leq y\\neq z",
-      "a\\times b\\cdot c",
-      "\\infty\\in A\\subset B",
-      "\\pm x\\mp y",
-      "A\\to B\\leftarrow C",
-      "A\\Rightarrow B\\Leftrightarrow C",
-      "x\\mapsto y",
-      "p\\wedge q\\vee r",
-      "\\forall x\\exists y\\in A",
-      "A\\cup B\\cap C\\setminus D",
-      "A\\supset B\\subseteq C\\supseteq D",
-      "x\\notin A",
-      "x\\not= y",
-      "x\\not\\in A",
-      "x\\not\\leq y",
-      "\\ldots",
-      "\\cdots",
-      "\\dots",
-      "a\\ldots b",
-      "a+\\cdots+b",
-      "x_1,\\ldots,x_n",
-      "\\sum",
-      "\\sum_i^n",
-      "\\begin{aligned}a&=b\\\\c&=d\\end{aligned}",
-      "\\begin{aligned}x_i&=y^2\\\\\\frac{1}{2}&=z\\end{aligned}",
-      "\\begin{aligned}a&=b&c&=d\\\\e&=f&g&=h\\end{aligned}",
-      "\\begin{aligned}\\sum_i^n&=x\\\\\\sqrt{x}&=y\\end{aligned}",
-      "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
-      "\\begin{array}{cc}a&b\\\\c&d\\end{array}",
-      "\\begin{array}{lr}a&b\\\\x&y\\end{array}",
-      "\\begin{cases}a&b\\\\x&y\\end{cases}",
-      "\\begin{smallmatrix}a&b\\\\x&y\\end{smallmatrix}",
-      "\\operatorname{rank}",
-      "\\operatorname*{arg\\,max}_{x}",
-      "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
-      "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
-      "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
-      "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}",
-      "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}",
-      "\\substack{i\\\\j}",
-      "x_{\\substack{i\\\\j}}",
-      "\\sum_{\\substack{i=1\\\\j=2}}^n",
-      "\\begin{subarray}{c}i\\\\j\\end{subarray}",
-      "\\begin{subarray}{l}i\\\\j\\end{subarray}",
-      "\\prod_i^n",
-      "\\coprod_i^n",
-      "\\bigcup_i^n",
-      "\\bigcap_i^n",
-      "\\int",
-      "\\int_0^1",
-      "\\oint_0^1",
-      "\\lim_{x}",
-      "x^2",
-      "x_i",
-      "x_i^2",
-      "y^2",
-      "y_i",
-      "y_i^2",
-      "{x+y}",
-      "{x+y}^2",
-      "x^{y_i}",
-    ];
-const tolerance = args.tolerance;
-const results = formulas.map((formula) => compareFormula(formula, tolerance));
-const failed = results.filter((result) => !result.ok);
-if (args.summaryOnly) {
-  console.log(JSON.stringify({
-    tolerance,
-    cases: formulas.length,
-    failed: failed.length,
-    seed: args.seed,
-    mode: generatedMathFormulas.length > 0
-      ? "math-fuzz"
-      : generatedAlignedFormulas.length > 0
-        ? "aligned-fuzz"
-        : "fixed",
-    failures: failed,
-  }, null, 2));
-} else {
-  console.log(JSON.stringify({ tolerance, results }, null, 2));
-}
-if (failed.length > 0) {
-  process.exitCode = 1;
+async function runComparisons() {
+  ({ generateTexMathFuzzCase } = await loadTexFuzzModules());
+  const args = readArgs();
+  const generatedAlignedFormulas = args.alignedFuzzCases > 0
+    ? generateAlignedFuzzFormulas(args.alignedFuzzCases, args.seed)
+    : [];
+  const generatedMathFormulas = args.mathFuzzCases > 0
+    ? generateMathFuzzFormulas(args.mathFuzzCases, args.seed)
+    : [];
+  const formulas = args.formulas.length > 0
+    ? args.formulas
+    : generatedMathFormulas.length > 0
+      ? generatedMathFormulas
+    : generatedAlignedFormulas.length > 0
+      ? generatedAlignedFormulas
+    : [
+        "a+1",
+        "x-y",
+        "xy",
+        "a=b",
+        "(z)",
+        "a{b}",
+        "a\\mathinner{b}",
+        "\\frac{1}{2}",
+        "\\frac{x+y}{2}",
+        "\\dfrac{1}{2}",
+        "\\tfrac{1}{2}",
+        "x+\\dfrac{n}{k}+\\tfrac{n}{k}",
+        "\\binom{n}{k}",
+        "\\dbinom{n}{k}",
+        "\\tbinom{n}{k}",
+        "x+\\binom{n}{k}",
+        "x_\\frac{1}{2}",
+        "\\sqrt{x}",
+        "\\sqrt{x+y}",
+        "\\sqrt{\\frac{1}{2}}",
+        "\\sqrt{\\sqrt{\\frac{1}{2}}}",
+        "\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}",
+        "\\overline{x}",
+        "\\underline{x}",
+        "\\overline{x+y}",
+        "\\underline{\\frac{1}{2}}",
+        "a^{\\overline{x}}",
+        "a^{\\underline{x}}",
+        "\\overline{x}^2",
+        "\\left(x\\right)",
+        "\\left(\\frac{1}{2}\\right)",
+        "\\left.\\frac{1}{2}\\right]",
+        "\\left[\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}\\right]",
+        "\\left|x\\right|",
+        "\\left\\Vert x\\right\\Vert",
+        "\\left\\langle x\\right\\rangle",
+        "\\left\\lbrace x\\right\\rbrace",
+        "\\left\\backslash x\\right/",
+        "\\left\\langle\\frac{1}{2}\\right\\rangle",
+        "\\left\\lfloor\\sqrt{\\sqrt{\\sqrt{\\sqrt{\\frac{1}{2}}}}}\\right\\rfloor",
+        "\\hat{x}",
+        "\\bar{x}",
+        "\\vec{x}",
+        "\\tilde{x}",
+        "\\dot{x}",
+        "\\ddot{x}",
+        "\\hat{y}",
+        "\\hat{xy}",
+        "\\hat{\\frac{1}{2}}",
+        "\\text{if}",
+        "x+\\text{if}",
+        "\\text{office}",
+        "\\textrm{if}",
+        "\\textsf{if}",
+        "\\texttt{if}",
+        "\\textnormal{if}",
+        "\\textbf{if}",
+        "\\textbf{\\textmd{if}}",
+        "\\textit{if}",
+        "\\textit{\\textup{if}}",
+        "\\textsl{if}",
+        "\\textsc{if}",
+        "\\emph{if}",
+        "\\mbox{\\textbf{Bold} text}",
+        "\\mbox{\\texttt{if}}",
+        "\\makebox{if}",
+        "\\makebox[20pt][l]{if}",
+        "\\makebox[20pt][c]{if}",
+        "\\makebox[20pt][r]{if}",
+        "\\makebox[24pt][s]{a b}",
+        "\\llap{if}",
+        "\\rlap{if}",
+        "\\fbox{if}",
+        "\\framebox{if}",
+        "\\framebox[24pt][r]{if}",
+        "\\phantom{x}+y",
+        "\\hphantom{x}+y",
+        "\\vphantom{\\frac{1}{2}}+y",
+        "\\mbox{a\\phantom{b}c}",
+        "\\mbox{a\\smash{g}c}",
+        "x_{\\text{if}}",
+        "x_{y_{\\textbf{if}}}",
+        "x_{\\mbox{$y$}}",
+        "x_{\\text{$y$}}",
+        "\\mathrm{ABC123}",
+        "\\mathit{ABC123}",
+        "\\mathbf{ABC123}",
+        "\\mathsf{ABC123}",
+        "\\mathtt{ABC123}",
+        "\\mathcal{ABC}",
+        "\\mathit{a+b}",
+        "\\mathtt{a+b}",
+        "\\mathcal{A+B}",
+        "x_{\\mathbf{i}}",
+        "x_{y_{\\mathsf{i}}}",
+        "x_{\\mathtt{i}}",
+        "x_{y_{\\mathcal{A}}}",
+        "\\alpha+\\beta=\\gamma",
+        "\\Gamma+\\Delta+\\Omega",
+        "x\\leq y\\neq z",
+        "a\\times b\\cdot c",
+        "\\infty\\in A\\subset B",
+        "\\pm x\\mp y",
+        "A\\to B\\leftarrow C",
+        "A\\Rightarrow B\\Leftrightarrow C",
+        "x\\mapsto y",
+        "p\\wedge q\\vee r",
+        "\\forall x\\exists y\\in A",
+        "A\\cup B\\cap C\\setminus D",
+        "A\\supset B\\subseteq C\\supseteq D",
+        "x\\notin A",
+        "x\\not= y",
+        "x\\not\\in A",
+        "x\\not\\leq y",
+        "\\ldots",
+        "\\cdots",
+        "\\dots",
+        "a\\ldots b",
+        "a+\\cdots+b",
+        "x_1,\\ldots,x_n",
+        "\\sum",
+        "\\sum_i^n",
+        "\\begin{aligned}a&=b\\\\c&=d\\end{aligned}",
+        "\\begin{aligned}x_i&=y^2\\\\\\frac{1}{2}&=z\\end{aligned}",
+        "\\begin{aligned}a&=b&c&=d\\\\e&=f&g&=h\\end{aligned}",
+        "\\begin{aligned}\\sum_i^n&=x\\\\\\sqrt{x}&=y\\end{aligned}",
+        "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
+        "\\begin{array}{cc}a&b\\\\c&d\\end{array}",
+        "\\begin{array}{lr}a&b\\\\x&y\\end{array}",
+        "\\begin{cases}a&b\\\\x&y\\end{cases}",
+        "\\begin{smallmatrix}a&b\\\\x&y\\end{smallmatrix}",
+        "\\operatorname{rank}",
+        "\\operatorname*{arg\\,max}_{x}",
+        "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+        "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
+        "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
+        "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}",
+        "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}",
+        "\\substack{i\\\\j}",
+        "x_{\\substack{i\\\\j}}",
+        "\\sum_{\\substack{i=1\\\\j=2}}^n",
+        "\\begin{subarray}{c}i\\\\j\\end{subarray}",
+        "\\begin{subarray}{l}i\\\\j\\end{subarray}",
+        "\\prod_i^n",
+        "\\coprod_i^n",
+        "\\bigcup_i^n",
+        "\\bigcap_i^n",
+        "\\int",
+        "\\int_0^1",
+        "\\oint_0^1",
+        "\\lim_{x}",
+        "x^2",
+        "x_i",
+        "x_i^2",
+        "y^2",
+        "y_i",
+        "y_i^2",
+        "{x+y}",
+        "{x+y}^2",
+        "x^{y_i}",
+      ];
+  const tolerance = args.tolerance;
+  const results = formulas.map((formula) => compareFormula(formula, tolerance));
+  const failed = results.filter((result) => !result.ok);
+  if (args.summaryOnly) {
+    console.log(JSON.stringify({
+      tolerance,
+      cases: formulas.length,
+      failed: failed.length,
+      seed: args.seed,
+      mode: generatedMathFormulas.length > 0
+        ? "math-fuzz"
+        : generatedAlignedFormulas.length > 0
+          ? "aligned-fuzz"
+          : "fixed",
+      failures: failed,
+    }, null, 2));
+  } else {
+    console.log(JSON.stringify({ tolerance, results }, null, 2));
+  }
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
+
 }
 
-function compareFormula(formula, tolerance) {
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await runComparisons();
+
+export function compareFormula(formula, tolerance = 0.01, options = {}) {
   const ours = ourTrace(formula);
   let tex;
   try {
-    tex = texTrace(formula);
+    tex = texTrace(formula, options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -464,7 +471,7 @@ function flattenOurItems(items, originX, originY) {
   return traceItems;
 }
 
-function texTrace(formula) {
+function texTrace(formula, options) {
   const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-math-compare-"));
   try {
     writeFileSync(join(tempDir, "trace.lua"), traceLuaSource(), "utf8");
@@ -474,6 +481,7 @@ function texTrace(formula) {
       env: texOracleEnv(),
       stdio: "pipe",
       maxBuffer: 10 * 1024 * 1024,
+      timeout: options.timeoutMs ?? 20_000,
     });
     const log = readFileSync(join(tempDir, "case.log"), "utf8");
     const items = [];
@@ -637,6 +645,26 @@ local function walk_hlist(list, origin_x, baseline_y, box)
       x=x+node_width(n)
     elseif n.id==glue_id then
       local w=glue_width(n, box)
+      -- Centered leaders are paint, not just glue advance. amsmath uses them
+      -- for extensible arrow shafts, including zero repetitions in short arrows.
+      if n.leader then
+        if n.subtype ~= 101 then error('Unsupported math trace leader subtype '..n.subtype) end
+        local leader=n.leader
+        local unit=leader.width or 0
+        local available=math.floor(w*65536+0.5)
+        if unit > 0 then
+          local count=math.max(0, math.floor(available/unit))
+          local start=x+sp(math.floor((available-count*unit)/2))
+          for i=0,count-1 do
+            local leader_x=start+sp(i*unit)
+            if leader.id==hlist_id then
+              walk_hlist(leader.list, leader_x, baseline_y+sp(leader.shift), leader)
+            elseif leader.id==vlist_id then
+              walk_vlist(leader.list, leader_x, baseline_y+sp(leader.shift), node_height(leader), node_width(leader))
+            else error('Unsupported math trace leader node '..leader.id) end
+          end
+        end
+      end
       if glue_natural_width(n) ~= 0 then
         texio.write_nl(string.format('TMT glue x=%.6f y=%.6f w=%.6f', x, baseline_y, w))
       end

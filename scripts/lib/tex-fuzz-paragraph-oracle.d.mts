@@ -30,7 +30,7 @@ export declare function compareTexFuzzParagraphGeometry(
 };
 export declare function runBatchedTexParagraphOracle(
   cases: readonly TexFuzzParagraphOracleCase[],
-  options?: { readonly engine?: string; readonly timeoutMs?: number; readonly batchSize?: number; readonly cacheDir?: string }
+  options?: { readonly engine?: string; readonly timeoutMs?: number; readonly maxTimeMs?: number; readonly batchSize?: number; readonly cacheDir?: string }
 ): {
   readonly observations: readonly (TexFuzzParagraphOracleObservation | undefined)[];
   readonly stats: Readonly<Record<string, number>>;

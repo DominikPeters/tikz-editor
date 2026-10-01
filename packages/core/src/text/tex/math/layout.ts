@@ -789,7 +789,8 @@ function texMathNucleusNeedsAmsMath(nucleus: TexMathNucleus): boolean {
     nucleus.kind === "sideset" ||
     nucleus.kind === "cases" ||
     nucleus.kind === "smallmatrix" ||
-    nucleus.kind === "operator-name"
+    nucleus.kind === "operator-name" ||
+    nucleus.kind === "extensible-arrow"
   ) {
     return true;
   }
@@ -1348,7 +1349,7 @@ function layoutNucleus(
     return layoutOperatorNameNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "extensible-arrow") {
-    return layoutExtensibleArrowNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutExtensibleArrowNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -5512,21 +5513,35 @@ function layoutExtensibleArrowNucleus(
   nucleus: TexMathExtensibleArrowNucleus,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
+  cramped: boolean,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const above = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, alphabet);
-  const below = nucleus.below
-    ? layoutLimitList(nucleus.below, fontProfile, "script", true, baseAtPt, alphabet)
+  // amsmath measures labels in scriptstyle, but typesets limits in the enclosing
+  // operator's script style. Empty arguments do not create a limit at all.
+  const measuredAbove = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, alphabet);
+  const measuredBelow = nucleus.below
+    ? layoutLimitList(nucleus.below, fontProfile, "script", false, baseAtPt, alphabet)
     : null;
-  if (!above || (nucleus.below && !below)) {
+  const aboveStyle = supStyle(style);
+  const above = nucleus.above.items.length > 0
+    ? aboveStyle === "script" && !cramped
+      ? measuredAbove
+      : layoutLimitList(nucleus.above, fontProfile, aboveStyle, cramped, baseAtPt, alphabet)
+    : null;
+  const below = nucleus.below && nucleus.below.items.length > 0
+    ? layoutLimitList(nucleus.below, fontProfile, subStyle(style), true, baseAtPt, alphabet)
+    : null;
+  if (!measuredAbove || (nucleus.below && !measuredBelow)
+    || (nucleus.above.items.length > 0 && !above)
+    || (nucleus.below && nucleus.below.items.length > 0 && !below)) {
     return null;
   }
   const padding = extensibleArrowPadding(nucleus.command, fontProfile, "script", baseAtPt);
   const targetWidth = roundTexPt(Math.max(
-    extensibleArrowMinimumWidth(fontProfile, "display", baseAtPt),
-    above.width + padding.measureLeft + padding.measureRight,
-    (below?.width ?? 0) + padding.measureLeft + padding.measureRight
+    extensibleArrowMinimumWidth(nucleus.command, fontProfile, "display", baseAtPt),
+    measuredAbove.width + padding.measureLeft + padding.measureRight,
+    (measuredBelow?.width ?? 0) + padding.measureLeft + padding.measureRight
   ));
   const body = layoutExtensibleArrowBody(
     nucleus.command,
@@ -5536,32 +5551,33 @@ function layoutExtensibleArrowNucleus(
     texLength(targetWidth),
     nucleus.commandSourceSpan
   );
+  const limitPadding = extensibleArrowPadding(nucleus.command, fontProfile, supStyle(style), baseAtPt);
   const width = roundTexPt(Math.max(
     body.width,
-    above.width + padding.limitLeft + padding.limitRight,
-    (below?.width ?? 0) + padding.limitLeft + padding.limitRight
+    above ? above.width + limitPadding.limitLeft + limitPadding.limitRight : 0,
+    below ? below.width + limitPadding.limitLeft + limitPadding.limitRight : 0
   ));
   const bodyX = roundTexPt((width - body.width) / 2);
   const items: TexMathHListItem[] = body.items.map((item) =>
     offsetMathLayoutItem(item, texHBoxOffsetX(bodyX))
   );
 
-  const aboveShift = roundTexPt(Math.max(
+  const aboveShift = above ? roundTexPt(Math.max(
     mathExtensionParameterToPt(fontProfile, "bigOpSpacing3", style, baseAtPt) - above.depth,
     mathExtensionParameterToPt(fontProfile, "bigOpSpacing1", style, baseAtPt)
-  ));
-  items.unshift(childHList(
+  )) : 0;
+  if (above) items.unshift(childHList(
     "limit-superscript",
-    roundTexPt((width - above.width + padding.limitLeft - padding.limitRight) / 2),
+    roundTexPt((width - above.width + limitPadding.limitLeft - limitPadding.limitRight) / 2),
     roundTexPt(-(body.height + aboveShift + above.depth)),
     above,
     nucleus.aboveSourceSpan
   ));
-  const height = roundTexPt(body.height +
+  const height = above ? roundTexPt(body.height +
     mathExtensionParameterToPt(fontProfile, "bigOpSpacing5", style, baseAtPt) +
     above.height +
     above.depth +
-    aboveShift);
+    aboveShift) : body.height;
 
   const belowShift = below
     ? roundTexPt(Math.max(
@@ -5572,7 +5588,7 @@ function layoutExtensibleArrowNucleus(
   if (below) {
     items.push(childHList(
       "limit-subscript",
-      roundTexPt((width - below.width + padding.limitLeft - padding.limitRight) / 2),
+      roundTexPt((width - below.width + limitPadding.limitLeft - limitPadding.limitRight) / 2),
       roundTexPt(body.depth + belowShift + below.height),
       below,
       nucleus.belowSourceSpan ?? nucleus.sourceSpan
@@ -6174,14 +6190,16 @@ function extensibleArrowPadding(
 }
 
 function extensibleArrowMinimumWidth(
+  command: TexMathExtensibleArrowNucleus["command"],
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: TexLength
 ): number {
   const font = fontProfile.resolveMathFont({ family: "symbols", style, baseAtPt });
   const relbarWidth = roundTexPt(tfmToPt(font, requiredCharMetric(font, 0).width));
-  const arrowWidth = roundTexPt(tfmToPt(font, requiredCharMetric(font, 33).width));
-  return roundTexPt(relbarWidth * 2 + arrowWidth + muToPt(fontProfile, style, baseAtPt, -14));
+  const arrowWidth = roundTexPt(tfmToPt(font, requiredCharMetric(font, command === "xleftarrow" ? 32 : 33).width));
+  // The leaders' hfill has zero natural width; only the two endpoints advance.
+  return roundTexPt(relbarWidth + arrowWidth + muToPt(fontProfile, style, baseAtPt, -14));
 }
 
 function layoutExtensibleArrowBody(
@@ -6204,11 +6222,10 @@ function layoutExtensibleArrowBody(
   const headKern = muToPt(fontProfile, style, baseAtPt, -7);
   const leaderSideKern = muToPt(fontProfile, style, baseAtPt, -2);
   const leaderUnitWidth = roundTexPt(relbarWidth + 2 * leaderSideKern);
-  const minimumWidth = roundTexPt(relbarWidth + headKern + headWidth);
-  const repeatCount = Math.max(
-    1,
-    Math.ceil((targetWidth - minimumWidth - headKern - relbarWidth) / Math.max(0.1, leaderUnitWidth))
-  );
+  const minimumWidth = roundTexPt(relbarWidth + 2 * headKern + headWidth);
+  const leaderWidth = Math.max(0, targetWidth - minimumWidth);
+  const repeatCount = leaderUnitWidth > 0 ? Math.floor(leaderWidth / leaderUnitWidth) : 0;
+  const leaderMargin = roundTexPt((leaderWidth - repeatCount * leaderUnitWidth) / 2);
   const items: TexMathHListItem[] = [];
   let cursor = 0;
   let height = 0;
@@ -6226,8 +6243,9 @@ function layoutExtensibleArrowBody(
       x: roundTexPt(cursor),
       y: 0,
       width: roundTexPt(tfmToPt(font, metric.width)),
-      height: roundTexPt(tfmToPt(font, metric.height)),
-      depth: roundTexPt(tfmToPt(font, metric.depth)),
+      // amsmath's relbar is smashed: retain its paint, omit its logical extents.
+      height: code === relbarCode ? 0 : roundTexPt(tfmToPt(font, metric.height)),
+      depth: code === relbarCode ? 0 : roundTexPt(tfmToPt(font, metric.depth)),
       italicCorrection: roundTexPt(tfmToPt(font, metric.italicCorrection)),
       sourceSpan,
     });
@@ -6255,17 +6273,21 @@ function layoutExtensibleArrowBody(
   if (command === "xleftarrow") {
     appendGlyph(leftArrowCode, "\\leftarrow");
     appendKern(headKern);
+    appendKern(leaderMargin);
     for (let index = 0; index < repeatCount; index += 1) {
       appendLeader();
     }
+    appendKern(leaderMargin);
     appendKern(headKern);
     appendGlyph(relbarCode, "\\relbar");
   } else {
     appendGlyph(relbarCode, "\\relbar");
     appendKern(headKern);
+    appendKern(leaderMargin);
     for (let index = 0; index < repeatCount; index += 1) {
       appendLeader();
     }
+    appendKern(leaderMargin);
     appendKern(headKern);
     appendGlyph(rightArrowCode, "\\rightarrow");
   }

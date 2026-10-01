@@ -272,7 +272,7 @@ as long as their result or snapshot, independently of the reuse budgets below.
 Deck contexts likewise retain the active frame's reports directly, so standalone
 registry limits cannot discard metadata for a large visible frame.
 
-The remaining text caches use the shared weighted LRU implementation:
+At revision `9ed851df`, the remaining text caches used the shared weighted LRU implementation:
 
 | Cache | Entries | Estimated budget |
 | --- | ---: | ---: |
@@ -330,3 +330,36 @@ single-line labels, wrapped display math, and align-row equation tags. Two addit
 deck tests passed after the active-frame ownership change, covering title/list
 edits, undo/redo, rendered caret navigation, and selection. The final source-span
 ownership adjustment passed all 12 targeted regression tests.
+
+## Relative math cache tradeoff follow-up
+
+The ownership fixes above remain necessary: SVG can survive after its independent
+report registry evicts metadata, and incomplete math keys can return obsolete tag
+or source spans. Visible-scene retention also keeps editing metadata available
+when the scene exceeds the reusable-cache budget. These are correctness guarantees,
+not benefits that can be traded away for a faster benchmark.
+
+The optional relative math layout cache was a separate optimization. An isolated
+ablation retained the correctness fixes and compared four repetitions of the same
+fraction at different source positions. Seven alternating 1,000-provider blocks
+measured 0.239ms/provider with the relative cache versus 0.181ms with direct layout:
+copying, freezing, and rebasing the template cost more than parsing and laying out
+this formula. The outputs matched exactly. This microbenchmark does not estimate
+catalog or browser performance.
+
+The relative layout cache and its admission cache have now been removed. Exact
+final math boxes still use complete structured keys, snapshot caller-owned tag
+spans, and retain their 256-entry/4MiB budget. Different source/width requests
+compute independently, eliminating the copied relative graph and its retention
+cost. The historical table above describes `9ed851df`; the two relative-cache
+rows no longer apply to the current implementation.
+
+A follow-up used three fresh-process, alternating-order runs of the catalog's
+repeated-fraction workload, with 500 samples per run. The median of cold medians
+fell from 0.765ms to 0.670ms, **12.4% faster**. Individual runs still varied:
+before 0.765/0.746/0.821ms and after 0.799/0.670/0.665ms. No tests ran during
+these focused measurements, but other agents remained active on the machine.
+This establishes a targeted saving with the ownership guarantees retained; it
+does not establish that the earlier 13% aggregate regression has been recovered.
+Timing JSON and the current oracle findings are saved locally under
+`artifacts/tex-fuzz/cache-and-oracle-followup/`.
