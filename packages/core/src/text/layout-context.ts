@@ -18,3 +18,8 @@ export function createTextLayoutContext(): TextLayoutContext {
 export function getActiveTextLayoutContext(): TextLayoutContext | null {
   return activeTextLayoutContext;
 }
+
+/** Reusing an engine must also select the reports that engine owns. */
+export function setActiveTextLayoutContext(context: TextLayoutContext): void {
+  activeTextLayoutContext = context;
+}

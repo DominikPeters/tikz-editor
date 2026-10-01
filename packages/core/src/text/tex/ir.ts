@@ -1,4 +1,5 @@
 import type { SyntaxNodeRef } from "@lezer/common";
+import { freezeTexCacheValue, TexWeightedLruCache } from "./cache.js";
 import {
   beamerDocumentParser,
   texFragmentParser,
@@ -839,9 +840,14 @@ const simpleTexMathBySyntaxIndex = new WeakMap<
   TexSyntaxIndex,
   ReadonlyMap<number, SimpleTexMathNode | SimpleTexDisplayMathNode>
 >();
+const paragraphIrCache = new TexWeightedLruCache<string, SimpleTexParagraphIr>(512, 2 * 1024 * 1024);
+const paragraphIrSeen = new TexWeightedLruCache<string, true>(1024, 512 * 1024);
+const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
   readonly listLeftMarginEmByDepth?: readonly number[];
+  /** Identifies all color alias results; change this when any alias changes. */
+  readonly colorResolverCacheKey?: string;
 }
 
 export function getSimpleTexFallbackReason(text: string, width: number): string | null {
@@ -884,9 +890,10 @@ export function analyzeSimpleTexParagraph(
 
 export function parseSimpleTexParagraphIr(
   text: string,
-  resolveColorAlias?: ColorAliasResolver
+  resolveColorAlias?: ColorAliasResolver,
+  options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphIr {
-  return buildSimpleTexParagraphIr(text, resolveColorAlias);
+  return buildSimpleTexParagraphIr(text, resolveColorAlias, options);
 }
 
 export interface SimpleTexSourceProjectionPolicy {
@@ -1157,7 +1164,25 @@ function buildSimpleTexParagraphIr(
   resolveColorAlias?: ColorAliasResolver,
   options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphIr {
-  return buildSimpleTexParagraphIrForRange(
+  // A bare resolver can change its answers without changing its identity.
+  // Only versioned resolvers and finite, value-keyed list settings are shared.
+  const cacheable = text.length <= PARAGRAPH_IR_MAX_SOURCE_LENGTH &&
+    (!resolveColorAlias || options?.colorResolverCacheKey !== undefined) &&
+    (!options?.listLeftMarginEmByDepth || options.listLeftMarginEmByDepth.every(Number.isFinite));
+  const key = cacheable
+    ? JSON.stringify([
+      text,
+      resolveColorAlias ? options?.colorResolverCacheKey : null,
+      options?.listLeftMarginEmByDepth ?? null,
+    ])
+    : null;
+  if (key !== null) {
+    const cached = paragraphIrCache.get(key);
+    if (cached) return cached;
+  }
+  const reused = key !== null && paragraphIrSeen.get(key) === true;
+  if (key !== null && !reused) paragraphIrSeen.set(key, true, key.length * 2 + 64);
+  const ir = buildSimpleTexParagraphIrForRange(
     text,
     0,
     text.length,
@@ -1165,6 +1190,10 @@ function buildSimpleTexParagraphIr(
     resolveColorAlias,
     options
   );
+  if (key !== null && reused) {
+    paragraphIrCache.set(key, ir, freezeTexCacheValue(ir) + key.length * 2);
+  }
+  return ir;
 }
 
 function buildSimpleTexParagraphIrForRange(

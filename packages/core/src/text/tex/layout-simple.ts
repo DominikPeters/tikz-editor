@@ -111,9 +111,10 @@ export function layoutSimpleTexParagraph(
     text,
     options.width,
     options.colorResolver?.resolve.bind(options.colorResolver),
-    options.listProfile
-      ? { listLeftMarginEmByDepth: options.listProfile.leftMarginEmByDepth }
-      : undefined
+    {
+      listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth,
+      colorResolverCacheKey: options.colorResolver?.cacheKey,
+    }
   );
   const fallbackReason = analysis.fallbackReason;
   const usePlaceholderFallback =

@@ -27,7 +27,7 @@ The fixture catalog lives in `scripts/lib/text-engine-bench-cases.ts`.
 | boxes | Frames, overlaps, color boxes, rules, raised text, phantom/smash, vertical skips and penalties |
 | math | Inline math, scripts, accents, operators, fractions, radicals, extensible delimiters, AMS alphabets, text in math, matrices, cases, aligned math, display equations, display align, Beamer sans math |
 | resources | Resolved/missing graphics, contextual image dimensions, color resolver revisions, graphic resolver revisions |
-| cache | Source-map cold layout, shifted source maps with shared layout, remeasurement after cache eviction |
+| cache | Source-map cold layout, shifted source maps with shared layout, paragraph width changes with shared IR, remeasurement after cache eviction |
 | editing | Character-by-character append, insertion, deletion, backspace, undo/redo, styled wrapped text, incomplete-to-complete math |
 | fallback | Incomplete list literal rendering, unsupported-command rejection, empty input |
 
@@ -59,7 +59,7 @@ the JSON `operations` and timing `count` fields give the number of individual ca
 JSON distinguishes:
 
 - `coldMs`: independent render/layout misses or remeasurement after eviction.
-- `editMs`: new states in an edit sequence, including declared incomplete input.
+- `editMs`: new states in a sequence, including text edits, declared incomplete input, and width changes.
 - `layoutReuseMs`: new render entries for shifted source maps after layout priming.
 - `revisitMs`: cached returns to earlier states in a sequence.
 - `warmMs`: immediate repeats of new rendered states.
@@ -184,3 +184,65 @@ Typechecking and production lint passed. The full suite passed with two workers:
 282 files, 4,136 tests (five skipped). An earlier default-concurrency run hit two
 15-second app/store import timeouts and a subsequent listener-count failure; the
 affected files also passed in isolation before the bounded full rerun.
+
+## Bounded caching pass
+
+Paragraph IR now survives changes to width, font size, alignment, and source-map
+position. Its key includes the exact source, list margins by value, and the color
+resolver revision. Unversioned color callbacks bypass this cache. Shaped text uses
+a provider-local cache keyed by owned generated font data, exact size, text, source
+span length, and caret mode; hits rebase source positions and retain the current
+caller font/color. Custom mutable fonts bypass it, and mutable custom lig/kern
+programs are recompiled. Cache state stays out of font-profile serialization, and
+borrowed shaping methods retain their original behavior.
+
+Both caches admit results after their second use and freeze the admitted graphs.
+This avoids preparing immutable results for most unique edits. Generated shaping
+metrics are also frozen; caller-owned resolver, role, font, and list settings are
+never frozen. The caches are bounded by entry count and estimated retained bytes:
+
+| Cache | Entries | Estimated budget | Admission limits |
+| --- | ---: | ---: | --- |
+| Paragraph IR | 512 | 2 MiB | Source up to 16,384 UTF-16 units |
+| Shaped runs, per provider | 2,048 | 2 MiB | Text up to 256 units; source span up to 512 |
+| IR admission keys | 1,024 | 512 KiB | Keys only |
+| Shaping admission keys, per provider | 1,024 | 256 KiB | Keys only |
+| Source-map identities, per engine | 2,048 | 4 MiB | Oversized maps use an exact serialized key |
+| Equivalent Beamer math profiles | 64 | 256 KiB | Finite line height |
+
+Render keys no longer round requested dimensions, concatenate resolver revisions,
+or rely on unchecked 32-bit source-map hashes. Exact source-map equality includes
+projection bounds and produces tokens that are never recycled; eviction causes a
+safe miss. Paragraph IDs are unique within their engine's report registry. Custom
+math profiles use object identity rather than their display ID; equivalent owned
+Beamer profiles are canonicalized with line height included. Reusing an engine
+also selects its report context.
+
+Three fresh-process, alternating-order comparisons of the same 68-case catalog
+(40 samples, 5,240 measured calls) reduced the median sum from 1,948 ms to 1,885 ms,
+an additional 3.2%. These measurements compare against the second-pass source.
+
+| Workload / phase | Before (ms) | Cached (ms) |
+| --- | ---: | ---: |
+| Wrapped paragraph, 150pt / cold | 1.130 | 1.005 |
+| Long paragraph, 120pt / cold | 6.361 | 5.920 |
+| Paragraph width changes / new state | 0.787 | 0.741 |
+| Ligatures and kerning / cold | 0.163 | 0.151 |
+| Nested styles, sizes, colors / cold | 0.367 | 0.330 |
+| Label edit sequence / edit miss | 0.096 | 0.093 |
+| Tiny word / cold | 0.189 | 0.230 |
+
+Caching has bookkeeping costs: the tiny-word median increased by 22%, about
+0.04 ms. No other rendering miss phase increased by more than 15% in these runs.
+Sub-millisecond comparisons remain sensitive to JIT and scheduling, and the
+aggregate describes this catalog rather than browser latency.
+
+Validation matched 12,000 seeded shaping/IR comparisons and all 524 captured engine
+states, normalizing only opaque keys and paragraph IDs. Regression tests cover
+eviction, frozen shared arrays, mutable custom inputs, exact dimensions, resolver
+separators, a reproduced source-map hash collision, projection bounds, profile
+identity, report ownership, serialization, and borrowed methods. An isolated
+snapshot of `be61f1be` plus this pass passed all 289 test files (4,218 tests; five
+skipped), with two workers and a 30-second test timeout. The final compatibility
+adjustments also passed 25 targeted tests. Typechecking, the coordinate-type guard,
+production lint, and lint for the new tests passed in that snapshot.

@@ -28,5 +28,8 @@ describe("open example preview rendering", () => {
 });
 
 function hashText(value: string | null): string {
-  return createHash("sha256").update(value ?? "").digest("hex");
+  // Paragraph IDs identify live cache entries, and can vary with cache warm-up
+  // and render order. Keep comparing all geometry, glyphs, and source spans.
+  const normalized = (value ?? "").replace(/data-paragraph-id="tex:[a-z0-9]+"/g, 'data-paragraph-id="tex:paragraph"');
+  return createHash("sha256").update(normalized).digest("hex");
 }

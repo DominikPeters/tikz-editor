@@ -8,6 +8,9 @@ import {
   type TexTextFontProfile,
 } from "../../text/tex/index.js";
 import type { BeamerThemeFont } from "./types.js";
+import { TexWeightedLruCache } from "../../text/tex/cache.js";
+
+const mathProfiles = new TexWeightedLruCache<string, TexMathFontProfile>(64, 64 * 4096);
 
 /**
  * Adapt a resolved Beamer font role to the generic LuaLaTeX text frontend.
@@ -18,6 +21,8 @@ import type { BeamerThemeFont } from "./types.js";
 export function createBeamerTexTextFontProfile(
   role: BeamerThemeFont
 ): TexTextFontProfile {
+  // The resolver closes over an owned snapshot, not the mutable theme role.
+  role = { ...role };
   const normalize = (state: SimpleTexFontState): SimpleTexFontState => {
     if (state.family !== "normal") {
       return state;
@@ -71,9 +76,17 @@ export function createBeamerTexTextFontProfile(
 export function createBeamerTexMathFontProfile(
   role: BeamerThemeFont
 ): TexMathFontProfile {
+  const key = Number.isFinite(role.lineHeightPt) && !Object.is(role.lineHeightPt, -0)
+    ? JSON.stringify([role.family, role.series, role.shape, role.lineHeightPt])
+    : null;
+  if (key !== null) {
+    const cached = mathProfiles.get(key);
+    if (cached) return cached;
+  }
+  role = { ...role };
   const base = luaLatexAmsMathFontProfile;
   const textFontProfile = createBeamerTexTextFontProfile(role);
-  return {
+  const profile: TexMathFontProfile = {
     ...base,
     id: `${base.id}-beamer-${role.family}-${role.series}-${role.shape}`,
     label: `${base.label} with Beamer font substitutions`,
@@ -140,4 +153,11 @@ export function createBeamerTexMathFontProfile(
       );
     },
   };
+  if (key !== null) {
+    Object.freeze(textFontProfile);
+    Object.freeze(profile.layoutParameters);
+    Object.freeze(profile);
+    mathProfiles.set(key, profile, 4096);
+  }
+  return profile;
 }

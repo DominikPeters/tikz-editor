@@ -145,7 +145,11 @@ function buildLigKernMap(rules: readonly GeneratedTexLigKern[]): Map<number, Lig
         : { kind: "kern", width: value }
     );
   }
-  ligKernMapCache.set(rules, map);
+  // Custom providers may edit their rules in place. Only immutable programs
+  // can safely reuse a compiled map; generated fonts are frozen by the cache.
+  if (Object.isFrozen(rules) && rules.every(Object.isFrozen)) {
+    ligKernMapCache.set(rules, map);
+  }
   return map;
 }
 

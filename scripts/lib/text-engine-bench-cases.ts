@@ -184,4 +184,10 @@ export const TEXT_ENGINE_BENCH_CASES: readonly TextEngineBenchCase[] = [
   fixture("incomplete list literal", "fallback", String.raw`\begin{enumerate}\item Alpha {i}`, { request: { textWidthPt: 150 }, expected: "literal", requiredSvg: ['data-tex-literal="malformed-input"'] }),
   fixture("unsupported command rejection", "fallback", String.raw`Alpha {i} \noindent Beta`, { expected: "null" }),
   fixture("empty input rejection", "fallback", "   ", { expected: "null" }),
+  {
+    name: "paragraph width changes with shared IR", group: "cache", mode: "sequence",
+    steps: ({ token }) => [80, 150, 300, 210].map((textWidthPt) => ({
+      request: textBenchRequest(paragraph.replaceAll("{i}", token), { textWidthPt }),
+    })),
+  },
 ];

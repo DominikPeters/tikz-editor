@@ -7,8 +7,12 @@ import type {
   ShapedTexTextRun,
   TexMetricProvider,
 } from "./types.js";
+import { TexShapedTextCache } from "../shaping/cache.js";
 import { shapeOt1Text } from "../shaping/shape.js";
 import { texLength } from "../coordinates.js";
+
+// Keep state out of serializable font profiles and support borrowed methods.
+const shapedTextCaches = new WeakMap<object, TexShapedTextCache>();
 
 export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmr10",
@@ -121,9 +125,15 @@ export type DefaultComputerModernMathFont = typeof DEFAULT_COMPUTER_MODERN_MATH_
 export type ResolveComputerModernFontOptions = ResolveTexFontOptions;
 
 export class ComputerModernTexMetricProvider implements TexMetricProvider {
+  public constructor() {
+    shapedTextCaches.set(this, new TexShapedTextCache());
+  }
+
   public resolveFont(options: ResolveComputerModernFontOptions = {}): ResolvedTexFont {
     const id = options.fontId ?? "cmr10";
-    const data = COMPUTER_MODERN_OT1_FONTS[id] as GeneratedTexFont | undefined;
+    const data = Object.hasOwn(COMPUTER_MODERN_OT1_FONTS, id)
+      ? COMPUTER_MODERN_OT1_FONTS[id] as GeneratedTexFont | undefined
+      : undefined;
     if (!data) {
       throw new Error(`Computer Modern font '${id}' is not available in the generated OT1 table.`);
     }
@@ -139,7 +149,7 @@ export class ComputerModernTexMetricProvider implements TexMetricProvider {
     font: ResolvedTexFont = this.resolveFont(),
     options: ShapeTexTextOptions = {}
   ): ShapedTexTextRun {
-    return shapeOt1Text(text, font, options);
+    return shapedTextCaches.get(this)?.shapeText(text, font, options) ?? shapeOt1Text(text, font, options);
   }
 }
 

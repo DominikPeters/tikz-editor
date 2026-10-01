@@ -27,6 +27,7 @@ export type NodeTextMeasureRequest = {
 
 /** Resolves document-local xcolor names without rewriting the TeX source. */
 export type NodeTextColorResolver = {
+  /** Identifies all resolved colors, including document scope and revision. */
   readonly cacheKey: string;
   resolve(name: string): string | null;
 };

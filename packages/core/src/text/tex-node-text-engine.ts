@@ -49,8 +49,10 @@ import {
 } from "./source-map.js";
 import {
   createTextLayoutContext,
+  setActiveTextLayoutContext,
   type TextLayoutContext,
 } from "./layout-context.js";
+import { TexWeightedLruCache } from "./tex/cache.js";
 
 export { renderTexVListSvgMetadata };
 
@@ -86,8 +88,9 @@ const LATEX_NORMAL_STRUT_HEIGHT_EM = 0.85;
 const RENDER_CACHE_LIMIT = 2048;
 const TEX_LAYOUT_CACHE_LIMIT = 512;
 const VALIDATION_CACHE_LIMIT = 512;
+const SOURCE_MAP_KEY_CACHE_BYTES = 4 * 1024 * 1024;
 let sharedEnginePromise: Promise<NodeTextEngine> | null = null;
-const profiledEnginePromises = new Map<string, Promise<NodeTextEngine>>();
+const profiledEnginePromises = new WeakMap<TexMathFontProfile, Promise<NodeTextEngine>>();
 
 export type TexNodeTextEngineOptions = {
   /**
@@ -105,7 +108,7 @@ export async function createTexNodeTextEngine(
     sharedEnginePromise ??= initializeEngine(options);
     return sharedEnginePromise;
   }
-  const key = options.mathFontProfile.id;
+  const key = options.mathFontProfile;
   let promise = profiledEnginePromises.get(key);
   if (!promise) {
     promise = initializeEngine(options);
@@ -123,6 +126,12 @@ async function initializeEngine(
   const renderCache = new Map<string, CachedRenderEntry>();
   const layoutCache = new Map<string, TexSharedLayout>();
   const validationCache = new Map<string, NodeTextValidationIssue | null>();
+  const sourceMapKeys = new TexWeightedLruCache<string, string>(RENDER_CACHE_LIMIT, SOURCE_MAP_KEY_CACHE_BYTES);
+  let sourceMapSequence = 0n;
+  let paragraphSequence = 0n;
+  // Reports share an engine-local registry. IDs must be collision-free there;
+  // hashes of source maps or layout keys cannot provide that guarantee.
+  const nextParagraphId = () => `tex:${++paragraphSequence}`;
 
   return {
     validate(text: string): NodeTextValidationIssue | null {
@@ -150,6 +159,7 @@ async function initializeEngine(
     },
 
     measure(request: NodeTextMeasureRequest) {
+      setActiveTextLayoutContext(layoutContext);
       const prepared = normalizeTexTextInput(request.text, {
         fontStyle: request.fontStyle,
         fontWeight: request.fontWeight,
@@ -170,25 +180,38 @@ async function initializeEngine(
         request.textWidthPt,
         request.alignment
       );
-      const graphicsCacheKey = request.graphicsResolver?.cacheKey ?? null;
-      const resolverCacheKey = [
-        graphicsCacheKey,
-        request.colorResolver?.cacheKey ?? null,
-      ].filter((value): value is string => value !== null).join("|") || null;
       const layoutCacheKey = measurementKey(
         layoutInput.text,
         request.textWidthPt,
         layoutInput.font,
         fontSizePt,
         alignment,
-        resolverCacheKey
+        request.graphicsResolver?.cacheKey ?? null,
+        request.colorResolver?.cacheKey ?? null
       );
-      const sourceMapAnchor = layoutInput.sourceMap
-        ? texSourceMapAnchor(layoutInput.sourceMap)
-        : null;
-      const cacheKey = sourceMapAnchor == null
+      let sourceMapKey: string | null = null;
+      if (layoutInput.sourceMap) {
+        const serialized = JSON.stringify([
+          layoutInput.sourceMap.inputText.length,
+          layoutInput.sourceMap.charOrigins,
+          layoutInput.sourceMap.boundaryOrigins,
+        ]);
+        sourceMapKey = sourceMapKeys.get(serialized) ?? null;
+        if (sourceMapKey === null) {
+          if (serialized.length * 2 + 64 <= SOURCE_MAP_KEY_CACHE_BYTES) {
+            // Exact string equality interns maps; tokens are never recycled.
+            // Evicting an interned map can cause a miss, never a false hit.
+            sourceMapKey = (++sourceMapSequence).toString(36);
+            sourceMapKeys.set(serialized, sourceMapKey, serialized.length * 2 + 64);
+          } else {
+            // Very large maps retain exact lookup without another cache copy.
+            sourceMapKey = serialized;
+          }
+        }
+      }
+      const cacheKey = sourceMapKey === null
         ? layoutCacheKey
-        : `${layoutCacheKey}|sm:${sourceMapAnchor}`;
+        : `${layoutCacheKey}|sm:${sourceMapKey}`;
 
       let entry = getCappedMapValue(renderCache, cacheKey) ?? null;
       if (!entry) {
@@ -207,6 +230,7 @@ async function initializeEngine(
           graphicsResolver: request.graphicsResolver,
           colorResolver: request.colorResolver,
           mathFontProfile: options.mathFontProfile,
+          nextParagraphId,
         });
         if (!entry) {
           return null;
@@ -227,6 +251,7 @@ async function initializeEngine(
     },
 
     renderFromCache(cacheKey: string): NodeTextRenderPayload | null {
+      setActiveTextLayoutContext(layoutContext);
       return getCappedMapValue(renderCache, cacheKey)?.payload ?? null;
     },
   };
@@ -243,6 +268,7 @@ function buildTexSharedLayout(params: {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
   readonly mathFontProfile?: TexMathFontProfile;
+  readonly nextParagraphId: () => string;
 }): TexSharedLayout | null {
   const cached = getCappedMapValue(params.layoutCache, params.layoutCacheKey);
   if (cached) {
@@ -263,7 +289,7 @@ function buildTexSharedLayout(params: {
     texLength(params.fontSizePt),
     metricProvider
   );
-  const paragraphId = `tex:${stableHashString(params.layoutCacheKey)}`;
+  const paragraphId = params.nextParagraphId();
 
   const runLayout = (
     width: TexLength,
@@ -409,6 +435,7 @@ function buildTexTextCacheEntry(params: {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly colorResolver?: NodeTextColorResolver;
   readonly mathFontProfile?: TexMathFontProfile;
+  readonly nextParagraphId: () => string;
 }): CachedRenderEntry | null {
   const shared = buildTexSharedLayout(params);
   if (!shared) {
@@ -416,7 +443,7 @@ function buildTexTextCacheEntry(params: {
   }
 
   const { contentWidthPt, renderFont } = shared;
-  const paragraphId = `tex:${stableHashString(params.cacheKey)}`;
+  const paragraphId = params.nextParagraphId();
   const report = {
     ...remapParagraphLayoutReportSourceMap(shared.report, params.sourceMap),
     paragraphId,
@@ -699,34 +726,20 @@ function measurementKey(
   font: TextFontOptions,
   fontSizePt: number,
   alignment: NodeTextParagraphAlignment | null,
-  resolverCacheKey: string | null
+  graphicsResolverCacheKey: string | null,
+  colorResolverCacheKey: string | null
 ): string {
   return JSON.stringify({
     text,
-    textWidthPt:
-      textWidthPt == null ? null : Number(textWidthPt.toFixed(6)),
-    fontSizePt: Number(fontSizePt.toFixed(6)),
+    textWidthPt: textWidthPt == null ? null : String(textWidthPt),
+    fontSizePt,
     alignment,
-    resolverCacheKey,
+    graphicsResolverCacheKey,
+    colorResolverCacheKey,
     fontStyle: font.fontStyle,
     fontWeight: font.fontWeight,
     fontFamily: font.fontFamily,
   });
-}
-
-function texSourceMapAnchor(sourceMap: TextSourceMap): string {
-  return stableHashString(
-    JSON.stringify([sourceMap.charOrigins, sourceMap.boundaryOrigins])
-  );
-}
-
-function stableHashString(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
 }
 
 function setCappedMapValue<K, V>(
