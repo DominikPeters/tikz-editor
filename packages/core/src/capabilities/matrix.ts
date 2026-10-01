@@ -659,6 +659,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "Headless source scanner inventories Beamer frames, sections, frame headers, preamble metadata, and nested TikZ roots. Frame content lowering and rendering are tracked by later Beamer phases."
   },
+  beamer_source_placeholders: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["beamer_source_placeholders"],
+    notes:
+      "Beamer frame and column flow render bounded source cards for unsupported environments and failed paragraph layout, with overlay-aware geometry and click-to-source selection. Nested block-body and inline fallback remain separate."
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

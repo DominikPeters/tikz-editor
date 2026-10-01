@@ -405,20 +405,22 @@ describe("Beamer canvas editing contract", () => {
       );
     });
 
-    it("falls back to an unsupported body for fragile verbatim frames without editing surfaces", async () => {
+    it("shows a source card for verbatim while preserving surrounding prose", async () => {
       expect(corpus.document.frames[4].options?.fragile).toBe(true);
       const page = await corpus.renderFrame({ frameIndex: 4, step: 1 });
-      // The whole body renders as the unsupported-body placeholder: no
-      // body paragraphs, no editable spans, no atoms — so no canvas
-      // session can anchor inside it (the title stays editable).
-      expect(page.layout.paragraphs.map((p) => p.role)).toEqual(["frame-title"]);
+      // The listing is an atomic source card. Supported prose stays editable.
+      expect(page.layout.paragraphs.map((p) => p.role)).toEqual(["frame-title", "body"]);
+      const card = page.layout.items.find((item) => item.kind === "unsupported")!;
+      expect(corpusSource.slice(card.sourceSpan.from, card.sourceSpan.to)).toContain("loss.backward()");
+      expect(page.svg.svg).toContain("data-beamer-placeholder=");
       expect(
         page.diagnostics.some(
-          (diagnostic) => diagnostic.code === "beamer-render-unsupported-body"
+          (diagnostic) => diagnostic.code === "beamer-render-unsupported-flow-node"
         )
       ).toBe(true);
       expect(editableSlices(page.layout, corpusSource)).toEqual([
         "Verbatim listing",
+        "Prose before the listing",
       ]);
     });
   });

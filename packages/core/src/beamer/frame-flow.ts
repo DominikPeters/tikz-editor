@@ -50,6 +50,20 @@ export function positionPreparedFrameFlow(
       previousDepth = 0;
       continue;
     }
+    if (item.kind === "unsupported") {
+      const contentTop = cursor + TEX_LINE_SKIP_PT;
+      const visualBottom = contentTop + item.height;
+      items.push({
+        item,
+        contentTop,
+        referenceY: visualBottom,
+        visualTop: contentTop,
+        visualBottom,
+      });
+      cursor = visualBottom;
+      previousDepth = 0;
+      continue;
+    }
     if (item.kind === "paragraph") {
       const glue = verticalInterlineGlue(
         previousDepth,

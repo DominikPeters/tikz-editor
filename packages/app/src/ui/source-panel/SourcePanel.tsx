@@ -769,6 +769,9 @@ export function SourcePanel() {
     source,
     sourceRevision,
     documentKind,
+    activeDocumentId,
+    deckObjectSelection,
+    showSourcePanel,
     lastEditPatches,
     lastEditPatchBaseRevision,
     activeRootId,
@@ -783,6 +786,9 @@ export function SourcePanel() {
     source: s.source,
     sourceRevision: s.sourceRevision,
     documentKind: s.documentKind,
+    activeDocumentId: s.activeDocumentId,
+    deckObjectSelection: s.deckObjectSelection,
+    showSourcePanel: s.showSourcePanel,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeRootId: s.activeRootId,
@@ -915,9 +921,9 @@ export function SourcePanel() {
         return;
       }
 
-      // Drive active-figure switching from CodeMirror selection updates so
-      // keyboard navigation and all cursor moves behave consistently.
-      if (update.view.hasFocus) {
+      // Follow caret movement across figures. Skip edits (including undo)
+      // because the root inventory still describes the previous source.
+      if (update.view.hasFocus && !update.docChanged) {
         const head = clamp(update.state.selection.main.head, 0, update.state.doc.length);
         const targetFigure = figuresRef.current.find((figure) => head >= figure.span.from && head <= figure.span.to) ?? null;
         if (targetFigure && targetFigure.id !== activeRootIdRef.current) {
@@ -1096,6 +1102,37 @@ export function SourcePanel() {
     view.dispatch({ effects: highlightCompartment.reconfigure(buildHighlightExtension(darkMode)) });
   }, [darkMode]);
 
+
+  const revealedPlaceholderSelectionRef = useRef<typeof deckObjectSelection>(null);
+  useEffect(() => {
+    const view = viewRef.current;
+    const frame = snapshot.deck?.activeFrame;
+    if (
+      !view ||
+      !showSourcePanel ||
+      !deckObjectSelection ||
+      revealedPlaceholderSelectionRef.current === deckObjectSelection ||
+      deckObjectSelection.documentId !== activeDocumentId ||
+      deckObjectSelection.frameId !== frame?.frameId ||
+      snapshot.source !== source
+    ) {
+      return;
+    }
+    const item = frame.layout.items.find((candidate) =>
+      candidate.kind === "unsupported" && candidate.id === deckObjectSelection.objectId
+    );
+    if (!item || item.visibility === "hidden") {
+      return;
+    }
+    revealedPlaceholderSelectionRef.current = deckObjectSelection;
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: item.sourceSpan.from, head: item.sourceSpan.to },
+      annotations: [Transaction.addToHistory.of(false)],
+      scrollIntoView: true
+    });
+    view.focus();
+  }, [activeDocumentId, deckObjectSelection, showSourcePanel, snapshot.deck, snapshot.source, source]);
 
   // ── Canvas selection → source selection sync ────────────────────────────────
   useEffect(() => {

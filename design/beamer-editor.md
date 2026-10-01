@@ -706,6 +706,34 @@ tarballs already are). Opening a `.tex` roots the project at its directory.
 
 ## Fallback Layers
 
+### Bounded source cards (2026-10-01)
+
+The frame/column implementation covers:
+
+1. Preserve unsupported, matched environments as source-backed flow nodes
+   before extracting any supported descendants. Ask the native text frontend
+   whether it recognizes the opening; leave math, lists, inline wrappers and
+   nested block bodies with their existing frontend.
+2. Carry cards through frame and column layout. Reserve their estimated height
+   for covered overlays, omit removed overlays, and paint only visible cards.
+   Failed paragraph layout and whole-body failure also receive source cards;
+   empty frames and entirely removed content stay empty.
+3. Paint one shared SVG card in the canvas and thumbnails: a label and up to
+   three abbreviated lines of escaped literal source. Preview scanning is
+   capped at 512 characters and card height at 54pt. These dimensions are an
+   editor estimate, not a claim about the unsupported construct's TeX size.
+4. Publish the original source span and selectable geometry. Clicking a card
+   opens the source panel, selects the exact source and focuses the editor.
+   Revealing a card does not edit source or add an undo entry. Stale snapshots
+   cannot request selection against a newer source revision.
+5. Check mixed flow, columns, unsupported outer containers, overlays, bounded
+   previews, markup escaping, source reveal, replacement and undo. Existing
+   Beamer rendering tests protect supported math and text behavior.
+
+This completes the basic frame/column source-card path. Per-inline failure
+cards and cards nested inside supported block bodies remain out of scope,
+with the native text renderer retaining its existing fallback behavior.
+
 Failure decomposes by granularity; each layer has its own answer and none
 requires TeX:
 
@@ -1264,12 +1292,11 @@ found two gaps in the headless surface:
    `renderBeamerFrame`/`renderBeamerFramePages` are one-shot wrappers over it;
    equivalence, error behavior, and the one-parse invariant are covered by
    `test/beamer-prepared-document.spec.ts`.
-2. **Block/inline fallback is not yet a placeholder.** Unsupported flow
-   nodes are currently dropped with `beamer-render-unsupported-flow-node`
-   warnings rather than rendered as the estimated-size source-snippet box
-   defined under Fallback Layers; only whole-body failure produces an
-   `unsupported` layout item. Sorter fallback cards and per-frame coverage
-   reporting depend on unsupported content being an item, not an omission.
+2. **Basic frame/column source cards are implemented (2026-10-01).**
+   Unsupported flow nodes retain their source spans and estimated geometry,
+   and paint a bounded source snippet. The shared renderer also supplies
+   thumbnails. Inline and nested block-body cards, sorter-specific fallback
+   presentation and per-frame coverage reporting remain separate work.
 
 **Root generalization is a re-architecture pass, not a bolt-on.** The app
 encodes "a document is a list of tikzpictures" through ad-hoc mechanisms
@@ -1334,7 +1361,7 @@ keystroke and needs `TreeFragment`-backed incremental CST parsing plus
 frame-level IR reuse across revisions. The navigator is
 still the original horizontal `FigureNavigator`, not the planned flexible
 root navigator with section headers, grid/vertical modes, fallback cards,
-and drag sorting. Block/inline source-card placeholders, chrome-level
+and drag sorting. Inline and nested block-body source cards, chrome-level
 diagnostic badges, deck-aware inspector panes, and a dedicated
 open→no-op→byte-identical Beamer round-trip test also remain.
 

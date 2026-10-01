@@ -1,0 +1,71 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage{tcolorbox}
+
+% Open this file in the TikZ editor's Beamer view.
+% Click a grey source card to select its original LaTeX in the source panel.
+% Replace the selected environment with plain text, then try Undo.
+% On the last two slides, advance the overlay step to reveal the card.
+
+\begin{document}
+
+\begin{frame}[t]{Click a source card}
+  This paragraph stays editable on the canvas.
+
+  \begin{tcolorbox}[title=An unsupported environment]
+    This box appears as a source card in the editor.
+    Click the card to select this entire environment.
+  \end{tcolorbox}
+
+  The text after the card stays visible and editable too.
+\end{frame}
+
+\begin{frame}[t]{Source cards inside columns}
+  \begin{columns}[t]
+    \begin{column}{.48\textwidth}
+      Text before the card.
+
+      \begin{tcolorbox}[title=Preserved source]
+        \begin{itemize}
+          \item This nested list belongs to the box.
+          \item The whole box is selected together.
+        \end{itemize}
+      \end{tcolorbox}
+
+      Text after the card.
+    \end{column}
+    \begin{column}{.48\textwidth}
+      This column renders normally.
+
+      \begin{itemize}
+        \item Editable list text
+        \item Native math: \(E = mc^2\)
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Overlay: reserve space}
+  Advance to step 2 to reveal the card.
+
+  \begin{uncoverenv}<2>
+    \begin{tcolorbox}
+      This card is hidden on step 1, but keeps its space.
+    \end{tcolorbox}
+  \end{uncoverenv}
+
+  This paragraph stays in the same position on both steps.
+\end{frame}
+
+\begin{frame}[t]{Overlay: remove and reflow}
+  Advance to step 2 to insert the card.
+
+  \begin{onlyenv}<2>
+    \begin{tcolorbox}
+      This card takes up space only on step 2.
+    \end{tcolorbox}
+  \end{onlyenv}
+
+  This paragraph moves down when the card appears.
+\end{frame}
+
+\end{document}

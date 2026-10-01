@@ -1,5 +1,6 @@
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import { parseSimpleTexInlineNodes } from "../text/tex/ir.js";
 import {
   concatMappedText,
   createGeneratedMappedText,
@@ -31,7 +32,7 @@ import type {
   BeamerVerticalSpaceBodyNode,
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
-import { scanBeamerFrameOverlays } from "./overlay.js";
+import { scanBeamerFrameOverlays, type BeamerOverlayModel } from "./overlay.js";
 import {
   resolveBeamerTheoremOccurrences,
   type BeamerTheoremOccurrence,
@@ -78,12 +79,32 @@ export function parseBeamerFrameBody(
       : new Map<number, BeamerTheoremOccurrence>());
   const theoremTemplate =
     params.document?.preamble.theoremTemplate ?? "default";
+  const overlays = scanBeamerFrameOverlays(source, frame, context.syntax);
   const children: BeamerFrameBodyNode[] = [];
   let cursor = frame.bodySpan.from;
   let nodeIndex = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    const unsupportedEndIndex = findUnsupportedEnvironmentEndIndex(
+      context,
+      tokens,
+      index,
+      overlays,
+      theoremOccurrences
+    );
+    if (unsupportedEndIndex >= 0) {
+      pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
+      children.push({
+        kind: "unsupported",
+        id: `${frame.id}:unsupported:${token.span.from}`,
+        span: { from: token.span.from, to: tokens[unsupportedEndIndex].span.to },
+        message: `The ${token.name} environment is not supported in this preview.`,
+      });
+      cursor = tokens[unsupportedEndIndex].span.to;
+      index = unsupportedEndIndex;
+      continue;
+    }
     if (
       token.kind !== "begin" ||
       (token.name !== "columns" &&
@@ -139,6 +160,7 @@ export function parseBeamerFrameBody(
             nodeIndex,
             theoremOccurrences,
             theoremTemplate,
+            overlays,
           })
         : isProofEnvironment(token.name) ||
             theoremOccurrences.has(token.span.from)
@@ -174,7 +196,7 @@ export function parseBeamerFrameBody(
     frameId: frame.id,
     span: frame.bodySpan,
     children: splitStandaloneFrameCommands(context, frame.id, children),
-    overlays: scanBeamerFrameOverlays(source, frame, context.syntax),
+    overlays,
     diagnostics,
   };
 }
@@ -722,6 +744,7 @@ function parseColumns(params: {
   nodeIndex: number;
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
   theoremTemplate: BeamerTheoremTemplateVariant;
+  overlays: BeamerOverlayModel;
 }): BeamerColumnsBodyNode {
   const {
     context,
@@ -801,7 +824,8 @@ function parseColumns(params: {
         tokens.slice(index + 1, endIndex),
         diagnostics,
         theoremOccurrences,
-        theoremTemplate
+        theoremTemplate,
+        params.overlays
       ),
     });
     index = endIndex;
@@ -881,13 +905,39 @@ function parseColumnFlow(
   tokens: readonly BeamerEnvironmentBoundary[],
   diagnostics: Diagnostic[],
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>,
-  theoremTemplate: BeamerTheoremTemplateVariant
+  theoremTemplate: BeamerTheoremTemplateVariant,
+  overlays: BeamerOverlayModel
 ): BeamerColumnFlowNode[] {
   const { source } = context;
   const structural: Array<{
     span: Span;
     node: BeamerColumnFlowNode;
   }> = [];
+  // Preserve unsupported outer environments before extracting nested lists or pictures.
+  for (let index = 0; index < tokens.length; index += 1) {
+    const endIndex = findUnsupportedEnvironmentEndIndex(
+      context,
+      tokens,
+      index,
+      overlays,
+      theoremOccurrences
+    );
+    if (endIndex < 0) {
+      continue;
+    }
+    const begin = tokens[index];
+    const span = { from: begin.span.from, to: tokens[endIndex].span.to };
+    structural.push({
+      span,
+      node: {
+        kind: "unsupported",
+        id: `${frameId}:column:${columnIndex}:unsupported:${span.from}`,
+        span,
+        message: `The ${begin.name} environment is not supported in this preview.`,
+      },
+    });
+    index = endIndex;
+  }
   let nodeIndex = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
@@ -1104,4 +1154,101 @@ function trimSpan(source: string, span: Span): Span {
     to -= 1;
   }
   return { from, to };
+}
+
+function isInsideNativeTextFlow(
+  context: BeamerSyntaxContext,
+  offset: number,
+  overlays: BeamerOverlayModel
+): boolean {
+  let node = context.syntax.tree.resolveInner(offset + 1, 1);
+  while (node.parent) {
+    if (["InlineMath", "DisplayMath", "MathEnvironment"].includes(node.name)) {
+      return true;
+    }
+    if (
+      node.name === "Group" &&
+      node.from < offset &&
+      !overlays.commands.some((command) =>
+        command.branches.some((branch) =>
+          branch.span.from === node.from && branch.span.to === node.to
+        )
+      )
+    ) {
+      // Overlay argument groups can contain frame flow; other groups stay inline.
+      return true;
+    }
+    // Keep nested failures inside supported paragraph containers in their own frontend.
+    if (node.name === "Environment" && node.from < offset) {
+      const boundary = context.syntax.environmentBoundaryByStart.get(node.from);
+      if (
+        boundary &&
+        (LIST_ENVIRONMENTS.has(boundary.name) || [
+          "minipage",
+          "quote",
+          "quotation",
+          "center",
+          "flushleft",
+          "flushright",
+        ].includes(boundary.name))
+      ) {
+        return true;
+      }
+    }
+    node = node.parent;
+  }
+  return false;
+}
+
+function findUnsupportedEnvironmentEndIndex(
+  context: BeamerSyntaxContext,
+  tokens: readonly BeamerEnvironmentBoundary[],
+  index: number,
+  overlays: BeamerOverlayModel,
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
+): number {
+  const begin = tokens[index];
+  if (
+    begin.kind !== "begin" ||
+    [
+      "columns",
+      "column",
+      "tikzpicture",
+      "center",
+      "onlyenv",
+      "uncoverenv",
+      "visibleenv",
+      "invisibleenv",
+    ].includes(begin.name) ||
+    BLOCK_ENVIRONMENTS.has(begin.name as BeamerBlockEnvironment) ||
+    isProofEnvironment(begin.name) ||
+    theoremOccurrences.has(begin.span.from) ||
+    isInsideNativeTextFlow(context, begin.span.from, overlays)
+  ) {
+    return -1;
+  }
+  const isOverlaySyntax = overlays.commands.some((command) =>
+    command.syntaxSpans.some((span) =>
+      span.from === begin.span.from && span.to >= begin.span.to
+    )
+  );
+  if (isOverlaySyntax) {
+    return -1;
+  }
+  const endIndex = matchingEnvironmentEnd(tokens, index);
+  if (endIndex < 0) {
+    return -1;
+  }
+  // Reuse native recognition so supported text environments keep their renderer.
+  const firstNode = parseSimpleTexInlineNodes(
+    context.source.slice(begin.span.from, tokens[endIndex].span.to)
+  ).nodes[0];
+  if (
+    firstNode?.kind === "literal" &&
+    firstNode.sourceStart === 0 &&
+    firstNode.reason === "unsupported-command"
+  ) {
+    return endIndex;
+  }
+  return -1;
 }

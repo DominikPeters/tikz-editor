@@ -298,6 +298,10 @@ export const capabilityFixtures: Record<string, string> = {
   node_text_includegraphics: String.raw`\begin{tikzpicture}
   \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
 \end{tikzpicture}`,
+  beamer_source_placeholders: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}Before.\begin{tcolorbox}Unsupported body\end{tcolorbox}After.\end{frame}
+\end{document}`,
   beamer_document_scan: String.raw`\documentclass{beamer}
 \begin{document}
 \section{Introduction}

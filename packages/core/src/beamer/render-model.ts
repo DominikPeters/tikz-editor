@@ -18,6 +18,14 @@ import type {
   BeamerRect,
 } from "./types.js";
 import type { BeamerOverlayVisibility } from "./overlay.js";
+import type { BeamerUnsupportedPlaceholder } from "./unsupported-placeholder.js";
+
+export type PreparedUnsupportedFlowItem = {
+  kind: "unsupported";
+  visibility: BeamerOverlayVisibility;
+  placeholder: BeamerUnsupportedPlaceholder;
+  height: number;
+};
 
 export type LaidParagraph = {
   layout: BeamerParagraphLayout;
@@ -76,6 +84,7 @@ export type PreparedTitlePage = {
 };
 
 export type PreparedColumnFlowItem =
+  | PreparedUnsupportedFlowItem
   | {
       kind: "paragraph";
       visibility: BeamerOverlayVisibility;
@@ -115,6 +124,7 @@ export type PreparedColumnContent = {
 };
 
 export type PreparedFrameFlowItem =
+  | PreparedUnsupportedFlowItem
   | {
       kind: "title-page";
       visibility: BeamerOverlayVisibility;

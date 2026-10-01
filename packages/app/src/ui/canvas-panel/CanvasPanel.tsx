@@ -148,6 +148,7 @@ import { useCanvasViewportEffects } from "./useCanvasViewportEffects";
 import { useCanvasViewportPersistence } from "./useCanvasViewportPersistence";
 import { useBucketFillPreview,type BucketPreviewSession } from "./useBucketFillPreview";
 import type { ClientPoint,SvgBounds,ViewportPoint,WorldPoint } from "../coords/types";
+import { getDockLayoutHandle } from "../DockLayout";
 import { useEditorCommandRuntime,type CommandOrigin } from "../editor-command-runtime";
 import { isMacLikePlatform } from "../key-labels";
 import {
@@ -1494,8 +1495,27 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   const selectDeckObject = useCallback(
     (objectId: string | null) => {
-      if (!deckActiveFrame) {
+      if (!deckActiveFrame || snapshot.source !== source) {
         return;
+      }
+      const placeholder = deckActiveFrame.layout.items.find((item) =>
+        item.id === objectId && item.kind === "unsupported"
+      );
+      if (placeholder) {
+        if (!useEditorStore.getState().showSourcePanel) {
+          const dock = getDockLayoutHandle();
+          if (dock) {
+            dock.togglePanel("source");
+          } else {
+            dispatch({ type: "TOGGLE_PANEL", panel: "source" });
+          }
+        }
+        // Clear first so clicking the same card triggers source selection again.
+        dispatch({
+          type: "SET_DECK_OBJECT_SELECTION",
+          frameId: deckActiveFrame.frameId,
+          objectId: null
+        });
       }
       dispatch({
         type: "SET_DECK_OBJECT_SELECTION",
@@ -1503,7 +1523,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         objectId
       });
     },
-    [deckActiveFrame, dispatch]
+    [deckActiveFrame, dispatch, snapshot.source, source]
   );
 
 
@@ -1558,7 +1578,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     for (const node of deckObjectIndex.nodes) {
       if (node.kind === "block" || node.kind === "columns" || node.kind === "column") {
         under.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
-      } else if (node.kind === "graphics" || node.kind === "tikzpicture") {
+      } else if (node.kind === "graphics" || node.kind === "tikzpicture" || node.kind === "unsupported") {
         over.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
       }
     }
@@ -2288,6 +2308,10 @@ export const CanvasPanel = memo(function CanvasPanel({
    */
   const openDeckObjectTextSession = useCallback(
     (node: BeamerObjectNode) => {
+      if (node.kind === "unsupported") {
+        selectDeckObject(node.id);
+        return;
+      }
       const layout = deckActiveFrame?.layout;
       if (!layout) {
         return;
@@ -2324,7 +2348,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       const local = clampLocal(offset);
       startTextEditingSession(target, local, local);
     },
-    [deckActiveFrame, resolveDeckCaretDomain, resolveEditableTextTargetById, startTextEditingSession]
+    [deckActiveFrame, resolveDeckCaretDomain, resolveEditableTextTargetById, selectDeckObject, startTextEditingSession]
   );
 
   // A duplicate's copy only exists after the frame re-renders; remember the

@@ -20,6 +20,7 @@ import type {
  * (item → list → block → column → columns).
  */
 export type BeamerObjectKind =
+  | "unsupported"
   | "block"
   | "columns"
   | "column"
@@ -64,6 +65,7 @@ export type BeamerObjectIndex = {
 };
 
 const LAYOUT_OBJECT_KINDS: ReadonlySet<string> = new Set([
+  "unsupported",
   "block",
   "columns",
   "column",

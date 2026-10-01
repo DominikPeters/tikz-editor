@@ -113,6 +113,11 @@ import type {
   PreparedTitlePage,
   PreparedTitlePageMetadataBox,
 } from "./render-model.js";
+import {
+  prepareUnsupportedPlaceholder,
+  unsupportedPlaceholderMarkup,
+  type BeamerUnsupportedPlaceholder,
+} from "./unsupported-placeholder.js";
 import type {
   BeamerDocumentModel,
   BeamerEmbeddedTikzLayout,
@@ -558,6 +563,15 @@ async function renderBeamerFrameStep(params: {
           embeddedTikz,
           modelBuilder,
         });
+      } else if (placement.item.kind === "unsupported") {
+        emitUnsupportedPlaceholder({
+          placeholder: placement.item.placeholder,
+          x: availableContentBounds.x,
+          y: frameBlockTop + placement.contentTop,
+          parentId: null,
+          items,
+          modelBuilder,
+        });
       } else if (placement.item.kind === "vertical-space") {
         // Explicit vertical material participates in TeX's frame packing but
         // has no painted representation of its own.
@@ -587,19 +601,30 @@ async function renderBeamerFrameStep(params: {
       y: frameBlockTop + visualTop,
       height: Math.max(0, visualBottom - visualTop),
     };
-  } else {
-    items.push({
-      id: `${frame.id}:unsupported-body`,
-      kind: "unsupported",
-      sourceSpan: frame.bodySpan,
-      bounds: contentBounds,
+  } else if (
+    bodyIr.children.some((node) =>
+      resolveBeamerOverlaySpanVisibility(bodyIr.overlays, node.span, step) === "visible" &&
+      hasProjectedContent(source, node.span, bodyIr.overlays, step)
+    )
+  ) {
+    const message = "This Beamer frame body could not be laid out.";
+    const placeholder = prepareUnsupportedPlaceholder(
+      source,
+      { id: `${frame.id}:unsupported-body`, span: frame.bodySpan, message },
+      availableContentBounds.width
+    );
+    emitUnsupportedPlaceholder({
+      placeholder,
+      x: availableContentBounds.x,
+      y: availableContentBounds.y,
       parentId: null,
-      message: "This Beamer frame body has no supported flow content.",
+      items,
+      modelBuilder,
     });
     diagnostics.push({
       severity: "warning",
       code: "beamer-render-unsupported-body",
-      message: "This Beamer frame body has no supported flow content.",
+      message,
       span: frame.bodySpan,
     });
   }
@@ -942,6 +967,24 @@ async function prepareFrameFlow(params: {
       });
       if (paragraph) {
         result.push(paragraph);
+      } else if (hasProjectedContent(params.source, node.span, params.overlays, params.step)) {
+        const placeholder = prepareUnsupportedPlaceholder(
+          params.source,
+          { ...node, message: "This content could not be laid out." },
+          params.textWidth
+        );
+        result.push({
+          kind: "unsupported",
+          visibility,
+          placeholder,
+          height: placeholder.height,
+        });
+        params.diagnostics.push({
+          severity: "warning",
+          code: "beamer-render-unsupported-flow-node",
+          message: placeholder.message,
+          span: node.span,
+        });
       }
       continue;
     }
@@ -1062,6 +1105,13 @@ async function prepareFrameFlow(params: {
       code: "beamer-render-unsupported-flow-node",
       message: node.message,
       span: node.span,
+    });
+    const placeholder = prepareUnsupportedPlaceholder(params.source, node, params.textWidth);
+    result.push({
+      kind: "unsupported",
+      visibility,
+      placeholder,
+      height: placeholder.height,
     });
   }
   return shrinkFrameParagraphGlueToAvailableHeight(result, {
@@ -2411,6 +2461,17 @@ function emitPreparedColumns(params: {
           (preparedColumn.flow[flowIndex + 1]
             ? flowItem.block.plan.geometry.afterSkipPt
             : 0);
+      } else if (flowItem.kind === "unsupported") {
+        emitUnsupportedPlaceholder({
+          placeholder: flowItem.placeholder,
+          x,
+          y: flowY,
+          parentId: columnId,
+          items: params.items,
+          modelBuilder: params.modelBuilder,
+        });
+        childIds.push(flowItem.placeholder.id);
+        flowY += flowItem.height;
       } else {
         emitEmbeddedTikz({
           tikz: flowItem,
@@ -2517,7 +2578,7 @@ async function prepareColumnContent(params: {
       flow.push(prepared);
       if (prepared.kind === "paragraph") {
         previousDepth = paragraphLastLineDepth(prepared.paragraph);
-      } else if (prepared.kind === "tikzpicture") {
+      } else if (prepared.kind === "tikzpicture" || prepared.kind === "unsupported") {
         previousDepth = 0;
       }
     }
@@ -2645,7 +2706,26 @@ async function prepareColumnFlowNode(params: {
       paperWidth,
     });
     if (!paragraph) {
-      return null;
+      if (!hasProjectedContent(source, node.span, overlays, step)) {
+        return null;
+      }
+      const placeholder = prepareUnsupportedPlaceholder(
+        source,
+        { ...node, message: "This content could not be laid out." },
+        width
+      );
+      diagnostics.push({
+        severity: "warning",
+        code: "beamer-render-unsupported-flow-node",
+        message: placeholder.message,
+        span: node.span,
+      });
+      return {
+        kind: "unsupported",
+        visibility,
+        placeholder,
+        height: placeholder.height,
+      };
     }
     return {
       kind: "paragraph",
@@ -2670,7 +2750,13 @@ async function prepareColumnFlowNode(params: {
       message: node.message,
       span: node.span,
     });
-    return null;
+    const placeholder = prepareUnsupportedPlaceholder(source, node, width);
+    return {
+      kind: "unsupported",
+      visibility,
+      placeholder,
+      height: placeholder.height,
+    };
   }
   return prepareEmbeddedTikz({
     source,
@@ -2798,7 +2884,7 @@ function firstFlowReferenceFromTop(
       offset += item.height;
       continue;
     }
-    if (item.kind === "tikzpicture") {
+    if (item.kind === "tikzpicture" || item.kind === "unsupported") {
       return offset + item.height;
     }
     if (item.kind === "block") {
@@ -3732,4 +3818,50 @@ function paragraphRole(
     return "headline";
   }
   return fontRole === "footline" ? "footline" : "body";
+}
+
+function hasProjectedContent(
+  source: string,
+  span: Span,
+  overlays: BeamerOverlayModel,
+  step: number
+): boolean {
+  const projected = projectBeamerOverlayText(
+    createIdentityMappedText(source.slice(span.from, span.to), span.from),
+    span,
+    overlays,
+    step
+  );
+  return projected.mapped.text.replace(/%[^\n]*/gu, "").trim().length > 0;
+}
+
+function emitUnsupportedPlaceholder(params: {
+  placeholder: BeamerUnsupportedPlaceholder;
+  x: number;
+  y: number;
+  parentId: string | null;
+  items: BeamerFrameLayoutItem[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+}): void {
+  const { placeholder } = params;
+  const bounds = {
+    x: params.x,
+    y: params.y,
+    width: placeholder.width,
+    height: placeholder.height,
+  };
+  params.items.push({
+    id: placeholder.id,
+    kind: "unsupported",
+    sourceSpan: placeholder.sourceSpan,
+    bounds,
+    parentId: params.parentId,
+    message: placeholder.message,
+  });
+  params.modelBuilder.addPart({
+    basePartId: placeholder.id,
+    sourceId: placeholder.id,
+    elementId: null,
+    markup: unsupportedPlaceholderMarkup(placeholder, bounds),
+  });
 }

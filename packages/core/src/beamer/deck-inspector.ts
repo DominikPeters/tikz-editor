@@ -106,6 +106,7 @@ function stepForSuffix(suffix: string): number {
 }
 
 const OBJECT_TITLES: Partial<Record<BeamerObjectNode["kind"], string>> = {
+  unsupported: "Unsupported content",
   block: "Block",
   columns: "Columns",
   column: "Column",
@@ -140,6 +141,7 @@ export function buildDeckObjectInspector(
     case "tikzpicture":
       fields.push(...tikzFields(context, node));
       break;
+    case "unsupported":
     case "columns":
       // No editable properties yet (per-divider widths live on the columns).
       break;
