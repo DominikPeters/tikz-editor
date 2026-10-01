@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/lezer-tex",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Reusable Lezer parser for TeX document, fragment, and math syntax",
   "type": "module",
   "license": "MIT",

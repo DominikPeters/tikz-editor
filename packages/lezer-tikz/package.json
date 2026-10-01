@@ -1,6 +1,6 @@
 {
   "name": "@tikz-editor/lezer-tikz",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Lezer parser for TikZ",
   "type": "module",
   "license": "MIT",
