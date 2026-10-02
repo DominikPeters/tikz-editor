@@ -1,3 +1,4 @@
+import { replaceTextFormatSelection } from "../text/format-commands.js";
 import type { Span } from "../ast/types.js";
 import type { BeamerCaretDomain } from "./caret-stops.js";
 import type { BeamerObjectIndex, BeamerObjectNode } from "./object-index.js";
@@ -25,8 +26,10 @@ export type BeamerStructuralEdit = {
 export type BeamerStructuralPatch = {
   /** Non-overlapping edits in document coordinates, sorted by `span.from`. */
   readonly edits: readonly BeamerStructuralEdit[];
-  /** Collapsed caret position in post-edit document coordinates. */
+  /** Caret, or selection start, in post-edit document coordinates. */
   readonly caretOffset: number;
+  /** Retained text selection after indenting a range of list items. */
+  readonly selectionEnd?: number;
 };
 
 export type BeamerStructuralKeyResult = BeamerStructuralPatch | "swallow" | null;
@@ -218,8 +221,12 @@ function itemIsEmpty(source: string, item: BeamerListItemTopology): boolean {
  */
 export function beamerStructuralEnterPatch(
   domain: BeamerCaretDomain,
-  offset: number
+  offset: number,
+  selectionEnd = offset
 ): BeamerStructuralKeyResult {
+  if (selectionEnd !== offset) {
+    return selectedBreakPatch(domain, offset, selectionEnd, false);
+  }
   if (isInsideMath(domain, offset)) {
     return "swallow";
   }
@@ -256,6 +263,47 @@ export function beamerStructuralEnterPatch(
   return {
     edits: [{ span: { from, to }, insert: "\n\n" }],
     caretOffset: from + 2,
+  };
+}
+
+/** Replace selected prose (including sibling item boundaries) in one undo step. */
+function selectedBreakPatch(
+  domain: BeamerCaretDomain,
+  anchor: number,
+  focus: number,
+  soft: boolean
+): BeamerStructuralKeyResult {
+  const from = Math.min(anchor, focus);
+  const to = Math.max(anchor, focus);
+  const first = beamerListItemAt(domain, from);
+  const last = beamerListItemAt(domain, to);
+  // Do not consume half an environment, macro invocation, or math island.
+  if (first?.list !== last?.list || domain.atomSpans.some((span) =>
+    (span.from < from && from < span.to) || (span.from < to && to < span.to)
+  ) || isInsideMath(domain, from) || isInsideMath(domain, to)) return "swallow";
+  if (/\\(?:begin|end)(?![a-zA-Z])/u.test(domain.source.slice(from, to))) return "swallow";
+  const result = soft
+    ? beamerStructuralLineBreakPatch(domain, from)
+    : beamerStructuralEnterPatch(domain, from);
+  if (!result || result === "swallow") return result;
+  const edit = result.edits[0];
+  const replacement = replaceTextFormatSelection(
+    domain.source, edit.span.from, Math.max(edit.span.to, to), edit.insert
+  );
+  if (!replacement) return "swallow";
+  // A single minimal replacement keeps the session's stale-source guard
+  // local, even when an enclosing inline style had to be split.
+  let left = 0;
+  while (left < domain.source.length && domain.source[left] === replacement.nextText[left]) left += 1;
+  let oldRight = domain.source.length;
+  let newRight = replacement.nextText.length;
+  while (oldRight > left && newRight > left && domain.source[oldRight - 1] === replacement.nextText[newRight - 1]) {
+    oldRight -= 1;
+    newRight -= 1;
+  }
+  return {
+    edits: [{ span: { from: left, to: oldRight }, insert: replacement.nextText.slice(left, newRight) }],
+    caretOffset: replacement.selectionStart,
   };
 }
 
@@ -304,8 +352,12 @@ function emptyLastItemExitPatch(
  */
 export function beamerStructuralLineBreakPatch(
   domain: BeamerCaretDomain,
-  offset: number
+  offset: number,
+  selectionEnd = offset
 ): BeamerStructuralKeyResult {
+  if (selectionEnd !== offset) {
+    return selectedBreakPatch(domain, offset, selectionEnd, true);
+  }
   if (isInsideMath(domain, offset)) {
     return "swallow";
   }
@@ -407,16 +459,38 @@ export function beamerStructuralDeletePatch(
 export function beamerStructuralTabPatch(
   domain: BeamerCaretDomain,
   offset: number,
-  direction: "nest" | "unnest"
+  direction: "nest" | "unnest",
+  selectionEnd = offset
 ): BeamerStructuralKeyResult {
-  const context = beamerListItemAt(domain, offset);
+  const start = Math.min(offset, selectionEnd);
+  const end = Math.max(offset, selectionEnd);
+  const context = beamerListItemAt(domain, start);
   if (!context) {
     return "swallow";
   }
-  const caret = clampToItemContent(offset, context.item);
-  return direction === "nest"
-    ? nestItemPatch(domain, context, caret)
-    : unnestItemPatch(domain, context, caret);
+  const last = start === end ? context : beamerListItemAt(domain, end - 1);
+  if (last?.list !== context.list) return "swallow";
+  // Treat consecutive selected siblings as one group. Their item tokens and
+  // nested children stay intact; only the surrounding list boundaries move.
+  const items = context.list.items;
+  const group = {
+    ...context.item,
+    contentSpan: { from: context.item.contentSpan.from, to: last.item.contentSpan.to },
+  };
+  const groupedContext = {
+    ...context,
+    item: group,
+    list: {
+      ...context.list,
+      items: [...items.slice(0, context.index), group, ...items.slice(last.index + 1)],
+    },
+  };
+  const caret = clampToItemContent(start, group);
+  const result = direction === "nest"
+    ? nestItemPatch(domain, groupedContext, caret)
+    : unnestItemPatch(domain, groupedContext, caret);
+  if (!result || result === "swallow" || start === end) return result;
+  return { ...result, selectionEnd: mapOffsetAfterEdits(result.edits, end) };
 }
 
 function nestItemPatch(

@@ -871,3 +871,76 @@ test("nested figure editing: enter, edit the picture, and exit back to the deck"
   await expect(page.getByTestId("nested-figure-breadcrumb")).toHaveCount(0);
   await expect.poll(activeRootId).toBe("frame:0");
 });
+
+test("formatting a selected word preserves adjacent formatting and supports undo", async ({ page }) => {
+  await setSource(page, SOURCE.replace("Body typo.", String.raw`\textbf{Body typo.}`));
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const buffer = await textarea.inputValue();
+  const start = buffer.indexOf("typo.");
+  await textarea.evaluate((element, from) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(from, from + 4);
+    input.dispatchEvent(new Event("select", { bubbles: true }));
+  }, start);
+  await page.getByTestId("text-format-bold").click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\textbf{Body }typo\textbf{.}`);
+  await expect.poll(() => textarea.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return input.value.slice(input.selectionStart, input.selectionEnd);
+  })).toBe("typo");
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\textbf{Body typo.}`);
+  await page.keyboard.press(`${PRIMARY_MOD}+Shift+z`);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\textbf{Body }typo\textbf{.}`);
+});
+
+test("canvas Enter and Shift+Enter replace the selected text with a break", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const start = buffer.indexOf("typo");
+  for (const key of ["Enter", "Shift+Enter"]) {
+    await input.evaluate((element, from) => {
+      const field = element as HTMLTextAreaElement;
+      field.focus();
+      field.setSelectionRange(from, from + 4);
+      field.dispatchEvent(new Event("select", { bubbles: true }));
+    }, start);
+    await page.keyboard.press(key);
+    await expect.poll(() => readStoreSource(page)).toContain(key === "Enter" ? "Body\n\n." : "Body \\\\ .");
+    await expect(input).toBeFocused();
+    await page.keyboard.press(`${PRIMARY_MOD}+z`);
+    await expect(textarea).toHaveValue(buffer);
+    // Wait for the restored source to reach the rendered caret domain.
+    await expect(page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${SOURCE.indexOf("Block typo")}"]`)).not.toHaveCount(0);
+  }
+});
+
+test("canvas Tab and Shift+Tab indent selected list items and keep their selection", async ({ page }) => {
+  const source = SOURCE.replace("\\item List typo", "\\item First point\n\\item Second point\n\\item Third point");
+  await setSource(page, source);
+  const textarea = await openScopeContaining(page, "Second point");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const start = buffer.indexOf("Second point");
+  const end = buffer.indexOf("Third point") + "Third point".length;
+  await input.evaluate((element, range) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(range.start, range.end);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, { start, end });
+  await page.keyboard.press("Tab");
+  await expect.poll(() => readStoreSource(page)).toContain("\\item First point\n\\begin{itemize}\n\\item Second point\n\\item Third point\n\\end{itemize}\n\\end{itemize}");
+  const nestedSource = await readStoreSource(page);
+  await expect(page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${nestedSource.indexOf("Block typo")}"]`)).not.toHaveCount(0);
+  await expect.poll(() => input.evaluate((element) => {
+    const field = element as HTMLTextAreaElement;
+    return field.value.slice(field.selectionStart, field.selectionEnd);
+  })).toBe(buffer.slice(start, end));
+  await page.keyboard.press("Shift+Tab");
+  await expect(textarea).toHaveValue(buffer);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(nestedSource);
+});

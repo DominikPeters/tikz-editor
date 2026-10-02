@@ -48,6 +48,7 @@ import {
 } from "@tikz-editor/core/beamer/index";
 import {
   activeTextFormatWrapper,
+  isTextFormatActive,
   applyTextColorCommand,
   toggleTextFormatCommand,
   type TextFormatCommandName
@@ -223,7 +224,7 @@ function sessionTextAfterStructuralPatch(
   session: TextEditingSession,
   domainSource: string,
   result: Exclude<BeamerStructuralKeyResult, "swallow" | null>
-): { nextText: string; caretLocal: number } | null {
+): { nextText: string; caretLocal: number; selectionEndLocal: number } | null {
   const toLocal = (documentOffset: number) => documentOffset - session.sourceSpan.from;
   for (const edit of result.edits) {
     const from = toLocal(edit.span.from);
@@ -247,7 +248,8 @@ function sessionTextAfterStructuralPatch(
   }
   return {
     nextText,
-    caretLocal: clamp(toLocal(result.caretOffset), 0, nextText.length)
+    caretLocal: clamp(toLocal(result.caretOffset), 0, nextText.length),
+    selectionEndLocal: clamp(toLocal(result.selectionEnd ?? result.caretOffset), 0, nextText.length)
   };
 }
 const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
@@ -1320,8 +1322,8 @@ export function useCanvasTextEditSession(
         session.selectionEnd,
         wrapName
       );
-      // Unwrapping an active wrapper is always legal; only fresh wraps
-      // need the structural-selection guard.
+      // Formatting must preserve structure; the helper also checks that
+      // splitting the enclosing inline wrappers leaves valid TeX.
       if (!active && !textFormatSelectionEditable(session)) {
         return;
       }
@@ -1359,7 +1361,8 @@ export function useCanvasTextEditSession(
         : beamerStructuralTabPatch(
             domain,
             offset,
-            commandId === "indent" ? "nest" : "unnest"
+            commandId === "indent" ? "nest" : "unnest",
+            session.sourceSpan.from + Math.max(session.selectionStart, session.selectionEnd)
           );
     if (!result || result === "swallow") {
       return;
@@ -1368,7 +1371,7 @@ export function useCanvasTextEditSession(
     if (!applied) {
       return;
     }
-    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.caretLocal);
+    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.selectionEndLocal);
   }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
 
   const handleTextFormatColor = useCallback((color: string | null) => {
@@ -1646,22 +1649,20 @@ export function useCanvasTextEditSession(
       session.sourceSpan.from + Math.min(session.selectionStart, session.selectionEnd);
     let result: BeamerStructuralKeyResult;
     if (isEnter) {
-      if (hasRange) {
-        return swallow();
-      }
+      const end = session.sourceSpan.from + Math.max(session.selectionStart, session.selectionEnd);
       result = event.shiftKey
-        ? beamerStructuralLineBreakPatch(domain, offset)
-        : beamerStructuralEnterPatch(domain, offset);
+        ? beamerStructuralLineBreakPatch(domain, offset, end)
+        : beamerStructuralEnterPatch(domain, offset, end);
       if (result == null) {
         // Unknown context (fallback-rendered chunk): plain newline through
         // the beforeinput machine.
         return false;
       }
     } else if (isTab) {
-      result = hasRange
-        ? "swallow"
-        : beamerStructuralTabPatch(domain, offset, event.shiftKey ? "unnest" : "nest") ??
-          "swallow";
+      result = beamerStructuralTabPatch(
+        domain, offset, event.shiftKey ? "unnest" : "nest",
+        session.sourceSpan.from + Math.max(session.selectionStart, session.selectionEnd)
+      );
     } else {
       result = isBackspace
         ? beamerStructuralBackspacePatch(domain, offset)
@@ -1670,7 +1671,7 @@ export function useCanvasTextEditSession(
         return false;
       }
     }
-    if (result === "swallow") {
+    if (!result || result === "swallow") {
       return swallow();
     }
     const applied = sessionTextAfterStructuralPatch(session, domain.source, result);
@@ -1679,7 +1680,7 @@ export function useCanvasTextEditSession(
     }
     event.preventDefault();
     event.stopPropagation();
-    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.caretLocal);
+    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.selectionEndLocal);
     return true;
   }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
 
@@ -2209,21 +2210,20 @@ export function useCanvasTextEditSession(
       glyphClass?: CanvasTextFormatToolbarItem["glyphClass"]
     ): CanvasTextFormatToolbarItem => {
       const active =
-        activeTextFormatWrapper(
+        isTextFormatActive(
           session.text,
           session.selectionStart,
           session.selectionEnd,
           name
-        ) != null;
+        );
       const disabled =
-        !active &&
-        (!editable ||
-          toggleTextFormatCommand(
-            session.text,
-            session.selectionStart,
-            session.selectionEnd,
-            name
-          ) === null);
+        (!active && !editable) ||
+        toggleTextFormatCommand(
+          session.text,
+          session.selectionStart,
+          session.selectionEnd,
+          name
+        ) === null;
       return { id, label, glyph, glyphClass, active, disabled };
     };
     const items: CanvasTextFormatToolbarItem[] = [

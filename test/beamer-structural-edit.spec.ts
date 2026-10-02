@@ -73,6 +73,47 @@ describe("beamer structural edits", () => {
     expect(next.slice(patch.caretOffset, patch.caretOffset + 3)).toBe("two");
   });
 
+  it.each([false, true])("replaces selected prose with a break (soft=%s)", async (soft) => {
+    const source = frameDocument("Before selected words after.");
+    const domain = await domainFor(source);
+    const from = source.indexOf("selected");
+    const to = from + "selected words".length;
+    const patch = asPatch(soft
+      ? beamerStructuralLineBreakPatch(domain, from, to)
+      : beamerStructuralEnterPatch(domain, from, to));
+    const { next } = await applyAndRender(source, patch);
+    expect(next).not.toContain("selected words");
+    expect(next).toContain(soft ? "Before \\\\  after." : "Before\n\n after.");
+    expect(next.slice(patch.caretOffset, patch.caretOffset + 7)).toBe(" after.");
+  });
+
+  it("replaces a selection crossing sibling list items and keeps the list valid", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const from = source.indexOf("one");
+    const to = source.indexOf("two") + 3;
+    const patch = asPatch(beamerStructuralEnterPatch(domain, from, to));
+    const { next, nextDomain } = await applyAndRender(source, patch);
+    expect(next).toContain("\\item First\n\\item \n\\item Third three");
+    expect(nextDomain.lists[0].items).toHaveLength(3);
+    expect(next).not.toContain("Second");
+  });
+
+  it("splits inline formatting around a paragraph break replacing selected text", async () => {
+    const source = frameDocument(String.raw`\textbf{Before selected after}`);
+    const domain = await domainFor(source);
+    const from = source.indexOf("selected");
+    const patch = asPatch(beamerStructuralEnterPatch(domain, from, from + 8));
+    const { next } = await applyAndRender(source, patch);
+    expect(next).toContain("\\textbf{Before}\n\n\\textbf{ after}");
+  });
+
+  it("does not replace partially selected structural or atomic syntax", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    expect(beamerStructuralEnterPatch(domain, source.indexOf("one"), source.indexOf("Outro"))).toBe("swallow");
+  });
+
   it("Enter at an item's content start inserts an empty item above", async () => {
     const source = frameDocument(LIST_BODY);
     const domain = await domainFor(source);
@@ -191,6 +232,51 @@ describe("beamer structural edits", () => {
     expect(beamerStructuralTabPatch(domain, source.indexOf("First one"), "nest")).toBe(
       "swallow"
     );
+  });
+
+  it("Tab indents selected siblings together and Shift+Tab restores them, retaining selection", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const from = source.indexOf("Second");
+    const to = source.indexOf("three") + 5;
+    const patch = asPatch(beamerStructuralTabPatch(domain, to, "nest", from));
+    const { next, nextDomain } = await applyAndRender(source, patch);
+    expect(nextDomain.lists).toHaveLength(2);
+    expect(nextDomain.lists[1].items).toHaveLength(2);
+    expect(next.slice(patch.caretOffset, patch.selectionEnd)).toBe(source.slice(from, to));
+    const unnest = asPatch(beamerStructuralTabPatch(nextDomain, patch.caretOffset, "unnest", patch.selectionEnd));
+    const restored = await applyAndRender(next, unnest);
+    expect(restored.next).toBe(source);
+    expect(restored.next.slice(unnest.caretOffset, unnest.selectionEnd)).toBe(source.slice(from, to));
+  });
+
+  it.each([["Alpha", "Beta"], ["Beta", "Gamma"]])("Shift+Tab unnests the selected %s–%s group", async (first, last) => {
+    const source = frameDocument(NESTED_BODY);
+    const domain = await domainFor(source);
+    const from = source.indexOf(first);
+    const to = source.indexOf(`${last} row`) + last.length + 4;
+    const patch = asPatch(beamerStructuralTabPatch(domain, from, "unnest", to));
+    const { next, nextDomain } = await applyAndRender(source, patch);
+    expect(nextDomain.lists[0].items).toHaveLength(4);
+    expect(next.slice(patch.caretOffset, patch.selectionEnd)).toBe(source.slice(from, to));
+  });
+
+  it("keeps Tab outside lists a no-op, including selected prose", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const from = source.indexOf("Intro");
+    expect(beamerStructuralTabPatch(domain, from, "nest", from + 5)).toBe("swallow");
+    expect(beamerStructuralTabPatch(domain, from, "unnest", from + 5)).toBe("swallow");
+  });
+
+  it("Tab on a word selection moves its whole item and retains just the word selection", async () => {
+    const source = frameDocument(LIST_BODY);
+    const domain = await domainFor(source);
+    const from = source.indexOf("two");
+    const patch = asPatch(beamerStructuralTabPatch(domain, from, "nest", from + 3));
+    const { next, nextDomain } = await applyAndRender(source, patch);
+    expect(nextDomain.lists[1].items).toHaveLength(1);
+    expect(next.slice(patch.caretOffset, patch.selectionEnd)).toBe("two");
   });
 
   it("consecutive Tabs extend the nested environment instead of chaining siblings", async () => {

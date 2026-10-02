@@ -96,6 +96,9 @@ function matchBracedGroup(text: string, open: number): number | null {
 
 export function scanTextFormatWrappers(text: string): readonly TextFormatWrapper[] {
   const wrappers: TextFormatWrapper[] = [];
+  // Keep the regex search outside comments, including comments containing
+  // braces that would otherwise make a fake wrapper span visible text.
+  let lexicalCursor = 0;
   FORMAT_COMMAND_PATTERN.lastIndex = 0;
   for (
     let match = FORMAT_COMMAND_PATTERN.exec(text);
@@ -103,6 +106,15 @@ export function scanTextFormatWrappers(text: string): readonly TextFormatWrapper
     match = FORMAT_COMMAND_PATTERN.exec(text)
   ) {
     const from = match.index;
+    while (lexicalCursor < from) {
+      if (text[lexicalCursor] === "\\") {
+        lexicalCursor += 2;
+      } else if (text[lexicalCursor] === "%") {
+        const lineEnd = text.indexOf("\n", lexicalCursor);
+        lexicalCursor = lineEnd === -1 ? text.length : lineEnd + 1;
+      } else lexicalCursor += 1;
+    }
+    if (lexicalCursor > from) continue;
     if (isEscapedBackslashAt(text, from)) {
       continue;
     }
@@ -154,8 +166,8 @@ export function scanTextFormatWrappers(text: string): readonly TextFormatWrapper
 /**
  * The innermost wrapper of `name` that either contains the selection in
  * its content argument or is exactly the (trimmed) selection. This is the
- * wrapper a toolbar toggle would remove, and its presence is the button's
- * active state.
+ * wrapper containing a caret; ranged toggles may split several wrappers.
+ * Use isTextFormatActive for the active state of a ranged selection.
  */
 export function activeTextFormatWrapper(
   text: string,
@@ -191,7 +203,8 @@ export function activeTextFormatWrapper(
 export function isTextFormatWrapSafe(
   text: string,
   selectionStart: number,
-  selectionEnd: number
+  selectionEnd: number,
+  allowParagraphs = false
 ): boolean {
   let depth = 0;
   let mathToggles = 0;
@@ -216,7 +229,7 @@ export function isTextFormatWrapSafe(
       mathToggles += 1;
     } else if (char === "\n") {
       const lineEnd = skipSpaces(text, cursor + 1);
-      if (text[lineEnd] === "\n") {
+      if (!allowParagraphs && text[lineEnd] === "\n") {
         return false;
       }
     }
@@ -241,90 +254,167 @@ function trimSelection(
   return [start, end];
 }
 
-function unwrapResult(text: string, wrapper: TextFormatWrapper): TextFormatToggleResult {
-  const openLength = wrapper.contentFrom - wrapper.from;
-  const nextText =
-    text.slice(0, wrapper.from) +
-    text.slice(wrapper.contentFrom, wrapper.contentTo) +
-    text.slice(wrapper.to);
-  return {
-    nextText,
-    selectionStart: wrapper.from,
-    selectionEnd: wrapper.contentTo - openLength,
-  };
-}
+type FormatPartition = {
+  before: string;
+  selected: string;
+  after: string;
+  /** Whether every selected text fragment inherits the requested format. */
+  allActive: boolean;
+};
 
-function wrapResult(
+/**
+ * Split only recognized inline wrappers at the selection boundaries. Each
+ * piece is balanced, so removing a format cannot change adjacent text or
+ * discard an unrelated nested style. Unknown TeX groups are never split.
+ */
+function partitionFormatSelection(
   text: string,
   start: number,
   end: number,
-  prefix: string
-): TextFormatToggleResult {
-  const nextText = text.slice(0, start) + prefix + text.slice(start, end) + "}" + text.slice(end);
+  name: TextFormatCommandName | null
+): FormatPartition | null {
+  const wrappers = scanTextFormatWrappers(text);
+  const visit = (from: number, to: number, active: boolean): FormatPartition | null => {
+    const result: FormatPartition = { before: "", selected: "", after: "", allActive: true };
+    const appendPlain = (left: number, right: number) => {
+      result.before += text.slice(left, Math.min(right, Math.max(left, start)));
+      const selected = text.slice(Math.max(left, start), Math.max(left, Math.min(right, end)));
+      result.selected += selected;
+      if (selected.length > 0 && !active) result.allActive = false;
+      result.after += text.slice(Math.min(right, Math.max(left, end)), right);
+    };
+    let cursor = from;
+    for (const wrapper of wrappers) {
+      if (wrapper.from < cursor || wrapper.to > to) continue;
+      appendPlain(cursor, wrapper.from);
+      cursor = wrapper.to;
+      if (wrapper.to <= start) {
+        result.before += text.slice(wrapper.from, wrapper.to);
+        continue;
+      }
+      if (wrapper.from >= end) {
+        result.after += text.slice(wrapper.from, wrapper.to);
+        continue;
+      }
+      // A boundary may sit in content or outside the entire invocation,
+      // but never in a command name, color argument, or closing brace.
+      if ([start, end].some((offset) =>
+        (wrapper.from < offset && offset < wrapper.contentFrom) ||
+        (wrapper.contentTo < offset && offset < wrapper.to)
+      )) return null;
+      const inner = visit(wrapper.contentFrom, wrapper.contentTo, active || wrapper.name === name);
+      if (!inner) return null;
+      const prefix = text.slice(wrapper.from, wrapper.contentFrom);
+      const wrap = (value: string) => value.length > 0 ? prefix + value + "}" : "";
+      // Cutting an unknown group or math island would make the cloned
+      // wrappers invalid. Leave such source selections untouched.
+      if (![inner.before, inner.selected, inner.after].every((value) =>
+        isTextFormatWrapSafe(value, 0, value.length)
+      )) return null;
+      result.before += wrap(inner.before);
+      result.selected += wrapper.name === name ? inner.selected : wrap(inner.selected);
+      result.after += wrap(inner.after);
+      result.allActive &&= inner.allActive;
+    }
+    appendPlain(cursor, to);
+    return result;
+  };
+  return visit(0, text.length, false);
+}
+
+function formatSelection(
+  text: string,
+  selectionStart: number,
+  selectionEnd: number,
+  name: TextFormatCommandName,
+  prefix: string | null,
+  toggle: boolean
+): TextFormatToggleResult | null {
+  const start = Math.min(selectionStart, selectionEnd);
+  const end = Math.max(selectionStart, selectionEnd);
+  if (start < 0 || end > text.length) return null;
+  // Keep unrelated enclosing styles in place and select only their content.
+  const enclosing = scanTextFormatWrappers(text).find((wrapper) =>
+    wrapper.contentFrom <= start && end <= wrapper.contentTo
+  );
+  if (enclosing && enclosing.name !== name) {
+    const inner = formatSelection(
+      text.slice(enclosing.contentFrom, enclosing.contentTo),
+      start - enclosing.contentFrom, end - enclosing.contentFrom, name, prefix, toggle
+    );
+    return inner ? {
+      nextText: text.slice(0, enclosing.contentFrom) + inner.nextText + text.slice(enclosing.contentTo),
+      selectionStart: enclosing.contentFrom + inner.selectionStart,
+      selectionEnd: enclosing.contentFrom + inner.selectionEnd,
+    } : null;
+  }
+  // A collapsed caret inside a wrapper also splits it: subsequent typing
+  // changes style without restyling the existing passage.
+  const active = activeTextFormatWrapper(text, start, end, name);
+  const parts = partitionFormatSelection(text, start, end, name);
+  if (!parts || !isTextFormatWrapSafe(parts.selected, 0, parts.selected.length)) return null;
+  const remove = prefix == null || (toggle && (start === end ? active != null : parts.allActive));
+  const insertedPrefix = remove ? "" : prefix;
+  const selected = insertedPrefix + parts.selected + (remove ? "" : "}");
+  let contentStart = 0;
+  let contentEnd = parts.selected.length;
+  for (const wrapper of scanTextFormatWrappers(parts.selected)) {
+    if (wrapper.from === contentStart && wrapper.to === contentEnd) {
+      contentStart = wrapper.contentFrom;
+      contentEnd = wrapper.contentTo;
+    }
+  }
   return {
-    nextText,
-    selectionStart: start + prefix.length,
-    selectionEnd: end + prefix.length,
+    nextText: parts.before + selected + parts.after,
+    selectionStart: parts.before.length + insertedPrefix.length + contentStart,
+    selectionEnd: parts.before.length + insertedPrefix.length + contentEnd,
   };
 }
 
-/**
- * Toggles a plain format wrapper (`\textbf`, `\textit`, `\underline`,
- * `\texttt`, `\alert`) around the selection. Returns null when the
- * selection cannot legally be wrapped.
- */
+/** Toggle a format on exactly the selected text, preserving other styles. */
 export function toggleTextFormatCommand(
   text: string,
   selectionStart: number,
   selectionEnd: number,
   name: Exclude<TextFormatCommandName, "textcolor">
 ): TextFormatToggleResult | null {
-  const wrapper = activeTextFormatWrapper(text, selectionStart, selectionEnd, name);
-  if (wrapper) {
-    return unwrapResult(text, wrapper);
-  }
-  const [start, end] = trimSelection(text, selectionStart, selectionEnd);
-  if (!isTextFormatWrapSafe(text, start, end)) {
-    return null;
-  }
-  return wrapResult(text, start, end, `\\${name}{`);
+  return formatSelection(text, selectionStart, selectionEnd, name, `\\${name}{`, true);
 }
 
-/**
- * Applies (or, with `color: null`, removes) a `\textcolor` wrapper. An
- * enclosing wrapper has its color argument replaced in place rather than
- * being nested.
- */
+/** Apply or remove color on exactly the selection, splitting existing spans. */
 export function applyTextColorCommand(
   text: string,
   selectionStart: number,
   selectionEnd: number,
   color: string | null
 ): TextFormatToggleResult | null {
-  const wrapper = activeTextFormatWrapper(text, selectionStart, selectionEnd, "textcolor");
-  if (wrapper) {
-    if (color === null) {
-      return unwrapResult(text, wrapper);
-    }
-    const span = wrapper.colorSpan;
-    if (!span) {
-      return null;
-    }
-    const delta = color.length - (span.to - span.from);
-    const nextText = text.slice(0, span.from) + color + text.slice(span.to);
-    const shift = (offset: number): number => (offset > span.to ? offset + delta : offset);
-    return {
-      nextText,
-      selectionStart: shift(selectionStart),
-      selectionEnd: shift(selectionEnd),
-    };
-  }
-  if (color === null) {
-    return null;
-  }
-  const [start, end] = trimSelection(text, selectionStart, selectionEnd);
-  if (!isTextFormatWrapSafe(text, start, end)) {
-    return null;
-  }
-  return wrapResult(text, start, end, `\\textcolor{${color}}{`);
+  return formatSelection(
+    text, selectionStart, selectionEnd, "textcolor",
+    color == null ? null : `\\textcolor{${color}}{`, false
+  );
+}
+
+/** Replace a text range while closing/reopening inline styles around the break. */
+export function replaceTextFormatSelection(
+  text: string,
+  start: number,
+  end: number,
+  insert: string
+): TextFormatToggleResult | null {
+  const parts = partitionFormatSelection(text, start, end, null);
+  if (!parts || !isTextFormatWrapSafe(parts.selected, 0, parts.selected.length, true)) return null;
+  const caret = parts.before.length + insert.length;
+  return { nextText: parts.before + insert + parts.after, selectionStart: caret, selectionEnd: caret };
+}
+
+/** Active state for selections spanning multiple adjacent or nested runs. */
+export function isTextFormatActive(
+  text: string,
+  start: number,
+  end: number,
+  name: TextFormatCommandName
+): boolean {
+  if (start === end) return activeTextFormatWrapper(text, start, end, name) != null;
+  const parts = partitionFormatSelection(text, Math.min(start, end), Math.max(start, end), name);
+  return parts != null && parts.selected.length > 0 && parts.allActive;
 }
