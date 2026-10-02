@@ -57,6 +57,8 @@ export type BeamerOverlayItem = {
   readonly spec: BeamerOverlaySpec;
   readonly overlaySpan: Span;
   readonly contentSpan: Span;
+  /** Present when this item inherits the enclosing list's default spec. */
+  readonly defaultListSpan?: Span;
 };
 
 export type BeamerOverlayPause = {
@@ -69,6 +71,9 @@ export type BeamerOverlayModel = {
   readonly frameSpan: Span;
   readonly commands: readonly BeamerOverlayCommand[];
   readonly items: readonly BeamerOverlayItem[];
+  /** Authored defaults, including those currently overridden by every item.
+   * Resolving a default here does not consume the relative overlay counter. */
+  readonly listDefaults: readonly { readonly span: Span; readonly spec: BeamerOverlaySpec }[];
   readonly pauses: readonly BeamerOverlayPause[];
   readonly stepCount: number;
 };
@@ -83,6 +88,12 @@ export type BeamerOverlayTextProjection = {
 
 type PendingSpec =
   | {
+      readonly kind: "list-default";
+      readonly sourceOrder: number;
+      readonly span: Span;
+      readonly rawSpec: BeamerDelimitedSourceValue;
+    }
+  | {
       readonly kind: "command";
       readonly sourceOrder: number;
       readonly command: Omit<BeamerOverlayCommand, "spec">;
@@ -96,6 +107,7 @@ type PendingSpec =
       readonly overlaySpan: Span;
       readonly contentSpan: Span;
       readonly rawSpec: BeamerDelimitedSourceValue;
+      readonly defaultListSpan?: Span;
     }
   | {
       readonly kind: "pause";
@@ -176,9 +188,11 @@ export function scanBeamerFrameOverlays(
     if (command.name !== "item") {
       continue;
     }
+    // Beamer accepts both \item<spec>[label] and \item[label]<spec>.
+    const label = beamerOptionalArgumentAfter(context, command.to, frame.bodySpan.to);
     const overlay = beamerOverlayArgumentAfter(
       context,
-      command.to,
+      label?.span.to ?? command.to,
       frame.bodySpan.to
     );
     if (!overlay) {
@@ -218,6 +232,8 @@ export function scanBeamerFrameOverlays(
     if (!defaultSpec) {
       continue;
     }
+    pending.push({ kind: "list-default", sourceOrder: list.from,
+      span: { from: list.from, to: list.to }, rawSpec: defaultSpec });
     const peers = itemControls.filter((candidate) =>
       smallestContainingSpan(listRanges, candidate.from) === list
     );
@@ -236,6 +252,7 @@ export function scanBeamerFrameOverlays(
           to: peers[index + 1]?.from ?? list.contentTo,
         },
         rawSpec: defaultSpec,
+        defaultListSpan: { from: list.from, to: list.to },
       });
     }
   }
@@ -243,6 +260,7 @@ export function scanBeamerFrameOverlays(
   pending.sort((left, right) => left.sourceOrder - right.sourceOrder);
   const commands: BeamerOverlayCommand[] = [];
   const items: BeamerOverlayItem[] = [];
+  const listDefaults: Array<{ span: Span; spec: BeamerOverlaySpec }> = [];
   const pauseStarts: Array<{
     span: Span;
     threshold: number;
@@ -258,6 +276,10 @@ export function scanBeamerFrameOverlays(
       continue;
     }
     const resolved = resolveOverlaySpec(entry.rawSpec, pauseCounter);
+    if (entry.kind === "list-default") {
+      listDefaults.push({ span: entry.span, spec: resolved.spec });
+      continue;
+    }
     pauseCounter = resolved.nextPauseCounter;
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
@@ -268,6 +290,7 @@ export function scanBeamerFrameOverlays(
         listItemIndex: entry.listItemIndex,
         overlaySpan: entry.overlaySpan,
         contentSpan: entry.contentSpan,
+        ...(entry.defaultListSpan ? { defaultListSpan: entry.defaultListSpan } : {}),
         spec: resolved.spec,
       });
     }
@@ -285,6 +308,7 @@ export function scanBeamerFrameOverlays(
     frameSpan: frame.bodySpan,
     commands,
     items,
+    listDefaults,
     pauses,
     stepCount,
   };
@@ -745,7 +769,8 @@ function overlayEnvironmentSpecs(
         },
       });
     }
-    index = endIndex;
+    // Nested environments can have independent overlay rules. Keep scanning
+    // their boundaries, including when their parent has its own spec.
   }
   return result;
 }

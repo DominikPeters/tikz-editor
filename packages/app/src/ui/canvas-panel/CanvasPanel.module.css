@@ -1207,3 +1207,47 @@
   stroke: var(--color-snap);
   vector-effect: non-scaling-stroke;
 }
+
+.deckColumnDivider {
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+}
+.deckDividerHit { stroke: transparent; pointer-events: stroke; }
+.deckDividerLine {
+  stroke: var(--accent-dark);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0;
+}
+.deckDividerGrip { fill: var(--accent-dark); pointer-events: none; opacity: 0; }
+.deckColumnDivider:hover .deckDividerLine,
+.deckColumnDivider[data-visible="true"] .deckDividerLine { opacity: 0.35; }
+.deckColumnDivider:hover .deckDividerGrip,
+.deckColumnDivider[data-visible="true"] .deckDividerGrip,
+.deckColumnDivider:focus-visible .deckDividerGrip,
+.deckColumnDivider:focus-visible .deckDividerLine { opacity: 1; }
+.deckImageCorner { outline: none; touch-action: none; }
+.deckImageCorner:focus-visible .handle { stroke-width: 2px; vector-effect: non-scaling-stroke; }
+
+.deckSpacingHandle { cursor: ns-resize; outline: none; touch-action: none; }
+.deckSpacingBand { fill: var(--accent-dark); opacity: 0; pointer-events: none; }
+.deckSpacingEdges {
+  fill: none;
+  stroke: var(--accent-dark);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  pointer-events: none;
+}
+.deckSpacingGrip { fill: var(--accent-dark); opacity: 0; pointer-events: none; }
+.deckSpacingHandle:hover .deckSpacingBand,
+.deckSpacingHandle:focus-visible .deckSpacingBand,
+.deckSpacingHandle[data-active="true"] .deckSpacingBand { opacity: 0.08; }
+.deckSpacingHandle:hover .deckSpacingEdges,
+.deckSpacingHandle:focus-visible .deckSpacingEdges,
+.deckSpacingHandle[data-active="true"] .deckSpacingEdges { opacity: 0.35; }
+.deckSpacingHandle:hover .deckSpacingGrip,
+.deckSpacingHandle:focus-visible .deckSpacingGrip,
+.deckSpacingHandle[data-active="true"] .deckSpacingGrip { opacity: 1; }

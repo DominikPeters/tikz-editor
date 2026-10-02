@@ -1,4 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
+import { documentKindForSource } from "../store/workspace-state";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { getDockLayoutHandle } from "./DockLayout";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
@@ -109,8 +111,9 @@ type RuntimeInput = {
   showObjectsPanel: boolean;
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
+  showBuildsPanel?: boolean;
   showAssistantPanel: boolean;
-  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant";
+  rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
   assistantAvailable: boolean;
   showDevPanel: boolean;
   indentSize?: 2 | 4;
@@ -177,6 +180,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     showObjectsPanel,
     showStylesPanel,
     showFiguresPanel,
+    showBuildsPanel = false,
     showAssistantPanel,
     rightSidebarTab,
     assistantAvailable,
@@ -387,7 +391,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       stylesVisible: boolean;
       figuresVisible: boolean;
       assistantVisible: boolean;
-      activeRightTab: "inspector" | "objects" | "styles" | "assistant";
+      activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
     }>
   ) => {
     dispatch({
@@ -403,6 +407,13 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   const bindings: CommandBindings = {
+    // Canvas overlay commands bind to the source object captured when its menu opens.
+    [APP_MENU_COMMAND_IDS.OVERLAY_NEXT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_FROM]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_ONLY]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_THROUGH]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_EDIT]: { enabled: false, run: () => {} },
+    [APP_MENU_COMMAND_IDS.OVERLAY_REMOVE]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.NEW_DOCUMENT]: {
       enabled: true,
       run: () => { dispatch({ type: "NEW_DOCUMENT" }); }
@@ -995,6 +1006,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
         });
       }
     },
+    [APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL]: {
+      enabled: documentKindForSource(source) === "beamer" && parseDocumentRootId(activeRootId ?? "")?.kind !== "beamer-frame-tikz",
+      checked: showBuildsPanel,
+      run: () => { getDockLayoutHandle()?.togglePanel("builds"); }
+    },
     [APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL]: {
       enabled: true,
       checked: showFiguresPanel,
@@ -1134,6 +1150,7 @@ export function useEditorCommandRuntime(
   const showInspectorPanel = useEditorStore((s) => s.showInspectorPanel);
   const showObjectsPanel = useEditorStore((s) => s.showObjectsPanel);
   const showStylesPanel = useEditorStore((s) => s.showStylesPanel);
+  const showBuildsPanel = useEditorStore((s) => s.showBuildsPanel);
   const showFiguresPanel = useEditorStore((s) => s.showFiguresPanel);
   const showAssistantPanel = useEditorStore((s) => s.showAssistantPanel);
   const rightSidebarTab = useEditorStore((s) => s.rightSidebarTab);
@@ -1195,6 +1212,7 @@ export function useEditorCommandRuntime(
         showObjectsPanel,
         showStylesPanel,
         showFiguresPanel,
+        showBuildsPanel,
         showAssistantPanel,
         rightSidebarTab,
         assistantAvailable,
@@ -1247,6 +1265,7 @@ export function useEditorCommandRuntime(
       showObjectsPanel,
       showStylesPanel,
       showFiguresPanel,
+      showBuildsPanel,
       showAssistantPanel,
       rightSidebarTab,
       assistantAvailable,

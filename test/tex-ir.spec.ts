@@ -651,8 +651,20 @@ describe("simple TeX paragraph IR", () => {
     }));
   });
 
+  it.each([["smallskip", 3], ["medskip", 6], ["bigskip", 12]] as const)("keeps horizontal-mode %s attached to its paragraph", (command, size) => {
+    const source = `Alpha \\${command} Beta`;
+    const analysis = analyzeSimpleTexParagraph(source, 120);
+
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.unsupportedCommand).toBe(false);
+    expect(analysis.ir?.items).toHaveLength(1);
+    expect(analysis.ir?.blocks[0].verticalAdjustments).toEqual([
+      expect.objectContaining({ command, size, sourceStart: source.indexOf("\\"), sourceEnd: source.indexOf(" Beta") }),
+    ]);
+  });
+
   it("rejects primitive vertical glue in the middle of a paragraph", () => {
-    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \smallskip Beta`, 120);
+    const analysis = analyzeSimpleTexParagraph(String.raw`Alpha \vskip 3pt Beta`, 120);
 
     expect(analysis.ir?.unsupportedCommand).toBe(true);
     expect(analysis.fallbackReason).toContain("not supported");

@@ -658,6 +658,23 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
+  beamer_direct_resize: {
+    parser: "not-applicable",
+    semantic: "not-applicable",
+    svg: "not-applicable",
+    edit: "partial",
+    fixtures: ["beamer_direct_resize"],
+    notes: "Canvas dividers resize adjacent columns together while preserving their combined width and authored units. Selected resolved images resize proportionally using their existing width/height or scale options. Explicit vertical spacing exposes draggable bands in frames, columns, blocks, and paragraphs. Numeric vspace edits preserve units and stars; smallskip/medskip/bigskip convert to fixed vspace only when resized. Flexible fills and complex dimensions remain source-editable. Gestures preview source changes and commit one undo step. Column widths resolve absolute units and textwidth, linewidth, columnwidth, and paperwidth references."
+  },
+  beamer_builds: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "not-applicable",
+    edit: "partial",
+    fixtures: ["beamer_builds"],
+    notes:
+      "Source-backed overlay inventory and effective per-step states for supported Beamer overlays, including branches, nested rules, pauses and inherited list defaults. Canvas object menus add/remove visibility rules for blocks, items and figures, and navigate shared/complex owners to the Overlays panel. Numeric specs support direct edits and from/only/through timing commands. Single numeric visibility ranges support boundary dragging with transient source previews and one undo commit. Relative, inverted and branching rules retain their own editing semantics."
+  },
   beamer_document_scan: {
     parser: "stable",
     semantic: "none",

@@ -398,6 +398,17 @@ export type BeamerGraphicsLayout = {
   };
 };
 
+/** Explicit source-owned vertical material; no paint is added to the slide. */
+export type BeamerSpacingLayout = {
+  sourceSpan: Span;
+  command: "vspace" | "smallskip" | "medskip" | "bigskip";
+  bounds: BeamerRect;
+  /** Signed space in points; negative space overlaps surrounding content. */
+  sizePt: number;
+  relativeUnitPt?: number;
+  horizontal?: boolean;
+};
+
 export type BeamerFrameLayout = {
   coordinateSystem: {
     unit: "tex-pt";
@@ -413,6 +424,7 @@ export type BeamerFrameLayout = {
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
   graphics: BeamerGraphicsLayout[];
+  spacing: BeamerSpacingLayout[];
   embeddedTikz: BeamerEmbeddedTikzLayout[];
   editScopes: BeamerEditScope[];
 };

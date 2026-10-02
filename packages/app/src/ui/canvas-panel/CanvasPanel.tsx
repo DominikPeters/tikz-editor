@@ -2,6 +2,7 @@ import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit } from "../../edit-execution";
 import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
+import { buildSelectionRects } from "../builds-panel/build-selection";
 import {
 Suspense,
 lazy,
@@ -65,7 +66,9 @@ import { rootKey } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
+import { DeckResizeOverlay } from "./DeckResizeOverlay";
 import { CanvasPanelView } from "./CanvasPanelView";
+import { useDeckOverlayContextMenu } from "./useDeckOverlayContextMenu";
 import { useCanvasContextMenuController,useCanvasContextMenuState } from "./useCanvasContextMenus";
 import {
 appendFreehandToolPoint,
@@ -508,6 +511,15 @@ export const CanvasPanel = memo(function CanvasPanel({
   // same SVG pipeline. Scene and edit handles are empty, so tikz
   // interactions are inert; the reducer additionally rejects edit actions.
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
+  const deckBuildSelectionRects = useMemo(() => {
+    if (!deckActiveFrame || !deckBuildSelection || snapshot.source !== source ||
+      deckBuildSelection.documentId !== activeDocumentId ||
+      deckBuildSelection.frameId !== deckActiveFrame.frameId ||
+      deckBuildSelection.step !== deckActiveFrame.step ||
+      deckBuildSelection.sourceRevision !== sourceRevision) return [];
+    return buildSelectionRects(deckActiveFrame.layout, source, deckBuildSelection.contentSpans);
+  }, [activeDocumentId, deckActiveFrame, deckBuildSelection, snapshot.source, source, sourceRevision]);
   const deckTextLayoutContext = useMemo(() => {
     if (!deckActiveFrame) {
       return null;
@@ -2819,6 +2831,12 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch
   });
 
+  const deckOverlayMenu = useDeckOverlayContextMenu({
+    index: deckObjectIndex, selected: deckSelectedObject, frame: deckActiveFrame,
+    viewportRef, svgRef: interactionSvgRef, bindings: commandRuntime.bindings,
+    closeText: closeTextEditingSession, editObject: applyDeckObjectEdit,
+  });
+
   const { onElementContextMenu, onCanvasContextMenu } = useCanvasSelectionInteractions({
     openCanvasContextMenuAt,
     closeTextEditingSession,
@@ -3379,12 +3397,18 @@ export const CanvasPanel = memo(function CanvasPanel({
         leftRulerRef={leftRulerRef}
         onTopRulerPointerDown={onTopRulerPointerDown}
         onLeftRulerPointerDown={onLeftRulerPointerDown}
-        onCanvasContextMenu={onCanvasContextMenu}
+        onCanvasContextMenu={(event) => { if (!deckOverlayMenu.onContextMenu(event)) onCanvasContextMenu(event); }}
         rulers={rulers}
         LEFT_RULER_DRAG_SOURCE_WIDTH_PX={LEFT_RULER_DRAG_SOURCE_WIDTH_PX}
         toolMode={toolMode}
         viewportRef={viewportRef}
         onViewportKeyDown={(event) => {
+          if (deckSelectedObject && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
+            event.preventDefault();
+            const rect = viewportRef.current?.getBoundingClientRect();
+            deckOverlayMenu.openForObject(deckSelectedObject, (rect?.left ?? 0) + 24, (rect?.top ?? 0) + 24);
+            return;
+          }
           if (handleDeckObjectViewportKey(event)) {
             return;
           }
@@ -3465,13 +3489,19 @@ export const CanvasPanel = memo(function CanvasPanel({
         draggableSourceIds={draggableSourceIds}
         hitRegionCursorByTargetId={pendingNodePositionHitRegionCursorByTargetId}
         onElementPointerDown={onElementPointerDown}
-        onElementContextMenu={onElementContextMenu}
+        onElementContextMenu={(event, id, region, handle) => {
+          if (!deckOverlayMenu.onContextMenu(event, region)) onElementContextMenu(event, id, region, handle);
+        }}
         onElementDoubleClick={onElementDoubleClick}
         onHoverChange={(id: string | null) => { dispatch({ type: "SET_HOVERED_ELEMENT", id }); }}
         nodePositionLinks={nodePositionLinks}
         marqueeBounds={marqueeBounds}
         selectionBoxes={selectionBoxes}
         deckObjectSelectionBox={deckObjectSelectionBox}
+        deckResizeOverlay={<DeckResizeOverlay source={snapshot.source} layout={deckActiveFrame?.layout ?? null}
+          index={deckObjectIndex} selected={deckSelectedObject} scale={canvasTransform.scale}
+          svgRef={interactionSvgRef} closeText={closeTextEditingSession} />}
+        deckBuildSelectionRects={deckBuildSelectionRects}
         adornmentHighlightBoxes={adornmentHighlightBoxes}
         selectedAdornmentConnectors={selectedAdornmentConnectors}
         selectionStrokeWidth={selectionStrokeWidth}
@@ -3525,6 +3555,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         nestedFigureBreadcrumb={nestedFigureBreadcrumb}
         RULER_SIZE={RULER_SIZE}
       />
+      {deckOverlayMenu.menu}
       {equationModalTarget ? (
         <Suspense fallback={null}>
           <EquationModal

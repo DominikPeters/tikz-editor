@@ -9,6 +9,7 @@ import { SourcePanel } from "./source-panel/SourcePanel";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import { FigureNavigator } from "./FigureNavigator";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
+import { BuildsPanel } from "./builds-panel/BuildsPanel";
 import { DeckInspectorPanel } from "./inspector-panel/DeckInspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { StylesPanel } from "./StylesPanel";
@@ -26,6 +27,7 @@ export const PANEL_IDS = {
   canvas: "canvas",
   figureNavigator: "figure-navigator",
   inspector: "inspector",
+  builds: "builds",
   objects: "objects",
   styles: "styles",
   assistant: "assistant",
@@ -55,6 +57,7 @@ const PANEL_HOMES: Record<string, PanelHome> = {
     dockLocation: DockLocation.CENTER,
     edgeLocation: DockLocation.RIGHT,
   },
+  [PANEL_IDS.builds]: { tabsetId: "right-tabset", dockLocation: DockLocation.CENTER, edgeLocation: DockLocation.RIGHT },
   [PANEL_IDS.objects]: {
     tabsetId: "right-tabset",
     dockLocation: DockLocation.CENTER,
@@ -165,7 +168,7 @@ function sanitizeLayout(json: IJsonModel): IJsonModel {
     if (!isAssistantAvailable() && node.type === "tab" && node.component === "assistant") {
       return null;
     }
-    let next = node;
+    let next = node.type === "tab" && node.component === "builds" ? { ...node, name: "Overlays" } : node;
     if (node.type === "tabset" && typeof node.id === "string" && (HOME_TABSET_IDS as readonly string[]).includes(node.id)) {
       next = { ...next, enableDeleteWhenEmpty: false };
     }
@@ -327,12 +330,13 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
   const inspectorVisible = model.getNodeById(PANEL_IDS.inspector) != null;
   const objectsVisible = model.getNodeById(PANEL_IDS.objects) != null;
   const stylesVisible = model.getNodeById(PANEL_IDS.styles) != null;
+  const buildsVisible = model.getNodeById(PANEL_IDS.builds) != null;
   const figuresVisible = model.getNodeById(PANEL_IDS.figureNavigator) != null;
   const assistantVisible = model.getNodeById(PANEL_IDS.assistant) != null;
 
   // Determine active right sidebar tab
-  let activeRightTab: "inspector" | "objects" | "styles" | "assistant" = "inspector";
-  const rightPanelIds = ["inspector", "objects", "styles", "assistant"] as const;
+  let activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds" = "inspector";
+  const rightPanelIds = ["inspector", "objects", "styles", "assistant", "builds"] as const;
   for (const id of rightPanelIds) {
     const node = model.getNodeById(id);
     if (node?.getParent()) {
@@ -354,6 +358,7 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
     objectsVisible,
     stylesVisible,
     figuresVisible,
+    buildsVisible,
     assistantVisible,
     activeRightTab,
   });
@@ -390,6 +395,7 @@ const MemoCanvasPanel = memo(CanvasPanel);
 const MemoFigureNavigator = memo(FigureNavigator);
 const MemoInspectorPanel = memo(InspectorPanel);
 const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
+const MemoBuildsPanel = memo(BuildsPanel);
 
 /**
  * Deck mode gets the deck object/frame inspector, tikz the full one.
@@ -452,6 +458,8 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
           );
         case "inspector":
           return <InspectorPanelSwitch />;
+        case "builds":
+          return <MemoBuildsPanel />;
         case "objects":
           return <MemoObjectsPanel />;
         case "styles":
@@ -502,6 +510,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
           canvas: "Canvas",
           "figure-navigator": "Figures",
           inspector: "Inspector",
+          builds: "Overlays",
           objects: "Objects",
           styles: "Styles",
           assistant: "Assistant",
@@ -564,6 +573,23 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
       if (activeDockHandle === handle) activeDockHandle = null;
     };
   }, [handle, model, dispatch]);
+
+  // Builds belongs to the slide surface. Keep it available for one-slide
+  // decks, and remove it when entering a nested TikZ drawing or another file.
+  const deckMode = useEditorStore((s) => s.documentKind === "beamer" &&
+    parseDocumentRootId(s.activeRootId ?? "")?.kind !== "beamer-frame-tikz");
+  useEffect(() => {
+    const m = modelRef.current;
+    const exists = m.getNodeById(PANEL_IDS.builds) != null;
+    if (deckMode && !exists) {
+      const target = m.getNodeById("right-tabset") ? "right-tabset" : m.getFirstTabSet().getId();
+      m.doAction(Actions.addNode({ type: "tab", id: PANEL_IDS.builds, name: "Overlays", component: "builds" }, target, DockLocation.CENTER, -1, false));
+      syncLayoutStateToStore(m, dispatchRef.current);
+    } else if (!deckMode && exists) {
+      m.doAction(Actions.deleteTab(PANEL_IDS.builds));
+      syncLayoutStateToStore(m, dispatchRef.current);
+    }
+  }, [deckMode, model]);
 
   // Auto-show/hide FigureNavigator based on figure count
   const figureCount = useEditorStore((s) => snapshotRoots(s.snapshot).length);

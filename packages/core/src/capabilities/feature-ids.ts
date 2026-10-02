@@ -92,6 +92,8 @@ export const FEATURE_IDS = [
   "svg_text",
   "text_includegraphics",
   "beamer_document_scan",
+  "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.
+  "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.
   "beamer_source_placeholders",
   "render_pipeline"
 ] as const;

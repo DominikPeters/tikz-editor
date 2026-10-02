@@ -584,30 +584,33 @@ function standaloneVerticalSpaceNodes(
   const result: BeamerVerticalSpaceBodyNode[] = [];
   let cursor = span.from;
   for (const command of beamerControlSequencesIn(context, span)) {
-    if (
-      command.name !== "vspace" ||
-      !isIgnorableFrameSource(source, { from: cursor, to: command.from })
-    ) {
-      return null;
-    }
-    const value = beamerRequiredArgumentAfter(context, command.to, span.to);
-    if (!value) {
-      return null;
-    }
-    const nodeSpan = { from: command.from, to: value.span.to };
-    result.push({
-      kind: "vertical-space",
-      id: `${frameId}:vspace:${firstIndex + result.length}`,
-      span: nodeSpan,
-      starred: command.starred,
-      value,
-    });
-    cursor = nodeSpan.to;
+    if (!isIgnorableFrameSource(source, { from: cursor, to: command.from })) return null;
+    const node = verticalSpaceNode(context, command, span.to, `${frameId}:vspace:${firstIndex + result.length}`);
+    if (!node) return null;
+    result.push(node);
+    cursor = node.span.to;
   }
   return result.length > 0 &&
       isIgnorableFrameSource(source, { from: cursor, to: span.to })
     ? result
     : null;
+}
+
+function verticalSpaceNode(
+  context: BeamerSyntaxContext,
+  command: { name: string; from: number; to: number; starred: boolean },
+  limit: number,
+  id: string
+): BeamerVerticalSpaceBodyNode | null {
+  if (command.name === "smallskip" || command.name === "medskip" || command.name === "bigskip") {
+    if (command.starred) return null;
+    return { kind: "vertical-space", id, command: command.name, starred: false,
+      span: { from: command.from, to: command.to } };
+  }
+  if (command.name !== "vspace") return null;
+  const value = beamerRequiredArgumentAfter(context, command.to, limit);
+  return value ? { kind: "vertical-space", id, command: "vspace", starred: command.starred, value,
+    span: { from: command.from, to: value.span.to } } : null;
 }
 
 function isIgnorableFrameSource(source: string, span: Span): boolean {
@@ -1025,24 +1028,16 @@ function parseColumnFlow(
   }
 
   for (const command of beamerControlSequencesIn(context, bodySpan)) {
-    if (command.name !== "vspace") {
-      continue;
-    }
-    const value = beamerRequiredArgumentAfter(context, command.to, bodySpan.to);
-    if (!value) {
-      continue;
-    }
-    const span = { from: command.from, to: value.span.to };
-    structural.push({
-      span,
-      node: {
-        kind: "vertical-space",
-        id: `${frameId}:column:${columnIndex}:vspace:${nodeIndex}`,
-        span,
-        starred: command.starred,
-        value,
-      },
-    });
+    const node = verticalSpaceNode(context, command, bodySpan.to, `${frameId}:column:${columnIndex}:vspace:${nodeIndex}`);
+    if (!node || isInsideNativeTextFlow(context, command.from, overlays)) continue;
+    if (structural.some(entry => entry.span.from <= command.from && command.from < entry.span.to)) continue;
+    const before = Math.max(bodySpan.from, ...structural.filter(entry => entry.span.to <= command.from).map(entry => entry.span.to));
+    const after = Math.min(bodySpan.to, ...structural.filter(entry => entry.span.from >= node.span.to).map(entry => entry.span.from));
+    // A source newline does not end a TeX paragraph. Keep spacing between
+    // text runs in the native frontend, which owns paragraph and line breaks.
+    if (!isIgnorableFrameSource(source, { from: before, to: command.from }) &&
+      !isIgnorableFrameSource(source, { from: node.span.to, to: after })) continue;
+    structural.push({ span: node.span, node });
     nodeIndex += 1;
   }
 

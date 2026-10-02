@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject
 } from "react";
 import type { AppMenuCommandId } from "../../app-menu";
@@ -132,7 +133,10 @@ type CanvasPanelViewProps = {
   nodePositionLinks: readonly NodePositionLinkDisplay[];
   marqueeBounds: SvgBounds | null;
   selectionBoxes: readonly SelectionBoxDisplay[];
+  /** Visible geometry for the selected build, in world coordinates. */
+  deckBuildSelectionRects?: readonly { x: number; y: number; width: number; height: number }[];
   /** Selected deck object outline (object layer), in world coordinates. */
+  deckResizeOverlay: ReactNode;
   deckObjectSelectionBox: {
     objectId: string;
     kind: string;
@@ -266,6 +270,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     marqueeBounds,
     selectionBoxes,
     deckObjectSelectionBox,
+    deckResizeOverlay,
+    deckBuildSelectionRects,
     adornmentHighlightBoxes,
     selectedAdornmentConnectors,
     selectionStrokeWidth,
@@ -710,6 +716,19 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                       data-deck-object-id={deckObjectSelectionBox.objectId}
                       data-deck-object-kind={deckObjectSelectionBox.kind}
                     />
+                  </g>
+                ) : null}
+
+                {deckResizeOverlay}
+
+                {deckBuildSelectionRects?.length ? (
+                  <g className={css.selectionOverlay} data-testid="deck-build-selection" pointerEvents="none">
+                    {deckBuildSelectionRects.map((rect, index) => <rect
+                      key={`${index}:${rect.x}:${rect.y}`}
+                      className={css.selectionRect}
+                      x={rect.x - 1} y={rect.y - 1} width={rect.width + 2} height={rect.height + 2}
+                      strokeWidth={selectionStrokeWidth}
+                    />)}
                   </g>
                 ) : null}
 

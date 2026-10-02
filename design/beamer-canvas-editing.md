@@ -233,11 +233,13 @@ traversal (select-then-delete).
   already retains per-option key/value spans precisely so a resize adapter
   can rewrite only the authored value. Corner drag rewrites
   `width=0.63\textwidth`, preserving the symbolic `\textwidth`-relative
-  form; aspect preserved by leaving `height` unset.
+  form; an authored height is scaled proportionally, and an unset height
+  remains unset.
 - **Columns**: hover the inter-column gap → col-resize cursor spanning the
-  column height; drag with live re-layout; on release rewrite *both*
-  adjacent width coefficients preserving their sum (`.55/.42` → `.48/.49`),
-  rounded to two decimals, symbolic form preserved. With three columns each
+  column height; drag previews source changes and live re-layout; release
+  commits one edit. Both adjacent width coefficients change while preserving
+  their combined rendered width (`.55/.42` → `.48/.49`), with up to six
+  decimal places and the authored units preserved. With three columns each
   divider touches only its two neighbors. Inspector holds the exact numeric
   field.
 - **Embedded tikzpictures**: click → select (inspector shows `scale=`/
@@ -716,14 +718,54 @@ foundation; full status paragraph in the Object layer section above.
     layout colors every step; per-step projection is deferred). Also
     deferred: mixed-run partial toggling, `\structure`, font-size
     controls.
-  - **Stage 3c — direct manipulation**: graphics corner resize handles
-    (rewrite the authored `width=0.63\textwidth` value span, symbolic form
-    preserved), column divider drag with live re-layout (rewrite both
-    adjacent coefficients preserving their sum), glue bands (vertical glue
-    enters the caret-traversal/select-then-delete domain; hover reveals
-    the band — decided 2026-07-31 — covering `\vspace`/`\smallskip`/
-    `\medskip`/`\bigskip`/`\vfill`), tier-3 selection promotion (text
-    drags crossing containers promote to object selection), and the
+  - **Direct resizing — implemented 2026-10-02**: selected resolved images
+    have four corner handles; hovering a column gap or selecting an adjacent
+    column reveals a divider. Both reuse canvas selection colors and handle
+    styling. Image corners scale existing width/height coefficients together,
+    or scale alone when no dimensions are present; natural-size images gain
+    a `scale` option. Numeric spans are patched without changing units,
+    whitespace, braces, filenames, overlay wrappers, or unrelated options.
+    Dividers change only their two neighbors and preserve their combined
+    rendered width, including mixed absolute and relative units. Column
+    rendering now resolves absolute dimensions and `\textwidth`,
+    `\linewidth`, `\columnwidth`, and `\paperwidth` coefficients.
+    Complex dimensions and unresolved image assets do not expose handles.
+
+    Gestures freeze their starting source and coordinate transform, preview
+    at most once per animation frame, and commit the release sample as one
+    undo entry. Escape, lost capture, window blur, tab/slide/step changes,
+    or a competing edit cancel the gesture; cancellation never overwrites a
+    newer source revision. Image selection follows its source location through
+    reflow and changed render IDs. Focused handles also support arrow keys
+    (Shift for larger steps). Exact values remain in the Inspector.
+
+    Implementation: `beamer/deck-resize.ts`, `beamer/column-dimensions.ts`,
+    `canvas-panel/DeckResizeOverlay.tsx`, and `canvas-panel/useDeckResize.ts`.
+    Regression coverage: `test/beamer-direct-resize.spec.ts` and
+    `test/web/deck-resize.spec.ts`.
+  - **Spacing handles — implemented 2026-10-02**: hovering an explicit
+    vertical gap reveals a band and an edge grip in the existing canvas
+    accent color. Dragging vertically or pressing Up/Down changes the gap;
+    Shift gives larger keyboard steps. Zero and negative gaps expose an
+    edge handle without intercepting the overlapping text. Geometry comes
+    from frame flow, column flow, and paragraph layout, including block
+    bodies and inline spacing attached to a line.
+
+    Existing `\vspace` commands retain their units, star, and surrounding
+    source formatting. Resizing `\smallskip`, `\medskip`, or `\bigskip`
+    replaces that command with `\vspace{…pt}`; clicking or returning to
+    the starting size preserves the named command. Handles share the
+    direct-resize preview, cancellation, and single-undo transaction.
+    Implicit theme/list gaps, flexible `\vfill`, complex dimensions, and
+    hidden or macro-owned material do not expose spacing handles.
+
+    Implementation: `beamer/deck-spacing.ts`, `beamer/spacing.ts`, and the
+    shared direct-resize overlay and gesture hook. Regression coverage:
+    `test/beamer-spacing.spec.ts`, `test/web/deck-resize.spec.ts`, and
+    `apps/web/e2e/beamer-spacing.spec.ts`.
+  - **Remaining direct manipulation**: glue caret traversal and
+    select-then-delete, flexible `\vfill` handles, tier-3 selection
+    promotion (text drags crossing containers promote to object selection), and the
     nested-TikZ breadcrumb editor — the largest single item; design
     settled 2026-07-31, see "Nested TikZ figure editing".
 - **Stage 4 — gap closing**: the deliberate gaps accumulated across

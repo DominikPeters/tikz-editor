@@ -1,4 +1,22 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
+export { beamerObjectOverlayTarget, type BeamerObjectOverlayTarget } from "./object-overlays.js";
+export {
+  buildBeamerBuildModel,
+  canEditBeamerBuildTiming,
+  beamerBuildTimingPatch,
+  beamerBuildRange,
+  beamerBuildBoundaryPatch,
+  type BeamerBuildTimingAction,
+  type BeamerBuildBoundary,
+  beamerBuildStateAt,
+  beamerBuildSpecPatch,
+  firstVisibleBeamerBuildStep,
+  isExplicitBeamerBuildSpec,
+  reconcileBeamerBuildRow,
+  type BeamerBuildModel,
+  type BeamerBuildRow,
+  type BeamerBuildState,
+} from "./builds.js";
 export { parseBeamerFrameBody } from "./content.js";
 export {
   beamerCaretAtomBeside,
@@ -88,3 +106,8 @@ export type * from "./content-types.js";
 export type * from "./overlay.js";
 export type * from "./theorems.js";
 export type * from "./theme/index.js";
+
+export { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarget, beamerImageResizePatches,
+  type BeamerColumnDivider, type BeamerImageResizeTarget } from "./deck-resize.js";
+
+export { beamerSpacingTargets, beamerSpacingResizePatches, type BeamerSpacingTarget } from "./deck-spacing.js";

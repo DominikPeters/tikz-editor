@@ -306,6 +306,23 @@ export const capabilityFixtures: Record<string, string> = {
 \begin{document}
 \begin{frame}Before.\begin{tcolorbox}Unsupported body\end{tcolorbox}After.\end{frame}
 \end{document}`,
+  beamer_direct_resize: String.raw`\documentclass{beamer}
+\begin{document}\begin{frame}
+\begin{columns}
+\begin{column}{.55\textwidth}Left\par\medskip Below\end{column}
+\begin{column}{.42\textwidth}\includegraphics[width=.8\linewidth]{demo.png}\end{column}
+\end{columns}
+\vspace{3pt}
+\end{frame}\end{document}`,
+  beamer_builds: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+\begin{itemize}[<+->]\item First\item Second\end{itemize}
+\only<2->{\begin{block}{Result}Proof.\end{block}}
+\uncover<2-4>{Finite interval}
+\alt<2>{During}{Otherwise}
+\end{frame}
+\end{document}`,
   beamer_document_scan: String.raw`\documentclass{beamer}
 \begin{document}
 \section{Introduction}

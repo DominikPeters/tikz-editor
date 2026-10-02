@@ -95,7 +95,9 @@ export type PreparedColumnFlowItem =
   | {
       kind: "vertical-space";
       visibility: BeamerOverlayVisibility;
+      node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>;
       height: number;
+      relativeUnitPt?: number;
     }
   | {
       kind: "tikzpicture";
@@ -135,6 +137,7 @@ export type PreparedFrameFlowItem =
       visibility: BeamerOverlayVisibility;
       node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>;
       height: number;
+      relativeUnitPt?: number;
     }
   | {
       kind: "paragraph";

@@ -38,9 +38,10 @@ export type BeamerVerticalSpaceBodyNode = {
   kind: "vertical-space";
   id: string;
   span: Span;
-  starred: boolean;
-  value: BeamerDelimitedSourceValue;
-};
+} & (
+  | { command: "vspace"; starred: boolean; value: BeamerDelimitedSourceValue }
+  | { command: "smallskip" | "medskip" | "bigskip"; starred: false }
+);
 
 export type BeamerTikzBodyNode = {
   kind: "tikzpicture";

@@ -57,6 +57,7 @@ function texVListBoxReportItem(
     ...(item.item.kind === "glue" ? {
       glue: {
         size: item.item.size,
+        ...(item.item.relativeUnitPt !== undefined ? { relativeUnitPt: item.item.relativeUnitPt } : {}),
         ...(item.item.stretch !== undefined ? { stretch: item.item.stretch } : {}),
         ...(item.item.shrink !== undefined ? { shrink: item.item.shrink } : {}),
         ...(item.item.stretchOrder !== undefined ? { stretchOrder: item.item.stretchOrder } : {}),

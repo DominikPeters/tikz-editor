@@ -34,6 +34,9 @@ import {
   type TexListLayoutProfile,
   type TexMetricProvider,
 } from "../text/tex/index.js";
+import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
+import { collectBeamerParagraphSpacing } from "./spacing.js";
+import { resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { collectBeamerEditScopes } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
@@ -123,6 +126,7 @@ import type {
   BeamerEmbeddedTikzLayout,
   BeamerFrameModel,
   BeamerFrameLayout,
+  BeamerSpacingLayout,
   BeamerFrameLayoutItem,
   BeamerGraphicsLayout,
   BeamerMetadataFieldModel,
@@ -434,6 +438,7 @@ async function renderBeamerFrameStep(params: {
   ];
   diagnostics.push(...bodyIr.diagnostics);
   const items: BeamerFrameLayoutItem[] = [];
+  const spacing: BeamerSpacingLayout[] = [];
   const paragraphs: BeamerParagraphLayout[] = [];
   const embeddedTikz: BeamerEmbeddedTikzLayout[] = [];
   const modelBuilder = createSvgModelBuilder();
@@ -538,6 +543,7 @@ async function renderBeamerFrameStep(params: {
         emitPreparedColumns({
           prepared: placement.item,
           referenceY: frameBlockTop + placement.referenceY,
+          spacing,
           bounds: availableContentBounds,
           items,
           paragraphs,
@@ -573,8 +579,11 @@ async function renderBeamerFrameStep(params: {
           modelBuilder,
         });
       } else if (placement.item.kind === "vertical-space") {
-        // Explicit vertical material participates in TeX's frame packing but
-        // has no painted representation of its own.
+        const item = placement.item;
+        spacing.push({ command: item.node.command, sourceSpan: item.node.span, sizePt: item.height,
+          relativeUnitPt: item.relativeUnitPt,
+          bounds: { x: availableContentBounds.x, y: frameBlockTop + placement.contentTop,
+            width: availableContentBounds.width, height: item.height } });
       } else {
         emitPreparedBlock({
           prepared: placement.item.block,
@@ -629,6 +638,7 @@ async function renderBeamerFrameStep(params: {
     });
   }
 
+  spacing.push(...collectBeamerParagraphSpacing(paragraphs, items));
   const graphics = collectBeamerGraphicsLayout(paragraphs, items);
   const model = modelBuilder.build({
     viewBox: page.page,
@@ -668,6 +678,7 @@ async function renderBeamerFrameStep(params: {
     items,
     paragraphs,
     graphics,
+    spacing,
     embeddedTikz,
     editScopes: collectBeamerEditScopes(
       frame,
@@ -993,7 +1004,7 @@ async function prepareFrameFlow(params: {
         kind: "vertical-space",
         visibility,
         node,
-        height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
+        ...measureVerticalSpace(node, bodyFont),
       });
       continue;
     }
@@ -2340,6 +2351,7 @@ function emitFrameParagraph(params: {
 function emitPreparedColumns(params: {
   prepared: Extract<PreparedFrameFlowItem, { kind: "columns" }>;
   referenceY: number;
+  spacing: BeamerSpacingLayout[];
   bounds: BeamerRect;
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
@@ -2392,6 +2404,9 @@ function emitPreparedColumns(params: {
         continue;
       }
       if (flowItem.kind === "vertical-space") {
+        params.spacing.push({ command: flowItem.node.command, sourceSpan: flowItem.node.span,
+          sizePt: flowItem.height, relativeUnitPt: flowItem.relativeUnitPt,
+          bounds: { x, y: flowY, width: preparedColumn.width, height: flowItem.height } });
         flowY += flowItem.height;
       } else if (flowItem.kind === "paragraph") {
         const laid = flowItem.paragraph;
@@ -2550,7 +2565,7 @@ async function prepareColumnContent(params: {
     theme,
     macroBindings,
   } = params;
-  const width = resolveColumnWidth(column.width.value, textWidth);
+  const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth) ?? textWidth;
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(theme);
@@ -2660,7 +2675,8 @@ async function prepareColumnFlowNode(params: {
     return {
       kind: "vertical-space",
       visibility,
-      height: resolveEmDimension(node.value.value) * bodyFont.sizePt,
+      node,
+      ...measureVerticalSpace(node, bodyFont),
     };
   }
   if (node.kind === "block" || node.kind === "theorem") {
@@ -3661,18 +3677,19 @@ function mappedTemplateText(primitive: Extract<
   );
 }
 
-function resolveColumnWidth(expression: string, textWidth: number): number {
-  const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*\\textwidth$/.exec(
-    expression
-  );
-  return match
-    ? Math.max(0, Number(match[1]) * textWidth)
-    : textWidth;
-}
-
-function resolveEmDimension(value: string): number {
-  const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))em$/.exec(value);
-  return match ? Number(match[1]) : 0;
+function measureVerticalSpace(
+  node: Extract<BeamerFrameBodyNode, { kind: "vertical-space" }>, font: BeamerThemeFont
+): { height: number; relativeUnitPt?: number } {
+  if (node.command !== "vspace") {
+    return { height: { smallskip: 3, medskip: 6, bigskip: 12 }[node.command] };
+  }
+  const dimension = parseTexDimensionExpression(node.value.value);
+  if (dimension?.kind === "absolute") return { height: dimension.value };
+  if (dimension?.kind === "contextual" && (dimension.reference === "em" || dimension.reference === "ex")) {
+    const relativeUnitPt = dimension.reference === "em" ? font.sizePt : fontXHeightPt(font);
+    return { height: dimension.factor * relativeUnitPt, relativeUnitPt };
+  }
+  return { height: 0 };
 }
 
 function resolveFrameVerticalPacking(
