@@ -1,6 +1,8 @@
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
-import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
+import { analyzeBeamerSlideMove } from "./slide-move-analysis.js";
+import { beamerSlideIsEditable, beamerSlideSourceSpan, beamerSlideInsertionPoint } from "./slide-source.js";
+export { beamerSlideIsEditable, beamerSlideSourceSpan } from "./slide-source.js";
 import { scanBeamerDocument } from "./scan.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerDocumentModel, BeamerFrameModel } from "./types.js";
@@ -21,59 +23,6 @@ export type BeamerSlideEditResult = {
   frameIds: Partial<Record<string, string>>;
   selectedFrameIds: string[];
 };
-
-/** A complete authored frame, outside command arguments and local TeX groups. */
-export function beamerSlideIsEditable(source: string, frame: BeamerFrameModel): boolean {
-  return !!frame.endSpan && isDocumentLevelSpan(source, frame.span);
-}
-
-function isDocumentLevelSpan(source: string, span: Span): boolean {
-  const syntax = createBeamerSyntaxContext(source).syntax;
-  if ([...matchTexSyntaxEnvironments(syntax).values()].some(env => env.name !== "document" &&
-    env.span.from < span.from && span.to < env.span.to)) return false;
-  let node = syntax.tree.resolveInner(span.from + 1, 1).parent;
-  while (node) {
-    if (["Group", "MacroDefinition", "OptionalArgument"].includes(node.name)) return false;
-    node = node.parent;
-  }
-  return true;
-}
-
-/** Whole frame lines and directly preceding comment lines travel together. */
-export function beamerSlideSourceSpan(source: string, frame: BeamerFrameModel): Span {
-  let from = frame.span.from;
-  const start = source.lastIndexOf("\n", from - 1) + 1;
-  if (!source.slice(start, from).trim()) {
-    from = start;
-    while (from > 0) {
-      const previous = source.lastIndexOf("\n", from - 2) + 1;
-      if (!/^[\t ]*%/u.test(source.slice(previous, from))) break;
-      from = previous;
-    }
-  }
-  let to = frame.span.to;
-  const end = source.indexOf("\n", to);
-  const suffix = source.slice(to, end < 0 ? source.length : end);
-  if (/^[\t \r]*(?:%[^\n]*)?$/u.test(suffix)) to = end < 0 ? source.length : end + 1;
-  return { from, to };
-}
-
-function insertionPoint(document: BeamerDocumentModel, destination: BeamerSlideDestination): number | null {
-  if (destination.kind === "end") return document.documentBodySpan.to;
-  if (destination.kind === "section") {
-    const section = document.sections.find(section => section.id === destination.sectionId);
-    if (!section || !isDocumentLevelSpan(document.source, section.span)) return null;
-    if (destination.edge === "before") return section.span.from;
-    // Include the command's trailing comment, so the inserted frame cannot be commented out.
-    const end = document.source.indexOf("\n", section.span.to);
-    return /^[\t \r]*(?:%[^\n]*)?$/u.test(document.source.slice(section.span.to, end < 0 ? undefined : end))
-      ? end < 0 ? document.source.length : end + 1 : section.span.to;
-  }
-  const frame = document.frames.find(frame => frame.id === destination.frameId);
-  if (!frame || !beamerSlideIsEditable(document.source, frame)) return null;
-  const span = beamerSlideSourceSpan(document.source, frame);
-  return destination.kind === "before" ? span.from : span.to;
-}
 
 type Replacement = { span: Span; text: string };
 type NamedSpan = { span: Span; name: string; kind: "target" | "citation" };
@@ -146,18 +95,21 @@ function duplicateReplacements(document: BeamerDocumentModel, frames: readonly B
   return replacements;
 }
 
-export function editBeamerSlides(source: string, edit: BeamerSlideEdit): BeamerSlideEditResult | null {
+export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options: { allowWarnings?: boolean } = {}): BeamerSlideEditResult | null {
   const document = scanBeamerDocument(source);
   if (!document.documentSpan) return null;
   const wanted = new Set(edit.kind === "insert" ? [] : edit.frameIds);
   const frames = document.frames.filter(frame => wanted.has(frame.id));
   if (edit.kind !== "insert" && (!frames.length || frames.length !== wanted.size || frames.some(frame => !beamerSlideIsEditable(source, frame)))) return null;
   if (edit.kind === "move" && frames.length === 1 && "frameId" in edit.destination && edit.destination.frameId === frames[0].id) return null;
+  const analysis = edit.kind === "move" ? analyzeBeamerSlideMove(source, edit) : null;
+  if (analysis && (analysis.status === "blocked" || (analysis.status === "review" && !options.allowWarnings))) return null;
   const spans = frames.map(frame => beamerSlideSourceSpan(source, frame));
-  let at = edit.kind === "delete" ? null : insertionPoint(document, edit.kind === "duplicate"
+  const dependencies = analysis?.dependencies ?? [];
+  let at = edit.kind === "delete" ? null : beamerSlideInsertionPoint(document, edit.kind === "duplicate"
     ? { kind: "after", frameId: frames.at(-1)!.id } : edit.destination);
   if (edit.kind !== "delete" && at == null) return null;
-  const removals = edit.kind === "move" || edit.kind === "delete" ? spans : [];
+  const removals = edit.kind === "move" || edit.kind === "delete" ? [...spans, ...dependencies.map(item => item.span)] : [];
   if (at != null) {
     const containing = removals.find(span => span.from <= at! && at! < span.to);
     if (containing) at = containing.from;
@@ -173,6 +125,10 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit): BeamerS
       payload += "\\begin{frame}\n\n\\end{frame}\n";
     } else {
       frames.forEach((frame, i) => {
+        for (const dependency of dependencies.filter(item => item.frameId === frame.id)) {
+          const text = source.slice(dependency.span.from, dependency.span.to);
+          payload += text + (text.endsWith("\n") ? "" : "\n");
+        }
         const span = spans[i];
         let text = source.slice(span.from, span.to);
         for (const replacement of rename.filter(item => span.from <= item.span.from && item.span.to <= span.to).sort((a, b) => b.span.from - a.span.from)) {

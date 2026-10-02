@@ -772,6 +772,7 @@ export function SourcePanel() {
     activeDocumentId,
     deckObjectSelection,
     deckBuildSelection,
+    sourceReveal,
     showSourcePanel,
     lastEditPatches,
     lastEditPatchBaseRevision,
@@ -790,6 +791,7 @@ export function SourcePanel() {
     activeDocumentId: s.activeDocumentId,
     deckObjectSelection: s.deckObjectSelection,
     deckBuildSelection: s.deckBuildSelection,
+    sourceReveal: s.sourceReveal,
     showSourcePanel: s.showSourcePanel,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
@@ -1118,6 +1120,20 @@ export function SourcePanel() {
     });
     if (selected.revealSource) view.focus();
   }, [activeDocumentId, activeRootId, deckBuildSelection, showSourcePanel, sourceRevision]);
+
+  const lastSourceReveal = useRef<typeof sourceReveal>(null);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !showSourcePanel || !sourceReveal || lastSourceReveal.current === sourceReveal ||
+      sourceReveal.documentId !== activeDocumentId || sourceReveal.sourceRevision !== sourceRevision) return;
+    lastSourceReveal.current = sourceReveal;
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: sourceReveal.span.from, head: sourceReveal.span.to },
+      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true,
+    });
+    view.focus();
+  }, [sourceReveal, activeDocumentId, sourceRevision, showSourcePanel]);
 
   const revealedPlaceholderSelectionRef = useRef<typeof deckObjectSelection>(null);
   useEffect(() => {

@@ -78,6 +78,7 @@ function initialUiState(): WorkspaceEphemeralState {
     deckStepByRootKey: {},
     deckObjectSelection: null,
     deckBuildSelection: null,
+    sourceReveal: null,
     fitToContentRequestToken: 0,
     fitToContentModeActive: true,
     canvasFitToContentScale: null,
@@ -1046,7 +1047,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const doc = readDocument(workspace.documents, action.documentId);
       if (doc?.sourceRevision !== action.baseRevision || doc.assistantLockReason ||
         ui.activeCanvasTextEditSourceId || ui.activeInspectorEditDocumentId || action.documentId !== activeId) return state;
-      const result = editBeamerSlides(doc.source, action.edit);
+      const result = editBeamerSlides(doc.source, action.edit, { allowWarnings: action.allowWarnings });
       if (!result) return state;
       const prefix = `${doc.id}::`;
       const stepsBefore = Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => key.startsWith(prefix)));
@@ -1440,6 +1441,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (ui.activeSourceScrubSourceId === action.sourceId) return state;
       ui = { ...ui, activeSourceScrubSourceId: action.sourceId };
       break;
+
+    case "REVEAL_SOURCE": {
+      const doc = workspace.documents[workspace.activeDocumentId];
+      if (action.documentId !== doc.id || action.sourceRevision !== doc.sourceRevision ||
+        action.span.from < 0 || action.span.to > doc.source.length || action.span.from > action.span.to) return state;
+      ui = { ...ui, sourceReveal: { documentId: action.documentId, sourceRevision: action.sourceRevision, span: action.span }, deckBuildSelection: null };
+      break;
+    }
 
     case "SET_DECK_BUILD_SELECTION": {
       if (action.selection && (

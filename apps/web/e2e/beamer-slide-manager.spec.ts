@@ -37,7 +37,7 @@ async function dragTo(page: Page, from: Locator, to: Locator, edge: "before" | "
   const box = (await to.boundingBox())!;
   const position = { clientX: box.x + box.width / 2, clientY: box.y + (edge === "before" ? 2 : box.height - 2) };
   await to.dispatchEvent("dragover", { ...position, dataTransfer: transfer });
-  await expect(to).toHaveAttribute("data-drop", edge);
+  await expect.poll(() => to.evaluate(element => element.closest("[data-slide-id], [data-section-id]")?.getAttribute("data-drop"))).toBe(edge);
   await to.dispatchEvent("drop", { ...position, dataTransfer: transfer });
   await transfer.dispose();
 }
@@ -130,4 +130,91 @@ test("reorders with a native pointer drag and keeps the moved slide active", asy
   expect(moved.indexOf("{D}Fourth")).toBeLessThan(moved.indexOf("% Keep with A"));
   await expect.poll(() => activeFrame(page)).toBe("frame:0");
   await expect(card(page, "D")).toHaveAttribute("aria-pressed", "true");
+});
+
+const WARNING_SOURCE = String.raw`\documentclass{beamer}
+\begin{document}
+\def\unit{ms}
+\begin{frame}{Latency}12\unit\end{frame}
+\def\unit{s}
+\begin{frame}{Throughput}Results\end{frame}
+\end{document}`;
+const review = (page: Page) => page.getByTestId("slide-move-review");
+
+test("reviews a dragged move with exact definitions, supports cancel and confirmation, and undoes once", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18); await setSource(page, WARNING_SOURCE);
+  await card(page, "Latency").click();
+  await dragTo(page, card(page, "Latency"), card(page, "Throughput"), "after");
+  await expect(review(page)).toBeVisible();
+  await expect(review(page)).toContainText("would use a different definition of \\unit");
+  await expect(review(page).locator("code")).toHaveText(["\\unit", "\\def\\unit{ms}", "\\def\\unit{s}"]);
+  expect(await readStoreSource(page)).toBe(WARNING_SOURCE);
+  await review(page).getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(review(page)).toHaveCount(0);
+  expect(await readStoreSource(page)).toBe(WARNING_SOURCE);
+  await card(page, "Latency").focus(); await page.keyboard.press("Alt+ArrowDown");
+  await expect(review(page)).toBeVisible();
+  await page.keyboard.press("Delete");
+  expect(await readStoreSource(page)).toBe(WARNING_SOURCE);
+  await review(page).getByRole("button", { name: "Move anyway", exact: true }).click();
+  await expect.poll(() => readStoreSource(page)).not.toBe(WARNING_SOURCE);
+  const moved = await readStoreSource(page);
+  expect(moved.indexOf("{Throughput}")).toBeLessThan(moved.indexOf("{Latency}"));
+  await card(page, "Latency").focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(WARNING_SOURCE);
+});
+
+test("opens the source panel and selects the clicked definition without moving the slide", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18); await setSource(page, WARNING_SOURCE);
+  await card(page, "Latency").click(); await page.keyboard.press("Alt+ArrowDown");
+  await review(page).getByRole("button", { name: "Show source: Current definition, line 3", exact: true }).click();
+  await expect(review(page)).toHaveCount(0);
+  await expect(page.locator(".cm-content")).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe("\\def\\unit{ms}");
+  expect(await readStoreSource(page)).toBe(WARNING_SOURCE);
+});
+
+test("blocks crossing a conditional and expires review after a source edit", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  const conditional = WARNING_SOURCE.replace("\\def\\unit{ms}", "\\iffalse").replace("\\def\\unit{s}", "\\fi");
+  await setSource(page, conditional);
+  await card(page, "Latency").click(); await page.keyboard.press("Alt+ArrowDown");
+  await expect(review(page)).toContainText("crosses a conditional branch");
+  await expect(review(page).getByRole("button", { name: "Move anyway" })).toHaveCount(0);
+  expect(await readStoreSource(page)).toBe(conditional);
+  await review(page).getByRole("button", { name: "Close", exact: true }).click();
+  const owned = conditional.replace("\\iffalse", "\\begin{onlyenv}<1>").replace("\\fi\n", "\\end{onlyenv}\n");
+  await setSource(page, owned);
+  await card(page, "Latency").click(); await page.keyboard.press("Alt+ArrowDown");
+  await expect(review(page)).toContainText("split an enclosing command");
+  await expect(review(page).getByRole("button", { name: "Move anyway" })).toHaveCount(0);
+  expect(await readStoreSource(page)).toBe(owned);
+  await review(page).getByRole("button", { name: "Close", exact: true }).click();
+  await setSource(page, WARNING_SOURCE);
+  await card(page, "Latency").click(); await page.keyboard.press("Alt+ArrowDown");
+  await expect(review(page)).toBeVisible();
+  await setSource(page, WARNING_SOURCE + "\n% edited");
+  await expect(review(page)).toHaveCount(0);
+  await setSource(page, WARNING_SOURCE);
+  await expect(review(page)).toHaveCount(0);
+});
+
+test("carries a private macro through keyboard reordering without a dialog and undoes it together", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Overview}Overview\end{frame}
+% Number of samples
+\newcommand{\sampleSize}{128}
+\begin{frame}{Results}N=\sampleSize\end{frame}
+\end{document}`;
+  await setSource(page, source);
+  await card(page, "Results").click(); await page.keyboard.press("Alt+ArrowUp");
+  await expect.poll(() => readStoreSource(page)).not.toBe(source);
+  await expect(review(page)).toHaveCount(0);
+  const moved = await readStoreSource(page);
+  expect(moved.indexOf("% Number of samples")).toBeLessThan(moved.indexOf("{Results}"));
+  expect(moved.indexOf("{Results}")).toBeLessThan(moved.indexOf("{Overview}"));
+  await card(page, "Results").focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(source);
 });

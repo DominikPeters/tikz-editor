@@ -113,3 +113,5 @@ export { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarge
 
 export { beamerSpacingTargets, beamerSpacingResizePatches, type BeamerSpacingTarget } from "./deck-spacing.js";
 export { editBeamerSlides, beamerSlideIsEditable, beamerSlideSourceSpan, type BeamerSlideEdit, type BeamerSlideDestination, type BeamerSlideEditResult } from "./slide-manager.js";
+
+export { analyzeBeamerSlideMove, type BeamerSlideMoveAnalysis, type BeamerSlideMoveIssue, type BeamerSlideMoveExcerpt } from "./slide-move-analysis.js";

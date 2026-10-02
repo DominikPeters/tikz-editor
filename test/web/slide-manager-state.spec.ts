@@ -56,3 +56,45 @@ describe("slide manager store transactions", () => {
     expect(state.activeRootId).toBe("frame:0");
   });
 });
+
+describe("slide move review transactions", () => {
+  const warned = String.raw`\documentclass{beamer}\begin{document}
+\def\unit{ms}
+\begin{frame}{A}\unit\end{frame}
+\def\unit{s}
+\begin{frame}{B}B\end{frame}
+\end{document}`;
+  const edit = { kind: "move", frameIds: ["frame:0"], destination: { kind: "end" } } as const;
+  it("requires confirmation and rejects a confirmation from an earlier source revision", () => {
+    const state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source: warned });
+    const action = { type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision, edit } as const;
+    expect(editorReducer(state, action)).toBe(state);
+    expect(editorReducer(state, { ...action, allowWarnings: true }).source).not.toBe(warned);
+    let changed = editorReducer(state, { type: "CODE_EDITED", source: warned + "\n" });
+    changed = editorReducer(changed, { type: "CODE_EDITED", source: warned });
+    expect(editorReducer(changed, { ...action, allowWarnings: true })).toBe(changed);
+  });
+  it("cannot override structural failures", () => {
+    const conditional = warned.replace("\\def\\unit{ms}", "\\iffalse").replace("\\def\\unit{s}", "\\fi");
+    const state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source: conditional });
+    expect(editorReducer(state, { type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision, edit, allowWarnings: true })).toBe(state);
+  });
+  it("moves definitions and frames in one undo event", () => {
+    const original = warned.replace("\\def\\unit{ms}\n", "").replace("\\unit\\end", "A\\end").replace("{B}B", "{B}\\unit");
+    let state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source: original });
+    state = editorReducer(state, { type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision,
+      edit: { kind: "move", frameIds: ["frame:1"], destination: { kind: "before", frameId: "frame:0" } } });
+    expect(state.source).not.toBe(original);
+    expect(state.history).toHaveLength(1);
+    state = editorReducer(state, { type: "UNDO" });
+    expect(state.source).toBe(original);
+  });
+  it("scopes source reveals to the current document and source revision", () => {
+    const state = setup();
+    const action = { type: "REVEAL_SOURCE", documentId: state.activeDocumentId, sourceRevision: state.sourceRevision, span: { from: 0, to: 20 } } as const;
+    expect(editorReducer(state, action).sourceReveal).toMatchObject({ span: action.span });
+    expect(editorReducer(state, { ...action, sourceRevision: state.sourceRevision - 1 })).toBe(state);
+    expect(editorReducer(state, { ...action, documentId: "other" })).toBe(state);
+    expect(editorReducer(state, { ...action, span: { from: 10, to: 100000 } })).toBe(state);
+  });
+});

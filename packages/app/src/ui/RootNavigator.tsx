@@ -185,7 +185,7 @@ export function RootNavigator() {
     }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if ((event.target as Element).closest('[role="menu"]')) return;
+    if ((event.target as Element).closest('[role="menu"], dialog, [role="dialog"]')) return;
     const command = event.ctrlKey || event.metaKey;
     const key = event.key.toLowerCase();
     const handled = () => { event.preventDefault(); event.stopPropagation(); };
@@ -203,7 +203,7 @@ export function RootNavigator() {
     if (key === "home") index = 0;
     else if (key === "end") index = visible.length - 1;
     else if (["arrowleft", "arrowright", "arrowup", "arrowdown"].includes(key)) {
-      if (event.altKey && deckMode && manager.canEditSelection) {
+      if (event.altKey && deckMode && manager.canMoveSelection) {
         handled();
         const selected = roots.filter(root => manager.ids.includes(root.id));
         const backward = key === "arrowleft" || key === "arrowup";
@@ -271,10 +271,10 @@ export function RootNavigator() {
                 ref={node => { if (node) buttons.current.set(root.id, node); else buttons.current.delete(root.id); }}
                 onClick={event => { if (deckMode) manager.select(root.id, event); else dispatch({ type: "SET_ACTIVE_ROOT", rootId: root.id }); }}
                 onContextMenu={event => { if (deckMode) manager.contextMenu(event, root.id); }}
-                draggable={deckMode && manager.enabled && manager.editable.includes(root.id)}
+                draggable={deckMode && manager.enabled && manager.movable.includes(root.id)}
                 onDragStart={event => {
                   const ids = manager.ids.includes(root.id) ? manager.ids : [root.id];
-                  if (!ids.every(id => manager.editable.includes(id))) { event.preventDefault(); return; }
+                  if (!ids.every(id => manager.movable.includes(id))) { event.preventDefault(); return; }
                   if (!manager.ids.includes(root.id)) manager.select(root.id);
                   const token = `${documentId}:${revision}:${root.id}`;
                   drag.current = { documentId, revision, ids, token }; setDragging(true);
@@ -292,5 +292,6 @@ export function RootNavigator() {
       {!roots.length && deckMode ? <div className={css.empty}>No slides</div> : null}
     </div>
     {manager.menu}
+    {manager.review}
   </div>;
 }

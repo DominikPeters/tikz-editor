@@ -259,6 +259,7 @@ export type WorkspaceEphemeralState = {
   /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
   deckObjectSelection: DeckObjectSelection | null;
   deckBuildSelection: DeckBuildSelection | null;
+  sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -358,6 +359,7 @@ export type EditorState = {
   /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
   deckObjectSelection: DeckObjectSelection | null;
   deckBuildSelection: DeckBuildSelection | null;
+  sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -444,6 +446,7 @@ export type EditorAction =
       documentId: string;
       baseRevision: number;
       edit: BeamerSlideEdit;
+      allowWarnings?: boolean;
     }
   | {
       type: "SELECT_DECK_SLIDES";
@@ -531,6 +534,7 @@ export type EditorAction =
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
   | { type: "SET_ACTIVE_INSPECTOR_EDIT"; documentId: string | null }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
+  | { type: "REVEAL_SOURCE"; documentId: string; sourceRevision: number; span: { from: number; to: number } }
   | { type: "SET_DECK_BUILD_SELECTION"; selection: DeckBuildSelection | null }
   | { type: "SET_DECK_STEP"; rootId: string; step: number }
   | { type: "SET_DECK_OBJECT_SELECTION"; frameId: string; objectId: string | null }

@@ -790,6 +790,31 @@ biggest determinant of coverage. Strategy:
 - Undo/redo, multi-root navigation, and source panel sync all reuse the
   existing machinery — these must not fork for deck mode.
 
+### Slide move analysis
+
+Drag and Alt+arrow reordering use the same analysis before changing source.
+
+- Matching TeX group and conditional branch identities are required. Incomplete
+  boundaries and moves that split enclosing constructs are blocked.
+- Macro uses are compared by declaration identity before and after the move,
+  including transitive references, captured `\let` aliases, and unmoved slides.
+  A missing known provider blocks the move; a changed provider requires review.
+- Private, zero-argument literal definitions can move with their consumers,
+  including pure transitive definitions and aliases. The analysis requires a
+  single declaration, matching scope, no outside references, and no unknown
+  document commands that could hide consumers. Exact source and comments travel
+  with the definition. Shared definitions stay in place.
+- Unknown commands, explicit state changes, and conditional definitions require
+  review when crossed. Parsing a macro is not evidence that expanding it has no
+  side effects. Arbitrary TeX expansion, package effects, and computed names are
+  outside the proof supported here.
+- The existing modal presents the reason and source excerpts. Each excerpt opens
+  and selects its exact range in Source. Only reviewable moves offer “Move anyway”.
+  The request expires when the document or source revision changes. The reducer
+  rechecks the move, so a confirmation cannot override a structural failure.
+- A move and any carried definitions are one undo transaction. Section membership
+  and ordinary slide numbering changes are expected consequences of reordering.
+
 ### Implemented links and manual references
 
 The native Beamer renderer supports `\hyperlink{target}{text}`,

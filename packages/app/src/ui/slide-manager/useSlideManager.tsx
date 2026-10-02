@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useState, type RefObject, type MouseEvent } from "react";
-import { beamerSlideIsEditable, editBeamerSlides, type BeamerDocumentModel, type BeamerSlideDestination, type BeamerSlideEdit } from "@tikz-editor/core/beamer/index";
+import { Actions } from "flexlayout-react";
+import { useCallback, useEffect, useMemo, useState, type RefObject, type MouseEvent } from "react";
+import { analyzeBeamerSlideMove, beamerSlideIsEditable, editBeamerSlides, type BeamerSlideMoveAnalysis, type BeamerDocumentModel, type BeamerSlideDestination, type BeamerSlideEdit } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { APP_MENU_COMMAND_IDS as IDS, type AppMenuItem } from "../../app-menu";
 import { CANVAS_CONTEXT_MENU_DEFINITION } from "../../context-menu";
 import { useEditorStore } from "../../store/store";
 import { getActiveEditorPlatform } from "../../platform/current";
+import { SlideMoveReview } from "./SlideMoveReview";
+import { getDockLayoutHandle } from "../DockLayout";
 import { CanvasContextMenu } from "../CanvasContextMenu";
 import type { CommandBinding, CommandBindings } from "../editor-command-runtime";
 
@@ -20,8 +23,14 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
   const anchorId = selection?.anchorId ?? frameId;
   const editable = useMemo(() => model?.frames.filter(frame => beamerSlideIsEditable(doc.source, frame)).map(frame => frame.id) ?? [], [model, doc.source]);
   const enabled = !!model && model.source === doc.source && !doc.assistantLockReason && !busy;
+  // Allow attempted moves so the analysis can explain structural restrictions.
+  const movable = model?.frames.map(frame => frame.id) ?? [];
+  const canMoveSelection = enabled && ids.length > 0 && ids.every(id => movable.includes(id));
   const canEditSelection = enabled && ids.length > 0 && ids.every(id => editable.includes(id));
   const [menu, setMenu] = useState<{ revision: number; documentId: string; anchor: { x: number; y: number }; bindings: CommandBindings } | null>(null);
+  const [pending, setPending] = useState<{ documentId: string; revision: number; edit: Extract<BeamerSlideEdit, { kind: "move" }>; analysis: BeamerSlideMoveAnalysis } | null>(null);
+  useEffect(() => { setPending(null); }, [documentId, doc.sourceRevision, enabled]);
+  const currentReview = pending?.documentId === documentId && pending.revision === doc.sourceRevision && enabled ? pending : null;
   const closeMenu = useCallback(() => {
     setMenu(null);
     containerRef.current?.querySelector<HTMLButtonElement>('[data-slide-id] button[data-selected]')?.focus();
@@ -41,7 +50,14 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
       ...(open && !(modifiers.ctrlKey || modifiers.metaKey || modifiers.shiftKey) ? { activeFrameId: id } : {}) });
   };
   const edit = (operation: BeamerSlideEdit, revision = doc.sourceRevision) => {
-    if (!enabled) return;
+    if (!enabled || revision !== doc.sourceRevision) return;
+    if (operation.kind === "move") {
+      const analysis = analyzeBeamerSlideMove(doc.source, operation);
+      if (analysis.status !== "safe") {
+        setPending({ documentId, revision, edit: operation, analysis });
+        return;
+      }
+    }
     dispatch({ type: "EDIT_DECK_SLIDES", documentId, baseRevision: revision, edit: operation });
   };
   const insert = () => {
@@ -74,9 +90,20 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
       setMenu({ revision: doc.sourceRevision, documentId, anchor: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) }, bindings });
     }
   };
-  return { ids, anchorId, select, edit, insert, enabled, editable, canEditSelection, contextMenu,
+  return { ids, anchorId, select, edit, insert, enabled, editable, movable, canEditSelection, canMoveSelection, contextMenu,
     selectAll: () => { dispatch({ type: "SELECT_DECK_SLIDES", documentId, baseRevision: doc.sourceRevision,
       frameIds: model?.frames.map(frame => frame.id) ?? [], anchorId }); },
+    review: currentReview ? <SlideMoveReview analysis={currentReview.analysis} onClose={() => { setPending(null); }}
+      onConfirm={() => {
+        dispatch({ type: "EDIT_DECK_SLIDES", documentId: currentReview.documentId, baseRevision: currentReview.revision, edit: currentReview.edit, allowWarnings: true });
+        setPending(null);
+      }} onReveal={span => {
+        setPending(null);
+        const layout = getDockLayoutHandle();
+        if (layout && !layout.getModel().getNodeById("source")) layout.togglePanel("source");
+        layout?.getModel().doAction(Actions.selectTab("source"));
+        dispatch({ type: "REVEAL_SOURCE", documentId: currentReview.documentId, sourceRevision: currentReview.revision, span });
+      }} /> : null,
     menu: menu?.documentId === documentId && menu.revision === doc.sourceRevision ?
       <CanvasContextMenu open anchor={menu.anchor} target="selection-multi" containerRef={containerRef} bindings={menu.bindings}
         definition={{ ...CANVAS_CONTEXT_MENU_DEFINITION, "selection-multi": MENU_ITEMS }} onClose={closeMenu}
