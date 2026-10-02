@@ -11,6 +11,8 @@ import type { TextLayoutContext } from "../text/layout-context.js";
 import { runTextRenderOperation, retainSceneTextLayout } from "../text/render-scope.js";
 import type { NodeItem, TikzFigure } from "../ast/types.js";
 import { parseNodeParts } from "../semantic/nodes/multipart.js";
+import type { CooperativeWorkOptions } from "../semantic/cooperative-work.js";
+import { evaluateTikzFigureAsync } from "../semantic/evaluate.js";
 
 export type RenderTikzOptions = {
   parse?: ParseTikzOptions;
@@ -20,6 +22,11 @@ export type RenderTikzOptions = {
     source: string,
     options: EvaluateOptions
   ) => EvaluateTikzResult;
+  /** Used by asynchronous renders; each batch runs inside this render's text scope. */
+  cooperative?: CooperativeWorkOptions;
+  semanticEvaluatorAsync?: (
+    figure: TikzFigure, source: string, options: EvaluateOptions, work: CooperativeWorkOptions
+  ) => Promise<EvaluateTikzResult>;
   svg?: EmitSvgOptions;
   /** Resolve source-dependent output options from the render's existing parse. */
   svgOptionsFromParse?: (parse: ParseTikzResult) => EmitSvgOptions;
@@ -107,12 +114,19 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
   const svgScope = svgOpts.textEngine === evaluateOpts.textEngine ? textScope : svgOpts.textEngine?.createRenderScope?.();
 
   const semanticEvaluator = opts.semanticEvaluator ?? evaluateTikzFigure;
-  let semanticResult = runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
+  const evaluate = () => opts.cooperative && (!opts.semanticEvaluator || opts.semanticEvaluatorAsync)
+    ? (opts.semanticEvaluatorAsync ?? evaluateTikzFigureAsync)(parseResult.figure, parseResult.source, evaluateOpts, {
+      ...opts.cooperative, run: operation => runTextRenderOperation(textScope, operation)
+    })
+    : runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
+  let semanticResult = await evaluate();
+  opts.cooperative?.signal?.throwIfAborted();
   let svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
 
   const flushedPendingTextKeys = await textEngine?.flushPending?.();
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
-    semanticResult = runTextRenderOperation(textScope, () => semanticEvaluator(parseResult.figure, parseResult.source, evaluateOpts));
+    opts.cooperative?.signal?.throwIfAborted();
+    semanticResult = await evaluate();
     svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOpts));
   }
   retainSceneTextLayout(textScope, semanticResult.scene);

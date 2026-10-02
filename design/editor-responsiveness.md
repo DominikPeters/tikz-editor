@@ -177,14 +177,111 @@ Local measurement artifacts: `/private/tmp/tikz-bindings-before-{1,2,3}/` and
 `/private/tmp/tikz-bindings-summary.json` contains all run medians. The reproducible
 scenario remains `apps/web/profiling/profile-source-typing.spec.ts`.
 
+## Incremental derived data and cooperative evaluation
+
+Scene source groups are indexed once per immutable element array. Node selection
+bounds and text-only-node checks use the same index, replacing a full scene scan
+for each handle. Source rebinding carries a geometry identity token forward;
+geometry-only bounds caches use that token and the numeric view box. A new
+semantic evaluation gets a fresh identity. Tokens do not reference old scene
+objects, and the caches are weakly owned so earlier source revisions can be
+collected.
+
+The dependency builder indexes each statement's edges in its persistent state.
+Selective replay reads only the replayed statements' dependency contributions.
+If their topology is unchanged, the complete graph and its invalidation index
+retain their identities. Otherwise the changed contribution is merged into the
+sorted graph, dropping disconnected resources. Invalidation queries share an
+adjacency index and traverse a queue with a cursor instead of repeatedly removing
+its first entry.
+
+Synchronous and cooperative semantic evaluation use the same generator, including
+full evaluation, suffix replay, selective replay and source rebinding. The app
+runs batches with an 8 ms budget and checks the budget between statements or
+reused fragments. The budget is a scheduling target: it cannot preempt one large
+statement or an indivisible parser/layout/finalization operation. Each batch
+enters and leaves its text render scope before the browser resumes other work.
+
+The host uses feature-detected `scheduler.yield()` and a timer fallback to cross
+an actual event-loop task boundary. A resolved Promise alone would not let input
+and rendering run. See [Chrome's scheduling explanation](https://developer.chrome.com/blog/use-scheduler-yield).
+
+The compute scheduler cancels obsolete requests and suppresses both their success
+and error callbacks. Source changes invalidate running work immediately, even
+while the replacement request is debouncing. New evaluations fork the committed
+parser and semantic sessions; SVG/text bindings are local to the request. Only a
+completed, current request can publish those caches together. Cancellation closes
+the generator outside semantic fallback handlers and leaves the previous
+snapshot/baseline intact. Concurrent preview/export requests cannot overwrite a
+newer completed cache with an older result.
+
+Regression tests compare synchronous and cooperative results, interrupt evaluation
+inside scopes, render another document during a text-layout pause, and verify
+that the next edit can reuse the committed baseline after cancellation. A browser
+test pauses a 400-node render and types into CodeMirror while the previous canvas
+remains displayed.
+
+## Derived-data and scheduling measurements, October 2, 2026
+
+Compared `efa28d32` with the changes above using frozen production builds,
+installed Chrome, one browser worker, and three runs per build. No other builds
+or test jobs from this task ran during measurement. Values below are the median
+of each run's median elapsed compute time; they include time spent yielding.
+
+| Source edit | Before | After |
+| --- | ---: | ---: |
+| Short burst, 2 statements | 5.7 ms | 5.6 ms |
+| Short burst, 120 nodes | 41.0 ms | 39.6 ms |
+| Paused path-label insertion, 400 nodes | 90.8 ms | 94.0 ms |
+| Paused existing-label edit, 400 nodes | 42.0 ms | 34.0 ms |
+
+The existing-label case computes about 19% faster. Median long-task counts over
+the typing sequence fell from 22 to 3. The structural insertion case takes about
+4% longer to complete, but its median long-task count fell from 32 to 17, and the
+median of the runs' 95th-percentile long-task durations fell from 158.9 to 63.6 ms.
+This is the intended tradeoff: the browser can process input between batches,
+even when total completion time is slightly longer.
+
+The keydown-to-next-frame proxy and frame-gap percentiles did not show a clear
+improvement in these workloads. For existing-label edits, they remained 18.2 ms
+and 50.0 ms respectively. Long-task reduction is evidence of less uninterrupted
+main-thread blocking, not a measured INP improvement. The separate browser
+regression verifies that CodeMirror can accept edits during suspended evaluation.
+
+Work counts stayed constant: all 22 existing-label previews reparse and reevaluate
+one statement and reuse 400; structural insertion uses semantic reuse on 15 of
+32 previews. Existing-label SVG updates still patch one part. Thus the compute
+improvement is not explained by dropping more preview updates.
+
+In the third existing-label CPU sample, dependency merging previously accounted
+for 142 ms across the sequence; the new subset-building/replacement path accounted
+for about 2 ms of samples. Preferred-node bounds lookups fell from 121 to 5 ms.
+Sampled React synchronous work fell from 734 to 592 ms. These sampled totals are
+supporting evidence rather than latency guarantees; garbage collection and host
+load varied between runs.
+
+Local reports and CPU profiles are in
+`/private/tmp/tikz-derived-before-{1,2,3}/` and
+`/private/tmp/tikz-derived-after-{1,2,3}/`. The per-run metrics and medians are in
+`/private/tmp/tikz-derived-summary.json`. The same four cases remain reproducible
+through `apps/web/profiling/profile-source-typing.spec.ts`.
+
+Validation: 4,345 unit tests passed across 308 files (six skipped); type checking,
+production lint, focused test lint, and the production build passed. Browser
+checks passed 43 cases covering source typing, cancellation, snapping, rectangle
+resizing and core editing. One grouping test expected six spaces of indentation
+but received four; the same failure reproduced on the unchanged baseline build.
+
 ## Remaining architectural work
 
 - Parsing still updates absolute AST spans. Profiling should determine whether
   its remaining copies justify a similar separation inside the parser.
-- Scene-derived UI indexes and semantic dependency assembly still do work across
-  the figure. Sharing geometry makes it possible to reuse more of those results.
-- Expensive full fallbacks still run synchronously. Cooperative scheduling is a
-  separate opportunity once the remaining work is measured.
+- Some scene-derived UI work, semantic finalization, parsing and SVG emission
+  still process the whole figure. The new identities and pause points provide
+  foundations for further targeted changes.
+- One large statement (for example, a matrix with many cells), macro expansion
+  and an individual text layout still run synchronously within a batch. Further
+  pause points should follow evidence from those workloads.
 - Beamer frame rendering has a separate compute path. Shared syntax indexing
   helps it, but ordinary TikZ statement reuse does not make complete Beamer
   frames incremental.

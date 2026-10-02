@@ -28,6 +28,30 @@ function normalizeForSceneComparison<T>(value: T): T {
 }
 
 describe("computeSnapshot incremental parser integration", () => {
+  it("rebases the next edit from the committed revision after cancellation", async () => {
+    const documentId = "cancelled-compute";
+    const source = String.raw`\begin{tikzpicture}
+\draw (0,0) -- (1,0);
+\node at (3,0) {Later};
+\end{tikzpicture}`;
+    const seed = await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0 });
+    const previous = JSON.stringify(seed.snapshot);
+    const abandoned = source.replace("(1,0)", "(12345,0)");
+    const controller = new AbortController();
+    await expect(computeSnapshot({ id: "cancelled", documentId, source: abandoned, sourceRevision: 1, inferSourceChanges: true }, {
+      signal: controller.signal, budgetMs: 0, yieldControl: async () => controller.abort()
+    })).rejects.toMatchObject({ name: "AbortError" });
+    const latest = source.replace("(1,0)", "(12,0)");
+    const result = await computeSnapshot({ id: "latest", documentId, source: latest, sourceRevision: 2,
+      patches: deriveSingleSourcePatch(abandoned, latest), patchBaseRevision: 1, changedSourceIds: ["path:0"] });
+    expect(result.snapshot.incremental?.parseStrategy).toBe("incremental");
+    expect(result.snapshot.incremental?.parsePatchApplication).toBe("rebased");
+    expect(result.snapshot.incremental?.strategy).toBe("incremental");
+    const canonical = await computeSnapshot({ id: "canonical", documentId, source: latest, sourceRevision: 2 });
+    expect(result.snapshot.svg?.svg).toBe(canonical.snapshot.svg?.svg);
+    expect(JSON.stringify(seed.snapshot)).toBe(previous);
+  });
+
   it("incrementally renders ordinary source edits with unchanged dependent geometry", async () => {
     const source = String.raw`\begin{tikzpicture}
       \node[draw] (a) at (0,0) {Alpha};

@@ -61,6 +61,7 @@ export type SemanticDependencyGraphBuilderState = {
   sourceNodes: PersistentMapSnapshot<string, SourceNodeState>;
   resourceNodes: PersistentMapSnapshot<string, ResourceNodeState>;
   edges: PersistentMapSnapshot<string, SemanticDependencyEdge>;
+  edgesBySource: PersistentMapSnapshot<string, SourceEdgeList>;
 };
 
 type SourceNodeState = {
@@ -73,12 +74,15 @@ type ResourceNodeState = {
   resourceKey: string;
 };
 
+type SourceEdgeList = { edge: SemanticDependencyEdge; previous?: SourceEdgeList };
+
 const GEOMETRY_CATEGORY: SemanticDependencyCategory = "geometry";
 
 export class SemanticDependencyGraphBuilder {
   private sourceNodes = new PersistentMap<string, SourceNodeState>();
   private resourceNodes = new PersistentMap<string, ResourceNodeState>();
   private edges = new PersistentMap<string, SemanticDependencyEdge>();
+  private edgesBySource = new PersistentMap<string, SourceEdgeList>();
 
   ensureSourceNode(sourceId: string): string {
     const existing = this.sourceNodes.get(sourceId);
@@ -177,11 +181,35 @@ export class SemanticDependencyGraphBuilder {
     };
   }
 
+  /** Read only replayed statements, without flattening the restored prefix. */
+  buildForSources(sourceIds: ReadonlySet<string>): SemanticDependencyGraph {
+    const nodes: SemanticDependencyNode[] = [];
+    const edges: SemanticDependencyEdge[] = [];
+    const resources = new Set<string>();
+    for (const sourceId of sourceIds) {
+      const source = this.sourceNodes.get(sourceId);
+      if (!source) continue;
+      const opaqueReasons = [...source.opaqueReasons].sort();
+      nodes.push({ id: sourceNodeId(sourceId), kind: "source", sourceId, opaque: opaqueReasons.length > 0, opaqueReasons });
+      for (let entry = this.edgesBySource.get(sourceId); entry; entry = entry.previous) {
+        const { edge } = entry;
+        edges.push(edge);
+        resources.add(edge.relation === "producer" ? edge.to : edge.from);
+      }
+    }
+    for (const id of resources) {
+      const resource = this.resourceNodes.get(id);
+      if (resource) nodes.push({ id, kind: "resource", ...resource });
+    }
+    return { nodes: nodes.sort(compareNodes), edges: edges.sort(compareEdges) };
+  }
+
   exportState(): SemanticDependencyGraphBuilderState {
     return {
       sourceNodes: this.sourceNodes.snapshot(),
       resourceNodes: this.resourceNodes.snapshot(),
-      edges: this.edges.snapshot()
+      edges: this.edges.snapshot(),
+      edgesBySource: this.edgesBySource.snapshot()
     };
   }
 
@@ -189,6 +217,7 @@ export class SemanticDependencyGraphBuilder {
     this.sourceNodes.restore(state.sourceNodes);
     this.resourceNodes.restore(state.resourceNodes);
     this.edges.restore(state.edges);
+    this.edgesBySource.restore(state.edgesBySource);
   }
 
   clone(): SemanticDependencyGraphBuilder {
@@ -203,27 +232,108 @@ export class SemanticDependencyGraphBuilder {
       return;
     }
     this.edges.set(edgeKey, edge);
+    const sourceId = (edge.relation === "producer" ? edge.from : edge.to).slice("source:".length);
+    this.edgesBySource.set(sourceId, { edge, previous: this.edgesBySource.get(sourceId) });
   }
+}
+
+type DependencyIndex = {
+  nodeById: ReadonlyMap<string, SemanticDependencyNode>;
+  adjacency: ReadonlyMap<string, readonly string[]>;
+  edgesBySource: ReadonlyMap<string, readonly SemanticDependencyEdge[]>;
+};
+
+// Published graphs are immutable. Repeated invalidation queries and unchanged
+// topology revisions share this index; discarded graphs release it naturally.
+const dependencyIndexes = new WeakMap<SemanticDependencyGraph, DependencyIndex>();
+
+function dependencyIndex(graph: SemanticDependencyGraph): DependencyIndex {
+  const cached = dependencyIndexes.get(graph);
+  if (cached) return cached;
+  const nodeById = new Map(graph.nodes.map(node => [node.id, node]));
+  const adjacency = new Map<string, string[]>();
+  const edgesBySource = new Map<string, SemanticDependencyEdge[]>();
+  for (const edge of graph.edges) {
+    const id = edge.relation === "producer" ? edge.from : edge.to;
+    const edges = edgesBySource.get(id);
+    if (edges) edges.push(edge);
+    else edgesBySource.set(id, [edge]);
+    if (edge.category !== GEOMETRY_CATEGORY) continue;
+    const neighbors = adjacency.get(edge.from);
+    if (neighbors) neighbors.push(edge.to);
+    else adjacency.set(edge.from, [edge.to]);
+  }
+  const index = { nodeById, adjacency, edgesBySource };
+  dependencyIndexes.set(graph, index);
+  return index;
+}
+
+/** Replace the dependency contribution of replayed statements. */
+export function replaceSourceDependencies(
+  previous: SemanticDependencyGraph,
+  rebuilt: SemanticDependencyGraph,
+  sourceIds: ReadonlySet<string>
+): SemanticDependencyGraph {
+  const before = dependencyIndex(previous);
+  const after = dependencyIndex(rebuilt);
+  const replaced = new Set([...sourceIds].map(sourceNodeId));
+  const unchanged = [...replaced].every(id => {
+    const left = before.nodeById.get(id);
+    const right = after.nodeById.get(id);
+    if (left?.kind !== "source" || right?.kind !== "source") return left === right;
+    if (left.opaque !== right.opaque || left.opaqueReasons.join("\0") !== right.opaqueReasons.join("\0")) return false;
+    const leftEdges = before.edgesBySource.get(id) ?? [];
+    const rightEdges = after.edgesBySource.get(id) ?? [];
+    return leftEdges.length === rightEdges.length && leftEdges.every((edge, i) => sameEdge(edge, rightEdges[i]));
+  });
+  if (unchanged) return previous;
+
+  const replacedResources = new Set([...replaced].flatMap(id =>
+    (before.edgesBySource.get(id) ?? []).map(edge => edge.relation === "producer" ? edge.to : edge.from)
+  ));
+  const edges = mergeSorted(
+    previous.edges.filter(edge => !replaced.has(edge.relation === "producer" ? edge.from : edge.to)),
+    rebuilt.edges, compareEdges
+  );
+  const resources = new Set(edges.map(edge => edge.relation === "producer" ? edge.to : edge.from));
+  const nodes = mergeSorted(
+    previous.nodes.filter(node => node.kind === "source"
+      ? !replaced.has(node.id)
+      : !replacedResources.has(node.id) || resources.has(node.id)),
+    rebuilt.nodes, compareNodes
+  );
+  return { nodes, edges };
+}
+
+function sameEdge(left: SemanticDependencyEdge, right: SemanticDependencyEdge): boolean {
+  return left.from === right.from && left.to === right.to && left.category === right.category && left.relation === right.relation;
+}
+
+function compareNodes(left: SemanticDependencyNode, right: SemanticDependencyNode): number {
+  return left.id.localeCompare(right.id);
+}
+
+function mergeSorted<T>(left: readonly T[], right: readonly T[], compare: (a: T, b: T) => number): T[] {
+  const merged: T[] = [];
+  let i = 0, j = 0;
+  while (i < left.length && j < right.length) {
+    const order = compare(left[i], right[j]);
+    if (order < 0) merged.push(left[i++]);
+    else {
+      if (order === 0) i++;
+      merged.push(right[j++]);
+    }
+  }
+  while (i < left.length) merged.push(left[i++]);
+  while (j < right.length) merged.push(right[j++]);
+  return merged;
 }
 
 export function collectGeometryInvalidation(
   graph: SemanticDependencyGraph,
   query: GeometryInvalidationQuery
 ): GeometryInvalidationResult {
-  const nodeById = new Map(graph.nodes.map((node) => [node.id, node] as const));
-  const adjacency = new Map<string, string[]>();
-
-  for (const edge of graph.edges) {
-    if (edge.category !== GEOMETRY_CATEGORY) {
-      continue;
-    }
-    const existing = adjacency.get(edge.from);
-    if (existing) {
-      existing.push(edge.to);
-    } else {
-      adjacency.set(edge.from, [edge.to]);
-    }
-  }
+  const { nodeById, adjacency } = dependencyIndex(graph);
 
   const queue: string[] = [];
   const visited = new Set<string>();
@@ -243,8 +353,8 @@ export function collectGeometryInvalidation(
   const affectedSourceIds = new Set<string>();
   const opaqueSourceIds = new Set<string>();
 
-  while (queue.length > 0) {
-    const nextId = queue.shift();
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const nextId = queue[cursor];
     if (!nextId) {
       continue;
     }

@@ -3,6 +3,48 @@ import { gotoApp, readStoreSource, resetStorageBeforeNavigation, setSource } fro
 
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 
+test("typing can replace a paused evaluation while the previous canvas stays intact", async ({ page }) => {
+  await resetStorageBeforeNavigation(page);
+  await gotoApp(page);
+  const original = String.raw`\begin{tikzpicture}\node {Original};\end{tikzpicture}`;
+  await setSource(page, original);
+  const pending = [String.raw`\begin{tikzpicture}`,
+    ...Array.from({ length: 400 }, (_, i) => `\\node at (${i % 20},${Math.floor(i / 20)}) {Label ${i}};`),
+    String.raw`\end{tikzpicture}`].join("\n");
+  await page.evaluate(nextSource => {
+    const host = globalThis as typeof globalThis & {
+      scheduler: { yield: () => Promise<void> };
+      __TIKZ_EDITOR_APP_TEST_API__?: { setSource: (source: string) => void };
+      __resumeEvaluation?: () => void;
+    };
+    const resumeNormally = host.scheduler.yield.bind(host.scheduler);
+    let first = true;
+    host.scheduler.yield = () => {
+      if (!first) return resumeNormally();
+      first = false;
+      return new Promise(resolve => { host.__resumeEvaluation = resolve; });
+    };
+    host.__TIKZ_EDITOR_APP_TEST_API__!.setSource(nextSource);
+  }, pending);
+  await expect.poll(() => page.evaluate(() => typeof (window as unknown as { __resumeEvaluation?: unknown }).__resumeEvaluation)).toBe("function");
+  const snapshotSource = () => page.evaluate(() => (window as unknown as {
+    __TIKZ_EDITOR_APP_TEST_API__: { getSnapshotSource: () => string };
+  }).__TIKZ_EDITOR_APP_TEST_API__.getSnapshotSource());
+  expect(await snapshotSource()).toBe(original);
+  const editor = page.locator(".cm-content").first();
+  await editor.locator(".cm-line").nth(1).click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type(" latest");
+  const latest = pending.replace("Label 0", "Label 0 latest");
+  await expect.poll(() => readStoreSource(page)).toBe(latest);
+  expect(await snapshotSource()).toBe(original);
+  await page.evaluate(() => (window as unknown as { __resumeEvaluation: () => void }).__resumeEvaluation());
+  await expect.poll(snapshotSource, { timeout: 15_000 }).toBe(latest);
+  await expect(page.locator('[data-text-renderer="tex"]').first()).toBeVisible();
+});
+
 test("source typing and undo keep later canvas text tied to its current source", async ({ page }) => {
   await resetStorageBeforeNavigation(page);
   await gotoApp(page);

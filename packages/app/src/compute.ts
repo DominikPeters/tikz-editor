@@ -1,3 +1,4 @@
+import type { CooperativeWorkOptions } from "@tikz-editor/core/semantic/cooperative-work";
 import type { Statement } from "@tikz-editor/core/ast/types";
 import {
   createIncrementalParseSession,
@@ -40,8 +41,7 @@ import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
 
 /**
- * A plain-data snapshot of a fully evaluated TikZ document.
- * Structured-clone compatible — ready for Web Worker transfer.
+ * An atomic snapshot of a fully evaluated document and its local text layouts.
  */
 export type SessionSnapshot = {
   source: string;
@@ -148,18 +148,21 @@ export type ComputeResponse = {
 };
 
 let revisionCounter = 0;
-let incrementalSemanticSession: IncrementalSemanticSession | null = null;
-let incrementalParseSession: IncrementalParseSession | null = null;
 let textEnginePromise: Promise<NodeTextEngine> | null = null;
 let resolvedTextEngine: NodeTextEngine | null = null;
 
 function resolveSvgPadding(parse: ParseTikzResult): number {
   return resolveFigureBoundsFromFigure(parse.figure).mode === "fixed" ? 0 : 18;
 }
-let incrementalDocumentId: string | undefined;
-let previousSvgModel: SvgRenderModel | null = null;
-let previousTextLayoutContext: TextLayoutContext | null = null;
-let incrementalWarmSource: string | null = null;
+type ComputeCache = {
+  documentId?: string;
+  semantic: IncrementalSemanticSession;
+  parse: IncrementalParseSession;
+  svg: SvgRenderModel | null;
+  text: TextLayoutContext | null;
+  warmSource: string | null;
+};
+let committedCache: ComputeCache | null = null;
 
 export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
   return {
@@ -182,23 +185,34 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
 
 /**
  * Compute a full SessionSnapshot for the given source.
- * Phase 0: synchronous implementation wrapped in a Promise.
- * The interface is designed so a Web Worker can be swapped in later.
+ * Evaluation optionally yields between batches. Only a completed request may
+ * publish its parser, semantic, SVG and text-layout baseline together.
  */
-export async function computeSnapshot(request: ComputeRequest): Promise<ComputeResponse> {
+export async function computeSnapshot(request: ComputeRequest, work?: CooperativeWorkOptions): Promise<ComputeResponse> {
   const revision = ++revisionCounter;
+  const previous = committedCache?.documentId === request.documentId ? committedCache : null;
+  const cache: ComputeCache = {
+    documentId: request.documentId,
+    semantic: previous?.semantic.fork() ?? createIncrementalSemanticSession(),
+    parse: previous?.parse.fork() ?? createIncrementalParseSession(),
+    svg: previous?.svg ?? null,
+    text: previous?.text ?? null,
+    warmSource: previous?.warmSource ?? null
+  };
+  work?.signal?.throwIfAborted();
+  const result = await computeSnapshotWithCache(request, revision, cache, work);
+  work?.signal?.throwIfAborted();
+  // Concurrent previews/exports may finish out of order. Only the newest run
+  // can become the baseline; every caller still receives its own full result.
+  if (revision === revisionCounter) committedCache = cache;
+  return result;
+}
+
+async function computeSnapshotWithCache(request: ComputeRequest, revision: number, cache: ComputeCache, work?: CooperativeWorkOptions): Promise<ComputeResponse> {
   const requestKind = request.kind ?? "render";
   const computeStartedAt = performance.now();
 
   try {
-    if (incrementalDocumentId !== request.documentId) {
-      incrementalDocumentId = request.documentId;
-      incrementalParseSession?.reset();
-      incrementalSemanticSession?.reset();
-      previousSvgModel = null;
-      previousTextLayoutContext = null;
-      incrementalWarmSource = null;
-    }
     if (detectDocumentKind(request.source) === "beamer") {
       const rootRef = request.activeRootId
         ? parseDocumentRootId(request.activeRootId)
@@ -227,7 +241,7 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       sourceRevision: request.sourceRevision,
       sourceLength: request.source.length
     });
-    if (requestKind === "prewarm" && incrementalWarmSource === request.source) {
+    if (requestKind === "prewarm" && cache.warmSource === request.source) {
       return {
         id: request.id,
         documentId: request.documentId,
@@ -247,7 +261,9 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         sourceFingerprint,
         request.documentFileRef ?? null,
         request.renderViewBox ?? null,
-        request.inferSourceChanges ?? false
+        request.inferSourceChanges ?? false,
+        cache,
+        work
       );
       const snapshot: SessionSnapshot = {
         source: request.source,
@@ -314,8 +330,8 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
     phases.textEngine = performance.now() - phaseStartedAt;
     // Full renders also seed the incremental cache. Route their one semantic
     // evaluation through the session instead of evaluating again after render.
-    incrementalSemanticSession?.reset();
-    const semanticSession = getIncrementalSemanticSession();
+    cache.semantic.reset();
+    const semanticSession = cache.semantic;
     phaseStartedAt = performance.now();
     const graphicsContext = await prepareDocumentGraphicsContext({
       source: request.source,
@@ -333,6 +349,9 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
         structuralMasks: textEditMaskSpan ? [textEditMaskSpan] : undefined
       },
       evaluate: { sourceFingerprint, graphicsResolver },
+      cooperative: work,
+      semanticEvaluatorAsync: async (figure, source, options, scopedWork) =>
+        (await semanticSession.evaluateAsync({ figure, source, options, hints: { trigger: "other" } }, scopedWork)).semantic,
       semanticEvaluator: (figure, source, options) =>
         semanticSession.evaluate({
           figure,
@@ -344,12 +363,12 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
-    incrementalWarmSource = request.source;
+    cache.warmSource = request.source;
     phaseStartedAt = performance.now();
     if (!textEditMaskSpan) {
       // A masked parse must not seed the drag-incremental cache; the session
       // ending clears the mask and triggers an unmasked render that primes.
-      const parseSession = getIncrementalParseSession();
+      const parseSession = cache.parse;
       parseSession.prime(result.parse, {
         activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
         includeContextDefinitions: true,
@@ -357,8 +376,8 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       });
     }
     phases.primeParse = performance.now() - phaseStartedAt;
-    previousSvgModel = result.svg.model;
-    previousTextLayoutContext = result.textLayoutContext;
+    cache.svg = result.svg.model;
+    cache.text = result.textLayoutContext;
 
     const snapshot: SessionSnapshot = {
       source: request.source,
@@ -393,11 +412,12 @@ export async function computeSnapshot(request: ComputeRequest): Promise<ComputeR
       diagnostics: result.renderDiagnostics
     };
   } catch (error) {
-    incrementalSemanticSession?.reset();
-    incrementalParseSession?.reset();
-    incrementalWarmSource = null;
-    previousSvgModel = null;
-    previousTextLayoutContext = null;
+    work?.signal?.throwIfAborted();
+    cache.semantic.reset();
+    cache.parse.reset();
+    cache.warmSource = null;
+    cache.svg = null;
+    cache.text = null;
     const snapshot: SessionSnapshot = {
       source: request.source,
       revision,
@@ -764,7 +784,9 @@ async function computeSnapshotIncremental(
   sourceFingerprint: string | undefined,
   documentFileRef: DocumentFileRef | null,
   renderViewBox: SvgViewBox | null,
-  inferChanges = false
+  inferChanges: boolean,
+  cache: ComputeCache,
+  work?: CooperativeWorkOptions
 ): Promise<{
   parse: ParseTikzResult;
   changedSourceIds: string[];
@@ -781,7 +803,7 @@ async function computeSnapshotIncremental(
   let phaseStartedAt = performance.now();
   const maybeTextEngine = getTextEngine();
   const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
-  const textScope = textEngine.createRenderScope?.(previousTextLayoutContext);
+  const textScope = textEngine.createRenderScope?.(cache.text);
   phases.textEngine = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
   const graphicsContext = await prepareDocumentGraphicsContext({
@@ -791,7 +813,8 @@ async function computeSnapshotIncremental(
   const graphicsResolver = graphicsContext.resolver;
   phases.imageAssets = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
-  const parseSession = getIncrementalParseSession();
+  work?.signal?.throwIfAborted();
+  const parseSession = cache.parse;
   const parseIncremental = parseSession.evaluate({
     source,
     sourceRevision,
@@ -814,15 +837,18 @@ async function computeSnapshotIncremental(
   const parseResult = parseIncremental.parse;
   const svgPadding = resolveSvgPadding(parseResult);
   phaseStartedAt = performance.now();
-  const session = getIncrementalSemanticSession();
+  const session = cache.semantic;
+  const evaluate = (input: Parameters<IncrementalSemanticSession["evaluate"]>[0]) => work
+    ? session.evaluateAsync(input, { ...work, run: operation => runTextRenderOperation(textScope, operation) })
+    : runTextRenderOperation(textScope, () => session.evaluate(input));
   // A parser fallback may include changes outside the supplied edit targets.
   // Rebuild semantics and SVG in that case instead of trusting narrower hints.
   if (parseIncremental.stats.strategy === "full") session.reset();
   phases.getSemanticSession = performance.now() - phaseStartedAt;
-  let reusePreviousModel = previousSvgModel;
+  let reusePreviousModel = cache.svg;
 
   phaseStartedAt = performance.now();
-  let incremental = runTextRenderOperation(textScope, () => session.evaluate({
+  let incremental = await evaluate({
     figure: parseResult.figure,
     source: parseResult.source,
     options: { sourceFingerprint, textEngine, graphicsResolver },
@@ -831,7 +857,8 @@ async function computeSnapshotIncremental(
       sourcePatches: patches,
       trigger
     }
-  }));
+  });
+  work?.signal?.throwIfAborted();
   phases.semantic = performance.now() - phaseStartedAt;
   let semanticResult = incremental.semantic;
   let incrementalStats = incremental.stats;
@@ -857,10 +884,11 @@ async function computeSnapshotIncremental(
 
   phaseStartedAt = performance.now();
   const flushedPendingTextKeys = await textEngine?.flushPending?.();
+  work?.signal?.throwIfAborted();
   phases.flushText = performance.now() - phaseStartedAt;
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
     phaseStartedAt = performance.now();
-    incremental = runTextRenderOperation(textScope, () => session.evaluate({
+    incremental = await evaluate({
       figure: parseResult.figure,
       source: parseResult.source,
       options: { sourceFingerprint, textEngine, graphicsResolver },
@@ -869,7 +897,8 @@ async function computeSnapshotIncremental(
         sourcePatches: patches,
         trigger
       }
-    }));
+    });
+    work?.signal?.throwIfAborted();
     phases.semanticAfterTextFlush = performance.now() - phaseStartedAt;
     semanticResult = incremental.semantic;
     incrementalStats = incremental.stats;
@@ -895,10 +924,10 @@ async function computeSnapshotIncremental(
     reusePreviousModel = svgResult.model;
   }
 
-  previousSvgModel = reusePreviousModel;
+  cache.svg = reusePreviousModel;
   retainSceneTextLayout(textScope, semanticResult.scene);
-  previousTextLayoutContext = textScope?.layoutContext ?? textEngine.layoutContext ?? null;
-  incrementalWarmSource = source;
+  cache.text = textScope?.layoutContext ?? textEngine.layoutContext ?? null;
+  cache.warmSource = source;
 
   return {
     parse: parseResult,
@@ -910,7 +939,7 @@ async function computeSnapshotIncremental(
     renderDiagnostics: [],
     phaseDurationsMs: phases,
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
-    textLayoutContext: previousTextLayoutContext
+    textLayoutContext: cache.text
   };
 }
 
@@ -1062,22 +1091,6 @@ function buildSvgReuseHints(
     previousModel,
     affectedSourceIds
   };
-}
-
-function getIncrementalSemanticSession(): IncrementalSemanticSession {
-  if (incrementalSemanticSession) {
-    return incrementalSemanticSession;
-  }
-  incrementalSemanticSession = createIncrementalSemanticSession();
-  return incrementalSemanticSession;
-}
-
-function getIncrementalParseSession(): IncrementalParseSession {
-  if (incrementalParseSession) {
-    return incrementalParseSession;
-  }
-  incrementalParseSession = createIncrementalParseSession();
-  return incrementalParseSession;
 }
 
 function getTextEngine(): NodeTextEngine | Promise<NodeTextEngine> {

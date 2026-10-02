@@ -1,3 +1,4 @@
+import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type { Span, TikzFigure } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import {
@@ -13,7 +14,7 @@ import {
   type SemanticContextSnapshot,
   type SemanticStatementEffectSummary
 } from "./context.js";
-import { collectGeometryInvalidation } from "./dependencies.js";
+import { collectGeometryInvalidation, replaceSourceDependencies } from "./dependencies.js";
 import {
   collectNodeAnchorTargets,
   computeBounds,
@@ -93,6 +94,8 @@ export type IncrementalSemanticEvaluateResult = {
 
 export type IncrementalSemanticSession = {
   evaluate: (input: IncrementalSemanticEvaluateInput) => IncrementalSemanticEvaluateResult;
+  evaluateAsync: (input: IncrementalSemanticEvaluateInput, work: CooperativeWorkOptions) => Promise<IncrementalSemanticEvaluateResult>;
+  fork: () => IncrementalSemanticSession;
   reset: () => void;
 };
 
@@ -139,11 +142,15 @@ const DEFAULT_CHECKPOINT_INTERVAL = 8;
 export function createIncrementalSemanticSession(
   defaultOptions: EvaluateOptions = {}
 ): IncrementalSemanticSession {
-  let cached: CachedSemanticRun | null = null;
+  return createSession(defaultOptions, null);
+}
 
-  const evaluate = (
-    input: IncrementalSemanticEvaluateInput
-  ): IncrementalSemanticEvaluateResult => {
+function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticRun | null): IncrementalSemanticSession {
+  let cached = initial;
+  let version = 0;
+
+  function* evaluate(input: IncrementalSemanticEvaluateInput): Generator<void, IncrementalSemanticEvaluateResult, void> {
+    const runVersion = ++version;
     const options: EvaluateOptions = {
       ...defaultOptions,
       ...input.options
@@ -155,23 +162,23 @@ export function createIncrementalSemanticSession(
     const statefulGraphicsState = resolveContainsStatefulGraphicsState(input.source, hints, cached);
 
     if (statefulGraphicsState) {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         run,
         statementIds,
         "stateful-graphics-state"
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
 
     const fallback = decideFallbackReason(hints, cached, statementIds);
     if (fallback) {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         run,
         statementIds,
         fallback
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
 
@@ -198,12 +205,12 @@ export function createIncrementalSemanticSession(
       changedSourceIds
     });
     if (invalidation.reachedOpaque) {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         run,
         statementIds,
         "opaque-dependency"
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
 
@@ -219,12 +226,12 @@ export function createIncrementalSemanticSession(
       for (let i = index + 1; i <= end; i++) affectedStatementIndices.push(i);
     }
     if (affectedStatementIndices.length === 0) {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         run,
         statementIds,
         "unmapped-affected-source"
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
 
@@ -237,31 +244,31 @@ export function createIncrementalSemanticSession(
       earliestAffectedIndex
     );
     if (restoreIndex == null) {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         run,
         statementIds,
         "checkpoint-missing"
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
 
     const startCheckpoint = preparedCheckpoints.checkpointsBeforeStatement.get(restoreIndex)!;
     const startFeatureUsage = preparedCheckpoints.featureUsageBeforeStatement.get(restoreIndex);
     if (!startFeatureUsage) {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         run,
         statementIds,
         "feature-checkpoint-missing"
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
 
     const selectivePlan = planSelectiveReplay(previous.statementFragments, restoreIndex, affectedStatementIndices);
     if (selectivePlan) {
       try {
-        const selective = evaluateSelectively({
+        const selective = yield* evaluateSelectively({
           run,
           previous,
           resolveSpan,
@@ -275,11 +282,11 @@ export function createIncrementalSemanticSession(
           startFeatureUsage,
           checkpointPreparation
         });
-        cached = selective.cached;
+        if (version === runVersion) cached = selective.cached;
         return selective.output;
       } catch {
         try {
-          const suffix = evaluateIncrementalSuffix({
+          const suffix = yield* evaluateIncrementalSuffix({
             run: createSemanticEvaluationRun(input.figure, input.source, options),
             previous,
             resolveSpan,
@@ -293,22 +300,22 @@ export function createIncrementalSemanticSession(
             fallbackReason: "selective-replay-error",
             checkpointPreparation
           });
-          cached = suffix.cached;
+          if (version === runVersion) cached = suffix.cached;
           return suffix.output;
         } catch {
-          const full = evaluateFullyAndCache(
+          const full = yield* evaluateFullyAndCache(
             createSemanticEvaluationRun(input.figure, input.source, options),
             statementIds,
             "runtime-error"
           );
-          cached = full.cached;
+          if (version === runVersion) cached = full.cached;
           return full.output;
         }
       }
     }
 
     try {
-      const suffix = evaluateIncrementalSuffix({
+      const suffix = yield* evaluateIncrementalSuffix({
         run,
         previous,
         resolveSpan,
@@ -321,35 +328,38 @@ export function createIncrementalSemanticSession(
         affectedStatementCount: new Set(affectedStatementIndices).size,
         checkpointPreparation
       });
-      cached = suffix.cached;
+      if (version === runVersion) cached = suffix.cached;
       return suffix.output;
     } catch {
-      const full = evaluateFullyAndCache(
+      const full = yield* evaluateFullyAndCache(
         createSemanticEvaluationRun(input.figure, input.source, options),
         statementIds,
         "runtime-error"
       );
-      cached = full.cached;
+      if (version === runVersion) cached = full.cached;
       return full.output;
     }
   };
 
   return {
-    evaluate,
+    evaluate: input => finishWork(evaluate(input)),
+    evaluateAsync: (input, work) => runCooperatively(evaluate(input), work),
+    fork: () => createSession(defaultOptions, cached),
     reset: () => {
+      version++;
       cached = null;
     }
   };
 }
 
-function evaluateFullyAndCache(
+function* evaluateFullyAndCache(
   run: ReturnType<typeof createSemanticEvaluationRun>,
   statementIds: string[],
   fallbackReason: IncrementalSemanticFallbackReason
-): {
+): Generator<void, {
   output: IncrementalSemanticEvaluateResult;
   cached: CachedSemanticRun;
-} {
+}, void> {
   const statementCount = run.expandedFigureBody.length;
   const checkpointInterval = Math.max(DEFAULT_CHECKPOINT_INTERVAL, Math.ceil(statementCount / 128));
   const statementFragments: SemanticStatementFragment[] = [];
@@ -368,6 +378,7 @@ function evaluateFullyAndCache(
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     statementFragments.push(createStatementFragment(evaluated, run.context.sourceFingerprint));
+    yield;
   }
   checkpointsBeforeStatement.set(
     statementCount,
@@ -411,7 +422,7 @@ function evaluateFullyAndCache(
   };
 }
 
-function evaluateIncrementalSuffix(args: {
+function* evaluateIncrementalSuffix(args: {
   run: ReturnType<typeof createSemanticEvaluationRun>;
   previous: CachedSemanticRun;
   resolveSpan: (span: Span) => Span;
@@ -424,10 +435,10 @@ function evaluateIncrementalSuffix(args: {
   affectedStatementCount: number;
   fallbackReason?: IncrementalSemanticFallbackReason;
   checkpointPreparation: IncrementalSemanticCheckpointPreparation;
-}): {
+}): Generator<void, {
   output: IncrementalSemanticEvaluateResult;
   cached: CachedSemanticRun;
-} {
+}, void> {
   const {
     run,
     previous,
@@ -449,7 +460,7 @@ function evaluateIncrementalSuffix(args: {
   });
   assignFeatureUsage(run.featureUsage, startFeatureUsage);
 
-  const nextFragments = bindFragmentsToCurrentSource(run, previous.statementFragments.slice(0, restoreIndex), resolveSpan);
+  const nextFragments = yield* bindFragmentsToCurrentSource(run, previous.statementFragments.slice(0, restoreIndex), resolveSpan);
   run.context.editHandles = nextFragments.flatMap(fragment => fragment.editHandles);
   run.diagnostics.length = run.baseDiagnosticsCount;
   for (const fragment of nextFragments) run.diagnostics.push(...fragment.diagnostics);
@@ -474,6 +485,7 @@ function evaluateIncrementalSuffix(args: {
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
+    yield;
   }
   checkpointsBeforeStatement.set(
     statementCount,
@@ -520,7 +532,7 @@ function evaluateIncrementalSuffix(args: {
   };
 }
 
-function evaluateSelectively(args: {
+function* evaluateSelectively(args: {
   run: ReturnType<typeof createSemanticEvaluationRun>;
   previous: CachedSemanticRun;
   resolveSpan: (span: Span) => Span;
@@ -533,10 +545,10 @@ function evaluateSelectively(args: {
   startCheckpoint: SemanticContextSnapshot;
   startFeatureUsage: FeatureUsage;
   checkpointPreparation: IncrementalSemanticCheckpointPreparation;
-}): {
+}): Generator<void, {
   output: IncrementalSemanticEvaluateResult;
   cached: CachedSemanticRun;
-} {
+}, void> {
   const {
     run,
     previous,
@@ -582,6 +594,7 @@ function evaluateSelectively(args: {
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
+    yield;
   }
   const previousCorridorHandleCount = countFragmentEditHandles(
     previous.statementFragments,
@@ -615,6 +628,7 @@ function evaluateSelectively(args: {
       applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.sourceId });
       run.context.editHandles.push(...fragment.editHandles);
     }
+    yield;
   }
   const finalFeatureUsage = mergeFeatureUsageAfterSelectiveReplay(
     previous.finalFeatureUsage,
@@ -627,17 +641,13 @@ function evaluateSelectively(args: {
   );
   featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(finalFeatureUsage));
 
-  const currentFragments = bindFragmentsToCurrentSource(run, nextFragments, resolveSpan);
-  const suffixSourceIds = currentFragments
-    .slice(corridorEndIndex + 1)
-    .map((fragment) => fragment.sourceId);
-  const recomputedSourceIds = currentFragments
+  const currentFragments = yield* bindFragmentsToCurrentSource(run, nextFragments, resolveSpan);
+  const recomputedSourceIds = new Set(currentFragments
     .slice(restoreIndex, corridorEndIndex + 1)
-    .map((fragment) => fragment.sourceId);
-  const dependencies = mergeSelectiveDependencies(
-    run.context.dependencyBuilder.build(),
+    .map((fragment) => fragment.sourceId));
+  const dependencies = replaceSourceDependencies(
     previous.dependencies,
-    suffixSourceIds,
+    run.context.dependencyBuilder.buildForSources(recomputedSourceIds),
     recomputedSourceIds
   );
 
@@ -949,63 +959,6 @@ function mergeFeatureUsageAfterSelectiveReplay(
   return merged;
 }
 
-function mergeSelectiveDependencies(
-  rebuilt: EvaluateTikzResult["dependencies"],
-  previous: EvaluateTikzResult["dependencies"],
-  suffixSourceIds: readonly string[],
-  recomputedSourceIds: readonly string[]
-): EvaluateTikzResult["dependencies"] {
-  const recomputedSourceIdSet = new Set(recomputedSourceIds);
-  if (suffixSourceIds.length === 0 && previous.nodes.length === 0) {
-    return rebuilt;
-  }
-
-  const nodesById = new Map(rebuilt.nodes.map((node) => [node.id, node]));
-  const edgesByKey = new Map(rebuilt.edges.map((edge) => [dependencyEdgeKey(edge), edge]));
-  const previousNodeById = new Map(previous.nodes.map((node) => [node.id, node]));
-
-  for (const node of previous.nodes) {
-    if (node.kind === "source" && !recomputedSourceIdSet.has(node.sourceId)) {
-      nodesById.set(node.id, node);
-    }
-  }
-
-  for (const edge of previous.edges) {
-    const fromNode = previousNodeById.get(edge.from);
-    const toNode = previousNodeById.get(edge.to);
-    const touchesRecomputedSource =
-      (fromNode?.kind === "source" && recomputedSourceIdSet.has(fromNode.sourceId)) ||
-      (toNode?.kind === "source" && recomputedSourceIdSet.has(toNode.sourceId));
-    if (touchesRecomputedSource) {
-      continue;
-    }
-    const touchesSuffixSource =
-      (fromNode?.kind === "source" && !recomputedSourceIdSet.has(fromNode.sourceId)) ||
-      (toNode?.kind === "source" && !recomputedSourceIdSet.has(toNode.sourceId));
-    if (!touchesSuffixSource) {
-      continue;
-    }
-    const resourceNode = fromNode?.kind === "resource" ? fromNode : toNode?.kind === "resource" ? toNode : null;
-    if (resourceNode) {
-      nodesById.set(resourceNode.id, resourceNode);
-    }
-    edgesByKey.set(dependencyEdgeKey(edge), edge);
-  }
-
-  return {
-    nodes: [...nodesById.values()].sort((left, right) => left.id.localeCompare(right.id)),
-    edges: [...edgesByKey.values()].sort((left, right) => {
-      const leftKey = dependencyEdgeKey(left);
-      const rightKey = dependencyEdgeKey(right);
-      return leftKey.localeCompare(rightKey);
-    })
-  };
-}
-
-function dependencyEdgeKey(edge: EvaluateTikzResult["dependencies"]["edges"][number]): string {
-  return `${edge.category}\u0000${edge.relation}\u0000${edge.from}\u0000${edge.to}`;
-}
-
 function mapSourceStatementFirstIndices(
   source: Record<string, number>
 ): Map<string, number> {
@@ -1040,15 +993,16 @@ function normalizeChangedSourceIds(
 }
 
 /** Eagerly bind compact source metadata; never clone the reusable geometry. */
-function bindFragmentsToCurrentSource(
+function* bindFragmentsToCurrentSource(
   run: ReturnType<typeof createSemanticEvaluationRun>,
   fragments: readonly SemanticStatementFragment[],
   resolveSpan: (span: Span) => Span
-): SemanticStatementFragment[] {
+): Generator<void, SemanticStatementFragment[], void> {
   const sourceFingerprint = run.context.sourceFingerprint;
   const binder = createSceneSourceBinder(resolveSpan, sourceFingerprint);
-  return fragments.map(fragment => {
-    if (fragment.sourceFingerprint === sourceFingerprint) return fragment;
+  const current: SemanticStatementFragment[] = [];
+  for (const fragment of fragments) {
+    if (fragment.sourceFingerprint === sourceFingerprint) { current.push(fragment); continue; }
     const mappedSpan = resolveSpan(fragment.sourceSpan);
     // The AST is authoritative for authored statement boundaries. Expansion
     // fragments use their mapped attribution spans instead of synthetic spans.
@@ -1066,8 +1020,10 @@ function bindFragmentsToCurrentSource(
       }
       return bound;
     });
-    return { ...fragment, sourceSpan, sourceFingerprint, elements,
+    current.push({ ...fragment, sourceSpan, sourceFingerprint, elements,
       editHandles: fragment.editHandles.map(binder.handle),
-      diagnostics: binder.metadata(fragment.diagnostics) };
-  });
+      diagnostics: binder.metadata(fragment.diagnostics) });
+    yield;
+  }
+  return current;
 }

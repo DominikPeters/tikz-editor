@@ -17,6 +17,7 @@ import {
 } from "@tikz-editor/core/semantic/types";
 import type { SvgTransform, WorldTransform, WorldVector } from "@tikz-editor/core/coords/index";
 import { intersectRayWithPolygon } from "@tikz-editor/core/semantic/nodes/shape-geometry";
+import { sceneGeometryIdentity } from "@tikz-editor/core/semantic/geometry-identity";
 import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 import { applyMatrixToVector, inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import type { CanvasDragKind } from "../../store/types";
@@ -273,7 +274,35 @@ export function elementBoundsInSvg(element: SceneElement, viewBox: SvgViewBox): 
 }
 
 export function effectiveElementBoundsInSvg(element: SceneElement, viewBox: SvgViewBox): SvgBounds | null {
-  return constrainBoundsToClipChain(elementBoundsInSvg(element, viewBox), element.clipChain ?? [], viewBox);
+  const identity = sceneGeometryIdentity(element);
+  const cached = elementBoundsCache.get(identity);
+  const key = `${viewBox.x},${viewBox.y},${viewBox.width},${viewBox.height}`;
+  if (cached?.key === key) return cached.bounds;
+  const bounds = constrainBoundsToClipChain(elementBoundsInSvg(element, viewBox), element.clipChain ?? [], viewBox);
+  elementBoundsCache.set(identity, { key, bounds });
+  return bounds;
+}
+
+// One view per geometry token bounds memory during zooming and source editing.
+const elementBoundsCache = new WeakMap<object, { key: string; bounds: SvgBounds | null }>();
+
+const sourceElementIndexes = new WeakMap<readonly SceneElement[], ReadonlyMap<string, SceneElement[]>>();
+
+function nodeElementsForSource(elements: readonly SceneElement[], sourceId: string): readonly SceneElement[] {
+  let index = sourceElementIndexes.get(elements);
+  if (!index) {
+    const next = new Map<string, SceneElement[]>();
+    for (const element of elements) {
+      if (element.adornment) continue;
+      const id = element.sourceRef.sourceId;
+      const group = next.get(id);
+      if (group) group.push(element);
+      else next.set(id, [element]);
+    }
+    sourceElementIndexes.set(elements, next);
+    index = next;
+  }
+  return index.get(sourceId) ?? [];
 }
 
 export function textBounds(element: SceneText, viewBox: SvgViewBox): SvgBounds {
@@ -927,7 +956,7 @@ export function preferredNodeBoundsForSource(
   viewBox: SvgViewBox,
   fallback: SvgBounds | null
 ): SvgBounds | null {
-  const sourceElements = elements.filter((element) => element.sourceRef.sourceId === sourceId && !element.adornment);
+  const sourceElements = nodeElementsForSource(elements, sourceId);
   if (sourceElements.length === 0) {
     return fallback;
   }
@@ -960,7 +989,7 @@ export function preferredNodeBoundsForSource(
 }
 
 export function isTextOnlyNodeSource(elements: SceneElement[], sourceId: string): boolean {
-  const sourceElements = elements.filter((element) => element.sourceRef.sourceId === sourceId && !element.adornment);
+  const sourceElements = nodeElementsForSource(elements, sourceId);
   if (sourceElements.length === 0) {
     return false;
   }
@@ -968,7 +997,7 @@ export function isTextOnlyNodeSource(elements: SceneElement[], sourceId: string)
 }
 
 function collectTextOnlyNodeVisualBoundsInSvg(
-  sourceElements: SceneElement[],
+  sourceElements: readonly SceneElement[],
   viewBox: SvgViewBox
 ): SvgBounds | null {
   let bounds: SvgBounds | null = null;

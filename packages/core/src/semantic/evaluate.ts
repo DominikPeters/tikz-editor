@@ -1,3 +1,4 @@
+import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type {
   ColorletStatement,
   DefineColorStatement,
@@ -190,11 +191,20 @@ function pushStyleDiagnostics(
 }
 
 export function evaluateTikzFigure(figure: TikzFigure, source: string, opts: EvaluateOptions = {}): EvaluateTikzResult {
+  return finishWork(evaluateFigureSteps(figure, source, opts));
+}
+
+export function evaluateTikzFigureAsync(figure: TikzFigure, source: string, opts: EvaluateOptions, work: CooperativeWorkOptions): Promise<EvaluateTikzResult> {
+  return runCooperatively(evaluateFigureSteps(figure, source, opts), work);
+}
+
+function* evaluateFigureSteps(figure: TikzFigure, source: string, opts: EvaluateOptions): Generator<void, EvaluateTikzResult, void> {
   const run = createSemanticEvaluationRun(figure, source, opts);
   const elementsByStatement: SceneElement[][] = [];
   for (let statementIndex = 0; statementIndex < run.expandedFigureBody.length; statementIndex += 1) {
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     elementsByStatement.push(evaluated.elements);
+    yield;
   }
   return finalizeSemanticEvaluationRun(run, elementsByStatement);
 }

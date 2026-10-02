@@ -97,12 +97,14 @@ describe("computeSnapshot edge orchestration", () => {
     }));
     vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         prime: vi.fn(),
         reset: vi.fn()
       }))
     }));
     vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: semanticEvaluate
       }))
@@ -156,12 +158,14 @@ describe("computeSnapshot edge orchestration", () => {
     }));
     vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         prime: vi.fn(),
         reset: parseReset
       }))
     }));
     vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         evaluate: vi.fn(),
         reset: semanticReset
       }))
@@ -187,9 +191,9 @@ describe("computeSnapshot edge orchestration", () => {
       }
     ]);
     expect(parseReset).toHaveBeenCalledTimes(1);
-    // The old cache is cleared before the full render and any partial cache
-    // created by a failing evaluator is cleared again in the error path.
-    expect(semanticReset).toHaveBeenCalledTimes(2);
+    // Each full render clears its private semantic baseline; a failed render
+    // clears its partial state again before returning an error snapshot.
+    expect(semanticReset).toHaveBeenCalledTimes(3);
   });
 
   it("merges dependency, matrix, scope, and pending TeX source ids into SVG reuse hints", async () => {
@@ -279,6 +283,7 @@ describe("computeSnapshot edge orchestration", () => {
     }));
     vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         prime: vi.fn(),
         reset: vi.fn(),
         evaluate: parseEvaluate
@@ -286,6 +291,7 @@ describe("computeSnapshot edge orchestration", () => {
     }));
     vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: semanticEvaluate
       })),
@@ -397,12 +403,14 @@ describe("computeSnapshot edge orchestration", () => {
     }));
     vi.doMock("@tikz-editor/core/parser/index", () => ({
       createIncrementalParseSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: vi.fn(() => ({ parse: parseResult, stats: parseStats }))
       }))
     }));
     vi.doMock("@tikz-editor/core/semantic/index", () => ({
       createIncrementalSemanticSession: vi.fn(() => ({
+        fork() { return { ...this }; },
         reset: vi.fn(),
         evaluate: vi.fn(() => ({ semantic: semanticResult, stats: semanticStats }))
       })),

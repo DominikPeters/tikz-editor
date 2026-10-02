@@ -64,6 +64,7 @@ export type IncrementalParseEvaluateResult = {
 export type IncrementalParseSession = {
   evaluate: (input: IncrementalParseEvaluateInput) => IncrementalParseEvaluateResult;
   prime: (parse: ParseTikzResult, options?: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions"> & { sourceRevision?: number | null }) => void;
+  fork: () => IncrementalParseSession;
   reset: () => void;
 };
 
@@ -100,7 +101,11 @@ const BEGIN_TIKZ_PATTERN = /\\begin\{tikzpicture\*?\}/u;
 const END_TIKZ_PATTERN = /\\end\{tikzpicture\*?\}/u;
 
 export function createIncrementalParseSession(): IncrementalParseSession {
-  let cached: CachedIncrementalParseState | null = null;
+  return createSession(null);
+}
+
+function createSession(initial: CachedIncrementalParseState | null): IncrementalParseSession {
+  let cached = initial;
 
   const prime = (
     parse: ParseTikzResult,
@@ -313,6 +318,7 @@ export function createIncrementalParseSession(): IncrementalParseSession {
   return {
     evaluate,
     prime,
+    fork: () => createSession(cached),
     reset: () => { cached = null; }
   };
 }

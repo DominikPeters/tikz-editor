@@ -3,6 +3,30 @@ import { describe, expect, it } from "vitest";
 import { createSingleFlightScheduler } from "../../packages/app/src/ui/compute-scheduler";
 
 describe("single-flight compute scheduler", () => {
+  it("aborts obsolete work and starts the latest request without reporting an error", async () => {
+    const signals: AbortSignal[] = [];
+    const completed: number[] = [];
+    const errors: unknown[] = [];
+    const scheduler = createSingleFlightScheduler<number, number>({
+      run: (input, signal) => {
+        signals.push(signal);
+        return input === 1
+          ? new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("Cancelled")), { once: true }))
+          : Promise.resolve(input);
+      },
+      onSuccess: (_input, output) => completed.push(output),
+      onError: (_input, error) => errors.push(error)
+    });
+    scheduler.schedule(1);
+    scheduler.schedule(2);
+    scheduler.schedule(3);
+    expect(signals[0].aborted).toBe(true);
+    await waitFor(() => completed.length > 0);
+    expect(completed).toEqual([3]);
+    expect(errors).toEqual([]);
+    scheduler.dispose();
+  });
+
   it("runs at most one request in flight and coalesces to the latest pending input", async () => {
     const started: number[] = [];
     const finished: number[] = [];
@@ -38,7 +62,7 @@ describe("single-flight compute scheduler", () => {
     deferreds.get(3)?.resolve(3);
     await flushMicrotasks();
 
-    expect(finished).toEqual([1, 3]);
+    expect(finished).toEqual([3]);
     expect(maxActive).toBe(1);
     scheduler.dispose();
   });
@@ -88,6 +112,27 @@ describe("single-flight compute scheduler", () => {
     await flushMicrotasks();
 
     expect(successCount).toBe(0);
+  });
+
+  it("can invalidate during a typing debounce without publishing or starting queued work", async () => {
+    const started: number[] = [];
+    const finished: number[] = [];
+    const deferred = createDeferred<number>();
+    const scheduler = createSingleFlightScheduler<number, number>({
+      run: async input => { started.push(input); return input === 1 ? deferred.promise : input; },
+      onSuccess: (_input, output) => finished.push(output)
+    });
+    scheduler.schedule(1);
+    scheduler.schedule(2);
+    scheduler.invalidate();
+    deferred.resolve(1);
+    await flushMicrotasks();
+    expect(started).toEqual([1]);
+    expect(finished).toEqual([]);
+    scheduler.schedule(3);
+    await waitFor(() => finished.length > 0);
+    expect(finished).toEqual([3]);
+    scheduler.dispose();
   });
 });
 

@@ -30,6 +30,7 @@ import { isCodeMirrorEventTarget } from "./editor-commands";
 import { useEditorCommandRuntime } from "./editor-command-runtime";
 import { toolModeFromShortcut } from "./tool-config";
 import { createSingleFlightScheduler } from "./compute-scheduler";
+import { yieldToBrowser } from "../yield-to-browser";
 import { computeTrigger } from "./compute-trigger";
 import { buildRepeatPreviewScene } from "./repeat-preview";
 import { useSettingsStore } from "../settings/useSettingsStore";
@@ -947,7 +948,7 @@ export function App() {
 
   useEffect(() => {
     const scheduler = createSingleFlightScheduler<ComputeRequest, ComputeResponse>({
-      run: (request) => computeSnapshot(request),
+      run: (request, signal) => computeSnapshot(request, { signal, yieldControl: yieldToBrowser }),
       onStart: (request) => {
         if ((request.kind ?? "render") === "prewarm") {
           return;
@@ -1003,6 +1004,12 @@ export function App() {
   const typingComputeDelay = trigger === "other" && changedSourceIds == null
     ? (source.length > 80_000 ? 220 : 120)
     : null;
+
+  // Typing may debounce the next render for 120–220 ms. Stop an obsolete
+  // evaluation as soon as the source changes, before that timer fires.
+  useLayoutEffect(() => {
+    computeSchedulerRef.current?.invalidate();
+  }, [source, activeDocumentId, activeRootId, activeDeckStep, textEditMaskSpan, imageAssetRefreshToken]);
 
   useEffect(() => {
     const scheduler = computeSchedulerRef.current;

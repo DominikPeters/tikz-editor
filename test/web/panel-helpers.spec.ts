@@ -3,11 +3,13 @@ import { pt, svgPoint, worldBounds, worldPoint } from "../../packages/core/src/c
 import type { SceneClipPath, ScenePath, SceneText } from "../../packages/core/src/semantic/types.js";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
+import { createSceneSourceBinder } from "../../packages/core/src/semantic/source-bindings.js";
 import { parseLength } from "../../packages/core/src/semantic/coords/parse-length.js";
 import { buildHitRegions } from "../../packages/app/src/ui/canvas-panel/hit-regions.js";
 import {
   collectSelectionBounds,
   collectSourceBounds,
+  effectiveElementBoundsInSvg,
   isPointInsideRectHitRegionContentBox,
   preferredNodeBoundsForSource,
   rectHitRegionsForTargetId,
@@ -21,6 +23,21 @@ const wp = (x: number, y: number) => worldPoint(pt(x), pt(y));
 const wb = (minX: number, minY: number, maxX: number, maxY: number) =>
   worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
 const sp = (x: number, y: number) => svgPoint(pt(x), pt(y));
+
+it("reuses geometry bounds across source bindings and invalidates for a new view or geometry", () => {
+  const source = String.raw`\begin{tikzpicture}\draw (0,0) rectangle (2,1);\end{tikzpicture}`;
+  const rendered = renderTikzToSvg(source);
+  const element = rendered.semantic.scene.elements[0];
+  const viewBox = rendered.svg.viewBox;
+  const original = effectiveElementBoundsInSvg(element, viewBox);
+  const rebound = createSceneSourceBinder(span => ({ from: span.from + 10, to: span.to + 10 }), "next").element(element);
+  expect(effectiveElementBoundsInSvg(rebound, { ...viewBox })).toBe(original);
+  const shiftedView = { ...viewBox, height: pt(viewBox.height + 20) };
+  expect(effectiveElementBoundsInSvg(rebound, shiftedView)).not.toEqual(original);
+  expect(effectiveElementBoundsInSvg(rebound, viewBox)).toEqual(original);
+  const changed = renderTikzToSvg(source.replace("(2,1)", "(4,1)")).semantic.scene.elements[0];
+  expect(effectiveElementBoundsInSvg(changed, viewBox)).not.toEqual(original);
+});
 
 describe("rectHitRegionsForTargetId", () => {
   it("matches rect regions by target id rather than statement source id", () => {

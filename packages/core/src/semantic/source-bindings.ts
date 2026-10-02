@@ -2,6 +2,7 @@ import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import type { EditHandle, SceneElement } from "./types.js";
 import type { StyleChainEntry } from "./style-chain.js";
+import { inheritSceneGeometry } from "./geometry-identity.js";
 
 /** One document transition, never a chain of historical coordinate systems. */
 export function createSourceSpanResolver(patches: readonly SourcePatch[]): (span: Span) => Span {
@@ -68,7 +69,7 @@ export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourc
   }
 
   function element(element: SceneElement): SceneElement {
-    return {
+    return inheritSceneGeometry(element, {
       ...element,
       sourceRef: metadata(element.sourceRef),
       styleChain: styleChain(element.styleChain),
@@ -78,7 +79,7 @@ export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourc
       ...(element.origin && { origin: metadata(element.origin) }),
       ...(element.clipChain && { clipChain: element.clipChain.map(clip => ({ ...clip, sourceRef: metadata(clip.sourceRef) })) }),
       ...(element.kind === "Text" && element.textSourceSpan && { textSourceSpan: resolveSpan(element.textSourceSpan) })
-    };
+    });
   }
 
   function handle(handle: EditHandle): EditHandle {
