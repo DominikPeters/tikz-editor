@@ -1,3 +1,4 @@
+import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
 import {
   buildBeamerReferenceIndex,
   projectBeamerReferences,
@@ -447,7 +448,7 @@ async function renderBeamerFrameStep(params: {
     ...theme.diagnostics,
   ];
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
-  const references: BeamerReferenceContext = { ...context.references, step, renderDiagnostics: diagnostics };
+  const references: BeamerReferenceContext = { ...context.references, step, theme, renderDiagnostics: diagnostics };
   const items: BeamerFrameLayoutItem[] = [];
   const paragraphs: BeamerParagraphLayout[] = [];
   const embeddedTikz: BeamerEmbeddedTikzLayout[] = [];
@@ -3049,6 +3050,16 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
+  // A size declaration preceding the list is an ambient font selection,
+  // not an empty paragraph (and must apply to its generated labels too).
+  const leadingSize = activeBeamerNamedSize(params.mapped.text);
+  if (leadingSize && new RegExp(`^\\s*\\\\${leadingSize.command}\\s*\\\\begin\\s*\\{thebibliography\\}`, "u").test(params.mapped.text)) {
+    params = {
+      ...params,
+      font: { ...params.font, sizePt: leadingSize.sizePt, lineHeightPt: leadingSize.lineHeightPt },
+      mapped: mapTransformedTextWithFallback(params.mapped, params.mapped.text.replace(leadingSize.pattern, ""), "Beamer ambient bibliography size"),
+    };
+  }
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
   const metricProvider = params.interwordSpacePt == null
@@ -3085,7 +3096,23 @@ function layoutParagraph(params: {
       `Beamer 11pt class ${namedSize.command} size`
     );
   }
-  const referenceProjection = projectBeamerReferences(mapped, params.references);
+  const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
+  const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
+    beamerBibliographyStyle({
+      source: params.references.source, sourceStart, theme: params.references.theme,
+      widestLabel, fontSizePt: namedSize?.sizePt ?? params.font.sizePt,
+      layoutFontSizePt: params.font.sizePt,
+      measure: (tex) => {
+        const prefix = namedSize ? `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont ` : "";
+        const measured = layoutSimpleTexParagraph(prefix + tex, {
+          width: texLength(10000), font: resolvedFont, metricProvider, textFontProfile,
+          alignment: "ragged-right", graphicsResolver,
+          mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
+        });
+        return measured.report?.lines[0]?.naturalWidth ?? 0;
+      },
+    })
+  );
   mapped = referenceProjection.mapped;
   const layoutOptions = {
     paragraphId: params.paragraphId,
@@ -3121,12 +3148,18 @@ function layoutParagraph(params: {
     }),
     baselineSkip: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,
-    listProfile: params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE,
+    listProfile: {
+      ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),
+      bibliographyMargins: referenceProjection.bibliographyMargins,
+      bibliographyParsepPt: (leadingSize?.command ?? namedSize?.command) === "small"
+        ? 3
+        : (leadingSize?.command ?? namedSize?.command) === "footnotesize" ? 2 : 0,
+    },
     displayMathProfile: BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
     hyphenator: params.disableAutomaticHyphenation
       ? { hyphenate: () => [] }
       : undefined,
-    graphicsResolver: params.graphicsResolver,
+    graphicsResolver,
     colorResolver: params.colorResolver,
     dimensionContext: {
       linewidth: texLength(params.bounds.width),
@@ -3237,7 +3270,7 @@ function layoutParagraph(params: {
     documentResult.vlistLayout.metrics.height + documentResult.vlistLayout.metrics.depth;
   const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped);
   const readOnlySourceSpans = macroArgumentRuns.map((run) => run.span);
-  const listStructure: BeamerListTopology[] = (documentResult.listStructure ?? []).map((list) => ({
+  const listStructure: BeamerListTopology[] = (documentResult.listStructure ?? []).flatMap((list) => list.name === "bibliography" ? [] : [{
     environment: list.name,
     beginSpan: { from: list.beginSpan.from, to: list.beginSpan.to },
     endSpan: { from: list.endSpan.from, to: list.endSpan.to },
@@ -3250,7 +3283,7 @@ function layoutParagraph(params: {
       contentSpan: { from: item.contentSpan.from, to: item.contentSpan.to },
       itemIndex: item.itemIndex,
     })),
-  }));
+  }]);
   return {
     height,
     layout: {

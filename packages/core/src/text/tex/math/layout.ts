@@ -164,6 +164,8 @@ export interface TexMathMiddleDelimiterLayoutItem {
 }
 
 export interface TexMathChildHListLayoutItem {
+  /** Paint for an atomic graphic, in 100 SVG units per TeX point. */
+  readonly svgBody?: string;
   readonly kind: "hlist";
   readonly role:
     | "nucleus"

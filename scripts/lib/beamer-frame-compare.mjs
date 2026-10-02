@@ -103,6 +103,14 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   const glyphs = [];
   const coveredGlyphs = [];
   for (const paragraph of render.layout.paragraphs) {
+    const marginLabelSpans = [];
+    const collectMarginLabels = (items) => {
+      for (const positioned of items) {
+        if (positioned.item.kind === "hbox" && positioned.item.role?.kind === "list-label") marginLabelSpans.push(positioned.item.sourceSpan);
+        if (positioned.children) collectMarginLabels(positioned.children);
+      }
+    };
+    collectMarginLabels(paragraph.vlistLayout.items);
     const placements = new Map(
       paragraph.vlistLayout.linePlacements.map(
         (placement) => [placement.lineIndex, placement]
@@ -110,7 +118,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     );
     for (const line of paragraph.report.lines) {
       const placement = placements.get(line.lineIndex);
-      const lineOffsetX = Math.max(
+      const lineOffsetX = line.segments.some((segment) => segment.role === "list-label") ? 0 : Math.max(
         0,
         Number(placement?.x ?? 0) - Number(line.xStart)
       );
@@ -142,7 +150,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
           const segmentRectangles = segmentCovered
             ? coveredRectangles
             : rectangles;
-          segmentRectangles.push(...math.rules.map((rule, ruleIndex) => ({
+          segmentRectangles.push(...math.rules.filter((rule) => rule.width > 0 && rule.height > 0).map((rule, ruleIndex) => ({
             id:
               `${paragraph.paragraphId}:line:${line.lineIndex}` +
               `:math-rule:${rectangles.length}:${ruleIndex}`,
@@ -154,7 +162,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
           segment.kind !== "text" ||
           !segment.text ||
           !segment.fontId ||
-          segment.role === "list-label"
+          (segment.role === "list-label" && marginLabelSpans.some((span) => span && span.start <= segment.sourceStartRaw && segment.sourceEndRaw <= span.end))
         ) {
           continue;
         }
@@ -1189,6 +1197,24 @@ function featuresFromNativeMathSvg(params) {
       width: round(width / 100),
       height: round(height / 100),
     });
+  }
+  // PDF image nodes appear as rules in LuaTeX's shipout trace. Preserve
+  // ancestor transforms when comparing a graphic inside an LR/raised box.
+  const transforms = [identityMatrix()];
+  for (const match of params.svgBody.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
+    const tag = match[0];
+    if (tag.startsWith("</")) { if (transforms.length > 1) transforms.pop(); continue; }
+    const name = /^<([\w:-]+)/u.exec(tag)?.[1];
+    const transform = multiplyMatrices(transforms.at(-1), parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""));
+    if (name === "image") {
+      const x = numericSvgAttribute(tag, "x", 0);
+      const y = numericSvgAttribute(tag, "y", 0);
+      const width = numericSvgAttribute(tag, "width", 0);
+      const height = numericSvgAttribute(tag, "height", 0);
+      const origin = transformPoint(transform, x, y);
+      rules.push({ role: "image", x: round(params.originX + origin.x / 100), y: round(params.baselineY + origin.y / 100), width: round(width * transform[0] / 100), height: round(height * transform[3] / 100) });
+    }
+    if (!tag.endsWith("/>") && !isVoidSvgElement(name)) transforms.push(transform);
   }
   return { glyphs, rules };
 }

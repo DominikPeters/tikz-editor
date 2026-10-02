@@ -57,6 +57,8 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "lmsans10-boldoblique",
   "lmsans8-regular",
   "lmsans8-oblique",
+  "lmsans9-regular",
+  "lmsans9-oblique",
   "tcrm1000",
 ] as const;
 

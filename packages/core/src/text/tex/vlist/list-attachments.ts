@@ -66,6 +66,7 @@ export function texListItemParagraphAttachments(params: {
   readonly spaceGlueProfile: TexSpaceGlueProfile;
   readonly inlineNodesToItems: TexInlineNodesToLayoutItems;
   readonly graphicsResolver?: DocumentGraphicsResolver;
+  readonly mathBoxProvider?: TexMathBoxProvider;
   readonly textFontProfile?: TexTextFontProfile;
   /** Absolute origin of the paragraph's containing VList. */
   readonly paragraphOriginX: TexVListX;
@@ -83,7 +84,8 @@ export function texListItemParagraphAttachments(params: {
         params.spaceGlueProfile,
         params.inlineNodesToItems,
         params.textFontProfile,
-        params.graphicsResolver
+        params.graphicsResolver,
+        params.mathBoxProvider
       ))
       : [];
   const firstLineIndentWidth = texArticleDescriptionFirstLineIndentWidth(
@@ -135,7 +137,7 @@ function texArticleDescriptionFirstLineIndentWidth(
   listItemLayout: TexVBoxListItemLayout | undefined,
   hasDescriptionLabel: boolean
 ): TexLength | undefined {
-  if (listContext?.kind !== "description") {
+  if (listContext?.kind !== "description" && listContext?.kind !== "bibliography") {
     return undefined;
   }
   const indent = hasDescriptionLabel
@@ -155,7 +157,8 @@ function texInlineLabelItemsForListContext(
   spaceGlueProfile: TexSpaceGlueProfile,
   inlineNodesToItems: TexInlineNodesToLayoutItems,
   textFontProfile?: TexTextFontProfile,
-  graphicsResolver?: DocumentGraphicsResolver
+  graphicsResolver?: DocumentGraphicsResolver,
+  mathBoxProvider?: TexMathBoxProvider
 ): TexLayoutInlineItem[] {
   if (labelBox.content.kind !== "source" || !listContext.label) {
     return [];
@@ -167,7 +170,7 @@ function texInlineLabelItemsForListContext(
     font.atPt,
     metricProvider,
     spaceGlueProfile,
-    undefined,
+    mathBoxProvider,
     labelBox.fontState,
     textFontProfile,
     graphicsResolver

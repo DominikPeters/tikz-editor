@@ -30,7 +30,7 @@ describe("Beamer hyperlinks and manual bibliographies", () => {
 \bibitem{first} First author. \newblock First title.
 \bibitem[AB26]{custom} Custom author.
 \bibitem{last} Last author.
-\end{thebibliography}`));
+\end{thebibliography}`), String.raw`\setbeamertemplate{bibliography item}[text]`);
     const result = await renderBeamerFrame(source);
     expect(text(result)).toContain("See [1, AB26, 2, p. 12].");
     expect(links(result).map((link) => link.label)).toEqual(["Citation first", "Citation custom", "Citation last"]);

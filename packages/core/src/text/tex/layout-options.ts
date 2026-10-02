@@ -64,6 +64,8 @@ export interface TexListMarkerProfile {
  */
 export interface TexListLayoutProfile {
   readonly leftMarginEmByDepth: readonly number[];
+  readonly bibliographyMargins?: ReadonlyMap<number, number>;
+  readonly bibliographyParsepPt?: number;
   readonly topsepPtByDepth: readonly number[];
   readonly topsepStretchPtByDepth?: readonly number[];
   readonly topsepShrinkPtByDepth?: readonly number[];

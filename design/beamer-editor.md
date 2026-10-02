@@ -805,9 +805,26 @@ Manual `thebibliography` environments support `\bibitem{key}`,
 `\cite[note]{key1,key2}` renders the resolved labels and links each citation
 to its bibliography entry's first visible overlay. Numbering restarts in
 each bibliography; explicitly labeled items do not advance the counter.
-The initial preview uses numbered/custom text labels for bibliography
-markers. Decorative icons, bibliography theme templates, BibTeX/biblatex,
-external `.bib` files, and PDF link annotations are outside this subset.
+Bibliographies use Beamer's stock `default`/`article`, `text`, `book`,
+`online`, and `triangle` item templates. The icon artwork comes from Beamer.
+Label widths, left alignment, long-label first-line offsets, author struts,
+entry colors, and `\newblock` state follow Beamer's definitions. Local
+`\small`/`\footnotesize` retain the class label gap and their size-specific
+paragraph spacing.
+
+`test/beamer-bibliography.spec.ts` checks every glyph's position, font and
+size, plus icon rectangles, against frozen LuaLaTeX shipout traces with a
+0.001pt tolerance. The fixtures cover stock templates, custom labels,
+wrapped small/footnotesize text, and bibliographies next to ordinary lists. Regenerate
+only from LuaLaTeX with `node scripts/update-beamer-bibliography-oracles.mjs`;
+the snapshots include engine versions and source hashes. The default icon
+and colors have also been visually compared to the PDF. The 9pt Latin
+Modern sans faces are included so `\footnotesize` does not substitute a
+scaled 10pt face. Regenerate those faces with
+`node scripts/generate-tex-font-data.mjs --fonts=lmsans9-regular,lmsans9-oblique --fonttools-outlines`.
+
+Arbitrary template/font/color redefinitions, BibTeX/biblatex, external
+`.bib` files, and PDF link annotations are outside this subset.
 
 `references.ts` builds a document-wide index when the document is prepared.
 Each paragraph projects reference commands into existing text/list primitives

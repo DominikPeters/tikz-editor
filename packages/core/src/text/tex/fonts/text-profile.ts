@@ -177,24 +177,10 @@ export function luaLatexDefaultFontIdForState(
     if (state.series === "bold") {
       return "lmsans10-bold";
     }
-    if (state.shape === "italic") {
-      return atPt <= 8
-        ? "lmsans8-oblique"
-        : atPt >= 12
-          ? "lmsans12-oblique"
-          : "lmsans10-oblique";
-    }
-    if (state.shape === "slanted") {
-      return atPt <= 8
-        ? "lmsans8-oblique"
-        : atPt >= 12
-          ? "lmsans12-oblique"
-          : "lmsans10-oblique";
-    }
-    if (atPt <= 8) {
-      return "lmsans8-regular";
-    }
-    return atPt >= 12 ? "lmsans12-regular" : "lmsans10-regular";
+    // Optical-size intervals from LaTeX's tulmss.fd.
+    const size = atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt >= 11 ? 12 : 10;
+    const shape = state.shape === "italic" || state.shape === "slanted" ? "oblique" : "regular";
+    return `lmsans${size}-${shape}`;
   }
   if (state.series === "bold" && state.shape === "italic") {
     return "lmroman10-bolditalic";

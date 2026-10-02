@@ -690,7 +690,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["beamer_references"],
-    notes: "Beamer document renderer supports manual thebibliography/bibitem entries, numeric/custom citation labels, multi-key cite with an optional note, and citation navigation. Bibliography entries currently use text labels. BibTeX/biblatex processing and bibliography template customization are not implemented."
+    notes: "Beamer document renderer supports manual thebibliography/bibitem entries, numeric/custom citation labels, multi-key cite with an optional note, and citation navigation. Stock bibliography markers (default/article, text, book, online, triangle), label widths, hanging indentation, entry colors and newblock spacing are checked against LuaLaTeX. Arbitrary bibliography template/font/color redefinitions and BibTeX/biblatex processing are not implemented."
   },
   render_pipeline: {
     parser: "not-applicable",

@@ -102,6 +102,11 @@ function renderMathHListItems(
           : "",
         ">",
       ].join(""));
+      if (item.svgBody) {
+        const x = translateTexHBoxX(originX, item.x) * TEX_MATH_SVG_UNITS_PER_PT;
+        const y = translateTexHBoxY(originY, item.y) * TEX_MATH_SVG_UNITS_PER_PT;
+        pieces.push(`<g transform="translate(${formatSvgNumber(x)} ${formatSvgNumber(y)})">${item.svgBody}</g>`);
+      }
       pieces.push(...renderMathHListItems(
         item.items,
         fontProfile,

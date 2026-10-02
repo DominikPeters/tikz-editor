@@ -1,3 +1,4 @@
+import type { ResolvedBeamerTheme } from "./theme/types.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import {
@@ -27,6 +28,7 @@ export type BeamerLinkRegion = {
 
 type CitationEntry = { label: string; destination: BeamerLinkDestination };
 export type BeamerReferenceIndex = {
+  source: string;
   targets: ReadonlyMap<string, BeamerLinkDestination>;
   citations: ReadonlyMap<string, CitationEntry>;
   specs: ReadonlyMap<number, BeamerOverlaySpec>;
@@ -35,6 +37,7 @@ export type BeamerReferenceIndex = {
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
   step: number;
+  theme?: ResolvedBeamerTheme;
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];
 };
@@ -102,11 +105,22 @@ export function buildBeamerReferenceIndex(
       addTarget(`beamerbib${key}`, destination(firstVisible), command.span);
     }
   }
-  return { targets, citations, specs, diagnostics };
+  return { source, targets, citations, specs, diagnostics };
 }
 
 type LinkSpan = { span: Span; destination: BeamerLinkDestination; label: string };
-export type BeamerReferenceProjection = { mapped: MappedText; links: LinkSpan[]; bibliography: boolean };
+export type BeamerBibliographyStyle = {
+  marginEm: number;
+  label: (label: string) => string;
+  author: string;
+  title: string;
+  location: string;
+  note: string;
+};
+export type BeamerReferenceProjection = {
+  mapped: MappedText; links: LinkSpan[]; bibliography: boolean;
+  bibliographyMargins?: ReadonlyMap<number, number>;
+};
 
 /**
  * Lower document references into native text/list primitives. Authored link
@@ -114,7 +128,7 @@ export type BeamerReferenceProjection = { mapped: MappedText; links: LinkSpan[];
  * original citation command. Link spans use the resulting layout coordinates,
  * so two keys in one citation remain independently clickable.
  */
-export function projectBeamerReferences(mapped: MappedText, context: BeamerReferenceContext): BeamerReferenceProjection {
+export function projectBeamerReferences(mapped: MappedText, context: BeamerReferenceContext, bibliographyStyle?: (widestLabel: string, sourceStart: number) => BeamerBibliographyStyle): BeamerReferenceProjection {
   if (!/\\(?:hyperlink|hyperref|hypertarget|href|url|label|cite|bibitem|newblock|beamer(?:goto|return|skip)?button|begin)(?![A-Za-z@])/u.test(mapped.text)) {
     return { mapped, links: [], bibliography: false };
   }
@@ -125,6 +139,9 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
   const links: LinkSpan[] = [];
   let length = 0;
   let bibliography = false;
+  const bibliographyMargins = new Map<number, number>();
+  let activeBibliography: BeamerBibliographyStyle | undefined;
+  let entryBlock = 0;
   const sourceSpan = (span: Span): Span | undefined => {
     const hit = projectInputRange(mapped.sourceMap, span.from, span.to);
     return hit.kind === "source-range" ? { from: hit.from, to: hit.to } : undefined;
@@ -157,15 +174,31 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
         if (!width?.complete) continue;
         append(sliceMappedText(mapped, cursor, command.span.from));
         bibliography = true;
-        generated("\\begin{description}", { from: env.begin.span.from, to: width.span.to });
+        const previous = activeBibliography;
+        activeBibliography = bibliographyStyle?.(raw(width.contentSpan), sourceSpan(env.begin.span)?.from ?? 0);
+        if (activeBibliography) bibliographyMargins.set(length, activeBibliography.marginEm);
+        generated("\\begin{bibliography}", { from: env.begin.span.from, to: width.span.to });
         visit(width.span.to, env.end.span.from, depth + 1);
-        generated("\\end{description}", env.end.span);
+        generated("\\end{bibliography}", env.end.span);
+        activeBibliography = previous;
         cursor = env.span.to;
         continue;
       }
+      if (command.name === "setbeamertemplate") {
+        const role = syntax.argumentAfter(command.span.to, "required", to);
+        const option = role && syntax.argumentAfter(role.span.to, "optional", to);
+        if (role && option && raw(role.contentSpan).trim() === "bibliography item") {
+          append(sliceMappedText(mapped, cursor, command.span.from));
+          cursor = option.span.to;
+          continue;
+        }
+      }
       if (command.name === "newblock") {
         append(sliceMappedText(mapped, cursor, command.span.from));
-        generated("\\par ", command.span);
+        entryBlock += 1;
+        const style = activeBibliography;
+        const declaration = entryBlock === 1 ? style?.title : entryBlock === 2 ? style?.location : style?.note;
+        generated(`\\par ${declaration ?? ""}`, command.span);
         cursor = command.span.to;
         continue;
       }
@@ -190,7 +223,11 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
         // Labels have no typeset content.
       } else if (command.name === "bibitem") {
         const label = context.citations.get(key)?.label ?? "?";
-        generated(`\\item[{\\textnormal{[${label}]}}] `, invocation);
+        entryBlock = 0;
+        generated(`\\item[{${activeBibliography?.label(label) ?? `\\textnormal{[${label}]}`}}]${activeBibliography?.author ?? ""}`, invocation);
+        // \bibitem ends with \ignorespaces; the zero-width author strut
+        // has already entered horizontal mode.
+        while (/\s/u.test(mapped.text[invocation.to] ?? "") && invocation.to < to) invocation.to += 1;
       } else if (command.name === "cite") {
         generated("[", invocation);
         key.split(",").forEach((entryKey, index) => {
@@ -231,7 +268,7 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
     append(sliceMappedText(mapped, cursor, to));
   };
   visit(0, mapped.text.length);
-  return { mapped: concatMappedText(parts), links, bibliography };
+  return { mapped: concatMappedText(parts), links, bibliography, bibliographyMargins };
 }
 
 /** Keep every wrapped line separately clickable; never cover neighboring prose. */

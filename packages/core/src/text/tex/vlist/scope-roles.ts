@@ -71,7 +71,7 @@ export function texVBoxLayoutForScopeRole(
     list: {
       ownLeftMarginWidth: texLength(role.ownLeftMarginEm * font.atPt),
       labelRightEdge: texLength(role.totalLeftMarginEm * font.atPt - 0.5 * font.atPt),
-      descriptionLabelSepWidth: texLength(0.5 * font.atPt),
+      descriptionLabelSepWidth: texLength(role.listKind === "bibliography" ? 0 : 0.5 * font.atPt),
     },
     paragraphPolicy: {
       resetInheritedAlignment: true,

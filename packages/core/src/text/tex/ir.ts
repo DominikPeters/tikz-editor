@@ -97,8 +97,9 @@ export type SimpleTexEnvironmentName =
   | SimpleTexTrivlistEnvironmentName
   | "itemize"
   | "enumerate"
-  | "description";
-export type SimpleTexListKind = "itemize" | "enumerate" | "description";
+  | "description"
+  | "bibliography";
+export type SimpleTexListKind = "itemize" | "enumerate" | "description" | "bibliography";
 export type SimpleTexVerticalGlueCommandName =
   | "vspace"
   | "vskip"
@@ -846,6 +847,8 @@ const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
   readonly listLeftMarginEmByDepth?: readonly number[];
+  /** Margins of generated Beamer bibliography lists, keyed by layout source start. */
+  readonly bibliographyMargins?: ReadonlyMap<number, number>;
   /** Identifies all color alias results; change this when any alias changes. */
   readonly colorResolverCacheKey?: string;
 }
@@ -1171,12 +1174,14 @@ function buildSimpleTexParagraphIr(
   // Only versioned resolvers and finite, value-keyed list settings are shared.
   const cacheable = text.length <= PARAGRAPH_IR_MAX_SOURCE_LENGTH &&
     (!resolveColorAlias || options?.colorResolverCacheKey !== undefined) &&
-    (!options?.listLeftMarginEmByDepth || options.listLeftMarginEmByDepth.every(Number.isFinite));
+    (!options?.listLeftMarginEmByDepth || options.listLeftMarginEmByDepth.every(Number.isFinite)) &&
+    [...(options?.bibliographyMargins?.values() ?? [])].every(Number.isFinite);
   const key = cacheable
     ? JSON.stringify([
       text,
       resolveColorAlias ? options?.colorResolverCacheKey : null,
       options?.listLeftMarginEmByDepth ?? null,
+      [...(options?.bibliographyMargins ?? [])],
     ])
     : null;
   if (key !== null) {
@@ -2702,7 +2707,7 @@ function isSimpleTexTrivlistEnvironmentName(
 }
 
 function isSimpleTexListEnvironmentName(name: string): name is SimpleTexListKind {
-  return name === "itemize" || name === "enumerate" || name === "description";
+  return name === "itemize" || name === "enumerate" || name === "description" || name === "bibliography";
 }
 
 function simpleTexTrivlistAlignment(
@@ -4326,7 +4331,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     };
   };
 
-  const beginList = (kind: SimpleTexListKind) => {
+  const beginList = (kind: SimpleTexListKind, sourceStart: number) => {
     const depth = currentQuoteDepth + listStack.length + 1;
     const labelDepth = listStack.filter((entry) => entry.kind === kind).length + 1;
     const margins =
@@ -4334,7 +4339,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const marginDepthIndex = options?.listLeftMarginEmByDepth
       ? listStack.length
       : depth - 1;
-    const ownMargin = margins[
+    const ownMargin = (kind === "bibliography" ? options?.bibliographyMargins?.get(sourceStart) : undefined) ?? margins[
       Math.min(marginDepthIndex, margins.length - 1)
     ] ?? 1;
     const scopeRole = {
@@ -4576,7 +4581,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         } else if (isSimpleTexTrivlistEnvironmentName(node.name)) {
           scopeRole = beginTrivlist(node.name);
         } else if (isSimpleTexListEnvironmentName(node.name)) {
-          scopeRole = beginList(node.name);
+          scopeRole = beginList(node.name, node.sourceStart);
           listTopologyStack.push({
             name: node.name,
             beginSpan: { from: node.sourceStart, to: node.sourceEnd },

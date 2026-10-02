@@ -1,0 +1,15 @@
+\documentclass{beamer}
+\setbeamertemplate{bibliography item}[text]
+\begin{document}
+\begin{frame}{Mixed content}
+Before the bibliography.
+\begin{thebibliography}{9}
+\bibitem{one} First author.\newblock Title.\newblock Location.
+\end{thebibliography}
+After the bibliography.
+\begin{itemize}\item An ordinary list.\end{itemize}
+\begin{thebibliography}{999}
+\bibitem{two} Second author.\newblock Another title.
+\end{thebibliography}
+\end{frame}
+\end{document}

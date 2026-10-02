@@ -37,6 +37,7 @@ Options:
   --page <n>           One-based compiled overlay page. Default: last page.
   --out-dir <dir>      Artifact root. Default: artifacts/beamer-frame-probe.
   --name <name>        Stable artifact directory name.
+  --trace-only         Write LuaLaTeX geometry without SVG/text conversion tools.
   --help               Show this help.
 `.trim();
 }
@@ -49,12 +50,15 @@ function parseArgs(argv) {
     outDir: defaultOutDir,
     name: null,
     help: false,
+    traceOnly: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const next = argv[index + 1];
     if (arg === "--help" || arg === "-h") {
       options.help = true;
+    } else if (arg === "--trace-only") {
+      options.traceOnly = true;
     } else if (arg === "--input" && next) {
       options.inputPath = resolve(next);
       index += 1;
@@ -267,8 +271,8 @@ async function main() {
       `--page ${pageNumber} exceeds the compiled ${pdf.pageCount} pages.`
     );
   }
-  renderArtifacts(runDir, pageNumber);
-  const structuredText = summarizeMutoolStructuredText(
+  if (!options.traceOnly) renderArtifacts(runDir, pageNumber);
+  const structuredText = options.traceOnly ? { pages: [] } : summarizeMutoolStructuredText(
     JSON.parse(
       readFileSync(join(runDir, "structured-text.json"), "utf8")
     )
@@ -317,8 +321,7 @@ async function main() {
       pageTrace: "beamer-page-trace.tsv",
       log: "probe.log",
       pdf: "probe.pdf",
-      svg: "probe.svg",
-      structuredText: "structured-text.json",
+      ...(!options.traceOnly ? { svg: "probe.svg", structuredText: "structured-text.json" } : {}),
     },
     scannerDiagnostics: document.diagnostics,
   };
