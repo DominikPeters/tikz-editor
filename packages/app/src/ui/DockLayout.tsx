@@ -7,7 +7,7 @@ import { getActiveEditorPlatform } from "../platform/current";
 import { loadDockLayout, saveDockLayout } from "../store/workspace-storage";
 import { SourcePanel } from "./source-panel/SourcePanel";
 import { CanvasPanel } from "./canvas-panel/CanvasPanel";
-import { FigureNavigator } from "./FigureNavigator";
+import { RootNavigator } from "./RootNavigator";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { BuildsPanel } from "./builds-panel/BuildsPanel";
 import { DeckInspectorPanel } from "./inspector-panel/DeckInspectorPanel";
@@ -392,7 +392,7 @@ let activeDockHandle: DockLayoutHandle | null = null;
 
 const MemoSourcePanel = memo(SourcePanel);
 const MemoCanvasPanel = memo(CanvasPanel);
-const MemoFigureNavigator = memo(FigureNavigator);
+const MemoRootNavigator = memo(RootNavigator);
 const MemoInspectorPanel = memo(InspectorPanel);
 const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
 const MemoBuildsPanel = memo(BuildsPanel);
@@ -453,7 +453,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
         case "figure-navigator":
           return (
             <Suspense fallback={null}>
-              <MemoFigureNavigator />
+              <MemoRootNavigator />
             </Suspense>
           );
         case "inspector":
@@ -508,7 +508,7 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
         const nameMap: Record<string, string> = {
           source: "Source",
           canvas: "Canvas",
-          "figure-navigator": "Figures",
+          "figure-navigator": useEditorStore.getState().documentKind === "beamer" ? "Slides" : "Figures",
           inspector: "Inspector",
           builds: "Overlays",
           objects: "Objects",
@@ -591,23 +591,26 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
     }
   }, [deckMode, model]);
 
-  // Auto-show/hide FigureNavigator based on figure count
+  // Auto-show/hide RootNavigator based on figure count
   const figureCount = useEditorStore((s) => snapshotRoots(s.snapshot).length);
   const prevFigureCountRef = useRef(figureCount);
+  const prevDeckModeRef = useRef(false);
   useEffect(() => {
     const prev = prevFigureCountRef.current;
     prevFigureCountRef.current = figureCount;
+    const wasDeck = prevDeckModeRef.current;
+    prevDeckModeRef.current = deckMode;
     const m = modelRef.current;
     const figTabExists = m.getNodeById(PANEL_IDS.figureNavigator) != null;
 
-    if (hasMultipleRoots(figureCount) && !figTabExists && !hasMultipleRoots(prev)) {
+    if (!figTabExists && ((deckMode && !wasDeck) || (!deckMode && hasMultipleRoots(figureCount) && !hasMultipleRoots(prev)))) {
       // Multi-figure document — auto-open below canvas with small height
       const canvasTabset = m.getNodeById("canvas-tabset");
       const firstTabSetId = m.getFirstTabSet().getId();
       const target = canvasTabset ? "canvas-tabset" : firstTabSetId;
       const added = Boolean(m.doAction(
         Actions.addNode(
-          { type: "tab", id: PANEL_IDS.figureNavigator, name: "Figures", component: "figure-navigator" },
+          { type: "tab", id: PANEL_IDS.figureNavigator, name: deckMode ? "Slides" : "Figures", component: "figure-navigator" },
           target,
           DockLocation.BOTTOM,
           -1
@@ -626,13 +629,15 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
       }
       saveDockLayout(m.toJson());
       syncLayoutStateToStore(m, dispatchRef.current);
-    } else if (!hasMultipleRoots(figureCount) && figTabExists) {
+    } else if (!deckMode && !hasMultipleRoots(figureCount) && figTabExists) {
       // Single-figure — auto-close, including startup with a persisted/open figures tab
       m.doAction(Actions.deleteTab(PANEL_IDS.figureNavigator));
       saveDockLayout(m.toJson());
       syncLayoutStateToStore(m, dispatchRef.current);
     }
-  }, [figureCount]);
+    const tab = m.getNodeById(PANEL_IDS.figureNavigator);
+    if (tab) m.doAction(Actions.renameTab(PANEL_IDS.figureNavigator, deckMode ? "Slides" : "Figures"));
+  }, [figureCount, deckMode, model]);
 
   return (
     <Layout

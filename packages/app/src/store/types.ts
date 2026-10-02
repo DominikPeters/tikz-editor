@@ -1,7 +1,7 @@
 import type { EditingIdentityState, IdentityMove } from "../editing-identities";
 import type { SessionSnapshot } from "../compute";
 import type { EditAction, EditActionResult } from "@tikz-editor/core/edit/actions";
-import type { DeckEditAction } from "@tikz-editor/core/beamer/index";
+import type { BeamerSlideEdit, DeckEditAction } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type {
@@ -73,7 +73,16 @@ export type CanvasTransform = {
   scale: number;
 };
 
+export type DeckSlideSelection = { source: string; frameIds: string[]; anchorId: string | null };
+export type DeckSlideNavigation = {
+  selection: DeckSlideSelection;
+  activeRootId: string | null;
+  steps: Record<string, number>;
+};
+
 export type HistoryEntry = {
+  deckSlidesBefore?: DeckSlideNavigation;
+  deckSlidesAfter?: DeckSlideNavigation;
   identityRootsBefore?: Record<string, EditingIdentityState>;
   identityRootsAfter?: Record<string, EditingIdentityState>;
   identitiesBefore?: EditingIdentityState;
@@ -123,6 +132,7 @@ export type FileRevision = {
 export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-needed" | "error";
 
 export type DocumentSession = {
+  deckSlideSelection?: DeckSlideSelection;
   /** Session-only identities for every figure visited in this document. */
   editingIdentityRoots?: Record<string, EditingIdentityState>;
   editingIdentities?: EditingIdentityState;
@@ -428,6 +438,20 @@ export type EditorAction =
        * structural parse mask atomically with the source change.
        */
       canvasTextEditMask?: { elementId: string; span: { from: number; to: number } };
+    }
+  | {
+      type: "EDIT_DECK_SLIDES";
+      documentId: string;
+      baseRevision: number;
+      edit: BeamerSlideEdit;
+    }
+  | {
+      type: "SELECT_DECK_SLIDES";
+      documentId: string;
+      baseRevision: number;
+      frameIds: string[];
+      anchorId: string | null;
+      activeFrameId?: string;
     }
   | {
       type: "APPLY_SOURCE_PATCHES";

@@ -658,6 +658,11 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
+  beamer_slide_manager: {
+    parser: "not-applicable", semantic: "not-applicable", svg: "not-applicable", edit: "partial",
+    fixtures: ["beamer_slide_manager"],
+    notes: "Shared dockable navigator with strip, vertical and grid layouts; source-backed section headings and frame multiselection. Complete authored frames support insertion, reorder, duplication with literal label/reference renaming, and deletion. Source operations preserve attached comments and leave unrelated commands in place. Active slide, selection and overlay positions follow frame moves and undo. Generated or incomplete frames and computed labels require source editing."
+  },
   beamer_direct_resize: {
     parser: "not-applicable",
     semantic: "not-applicable",

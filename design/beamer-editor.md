@@ -1413,15 +1413,34 @@ Node-backed corpus helpers through the core package root.
 
 *Remaining:* typing still invalidates the whole prepared session per
 keystroke and needs `TreeFragment`-backed incremental CST parsing plus
-frame-level IR reuse across revisions. The navigator is
-still the original horizontal `FigureNavigator`, not the planned flexible
-root navigator with section headers, grid/vertical modes, fallback cards,
-and drag sorting. Inline and nested block-body source cards, chrome-level
+frame-level IR reuse across revisions. Inline and nested block-body source cards, chrome-level
 diagnostic badges, deck-aware inspector panes, and a dedicated
 open→no-op→byte-identical Beamer round-trip test also remain.
 
 Exit: any corpus deck opens in the app; the sorter shows render order and
 fallback cards; existing TikZ editing remains unaffected.
+
+*Implemented 2026-10-02:* `RootNavigator` now serves both Figures and Slides
+through the existing dock panel and thumbnail worker. It adapts to a short
+horizontal strip, a narrow vertical list, or a wide grid. Slides show the
+final overlay with a step count, while the canvas retains its viewed step.
+Source section/subsection headings collapse their descendants. The Slides
+panel remains available for zero or one frame.
+
+Click opens a slide; Shift selects a range; Cmd/Ctrl toggles selection.
+Selected slides move together in source order by dragging, with an insertion
+marker on either side of a frame or section heading. Alt+arrow moves the
+selection from the keyboard. New slide inserts an empty frame after the
+selection; Duplicate and Delete are available in the context menu and via
+Cmd/Ctrl+D and Delete. Undo/redo restores the active frame, selection, and
+viewed overlay steps. Each operation is one source transaction.
+
+Frame source, including directly attached comment lines, travels intact;
+section commands and unrelated inter-frame code remain in place. Copies get
+fresh literal labels and update links within the copied group. Incomplete
+frames and frames owned by TeX groups or enclosing environments remain
+source-editable. Whole-section moves, arbitrary generated frames, and
+renaming computed label expressions are outside this manager's scope.
 
 ### Phase B3: Editing
 

@@ -306,6 +306,13 @@ export const capabilityFixtures: Record<string, string> = {
 \begin{document}
 \begin{frame}Before.\begin{tcolorbox}Unsupported body\end{tcolorbox}After.\end{frame}
 \end{document}`,
+  beamer_slide_manager: String.raw`\documentclass{beamer}
+\begin{document}
+\section{Start}
+\begin{frame}[label=first]{First}One\end{frame}
+\section{Next}
+\begin{frame}{Second}\hyperlink{first}{Back}\end{frame}
+\end{document}`,
   beamer_direct_resize: String.raw`\documentclass{beamer}
 \begin{document}\begin{frame}
 \begin{columns}

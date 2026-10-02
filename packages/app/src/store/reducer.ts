@@ -2,7 +2,7 @@ import { reconcileEditingIdentities, updateDocumentIdentities, withEditingHandle
 import { executeDocumentEdit, resolveNestedEditSpan } from "../edit-execution";
 import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
-import { isDeckEditAction } from "@tikz-editor/core/beamer/index";
+import { editBeamerSlides, isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
   DocumentSession,
   EditorAction,
@@ -14,7 +14,7 @@ import type {
 import type { AssistantItem } from "../platform/types";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
 import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
-import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import {
   createDocumentSession,
   createInitialWorkspaceState,
@@ -371,6 +371,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           : {
               ...doc,
               activeRootId: action.rootId,
+              deckSlideSelection: undefined,
               hasInitializedRootSelection: true
             }
       );
@@ -1031,6 +1032,64 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
+    case "SELECT_DECK_SLIDES": {
+      workspace = updateDocument(workspace, action.documentId, doc => doc.sourceRevision !== action.baseRevision ? doc : ({
+        ...doc,
+        deckSlideSelection: { source: doc.source, frameIds: action.frameIds, anchorId: action.anchorId },
+        activeRootId: action.activeFrameId ?? doc.activeRootId,
+        hasInitializedRootSelection: true,
+      }));
+      break;
+    }
+
+    case "EDIT_DECK_SLIDES": {
+      const doc = readDocument(workspace.documents, action.documentId);
+      if (doc?.sourceRevision !== action.baseRevision || doc.assistantLockReason ||
+        ui.activeCanvasTextEditSourceId || ui.activeInspectorEditDocumentId || action.documentId !== activeId) return state;
+      const result = editBeamerSlides(doc.source, action.edit);
+      if (!result) return state;
+      const prefix = `${doc.id}::`;
+      const stepsBefore = Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => key.startsWith(prefix)));
+      const previousSteps = new Map(Object.entries(stepsBefore));
+      const stepsAfter: Record<string, number> = {};
+      for (const [oldId, newId] of Object.entries(result.frameIds)) {
+        const step = previousSteps.get(rootKey(doc.id, oldId));
+        if (step != null && newId != null) stepsAfter[rootKey(doc.id, newId)] = step;
+      }
+      const activeRoot = parseDocumentRootId(doc.activeRootId ?? "");
+      const activeFrameId = activeRoot?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: activeRoot.frameIndex }) : doc.activeRootId;
+      const before = {
+        selection: doc.deckSlideSelection?.source === doc.source ? doc.deckSlideSelection :
+          { source: doc.source, frameIds: activeFrameId ? [activeFrameId] : [], anchorId: activeFrameId },
+        activeRootId: doc.activeRootId, steps: stepsBefore,
+      };
+      const after = {
+        selection: { source: result.source, frameIds: result.selectedFrameIds, anchorId: result.selectedFrameIds.at(0) ?? null },
+        activeRootId: (action.edit.kind === "move" || action.edit.kind === "delete") && activeFrameId ?
+          result.frameIds[activeFrameId] ?? result.selectedFrameIds.at(0) ?? null : result.selectedFrameIds.at(0) ?? null,
+        steps: stepsAfter,
+      };
+      const kind = action.edit.kind;
+      const entry: HistoryEntry = {
+        kind: kind === "move" ? "reorder" : kind === "delete" ? "delete" : "add-element",
+        label: kind === "move" ? "Move slides" : kind === "duplicate" ? "Duplicate slides" : kind === "delete" ? "Delete slides" : "New slide",
+        sourceBefore: doc.source, sourceAfter: result.source, forward: result.patches,
+        deckSlidesBefore: before, deckSlidesAfter: after,
+      };
+      const history = [...doc.history.slice(0, doc.historyIndex + 1), entry];
+      workspace = updateDocument(workspace, doc.id, current => ({
+        ...current, source: result.source, sourceRevision: current.sourceRevision + 1,
+        activeRootId: after.activeRootId, hasInitializedRootSelection: true, deckSlideSelection: after.selection,
+        lastEditPatches: result.patches, lastEditPatchBaseRevision: current.sourceRevision,
+        lastEditChangedSourceIds: [], lastEditChangeToken: current.lastEditChangeToken + 1,
+        lastEditWarningMessage: null, history, historyIndex: history.length - 1,
+        selectedElementIds: new Set(), activeHandleId: null, dirty: result.source !== current.savedSource,
+      }));
+      ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(prefix))), ...stepsAfter } };
+      break;
+    }
+
     case "APPLY_SOURCE_PATCHES": {
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       const activeDoc = readDocument(workspace.documents, documentId);
@@ -1179,6 +1238,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       workspace = updateDocument(workspace, activeId, (current) => ({
         ...current,
         source: entry.sourceBefore,
+        ...(entry.deckSlidesBefore ? { activeRootId: entry.deckSlidesBefore.activeRootId, deckSlideSelection: entry.deckSlidesBefore.selection } : {}),
         editingIdentityRoots: entry.identityRootsBefore,
         editingIdentities: entry.identitiesBefore ? { ...entry.identitiesBefore, nextId: Math.max(entry.identitiesBefore.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
         sourceRevision: current.sourceRevision + 1,
@@ -1198,6 +1258,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         activeHandleId: null,
         dirty: entry.sourceBefore !== current.savedSource
       }));
+      if (entry.deckSlidesBefore) ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(`${activeId}::`))), ...entry.deckSlidesBefore.steps } };
       break;
     }
 
@@ -1213,6 +1275,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       workspace = updateDocument(workspace, activeId, (current) => ({
         ...current,
         source: entry.sourceAfter,
+        ...(entry.deckSlidesAfter ? { activeRootId: entry.deckSlidesAfter.activeRootId, deckSlideSelection: entry.deckSlidesAfter.selection } : {}),
         editingIdentityRoots: entry.identityRootsAfter,
         editingIdentities: entry.identitiesAfter ? { ...entry.identitiesAfter, nextId: Math.max(entry.identitiesAfter.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
         sourceRevision: current.sourceRevision + 1,
@@ -1232,6 +1295,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         activeHandleId: null,
         dirty: entry.sourceAfter !== current.savedSource
       }));
+      if (entry.deckSlidesAfter) ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(`${activeId}::`))), ...entry.deckSlidesAfter.steps } };
       break;
     }
 
