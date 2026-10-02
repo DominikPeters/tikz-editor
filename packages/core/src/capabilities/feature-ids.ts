@@ -95,6 +95,9 @@ export const FEATURE_IDS = [
   "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.
   "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.
   "beamer_source_placeholders",
+  "beamer_hyperlinks",
+  // Manual entries and stock Beamer templates, verified against LuaLaTeX.
+  "beamer_manual_bibliography",
   "render_pipeline"
 ] as const;
 

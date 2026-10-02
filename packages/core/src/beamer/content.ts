@@ -79,7 +79,7 @@ export function parseBeamerFrameBody(
       : new Map<number, BeamerTheoremOccurrence>());
   const theoremTemplate =
     params.document?.preamble.theoremTemplate ?? "default";
-  const overlays = scanBeamerFrameOverlays(source, frame, context.syntax);
+  const overlays = params.overlays ?? scanBeamerFrameOverlays(source, frame, context.syntax);
   const children: BeamerFrameBodyNode[] = [];
   let cursor = frame.bodySpan.from;
   let nodeIndex = 0;
@@ -1214,6 +1214,7 @@ function findUnsupportedEnvironmentEndIndex(
       "uncoverenv",
       "visibleenv",
       "invisibleenv",
+      "thebibliography",
     ].includes(begin.name) ||
     BLOCK_ENVIRONMENTS.has(begin.name as BeamerBlockEnvironment) ||
     isProofEnvironment(begin.name) ||

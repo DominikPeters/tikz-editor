@@ -5,6 +5,7 @@ import type {
   Span,
 } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import type { BeamerLinkRegion } from "./references.js";
 import type {
   DocumentGraphicsAsset,
   DocumentGraphicsResolver,
@@ -241,6 +242,8 @@ export type BeamerFrameLayoutItem = {
 };
 
 export type BeamerParagraphLayout = {
+  /** Link hit regions in paragraph-local coordinates, after overlay filtering. */
+  links?: readonly BeamerLinkRegion[];
   paragraphId: string;
   role:
     | "title"

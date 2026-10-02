@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { analyzeSimpleTexParagraph, parseSimpleTexParagraphIr } from "../packages/core/src/text/tex/ir.js";
 
 describe("cached TeX paragraph IR", () => {
+  it("keeps generated bibliography margins in the cache key", () => {
+    const source = String.raw`\begin{bibliography}\item[{[1]}] Entry.\end{bibliography}`;
+    const margins = new Map([[0, 2]]);
+    const first = parseSimpleTexParagraphIr(source, undefined, { bibliographyMargins: margins });
+    parseSimpleTexParagraphIr(source, undefined, { bibliographyMargins: margins });
+    margins.set(0, 4);
+    const changed = parseSimpleTexParagraphIr(source, undefined, { bibliographyMargins: margins });
+    expect(changed).not.toEqual(first);
+    expect(changed.blocks[0].listContext?.ownLeftMarginEm).toBe(4);
+    expect(first.blocks[0].listContext?.ownLeftMarginEm).toBe(2);
+  });
   it("shares immutable IR across parsing, validation, and width changes", () => {
     const text = String.raw`IR cache fixture \textbf{office} $x^2$\\second line`;
     parseSimpleTexParagraphIr(text);

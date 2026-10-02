@@ -693,6 +693,22 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "Beamer frame and column flow render bounded source cards for unsupported environments and failed paragraph layout, with overlay-aware geometry and click-to-source selection. Nested block-body and inline fallback remain separate."
   },
+  beamer_hyperlinks: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["beamer_references"],
+    notes: "Beamer document renderer resolves frame labels, label/hypertarget destinations, hyperlink/hyperref links and safe href/url links. Canvas activation is disabled during text editing. Full hyperref package execution and PDF annotations are not implemented."
+  },
+  beamer_manual_bibliography: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["beamer_references"],
+    notes: "Beamer document renderer supports manual thebibliography/bibitem entries, numeric/custom citation labels, multi-key cite with an optional note, and citation navigation. Stock bibliography markers (default/article, text, book, online, triangle), label widths, hanging indentation, entry colors and newblock spacing are checked against LuaLaTeX. Arbitrary bibliography template/font/color redefinitions and BibTeX/biblatex processing are not implemented."
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

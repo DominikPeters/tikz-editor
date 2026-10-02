@@ -102,6 +102,7 @@ export {
   resolveBeamerThemeColor,
 } from "./theme/index.js";
 export type * from "./types.js";
+export type { BeamerLinkDestination, BeamerLinkRegion } from "./references.js";
 export type * from "./content-types.js";
 export type * from "./overlay.js";
 export type * from "./theorems.js";

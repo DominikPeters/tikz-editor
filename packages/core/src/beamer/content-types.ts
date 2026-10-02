@@ -173,4 +173,6 @@ export type ParseBeamerFrameBodyParams = {
    * per frame.
    */
   theoremOccurrences?: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  /** Reuse the prepared document's scan for this frame and source revision. */
+  overlays?: BeamerOverlayModel;
 };

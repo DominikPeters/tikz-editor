@@ -104,7 +104,7 @@ export function createTexDerivedInlineMathBoxProvider(
   };
   return {
     getInlineMathBox: (params) => {
-      return getMathBox(params, "text", getCache(), configuredFontProfile, baseAtPt, renderInlineSvg);
+      return getMathBox(params, "text", getCache(), configuredFontProfile, params.atPt ?? baseAtPt, renderInlineSvg);
     },
     getDisplayMathBox: (params) => {
       return getMathBox(params, "display", getCache(), configuredFontProfile, baseAtPt);
@@ -141,7 +141,7 @@ function getMathBox(
   // Final projections include every source/label field. Structured keys also
   // prevent a colon in label/content text from aliasing another request.
   const key = JSON.stringify([
-    style, params.delimiter, params.source, params.content,
+    style, baseAtPt, params.delimiter, params.source, params.content,
     sourceNumberKey(params.sourceStart), sourceNumberKey(params.sourceEnd),
     sourceNumberKey(params.contentStart), sourceNumberKey(params.contentEnd),
     params.targetWidth === undefined ? null : sourceNumberKey(params.targetWidth),

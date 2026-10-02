@@ -1,3 +1,16 @@
+import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
+import {
+  buildBeamerReferenceIndex,
+  projectBeamerReferences,
+  layoutBeamerLinks,
+  type BeamerReferenceContext,
+  type BeamerReferenceIndex,
+} from "./references.js";
+import {
+  remapParagraphLayoutReportSourceMap,
+  remapTexVListLayoutSourceMap,
+  remapSimpleTexListStructureSourceMap,
+} from "../text/tex/source-map-report.js";
 import type { Span } from "../ast/types.js";
 import { pt, svgPoint, svgRect, type SvgPoint, type SvgRect } from "../coords/index.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -219,6 +232,8 @@ type BeamerRenderContext = {
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
   readonly macroBindings: ReadonlyMap<string, MacroBinding>;
+  readonly references: BeamerReferenceIndex;
+  readonly overlaysByFrameId: ReadonlyMap<string, BeamerOverlayModel>;
   readonly page: BeamerPageGeometry;
   readonly navigationModel: BeamerNavigationModel;
   readonly theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
@@ -238,12 +253,17 @@ function createBeamerRenderContext(
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
+  const overlaysByFrameId = new Map(document.frames.map((frame) => [
+    frame.id, scanBeamerFrameOverlays(source, frame, syntaxContext.syntax),
+  ]));
   return {
     source,
     syntax: syntaxContext.syntax,
     document,
     theme,
     macroBindings: collectMacroBindings(document.preamble.macroDefinitions),
+    references: buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId),
+    overlaysByFrameId,
     page: resolveBeamerPageGeometry(document, theme),
     navigationModel: createBeamerNavigationModel(document),
     theoremOccurrences: resolveBeamerTheoremOccurrences(
@@ -286,7 +306,6 @@ export function prepareBeamerDocument(
 ): PreparedBeamerDocument {
   const context = createBeamerRenderContext(source, options);
   const bodyIrByFrameIndex = new Map<number, BeamerFrameBodyIr>();
-  const overlaysByFrameIndex = new Map<number, BeamerOverlayModel>();
 
   const requireFrame = (frameIndex: number): BeamerFrameModel => {
     const frame = context.document.frames[frameIndex];
@@ -309,6 +328,7 @@ export function prepareBeamerDocument(
       document: context.document,
       syntax: context.syntax,
       theoremOccurrences: context.theoremOccurrences,
+      overlays: context.overlaysByFrameId.get(requireFrame(frameIndex).id),
     });
     bodyIrByFrameIndex.set(frameIndex, bodyIr);
     return bodyIr;
@@ -332,21 +352,7 @@ export function prepareBeamerDocument(
     theme: context.theme,
     syntaxTree: context.syntax.tree,
     frameStepCount: (frameIndex) => {
-      const bodyIr = bodyIrByFrameIndex.get(frameIndex);
-      if (bodyIr) {
-        return bodyIr.overlays.stepCount;
-      }
-      const cached = overlaysByFrameIndex.get(frameIndex);
-      if (cached) {
-        return cached.stepCount;
-      }
-      const overlays = scanBeamerFrameOverlays(
-        context.source,
-        requireFrame(frameIndex),
-        context.syntax
-      );
-      overlaysByFrameIndex.set(frameIndex, overlays);
-      return overlays.stepCount;
+      return context.overlaysByFrameId.get(requireFrame(frameIndex).id)!.stepCount;
     },
     async renderFrame(options = {}) {
       const frameIndex = options.frameIndex ?? 0;
@@ -436,7 +442,8 @@ async function renderBeamerFrameStep(params: {
     ...document.diagnostics,
     ...theme.diagnostics,
   ];
-  diagnostics.push(...bodyIr.diagnostics);
+  diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
+  const references: BeamerReferenceContext = { ...context.references, step, theme, renderDiagnostics: diagnostics };
   const items: BeamerFrameLayoutItem[] = [];
   const spacing: BeamerSpacingLayout[] = [];
   const paragraphs: BeamerParagraphLayout[] = [];
@@ -465,6 +472,7 @@ async function renderBeamerFrameStep(params: {
     paragraphs,
     modelBuilder,
     macroBindings,
+    references,
     graphicsResolver: params.graphicsResolver,
     paperWidth: page.page.width,
   });
@@ -490,6 +498,7 @@ async function renderBeamerFrameStep(params: {
     theme,
     metadata: document.preamble.metadata,
     macroBindings,
+    references,
     overlays: bodyIr.overlays,
     step,
     graphicsResolver: params.graphicsResolver,
@@ -613,7 +622,7 @@ async function renderBeamerFrameStep(params: {
   } else if (
     bodyIr.children.some((node) =>
       resolveBeamerOverlaySpanVisibility(bodyIr.overlays, node.span, step) === "visible" &&
-      hasProjectedContent(source, node.span, bodyIr.overlays, step)
+      hasProjectedContent(source, node.span, bodyIr.overlays, step, references)
     )
   ) {
     const message = "This Beamer frame body could not be laid out.";
@@ -793,6 +802,7 @@ function renderChrome(params: {
   paragraphs: BeamerParagraphLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
 }): void {
@@ -855,6 +865,7 @@ function renderChrome(params: {
       interwordSpacePt: primitive.interwordSpacePt,
       disableAutomaticHyphenation: primitive.disableAutomaticHyphenation,
       macroBindings: params.macroBindings,
+      references: params.references,
       graphicsResolver: params.graphicsResolver,
       paperWidth: params.paperWidth,
     });
@@ -930,6 +941,7 @@ async function prepareFrameFlow(params: {
     Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
   >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   overlays: BeamerOverlayModel;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
@@ -956,6 +968,7 @@ async function prepareFrameFlow(params: {
           theme: params.theme,
           metadata: params.metadata,
           macroBindings: params.macroBindings,
+          references: params.references,
           graphicsResolver: params.graphicsResolver,
           paperWidth: params.paperWidth,
         }),
@@ -970,6 +983,7 @@ async function prepareFrameFlow(params: {
         bodyFont,
         listProfile,
         macroBindings: params.macroBindings,
+        references: params.references,
         overlays: params.overlays,
         step: params.step,
         graphicsResolver: params.graphicsResolver,
@@ -978,7 +992,7 @@ async function prepareFrameFlow(params: {
       });
       if (paragraph) {
         result.push(paragraph);
-      } else if (hasProjectedContent(params.source, node.span, params.overlays, params.step)) {
+      } else if (hasProjectedContent(params.source, node.span, params.overlays, params.step, params.references)) {
         const placeholder = prepareUnsupportedPlaceholder(
           params.source,
           { ...node, message: "This content could not be laid out." },
@@ -1027,6 +1041,7 @@ async function prepareFrameFlow(params: {
             diagnostics: params.diagnostics,
             theme: params.theme,
             macroBindings: params.macroBindings,
+            references: params.references,
             leftSidebarWidth: params.leftSidebarWidth,
             overlays: params.overlays,
             step: params.step,
@@ -1093,6 +1108,7 @@ async function prepareFrameFlow(params: {
         leftSidebarWidth: params.leftSidebarWidth,
         theme: params.theme,
         macroBindings: params.macroBindings,
+        references: params.references,
         overlays: params.overlays,
         step: params.step,
         graphicsResolver: params.graphicsResolver,
@@ -1132,6 +1148,7 @@ async function prepareFrameFlow(params: {
     bodyFont,
     listProfile,
     macroBindings: params.macroBindings,
+    references: params.references,
     overlays: params.overlays,
     step: params.step,
     graphicsResolver: params.graphicsResolver,
@@ -1148,6 +1165,7 @@ function prepareTitlePage(params: {
     Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
   >;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
 }): PreparedTitlePage {
@@ -1170,6 +1188,7 @@ function prepareTitlePage(params: {
         colorResolver: beamerAlertColorResolver(params.theme),
         alignment,
         macroBindings: params.macroBindings,
+        references: params.references,
         graphicsResolver: params.graphicsResolver,
         paperWidth: params.paperWidth,
       })
@@ -1188,6 +1207,7 @@ function prepareTitlePage(params: {
         colorResolver: beamerAlertColorResolver(params.theme),
         alignment,
         macroBindings: params.macroBindings,
+        references: params.references,
         graphicsResolver: params.graphicsResolver,
         paperWidth: params.paperWidth,
       })
@@ -1240,6 +1260,7 @@ function prepareTitlePage(params: {
           colorResolver: beamerAlertColorResolver(params.theme),
           alignment,
           macroBindings: params.macroBindings,
+          references: params.references,
           graphicsResolver: params.graphicsResolver,
           paperWidth: params.paperWidth,
         })
@@ -1272,6 +1293,7 @@ function prepareFrameParagraph(params: {
   bodyFont: BeamerThemeFont;
   listProfile: TexListLayoutProfile;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   overlays: BeamerOverlayModel;
   step: number;
   targetHeight?: number;
@@ -1303,6 +1325,7 @@ function prepareFrameParagraph(params: {
     alignment: "left",
     listProfile: params.listProfile,
     macroBindings: params.macroBindings,
+    references: params.references,
     targetHeight: params.targetHeight,
     hiddenSourceSpans: projection.hiddenSourceSpans,
     hiddenListItemIndices: projection.hiddenListItemIndices,
@@ -1356,6 +1379,7 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     bodyFont: BeamerThemeFont;
     listProfile: TexListLayoutProfile;
     macroBindings: ReadonlyMap<string, MacroBinding>;
+    references: BeamerReferenceContext;
     overlays: BeamerOverlayModel;
     step: number;
     graphicsResolver?: DocumentGraphicsResolver;
@@ -1564,6 +1588,7 @@ function prepareBlock(params: {
   leftSidebarWidth: number;
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   overlays: BeamerOverlayModel;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
@@ -1630,6 +1655,7 @@ function prepareBlock(params: {
     alignment: plan.style === "inmargin" ? "right" : "left",
     disableAutomaticHyphenation: plan.style === "inmargin",
     macroBindings: params.macroBindings,
+    references: params.references,
     hiddenSourceSpans: titleProjection.hiddenSourceSpans,
     graphicsResolver: params.graphicsResolver,
     paperWidth: params.paperWidth,
@@ -1678,6 +1704,7 @@ function prepareBlock(params: {
         // markers) as frame-level lists.
         listProfile: beamerListLayoutProfile(params.theme),
         macroBindings: params.macroBindings,
+        references: params.references,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
         hiddenListItemIndices: bodyProjection.hiddenListItemIndices,
         graphicsResolver: params.graphicsResolver,
@@ -2551,6 +2578,7 @@ async function prepareColumnContent(params: {
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   leftSidebarWidth: number;
   overlays: BeamerOverlayModel;
   step: number;
@@ -2564,6 +2592,7 @@ async function prepareColumnContent(params: {
     diagnostics,
     theme,
     macroBindings,
+    references,
   } = params;
   const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth) ?? textWidth;
   const flow: PreparedColumnFlowItem[] = [];
@@ -2583,6 +2612,7 @@ async function prepareColumnContent(params: {
       initialPreviousDepth:
         node.kind === "list" ? previousDepth : undefined,
       macroBindings,
+      references,
       leftSidebarWidth: params.leftSidebarWidth,
       overlays: params.overlays,
       step: params.step,
@@ -2641,6 +2671,7 @@ async function prepareColumnFlowNode(params: {
   listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
   macroBindings: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   leftSidebarWidth: number;
   overlays: BeamerOverlayModel;
   step: number;
@@ -2657,6 +2688,7 @@ async function prepareColumnFlowNode(params: {
     listProfile,
     initialPreviousDepth,
     macroBindings,
+    references,
     leftSidebarWidth,
     overlays,
     step,
@@ -2687,6 +2719,7 @@ async function prepareColumnFlowNode(params: {
       leftSidebarWidth,
       theme,
       macroBindings,
+      references,
       overlays,
       step,
       graphicsResolver,
@@ -2716,13 +2749,14 @@ async function prepareColumnFlowNode(params: {
       initialPreviousDepth,
       listProfile,
       macroBindings,
+      references,
       hiddenSourceSpans: projection.hiddenSourceSpans,
       hiddenListItemIndices: projection.hiddenListItemIndices,
       graphicsResolver,
       paperWidth,
     });
     if (!paragraph) {
-      if (!hasProjectedContent(source, node.span, overlays, step)) {
+      if (!hasProjectedContent(source, node.span, overlays, step, references)) {
         return null;
       }
       const placeholder = prepareUnsupportedPlaceholder(
@@ -3013,6 +3047,7 @@ function layoutParagraph(params: {
   listProfile?: TexListLayoutProfile;
   disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
+  references: BeamerReferenceContext;
   targetHeight?: number;
   hiddenSourceSpans?: readonly Span[];
   hiddenListItemIndices?: readonly number[];
@@ -3022,6 +3057,16 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
+  // A size declaration preceding the list is an ambient font selection,
+  // not an empty paragraph (and must apply to its generated labels too).
+  const leadingSize = activeBeamerNamedSize(params.mapped.text);
+  if (leadingSize && new RegExp(`^\\s*\\\\${leadingSize.command}\\s*\\\\begin\\s*\\{thebibliography\\}`, "u").test(params.mapped.text)) {
+    params = {
+      ...params,
+      font: { ...params.font, sizePt: leadingSize.sizePt, lineHeightPt: leadingSize.lineHeightPt },
+      mapped: mapTransformedTextWithFallback(params.mapped, params.mapped.text.replace(leadingSize.pattern, ""), "Beamer ambient bibliography size"),
+    };
+  }
   const fontSize = texLength(params.font.sizePt);
   const profile = createBeamerTexTextFontProfile(params.font);
   const metricProvider = params.interwordSpacePt == null
@@ -3058,6 +3103,24 @@ function layoutParagraph(params: {
       `Beamer 11pt class ${namedSize.command} size`
     );
   }
+  const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
+  const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
+    beamerBibliographyStyle({
+      source: params.references.source, sourceStart, theme: params.references.theme,
+      widestLabel, fontSizePt: namedSize?.sizePt ?? params.font.sizePt,
+      layoutFontSizePt: params.font.sizePt,
+      measure: (tex) => {
+        const prefix = namedSize ? `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont ` : "";
+        const measured = layoutSimpleTexParagraph(prefix + tex, {
+          width: texLength(10000), font: resolvedFont, metricProvider, textFontProfile,
+          alignment: "ragged-right", graphicsResolver,
+          mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
+        });
+        return measured.report?.lines[0]?.naturalWidth ?? 0;
+      },
+    })
+  );
+  mapped = referenceProjection.mapped;
   const layoutOptions = {
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
@@ -3092,13 +3155,18 @@ function layoutParagraph(params: {
     }),
     baselineSkip: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
     initialPreviousDepth: params.initialPreviousDepth,
-    listProfile: params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE,
+    listProfile: {
+      ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),
+      bibliographyMargins: referenceProjection.bibliographyMargins,
+      bibliographyParsepPt: (leadingSize?.command ?? namedSize?.command) === "small"
+        ? 3
+        : (leadingSize?.command ?? namedSize?.command) === "footnotesize" ? 2 : 0,
+    },
     displayMathProfile: BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
     hyphenator: params.disableAutomaticHyphenation
       ? { hyphenate: () => [] }
       : undefined,
-    sourceMap: mapped.sourceMap,
-    graphicsResolver: params.graphicsResolver,
+    graphicsResolver,
     colorResolver: params.colorResolver,
     dimensionContext: {
       linewidth: texLength(params.bounds.width),
@@ -3198,11 +3266,18 @@ function layoutParagraph(params: {
   if (!result.supported || !result.report || !result.vlistLayout) {
     return null;
   }
+  const links = layoutBeamerLinks(referenceProjection, result.report, result.vlistLayout, params.hiddenSourceSpans ?? []);
+  const documentResult = {
+    ...result,
+    report: remapParagraphLayoutReportSourceMap(result.report, mapped.sourceMap),
+    vlistLayout: remapTexVListLayoutSourceMap(result.vlistLayout, mapped.sourceMap),
+    listStructure: remapSimpleTexListStructureSourceMap(result.listStructure, mapped.sourceMap),
+  };
   const height =
-    result.vlistLayout.metrics.height + result.vlistLayout.metrics.depth;
+    documentResult.vlistLayout.metrics.height + documentResult.vlistLayout.metrics.depth;
   const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped);
   const readOnlySourceSpans = macroArgumentRuns.map((run) => run.span);
-  const listStructure: BeamerListTopology[] = (result.listStructure ?? []).map((list) => ({
+  const listStructure: BeamerListTopology[] = (documentResult.listStructure ?? []).flatMap((list) => list.name === "bibliography" ? [] : [{
     environment: list.name,
     beginSpan: { from: list.beginSpan.from, to: list.beginSpan.to },
     endSpan: { from: list.endSpan.from, to: list.endSpan.to },
@@ -3215,10 +3290,11 @@ function layoutParagraph(params: {
       contentSpan: { from: item.contentSpan.from, to: item.contentSpan.to },
       itemIndex: item.itemIndex,
     })),
-  }));
+  }]);
   return {
     height,
     layout: {
+      links,
       paragraphId: params.paragraphId,
       role: params.role,
       sourceSpan: params.sourceSpan,
@@ -3226,13 +3302,13 @@ function layoutParagraph(params: {
         ...params.bounds,
         height,
       },
-      report: result.report,
-      vlistLayout: result.vlistLayout,
+      report: documentResult.report,
+      vlistLayout: documentResult.vlistLayout,
       editableTextSpans: collectBeamerEditableTextSpans(
         params.paragraphId,
         params.role,
-        result.report,
-        result.vlistLayout,
+        documentResult.report,
+        documentResult.vlistLayout,
         params.sourceSpan,
         null,
         (params.hiddenSourceSpans ?? []).concat(readOnlySourceSpans)
@@ -3240,8 +3316,8 @@ function layoutParagraph(params: {
       atomicRenderSpans: collectBeamerAtomicRenderSpans(
         params.paragraphId,
         params.role,
-        result.report,
-        result.vlistLayout,
+        documentResult.report,
+        documentResult.vlistLayout,
         params.sourceSpan,
         null,
         params.hiddenSourceSpans ?? [],
@@ -3262,9 +3338,9 @@ function layoutParagraph(params: {
       ...(listStructure.length ? { listStructure } : {}),
     },
     svgBody: hideOverlayPaintInSvg(
-      renderTexParagraphSvgBody(result.report, {
+      renderTexParagraphSvgBody(documentResult.report, {
         lineHeightPt: texLength(params.font.lineHeightPt),
-        vlistLayout: result.vlistLayout,
+        vlistLayout: documentResult.vlistLayout,
         metricProvider,
         textFontProfile,
         baseFontSizePt: fontSize,
@@ -3273,7 +3349,7 @@ function layoutParagraph(params: {
       params.hiddenSourceSpans ?? [],
       params.hiddenListItemIndices ?? []
     ),
-    listMarkers: result.vlistLayout.boxReport.items
+    listMarkers: documentResult.vlistLayout.boxReport.items
       .filter((item) =>
         item.hboxRole?.kind === "list-label" &&
         item.hboxRole.labelKind === "default"
@@ -3841,7 +3917,8 @@ function hasProjectedContent(
   source: string,
   span: Span,
   overlays: BeamerOverlayModel,
-  step: number
+  step: number,
+  references: BeamerReferenceContext
 ): boolean {
   const projected = projectBeamerOverlayText(
     createIdentityMappedText(source.slice(span.from, span.to), span.from),
@@ -3849,7 +3926,8 @@ function hasProjectedContent(
     overlays,
     step
   );
-  return projected.mapped.text.replace(/%[^\n]*/gu, "").trim().length > 0;
+  return projectBeamerReferences(projected.mapped, references).mapped.text
+    .replace(/%[^\n]*/gu, "").replace(/[{}\s]/gu, "").length > 0;
 }
 
 function emitUnsupportedPlaceholder(params: {

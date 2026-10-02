@@ -194,6 +194,7 @@ function runOracle(options, runDir, inputPath) {
   if (options.pageNumber != null) {
     args.push("--page", String(options.pageNumber));
   }
+  if (options.structuralOnly) args.push("--trace-only");
   runRequired(process.execPath, args);
   return join(oracleRoot, "frame");
 }

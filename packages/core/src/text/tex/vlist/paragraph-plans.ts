@@ -164,6 +164,7 @@ export function prepareTexLayoutParagraphsFromVList(
         spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
         graphicsResolver: params.options.graphicsResolver,
+        mathBoxProvider: params.options.mathBoxProvider,
         textFontProfile: params.options.textFontProfile,
         paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
       });

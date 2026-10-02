@@ -55,6 +55,7 @@ import type { HitRegion } from "./hit-regions";
 import type { CurveControlLine } from "./curve-controls";
 import { CanvasTextEditPopup, type CanvasTextEditViewModel } from "./CanvasTextEditPopup";
 import css from "./CanvasPanel.module.css";
+import type { BeamerLinkDestination, BeamerLinkRegion } from "@tikz-editor/core/beamer";
 
 const MAGNIFIER_DIAMETER_PX = 300;
 const MAGNIFIER_SCALE = 2.25;
@@ -63,6 +64,8 @@ const TEXT_CARET_BLINK_VISIBLE_MS = TEXT_CARET_BLINK_PERIOD_MS / 2;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 type CanvasPanelViewProps = {
+  beamerLinks: readonly BeamerLinkRegion[];
+  onBeamerLinkActivate: (destination: BeamerLinkDestination) => void;
   prefersNonBlinkingTextInsertionIndicator: boolean;
   showRulers: boolean;
   viewportSize: { width: number; height: number };
@@ -219,6 +222,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     onViewportDrop,
     onBackgroundClick,
     onViewportPointerDown,
+    beamerLinks,
+    onBeamerLinkActivate,
     onViewportPointerUp,
     svgResult,
     noActiveFigure,
@@ -690,6 +695,32 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   onElementDoubleClick={onElementDoubleClick}
                   onHoverChange={onHoverChange}
                 />
+
+                <g data-testid="beamer-link-overlay">
+                  {beamerLinks.map((link) => (
+                    <rect
+                      key={`${link.label}:${link.bounds.x}:${link.bounds.y}`}
+                      data-beamer-link={link.label}
+                      {...link.bounds}
+                      fill="transparent"
+                      pointerEvents="all"
+                      style={{ cursor: "pointer" }}
+                      role="link"
+                      tabIndex={0}
+                      aria-label={link.label}
+                      onPointerDown={(event) => { event.stopPropagation(); }}
+                      onPointerUp={(event) => { event.stopPropagation(); }}
+                      onClick={(event) => { event.preventDefault(); event.stopPropagation(); onBeamerLinkActivate(link.destination); }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onBeamerLinkActivate(link.destination);
+                        }
+                      }}
+                    ><title>{link.label}</title></rect>
+                  ))}
+                </g>
 
                 <NodePositionLinkOverlay
                   links={nodePositionLinks}

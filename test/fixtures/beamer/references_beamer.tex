@@ -1,0 +1,25 @@
+\documentclass{beamer}
+\setbeamertemplate{bibliography item}[text]
+\begin{document}
+\begin{frame}[label=intro]{Links and references}
+  Read the \hyperlink{details<2>}{second overlay}, or follow an
+  \href{https://example.com}{external link}.
+
+  Two references: \cite[p.~12]{manual,custom}.
+\end{frame}
+\begin{frame}[label=details]{Details}
+  This text is on both overlays.
+  \only<2>{\hypertarget{result}{This result appears on the second overlay.}}
+
+  \hyperlink{intro}{\beamerreturnbutton{Return}}
+\end{frame}
+\begin{frame}[label=references]{References}
+  \begin{thebibliography}{99}
+    \bibitem{manual} A. Author.
+      \newblock A manually authored reference.
+      \newblock 2026.
+    \bibitem[AB26]{custom} B. Author.
+      \newblock A reference with a custom citation label.
+  \end{thebibliography}
+\end{frame}
+\end{document}

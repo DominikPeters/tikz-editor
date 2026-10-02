@@ -302,6 +302,7 @@ export interface TexMathDisplayAlignment {
 
 export interface TexMathBoxProvider {
   readonly getInlineMathBox: (params: {
+    readonly atPt?: TexLength;
     readonly source: string;
     readonly content: string;
     readonly delimiter: "dollar" | "paren";
@@ -545,6 +546,7 @@ export function simpleTexSegmentToLayoutItems(
 
     if (token.kind === "math") {
       const box = mathBoxProvider?.getInlineMathBox({
+        atPt: token.fontState.sizePt,
         source: token.text,
         content: token.content ?? "",
         delimiter: token.delimiter ?? "dollar",
@@ -1822,6 +1824,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
 
     if (token.kind === "math") {
       const box = params.mathBoxProvider?.getInlineMathBox({
+        atPt: token.fontState.sizePt,
         source: token.text,
         content: token.content ?? "",
         delimiter: token.delimiter ?? "dollar",
@@ -2423,7 +2426,7 @@ function texMBoxChildHListItem(
   sourceStart: number,
   sourceEnd: number
 ): TexMathChildHListLayoutItem | null {
-  if (!box.hlist) {
+  if (!box.hlist && !box.svgBody) {
     return null;
   }
   return {
@@ -2439,7 +2442,8 @@ function texMBoxChildHListItem(
       end: sourceEnd,
     },
     ...(box.color ? { color: box.color } : {}),
-    items: box.hlist.items,
+    items: box.hlist?.items ?? [],
+    ...(!box.hlist && box.svgBody ? { svgBody: box.svgBody } : {}),
   };
 }
 

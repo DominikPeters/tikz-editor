@@ -323,6 +323,13 @@ export const capabilityFixtures: Record<string, string> = {
 \alt<2>{During}{Otherwise}
 \end{frame}
 \end{document}`,
+  beamer_references: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}See \hyperlink{refs}{references} and \cite{example}.\end{frame}
+\begin{frame}[label=refs]\begin{thebibliography}{9}
+\bibitem{example} Author. Title.
+\end{thebibliography}\end{frame}
+\end{document}`,
   beamer_document_scan: String.raw`\documentclass{beamer}
 \begin{document}
 \section{Introduction}

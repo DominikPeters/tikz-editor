@@ -205,7 +205,7 @@ function renderTexVListItemsSvgContent<Space extends SourceCoordinateSpace>(
             line,
             {
               ...options,
-              skipListLabelSegments: true,
+              skipListLabelSegments: item.item.paragraph.listContext?.kind !== "description" && item.item.paragraph.listContext?.kind !== "bibliography",
             },
             renderedLines
           ));

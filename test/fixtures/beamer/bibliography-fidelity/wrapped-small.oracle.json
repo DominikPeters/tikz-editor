@@ -1,0 +1,3388 @@
+{
+  "sourceSha256": "e6b4427927e7dc96dde2c7389005a7ee10625b350075253f38039accf6d7434e",
+  "engine": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025)",
+  "beamer": {
+    "date": "2025/02/04",
+    "version": "3.72",
+    "description": "A class for typesetting presentations"
+  },
+  "trace": {
+    "coordinateSystem": {
+      "unit": "tex-pt",
+      "origin": "top-left",
+      "yAxis": "down"
+    },
+    "page": {
+      "x": 0,
+      "y": 0,
+      "width": 364.1953582763672,
+      "height": 273.14662170410156
+    },
+    "shipoutOrigin": {
+      "x": -72.26998901367188,
+      "y": -72.26998901367188
+    },
+    "boxes": [],
+    "rules": [
+      {
+        "path": "root.5.2.1.2.2.1.1.2.1.1.4",
+        "x": 0,
+        "y": 0,
+        "width": 364.195358,
+        "height": 273.146622,
+        "depth": 0,
+        "totalHeight": 273.146622
+      }
+    ],
+    "glyphs": [],
+    "lines": [
+      {
+        "text": "Wrappedreferences",
+        "x": 8.535904,
+        "baselineY": 21.142303,
+        "glyphs": [
+          {
+            "code": 87,
+            "x": 8.535904,
+            "y": 21.142303,
+            "width": 13.233597,
+            "height": 9.993591,
+            "depth": 0,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 114,
+            "x": 21.380707,
+            "y": 21.142303,
+            "width": 4.795197,
+            "height": 6.537598,
+            "depth": 0,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 97,
+            "x": 26.175903,
+            "y": 21.142303,
+            "width": 6.753601,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 112,
+            "x": 32.929504,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 2.793594,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 112,
+            "x": 40.158295,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 2.793594,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 101,
+            "x": 47.775879,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 100,
+            "x": 54.039871,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 9.993591,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 114,
+            "x": 65.963058,
+            "y": 21.142303,
+            "width": 4.795197,
+            "height": 6.537598,
+            "depth": 0,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 101,
+            "x": 70.758255,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 102,
+            "x": 77.022247,
+            "y": 21.142303,
+            "width": 4.305603,
+            "height": 10.137589,
+            "depth": 0,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 101,
+            "x": 81.32785,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 114,
+            "x": 87.591843,
+            "y": 21.142303,
+            "width": 4.795197,
+            "height": 6.537598,
+            "depth": 0,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 101,
+            "x": 92.387039,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 110,
+            "x": 98.651031,
+            "y": 21.142303,
+            "width": 7.22879,
+            "height": 6.537598,
+            "depth": 0,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 99,
+            "x": 105.879822,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 101,
+            "x": 112.143814,
+            "y": 21.142303,
+            "width": 6.263992,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          },
+          {
+            "code": 115,
+            "x": 118.407806,
+            "y": 21.142303,
+            "width": 5.399994,
+            "height": 6.609604,
+            "depth": 0.143997,
+            "fontName": "lmsans12-regular",
+            "fontSize": 14.399994
+          }
+        ]
+      },
+      {
+        "text": "[LongLabel26]AliceAuthorandBobWriter,withenoughadditional",
+        "x": 28.452744,
+        "baselineY": 78.902405,
+        "glyphs": [
+          {
+            "code": 91,
+            "x": 28.452744,
+            "y": 78.902405,
+            "width": 2.889999,
+            "height": 7.5,
+            "depth": 2.5,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 76,
+            "x": 31.342743,
+            "y": 78.902405,
+            "width": 5.419998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 36.762741,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 41.762741,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 46.932739,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 76,
+            "x": 51.932739,
+            "y": 78.902405,
+            "width": 5.419998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 57.352737,
+            "y": 78.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 98,
+            "x": 62.162735,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 67.612732,
+            "y": 78.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 72.052734,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 50,
+            "x": 74.442734,
+            "y": 78.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 54,
+            "x": 79.442734,
+            "y": 78.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 93,
+            "x": 84.442734,
+            "y": 78.902405,
+            "width": 2.889999,
+            "height": 7.5,
+            "depth": 2.5,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 65,
+            "x": 92.807724,
+            "y": 78.902405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 99.477722,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 101.867722,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 99,
+            "x": 104.257721,
+            "y": 78.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 108.697723,
+            "y": 78.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 65,
+            "x": 116.467728,
+            "y": 78.902405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 122.857727,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 128.027725,
+            "y": 78.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 131.637726,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 136.807724,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 141.527725,
+            "y": 78.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 148.277725,
+            "y": 78.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 153.087723,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 158.257721,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 66,
+            "x": 166.757721,
+            "y": 78.902405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 173.427719,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 98,
+            "x": 178.427719,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 87,
+            "x": 186.927719,
+            "y": 78.902405,
+            "width": 9.440002,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 196.087723,
+            "y": 78.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 199.507721,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 201.89772,
+            "y": 78.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 205.507721,
+            "y": 78.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 209.947723,
+            "y": 78.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 44,
+            "x": 213.367722,
+            "y": 78.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 1.25,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 119,
+            "x": 219.477722,
+            "y": 78.902405,
+            "width": 6.830002,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 226.307724,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 228.697723,
+            "y": 78.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 232.307724,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 240.807724,
+            "y": 78.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 245.247726,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 250.417725,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 255.417725,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 260.587723,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 265.587723,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 274.087723,
+            "y": 78.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 278.89772,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 284.067719,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 289.237717,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 291.627716,
+            "y": 78.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 295.237717,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 297.627716,
+            "y": 78.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 302.627716,
+            "y": 78.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 307.797714,
+            "y": 78.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 312.607712,
+            "y": 78.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "authorinformationtowrapontothefollowingline.",
+        "x": 44.707733,
+        "baselineY": 90.902405,
+        "glyphs": [
+          {
+            "code": 97,
+            "x": 44.707733,
+            "y": 90.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 49.517731,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 54.687729,
+            "y": 90.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 58.297729,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 63.467728,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 68.187729,
+            "y": 90.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 74.937729,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 77.327728,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 102,
+            "x": 82.497726,
+            "y": 90.902405,
+            "width": 3.059998,
+            "height": 7.050003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 85.557724,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 90.277725,
+            "y": 90.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 109,
+            "x": 93.697723,
+            "y": 90.902405,
+            "width": 7.940002,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 101.637726,
+            "y": 90.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 106.447723,
+            "y": 90.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 110.057724,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 112.447723,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 117.447723,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 125.947723,
+            "y": 90.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 129.557724,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 119,
+            "x": 137.887726,
+            "y": 90.902405,
+            "width": 6.830002,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 144.717728,
+            "y": 90.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 148.137726,
+            "y": 90.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 112,
+            "x": 152.947723,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 1.940002,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 161.447723,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 166.447723,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 171.617722,
+            "y": 90.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 175.227722,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 183.557724,
+            "y": 90.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 187.167725,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 192.337723,
+            "y": 90.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 102,
+            "x": 200.107727,
+            "y": 90.902405,
+            "width": 3.059998,
+            "height": 7.050003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 203.167725,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 208.167725,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 210.557724,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 212.947723,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 119,
+            "x": 217.667725,
+            "y": 90.902405,
+            "width": 6.830002,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 224.497726,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 226.887726,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 232.057724,
+            "y": 90.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 240.387726,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 242.777725,
+            "y": 90.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 245.167725,
+            "y": 90.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 250.337723,
+            "y": 90.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 254.777725,
+            "y": 90.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "Alongtitlewithseveralextrawordstoexerciselinewrappinginthe",
+        "x": 44.707733,
+        "baselineY": 105.902405,
+        "glyphs": [
+          {
+            "code": 65,
+            "x": 44.707733,
+            "y": 105.902405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 54.707733,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 57.097733,
+            "y": 105.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 62.097733,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 67.267731,
+            "y": 105.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 75.597733,
+            "y": 105.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 79.207733,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 81.597733,
+            "y": 105.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 85.207733,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 87.597733,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 119,
+            "x": 95.367737,
+            "y": 105.902405,
+            "width": 6.830002,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 102.197739,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 104.587738,
+            "y": 105.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 108.197739,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 116.697739,
+            "y": 105.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 120.52774,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 118,
+            "x": 124.967743,
+            "y": 105.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 129.577744,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 134.017746,
+            "y": 105.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 137.437744,
+            "y": 105.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 142.247742,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 147.967743,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 120,
+            "x": 152.407745,
+            "y": 105.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 157.017746,
+            "y": 105.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 160.627747,
+            "y": 105.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 164.047745,
+            "y": 105.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 119,
+            "x": 172.187744,
+            "y": 105.902405,
+            "width": 6.830002,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 178.737747,
+            "y": 105.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 183.457748,
+            "y": 105.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 186.877747,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 192.047745,
+            "y": 105.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 199.207748,
+            "y": 105.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 202.817749,
+            "y": 105.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 211.147751,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 120,
+            "x": 215.587753,
+            "y": 105.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 220.197754,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 224.637756,
+            "y": 105.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 99,
+            "x": 228.057755,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 232.497757,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 234.887756,
+            "y": 105.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 238.717758,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 246.487762,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 248.877762,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 251.267761,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 256.437759,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 119,
+            "x": 264.207764,
+            "y": 105.902405,
+            "width": 6.830002,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 271.037766,
+            "y": 105.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 274.457764,
+            "y": 105.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 112,
+            "x": 279.267761,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 1.940002,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 112,
+            "x": 284.437759,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 1.940002,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 289.607758,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 291.997757,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 297.167755,
+            "y": 105.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 305.497757,
+            "y": 105.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 307.887756,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 316.387756,
+            "y": 105.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 319.997757,
+            "y": 105.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 325.167755,
+            "y": 105.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "bibliographyandtestthehangingindentation.",
+        "x": 44.707733,
+        "baselineY": 117.902405,
+        "glyphs": [
+          {
+            "code": 98,
+            "x": 44.707733,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 49.877731,
+            "y": 117.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 98,
+            "x": 52.267731,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 57.437729,
+            "y": 117.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 59.827728,
+            "y": 117.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 62.217728,
+            "y": 117.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 67.217728,
+            "y": 117.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 72.217728,
+            "y": 117.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 75.637726,
+            "y": 117.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 112,
+            "x": 80.447723,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 1.940002,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 85.617722,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 121,
+            "x": 90.78772,
+            "y": 117.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 2.050003,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 98.727722,
+            "y": 117.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 103.53772,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 108.707718,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 117.207718,
+            "y": 117.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 120.817719,
+            "y": 117.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 125.257721,
+            "y": 117.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 129.087723,
+            "y": 117.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 136.027725,
+            "y": 117.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 139.637726,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 144.807724,
+            "y": 117.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 152.577728,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 157.747726,
+            "y": 117.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 162.557724,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 167.727722,
+            "y": 117.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 172.727722,
+            "y": 117.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 175.117722,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 180.28772,
+            "y": 117.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 188.617722,
+            "y": 117.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 191.007721,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 196.177719,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 201.347717,
+            "y": 117.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 205.78772,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 210.957718,
+            "y": 117.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 214.567719,
+            "y": 117.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 219.377716,
+            "y": 117.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 222.987717,
+            "y": 117.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 225.377716,
+            "y": 117.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 230.377716,
+            "y": 117.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 235.547714,
+            "y": 117.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-oblique",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "JournalofCarefullyMeasuredExamples,volume12,issue3,pages",
+        "x": 44.707733,
+        "baselineY": 132.902405,
+        "glyphs": [
+          {
+            "code": 74,
+            "x": 44.707733,
+            "y": 132.902405,
+            "width": 4.720001,
+            "height": 6.940002,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 49.427734,
+            "y": 132.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 54.427734,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 59.597733,
+            "y": 132.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 63.017731,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 68.187729,
+            "y": 132.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 72.997726,
+            "y": 132.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 78.717728,
+            "y": 132.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 102,
+            "x": 83.717728,
+            "y": 132.902405,
+            "width": 3.059998,
+            "height": 7.050003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 67,
+            "x": 90.107727,
+            "y": 132.902405,
+            "width": 6.389999,
+            "height": 7.059998,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 96.497726,
+            "y": 132.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 101.027725,
+            "y": 132.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 104.447723,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 102,
+            "x": 108.887726,
+            "y": 132.902405,
+            "width": 3.059998,
+            "height": 7.050003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 111.947723,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 117.117722,
+            "y": 132.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 119.507721,
+            "y": 132.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 121,
+            "x": 121.89772,
+            "y": 132.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 2.050003,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 77,
+            "x": 129.837723,
+            "y": 132.902405,
+            "width": 8.75,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 138.587723,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 143.027725,
+            "y": 132.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 147.837723,
+            "y": 132.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 151.667725,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 156.837723,
+            "y": 132.902405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 160.257721,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 164.697723,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 69,
+            "x": 173.197723,
+            "y": 132.902405,
+            "width": 5.970001,
+            "height": 6.910004,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 120,
+            "x": 179.167725,
+            "y": 132.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 183.777725,
+            "y": 132.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 109,
+            "x": 188.587723,
+            "y": 132.902405,
+            "width": 7.940002,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 112,
+            "x": 196.527725,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 1.940002,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 201.697723,
+            "y": 132.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 204.087723,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 208.527725,
+            "y": 132.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 44,
+            "x": 212.357727,
+            "y": 132.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 1.25,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 118,
+            "x": 218.467728,
+            "y": 132.902405,
+            "width": 4.610001,
+            "height": 4.440002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 223.077728,
+            "y": 132.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 228.077728,
+            "y": 132.902405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 230.467728,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 109,
+            "x": 235.637726,
+            "y": 132.902405,
+            "width": 7.940002,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 243.577728,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 49,
+            "x": 251.347733,
+            "y": 132.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 50,
+            "x": 256.347733,
+            "y": 132.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 44,
+            "x": 261.347733,
+            "y": 132.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 1.25,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 267.457733,
+            "y": 132.902405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 269.847733,
+            "y": 132.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 273.677734,
+            "y": 132.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 277.507736,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 282.677734,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 51,
+            "x": 290.447739,
+            "y": 132.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 44,
+            "x": 295.447739,
+            "y": 132.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 1.25,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 112,
+            "x": 301.557739,
+            "y": 132.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 1.940002,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 97,
+            "x": 306.727737,
+            "y": 132.902405,
+            "width": 4.809998,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 103,
+            "x": 311.537735,
+            "y": 132.902405,
+            "width": 5,
+            "height": 4.550003,
+            "depth": 2.059998,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 316.537735,
+            "y": 132.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 320.977737,
+            "y": 132.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "45–67,2026.",
+        "x": 44.707733,
+        "baselineY": 144.902405,
+        "glyphs": [
+          {
+            "code": 52,
+            "x": 44.707733,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.559998,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 53,
+            "x": 49.707733,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.559998,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 8211,
+            "x": 54.707733,
+            "y": 144.902405,
+            "width": 5,
+            "height": 3.050003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 54,
+            "x": 59.707733,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 55,
+            "x": 64.707733,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.559998,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 44,
+            "x": 69.707733,
+            "y": 144.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 1.25,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 50,
+            "x": 75.817734,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 48,
+            "x": 80.817734,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 50,
+            "x": 85.817734,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 54,
+            "x": 90.817734,
+            "y": 144.902405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0.220001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 95.817734,
+            "y": 144.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "Anote.",
+        "x": 44.707733,
+        "baselineY": 159.902405,
+        "glyphs": [
+          {
+            "code": 65,
+            "x": 44.707733,
+            "y": 159.902405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 54.707733,
+            "y": 159.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 59.877731,
+            "y": 159.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 64.877731,
+            "y": 159.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 68.487732,
+            "y": 159.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 72.927734,
+            "y": 159.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "Asecondnote.",
+        "x": 44.707733,
+        "baselineY": 174.902405,
+        "glyphs": [
+          {
+            "code": 65,
+            "x": 44.707733,
+            "y": 174.902405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 115,
+            "x": 54.707733,
+            "y": 174.902405,
+            "width": 3.830002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 58.537735,
+            "y": 174.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 99,
+            "x": 62.977737,
+            "y": 174.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 67.41774,
+            "y": 174.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 72.41774,
+            "y": 174.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 100,
+            "x": 77.587738,
+            "y": 174.902405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 86.087738,
+            "y": 174.902405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 91.257736,
+            "y": 174.902405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 96.257736,
+            "y": 174.902405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 99.867737,
+            "y": 174.902405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 104.307739,
+            "y": 174.902405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "[1]C.Author.",
+        "x": 28.452744,
+        "baselineY": 194.012405,
+        "glyphs": [
+          {
+            "code": 91,
+            "x": 28.452744,
+            "y": 194.012405,
+            "width": 2.889999,
+            "height": 7.5,
+            "depth": 2.5,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 49,
+            "x": 31.342743,
+            "y": 194.012405,
+            "width": 5,
+            "height": 6.779999,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 93,
+            "x": 36.342743,
+            "y": 194.012405,
+            "width": 2.889999,
+            "height": 7.5,
+            "depth": 2.5,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 67,
+            "x": 44.707733,
+            "y": 194.012405,
+            "width": 6.389999,
+            "height": 7.059998,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 51.097733,
+            "y": 194.012405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 65,
+            "x": 57.207733,
+            "y": 194.012405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 117,
+            "x": 63.597733,
+            "y": 194.012405,
+            "width": 5.169998,
+            "height": 4.440002,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 68.767731,
+            "y": 194.012405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 72.377731,
+            "y": 194.012405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 77.547729,
+            "y": 194.012405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 82.267731,
+            "y": 194.012405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 85.687729,
+            "y": 194.012405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      },
+      {
+        "text": "Anothertitle.",
+        "x": 44.707733,
+        "baselineY": 209.012405,
+        "glyphs": [
+          {
+            "code": 65,
+            "x": 44.707733,
+            "y": 209.012405,
+            "width": 6.669998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 110,
+            "x": 51.377731,
+            "y": 209.012405,
+            "width": 5.169998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 111,
+            "x": 56.547729,
+            "y": 209.012405,
+            "width": 5,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 61.547729,
+            "y": 209.012405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 104,
+            "x": 65.15773,
+            "y": 209.012405,
+            "width": 5.169998,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 70.327728,
+            "y": 209.012405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 114,
+            "x": 74.767731,
+            "y": 209.012405,
+            "width": 3.419998,
+            "height": 4.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 81.517731,
+            "y": 209.012405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 105,
+            "x": 85.127731,
+            "y": 209.012405,
+            "width": 2.389999,
+            "height": 6.550003,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 116,
+            "x": 87.517731,
+            "y": 209.012405,
+            "width": 3.610001,
+            "height": 5.710007,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 108,
+            "x": 91.127731,
+            "y": 209.012405,
+            "width": 2.389999,
+            "height": 6.940002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 101,
+            "x": 93.517731,
+            "y": 209.012405,
+            "width": 4.440002,
+            "height": 4.610001,
+            "depth": 0.110001,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          },
+          {
+            "code": 46,
+            "x": 97.957733,
+            "y": 209.012405,
+            "width": 2.779999,
+            "height": 0.830002,
+            "depth": 0,
+            "fontName": "lmsans10-regular",
+            "fontSize": 10
+          }
+        ]
+      }
+    ]
+  }
+}

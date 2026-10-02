@@ -40,6 +40,9 @@ export function texListItemLayoutForParagraph(
             kind: labelKind,
             placement: labelPlacement,
             content: labelContent,
+            ...(paragraph.listContext.kind === "bibliography"
+              ? { fontState: { family: "normal", series: "medium", shape: "upright" } }
+              : {}),
             ...(labelKind === "description"
               ? {
                   fontState: {
@@ -92,7 +95,7 @@ function texListItemLabelPlacement(
   if (!listContext?.showLabel) {
     return undefined;
   }
-  return listContext.kind === "description" ? "inline" : "margin";
+  return ["description", "bibliography"].includes(listContext.kind) ? "inline" : "margin";
 }
 
 function texListItemLabelContent(
@@ -250,7 +253,7 @@ function texListItemDescriptionIndent(
   readonly labelFirstLineIndentWidth: TexLength;
   readonly bodyFirstLineIndentWidth: TexLength;
 } | undefined {
-  if (paragraph.listContext?.kind !== "description") {
+  if (paragraph.listContext?.kind !== "description" && paragraph.listContext?.kind !== "bibliography") {
     return undefined;
   }
   const listLayout = texNearestListLayout(stack);

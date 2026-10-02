@@ -113,6 +113,7 @@ export function layoutSimpleTexParagraph(
     options.colorResolver?.resolve.bind(options.colorResolver),
     {
       listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth,
+      bibliographyMargins: options.listProfile?.bibliographyMargins,
       colorResolverCacheKey: options.colorResolver?.cacheKey,
     }
   );

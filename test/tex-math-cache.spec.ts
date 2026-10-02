@@ -9,6 +9,15 @@ const params = (content: string, offset = 0) => ({
 const label = (start: number, text = "1") => ({ text, sourceSpan: { start, end: start + 8 }, textSourceSpan: { start: start + 3, end: start + 4 } });
 
 describe("math layout and source projection caches", () => {
+  it("keys inline math layout and projection by the active font size", () => {
+    const provider = createTexDerivedInlineMathBoxProvider();
+    const request = { ...params(String.raw`\blacktriangleright`), delimiter: "dollar" as const };
+    for (const size of [8, 10.95, 8, 12, 10.95, 8]) {
+      const actual = provider.getInlineMathBox({ ...request, atPt: texLength(size) });
+      const expected = createTexDerivedInlineMathBoxProvider({ baseAtPt: size }).getInlineMathBox(request);
+      expect(actual).toEqual(expected);
+    }
+  });
   it("snapshots caller-owned tag spans without freezing or retaining them", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
     const mutableLabel = label(10);

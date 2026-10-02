@@ -1773,6 +1773,12 @@ function texArticleListVerticalSkipBefore(
   if (!previous && !current) {
     return texLength(0);
   }
+  // Beamer zeros topsep, partopsep and itemsep, retaining the size-selected
+  // parsep (zero at normalsize, 3pt at small, 2pt at footnotesize).
+  if ((current ?? previous)?.kind === "bibliography") {
+    if (previous && previous.kind !== "bibliography") return texArticleListExitBoundarySkip(state, previous.depth, 0, font, profile);
+    return texLength(previous?.kind === "bibliography" && current?.kind === "bibliography" ? profile?.bibliographyParsepPt ?? 0 : 0);
+  }
   if (!hasPreviousEmittedParagraph && current) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
     return texArticleInitialListSkip(
@@ -2038,7 +2044,7 @@ function texProfileListVerticalGlueFlex(
   exitsTrivlistScope: boolean,
   profile?: TexListLayoutProfile
 ): { stretch: TexLength; shrink: TexLength } {
-  if (!profile || (!previous && !current)) {
+  if (!profile || (!previous && !current) || (current ?? previous)?.kind === "bibliography") {
     return { stretch: texLength(0), shrink: texLength(0) };
   }
   let depth = current?.depth ?? previous?.depth ?? 1;

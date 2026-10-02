@@ -67,6 +67,13 @@ export type BeamerOverlayPause = {
   readonly contentSpan: Span;
 };
 
+export type BeamerOverlayReference = {
+  readonly sourceStart: number;
+  readonly spec: BeamerOverlaySpec;
+  /** Hyperlinks and hypertargets use \only semantics for their text argument. */
+  readonly contentSpan?: Span;
+};
+
 export type BeamerOverlayModel = {
   readonly frameSpan: Span;
   readonly commands: readonly BeamerOverlayCommand[];
@@ -75,6 +82,7 @@ export type BeamerOverlayModel = {
    * Resolving a default here does not consume the relative overlay counter. */
   readonly listDefaults: readonly { readonly span: Span; readonly spec: BeamerOverlaySpec }[];
   readonly pauses: readonly BeamerOverlayPause[];
+  readonly referenceSpecs: readonly BeamerOverlayReference[];
   readonly stepCount: number;
 };
 
@@ -87,6 +95,7 @@ export type BeamerOverlayTextProjection = {
 };
 
 type PendingSpec =
+  | { readonly kind: "reference"; readonly sourceOrder: number; readonly rawSpec: BeamerDelimitedSourceValue; readonly contentSpan?: Span }
   | {
       readonly kind: "list-default";
       readonly sourceOrder: number;
@@ -142,10 +151,20 @@ export function scanBeamerFrameOverlays(
   const pending: PendingSpec[] = [];
   const controls = beamerControlSequencesIn(context, frame.bodySpan);
   const listRanges = beamerListRanges(context, frame.bodySpan);
-  const itemControls = controls.filter((command) => command.name === "item");
+  const itemControls = controls.filter((command) => command.name === "item" || command.name === "bibitem");
   const explicitItemCommands = new Set<number>();
 
   for (const command of controls) {
+    if (["label", "hypertarget", "hyperlink"].includes(command.name)) {
+      const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+      if (rawSpec) {
+        const target = beamerRequiredArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to);
+        const content = command.name !== "label" && target
+          ? beamerRequiredArgumentAfter(context, target.span.to, frame.bodySpan.to) : null;
+        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, contentSpan: content?.contentSpan });
+      }
+      continue;
+    }
     const overlayKind = OVERLAY_COMMANDS.get(command.name);
     if (overlayKind) {
       const parsed = parseOverlayCommand(
@@ -185,7 +204,7 @@ export function scanBeamerFrameOverlays(
       });
       continue;
     }
-    if (command.name !== "item") {
+    if (command.name !== "item" && command.name !== "bibitem") {
       continue;
     }
     // Beamer accepts both \item<spec>[label] and \item[label]<spec>.
@@ -259,6 +278,7 @@ export function scanBeamerFrameOverlays(
 
   pending.sort((left, right) => left.sourceOrder - right.sourceOrder);
   const commands: BeamerOverlayCommand[] = [];
+  const referenceSpecs: BeamerOverlayReference[] = [];
   const items: BeamerOverlayItem[] = [];
   const listDefaults: Array<{ span: Span; spec: BeamerOverlaySpec }> = [];
   const pauseStarts: Array<{
@@ -284,6 +304,8 @@ export function scanBeamerFrameOverlays(
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
       commands.push({ ...entry.command, spec: resolved.spec });
+    } else if (entry.kind === "reference") {
+      referenceSpecs.push({ sourceStart: entry.sourceOrder, spec: resolved.spec, contentSpan: entry.contentSpan });
     } else {
       items.push({
         commandSpan: entry.commandSpan,
@@ -310,6 +332,7 @@ export function scanBeamerFrameOverlays(
     items,
     listDefaults,
     pauses,
+    referenceSpecs,
     stepCount,
   };
 }
@@ -329,6 +352,10 @@ export function resolveBeamerOverlaySpanVisibility(
   step: number
 ): BeamerOverlayVisibility {
   let visibility: BeamerOverlayVisibility = "visible";
+  for (const reference of model.referenceSpecs) {
+    if (reference.contentSpan && containsSpan(reference.contentSpan, span) &&
+      !beamerOverlaySpecContains(reference.spec, step)) return "removed";
+  }
   for (const command of model.commands) {
     let branchIndex = command.branches.findIndex((branch) =>
       containsSpan(branch.contentSpan, span)
@@ -650,7 +677,8 @@ function beamerListRanges(
     if (
       token.name !== "itemize" &&
       token.name !== "enumerate" &&
-      token.name !== "description"
+      token.name !== "description" &&
+      token.name !== "thebibliography"
     ) {
       continue;
     }
