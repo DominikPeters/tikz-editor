@@ -107,16 +107,17 @@ export function createTexDerivedInlineMathBoxProvider(
       return getMathBox(params, "text", getCache(), configuredFontProfile, params.atPt ?? baseAtPt, renderInlineSvg);
     },
     getDisplayMathBox: (params) => {
-      return getMathBox(params, "display", getCache(), configuredFontProfile, baseAtPt);
+      return getMathBox(params, "display", getCache(), configuredFontProfile, params.atPt ?? baseAtPt);
     },
     getDisplayMathAlignment: (params) => {
-      return getDisplayMathAlignment(params, configuredFontProfile, baseAtPt);
+      return getDisplayMathAlignment(params, configuredFontProfile, params.atPt ?? baseAtPt);
     },
   };
 }
 
 function getMathBox(
   params: {
+    readonly baselineSkip?: TexLength;
     readonly source: string;
     readonly content: string;
     readonly delimiter: string;
@@ -141,7 +142,7 @@ function getMathBox(
   // Final projections include every source/label field. Structured keys also
   // prevent a colon in label/content text from aliasing another request.
   const key = JSON.stringify([
-    style, baseAtPt, params.delimiter, params.source, params.content,
+    style, baseAtPt, params.baselineSkip ?? null, params.delimiter, params.source, params.content,
     sourceNumberKey(params.sourceStart), sourceNumberKey(params.sourceEnd),
     sourceNumberKey(params.contentStart), sourceNumberKey(params.contentEnd),
     params.targetWidth === undefined ? null : sourceNumberKey(params.targetWidth),
@@ -181,6 +182,10 @@ function getMathBox(
     contentStart: params.contentStart,
     contentEnd: params.contentEnd,
     width: hlist.width,
+    ...(style === "display" ? { displayContentWidth: measuredHList.width } : {}),
+    ...(style === "display" && list.items.some(item => item.kind === "atom" && item.nucleus.kind === "aligned" &&
+      /^\\begin\s*\{\s*split\s*\}/u.test(params.content.slice(item.nucleus.beginSourceSpan.start - params.contentStart)))
+      ? { fullDisplayWidth: true } : {}),
     height: hlist.height,
     depth: hlist.depth,
     ...mathHListFlex(hlist.items, texHBoxLocalX(0), texHBoxLocalX(hlist.width)),
@@ -201,8 +206,19 @@ function sourceNumberKey(value: number): string {
   return Object.is(value, -0) ? "-0" : String(value);
 }
 
+function displayFontProfile(profile: TexMathFontProfile, baselineSkip: TexLength | undefined): TexMathFontProfile {
+  if (baselineSkip === undefined) return profile;
+  // LaTeX sets the current strut to .7/.3 of baselineskip using scaled points.
+  const baselineSp = Math.round(baselineSkip * 65536);
+  return { ...profile, layoutParameters: { ...profile.layoutParameters,
+    alignedBaselineSkip: baselineSkip,
+    arrayStrutHeight: texLength(Math.floor(baselineSp * 45875 / 65536) / 65536),
+    arrayStrutDepth: texLength(Math.floor(baselineSp * 19661 / 65536) / 65536),
+  } };
+}
+
 function getMathBoxLayout(
-  params: { readonly delimiter: string; readonly content: string; readonly contentStart: number },
+  params: { readonly baselineSkip?: TexLength; readonly delimiter: string; readonly content: string; readonly contentStart: number },
   style: "text" | "display",
   configuredFontProfile: TexMathFontProfile | undefined,
   baseAtPt: TexLength
@@ -212,7 +228,7 @@ function getMathBoxLayout(
   // benchmark catalog. Exact final boxes still reuse their complete metadata.
   const parsed = parseMathBoxContent(params, style);
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) return null;
-  const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
+  const fontProfile = displayFontProfile(configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list), params.baselineSkip);
   const laidOut = layoutTexMathList(parsed.list, { style, fontProfile, baseAtPt });
   if (!laidOut.supported) return null;
   return { list: parsed.list, hlist: laidOut.hlist, fontProfile };
@@ -1305,6 +1321,7 @@ function texMathSingleDisplayBodyDelimiter(delimiter: string): boolean {
 
 function getDisplayMathAlignment(
   params: {
+    readonly baselineSkip?: TexLength;
     readonly source: string;
     readonly content: string;
     readonly delimiter: string;
@@ -1331,7 +1348,7 @@ function getDisplayMathAlignment(
   if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return null;
   }
-  const fontProfile = configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list);
+  const fontProfile = displayFontProfile(configuredFontProfile ?? resolveDefaultTexMathFontProfileForList(parsed.list), params.baselineSkip);
   const laidOut = layoutTexMathList(parsed.list, {
     style: "display",
     fontProfile,

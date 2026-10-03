@@ -255,6 +255,7 @@ export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
   readonly sizePt?: TexLength;
   readonly baselineSkipPt?: TexLength;
   readonly sizeScope?: { readonly boundary: "begin" | "end"; readonly name: string };
+  readonly sizeCommand?: string;
   readonly listRegisters?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep", string>>;
   readonly color?: string;
   readonly tabularRegisters?: TexTabularRegisters;
@@ -674,7 +675,15 @@ export interface SimpleTexPlaceholderBlockItem extends SimpleTexSourceRange {
   readonly scopePath?: readonly SimpleTexScopePathRole[];
 }
 
-export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange {
+export interface SimpleTexDisplayMathState {
+  readonly fontSizePt?: TexLength;
+  readonly baselineSkip?: TexLength;
+  /** Only class size commands that assign display registers replace this state. */
+  readonly displaySkipCommand?: "normalsize" | "small" | "footnotesize";
+  readonly normalFontSizePt?: TexLength;
+}
+
+export interface SimpleTexDisplayMathBlockItem extends SimpleTexSourceRange, SimpleTexDisplayMathState {
   readonly kind: "display-math";
   readonly text: string;
   readonly delimiter: SimpleTexDisplayMathDelimiter;
@@ -1665,7 +1674,11 @@ function scanSimpleTexIrNodes(
     if (char === "{") {
       const group = scanSimpleTexGroup(text, index, sourceOffset, resolveColorAlias);
       if (group) {
-        nodes.push(group.node);
+        if (group.blockChildren) {
+          nodes.push({ kind: "style-declaration", text: "{", sizeScope: { boundary: "begin", name: "" }, sourceStart, sourceEnd: sourceStart + 1 },
+            ...group.blockChildren,
+            { kind: "style-declaration", text: "}", sizeScope: { boundary: "end", name: "" }, sourceStart: sourceOffset + group.end - 1, sourceEnd: sourceOffset + group.end });
+        } else nodes.push(group.node);
         unsupportedCommand ||= group.unsupportedCommand;
         index = group.end;
         continue;
@@ -1936,6 +1949,11 @@ function simpleTexMathNodeFromSyntax(
   const end = syntax.node.getChild("EndMathEnvironment");
   if (!begin || !end) {
     return null;
+  }
+  if (text.slice(syntax.from, syntax.to).includes(String.raw`\intertext`)) {
+    let malformed = false;
+    syntax.node.cursor().iterate(node => { if (node.type.isError) malformed = true; });
+    if (malformed) return null;
   }
   const beginText = text.slice(begin.from, begin.to);
   const nameMatch = /^\\begin\{(equation|align|flalign|gather|multline)(\*)?\}$/u.exec(
@@ -3705,6 +3723,7 @@ function scanSimpleTexStyleDeclaration(
         node: {
           kind: "style-declaration",
           text: text.slice(start, end),
+          sizeCommand: name.replace("pgfutil@font@", ""),
           sizePt: texLength(DEFAULT_TEXT_FONT_SIZE * (FONT_SIZE_COMMAND_FACTORS[`\\${name}`] ?? 1)),
           sourceStart: sourceOffset + start,
           sourceEnd: sourceOffset + end,
@@ -3727,8 +3746,10 @@ function scanSimpleTexStyleDeclaration(
   cursor = skipSimpleTexControlWordSpaces(text, baselineSkip.end);
   const selectfontEnd = scanSimpleTexControlWord(text, cursor, "selectfont");
   if (selectfontEnd === null) return null;
-  const sizePt = parseTexDimensionText(size.content.trim());
-  const baselineSkipPt = parseTexDimensionText(baselineSkip.content.trim());
+  const fontDimension = (value: string): TexLength | null => /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value.trim())
+    ? texLength(Number(value.trim())) : parseTexDimensionText(value.trim());
+  const sizePt = fontDimension(size.content);
+  const baselineSkipPt = fontDimension(baselineSkip.content);
   if (sizePt === null || sizePt <= 0) return null;
   return {
     node: {
@@ -3976,6 +3997,7 @@ function scanSimpleTexGroup(
   resolveColorAlias?: ColorAliasResolver
 ): {
   node: SimpleTexGroupNode;
+  readonly blockChildren?: readonly SimpleTexNode[];
   end: number;
   unsupportedCommand: boolean;
 } | null {
@@ -3992,7 +4014,11 @@ function scanSimpleTexGroup(
     resolveColorAlias
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
+  const blockChildren = childScan.nodes.some(node => node.kind === "display-math") &&
+    childScan.nodes.every(node => isSimpleTexInlineNode(node) || node.kind === "display-math" || node.kind === "paragraph-break")
+    ? childScan.nodes : undefined;
   return {
+    ...(blockChildren ? { blockChildren } : {}),
     node: {
       kind: "group",
       text: text.slice(start, groupEnd),
@@ -4005,7 +4031,7 @@ function scanSimpleTexGroup(
         : [],
     },
     end: groupEnd,
-    unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline,
+    unsupportedCommand: childScan.unsupportedCommand || (!childrenAreInline && !blockChildren),
   };
 }
 
@@ -4224,27 +4250,50 @@ function buildSimpleTexParagraphBlocksFromNodes(
   sourceEnd = sourceOffset + text.length,
   options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphBlockScanResult {
-  const initialSize = texLength(options?.fontSizePt ?? DEFAULT_TEXT_FONT_SIZE);
+  const initialSize = texLength(options?.fontSizePt ?? 10);
   const initialBaseline = options?.baselineSkipPt === undefined ? undefined : texLength(options.baselineSkipPt);
-  type SizeState = { sizePt: TexLength; baselineSkip?: TexLength };
-  let sizeState: SizeState = { sizePt: initialSize, baselineSkip: initialBaseline };
+  type SizeState = SimpleTexDisplayMathState & { sizePt: TexLength };
+  const normalFontSizePt = texLength(options?.namedFontSizes?.normalsize?.sizePt ?? 10);
+  const initialState: SizeState = { sizePt: initialSize, baselineSkip: initialBaseline, normalFontSizePt };
+  let sizeState: SizeState = initialState;
   const sizeScopes: SizeState[] = [];
   const sizeHistory: Array<{ from: number; state: SizeState }> = [{ from: sourceOffset, state: sizeState }];
-  sourceNodes = sourceNodes.map(node => {
+  // Class size macros also select baselines; explicit \fontsize keeps the
+  // previously installed display skips. Groups restore both sets of registers.
+  const defaultSizes: Readonly<Record<string, number>> = {
+    tiny: 5, scriptsize: 7, footnotesize: 8, small: 9, normalsize: 10,
+    large: 12, Large: 14.4, LARGE: 17.28, huge: 20.74, Huge: 24.88,
+  };
+  const defaultBaselines: Readonly<Record<string, number>> = {
+    tiny: 6, scriptsize: 8, footnotesize: 9.5, small: 11, normalsize: 12,
+    large: 14, Large: 18, LARGE: 22, huge: 25, Huge: 30,
+  };
+  const resolveSizeNodes = (nodes: readonly SimpleTexNode[]): SimpleTexNode[] => nodes.map(node => {
+    if (node.kind === "group") {
+      const outer = sizeState;
+      const children = resolveSizeNodes(node.children) as SimpleTexInlineNode[];
+      sizeState = outer;
+      sizeHistory.push({ from: node.sourceEnd, state: outer });
+      return { ...node, children };
+    }
     if (node.kind !== "style-declaration") return node;
-    if (node.sizeScope?.boundary === "begin") {
-      sizeScopes.push(sizeState);
-      const selected = options?.namedFontSizes?.[node.sizeScope.name];
-      sizeState = { sizePt: texLength(selected?.sizePt ?? node.sizePt ?? initialSize),
-        baselineSkip: selected ? texLength(selected.baselineSkipPt) : initialBaseline };
-    } else if (node.sizeScope?.boundary === "end") {
-      sizeState = sizeScopes.pop() ?? { sizePt: initialSize, baselineSkip: initialBaseline };
+    const name = node.sizeScope?.boundary === "begin" ? node.sizeScope.name : node.sizeCommand;
+    if (node.sizeScope?.boundary === "begin") sizeScopes.push(sizeState);
+    if (node.sizeScope?.boundary === "end") {
+      sizeState = sizeScopes.pop() ?? initialState;
+    } else if (name) {
+      const selected = options?.namedFontSizes?.[name];
+      sizeState = { ...sizeState, sizePt: texLength(selected?.sizePt ?? defaultSizes[name] ?? node.sizePt ?? initialSize),
+        baselineSkip: texLength(selected?.baselineSkipPt ?? defaultBaselines[name] ?? initialBaseline ?? 12),
+        ...(["normalsize", "small", "footnotesize"].includes(name)
+          ? { displaySkipCommand: name as "normalsize" | "small" | "footnotesize" } : {}) };
     } else if (node.sizePt != null) {
-      sizeState = { sizePt: node.sizePt, baselineSkip: node.baselineSkipPt ?? sizeState.baselineSkip };
-    } else return node;
+      sizeState = { ...sizeState, sizePt: node.sizePt, baselineSkip: node.baselineSkipPt ?? sizeState.baselineSkip };
+    } else if (!node.sizeScope) return node;
     sizeHistory.push({ from: node.sourceEnd, state: sizeState });
     return { ...node, sizePt: sizeState.sizePt, baselineSkipPt: sizeState.baselineSkip };
   });
+  sourceNodes = resolveSizeNodes(sourceNodes);
   const sizeAt = (offset: number): SizeState => {
     for (let i = sizeHistory.length - 1; i >= 0; i -= 1) if (sizeHistory[i].from <= offset) return sizeHistory[i].state;
     return sizeHistory[0].state;
@@ -4767,6 +4816,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       }
       items.push({
         kind: "display-math",
+        fontSizePt: sizeAt(node.sourceStart).sizePt,
+        baselineSkip: sizeAt(node.sourceStart).baselineSkip,
+        displaySkipCommand: sizeAt(node.sourceStart).displaySkipCommand,
+        normalFontSizePt,
         text: node.text,
         delimiter: node.delimiter,
         content: node.content,

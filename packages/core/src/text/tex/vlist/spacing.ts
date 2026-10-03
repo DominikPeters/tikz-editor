@@ -555,7 +555,7 @@ function materializeDisplayMathVerticalGlueInItems(
         profile,
         index === 0 && profile.leadingDisplay ? "short" : undefined
       ));
-      items.push(...displayAlignmentMaterialItems(item, profile));
+      items.push(...displayAlignmentMaterialItems(item, displayMathProfileForItem(item, profile)));
       items.push(displayMathBoundaryGlueItem(item, "below", profile));
       continue;
     }
@@ -564,15 +564,39 @@ function materializeDisplayMathVerticalGlueInItems(
   return items;
 }
 
+function displayMathProfileForItem(
+  item: TexDisplayMathItem | TexDisplayAlignmentItem,
+  profile: TexDisplayMathLayoutProfile
+): TexDisplayMathLayoutProfile {
+  if (!item.displaySkipCommand) return profile;
+  // size10/11/12.clo assign these registers only in normalsize, small and
+  // footnotesize. Other size declarations and explicit fontsize inherit them.
+  const classIndex = item.normalFontSizePt === 12 ? 2 :
+    item.normalFontSizePt !== undefined && Math.abs(item.normalFontSizePt - 10.95) < .01 ? 1 : 0;
+  const registers = {
+    normalsize: [[10, 2, 5, 3, 6, 3, 3], [11, 3, 6, 3, 6.5, 3.5, 3], [12, 3, 7, 3, 6.5, 3.5, 3]],
+    small: [[8.5, 3, 4, 2, 4, 2, 2], [10, 2, 5, 3, 6, 3, 3], [11, 3, 6, 3, 6.5, 3.5, 3]],
+    footnotesize: [[6, 2, 4, 1, 3, 1, 2], [8, 2, 4, 1, 4, 2, 2], [10, 2, 5, 3, 6, 3, 3]],
+  }[item.displaySkipCommand][classIndex];
+  const [sizePt, stretchPt, shrinkPt, aboveShortStretch, belowShort, belowShortStretch, belowShortShrink] = registers;
+  const normal = { sizePt, stretchPt, shrinkPt };
+  return { ...profile,
+    above: { normal, short: { sizePt: 0, stretchPt: aboveShortStretch, shrinkPt: 0 } },
+    below: { normal, short: { sizePt: belowShort, stretchPt: belowShortStretch, shrinkPt: belowShortShrink } },
+  };
+}
+
 function displayMathBoundaryGlueItem(
   item: TexDisplayMathItem | TexDisplayAlignmentItem,
   side: "above" | "below",
   profile: TexDisplayMathLayoutProfile,
   variant?: TexDisplayMathSkipVariant
 ): TexGlueItem {
+  profile = displayMathProfileForItem(item, profile);
+  if (item.kind === "display-alignment" || item.box.fullDisplayWidth) variant = "normal";
   const skip = profile[side][variant ?? "normal"];
   const materialWidth = item.kind === "display-math"
-    ? item.box.width
+    ? item.box.displayContentWidth ?? item.box.width
     : item.alignment.width;
   const displayLeftEdge = texLength(roundTexPt(
     Math.max(0, (item.targetWidth - materialWidth) / 2)
@@ -584,6 +608,8 @@ function displayMathBoundaryGlueItem(
     origin: {
       kind: "display-math-boundary",
       side,
+      ...(item.displaySkipCommand ? { profile } : {}),
+      ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
       ...(variant ? { variant } : {}),
       ...(side === "above" ? { displayLeftEdge } : {}),
     },
@@ -607,7 +633,10 @@ function leadingDisplayEmptyLineGlue(
       kind: "display-math-interline",
       side: "above",
     },
-    size: texLength(profile.leadingDisplay?.emptyLineBaselineSkipPt ?? 0),
+    // A containing environment may already ship the leading line and request
+    // zero additional baseline (for example Beamer column[T]'s colheadskip).
+    size: texLength(profile.leadingDisplay?.emptyLineBaselineSkipPt === 0
+      ? 0 : item.baselineSkip ?? profile.leadingDisplay?.emptyLineBaselineSkipPt ?? 0),
     stretchOrder: "normal",
     shrinkOrder: "normal",
   };
@@ -845,7 +874,7 @@ function resolveDisplayMathVerticalGlueInItems(
           texInterlineGlueSize(
             previousDepth,
             displayItem.box.height,
-            options.lineHeight
+            item.origin.baselineSkip ?? options.lineHeight
           )
         ));
       } else if (item.origin.side === "below" && previousDisplayMaterialMetrics) {
@@ -866,7 +895,7 @@ function resolveDisplayMathVerticalGlueInItems(
             texInterlineGlueSize(
               previousDisplayMaterialMetrics.depth,
               nextHeight,
-              options.lineHeight
+              nextParagraph ? nextParagraph.baselineSkip ?? options.lineHeight : item.origin.baselineSkip ?? options.lineHeight
             )
           ));
         }
@@ -1208,6 +1237,8 @@ function displayAlignmentIntertextParagraph(
     paragraph: {
       text: rawText,
       sourceSpan,
+      fontSizePt: item.fontSizePt,
+      baselineSkip: item.baselineSkip,
       nodes,
       noIndent: true,
       alignment: "justified",
@@ -1535,13 +1566,13 @@ function resolveDisplayMathBoundaryGlueItem(
   if (item.origin?.kind !== "display-math-boundary") {
     return item;
   }
-  const skip = profile[item.origin.side][variant];
+  const skip = (item.origin.profile ?? profile)[item.origin.side][variant];
+  const { profile: resolvedProfile, baselineSkip: resolvedBaseline, ...origin } = item.origin;
+  void resolvedProfile;
+  void resolvedBaseline;
   return {
     ...item,
-    origin: {
-      ...item.origin,
-      variant,
-    },
+    origin: { ...origin, variant },
     size: texLength(skip.sizePt),
     stretch: texLength(skip.stretchPt),
     shrink: texLength(skip.shrinkPt),

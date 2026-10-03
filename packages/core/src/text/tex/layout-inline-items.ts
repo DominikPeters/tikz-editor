@@ -164,6 +164,10 @@ export interface TexMathBox {
   readonly contentStart: number;
   readonly contentEnd: number;
   readonly width: TexLength;
+  /** AMS split wraps a full-width display despite its occupied glyph width. */
+  readonly fullDisplayWidth?: boolean;
+  /** Occupied formula width before a separately positioned equation label. */
+  readonly displayContentWidth?: TexLength;
   readonly height: TexLength;
   readonly depth: TexLength;
   readonly stretch?: TexLength;
@@ -315,6 +319,8 @@ export interface TexMathBoxProvider {
     readonly contentEnd: number;
   }) => TexMathBox | null;
   readonly getDisplayMathBox?: (params: {
+    readonly atPt?: TexLength;
+    readonly baselineSkip?: TexLength;
     readonly source: string;
     readonly content: string;
     readonly delimiter: SimpleTexDisplayMathDelimiter;
@@ -326,6 +332,8 @@ export interface TexMathBoxProvider {
     readonly displayLabel?: TexMathDisplayLabel;
   }) => TexMathBox | null;
   readonly getDisplayMathAlignment?: (params: {
+    readonly atPt?: TexLength;
+    readonly baselineSkip?: TexLength;
     readonly source: string;
     readonly content: string;
     readonly delimiter: SimpleTexDisplayMathDelimiter;

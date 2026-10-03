@@ -12,6 +12,7 @@ import type {
   SimpleTexGraphicsOptions,
   SimpleTexBoxCommandName,
   SimpleTexDisplayMathDelimiter,
+  SimpleTexDisplayMathState,
   SimpleTexSegmentInput,
   SimpleTexVerticalGlueCommandName,
   TexAlignmentProfile,
@@ -90,6 +91,8 @@ export type TexGlueOrigin =
       readonly variant?: TexDisplayMathSkipVariant;
       /** Centered material edge used for TeX's pre-display overlap test. */
       readonly displayLeftEdge?: TexLength;
+      readonly profile?: TexDisplayMathLayoutProfile;
+      readonly baselineSkip?: TexLength;
     }
   | {
       readonly kind: "display-math-interline";
@@ -394,7 +397,7 @@ export interface TexPlaceholderItem {
   readonly literalText?: string;
 }
 
-export interface TexDisplayMathItem {
+export interface TexDisplayMathItem extends SimpleTexDisplayMathState {
   readonly kind: "display-math";
   readonly sourceSpan: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];
@@ -407,7 +410,7 @@ export interface TexDisplayMathItem {
   readonly box: TexMathBox;
 }
 
-export interface TexDisplayAlignmentItem {
+export interface TexDisplayAlignmentItem extends SimpleTexDisplayMathState {
   readonly kind: "display-alignment";
   readonly sourceSpan: TexSourceSpan;
   readonly scopePath?: readonly TexVBoxRole[];

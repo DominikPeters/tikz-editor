@@ -190,6 +190,8 @@ function displayMathItemFromSimpleTexDisplayMath(
   };
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
+  const displayState = { fontSizePt: item.fontSizePt, baselineSkip: item.baselineSkip,
+    displaySkipCommand: item.displaySkipCommand, normalFontSizePt: item.normalFontSizePt };
   if (
     item.delimiter === "align" ||
     item.delimiter === "align-star" ||
@@ -201,6 +203,8 @@ function displayMathItemFromSimpleTexDisplayMath(
     item.delimiter === "multline-star"
   ) {
     const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
+      atPt: item.fontSizePt,
+      baselineSkip: item.baselineSkip,
       source: item.text,
       content: item.content,
       delimiter: item.delimiter,
@@ -216,6 +220,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     }
     return {
       kind: "display-alignment",
+      ...displayState,
       sourceSpan,
       scopePath,
       text: item.text,
@@ -228,6 +233,8 @@ function displayMathItemFromSimpleTexDisplayMath(
     };
   }
   const box = options.mathBoxProvider?.getDisplayMathBox?.({
+    atPt: item.fontSizePt,
+    baselineSkip: item.baselineSkip,
     source: item.text,
     content: item.content,
     delimiter: item.delimiter,
@@ -243,6 +250,7 @@ function displayMathItemFromSimpleTexDisplayMath(
   }
   return {
     kind: "display-math",
+    ...displayState,
     sourceSpan,
     scopePath,
     text: item.text,
