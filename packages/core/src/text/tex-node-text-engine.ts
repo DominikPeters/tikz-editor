@@ -720,7 +720,7 @@ function texTextFontProfileForNodeFont(
   font: TextFontOptions
 ): TexTextFontProfile {
   const defaultFontState: SimpleTexFontState = {
-    family: font.fontFamily === "sans" ? "sans" : "normal",
+    family: font.fontFamily === "monospace" ? "typewriter" : font.fontFamily === "sans" ? "sans" : "normal",
     series: font.fontWeight === "bold" ? "bold" : "medium",
     shape: font.fontStyle === "italic" ? "italic" : "upright",
   };
