@@ -5,27 +5,14 @@ import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import type { EditHandle } from "../packages/core/src/semantic/types.js";
 import { identityMatrix } from "../packages/core/src/semantic/transform.js";
 import { computeSourceFingerprint } from "../packages/core/src/utils/source-fingerprint.js";
-import { makeEmptySnapshot } from "../packages/app/src/compute.js";
+import { makeEmptySnapshot, type SessionSnapshot } from "../packages/app/src/compute.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
 import { wp } from "./coords-helpers.js";
 
-// Scene/source ids are positional (`path:${statementIndex}`, see
-// packages/core/src/ast/ids.ts). The store applies elementId-targeted edit
-// actions against the LIVE source (reducer APPLY_EDIT_ACTION recompute), while
-// the UI derives those ids from the async, possibly LAGGING snapshot scene
-// (canvas hit-testing, selection, inspector descriptors). Whenever the live
-// source has gained or lost a statement that the snapshot hasn't caught up
-// with, every stale id silently denotes a DIFFERENT element — and the edit
-// lands on the wrong object. Handle-based actions are protected against this
-// by source fingerprints (see the "guarded" tests at the bottom); elementId-
-// based actions have no equivalent guard.
-//
-// The `it.fails` tests below encode the DESIRED behavior (edit lands on the
-// element the user selected, or is rejected as stale). They currently fail —
-// i.e. the bug is present. When the staleness guard/id remapping is
-// implemented, they will start passing and vitest will flag them so they can
-// be promoted to regular tests.
+// Positional ids can change while the canvas still displays an older scene.
+// These fixtures publish a ready snapshot through the real identity lifecycle
+// and verify that stale edits preserve source and explain the rejection.
 
 const cm = (v: number) => v * PT_PER_CM;
 
@@ -77,125 +64,130 @@ const TWO_RECTS_EDITED = [
 ].join("\n");
 
 function makeState(source: string, selectedIds: readonly string[] = []): EditorState {
-  const initial = makeInitialState();
-  return {
-    ...initial,
-    source,
-    snapshot: { ...makeEmptySnapshot(source), source },
-    selectedElementIds: new Set(selectedIds)
+  let state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source });
+  const rendered = renderTikzToSvg(source);
+  const snapshot: SessionSnapshot = {
+    ...makeEmptySnapshot(source),
+    parseResult: rendered.parse,
+    semanticResult: rendered.semantic,
+    activeRootId: rendered.parse.activeFigureId,
+    figures: rendered.parse.figures,
+    scene: rendered.semantic.scene,
+    editHandles: rendered.semantic.editHandles
   };
+  state = editorReducer(state, { type: "COMPUTE_REQUESTED", requestId: "ready" });
+  state = editorReducer(state, { type: "SNAPSHOT_READY", requestId: "ready", snapshot });
+  expect(state.documents[state.activeDocumentId].editingIdentities).toBeDefined();
+  for (const id of selectedIds) state = editorReducer(state, { type: "SELECT", id, additive: true });
+  return state;
+}
+
+function expectStaleRejection(state: EditorState, source: string): void {
+  expect(state.source).toBe(source);
+  expect(state.lastEditWarningMessage).toContain("catching up");
 }
 
 function elementIdContaining(source: string, needle: string): string {
   const rendered = renderTikzToSvg(source, {
     parse: { recover: true, includeContextDefinitions: true }
   });
-  const element = rendered.semantic.scene.elements.find((candidate) =>
-    source.slice(candidate.sourceRef.sourceSpan.from, candidate.sourceRef.sourceSpan.to).includes(needle)
+  const statement = rendered.parse.figure.body.find((candidate) =>
+    source.slice(candidate.span.from, candidate.span.to).includes(needle)
   );
-  if (!element) {
-    throw new Error(`No scene element found whose source contains "${needle}"`);
+  if (!statement) {
+    throw new Error(`No statement found whose source contains "${needle}"`);
   }
-  return element.sourceRef.sourceId;
+  expect(rendered.semantic.scene.elements.some(element => element.sourceRef.sourceId === statement.id)).toBe(true);
+  return statement.id;
 }
 
-describe("stale scene id retargeting (positional sourceIds + lagging snapshot)", () => {
-  it.fails("inspector property write lands on the element the user selected, not on a shifted id", () => {
-    // The user selects the circle on the canvas. The scene rendered from
-    // RECT_CIRCLE resolves that click to "path:1".
+describe("stale scene ids with ready editing identities", () => {
+  it("rejects an inspector property write after a source insertion", () => {
     const circleId = elementIdContaining(RECT_CIRCLE, "circle");
-    expect(circleId).toBe("path:1");
-
     let state = makeState(RECT_CIRCLE, [circleId]);
-
-    // The user types a new statement above it in the code editor. Selection
-    // survives CODE_EDITED by id, but every statement index below the
-    // insertion has shifted; the snapshot has not been recomputed yet.
     state = editorReducer(state, { type: "CODE_EDITED", source: RECT_CIRCLE_EDITED });
-    expect(state.selectedElementIds.has(circleId)).toBe(true);
-
-    // Before SNAPSHOT_READY arrives, the user clicks a color swatch in the
-    // inspector. The inspector dispatches setProperty with the stale id.
     state = editorReducer(state, {
       type: "APPLY_EDIT_ACTION",
       action: { kind: "setProperty", elementId: circleId, level: "command", key: "fill", value: "blue" }
     });
-
-    // Desired: the fill lands on the circle (or the action is rejected as
-    // stale). Actual today: "path:1" now denotes the RECTANGLE, which gets
-    // fill=blue while the circle is untouched.
-    const circleLine = state.source.split("\n").find((line) => line.includes("circle")) ?? "";
-    const rectangleLine = state.source.split("\n").find((line) => line.includes("rectangle")) ?? "";
-    expect(circleLine).toContain("fill=blue");
-    expect(rectangleLine).not.toContain("fill=blue");
+    expectStaleRejection(state, RECT_CIRCLE_EDITED);
   });
 
-  it.fails("delete after duplicate removes the element the user clicked, not the fresh duplicate", () => {
-    // Pure-WYSIWYG sequence, no code editing involved. The user duplicates
-    // the rectangle (path:0); the copy is inserted directly after the
-    // original, so the circle shifts from path:1 to path:2.
+  it("rejects a stale delete after duplication and preserves both rectangles and the circle", () => {
     let state = makeState(RECT_CIRCLE, ["path:0"]);
     state = editorReducer(state, {
-      type: "APPLY_EDIT_ACTION",
-      action: { kind: "duplicateElements", elementIds: ["path:0"] }
+      type: "APPLY_EDIT_ACTION", action: { kind: "duplicateElements", elementIds: ["path:0"] }
     });
-
-    // The canvas still shows the pre-duplicate scene (SNAPSHOT_READY has not
-    // arrived). The user clicks the circle; stale hit-testing resolves the
-    // click to "path:1". They press Delete.
-    const staleCircleId = elementIdContaining(RECT_CIRCLE, "circle");
+    const afterDuplicate = state.source;
+    expect(afterDuplicate.split("rectangle")).toHaveLength(3);
+    expect(afterDuplicate).toContain("circle");
     state = editorReducer(state, {
-      type: "APPLY_EDIT_ACTION",
-      action: { kind: "deleteElement", elementId: staleCircleId }
+      type: "APPLY_EDIT_ACTION", action: { kind: "deleteElement", elementId: elementIdContaining(RECT_CIRCLE, "circle") }
     });
-
-    // Desired: the circle is gone and both rectangles remain. Actual today:
-    // the freshly inserted duplicate is deleted and the circle survives.
-    expect(state.source).not.toContain("circle");
-    expect(state.source.split("rectangle").length - 1).toBe(2);
+    expectStaleRejection(state, afterDuplicate);
   });
 
-  it.fails("node text update renames the node the user was editing, not a shifted id", () => {
+  it("rejects node text updates from the old snapshot", () => {
     const nodeBId = elementIdContaining(TWO_NODES, "{B}");
-    expect(nodeBId).toBe("path:1");
-
     let state = makeState(TWO_NODES, [nodeBId]);
     state = editorReducer(state, { type: "CODE_EDITED", source: TWO_NODES_EDITED });
     state = editorReducer(state, {
-      type: "APPLY_EDIT_ACTION",
-      action: { kind: "updateNodeText", elementId: nodeBId, text: "Renamed" }
+      type: "APPLY_EDIT_ACTION", action: { kind: "updateNodeText", elementId: nodeBId, text: "Renamed" }
     });
-
-    // Desired: B becomes "Renamed", A stays "A". Actual today: A is renamed
-    // and B is untouched.
-    expect(state.source).toContain("{A}");
-    expect(state.source).not.toContain("{B}");
+    expectStaleRejection(state, TWO_NODES_EDITED);
   });
 
-  it.fails("resize applies to the element the gesture started on, not a shifted id", () => {
-    // Same mechanism as the resize-drag staleness-guard exemption in
-    // useCanvasDragController: a resize dispatched with a gesture-start id
-    // after the statement list changed resizes a different element.
-    const secondRectId = elementIdContaining(TWO_RECTS, "(3,0)");
-    expect(secondRectId).toBe("path:1");
-
-    let state = makeState(TWO_RECTS, [secondRectId]);
+  it("rejects resize from the old snapshot", () => {
+    const id = elementIdContaining(TWO_RECTS, "(3,0)");
+    let state = makeState(TWO_RECTS, [id]);
     state = editorReducer(state, { type: "CODE_EDITED", source: TWO_RECTS_EDITED });
     state = editorReducer(state, {
-      type: "APPLY_EDIT_ACTION",
-      action: { kind: "resizeElement", elementId: secondRectId, role: "right", newWorld: wp(cm(6), cm(0.5)) }
+      type: "APPLY_EDIT_ACTION", action: { kind: "resizeElement", elementId: id, role: "right", newWorld: wp(cm(6), cm(0.5)) }
     });
-
-    // Desired: the second rectangle is resized (or the action is rejected as
-    // stale); the first rectangle is untouched. Actual today: the first
-    // rectangle is resized.
-    expect(state.source).toContain("(0,0) rectangle (1,1)");
+    expectStaleRejection(state, TWO_RECTS_EDITED);
   });
 });
 
-// Contrast: handle-based actions ARE protected against stale snapshots via
-// source fingerprints (packages/core/src/edit/apply.ts). These tests document
-// the guard that elementId-based actions lack.
+describe("current scene id positive controls", () => {
+  it("writes the property to the selected circle", () => {
+    let state = makeState(RECT_CIRCLE, ["path:1"]);
+    state = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: {
+      kind: "setProperty", elementId: "path:1", level: "command", key: "fill", value: "blue"
+    } });
+    expect(state.source.split("\n").find(line => line.includes("circle"))).toContain("fill=blue");
+    expect(state.source.split("\n").find(line => line.includes("rectangle"))).not.toContain("fill=blue");
+  });
+
+  it("deletes the current circle without deleting the rectangle", () => {
+    let state = makeState(RECT_CIRCLE, ["path:1"]);
+    state = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "deleteElement", elementId: "path:1" } });
+    expect(state.source).not.toContain("circle");
+    expect(state.source.split("rectangle")).toHaveLength(2);
+  });
+
+  it("renames the current node and preserves its sibling", () => {
+    let state = makeState(TWO_NODES, ["path:1"]);
+    state = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "updateNodeText", elementId: "path:1", text: "Renamed" } });
+    expect(state.source).toContain("{A}");
+    expect(state.source).toContain("{Renamed}");
+    expect(state.source).not.toContain("{B}");
+  });
+
+  it("resizes the current second rectangle and preserves the first", () => {
+    let state = makeState(TWO_RECTS, ["path:1"]);
+    state = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: {
+      kind: "resizeElement", elementId: "path:1", role: "right", newWorld: wp(cm(6), cm(0.5))
+    } });
+    expect(state.source).toContain("(0,0) rectangle (1,1)");
+    expect(state.source).not.toBe(TWO_RECTS);
+    expect(state.lastEditWarningMessage).toBeNull();
+  });
+});
+
+// The legacy no-identity reducer entry still relies on callers providing current
+// ids. Its stale-id behavior is a separately qualified API contract candidate;
+// it is not used as an expected-failure proxy for the hydrated app lifecycle.
+
 
 function makeHandle(
   source: string,
