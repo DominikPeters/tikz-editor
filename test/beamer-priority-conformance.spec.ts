@@ -88,6 +88,20 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(render.layout.items.some(item => item.kind === "unsupported")).toBe(false);
   });
 
+  it.each([
+    { frame: 5, x: 194.522522, baseline: 134.946899 },
+    { frame: 19, x: 63.929550, baseline: 120.596008 },
+  ])("places cases in fixture frame $frame at the TeX position", async fixture => {
+    const source = readFileSync(new URL("flow.tex", root), "utf8");
+    const render = await prepareBeamerDocument(source).renderFrame({ frameIndex: fixture.frame - 1, step: 1 });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    const line = trace.lines.find(candidate => candidate.text === "f(x)=")!;
+    expect(line).toBeDefined();
+    expect(Math.abs(line.x - fixture.x)).toBeLessThan(.02);
+    expect(Math.abs(line.baselineY - fixture.baseline)).toBeLessThan(.01);
+    expect(render.diagnostics).toEqual([]);
+  });
+
   it("rejects the silent disappearance shape observed for code inside an exampleblock", async () => {
     const render = await prepareBeamerDocument(codeSource).renderFrame({ frameIndex: 0, step: 1 });
     const card = render.layout.items.find(item => item.kind === "unsupported")!;

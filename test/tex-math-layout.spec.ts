@@ -3650,6 +3650,19 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it.each([8, 10.95, 12, 17.28])("sizes the cases quad gap with the ambient %spt text font", atPt => {
+    const result = layoutTexMathList(
+      parseTexMath(String.raw`\begin{cases}a&b\\a&y\end{cases}`).list,
+      { style: "display", baseAtPt: texLength(atPt) }
+    );
+    expect(result.supported).toBe(true);
+    const row = flattenMathItems(result.hlist!.items).find(item =>
+      item.kind === "hlist" && item.role === "cases-row"
+    ) as TexMathChildHListLayoutItem;
+    const [left, right] = row.items as TexMathChildHListLayoutItem[];
+    expect(right.x - left.width).toBeCloseTo(atPt, 5);
+  });
+
   it("lays out plain-TeX cases macros through the cases layout", () => {
     const result = layoutTexMathList(
       parseTexMath(String.raw`\cases{a&b\\x&y}`).list,

@@ -1867,7 +1867,6 @@ const TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT = 10;
 const TEX_LATEX_EQNARRAY_COLUMN_GAP_PT = 10;
 const TEX_MATRIX_ARRAY_COL_SEP_PT = 5;
 const TEX_CASES_ARRAY_STRETCH = 1.2;
-const TEX_CASES_COLUMN_GAP_PT = 10;
 const TEX_SMALLMATRIX_BASELINE_SKIP_PT = 6;
 const TEX_SMALLMATRIX_LINE_SKIP_PT = 1.5;
 const TEX_SUBSTACK_STYLE: TexMathStyle = "script";
@@ -2720,7 +2719,13 @@ function layoutCasesBody(
   const firstColumnWidth = roundTexPt(Math.max(0, ...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
   const secondColumnWidth = roundTexPt(Math.max(0, ...concreteRows.map((row) => row.cells[1]?.hlist.width ?? 0)));
   const hasSecondColumn = concreteRows.some((row) => row.cells.length > 1);
-  const width = roundTexPt(firstColumnWidth + (hasSecondColumn ? TEX_CASES_COLUMN_GAP_PT + secondColumnWidth : 0));
+  // amsmath's cases preamble is @{}l@{\quad}l@{}: \quad follows
+  // the ambient text font's em, including non-10pt Beamer class sizes.
+  const textFont = fontProfile.textFontProfile.resolveTextFont(
+    fontProfile.textFontProfile.defaultFontState, baseAtPt, fontProfile.metricProvider
+  );
+  const columnGap = tfmToPt(textFont, textFont.data.fontdimen.quad);
+  const width = roundTexPt(firstColumnWidth + (hasSecondColumn ? columnGap + secondColumnWidth : 0));
   const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
   const lastRow = concreteRows[concreteRows.length - 1];
   const naturalHeight = roundTexPt(
@@ -2750,7 +2755,7 @@ function layoutCasesBody(
     if (secondCell) {
       rowChildren.push(childHList(
         "cases-cell",
-        roundTexPt(firstColumnWidth + TEX_CASES_COLUMN_GAP_PT),
+        roundTexPt(firstColumnWidth + columnGap),
         0,
         secondCell.hlist,
         secondCell.sourceSpan

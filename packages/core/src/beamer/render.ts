@@ -2711,6 +2711,9 @@ async function prepareColumnContent(params: {
       graphicsResolver: params.graphicsResolver,
       paperWidth: params.paperWidth,
       work: params.work,
+      // T's \colheadskip ships the leading empty line before \vskip-1ex.
+      // A first display selects short skips without another baseline skip.
+      leadingDisplayBaselineSkipPt: column.alignment === "T" && flow.length === 0 ? 0 : undefined,
     });
     if (prepared) {
       flow.push(prepared);
@@ -2763,6 +2766,7 @@ async function prepareColumnFlowNode(params: {
   diagnostics: Diagnostic[];
   listProfile: TexListLayoutProfile;
   initialPreviousDepth?: number;
+  leadingDisplayBaselineSkipPt?: number;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   references: BeamerReferenceContext;
   leftSidebarWidth: number;
@@ -2842,6 +2846,7 @@ async function prepareColumnFlowNode(params: {
       colorResolver: beamerAlertColorResolver(theme),
       alignment: "left",
       initialPreviousDepth,
+      leadingDisplayBaselineSkipPt: params.leadingDisplayBaselineSkipPt,
       listProfile,
       macroBindings,
       references,
@@ -3157,6 +3162,7 @@ function layoutParagraph(params: {
   alignment: "left" | "center" | "right";
   interwordSpacePt?: number;
   initialPreviousDepth?: number;
+  leadingDisplayBaselineSkipPt?: number;
   listProfile?: TexListLayoutProfile;
   disableAutomaticHyphenation?: boolean;
   macroBindings?: ReadonlyMap<string, MacroBinding>;
@@ -3274,7 +3280,11 @@ function layoutParagraph(params: {
     },
     displayMathProfile: params.role === "block-body"
       ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE, leadingDisplay: undefined }
-      : BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
+      : params.leadingDisplayBaselineSkipPt != null
+        ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE, leadingDisplay: {
+            emptyLineBaselineSkipPt: params.leadingDisplayBaselineSkipPt,
+          } }
+        : BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
     hyphenator: params.disableAutomaticHyphenation
       ? { hyphenate: () => [] }
       : undefined,
