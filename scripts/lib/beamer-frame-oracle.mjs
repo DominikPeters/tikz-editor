@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 5;
+export const BEAMER_FRAME_ORACLE_VERSION = 6;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -53,8 +53,39 @@ local hlist_id = node.id("hlist")
 local vlist_id = node.id("vlist")
 local rule_id = node.id("rule")
 local disc_id = node.id("disc")
+local whatsit_id = node.id("whatsit")
+local pdf_save = node.subtype("pdf_save")
+local pdf_restore = node.subtype("pdf_restore")
+local pdf_setmatrix = node.subtype("pdf_setmatrix")
 local running_dimension = -1073741824
 local page_index = 0
+local transform = {1, 0, 0, 1, 0, 0}
+local transform_stack = {}
+
+local function painted_point(x, y)
+  return transform[1] * x + transform[3] * y + transform[5],
+    transform[2] * x + transform[4] * y + transform[6]
+end
+
+-- graphicx emits PDF save/setmatrix/restore nodes. PDF uses y-up axes;
+-- the trace uses y-down axes. LuaTeX anchors setmatrix at its current TeX
+-- position, so concatenate the converted matrix around that position.
+local function apply_pdf_transform(value, x, y)
+  if value.subtype == pdf_save then
+    transform_stack[#transform_stack + 1] = transform
+  elseif value.subtype == pdf_restore then
+    transform = table.remove(transform_stack) or {1, 0, 0, 1, 0, 0}
+  elseif value.subtype == pdf_setmatrix then
+    local coefficients = {}
+    for number in tostring(value.data):gmatch("[%+%-]?[%d%.]+") do coefficients[#coefficients + 1] = tonumber(number) end
+    if #coefficients ~= 4 then return end
+    local a, b, c, d = coefficients[1], -coefficients[2], -coefficients[3], coefficients[4]
+    local e, f = x - a * x - c * y, y - b * x - d * y
+    local t = transform
+    transform = {t[1]*a+t[3]*b, t[2]*a+t[4]*b, t[1]*c+t[3]*d, t[2]*c+t[4]*d,
+      t[1]*e+t[3]*f+t[5], t[2]*e+t[4]*f+t[6]}
+  end
+end
 
 local function clean(value)
   return tostring(value or ""):gsub("[\t\r\n]", " ")
@@ -116,6 +147,16 @@ local function write_box(kind, path, x, y, value)
 end
 
 local function write_rule(path, x, y, width, height, depth)
+  if transform[1] ~= 1 or transform[2] ~= 0 or transform[3] ~= 0 or transform[4] ~= 1 then
+    local x1, y1 = painted_point(x, y)
+    local x2, y2 = painted_point(x + width, y)
+    local x3, y3 = painted_point(x, y + height + depth)
+    local x4, y4 = painted_point(x + width, y + height + depth)
+    x, y = math.min(x1,x2,x3,x4), math.min(y1,y2,y3,y4)
+    width, height, depth = math.max(x1,x2,x3,x4)-x, math.max(y1,y2,y3,y4)-y, 0
+  else
+    x, y = painted_point(x, y)
+  end
   trace_file:write(table.concat({
     "RULE",
     page_index,
@@ -125,6 +166,7 @@ local function write_rule(path, x, y, width, height, depth)
     math.floor(width + 0.5),
     math.floor(height + 0.5),
     math.floor(depth + 0.5),
+    transform[1], transform[2], transform[3], transform[4],
   }, "\t"), "\n")
 end
 
@@ -147,19 +189,21 @@ end
 local function write_glyph(path, value, x, baseline)
   local x_offset = value.xoffset or 0
   local y_offset = value.yoffset or 0
+  local painted_x, painted_y = painted_point(x + x_offset, baseline - y_offset)
   trace_file:write(table.concat({
     "GLYPH",
     page_index,
     path,
     value.char or -1,
-    math.floor(x + x_offset + 0.5),
-    math.floor(baseline - y_offset + 0.5),
+    math.floor(painted_x + 0.5),
+    math.floor(painted_y + 0.5),
     value.width or 0,
     value.height or 0,
     value.depth or 0,
     value.font or 0,
     font_size(value.font),
     font_name(value.font),
+    transform[1], transform[2], transform[3], transform[4],
   }, "\t"), "\n")
 end
 
@@ -223,6 +267,8 @@ walk_hlist = function(list, parent, origin_x, baseline, path)
       x = x + width
     elseif value.id == disc_id then
       x = walk_hlist(value.replace, parent, x, baseline, current_path)
+    elseif value.id == whatsit_id then
+      apply_pdf_transform(value, x, baseline)
     end
   end
   return x
@@ -261,6 +307,8 @@ walk_vlist = function(list, parent, origin_x, origin_y, path)
       local depth = resolved(value.depth, parent and parent.depth)
       write_rule(current_path, origin_x, y, width, height, depth)
       y = y + height + depth
+    elseif value.id == whatsit_id then
+      apply_pdf_transform(value, origin_x, y)
     end
   end
   return y
@@ -268,6 +316,8 @@ end
 
 local function trace_page(page)
   page_index = page_index + 1
+  transform = {1, 0, 0, 1, 0, 0}
+  transform_stack = {}
   local kind = node.type(page.id)
   trace_file:write(table.concat({
     "PAGE",
@@ -600,6 +650,7 @@ export function parseBeamerPageTraceTsv(tsv) {
         width: dimension(Number(fields[5])),
         height: dimension(Number(fields[6])),
         depth: dimension(Number(fields[7])),
+        ...parsedTransform(fields, 8),
       });
     } else if (kind === "GLYPH") {
       page.glyphs.push({
@@ -613,6 +664,7 @@ export function parseBeamerPageTraceTsv(tsv) {
         fontId: Number(fields[9]),
         fontSize: dimension(Number(fields[10])),
         fontName: fields[11] ?? "",
+        ...parsedTransform(fields, 12),
       });
     } else if (kind === "GLUE" || kind === "KERN") {
       const spacing = {
@@ -632,6 +684,12 @@ export function parseBeamerPageTraceTsv(tsv) {
     }
   }
   return { pages };
+}
+
+function parsedTransform(fields, start) {
+  if (fields.length < start + 4) return {};
+  const transform = fields.slice(start, start + 4).map(Number);
+  return transform.every(Number.isFinite) && transform.some((value, index) => value !== [1, 0, 0, 1][index]) ? { transform } : {};
 }
 
 export function parsePdfInfo(output) {

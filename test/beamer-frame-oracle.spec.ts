@@ -266,6 +266,34 @@ KERN\t1\troot.4\ty\t0\t589824\t-32768\t-32768\t0\t0\t0\t0\t1
     }
   }, 30_000);
 
+  it.runIf(runOracleIntegration)("traces graphicx matrices, nested axes and graphics state restoration", () => {
+    const directory = mkdtempSync(join(tmpdir(), "beamer-transform-oracle-"));
+    try {
+      const source = readFileSync(new URL("./fixtures/beamer/oracle-transforms.tex", import.meta.url), "utf8");
+      writeFileSync(join(directory, "probe.tex"), source.replace(String.raw`\begin{document}`, `${beamerProbeInstrumentation()}\n${String.raw`\begin{document}`}`));
+      writeFileSync(join(directory, "beamer-page-trace.lua"), beamerPageTraceLuaSource());
+      execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "--no-shell-escape", `--output-directory=${directory}`, "probe.tex"], {
+        cwd: directory, env: { ...process.env, TEXMFVAR: "/private/tmp", TEXMFCACHE: "/private/tmp", TIKZ_BEAMER_TRACE_DIR: directory }, stdio: "ignore", timeout: 30_000,
+      });
+      const trace = parseBeamerPageTraceTsv(readFileSync(join(directory, "beamer-page-trace.tsv"), "utf8"));
+      type Glyph = { code: number; x: { texPt: number }; y: { texPt: number }; width: { texPt: number }; transform?: number[] };
+      const matrices = [[0, -1, 1, 0], [2, 0, 0, .5], [0, -.5, .5, 0]];
+      expect(trace.pages).toHaveLength(3);
+      trace.pages.forEach((page: { glyphs: Glyph[] }, index: number) => {
+        const a = page.glyphs.find(g => g.code === 65)!;
+        const b = page.glyphs.find(g => g.code === 66)!;
+        const c = page.glyphs.find(g => g.code === 67)!;
+        expect(a.transform).toEqual(matrices[index]);
+        expect(b.transform).toEqual(matrices[index]);
+        expect(c.transform).toBeUndefined();
+        expect(b.x.texPt - a.x.texPt).toBeCloseTo(matrices[index][0] * a.width.texPt, 4);
+        expect(b.y.texPt - a.y.texPt).toBeCloseTo(matrices[index][1] * a.width.texPt, 4);
+      });
+      const rotatedRule = trace.pages[2].rules.find((rule: { width: { texPt: number }; height: { texPt: number } }) => rule.width.texPt === 6 && rule.height.texPt === 2);
+      expect(rotatedRule?.transform).toEqual([0, -1, 1, 0]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }, 30_000);
+
   it("parses PDF page geometry and Beamer class provenance", () => {
     expect(
       parsePdfInfo(`Pages:           2
