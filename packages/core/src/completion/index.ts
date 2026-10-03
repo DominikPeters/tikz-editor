@@ -4,6 +4,13 @@ import type { ParseTikzResult } from "../parser/index.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { walkStatements } from "../ast/walk.js";
+import {
+  readTexBalancedDelimited,
+  readTexControlSequence,
+  skipTexComment,
+  skipTexVerbatim,
+  type TexControlSequence
+} from "../parser/tex-lexical.js";
 
 export type DocumentSymbols = {
   nodeNames: string[];
@@ -28,27 +35,27 @@ export function collectSymbols(snapshot: SymbolSnapshot): DocumentSymbols {
   const nodeNames = new Set<string>();
   const coordinateNames = new Set<string>();
   const styleNames = new Set<string>();
+  const recovery = scanRecoverySource(parseResult.source);
 
   walkStatements(parseResult.figure.body, {
     onStatement: (statement) => {
-      if (statement.kind === "TikzSet" || statement.kind === "Pgfkeys") {
+      if ((statement.kind === "TikzSet" || statement.kind === "Pgfkeys") && isLivePosition(statement.span.from, recovery.inertSpans)) {
         collectStyleSymbolsFromOptions(statement.optionList.entries, styleNames);
-      } else if (statement.kind === "TikzStyle") {
+      } else if (statement.kind === "TikzStyle" && isLivePosition(statement.span.from, recovery.inertSpans)) {
         addTrimmedSymbol(styleNames, normalizeStyleName(statement.styleNameRaw));
       }
     },
     onNode: (node) => {
-      collectNodeIdentifiers(node, nodeNames);
+      if (isLivePosition(node.span.from, recovery.inertSpans)) collectNodeIdentifiers(node, nodeNames);
     },
     onCoordinateOperation: (item) => {
-      addTrimmedSymbol(coordinateNames, item.name);
+      if (isLivePosition(item.span.from, recovery.inertSpans)) addTrimmedSymbol(coordinateNames, item.name);
     }
   });
   // Completion runs on in-progress source: parser recovery swallows every
-  // statement after an unterminated brace group, so the raw scans below keep
+  // statement after an unterminated brace group, so lexical recovery below keeps
   // symbols visible for the regions the recovered AST does not cover.
-  collectStandaloneNodeCommandNamesFromSource(parseResult.source, nodeNames);
-  collectStyleSymbolsFromSource(parseResult.source, styleNames);
+  collectRecoverySymbols(recovery, nodeNames, styleNames);
 
   return {
     nodeNames: [...nodeNames].sort(compareSymbolName),
@@ -77,80 +84,87 @@ function collectStyleSymbolsFromOptions(entries: readonly OptionEntry[], styleNa
   }
 }
 
-function collectStyleSymbolsFromSource(source: string, styleNames: Set<string>): void {
-  collectStyleSymbolsFromCommand(source, "\\tikzset", styleNames);
-  collectStyleSymbolsFromCommand(source, "\\pgfkeys", styleNames);
-  collectStyleSymbolsFromTikzstyle(source, styleNames);
-}
+type RecoverySource = {
+  source: string;
+  commands: TexControlSequence[];
+  inertSpans: Array<{ from: number; to: number }>;
+};
 
-function collectStandaloneNodeCommandNamesFromSource(source: string, nodeNames: Set<string>): void {
-  const command = "\\node";
+/** Keep offsets and line endings intact while hiding inert recovery material. */
+function scanRecoverySource(source: string): RecoverySource {
+  const commands: TexControlSequence[] = [];
+  const inertSpans: RecoverySource["inertSpans"] = [];
   let cursor = 0;
-
   while (cursor < source.length) {
-    const commandIndex = source.indexOf(command, cursor);
-    if (commandIndex < 0) {
-      return;
-    }
-
-    let index = skipWhitespace(source, commandIndex + command.length);
-    const optionBlock = readBalancedBlock(source, index, "[", "]");
-    if (optionBlock) {
-      index = skipWhitespace(source, optionBlock.nextIndex);
-    }
-
-    const nameBlock = readBalancedBlock(source, index, "(", ")");
-    if (nameBlock) {
-      addTrimmedSymbol(nodeNames, normalizeSimpleSymbolName(nameBlock.content));
-      cursor = nameBlock.nextIndex;
+    if (source.charAt(cursor) === "%") {
+      const to = skipTexComment(source, cursor);
+      inertSpans.push({ from: cursor, to });
+      cursor = to;
       continue;
     }
-
-    cursor = commandIndex + command.length;
+    const command = readTexControlSequence(source, cursor);
+    if (!command) {
+      cursor += 1;
+      continue;
+    }
+    const verbatimEnd = skipTexVerbatim(source, command, true);
+    if (verbatimEnd !== null) {
+      inertSpans.push({ from: command.from, to: verbatimEnd });
+      cursor = verbatimEnd;
+      continue;
+    }
+    if (["\\node", "\\tikzset", "\\pgfkeys", "\\tikzstyle"].includes(command.raw)) commands.push(command);
+    cursor = command.to;
   }
-}
-
-function collectStyleSymbolsFromCommand(source: string, command: string, styleNames: Set<string>): void {
-  let cursor = 0;
-  while (cursor < source.length) {
-    const commandIndex = source.indexOf(command, cursor);
-    if (commandIndex < 0) {
-      return;
-    }
-
-    const openBraceIndex = skipWhitespace(source, commandIndex + command.length);
-    const block = readBalancedBlock(source, openBraceIndex, "{", "}");
-    if (!block) {
-      cursor = commandIndex + command.length;
-      continue;
-    }
-
-    const optionList = parseOptionListRaw(`[${block.content}]`, openBraceIndex);
-    collectStyleSymbolsFromOptions(optionList.entries, styleNames);
-
-    cursor = block.nextIndex;
+  const parts: string[] = [];
+  cursor = 0;
+  for (const span of inertSpans) {
+    parts.push(source.slice(cursor, span.from), source.slice(span.from, span.to).replace(/[^\r\n]/gu, char => " ".repeat(char.length)));
+    cursor = span.to;
   }
+  parts.push(source.slice(cursor));
+  return { source: parts.join(""), commands, inertSpans };
 }
 
-function collectStyleSymbolsFromTikzstyle(source: string, styleNames: Set<string>): void {
-  const command = "\\tikzstyle";
-  let cursor = 0;
+function isLivePosition(position: number, spans: RecoverySource["inertSpans"]): boolean {
+  let from = 0;
+  let to = spans.length;
+  while (from < to) {
+    const middle = (from + to) >>> 1;
+    const span = spans[middle];
+    if (position < span.from) to = middle;
+    else if (position >= span.to) from = middle + 1;
+    else return false;
+  }
+  return true;
+}
 
-  while (cursor < source.length) {
-    const commandIndex = source.indexOf(command, cursor);
-    if (commandIndex < 0) {
-      return;
-    }
-
-    const openBraceIndex = skipWhitespace(source, commandIndex + command.length);
-    const nameBlock = readBalancedBlock(source, openBraceIndex, "{", "}");
-    if (!nameBlock) {
-      cursor = commandIndex + command.length;
+function collectRecoverySymbols(recovery: RecoverySource, nodeNames: Set<string>, styleNames: Set<string>): void {
+  const { source, commands } = recovery;
+  // Preserve the previous per-command recovery boundary inside complete arguments.
+  const consumedThrough = new Map<string, number>();
+  for (const command of commands) {
+    if (command.from < (consumedThrough.get(command.raw) ?? 0)) continue;
+    let index = skipWhitespace(source, command.to);
+    if (command.raw === "\\node") {
+      const options = readTexBalancedDelimited(source, index, "[", "]");
+      if (options) index = skipWhitespace(source, options.to);
+      const name = readBalancedBlock(source, index, "(", ")");
+      if (name) {
+        addTrimmedSymbol(nodeNames, normalizeSimpleSymbolName(name.content));
+        consumedThrough.set(command.raw, name.nextIndex);
+      }
       continue;
     }
-
-    addTrimmedSymbol(styleNames, normalizeStyleName(nameBlock.content));
-    cursor = nameBlock.nextIndex;
+    const block = readTexBalancedDelimited(source, index, "{", "}");
+    if (!block) continue;
+    consumedThrough.set(command.raw, block.to);
+    const content = source.slice(block.from + 1, block.to - 1);
+    if (command.raw === "\\tikzstyle") {
+      addTrimmedSymbol(styleNames, normalizeStyleName(content));
+    } else {
+      collectStyleSymbolsFromOptions(parseOptionListRaw(`[${content}]`, index).entries, styleNames);
+    }
   }
 }
 
