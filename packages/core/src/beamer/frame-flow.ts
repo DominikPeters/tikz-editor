@@ -10,7 +10,10 @@ const TEX_LINE_SKIP_PT = 1;
 /** TeX uses the size active at the end of the first paragraph. */
 export function paragraphStartingBaselineSkip(paragraph: LaidParagraph, fallback: number): number {
   const first = flattenPositionedTexVListItems(paragraph.layout.vlistLayout.items)
-    .find(positioned => positioned.item.kind === "paragraph");
+    .find(positioned => positioned.item.kind === "paragraph" || positioned.item.kind === "display-math" || positioned.item.kind === "display-alignment");
+  if (first?.item.kind === "display-math" || first?.item.kind === "display-alignment") {
+    return Number(first.item.baselineSkip ?? fallback);
+  }
   return first?.item.kind === "paragraph" && first.item.paragraph.baselineSkip !== undefined
     ? Number(first.item.paragraph.baselineSkip) : fallback;
 }

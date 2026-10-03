@@ -794,6 +794,7 @@ function parseColumns(params: {
   // environment then inherits that class default before applying its keys.
   const alignment = resolveColumnAlignment(options?.value, "center");
   const columns: BeamerColumnBodyNode[] = [];
+  const heads: { beginSpan: Span; endSpan: Span; bodyTo: number }[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (token.kind !== "begin" || token.name !== "column") {
@@ -810,36 +811,62 @@ function parseColumns(params: {
       continue;
     }
     const columnEnd = tokens[endIndex];
+    heads.push({ beginSpan: token.span, endSpan: columnEnd.span,
+      bodyTo: columnEnd.span.from });
+    index = endIndex;
+  }
+  // The command form opens the same minipage until the next column or the
+  // columns end. Explicit column environments already own their contents.
+  const commands = beamerControlSequencesIn(context, {
+    from: options?.span.to ?? begin.span.to, to: end.span.from,
+  }).filter(command => command.name === "column" && !heads.some(head =>
+    command.from >= head.beginSpan.from && command.from < head.endSpan.to));
+  for (const command of commands) {
+    heads.push({ beginSpan: { from: command.from, to: command.to },
+      endSpan: { from: end.span.from, to: end.span.from }, bodyTo: end.span.from });
+  }
+  heads.sort((a, b) => a.beginSpan.from - b.beginSpan.from);
+  for (const [index, head] of heads.entries()) {
+    if (head.endSpan.from === head.endSpan.to) {
+      head.bodyTo = heads[index + 1]?.beginSpan.from ?? end.span.from;
+      head.endSpan = { from: head.bodyTo, to: head.bodyTo };
+    }
+    let cursor = head.beginSpan.to;
+    const overlayBefore = beamerOverlayArgumentAfter(context, cursor, head.bodyTo);
+    if (overlayBefore) cursor = overlayBefore.span.to;
     const columnOptions = beamerOptionalArgumentAfter(
       context,
-      token.span.to,
-      columnEnd.span.from
+      cursor,
+      head.bodyTo
     ) ?? undefined;
+    if (columnOptions) cursor = columnOptions.span.to;
+    const overlayAfter = beamerOverlayArgumentAfter(context, cursor, head.bodyTo);
+    if (overlayAfter) cursor = overlayAfter.span.to;
     const width = beamerRequiredArgumentAfter(
       context,
-      columnOptions?.span.to ?? token.span.to,
-      columnEnd.span.from
+      cursor,
+      head.bodyTo
     );
     if (!width) {
       diagnostics.push({
         severity: "error",
         code: "beamer-column-missing-width",
         message: "A Beamer column requires a width argument.",
-        span: token.span,
+        span: head.beginSpan,
       });
-      index = endIndex;
       continue;
     }
+    const trailingOverlay = beamerOverlayArgumentAfter(context, width.span.to, head.bodyTo);
     const bodySpan = {
-      from: width.span.to,
-      to: columnEnd.span.from,
+      from: trailingOverlay?.span.to ?? width.span.to,
+      to: head.bodyTo,
     };
     columns.push({
       kind: "column",
       id: `${frameId}:columns:${nodeIndex}:column:${columns.length}`,
-      span: { from: token.span.from, to: columnEnd.span.to },
-      beginSpan: token.span,
-      endSpan: columnEnd.span,
+      span: { from: head.beginSpan.from, to: head.endSpan.to },
+      beginSpan: head.beginSpan,
+      endSpan: head.endSpan,
       options: columnOptions,
       alignment: resolveColumnAlignment(columnOptions?.value, alignment),
       width,
@@ -849,14 +876,13 @@ function parseColumns(params: {
         frameId,
         columns.length,
         bodySpan,
-        tokens.slice(index + 1, endIndex),
+        tokens.filter(token => token.span.from >= bodySpan.from && token.span.to <= bodySpan.to),
         diagnostics,
         theoremOccurrences,
         theoremTemplate,
         params.overlays
       ),
     });
-    index = endIndex;
   }
   return {
     kind: "columns",

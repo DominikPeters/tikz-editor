@@ -108,6 +108,26 @@ describe("Beamer frame content frontend", () => {
     });
   });
 
+  it("keeps command-form column widths and content bounded by the next column", () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}
+\begin{columns}[T,totalwidth=\textwidth]
+\column<2->[b]{.4\textwidth}Alpha\begin{itemize}\item Beta\end{itemize}
+\column[t]{.5\textwidth}Gamma
+\end{columns}\end{frame}\end{document}`;
+    const document = scanBeamerDocument(source);
+    const ir = parseBeamerFrameBody({ source, frame: document.frames[0] });
+    const node = ir.children[0];
+    if (node.kind !== "columns") throw new Error("Expected columns.");
+    expect(ir.diagnostics).toEqual([]);
+    expect(node.columns.map(column => column.width.value)).toEqual([".4\\textwidth", ".5\\textwidth"]);
+    expect(node.columns.map(column => column.alignment)).toEqual(["bottom", "top"]);
+    expect(source.slice(node.columns[0].bodySpan.from, node.columns[0].bodySpan.to).trim()).toBe(String.raw`Alpha\begin{itemize}\item Beta\end{itemize}`);
+    expect(source.slice(node.columns[1].bodySpan.from, node.columns[1].bodySpan.to).trim()).toBe("Gamma");
+    expect(node.columns[0].span.to).toBe(source.indexOf(String.raw`\column[t]`));
+    expect(node.columns[1].endSpan.from).toBe(source.indexOf(String.raw`\end{columns}`));
+    expect(node.columns[0].children.map(child => child.kind)).toEqual(["paragraph", "list"]);
+  });
+
   it("retains non-column bodies as text leaves", () => {
     const source = String.raw`
 \documentclass{beamer}
