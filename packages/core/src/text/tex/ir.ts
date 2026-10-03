@@ -1,3 +1,5 @@
+import { parseTexTabular, tabularGroup } from "./tabular/parser.js";
+import type { TexTabular, TexTabularAssignmentFont, TexTabularRegisters } from "./tabular/types.js";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { freezeTexCacheValue, TexWeightedLruCache } from "./cache.js";
 import {
@@ -142,6 +144,7 @@ export interface SimpleTexFontState {
   readonly sizePt?: TexLength;
   /** CSS color normalized from the xcolor spelling in the source. */
   readonly color?: string;
+  readonly tabularRegisters?: TexTabularRegisters;
 }
 
 interface SimpleTexSourceRange {
@@ -223,11 +226,18 @@ export interface SimpleTexFontDeclarationNode extends SimpleTexSourceRange {
   readonly command: SimpleTexFontDeclarationName;
 }
 
+export interface SimpleTexTabularNode extends SimpleTexSourceRange {
+  readonly kind: "tabular";
+  readonly text: string;
+  readonly table: TexTabular;
+}
+
 export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
   readonly kind: "style-declaration";
   readonly text: string;
   readonly sizePt?: TexLength;
   readonly color?: string;
+  readonly tabularRegisters?: TexTabularRegisters;
 }
 
 export interface SimpleTexColorCommandNode extends SimpleTexSourceRange {
@@ -442,6 +452,7 @@ export type SimpleTexInlineNode =
   | SimpleTexCommentNode
   | SimpleTexLineBreakNode
   | SimpleTexMathNode
+  | SimpleTexTabularNode
   | SimpleTexFontCommandNode
   | SimpleTexFontDeclarationNode
   | SimpleTexStyleDeclarationNode
@@ -475,6 +486,7 @@ export const SIMPLE_TEX_INLINE_NODE_KINDS = [
   "comment",
   "line-break",
   "math",
+  "tabular",
   "font-command",
   "font-declaration",
   "style-declaration",
@@ -517,10 +529,11 @@ const SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE: [
 void SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box";
+  readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box" | "tabular";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
+  readonly table?: TexTabular;
   readonly delimiter?: "dollar" | "paren";
   readonly content?: string;
   readonly contentStart?: number;
@@ -1324,6 +1337,49 @@ function scanSimpleTexIrNodes(
         index = lineBreak.end;
         continue;
       }
+
+      const tabularEnvironment = matchedEnvironments.find((environment) => environment.name === "tabular" && environment.begin.span.from === index);
+      if (tabularEnvironment) {
+        try {
+          const table = parseTexTabular(text, tabularEnvironment.contentSpan.from, tabularEnvironment.contentSpan.to, sourceOffset);
+          const validateCellNodes = (nodes: readonly SimpleTexNode[], paragraph: boolean): boolean => nodes.every((node) =>
+            node.kind === "group" ? validateCellNodes(node.children, paragraph) : isSimpleTexInlineNode(node) || paragraph && ["paragraph-break", "alignment", "noindent"].includes(node.kind));
+          const preambles = [table.preamble, ...table.items.flatMap((item) => item.kind === "row" ? item.cells.flatMap((cell) => cell.preamble ? [cell.preamble] : []) : [])];
+          for (const preamble of preambles) {
+            for (const column of preamble.columns) {
+              if (column.before?.trim() === "$" && column.after?.trim() === "$") continue;
+              for (const part of [...column.beforeParts ?? [], ...column.afterParts ?? []]) {
+                const scan = scanSimpleTexIrNodes(part.text.replace(/\\arraybackslash\b/gu, ""), part.sourceStart, resolveColorAlias);
+                if (scan.unsupportedCommand || !validateCellNodes(scan.nodes, Boolean(column.width))) throw new Error("Unsupported vertical material in tabular column declaration.");
+              }
+            }
+            for (const part of preamble.boundaries.flatMap((boundary) => [...boundary.replaceParts ?? [], ...boundary.insertParts ?? []])) {
+              const scan = scanSimpleTexIrNodes(part.text, part.sourceStart, resolveColorAlias);
+              if (scan.unsupportedCommand || !validateCellNodes(scan.nodes, false)) throw new Error("Unsupported vertical material in tabular boundary insert.");
+            }
+          }
+          for (const item of table.items) {
+            if (item.kind !== "row") continue;
+            let columnIndex = 0;
+            for (const cell of item.cells) {
+              const column = cell.preamble?.columns[0] ?? table.preamble.columns[columnIndex];
+              if (cell.preamble?.boundaries.some((boundary) => (boundary.replace ?? "").length || (boundary.insert ?? "").length)) throw new Error("Multicolumn boundary inserts are not yet supported.");
+              if (!(column.before?.trim() === "$" && column.after?.trim() === "$")) {
+                const scan = scanSimpleTexIrNodes(cell.text, cell.sourceStart, resolveColorAlias);
+                if (scan.unsupportedCommand || !validateCellNodes(scan.nodes, Boolean(column.width))) throw new Error("Unsupported vertical material in tabular cell.");
+              }
+              columnIndex += cell.span;
+            }
+          }
+          nodes.push({ kind: "tabular", text: text.slice(index, tabularEnvironment.span.to), table, sourceStart, sourceEnd: sourceOffset + tabularEnvironment.span.to });
+        } catch (error) {
+          nodes.push({ kind: "literal", text: text.slice(index, tabularEnvironment.span.to), reason: "unsupported-command", detail: error instanceof Error ? error.message : "Unsupported tabular", sourceStart, sourceEnd: sourceOffset + tabularEnvironment.span.to });
+        }
+        index = tabularEnvironment.span.to;
+        continue;
+      }
+      const tableRegister = scanSimpleTexTabularRegister(text, index, sourceOffset);
+      if (tableRegister) { nodes.push(tableRegister.node); index = tableRegister.end; continue; }
 
       const environmentBoundary = scanSimpleTexEnvironmentBoundary(
         syntax,
@@ -2585,11 +2641,11 @@ function scanSimpleTexEnvironmentBoundary(
   if (
     boundary &&
     matchedBoundaryStarts.has(start) &&
-    isSimpleTexEnvironmentName(boundary.name)
+    (isSimpleTexEnvironmentName(boundary.name) || boundary.name === "table")
   ) {
     return {
       boundary: boundary.kind,
-      name: boundary.name,
+      name: boundary.name === "table" ? "center" : boundary.name,
       end: boundary.span.to,
     };
   }
@@ -3506,6 +3562,37 @@ function scanSimpleTexFontDeclarationName(
   return null;
 }
 
+/** Toplevel preamble register declarations; braced local groups remain scoped. */
+export function parseSimpleTexTabularRegisters(text: string): TexTabularRegisters {
+  let registers: TexTabularRegisters = {};
+  let font: TexTabularAssignmentFont = {};
+  for (const node of scanSimpleTexIrNodes(text).nodes) {
+    if (node.kind === "font-declaration") font = simpleTexFontStateForDeclaration({ family: font.family ?? defaultSimpleTexFontState.family, series: font.series ?? defaultSimpleTexFontState.series, shape: font.shape ?? defaultSimpleTexFontState.shape, sizePt: font.sizePt === undefined ? undefined : texLength(font.sizePt) }, node.command);
+    if (node.kind === "style-declaration") {
+      if (node.tabularRegisters) registers = { ...registers, ...snapshotTabularRegisters(node.tabularRegisters, font) };
+      if (node.sizePt !== undefined) font = { ...font, sizePt: node.sizePt };
+    }
+  }
+  return registers;
+}
+
+function snapshotTabularRegisters(registers: TexTabularRegisters, font: TexTabularAssignmentFont): TexTabularRegisters {
+  return Object.fromEntries(Object.entries(registers).map(([name, value]) => [name, typeof value === "string" ? { value, font: { family: font.family, series: font.series, shape: font.shape, sizePt: font.sizePt } } : value]));
+}
+
+function scanSimpleTexTabularRegister(text: string, start: number, sourceOffset: number): { node: SimpleTexStyleDeclarationNode; end: number } | null {
+  const command = /^\\(setlength|renewcommand)\b/u.exec(text.slice(start));
+  if (!command) return null;
+  const register = tabularGroup(text, start + command[0].length);
+  const value = register && tabularGroup(text, register.end);
+  if (!register || !value) return null;
+  const name = register.content.trim().replace(/^\\/u, "");
+  const names: readonly string[] = ["tabcolsep", "arrayrulewidth", "doublerulesep", "extrarowheight", "heavyrulewidth", "lightrulewidth", "cmidrulewidth", "aboverulesep", "belowrulesep", "abovetopsep", "belowbottomsep", "cmidrulekern", "defaultaddspace"];
+  if (command[1] === "setlength" && !names.includes(name)) return null;
+  if (command[1] === "renewcommand" && (name !== "arraystretch" || !Number.isFinite(Number(value.content)))) return null;
+  return { node: { kind: "style-declaration", text: text.slice(start, value.end), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + value.end, tabularRegisters: command[1] === "renewcommand" ? { arraystretch: Number(value.content) } : { [name]: value.content } }, end: value.end };
+}
+
 function scanSimpleTexStyleDeclaration(
   text: string,
   start: number,
@@ -4009,6 +4096,7 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "comment" ||
     node.kind === "line-break" ||
     node.kind === "math" ||
+    node.kind === "tabular" ||
     node.kind === "font-command" ||
     node.kind === "font-declaration" ||
     node.kind === "style-declaration" ||
@@ -5198,6 +5286,11 @@ export function simpleTexInlineNodesToTokens(
       continue;
     }
 
+    if (node.kind === "tabular") {
+      tokens.push({ kind: "tabular", text: node.text, table: node.table, sourceStart: node.sourceStart, sourceEnd: node.sourceEnd, fontState: activeFontState });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
     if (node.kind === "includegraphics") {
       tokens.push({
         kind: "includegraphics",
@@ -5266,6 +5359,7 @@ export function simpleTexInlineNodesToTokens(
         ...activeFontState,
         ...(node.sizePt !== undefined ? { sizePt: node.sizePt } : {}),
         ...(node.color !== undefined ? { color: node.color } : {}),
+        ...(node.tabularRegisters ? { tabularRegisters: { ...activeFontState.tabularRegisters, ...snapshotTabularRegisters(node.tabularRegisters, activeFontState) } } : {}),
       };
       continue;
     }
@@ -5404,7 +5498,7 @@ export function simpleTexFontStateForCommand(
     };
   }
   if (command === "textnormal") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color };
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color, tabularRegisters: current.tabularRegisters };
   }
   if (command === "textsf") {
     return { ...current, family: "sans" };
@@ -5420,25 +5514,25 @@ function simpleTexFontStateForDeclaration(
   command: SimpleTexFontDeclarationName
 ): SimpleTexFontState {
   if (command === "it") {
-    return { ...defaultSimpleTexFontState, shape: "italic" };
+    return { ...defaultSimpleTexFontState, shape: "italic", tabularRegisters: current.tabularRegisters };
   }
   if (command === "bf") {
-    return { ...defaultSimpleTexFontState, series: "bold" };
+    return { ...defaultSimpleTexFontState, series: "bold", tabularRegisters: current.tabularRegisters };
   }
   if (command === "rm") {
-    return defaultSimpleTexFontState;
+    return { ...defaultSimpleTexFontState, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sf") {
-    return { ...defaultSimpleTexFontState, family: "sans" };
+    return { ...defaultSimpleTexFontState, family: "sans", tabularRegisters: current.tabularRegisters };
   }
   if (command === "sl") {
-    return { ...defaultSimpleTexFontState, shape: "slanted" };
+    return { ...defaultSimpleTexFontState, shape: "slanted", tabularRegisters: current.tabularRegisters };
   }
   if (command === "sc") {
-    return { ...defaultSimpleTexFontState, shape: "small-caps" };
+    return { ...defaultSimpleTexFontState, shape: "small-caps", tabularRegisters: current.tabularRegisters };
   }
   if (command === "tt") {
-    return { ...defaultSimpleTexFontState, family: "typewriter" };
+    return { ...defaultSimpleTexFontState, family: "typewriter", tabularRegisters: current.tabularRegisters };
   }
   if (command === "em") {
     return {
@@ -5447,7 +5541,7 @@ function simpleTexFontStateForDeclaration(
     };
   }
   if (command === "normalfont") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color };
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color, tabularRegisters: current.tabularRegisters };
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };

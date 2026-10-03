@@ -302,6 +302,7 @@ export const capabilityFixtures: Record<string, string> = {
   node_text_includegraphics: String.raw`\begin{tikzpicture}
   \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
 \end{tikzpicture}`,
+  text_tabular: String.raw`\begin{tikzpicture}\node {\begin{tabular}{lr}\toprule Alpha & Value\\ \midrule Beta & 2\\ \bottomrule\end{tabular}};\end{tikzpicture}`,
   beamer_source_placeholders: String.raw`\documentclass{beamer}
 \begin{document}
 \begin{frame}Before.\begin{tcolorbox}Unsupported body\end{tcolorbox}After.\end{frame}

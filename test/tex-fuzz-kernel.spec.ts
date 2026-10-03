@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   caseFromTexFuzzAst,
   checkTexFuzzHardInvariants,
+  classifyTexFuzzNativeSupport,
   differentialCanaryCase,
   differentialSupportFingerprint,
   generateTexFuzzCase,
   parseTexFuzzBundle,
   serializeTexFuzzBundle,
   shrinkTexFuzzCase,
+  texFuzzShrinkCandidates,
   texFuzzRegistryDrift,
 } from "@tikz-editor/tex-fuzz";
 import {
@@ -46,6 +48,31 @@ describe("adversarial TeX fuzz kernel vertical slice", () => {
       observation: { fingerprint: differentialSupportFingerprint(caseData) },
     };
     expect(parseTexFuzzBundle(serializeTexFuzzBundle(bundle))).toEqual(bundle);
+  });
+
+  it("prints, attributes, replays, and shrinks valid tabular cells", () => {
+    const caseData = caseFromTexFuzzAst([{
+      kind: "tabular",
+      columns: ["l", "r"],
+      position: "t",
+      cells: [
+        [{ kind: "text", value: "Alpha" }, { kind: "text", value: "7" }],
+        [{ kind: "font", command: "textbf", children: [{ kind: "text", value: "Beta" }] }, { kind: "text", value: "42" }],
+      ],
+    }]);
+    expect(caseData.source).toBe(String.raw`\begin{tabular}[t]{lr}Alpha&7\\\textbf{Beta}&42\end{tabular}`);
+    const cell = caseData.sourceMap.find((span) => span.path === "root/0/cells/1/1/0");
+    expect(caseData.source.slice(cell!.start, cell!.end)).toBe("42");
+    expect(classifyTexFuzzNativeSupport(caseData)).toEqual({ supported: true, reason: "fully-supported" });
+    expect(checkTexFuzzHardInvariants(caseData)).toEqual([]);
+    const bundle = { case: caseData, observation: { fingerprint: differentialSupportFingerprint(caseData) } };
+    expect(parseTexFuzzBundle(serializeTexFuzzBundle(bundle))).toEqual(bundle);
+    const candidates = texFuzzShrinkCandidates(caseData);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(candidate.source.length).toBeLessThan(caseData.source.length);
+      expect(checkTexFuzzHardInvariants(candidate)).toEqual([]);
+    }
   });
 
   it("shrinks against a stable hard-invariant fingerprint", async () => {
@@ -90,5 +117,26 @@ describe("adversarial TeX fuzz kernel vertical slice", () => {
       ["b", true],
     ]);
     expect(withFailure.stats.bisectedFailures).toBeGreaterThan(0);
+  }, 30_000);
+
+  it.runIf(runOracleIntegration)("compiles a generated small table with LuaLaTeX", () => {
+    const generated = Array.from({ length: 25 }, (_, seed) =>
+      generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 })
+    );
+    const findTable = (nodes: typeof generated[number]["ast"]): typeof generated[number]["ast"][number] | undefined => {
+      for (const node of nodes) {
+        if (node.kind === "tabular") return node;
+        if ("children" in node) {
+          const table = findTable(node.children);
+          if (table) return table;
+        }
+      }
+      return undefined;
+    };
+    const table = generated.map((caseData) => findTable(caseData.ast)).find((node) => node !== undefined);
+    expect(table).toBeDefined();
+    const source = caseFromTexFuzzAst([table!]).source;
+    const result = runBatchedTexSupportOracle([{ id: "tabular", source }]);
+    expect(result.observations.map((item) => [item.id, item.supported])).toEqual([["tabular", true]]);
   }, 30_000);
 });

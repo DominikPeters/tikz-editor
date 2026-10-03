@@ -30,6 +30,25 @@ const DIMENSION_BOX_COMMANDS = ["hphantom", "vphantom", "phantom", "smash"] as c
 const COLORS = ["red", "blue", "teal"] as const;
 const MAX_DESCENDANTS_PER_ROOT = 12;
 
+function tabularNode(random: TexFuzzRandom, path: string): TexFuzzNode {
+  const columns = Array.from({ length: 1 + random.int(`${path}/columns`, 3) }, (_, index) =>
+    random.pick(`${path}/column-${index}`, ["l", "c", "r"] as const)
+  );
+  return {
+    kind: "tabular",
+    columns,
+    position: random.pick(`${path}/position`, ["t", "c", "b"] as const),
+    // Keep the initial table family valid and small even when surrounding
+    // inline generation produces deeply nested boxes or declarations.
+    cells: Array.from({ length: 1 + random.int(`${path}/rows`, 3) }, (_, row) =>
+      columns.map((_, column) => ({
+        kind: "text",
+        value: random.pick(`${path}/cells/${row}/${column}`, ["A", "Beta", "7", "Delta"] as const),
+      }))
+    ),
+  };
+}
+
 interface GenerationContext {
   readonly weights: Readonly<Partial<Record<TexFuzzFeatureId, number>>>;
   remainingDescendants: number;
@@ -141,6 +160,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
     { value: "dimension-box", weight: featureWeightSum(context, DIMENSION_BOX_COMMANDS.map((command) => `box.dimension.${command}` as const)) },
     { value: "raisebox", weight: featureWeight(context, "box.raisebox") },
     { value: "rule", weight: featureWeight(context, "box.rule") },
+    { value: "tabular", weight: featureWeight(context, "box.tabular") },
     { value: "math", weight: featureWeight(context, "math.inline") },
     { value: "accent", weight: featureWeight(context, "text.accent") },
     { value: "line-break", weight: featureWeight(context, "text.line-break") },
@@ -219,6 +239,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
         children: inlineChildren(random, `${path}/raise-body`, depth, context),
       };
     case "rule": return { kind: "rule", raise: random.boolean(`${path}/raise-present`) ? dimension(random, `${path}/raise`) : undefined, width: dimension(random, `${path}/rule-width`, { nonNegative: true }), height: dimension(random, `${path}/rule-height`, { nonNegative: true }) };
+    case "tabular": return tabularNode(random, `${path}/tabular`);
     case "math": return { kind: "math", body: generateTexFuzzMathNode(random, `${path}/math`, Math.min(4, Math.max(1, depth - 1))), delimiter: random.boolean(`${path}/math-delimiter`) ? "dollar" : "paren" };
     case "accent": return { kind: "accent", command: random.pick(`${path}/accent`, ["'", "`", "^"] as const), base: "e" };
     case "line-break":
@@ -350,6 +371,12 @@ function nodeFeatures(node: TexFuzzNode, features: Set<TexFuzzFeatureId>): void 
     case "dimension-box": features.add(`box.dimension.${node.command}`); break;
     case "raisebox": features.add("box.raisebox"); break;
     case "rule": features.add("box.rule"); break;
+    case "tabular":
+      features.add("box.tabular");
+      node.cells.forEach((row) => {
+        row.forEach((cell) => { nodeFeatures(cell, features); });
+      });
+      break;
     case "paragraph-break": features.add("document.paragraph-break"); break;
     case "noindent": features.add("document.noindent"); break;
     case "alignment": features.add(`document.alignment.${node.command}`); break;

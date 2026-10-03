@@ -93,6 +93,21 @@ function nodeCandidates(node: TexFuzzNode): readonly TexFuzzNode[] {
   if ((node.kind === "math" || node.kind === "display-math") && node.body) {
     for (const body of mathCandidates(node.body)) candidates.push({ ...node, body });
   }
+  if (node.kind === "tabular") {
+    for (const [rowIndex, row] of node.cells.entries()) {
+      if (node.cells.length > 1) candidates.push({ ...node, cells: node.cells.filter((_, index) => index !== rowIndex) });
+      for (const [columnIndex, cell] of row.entries()) {
+        for (const reduced of nodeCandidates(cell)) candidates.push({ ...node,
+          cells: node.cells.map((cells, index) => index === rowIndex
+            ? cells.map((item, position) => position === columnIndex ? reduced : item) : cells) });
+      }
+    }
+    if (node.columns.length > 1) {
+      for (let columnIndex = 0; columnIndex < node.columns.length; columnIndex += 1) candidates.push({ ...node,
+        columns: node.columns.filter((_, index) => index !== columnIndex),
+        cells: node.cells.map((row) => row.filter((_, index) => index !== columnIndex)) });
+    }
+  }
   if ("children" in node) {
     if (node.children.length === 1) {
       candidates.push(node.children[0]);

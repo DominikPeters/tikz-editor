@@ -1,3 +1,4 @@
+import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import type { Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
 import type { ParagraphLayoutReport } from "../knuth-plass/paragraph/report.js";
 import type { TextSourceMap } from "../source-map.js";
@@ -68,6 +69,7 @@ export interface TexParagraphLayoutOptions {
   readonly initialPreviousDepth?: number;
   readonly listProfile?: TexListLayoutProfile;
   readonly displayMathProfile?: TexDisplayMathLayoutProfile;
+  readonly tabularProfile?: TexTabularLayoutProfile;
   readonly tikzTextWidthNode?: boolean;
   readonly spaceGlueProfile?: TexSpaceGlueProfile;
   readonly fallbackPolicy?: "whole-node" | "placeholder";

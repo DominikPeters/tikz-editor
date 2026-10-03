@@ -14,6 +14,7 @@ function visibleWords(node: TexFuzzNode): string[] {
     case "paragraph-break": return [];
     case "oracle-command": return [node.command];
     case "item": return node.label?.flatMap(visibleWords) ?? [];
+    case "tabular": return node.cells.flatMap((row) => row.flatMap(visibleWords));
     case "noindent":
     case "alignment":
     case "vertical-glue":

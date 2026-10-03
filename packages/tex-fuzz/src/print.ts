@@ -252,6 +252,20 @@ function printNodes(
       case "rule":
         output.source += `\\rule${node.raise ? `[${printDimension(node.raise)}]` : ""}{${printDimension(node.width)}}{${printDimension(node.height)}}`;
         break;
+      case "tabular":
+        if (node.columns.length === 0 || node.cells.length === 0 || node.cells.some((row) => row.length !== node.columns.length)) {
+          throw new Error("Cannot print an empty or ragged tabular.");
+        }
+        output.source += `\\begin{tabular}${node.position ? `[${node.position}]` : ""}{${node.columns.join("")}}`;
+        node.cells.forEach((row, rowIndex) => {
+          if (rowIndex > 0) output.source += "\\\\";
+          row.forEach((cell, columnIndex) => {
+            if (columnIndex > 0) output.source += "&";
+            printNested([cell], `cells/${rowIndex}/${columnIndex}`);
+          });
+        });
+        output.source += "\\end{tabular}";
+        break;
       case "paragraph-break":
         output.source += node.command === "blank-line" ? "\n\n" : "\\par ";
         break;

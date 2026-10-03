@@ -57,6 +57,7 @@ describe("TeX fuzz semantic coverage", () => {
     expect(new Set([...accounting.generated, ...accounting.excluded])).toEqual(new Set(accounting.production));
     expect(accounting.generated).toContain("font-command:textbf");
     expect(accounting.generated).toContain("font-command:texttt");
+    expect(accounting.generated).toContain("inline-kind:tabular");
     expect(accounting.generated).toContain("control-kind:environment-boundary");
     expect(accounting.generated).toContain("display-delimiter:flalign");
     expect(accounting.generated).toContain("display-delimiter:flalign-star");
@@ -78,6 +79,19 @@ describe("TeX fuzz semantic coverage", () => {
       }
     }
   }, 15_000);
+
+  it("generates bounded tables and records their cell content", () => {
+    const cases = Array.from({ length: 25 }, (_, seed) =>
+      generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 })
+    );
+    const tables = cases.filter((caseData) => caseData.features.includes("box.tabular"));
+    expect(tables.length).toBeGreaterThan(0);
+    expect(tables.every((caseData) => caseData.source.includes("\\begin{tabular}"))).toBe(true);
+    const coverage = measureTexFuzzCoverage(tables);
+    expect(coverage.nodeKindCounts.tabular).toBeGreaterThan(0);
+    expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
+    expect(coverage.featureCounts["box.tabular"]).toBe(tables.length);
+  });
 
   it("counts feature combinations, generic node depth, boundaries, and Unicode", () => {
     const composed = caseFromTexFuzzAst([

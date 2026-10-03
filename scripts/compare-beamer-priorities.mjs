@@ -9,7 +9,7 @@ import { corpusGraphicsResolver, sha256 } from "./lib/beamer-corpus.mjs";
 import { priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures } from "./lib/beamer-priority-contracts.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const fixtureRoot = join(repoRoot, "test/fixtures/beamer/corpus-priorities");
+const defaultManifest = join(repoRoot, "test/fixtures/beamer/corpus-priorities/cases.json");
 const readJson = file => JSON.parse(readFileSync(file, "utf8"));
 const writeJson = (file, value) => writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
 const escape = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
@@ -35,9 +35,9 @@ function snapshotGallery(result, snapshot) {
 }
 
 function gallery(report) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Beamer priority reproductions</title><style>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(report.title ?? "Beamer priority reproductions")}</title><style>
 body{font:16px/1.5 system-ui;margin:0;background:#f4f5f8;color:#202534}main{max-width:1320px;margin:auto;padding:28px}h1{margin-bottom:8px}h2{font-size:20px;margin:0}article{background:white;padding:22px;border:1px solid #dce0e8;border-radius:10px;margin:24px 0}.case-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.badge{font-size:13px;border-radius:5px;padding:3px 9px;background:#fff0e6;color:#8a350c}.badge.passed{background:#e6f4ed;color:#186143}.metadata,.artifact-links{color:#5a6272;font-size:14px}.comparison,.oracle-pages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.oracle-pages{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}.native-only{max-width:760px}figure{margin:0;min-width:0}figcaption{font-size:14px;font-weight:600;margin:4px 0 8px}img{display:block;width:100%;height:auto;border:1px solid #dce0e8;box-sizing:border-box;background:white}section+section{border-top:1px solid #dce0e8;margin-top:24px;padding-top:18px}a{color:#0659a8}pre{white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace}details{margin-top:12px}summary{cursor:pointer;color:#5a6272}.notice{font-size:14px;background:#fff6df;padding:10px 12px;border-radius:5px}@media(max-width:760px){main{padding:12px}article{padding:14px}.comparison{grid-template-columns:1fr}}
-</style></head><body><main><h1>Beamer priority reproductions</h1><p>${report.passed} passed · ${report.failed} failed · run ${escape(report.status)}</p><p class="metadata">Native SVGs and rasterized TeX output. Fidelity and unsupported-code recognition have separate contracts. Current failures remain red reproductions.</p>${report.error ? `<pre>${escape(report.error)}</pre>` : ""}${report.results.map(result => `<article id="${escape(result.id)}"><div class="case-heading"><h2>${escape(result.id)}</h2><span class="badge ${result.status === "passed" ? "passed" : ""}">${escape(result.status)}</span></div><p class="metadata">${escape(result.fixture.family ?? result.fixture.environment)} · frame ${result.fixture.frame} · ${result.kind}</p>${result.snapshots.map(snapshot => snapshotGallery(result, snapshot)).join("")}${result.failures.length ? `<details><summary>${result.failures.length} contract failures</summary><pre>${escape(result.failures.join("\n"))}</pre></details>` : ""}</article>`).join("")}</main></body></html>`;
+</style></head><body><main><h1>${escape(report.title ?? "Beamer priority reproductions")}</h1><p>${report.passed} passed · ${report.failed} failed · run ${escape(report.status)}</p><p class="metadata">Fidelity gates exact glyph positions and sizes, rule geometry, and sampled flat block fills. Raster previews support manual review; a green badge does not assert whole-image pixel equality. Unsupported-code recognition has its own contract. Current failures remain red reproductions.</p>${report.error ? `<pre>${escape(report.error)}</pre>` : ""}${report.results.map(result => `<article id="${escape(result.id)}"><div class="case-heading"><h2>${escape(result.id)}</h2><span class="badge ${result.status === "passed" ? "passed" : ""}">${escape(result.status)}</span></div><p class="metadata">${escape(result.fixture.family ?? result.fixture.environment)} · frame ${result.fixture.frame} · ${result.kind}</p>${result.snapshots.map(snapshot => snapshotGallery(result, snapshot)).join("")}${result.failures.length ? `<details><summary>${result.failures.length} contract failures</summary><pre>${escape(result.failures.join("\n"))}</pre></details>` : ""}</article>`).join("")}</main></body></html>`;
 }
 
 // Build previews from saved artifacts, including cases whose page counts differ.
@@ -86,20 +86,22 @@ function refreshGallery(outDir, raster) {
 }
 
 async function main(argv) {
-  const options = { outDir: join(repoRoot, "artifacts/beamer-priority-conformance"), kind: "all", cases: null, raster: true, refreshGallery: false };
+  const options = { outDir: join(repoRoot, "artifacts/beamer-priority-conformance"), kind: "all", cases: null, raster: true, refreshGallery: false, manifest: defaultManifest };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--out-dir") options.outDir = resolve(argv[++i]);
+    if (argv[i] === "--manifest") options.manifest = resolve(argv[++i]);
+    else if (argv[i] === "--out-dir") options.outDir = resolve(argv[++i]);
     else if (argv[i] === "--kind") options.kind = argv[++i];
     else if (argv[i] === "--cases") options.cases = argv[++i].split(",");
     else if (argv[i] === "--raster") options.raster = true;
     else if (argv[i] === "--structural-only") options.raster = false;
     else if (argv[i] === "--refresh-gallery") options.refreshGallery = true;
-    else if (argv[i] === "--help") { console.log("Usage: npm run compare:beamer-priorities -- [--kind all|fidelity|recognition] [--cases comma-separated-IDs] [--structural-only] [--refresh-gallery] [--out-dir directory]\nGenerates native and TeX raster previews by default. --refresh-gallery rebuilds previews from saved artifacts without rerunning conformance.\nConformance runs always exit nonzero on a mismatch, invalid oracle, recognition failure or exception."); return; }
+    else if (argv[i] === "--help") { console.log("Usage: npm run compare:beamer-priorities -- [--kind all|fidelity|recognition] [--cases comma-separated-IDs] [--structural-only] [--refresh-gallery] [--out-dir directory] [--manifest cases.json]\nGenerates native and TeX raster previews by default. --refresh-gallery rebuilds previews from saved artifacts without rerunning conformance.\nConformance runs always exit nonzero on a mismatch, invalid oracle, recognition failure or exception."); return; }
     else throw new Error(`Unknown argument: ${argv[i]}`);
   }
   if (!["all", "fidelity", "recognition"].includes(options.kind)) throw new Error("--kind must be all, fidelity or recognition.");
   if (options.refreshGallery) { refreshGallery(options.outDir, options.raster); return; }
-  const manifest = readJson(join(fixtureRoot, "cases.json"));
+  const fixtureRoot = dirname(options.manifest);
+  const manifest = readJson(options.manifest);
   const catalog = [...manifest.fidelity.map(fixture => ({ kind: "fidelity", fixture })), ...manifest.recognition.map(fixture => ({ kind: "recognition", fixture }))];
   if (options.cases?.some(id => !catalog.some(c => c.fixture.id === id))) throw new Error("Unknown case ID.");
   const selected = catalog.filter(c => (options.kind === "all" || options.kind === c.kind) && (!options.cases || options.cases.includes(c.fixture.id)));
@@ -107,7 +109,7 @@ async function main(argv) {
   mkdirSync(options.outDir, { recursive: true });
   const documents = new Map();
   const results = [];
-  const report = { formatVersion: 1, generatedAt: new Date().toISOString(), status: "running", options, manifestSha256: sha256(readFileSync(join(fixtureRoot, "cases.json"))), passed: 0, failed: 0, results };
+  const report = { formatVersion: 1, generatedAt: new Date().toISOString(), status: "running", title: manifest.title ?? "Beamer priority reproductions", options, manifestSha256: sha256(readFileSync(options.manifest)), passed: 0, failed: 0, results };
   const checkpoint = () => {
     report.passed = results.filter(r => r.status === "passed").length;
     report.failed = results.length - report.passed;

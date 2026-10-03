@@ -1,3 +1,4 @@
+import type { TexTabularLayoutProfile } from "../tabular/types.js";
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
 import type { TexTextFontProfile } from "../fonts/text-profile.js";
 import type { DocumentGraphicsResolver } from "../../../graphics/types.js";
@@ -19,6 +20,7 @@ export function texLayoutItemsForParagraphPlan(
     readonly graphicsResolver?: DocumentGraphicsResolver;
     readonly textFontProfile?: TexTextFontProfile;
     readonly dimensionContext?: TexDimensionContext;
+    readonly tabularProfile?: TexTabularLayoutProfile;
   }
 ): readonly TexLayoutInlineItem[] {
   const contentItems = simpleTexSegmentToLayoutItems(
@@ -30,7 +32,8 @@ export function texLayoutItemsForParagraphPlan(
     params.textFontProfile?.defaultFontState,
     params.textFontProfile,
     params.graphicsResolver,
-    params.dimensionContext
+    params.dimensionContext,
+    params.tabularProfile
   );
   if (plan.preserveTrailingInterwordSpace) {
     const trailingSourceSpace = plan.segment.nodes.at(-1);

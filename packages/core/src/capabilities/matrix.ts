@@ -658,6 +658,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports PNG/JPEG/SVG inline graphics, trim/clip/viewport rendering, and desktop PDF graphics rasterized through the app asset resolver. Desktop resolves local assets; browser and unresolved assets render placeholders."
   },
+  text_tabular: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["text_tabular"],
+    notes: "Shared TeX text boxes support l/c/r, fixed-width p columns, array m/b columns and font/alignment declarations, repeated preambles, multicolumn, intercolumn inserts, scoped registers, row spacing, kernel/array rules and stock booktabs rules, spacing and trimmed partial rules. Cell and preamble glyphs retain source ownership through the common text/math renderer. Column macros, multicolumn boundary inserts, nonparagraph vertical cell material and package-specific table engines remain visible source literals."
+  },
   beamer_direct_resize: {
     parser: "not-applicable",
     semantic: "not-applicable",

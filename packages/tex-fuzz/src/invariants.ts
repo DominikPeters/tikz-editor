@@ -128,6 +128,13 @@ function semanticProseLeaves(caseData: TexFuzzCase): readonly SemanticProseLeaf[
         case "item":
           if (node.label) visit(node.label, `${path}/label`, false);
           break;
+        case "tabular":
+          node.cells.forEach((row, rowIndex) => {
+            row.forEach((cell, columnIndex) => {
+              visit([cell], `${path}/cells/${rowIndex}/${columnIndex}`, false);
+            });
+          });
+          break;
         case "math":
         case "display-math":
         case "rule":
@@ -165,6 +172,13 @@ function semanticControlRanges(caseData: TexFuzzCase): {
       }
       if ("children" in node) visit(node.children, `${path}/children`);
       if (node.kind === "item" && node.label) visit(node.label, `${path}/label`);
+      if (node.kind === "tabular") {
+        node.cells.forEach((row, rowIndex) => {
+          row.forEach((cell, columnIndex) => {
+            visit([cell], `${path}/cells/${rowIndex}/${columnIndex}`);
+          });
+        });
+      }
     });
   };
   visit(caseData.ast, "root");
@@ -316,6 +330,13 @@ function visibleContentObligations(caseData: TexFuzzCase): readonly ContentOblig
           return;
         case "item":
           if (node.label) visit(node.label, `${path}/label`, false);
+          return;
+        case "tabular":
+          node.cells.forEach((row, rowIndex) => {
+            row.forEach((cell, columnIndex) => {
+              visit([cell], `${path}/cells/${rowIndex}/${columnIndex}`, false);
+            });
+          });
           return;
         case "space":
         case "line-break":

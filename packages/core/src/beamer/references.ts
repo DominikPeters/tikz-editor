@@ -15,6 +15,7 @@ import {
 } from "./overlay.js";
 import type { BeamerDocumentModel, BeamerRect } from "./types.js";
 import type { BeamerFootnoteIndex } from "./footnotes.js";
+import type { TexTabularRegisters } from "../text/tex/tabular/types.js";
 
 export type BeamerLinkDestination =
   | { kind: "frame"; frameId: string; step: number }
@@ -37,6 +38,8 @@ export type BeamerReferenceIndex = {
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
+  arrayPackage?: boolean;
+  tableRegisters?: TexTabularRegisters;
   step: number;
   footnotes?: BeamerFootnoteIndex;
   theme?: ResolvedBeamerTheme;

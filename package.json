@@ -120,7 +120,8 @@
     "test:e2e:webkit": "npm run -w @tikz-editor/web test:e2e:webkit --",
     "test:e2e:all-browsers": "npm run -w @tikz-editor/web test:e2e:all-browsers --",
     "test:e2e:ci": "npm run -w @tikz-editor/web test:e2e:ci --",
-    "test:desktop:e2e": "npm run -w @tikz-editor/desktop test:e2e --"
+    "test:desktop:e2e": "npm run -w @tikz-editor/desktop test:e2e --",
+    "compare:beamer-tables": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/tables/cases.json --out-dir artifacts/beamer-table-conformance"
   },
   "keywords": [
     "tikz",

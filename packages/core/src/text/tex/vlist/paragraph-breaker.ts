@@ -89,6 +89,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         graphicsResolver: params.options.graphicsResolver,
         textFontProfile: params.options.textFontProfile,
         dimensionContext,
+        tabularProfile: params.options.tabularProfile,
       })
     );
     if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {

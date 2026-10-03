@@ -1,3 +1,4 @@
+import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import { englishDefaults } from "../knuth-plass/languages/en.js";
 import { breakWithDp, type DpOptions } from "../knuth-plass/paragraph/dp.js";
 import { createEnglishHyphenator, type Hyphenator } from "../knuth-plass/paragraph/hyphenate.js";
@@ -66,6 +67,7 @@ export interface TexParagraphBreakOptions {
   readonly mathBoxProvider?: TexMathBoxProvider;
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
+  readonly tabularProfile?: TexTabularLayoutProfile;
 }
 
 export function breakTexParagraphRuns(params: {

@@ -31,6 +31,7 @@ export type TexFuzzFeatureId =
   | `box.dimension.${TexFuzzDimensionBoxCommand}`
   | "box.raisebox"
   | "box.rule"
+  | "box.tabular"
   | "document.paragraph-break"
   | "document.noindent"
   | `document.alignment.${"centering" | "raggedright" | "raggedleft"}`
@@ -247,6 +248,12 @@ export type TexFuzzNode =
       readonly raise?: TexFuzzDimension;
       readonly width: TexFuzzDimension;
       readonly height: TexFuzzDimension;
+    }
+  | {
+      readonly kind: "tabular";
+      readonly columns: readonly ("l" | "c" | "r")[];
+      readonly position?: "t" | "c" | "b";
+      readonly cells: readonly (readonly TexFuzzNode[])[];
     }
   | { readonly kind: "paragraph-break"; readonly command: "par" | "blank-line" }
   | { readonly kind: "noindent" }

@@ -241,3 +241,5 @@ export type {
   TexMetricProvider,
   TexShapedItem,
 } from "./fonts/types.js";
+
+export type { TexTabularLayoutProfile, TexTabularRegisters } from "./tabular/types.js";

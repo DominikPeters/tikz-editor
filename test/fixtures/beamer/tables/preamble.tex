@@ -1,0 +1,15 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage{booktabs,array}
+\setbeamertemplate{navigation symbols}{}
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.4}
+\setlength{\extrarowheight}{2pt}
+\setlength{\arrayrulewidth}{.7pt}
+\begin{document}
+\begin{frame}[plain,t]
+\begin{tabular}{|l|r|}\hline Alpha & 1\\ Beta & 22\\\hline\end{tabular}
+\end{frame}
+\begin{frame}[plain,t]
+\noindent{\renewcommand{\arraystretch}{1}\setlength{\tabcolsep}{6pt}\begin{tabular}{lr}\toprule Alpha & 1\\ Beta & 22\\\bottomrule\end{tabular}}
+\end{frame}
+\end{document}

@@ -61,6 +61,7 @@ const BASE_FEATURE_DEFINITIONS = {
   "text.line-break": definition("text.line-break", ["inline-kind:line-break"], ["line-break"], "text", "structure"),
   "box.raisebox": definition("box.raisebox", ["inline-kind:raisebox"], ["raisebox"], "text", "box"),
   "box.rule": definition("box.rule", ["inline-kind:rule"], ["rule"], "text", "box"),
+  "box.tabular": definition("box.tabular", ["inline-kind:tabular"], ["tabular"], "text", "box"),
   "document.paragraph-break": definition("document.paragraph-break", ["control-kind:paragraph-break"], ["paragraph-break"], "document", "document"),
   "document.noindent": definition("document.noindent", ["control-kind:noindent"], ["noindent"], "document", "document"),
   "document.item": definition("document.item", ["control-kind:item"], ["item"], "document", "document"),

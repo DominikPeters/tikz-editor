@@ -52,6 +52,7 @@ import {
   type TexMetricProvider,
 } from "../text/tex/index.js";
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
+import { parseSimpleTexTabularRegisters } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { parseBeamerFrameBody } from "./content.js";
@@ -263,12 +264,17 @@ function createBeamerRenderContext(
   const overlaysByFrameId = new Map(document.frames.map((frame) => [
     frame.id, scanBeamerFrameOverlays(source, frame, syntaxContext.syntax),
   ]));
+  const macroBindings = collectMacroBindings(document.preamble.macroDefinitions);
+  // The table frontend evaluates this kernel register and its local
+  // assignments. Expanding it as a user macro would rewrite the target
+  // of a later \renewcommand{\arraystretch}{...} into its numeric value.
+  macroBindings.delete("\\arraystretch");
   return {
     source,
     syntax: syntaxContext.syntax,
     document,
     theme,
-    macroBindings: collectMacroBindings(document.preamble.macroDefinitions),
+    macroBindings,
     references: buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId),
     overlaysByFrameId,
     page: resolveBeamerPageGeometry(document, theme),
@@ -460,6 +466,13 @@ async function renderBeamerFrameStep(params: {
   const references: BeamerReferenceContext = {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
+    tableRegisters: parseSimpleTexTabularRegisters(source.slice(document.preamble.span.from, document.preamble.span.to)),
+    arrayPackage: context.syntax.controlsIn(document.preamble.span).some(control => {
+      if (control.name !== "usepackage" && control.name !== "RequirePackage") return false;
+      const optional = context.syntax.argumentAfter(control.span.to, "optional", document.preamble.span.to);
+      const names = context.syntax.argumentAfter(optional?.span.to ?? control.span.to, "required", document.preamble.span.to);
+      return names?.complete === true && source.slice(names.contentSpan.from, names.contentSpan.to).split(",").some(name => name.trim() === "array");
+    }),
   };
   const items: BeamerFrameLayoutItem[] = [];
   const spacing: BeamerSpacingLayout[] = [];
@@ -3391,6 +3404,13 @@ function layoutParagraph(params: {
       ),
     }),
     baselineSkip: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
+    tabularProfile: {
+      arrayPackage: params.references.arrayPackage,
+      registers: params.references.tableRegisters,
+      baselineSkipPt: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
+      booktabsFontSizePt: params.references?.theme?.fonts["normal-text"].sizePt ?? params.font.sizePt,
+      booktabsXHeightPt: fontXHeightPt(params.references?.theme?.fonts["normal-text"] ?? params.font),
+    },
     initialPreviousDepth: params.initialPreviousDepth,
     listProfile: {
       ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),

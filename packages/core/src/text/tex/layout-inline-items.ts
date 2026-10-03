@@ -1,3 +1,5 @@
+import { layoutTexTabularBox } from "./tabular/layout.js";
+import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import {
   defaultTexTextFontProfile,
   type TexTextFontProfile,
@@ -353,7 +355,8 @@ export type TexLayoutTextBoxCommandName =
   | SimpleTexDimensionBoxCommandName
   | "rule"
   | "includegraphics"
-  | "raisebox";
+  | "raisebox"
+  | "tabular";
 
 export interface TexLayoutTextBoxItem {
   readonly kind: "text-box";
@@ -509,7 +512,8 @@ export function simpleTexSegmentToLayoutItems(
   initialFontState?: SimpleTexFontState,
   textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
   graphicsResolver?: DocumentGraphicsResolver,
-  dimensionContext?: TexDimensionContext
+  dimensionContext?: TexDimensionContext,
+  tabularProfile?: TexTabularLayoutProfile
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
@@ -591,6 +595,12 @@ export function simpleTexSegmentToLayoutItems(
       hasSeenText = true;
       spaceFactor = 1000;
       continue;
+    }
+
+    if (token.kind === "tabular" && token.table) {
+      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, mathBoxProvider, textFontProfile, graphicsResolver, dimensionContext, tabularProfile });
+      items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
+      hasSeenText = true; spaceFactor = 1000; continue;
     }
 
     if (token.kind === "mbox") {
@@ -1788,6 +1798,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly dimensionContext?: TexDimensionContext;
+  readonly tabularProfile?: TexTabularLayoutProfile;
   readonly trimEdges: boolean;
 }): TexLayoutInlineItem[] {
   const items: TexLayoutInlineItem[] = [];
@@ -1861,6 +1872,12 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       hasSeenText = true;
       spaceFactor = 1000;
       continue;
+    }
+
+    if (token.kind === "tabular" && token.table) {
+      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, mathBoxProvider: params.mathBoxProvider, textFontProfile: params.textFontProfile, graphicsResolver: params.graphicsResolver, dimensionContext: params.dimensionContext, tabularProfile: params.tabularProfile });
+      items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
+      hasSeenText = true; spaceFactor = 1000; continue;
     }
 
     if (token.kind === "mbox") {
