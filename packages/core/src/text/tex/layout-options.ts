@@ -1,6 +1,6 @@
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import type { TexTextFontProfile } from "./fonts/text-profile.js";
-import type { TexSpaceGlueProfile } from "./ir.js";
+import type { SimpleTexParagraphIrOptions, TexSpaceGlueProfile } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type { TexLength } from "./coordinates.js";
@@ -64,6 +64,11 @@ export interface TexListMarkerProfile {
  * selected `\@listi`, `\@listii`, and `\@listiii`.
  */
 export interface TexListLayoutProfile {
+  /** Class-owned center/flushleft/flushright (trivlist) boundary skips. */
+  readonly trivlistTopsepPt?: number;
+  readonly trivlistPartopsepPt?: number;
+  /** Size commands replace the first-level list defaults in LaTeX classes. */
+  readonly sizeOverrides?: readonly { readonly fontSizePt: number; readonly topsepPt: number; readonly topsepStretchPt: number; readonly topsepShrinkPt: number; readonly parsepPt: number; readonly parsepStretchPt: number; readonly parsepShrinkPt: number; readonly itemsepPt: number; readonly itemsepStretchPt: number; readonly itemsepShrinkPt: number }[];
   /** Class-owned body font switches; omitted depths inherit the ambient font. */
   readonly bodyFontSizePtByDepth?: readonly (number | undefined)[];
   readonly bodyBaselineSkipPtByDepth?: readonly (number | undefined)[];
@@ -84,6 +89,7 @@ export interface TexListLayoutProfile {
   readonly parsepShrinkPtByDepth?: readonly number[];
   readonly initialItemBaselineAdjustmentPt: number;
   readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
+  readonly resolveItemizeMarker?: (labelDepth: number, fontSizePt: number | undefined) => TexListMarkerProfile | undefined;
   readonly resolveEnumerateMarker?: (
     itemIndex: number,
     labelDepth: number
@@ -123,6 +129,7 @@ export interface TexDisplayMathLayoutProfile {
 }
 
 export interface TexLayoutIrOptions {
+  readonly namedFontSizes?: SimpleTexParagraphIrOptions["namedFontSizes"];
   readonly width?: TexLength;
   /** Ambient TeX dimension registers, resolved before inline box lowering. */
   readonly dimensionContext?: TexDimensionContext;

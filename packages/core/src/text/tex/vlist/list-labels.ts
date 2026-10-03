@@ -111,7 +111,7 @@ function texListItemLabelContent(
   }
   if (listContext.kind === "itemize") {
     const markers = listProfile?.itemizeMarkersByDepth;
-    const marker = markers?.[
+    const marker = listProfile?.resolveItemizeMarker?.(listContext.labelDepth, paragraph.fontSizePt) ?? markers?.[
       Math.max(0, Math.min(listContext.labelDepth - 1, markers.length - 1))
     ];
     if (marker) {

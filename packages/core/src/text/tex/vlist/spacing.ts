@@ -128,6 +128,7 @@ interface SimpleTexParagraphVerticalSkipState {
   readonly listPartopsepByDepth: Map<number, boolean>;
   readonly emittedListItemKeys: Set<string>;
   emittedParagraphCount: number;
+  hasInterveningPenalty: boolean;
 }
 
 type TexTrivlistScopeRole = Extract<TexVBoxRole, { readonly kind: "trivlist" }>;
@@ -177,6 +178,10 @@ function planSimpleTexParagraphVerticalSkipsInto(
       );
       continue;
     }
+    if (item.kind === "penalty") {
+      state.hasInterveningPenalty = true;
+      continue;
+    }
     if (item.kind === "display-math" || item.kind === "display-alignment") {
       state.previousEmittedContentKind = "display";
       continue;
@@ -212,6 +217,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
 
     const paragraph = item.paragraph;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
+    const resolvedListProfile = listProfileForContext(listProfile, scope.listContext ?? state.previousEmittedListContext);
     const hasPreviousEmittedParagraph = state.emittedParagraphCount > 0;
     const startsAfterExplicitPar = item.paragraph.startsAfterExplicitPar === true;
     const startsListInVerticalMode = startsAfterExplicitPar ||
@@ -230,7 +236,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           startsListInVerticalMode,
           exitsTrivlistScope,
           font,
-          listProfile
+          resolvedListProfile
         );
     const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
@@ -239,7 +245,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           scope.listContext,
           hasPreviousEmittedParagraph,
           exitsTrivlistScope,
-          listProfile
+          resolvedListProfile
         );
     const quoteVerticalSkipBefore = followsDisplay
       ? texLength(0)
@@ -260,7 +266,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
           state.previousEmittedTrivlistScopes,
           scope.trivlistScopes,
           startsListInVerticalMode,
-          font
+          font,
+          listProfile
         );
 
     skips.push({
@@ -292,6 +299,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     }
     state.emittedParagraphCount += 1;
     state.previousEmittedContentKind = "paragraph";
+    state.hasInterveningPenalty = false;
   }
 }
 
@@ -307,6 +315,7 @@ function createInitialSimpleTexParagraphVerticalSkipState(): SimpleTexParagraphV
     listPartopsepByDepth: new Map(),
     emittedListItemKeys: new Set(),
     emittedParagraphCount: 0,
+    hasInterveningPenalty: false,
   };
 }
 
@@ -347,6 +356,9 @@ function paragraphScopeFromVListAncestors(
         showLabel: item.paragraph.listContext?.showLabel ??
           !state.emittedListItemKeys.has(listItemKey),
         label: item.paragraph.listContext?.label,
+        fontSizePt: item.paragraph.listContext?.fontSizePt,
+        spacing: item.paragraph.listContext?.spacing,
+        listStart: item.paragraph.listContext?.listStart,
       },
     };
   }
@@ -1723,7 +1735,8 @@ function texArticleTrivlistVerticalSkipBefore(
   previousScopes: readonly TexTrivlistScopeRole[],
   currentScopes: readonly TexTrivlistScopeRole[],
   startsListInVerticalMode: boolean,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
 ): TexLength {
   const commonPrefixLength = commonTrivlistScopePrefixLength(
     previousScopes,
@@ -1735,12 +1748,14 @@ function texArticleTrivlistVerticalSkipBefore(
   ) {
     return texLength(0);
   }
-  let size = texArticleTrivlistExitBoundarySkip(
+  const exitSize = texArticleTrivlistExitBoundarySkip(
     state,
     previousScopes,
     commonPrefixLength,
-    font
+    font,
+    profile
   );
+  let entrySize = texLength(0);
   for (let index = commonPrefixLength; index < currentScopes.length; index += 1) {
     const scope = currentScopes[index];
     if (!scope) {
@@ -1749,16 +1764,40 @@ function texArticleTrivlistVerticalSkipBefore(
     const usesPartopsep =
       index === 0 && commonPrefixLength === 0 && startsListInVerticalMode;
     state.trivlistPartopsepByScope.set(scope, usesPartopsep);
-    size = texLength(Math.max(
-      size,
-      texEmSkip(
-        articleListSpacingEm.topsep +
-          (usesPartopsep ? articleListSpacingEm.partopsep : 0),
-        font
-      )
+    entrySize = texLength(Math.max(
+      entrySize,
+      texTrivlistBoundarySkip(font, usesPartopsep, profile)
     ));
   }
-  return size;
+  // An authored penalty separates the closing and opening glue, preventing
+  // LaTeX \addvspace from collapsing them across adjacent environments.
+  return texLength(state.hasInterveningPenalty ? exitSize + entrySize : Math.max(exitSize, entrySize));
+}
+
+function listProfileForContext(profile: TexListLayoutProfile | undefined, context: SimpleTexListContext | undefined): TexListLayoutProfile | undefined {
+  if (!profile || !context) return profile;
+  const size = context.depth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - Number(context.fontSizePt)) < .001) : undefined;
+  const index = context.depth - 1;
+  const replace = (values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined => {
+    if (value === undefined) return values;
+    const copy = [...values ?? []];
+    while (copy.length <= index) copy.push(0);
+    copy[index] = value;
+    return copy;
+  };
+  const authored = context.spacing;
+  return { ...profile,
+    topsepPtByDepth: replace(profile.topsepPtByDepth, authored?.topsep?.sizePt ?? size?.topsepPt)!,
+    topsepStretchPtByDepth: replace(profile.topsepStretchPtByDepth, authored?.topsep?.stretchPt ?? size?.topsepStretchPt),
+    topsepShrinkPtByDepth: replace(profile.topsepShrinkPtByDepth, authored?.topsep?.shrinkPt ?? size?.topsepShrinkPt),
+    partopsepPtByDepth: replace(profile.partopsepPtByDepth, authored?.partopsep?.sizePt)!,
+    itemsepPtByDepth: replace(profile.itemsepPtByDepth, authored?.itemsep?.sizePt ?? size?.itemsepPt)!,
+    itemsepStretchPtByDepth: replace(profile.itemsepStretchPtByDepth, authored?.itemsep?.stretchPt ?? size?.itemsepStretchPt),
+    itemsepShrinkPtByDepth: replace(profile.itemsepShrinkPtByDepth, authored?.itemsep?.shrinkPt ?? size?.itemsepShrinkPt),
+    parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parsep?.sizePt ?? size?.parsepPt)!,
+    parsepStretchPtByDepth: replace(profile.parsepStretchPtByDepth, authored?.parsep?.stretchPt ?? size?.parsepStretchPt),
+    parsepShrinkPtByDepth: replace(profile.parsepShrinkPtByDepth, authored?.parsep?.shrinkPt ?? size?.parsepShrinkPt),
+  };
 }
 
 function texArticleListVerticalSkipBefore(
@@ -1810,6 +1849,14 @@ function texArticleListVerticalSkipBefore(
   if (!previous || !current) {
     return texLength(0);
   }
+  if (previous.depth === current.depth && previous.listStart !== undefined && current.listStart !== undefined && previous.listStart !== current.listStart) {
+    // The closed list's trailing skip and the next list's initial skip are
+    // separate boundaries; \@endparenv closes the first paragraph scope.
+    return texLength(
+      texArticleOutsideListBoundarySkip(false, font, listProfileForContext(profile, previous), previous.depth) +
+      texArticleOutsideListBoundarySkip(startsListInVerticalMode, font, profile, current.depth)
+    );
+  }
   if (current.depth > previous.depth) {
     state.listPartopsepByDepth.set(current.depth, startsListInVerticalMode);
     return texArticleNestedListBoundarySkip(
@@ -1852,7 +1899,8 @@ function texArticleTrivlistExitBoundarySkip(
   state: SimpleTexParagraphVerticalSkipState,
   previousScopes: readonly TexTrivlistScopeRole[],
   commonPrefixLength: number,
-  font: ResolvedTexFont
+  font: ResolvedTexFont,
+  profile?: TexListLayoutProfile
 ): TexLength {
   let size = texLength(0);
   for (let index = previousScopes.length - 1; index >= commonPrefixLength; index -= 1) {
@@ -1862,14 +1910,15 @@ function texArticleTrivlistExitBoundarySkip(
     }
     const usesPartopsep = state.trivlistPartopsepByScope.get(scope) ?? false;
     state.trivlistPartopsepByScope.delete(scope);
-    const depthSize = texEmSkip(
-      articleListSpacingEm.topsep +
-        (usesPartopsep ? articleListSpacingEm.partopsep : 0),
-      font
-    );
+    const depthSize = texTrivlistBoundarySkip(font, usesPartopsep, profile);
     size = texLength(Math.max(size, depthSize));
   }
   return size;
+}
+
+function texTrivlistBoundarySkip(font: ResolvedTexFont, usesPartopsep: boolean, profile?: TexListLayoutProfile): TexLength {
+  return texLength((profile?.trivlistTopsepPt ?? texEmSkip(articleListSpacingEm.topsep, font)) +
+    (usesPartopsep ? profile?.trivlistPartopsepPt ?? texEmSkip(articleListSpacingEm.partopsep, font) : 0));
 }
 
 function commonTrivlistScopePrefixLength(
@@ -2057,6 +2106,9 @@ function texProfileListVerticalGlueFlex(
   let stretchValues = profile.topsepStretchPtByDepth;
   let shrinkValues = profile.topsepShrinkPtByDepth;
   if (current?.depth !== undefined && previous?.depth === current.depth) {
+    if (current.listStart !== undefined && previous.listStart !== undefined && current.listStart !== previous.listStart) {
+      return { stretch: texLength(texProfileOptionalDepthValue(profile.topsepStretchPtByDepth, depth)), shrink: texLength(texProfileOptionalDepthValue(profile.topsepShrinkPtByDepth, depth)) };
+    }
     depth = current.depth;
     const sameItem =
       current.kind === previous.kind &&

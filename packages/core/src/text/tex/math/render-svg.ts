@@ -172,6 +172,7 @@ function renderMathGlyphPath(
   const y = translateTexHBoxY(originY, item.y);
   return [
     `<path data-tex-font="${escapeXmlAttribute(font.id)}"`,
+    ` data-tex-font-at-pt="${formatSvgNumber(font.atPt)}"`,
     ` data-tex-glyph="${item.code}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,

@@ -666,6 +666,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["text_tabular"],
     notes: "Shared TeX text boxes support l/c/r, fixed-width p columns, array m/b columns and font/alignment declarations, repeated preambles, multicolumn, intercolumn inserts, scoped registers, row spacing, kernel/array rules and stock booktabs rules, spacing and trimmed partial rules. Cell and preamble glyphs retain source ownership through the common text/math renderer. Column macros, multicolumn boundary inserts, nonparagraph vertical cell material and package-specific table engines remain visible source literals."
   },
+  text_transform_boxes: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["text_transform_boxes"],
+    notes: "Shared TeX text layout supports graphicx rotatebox, scalebox, reflectbox and resizebox/star with source-backed text/math, rules and natural-height minipage/parbox composition. Rotation origins, explicit pivots, anisotropic/negative scales and nested transforms preserve painted glyph positions, font axes and caret source ownership. Explicit-height paragraph boxes, unsupported content and complex transform dimensions remain visible source material."
+  },
   beamer_direct_resize: {
     parser: "not-applicable",
     semantic: "not-applicable",

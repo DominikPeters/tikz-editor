@@ -92,6 +92,7 @@ export const FEATURE_IDS = [
   "svg_text",
   "text_includegraphics",
   "text_tabular", // Source-backed LaTeX tabular and booktabs alignments.
+  "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
   "beamer_document_scan",
   "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.
   "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.

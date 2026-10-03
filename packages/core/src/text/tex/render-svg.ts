@@ -767,7 +767,7 @@ function renderTexGlyphPath(
   const sourceAttrs = sourceBacked
     ? ` data-source-start="${item.sourceStart}" data-source-end="${item.sourceEnd}"`
     : "";
-  return `<path data-tex-font="${formatted.fontId}" data-tex-glyph="${item.code}"${sourceAttrs} d="${d}" transform="translate(${formatPt(x)} ${formatted.baseline})${formatted.scaleSuffix}" />`;
+  return `<path data-tex-font="${formatted.fontId}" data-tex-font-at-pt="${formatPt(font.atPt)}" data-tex-glyph="${item.code}"${sourceAttrs} d="${d}" transform="translate(${formatPt(x)} ${formatted.baseline})${formatted.scaleSuffix}" />`;
 }
 
 type TexGlyphSvgPlacement = {

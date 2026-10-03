@@ -277,9 +277,11 @@ KERN\t1\troot.4\ty\t0\t589824\t-32768\t-32768\t0\t0\t0\t0\t1
       });
       const trace = parseBeamerPageTraceTsv(readFileSync(join(directory, "beamer-page-trace.tsv"), "utf8"));
       type Glyph = { code: number; x: { texPt: number }; y: { texPt: number }; width: { texPt: number }; transform?: number[] };
+      type Rule = { width: { texPt: number }; height: { texPt: number }; transform?: number[] };
+      const pages = trace.pages as unknown as readonly { glyphs: readonly Glyph[]; rules: readonly Rule[] }[];
       const matrices = [[0, -1, 1, 0], [2, 0, 0, .5], [0, -.5, .5, 0]];
       expect(trace.pages).toHaveLength(3);
-      trace.pages.forEach((page: { glyphs: Glyph[] }, index: number) => {
+      pages.forEach((page, index) => {
         const a = page.glyphs.find(g => g.code === 65)!;
         const b = page.glyphs.find(g => g.code === 66)!;
         const c = page.glyphs.find(g => g.code === 67)!;
@@ -289,7 +291,7 @@ KERN\t1\troot.4\ty\t0\t589824\t-32768\t-32768\t0\t0\t0\t0\t1
         expect(b.x.texPt - a.x.texPt).toBeCloseTo(matrices[index][0] * a.width.texPt, 4);
         expect(b.y.texPt - a.y.texPt).toBeCloseTo(matrices[index][1] * a.width.texPt, 4);
       });
-      const rotatedRule = trace.pages[2].rules.find((rule: { width: { texPt: number }; height: { texPt: number } }) => rule.width.texPt === 6 && rule.height.texPt === 2);
+      const rotatedRule = pages[2].rules.find(rule => rule.width.texPt === 6 && rule.height.texPt === 2);
       expect(rotatedRule?.transform).toEqual([0, -1, 1, 0]);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30_000);

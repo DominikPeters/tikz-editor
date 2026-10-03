@@ -1,4 +1,5 @@
 import { layoutTexTabularBox } from "./tabular/layout.js";
+import { layoutTexTransformBox } from "./text-box-transform.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import {
   defaultTexTextFontProfile,
@@ -356,7 +357,8 @@ export type TexLayoutTextBoxCommandName =
   | "rule"
   | "includegraphics"
   | "raisebox"
-  | "tabular";
+  | "tabular"
+  | "rotatebox" | "scalebox" | "resizebox" | "reflectbox";
 
 export interface TexLayoutTextBoxItem {
   readonly kind: "text-box";
@@ -597,6 +599,11 @@ export function simpleTexSegmentToLayoutItems(
       continue;
     }
 
+    if (token.kind === "transform-box" && token.transformBox) {
+      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, mathBoxProvider, textFontProfile, graphicsResolver, dimensionContext, tabularProfile });
+      items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
+      hasSeenText = true; spaceFactor = 1000; continue;
+    }
     if (token.kind === "tabular" && token.table) {
       const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, mathBoxProvider, textFontProfile, graphicsResolver, dimensionContext, tabularProfile });
       items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
@@ -824,7 +831,7 @@ export function simpleTexSegmentToLayoutItems(
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
-        spaceFactor,
+        spaceFactor: token.controlSpace ? 1000 : spaceFactor,
         spaceGlueProfile,
         nonBreaking: true,
       });
@@ -836,7 +843,7 @@ export function simpleTexSegmentToLayoutItems(
       sourceStart: token.sourceStart,
       sourceEnd: token.sourceEnd,
       font,
-      spaceFactor,
+      spaceFactor: token.controlSpace ? 1000 : spaceFactor,
       spaceGlueProfile,
     });
   }
@@ -1874,6 +1881,11 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       continue;
     }
 
+    if (token.kind === "transform-box" && token.transformBox) {
+      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, mathBoxProvider: params.mathBoxProvider, textFontProfile: params.textFontProfile, graphicsResolver: params.graphicsResolver, dimensionContext: params.dimensionContext, tabularProfile: params.tabularProfile });
+      items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
+      hasSeenText = true; spaceFactor = 1000; continue;
+    }
     if (token.kind === "tabular" && token.table) {
       const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, mathBoxProvider: params.mathBoxProvider, textFontProfile: params.textFontProfile, graphicsResolver: params.graphicsResolver, dimensionContext: params.dimensionContext, tabularProfile: params.tabularProfile });
       items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
@@ -2099,7 +2111,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
-        spaceFactor,
+        spaceFactor: token.controlSpace ? 1000 : spaceFactor,
         spaceGlueProfile: params.spaceGlueProfile,
         nonBreaking: true,
       });
@@ -2111,7 +2123,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       sourceStart: token.sourceStart,
       sourceEnd: token.sourceEnd,
       font,
-      spaceFactor,
+      spaceFactor: token.controlSpace ? 1000 : spaceFactor,
       spaceGlueProfile: params.spaceGlueProfile,
     });
   }

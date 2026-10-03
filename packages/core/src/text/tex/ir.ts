@@ -142,6 +142,7 @@ export interface SimpleTexFontState {
   readonly shape: TexFontShape;
   /** Absolute TeX point size selected by an inline declaration. */
   readonly sizePt?: TexLength;
+  readonly baselineSkipPt?: TexLength;
   /** CSS color normalized from the xcolor spelling in the source. */
   readonly color?: string;
   readonly tabularRegisters?: TexTabularRegisters;
@@ -162,6 +163,8 @@ export interface SimpleTexSpaceNode extends SimpleTexSourceRange {
   readonly text: string;
   /** TeX's active `~` space: visible glue without a line-break opportunity. */
   readonly nonBreaking?: boolean;
+  /** TeX's control space uses font space without punctuation's space factor. */
+  readonly controlSpace?: boolean;
 }
 
 export interface SimpleTexCommentNode extends SimpleTexSourceRange {
@@ -231,11 +234,28 @@ export interface SimpleTexTabularNode extends SimpleTexSourceRange {
   readonly text: string;
   readonly table: TexTabular;
 }
+export type SimpleTexTransformCommandName = "rotatebox" | "scalebox" | "resizebox" | "reflectbox";
+export interface SimpleTexTransformNode extends SimpleTexSourceRange {
+  readonly kind: "transform-box";
+  readonly command: SimpleTexTransformCommandName;
+  readonly text: string;
+  readonly content: string;
+  readonly contentStart: number;
+  readonly contentEnd: number;
+  readonly children: readonly SimpleTexNode[];
+  readonly parameters:
+    | { readonly kind: "rotate"; readonly angle: number; readonly options?: OptionListAst }
+    | { readonly kind: "scale"; readonly x: number; readonly y: number }
+    | { readonly kind: "resize"; readonly width: string; readonly height: string; readonly totalHeight: boolean };
+}
 
 export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
   readonly kind: "style-declaration";
   readonly text: string;
   readonly sizePt?: TexLength;
+  readonly baselineSkipPt?: TexLength;
+  readonly sizeScope?: { readonly boundary: "begin" | "end"; readonly name: string };
+  readonly listRegisters?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep", string>>;
   readonly color?: string;
   readonly tabularRegisters?: TexTabularRegisters;
 }
@@ -453,6 +473,7 @@ export type SimpleTexInlineNode =
   | SimpleTexLineBreakNode
   | SimpleTexMathNode
   | SimpleTexTabularNode
+  | SimpleTexTransformNode
   | SimpleTexFontCommandNode
   | SimpleTexFontDeclarationNode
   | SimpleTexStyleDeclarationNode
@@ -487,6 +508,7 @@ export const SIMPLE_TEX_INLINE_NODE_KINDS = [
   "line-break",
   "math",
   "tabular",
+  "transform-box",
   "font-command",
   "font-declaration",
   "style-declaration",
@@ -529,11 +551,12 @@ const SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE: [
 void SIMPLE_TEX_NODE_KIND_REGISTRY_IS_COMPLETE;
 
 export interface SimpleTexToken {
-  readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box" | "tabular";
+  readonly kind: "text" | "space" | "forced-break" | "penalty" | "math" | "mbox" | "rule" | "includegraphics" | "raisebox" | "dimension-box" | "tabular" | "transform-box";
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly table?: TexTabular;
+  readonly transformBox?: SimpleTexTransformNode;
   readonly delimiter?: "dollar" | "paren";
   readonly content?: string;
   readonly contentStart?: number;
@@ -561,6 +584,7 @@ export interface SimpleTexToken {
   readonly penalty?: number;
   readonly fontState: SimpleTexFontState;
   readonly nonBreaking?: boolean;
+  readonly controlSpace?: boolean;
   readonly italicCorrectionAfter?: boolean;
   readonly literal?: SimpleTexTokenLiteralInfo;
 }
@@ -575,6 +599,8 @@ export interface SimpleTexParagraphBlock {
   readonly sourceStart: number;
   readonly sourceEnd: number;
   readonly nodes: readonly SimpleTexInlineNode[];
+  readonly fontSizePt?: TexLength;
+  readonly baselineSkip?: TexLength;
   /**
    * LaTeX lowers `\vspace` encountered in horizontal mode to `\vadjust`.
    * Keep those adjustments attached to the unbroken paragraph so line
@@ -694,6 +720,8 @@ export type SimpleTexBlockItem =
   | SimpleTexPlaceholderBlockItem;
 
 export interface SimpleTexListContext {
+  /** Distinguishes adjacent authored lists with the same kind and depth. */
+  readonly listStart?: number;
   readonly kind: SimpleTexListKind;
   readonly depth: number;
   readonly labelDepth: number;
@@ -704,6 +732,8 @@ export interface SimpleTexListContext {
   readonly totalLeftMarginEm: number;
   readonly showLabel: boolean;
   readonly label?: SimpleTexListLabel;
+  readonly fontSizePt?: TexLength;
+  readonly spacing?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep", { readonly sizePt: number; readonly stretchPt: number; readonly shrinkPt: number }>>;
 }
 
 export interface SimpleTexListLabel {
@@ -861,6 +891,9 @@ const paragraphIrSeen = new TexWeightedLruCache<string, true>(1024, 512 * 1024);
 const PARAGRAPH_IR_MAX_SOURCE_LENGTH = 16384;
 
 export interface SimpleTexParagraphIrOptions {
+  readonly fontSizePt?: number;
+  readonly baselineSkipPt?: number;
+  readonly namedFontSizes?: Readonly<Record<string, { readonly sizePt: number; readonly baselineSkipPt: number }>>;
   readonly listLeftMarginEmByDepth?: readonly number[];
   /** Margins of generated Beamer bibliography lists, keyed by layout source start. */
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
@@ -1016,6 +1049,7 @@ function collectSimpleTexPolicyRanges(
       node.kind === "color-command" ||
       node.kind === "group" ||
       node.kind === "mbox" ||
+      node.kind === "transform-box" ||
       node.kind === "raisebox" ||
       node.kind === "dimension-box"
     ) {
@@ -1139,6 +1173,7 @@ function collectSimpleTexGraphicsResourcesFromNodes(
       node.kind === "color-command" ||
       node.kind === "group" ||
       node.kind === "mbox" ||
+      node.kind === "transform-box" ||
       node.kind === "raisebox" ||
       node.kind === "dimension-box"
     ) {
@@ -1197,6 +1232,7 @@ function buildSimpleTexParagraphIr(
       resolveColorAlias ? options?.colorResolverCacheKey : null,
       options?.listLeftMarginEmByDepth ?? null,
       [...(options?.bibliographyMargins ?? [])],
+      options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes,
     ])
     : null;
   if (key !== null) {
@@ -1338,6 +1374,8 @@ function scanSimpleTexIrNodes(
         continue;
       }
 
+      const transform = scanSimpleTexTransformCommand(text, index, sourceOffset, resolveColorAlias);
+      if (transform) { nodes.push(transform.node); index = transform.end; continue; }
       const tabularEnvironment = matchedEnvironments.find((environment) => environment.name === "tabular" && environment.begin.span.from === index);
       if (tabularEnvironment) {
         try {
@@ -1380,6 +1418,17 @@ function scanSimpleTexIrNodes(
       }
       const tableRegister = scanSimpleTexTabularRegister(text, index, sourceOffset);
       if (tableRegister) { nodes.push(tableRegister.node); index = tableRegister.end; continue; }
+      const sizeBoundary = syntax.environmentBoundaryByStart.get(index);
+      if (sizeBoundary && matchedEnvironmentBoundaryStarts.has(index) && Object.hasOwn(FONT_SIZE_COMMAND_FACTORS, `\\${sizeBoundary.name}`)) {
+        nodes.push({ kind: "style-declaration", text: text.slice(index, sizeBoundary.span.to),
+          sizeScope: { boundary: sizeBoundary.kind, name: sizeBoundary.name },
+          ...(sizeBoundary.kind === "begin" ? { sizePt: texLength(DEFAULT_TEXT_FONT_SIZE * FONT_SIZE_COMMAND_FACTORS[`\\${sizeBoundary.name}`]) } : {}),
+          sourceStart, sourceEnd: sourceOffset + sizeBoundary.span.to });
+        index = sizeBoundary.span.to;
+        continue;
+      }
+      const listRegister = scanSimpleTexListRegister(text, index, sourceOffset);
+      if (listRegister) { nodes.push(listRegister.node); index = listRegister.end; continue; }
 
       const environmentBoundary = scanSimpleTexEnvironmentBoundary(
         syntax,
@@ -2085,6 +2134,7 @@ function scanSimpleTexProseControl(
     return {
       node: {
         kind: "space",
+        controlSpace: true,
         text: text.slice(start, commandEnd),
         sourceStart,
         sourceEnd: sourceOffset + commandEnd,
@@ -2433,6 +2483,32 @@ function scanSimpleTexPenaltyCommand(
     end,
     unsupportedCommand: false,
   };
+}
+
+function scanSimpleTexTransformCommand(text: string, start: number, sourceOffset: number, resolveColorAlias?: ColorAliasResolver): { node: SimpleTexTransformNode | SimpleTexLiteralNode; end: number } | null {
+  const command = /^\\(rotatebox|scalebox|resizebox|reflectbox)\b/u.exec(text.slice(start));
+  if (!command) return null;
+  const name = command[1] as SimpleTexTransformCommandName;
+  let cursor = start + command[0].length; let parameters: SimpleTexTransformNode["parameters"];
+  const star = name === "resizebox" && text[cursor] === "*"; if (star) cursor++;
+  const optional = name === "rotatebox" ? tabularGroup(text, cursor, "[", "]") : null; if (optional) cursor = optional.end;
+  const first = name !== "reflectbox" ? tabularGroup(text, cursor) : null; if (name !== "reflectbox" && !first) return null; if (first) cursor = first.end;
+  if (name === "rotatebox") parameters = { kind: "rotate", angle: Number(first!.content), ...(optional ? { options: parseOptionListRaw(text.slice(optional.start - 1, optional.end), sourceOffset + optional.start - 1) } : {}) };
+  else if (name === "resizebox") { const height = tabularGroup(text, cursor); if (!height) return null; cursor = height.end; parameters = { kind: "resize", width: first!.content, height: height.content, totalHeight: star }; }
+  else { const vertical = name === "scalebox" ? tabularGroup(text, cursor, "[", "]") : null; if (vertical) cursor = vertical.end; parameters = { kind: "scale", x: name === "reflectbox" ? -1 : Number(first!.content), y: name === "reflectbox" ? 1 : /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test((vertical?.content ?? first!.content).trim()) ? Number(vertical?.content ?? first!.content) : Number.NaN }; }
+  const body = tabularGroup(text, cursor); if (!body) return null;
+  const scan = scanSimpleTexIrNodes(body.content, sourceOffset + body.start, resolveColorAlias);
+  const numeric = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value.trim());
+  const finite = parameters.kind === "rotate" ? numeric(first!.content) : parameters.kind === "scale" ? name === "reflectbox" || numeric(first!.content) && Number.isFinite(parameters.y) : true;
+  const rotationOptions = parameters.kind !== "rotate" || (parameters.options?.entries ?? []).every((option) => {
+    if (option.kind !== "kv") return false;
+    const value = option.valueRaw.trim().replace(/^\{(.*)\}$/u, "$1");
+    return option.key === "origin" ? /^[lrcbtB]+$/u.test(value) : option.key === "x" || option.key === "y" ? value.length > 0 : option.key === "units" && numeric(value) && Number(value) !== 0;
+  });
+  const supported = finite && rotationOptions && !scan.unsupportedCommand && scan.nodes.every((node) => isSimpleTexInlineNode(node) || node.kind === "box" && node.height === undefined || node.kind === "paragraph-break");
+  const end = body.end;
+  if (!supported) return { node: { kind: "literal", text: text.slice(start, end), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + end, reason: "unsupported-command", detail: "Unsupported graphicx box content or transform." }, end };
+  return { node: { kind: "transform-box", command: name, parameters, text: text.slice(start, end), content: body.content, contentStart: sourceOffset + body.start, contentEnd: sourceOffset + end - 1, sourceStart: sourceOffset + start, sourceEnd: sourceOffset + end, children: scan.nodes }, end };
 }
 
 function scanSimpleTexBoxCommand(
@@ -3593,6 +3669,21 @@ function scanSimpleTexTabularRegister(text: string, start: number, sourceOffset:
   return { node: { kind: "style-declaration", text: text.slice(start, value.end), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + value.end, tabularRegisters: command[1] === "renewcommand" ? { arraystretch: Number(value.content) } : { [name]: value.content } }, end: value.end };
 }
 
+function scanSimpleTexListRegister(text: string, start: number, sourceOffset: number): { node: SimpleTexStyleDeclarationNode; end: number } | null {
+  const command = /^\\setlength\b/u.exec(text.slice(start));
+  if (!command) return null;
+  const register = tabularGroup(text, start + command[0].length);
+  const value = register && tabularGroup(text, register.end);
+  if (!register || !value) return null;
+  const name = register.content.trim().replace(/^\\/u, "");
+  if (name !== "itemsep") return null;
+  // Keep authored glue until the active font is known at the assignment site.
+  const parts = value.content.trim().split(/\s+(?:plus|minus)\s+/u);
+  if (!parts.every(part => parseTexDimensionExpression(part) != null)) return null;
+  return { node: { kind: "style-declaration", text: text.slice(start, value.end),
+    listRegisters: { [name]: value.content }, sourceStart: sourceOffset + start, sourceEnd: sourceOffset + value.end }, end: value.end };
+}
+
 function scanSimpleTexStyleDeclaration(
   text: string,
   start: number,
@@ -3637,12 +3728,14 @@ function scanSimpleTexStyleDeclaration(
   const selectfontEnd = scanSimpleTexControlWord(text, cursor, "selectfont");
   if (selectfontEnd === null) return null;
   const sizePt = parseTexDimensionText(size.content.trim());
+  const baselineSkipPt = parseTexDimensionText(baselineSkip.content.trim());
   if (sizePt === null || sizePt <= 0) return null;
   return {
     node: {
       kind: "style-declaration",
       text: text.slice(start, selectfontEnd),
       sizePt,
+      ...(baselineSkipPt != null ? { baselineSkipPt } : {}),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + selectfontEnd,
     },
@@ -4097,6 +4190,7 @@ function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode
     node.kind === "line-break" ||
     node.kind === "math" ||
     node.kind === "tabular" ||
+    node.kind === "transform-box" ||
     node.kind === "font-command" ||
     node.kind === "font-declaration" ||
     node.kind === "style-declaration" ||
@@ -4130,11 +4224,49 @@ function buildSimpleTexParagraphBlocksFromNodes(
   sourceEnd = sourceOffset + text.length,
   options?: SimpleTexParagraphIrOptions
 ): SimpleTexParagraphBlockScanResult {
+  const initialSize = texLength(options?.fontSizePt ?? DEFAULT_TEXT_FONT_SIZE);
+  const initialBaseline = options?.baselineSkipPt === undefined ? undefined : texLength(options.baselineSkipPt);
+  type SizeState = { sizePt: TexLength; baselineSkip?: TexLength };
+  let sizeState: SizeState = { sizePt: initialSize, baselineSkip: initialBaseline };
+  const sizeScopes: SizeState[] = [];
+  const sizeHistory: Array<{ from: number; state: SizeState }> = [{ from: sourceOffset, state: sizeState }];
+  sourceNodes = sourceNodes.map(node => {
+    if (node.kind !== "style-declaration") return node;
+    if (node.sizeScope?.boundary === "begin") {
+      sizeScopes.push(sizeState);
+      const selected = options?.namedFontSizes?.[node.sizeScope.name];
+      sizeState = { sizePt: texLength(selected?.sizePt ?? node.sizePt ?? initialSize),
+        baselineSkip: selected ? texLength(selected.baselineSkipPt) : initialBaseline };
+    } else if (node.sizeScope?.boundary === "end") {
+      sizeState = sizeScopes.pop() ?? { sizePt: initialSize, baselineSkip: initialBaseline };
+    } else if (node.sizePt != null) {
+      sizeState = { sizePt: node.sizePt, baselineSkip: node.baselineSkipPt ?? sizeState.baselineSkip };
+    } else return node;
+    sizeHistory.push({ from: node.sourceEnd, state: sizeState });
+    return { ...node, sizePt: sizeState.sizePt, baselineSkipPt: sizeState.baselineSkip };
+  });
+  const sizeAt = (offset: number): SizeState => {
+    for (let i = sizeHistory.length - 1; i >= 0; i -= 1) if (sizeHistory[i].from <= offset) return sizeHistory[i].state;
+    return sizeHistory[0].state;
+  };
+  const resolveListGlue = (raw: string, sizePt: number): { sizePt: number; stretchPt: number; shrinkPt: number } | null => {
+    const parts = /^([\s\S]*?)(?:\s+plus\s+([\s\S]*?))?(?:\s+minus\s+([\s\S]*?))?$/u.exec(raw.trim());
+    if (!parts) return null;
+    const resolve = (part: string | undefined): number | null => {
+      if (part === undefined) return 0;
+      const dimension = parseTexDimensionExpression(part);
+      return dimension?.kind === "absolute" ? Number(dimension.value) : dimension?.kind === "contextual" && ["em", "ex"].includes(dimension.reference)
+        ? dimension.factor * sizePt * (dimension.reference === "em" ? 1 : .43) : null;
+    };
+    const size = resolve(parts[1]), stretch = resolve(parts[2]), shrink = resolve(parts[3]);
+    return size === null || stretch === null || shrink === null ? null : { sizePt: size, stretchPt: stretch, shrinkPt: shrink };
+  };
   const blocks: SimpleTexParagraphBlock[] = [];
   const items: SimpleTexBlockItem[] = [];
   let unsupportedCommand = false;
   let abortScan = false;
   interface ActiveSimpleTexList {
+    readonly sourceStart: number;
     readonly kind: SimpleTexListKind;
     readonly depth: number;
     readonly labelDepth: number;
@@ -4143,6 +4275,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly ownLeftMarginEm: number;
     readonly totalLeftMarginEm: number;
     readonly scopeRole: Extract<SimpleTexScopePathRole, { readonly kind: "list" }>;
+    readonly fontSizePt: TexLength;
+    spacing?: SimpleTexListContext["spacing"];
   }
   interface ActiveSimpleTexEnvironment {
     readonly name: SimpleTexEnvironmentName;
@@ -4318,6 +4452,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         simpleTexInlineNodesForRange(sourceNodes, start, end),
         pendingParagraphVerticalAdjustments
       );
+      // Declarations in vertical mode select registers without creating an
+      // empty prose paragraph (notably assignments before the first item).
+      if (nodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind)) && !(allowEmptyListItem && pendingListShowLabel)) return;
       if (listStack.length > 0 && !listContext) {
         // Material before a list's first `\item` fails to compile in LaTeX
         // ("perhaps a missing \item"), so it is outside the supported
@@ -4342,6 +4479,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceStart: start,
         sourceEnd: end,
         nodes,
+        ...(options?.fontSizePt !== undefined || sizeHistory.some(entry => entry.from > sourceOffset && entry.from <= start)
+          ? { fontSizePt: sizeAt(start).sizePt } : {}),
+        ...(sizeAt(end).baselineSkip !== undefined ? { baselineSkip: sizeAt(end).baselineSkip } : {}),
         ...(pendingParagraphVerticalAdjustments.length > 0
           ? {
               verticalAdjustments: [
@@ -4420,6 +4560,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
       totalLeftMarginEm: activeList.totalLeftMarginEm,
       showLabel: pendingListShowLabel,
       label: pendingListLabel,
+      listStart: activeList.sourceStart,
+      fontSizePt: activeList.fontSizePt,
+      ...(activeList.spacing ? { spacing: activeList.spacing } : {}),
     };
   };
 
@@ -4443,6 +4586,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
     } as const;
     listStack.push({
+      sourceStart,
       kind,
       depth,
       labelDepth,
@@ -4450,6 +4594,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ownLeftMarginEm: ownMargin,
       totalLeftMarginEm: scopeRole.totalLeftMarginEm,
       scopeRole,
+      fontSizePt: sizeAt(sourceStart).sizePt,
     });
     return scopeRole;
   };
@@ -4573,6 +4718,14 @@ function buildSimpleTexParagraphBlocksFromNodes(
       unsupportedCommand = true;
       abortScan = true;
       break;
+    }
+    if (node.kind === "style-declaration" && node.listRegisters && listStack.length > 0) {
+      const list = listStack.at(-1)!;
+      const assignments = Object.fromEntries(Object.entries(node.listRegisters).flatMap(([name, value]) => {
+        const glue = resolveListGlue(value, sizeAt(node.sourceStart).sizePt);
+        return glue ? [[name, glue]] : [];
+      }));
+      list.spacing = { ...list.spacing, ...assignments };
     }
 
     if (node.kind === "unsupported-command") {
@@ -5286,6 +5439,11 @@ export function simpleTexInlineNodesToTokens(
       continue;
     }
 
+    if (node.kind === "transform-box") {
+      tokens.push({ kind: "transform-box", text: node.text, transformBox: node, sourceStart: node.sourceStart, sourceEnd: node.sourceEnd, fontState: activeFontState });
+      skipPostLineBreakSpace = false;
+      continue;
+    }
     if (node.kind === "tabular") {
       tokens.push({ kind: "tabular", text: node.text, table: node.table, sourceStart: node.sourceStart, sourceEnd: node.sourceEnd, fontState: activeFontState });
       skipPostLineBreakSpace = false;
@@ -5358,6 +5516,7 @@ export function simpleTexInlineNodesToTokens(
       activeFontState = {
         ...activeFontState,
         ...(node.sizePt !== undefined ? { sizePt: node.sizePt } : {}),
+        ...(node.baselineSkipPt !== undefined ? { baselineSkipPt: node.baselineSkipPt } : {}),
         ...(node.color !== undefined ? { color: node.color } : {}),
         ...(node.tabularRegisters ? { tabularRegisters: { ...activeFontState.tabularRegisters, ...snapshotTabularRegisters(node.tabularRegisters, activeFontState) } } : {}),
       };
@@ -5389,6 +5548,7 @@ export function simpleTexInlineNodesToTokens(
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
         nonBreaking: node.nonBreaking,
+        controlSpace: node.controlSpace,
       });
       continue;
     }
@@ -5498,7 +5658,7 @@ export function simpleTexFontStateForCommand(
     };
   }
   if (command === "textnormal") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color, tabularRegisters: current.tabularRegisters };
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, color: current.color, tabularRegisters: current.tabularRegisters };
   }
   if (command === "textsf") {
     return { ...current, family: "sans" };
@@ -5514,25 +5674,25 @@ function simpleTexFontStateForDeclaration(
   command: SimpleTexFontDeclarationName
 ): SimpleTexFontState {
   if (command === "it") {
-    return { ...defaultSimpleTexFontState, shape: "italic", tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "italic", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "bf") {
-    return { ...defaultSimpleTexFontState, series: "bold", tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, series: "bold", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "rm") {
-    return { ...defaultSimpleTexFontState, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sf") {
-    return { ...defaultSimpleTexFontState, family: "sans", tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, family: "sans", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sl") {
-    return { ...defaultSimpleTexFontState, shape: "slanted", tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "slanted", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sc") {
-    return { ...defaultSimpleTexFontState, shape: "small-caps", tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "small-caps", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "tt") {
-    return { ...defaultSimpleTexFontState, family: "typewriter", tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, family: "typewriter", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
   }
   if (command === "em") {
     return {
@@ -5541,7 +5701,7 @@ function simpleTexFontStateForDeclaration(
     };
   }
   if (command === "normalfont") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, color: current.color, tabularRegisters: current.tabularRegisters };
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, color: current.color, tabularRegisters: current.tabularRegisters };
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };

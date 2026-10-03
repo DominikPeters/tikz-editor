@@ -18,6 +18,7 @@ import type {
 import type {
   TexDisplayMathLayoutProfile,
   TexListLayoutProfile,
+  TexLayoutIrOptions,
 } from "./layout-options.js";
 import {
   analyzeSimpleTexParagraph,
@@ -47,6 +48,7 @@ import {
 } from "./dimensions.js";
 
 export interface TexParagraphLayoutOptions {
+  readonly namedFontSizes?: TexLayoutIrOptions["namedFontSizes"];
   readonly paragraphId?: string;
   readonly width: number;
   /**
@@ -109,6 +111,14 @@ export function layoutSimpleTexParagraph(
   text: string,
   options: TexParagraphLayoutOptions
 ): TexParagraphLayoutResult {
+  const textFontProfile = options.textFontProfile ?? defaultTexTextFontProfile;
+  const metricProvider = options.metricProvider ?? textFontProfile.metricProvider ?? computerModernTexMetricProvider;
+  const defaultAtPt = metricProvider.resolveFont().atPt;
+  const font = options.font ?? textFontProfile.resolveTextFont(
+    textFontProfile.defaultFontState,
+    defaultAtPt,
+    metricProvider
+  );
   const analysis = analyzeSimpleTexParagraph(
     text,
     options.width,
@@ -117,6 +127,9 @@ export function layoutSimpleTexParagraph(
       listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth,
       bibliographyMargins: options.listProfile?.bibliographyMargins,
       colorResolverCacheKey: options.colorResolver?.cacheKey,
+      fontSizePt: font.atPt,
+      baselineSkipPt: options.baselineSkip,
+      namedFontSizes: options.namedFontSizes,
     }
   );
   const fallbackReason = analysis.fallbackReason;
@@ -134,14 +147,6 @@ export function layoutSimpleTexParagraph(
     };
   }
 
-  const textFontProfile = options.textFontProfile ?? defaultTexTextFontProfile;
-  const metricProvider = options.metricProvider ?? textFontProfile.metricProvider ?? computerModernTexMetricProvider;
-  const defaultAtPt = metricProvider.resolveFont().atPt;
-  const font = options.font ?? textFontProfile.resolveTextFont(
-    textFontProfile.defaultFontState,
-    defaultAtPt,
-    metricProvider
-  );
   const defaultWidth = options.dimensionContext === null
     ? texLength(0)
     : texLength(options.width);

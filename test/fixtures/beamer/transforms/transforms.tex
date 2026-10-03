@@ -1,0 +1,46 @@
+\documentclass[aspectratio=169]{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[plain,t]
+Before. \rotatebox{90}{Alpha} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \rotatebox{-90}{Alpha gp} \rotatebox{180}{Beta} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \rotatebox[origin=c]{45}{Alpha gp} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \rotatebox[origin=tr]{30}{Alpha gp} \rotatebox[origin=lB]{-30}{Beta gp} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \rotatebox[x=2pt,y=3pt]{45}{Alpha} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \scalebox{.8}{Alpha $x^2+1$ \rule{15pt}{2pt}} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \scalebox{.7}[1.5]{Alpha gp $x+1$} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \reflectbox{Alpha gp} \scalebox{-1}[-1]{Beta gp} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \resizebox{70pt}{!}{Alpha gp $x+1$} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \resizebox{!}{12pt}{Alpha gp} \resizebox*{!}{18pt}{Beta gp} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \scalebox{.8}{\begin{minipage}{160pt}Alpha paragraph.\par Beta paragraph.\end{minipage}} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \scalebox{.8}{\begin{minipage}[t]{95pt}Alpha paragraph.\par Beta paragraph.\end{minipage}} \scalebox{.8}{\begin{minipage}[b]{95pt}Alpha paragraph.\par Beta paragraph.\end{minipage}} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \rotatebox{30}{\begin{minipage}{95pt}Alpha Beta Gamma Delta Epsilon Zeta.\par Inline $x+1$.\end{minipage}} After.
+\end{frame}
+\begin{frame}[plain,t]
+Before. \rotatebox{30}{\scalebox{.9}{Alpha gp}} \scalebox{.7}{\rotatebox{-90}{Beta}} After.
+\end{frame}
+\end{document}

@@ -645,6 +645,8 @@ function paragraphInputFromSimpleTexBlock(
     text: block.text,
     sourceSpan: sourceSpanFromBlock(block),
     nodes: block.nodes,
+    ...(block.fontSizePt !== undefined ? { fontSizePt: block.fontSizePt } : {}),
+    ...(block.baselineSkip !== undefined ? { baselineSkip: block.baselineSkip } : {}),
     ...(block.verticalAdjustments && block.verticalAdjustments.length > 0
       ? {
           verticalAdjustments: block.verticalAdjustments.map((adjustment) =>

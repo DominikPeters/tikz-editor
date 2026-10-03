@@ -2075,6 +2075,15 @@ describe("simple TeX paragraph layout", () => {
     expect(followingNormalSpace).toBeCloseTo(normalSpace ?? 0, 6);
   });
 
+  it("uses an ordinary font space for control space after punctuation", () => {
+    const options = { paragraphId: "tex:control-space", width: 300, alignment: "justified" as const };
+    const normal = firstLineSpaceWidths("Alpha Beta", options)[0];
+    expect(firstLineSpaceWidths(String.raw`Alpha:\ Beta`, options)[0]).toBeCloseTo(normal, 6);
+    expect(firstLineSpaceWidths(String.raw`Alpha.\ Beta`, options)[0]).toBeCloseTo(normal, 6);
+    const ordinary = firstLineSpaceWidths("Alpha: Beta", options)[0];
+    expect(ordinary).toBeGreaterThan(normal);
+  });
+
   it("matches TeX spacefactor for uppercase abbreviations and closing punctuation", () => {
     const normalSpace = firstLineSpaceWidths("Alpha Beta", {
       paragraphId: "tex:normal-spacefactor-baseline",
@@ -4956,6 +4965,20 @@ describe("simple TeX paragraph layout", () => {
     expect(flushLeft.report?.lines[0]?.xStart).toBeCloseTo(0, 6);
     expect(flushRight.supported).toBe(true);
     expect(flushRight.report?.lines[0]?.xEnd).toBeCloseTo(120, 5);
+  });
+
+  it("keeps separate trivlist boundary glue across an authored penalty", () => {
+    const options = { paragraphId: "tex:penalty-separated-centers", width: 120, alignment: "ragged-right" as const, hyphenator: { hyphenate: () => [] } };
+    const collapsed = layoutSimpleTexParagraph(String.raw`Before.\begin{center}Alpha\end{center}\begin{center}Beta\end{center}After.`, options);
+    const separated = layoutSimpleTexParagraph(String.raw`Before.\begin{center}Alpha\end{center}\par\penalty10000\begin{center}Beta\end{center}After.`, options);
+    expect(collapsed.supported).toBe(true);
+    expect(separated.supported).toBe(true);
+    expect(lineTexts(separated.report)).toEqual(["Before.", "Alpha", "Beta", "After."]);
+    const boundarySkip = Number(computerModernTexMetricProvider.resolveFont().atPt);
+    // LuaLaTeX confirms that the intervening penalty prevents addvspace from
+    // merging the previous center's closing skip with the next opening skip;
+    // the explicit par also enables the new center's partopsep.
+    expect(Number(separated.vlistLayout!.linePlacements[2].y) - Number(collapsed.vlistLayout!.linePlacements[2].y)).toBeCloseTo(boundarySkip, 5);
   });
 
   it("allows paragraph alignment declarations after TeX paragraph boundaries", () => {
