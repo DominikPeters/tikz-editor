@@ -1237,6 +1237,7 @@ function findUnsupportedEnvironmentEndIndex(
       "column",
       "tikzpicture",
       "tabular",
+      "figure",
       "table",
       "center",
       "onlyenv",

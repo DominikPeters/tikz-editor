@@ -33,6 +33,10 @@ export type BeamerReferenceIndex = {
   source: string;
   resolveTarget: (name: string) => BeamerLinkDestination | undefined;
   citations: ReadonlyMap<string, CitationEntry>;
+  /** Values written by LaTeX's numbered equation environments. */
+  equationLabels?: ReadonlyMap<string, string>;
+  /** Document-wide automatic tag values, keyed by equation begin offset. */
+  equationNumbers?: ReadonlyMap<number, string>;
   specs: ReadonlyMap<number, BeamerOverlaySpec>;
   diagnostics: readonly Diagnostic[];
 };
@@ -65,10 +69,14 @@ export function buildBeamerReferenceIndex(
     return { kind: "frame", frameId: frame.frameId, step };
   };
   const citations = new Map<string, CitationEntry>();
+  const equationLabels = new Map<string, string>();
+  const equationNumbers = new Map<number, string>();
+  let equationNumber = 0;
   const specs = new Map<number, BeamerOverlaySpec>();
   const diagnostics: Diagnostic[] = [];
   const source = syntax.source;
-  const bibliographies = [...matchTexSyntaxEnvironments(syntax).values()].filter((env) => env.name === "thebibliography");
+  const environments = [...matchTexSyntaxEnvironments(syntax).values()];
+  const bibliographies = environments.filter((env) => env.name === "thebibliography");
   const addTarget = (name: string, destination: BeamerLinkDestination, span: Span) => {
     if (!name) return;
     if (resolveTarget(name)) {
@@ -76,6 +84,21 @@ export function buildBeamerReferenceIndex(
     } else targets.set(name, { destination, sourceStart: span.from });
   };
   for (const frame of document.frames) {
+    for (const env of environments.filter(env => ["equation", "equation*"].includes(env.name) && frame.bodySpan.from <= env.span.from && env.span.to <= frame.bodySpan.to).sort((a, b) => a.span.from - b.span.from)) {
+      const commands = syntax.controlsIn(env.contentSpan);
+      const tag = commands.find(command => command.name === "tag");
+      const tagArgument = tag && syntax.argumentAfter(tag.span.to, "required", env.contentSpan.to);
+      const suppressed = commands.some(command => command.name === "notag" || command.name === "nonumber");
+      const value = tagArgument?.complete ? source.slice(tagArgument.contentSpan.from, tagArgument.contentSpan.to) :
+        env.name === "equation" && !suppressed ? String(++equationNumber) : undefined;
+      if (value == null) continue;
+      if (!tagArgument) equationNumbers.set(env.span.from, value);
+      for (const command of syntax.controlsIn(env.contentSpan)) {
+        if (command.name !== "label") continue;
+        const argument = syntax.argumentAfter(command.span.to, "required", env.contentSpan.to);
+        if (argument?.complete) equationLabels.set(source.slice(argument.contentSpan.from, argument.contentSpan.to).trim(), value);
+      }
+    }
     const overlays = overlaysByFrameId.get(frame.id)!;
     const visibilitySteps = overlayVisibilitySteps(overlays);
     for (const entry of overlays.referenceSpecs) specs.set(entry.sourceStart, entry.spec);
@@ -124,7 +147,7 @@ export function buildBeamerReferenceIndex(
       addTarget(`beamerbib${key}`, destination(firstVisible), command.span);
     }
   }
-  return { source, resolveTarget, citations, specs, diagnostics };
+  return { source, resolveTarget, citations, equationLabels, equationNumbers, specs, diagnostics };
 }
 
 /** Visibility is constant between interval boundaries, regardless of step count. */
@@ -164,12 +187,13 @@ export type BeamerReferenceProjection = {
  * so two keys in one citation remain independently clickable.
  */
 export function projectBeamerReferences(mapped: MappedText, context: BeamerReferenceContext, bibliographyStyle?: (widestLabel: string, sourceStart: number) => BeamerBibliographyStyle): BeamerReferenceProjection {
-  if (!/\\(?:hyperlink|hyperref|hypertarget|href|url|label|cite|bibitem|newblock|beamer(?:goto|return|skip)?button|begin)(?![A-Za-z@])/u.test(mapped.text)) {
+  if (!/\\(?:hyperlink|hyperref|hypertarget|href|url|label|ref|eqref|cite|bibitem|newblock|beamer(?:goto|return|skip)?button|begin)(?![A-Za-z@])/u.test(mapped.text)) {
     return { mapped, links: [], bibliography: false };
   }
   const syntax = getTexSyntaxIndex(mapped.text, beamerDocumentParser);
   const environments = [...matchTexSyntaxEnvironments(syntax).values()];
   const bibliographies = new Map(environments.filter((env) => env.name === "thebibliography").map((env) => [env.span.from, env]));
+  const equations = new Map(environments.filter(env => env.name === "equation").map(env => [env.span.from, env]));
   const parts: MappedText[] = [];
   const links: LinkSpan[] = [];
   let length = 0;
@@ -204,6 +228,17 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
     for (const command of syntax.controlsIn({ from, to })) {
       if (command.span.from < cursor) continue;
       const env = bibliographies.get(command.span.from);
+      const equation = equations.get(command.span.from);
+      const equationOwner = equation && sourceSpan(equation.begin.span);
+      const equationNumber = equationOwner && context.equationNumbers?.get(equationOwner.from);
+      if (equation && equationNumber && equation.span.to <= to) {
+        append(sliceMappedText(mapped, cursor, equation.contentSpan.from));
+        visit(equation.contentSpan.from, equation.contentSpan.to, depth + 1);
+        generated(`\\tag{${equationNumber}}`, equation.end.span);
+        append(sliceMappedText(mapped, equation.end.span.from, equation.end.span.to));
+        cursor = equation.span.to;
+        continue;
+      }
       if (env && env.span.to <= to) {
         const width = syntax.argumentAfter(env.begin.span.to, "required", env.end.span.from);
         if (!width?.complete) continue;
@@ -237,7 +272,7 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
         cursor = command.span.to;
         continue;
       }
-      const names = ["hyperlink", "hyperref", "href", "url", "hypertarget", "label", "cite", "bibitem", "beamerbutton", "beamergotobutton", "beamerreturnbutton", "beamerskipbutton"];
+      const names = ["hyperlink", "hyperref", "href", "url", "hypertarget", "label", "ref", "eqref", "cite", "bibitem", "beamerbutton", "beamergotobutton", "beamerreturnbutton", "beamerskipbutton"];
       if (!names.includes(command.name)) continue;
       const overlay = syntax.argumentAfter(command.span.to, "overlay", to);
       let argumentStart = overlay?.span.to ?? command.span.to;
@@ -256,6 +291,13 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
       const key = raw(first.contentSpan).trim();
       if (command.name === "label") {
         // Labels have no typeset content.
+      } else if (command.name === "ref" || command.name === "eqref") {
+        const value = context.equationLabels?.get(key);
+        const start = length;
+        generated(command.name === "eqref" ? `\\textnormal{(${value ?? "??"})}` : value ?? "??", invocation);
+        const destination = value ? context.resolveTarget(key) : undefined;
+        if (destination) links.push({ span: { from: start, to: length }, destination, label: key });
+        if (!value) warn("beamer-unresolved-reference", `Unknown numeric reference '${key}'.`, invocation);
       } else if (command.name === "bibitem") {
         const label = context.citations.get(key)?.label ?? "?";
         entryBlock = 0;

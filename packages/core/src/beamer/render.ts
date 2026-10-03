@@ -13,6 +13,7 @@ import {
   remapSimpleTexListStructureSourceMap,
 } from "../text/tex/source-map-report.js";
 import type { Span } from "../ast/types.js";
+import { projectBeamerCaptions } from "./captions.js";
 import { pt, svgPoint, svgRect, type SvgPoint, type SvgRect } from "../coords/index.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
@@ -182,6 +183,9 @@ const BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT = 5.475;
 // \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
 // \itemsep=3pt. The deeper itemsep values alias their zero parsep.
 const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
+  trivlistTopsepPt: 9,
+  // Beamer globally zeros \partopsep after size11.clo is loaded.
+  trivlistPartopsepPt: 0,
   leftMarginEmByDepth: [2, 2, 2],
   topsepPtByDepth: [3, 2, 2],
   topsepStretchPtByDepth: [2, 1, 1],
@@ -3354,6 +3358,7 @@ function layoutParagraph(params: {
     lineHeightPt: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
   });
   const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
+  mapped = projectBeamerCaptions(mapped, params.references.source, params.references.theme);
   const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
     beamerBibliographyStyle({
       source: params.references.source, sourceStart, theme: params.references.theme,

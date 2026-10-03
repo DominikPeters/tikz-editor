@@ -302,6 +302,8 @@ function createDefaultTheme(): MutableTheme {
       "local structure": { parent: "structure" },
       item: { parent: "local structure" },
       "bibliography item": { parent: "item" },
+      caption: {},
+      "caption name": { parent: "structure" },
       "bibliography entry author": { parent: "structure" },
       "bibliography entry title": { parent: "normal text" },
       "bibliography entry location": { fgMix: { foregroundRole: "structure", backgroundRole: "normal text", foregroundPercent: 65 } },

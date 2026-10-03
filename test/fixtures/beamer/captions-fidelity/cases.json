@@ -1,0 +1,79 @@
+{
+  "formatVersion": 1,
+  "description": "Stock short figure/table caption and flow fidelity.",
+  "fidelity": [
+    {
+      "id": "center-image",
+      "file": "center-image.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "After"
+      ],
+      "images": 1
+    },
+    {
+      "id": "numbered",
+      "file": "numbered.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "table",
+      "file": "table.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Gamma",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "leading-figure",
+      "file": "leading-figure.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "After"
+      ],
+      "images": 1
+    },
+    {
+      "id": "frame-local-numbered",
+      "file": "scoped-templates.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Figure1:Alpha",
+        "After"
+      ],
+      "images": 0
+    },
+    {
+      "id": "frame-template-restored",
+      "file": "scoped-templates.tex",
+      "frame": 2,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Figure:Beta",
+        "After"
+      ],
+      "images": 0
+    }
+  ],
+  "recognition": []
+}

@@ -11,6 +11,7 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Source-backed tabular and booktabs share the text alignment ID.
   // Graphicx text/paragraph transforms share the text transform box ID.
   // Frame footnote projection and stock insertion share the footnote ID.
+  // Stock figure/table captions share their source-backed flow capability.
   // Frame, column and nested block/theorem source cards share the placeholder ID.
   return FEATURE_IDS.filter((featureId) => {
     const status = capabilityMatrix[featureId][layer];

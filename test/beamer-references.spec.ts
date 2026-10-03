@@ -9,6 +9,28 @@ const links = (result: Awaited<ReturnType<typeof renderBeamerFrame>>) => result.
 const text = (result: Awaited<ReturnType<typeof renderBeamerFrame>>) => result.layout.paragraphs.flatMap((p) => p.report.lines.map((line) => line.segments.map((s) => s.text ?? "").join(""))).join("\n");
 
 describe("Beamer hyperlinks and manual bibliographies", () => {
+  it("resolves forward equation references and preserves numbers across frame renders", async () => {
+    const source = deck(frame(String.raw`Forward \eqref{second}.\begin{equation}\label{first}a=b\end{equation}`) +
+      frame(String.raw`\begin{equation}\label{second}c=d\end{equation}References \ref{first}, \eqref{second}.`), String.raw`\usepackage{amsmath}`);
+    const prepared = prepareBeamerDocument(source);
+    const first = await prepared.renderFrame({ frameIndex: 0 });
+    const second = await prepared.renderFrame({ frameIndex: 1 });
+    expect(text(first)).toContain("Forward (2).");
+    expect(text(second)).toContain("References 1, (2).");
+    expect(first.svg.svg).toContain('data-tex-glyph="49"');
+    expect(second.svg.svg).toContain('data-tex-glyph="50"');
+    expect(links(first).some(link => link.destination.kind === "frame" && link.destination.frameId === "frame:1")).toBe(true);
+    expect([...first.diagnostics, ...second.diagnostics]).toEqual([]);
+  });
+
+  it("resolves explicit equation-star tags and reports unresolved numeric references", async () => {
+    const source = deck(frame(String.raw`\begin{equation*}\label{custom}a=b\tag{A}\end{equation*}See \eqref{custom}; \ref{missing}.`), String.raw`\usepackage{amsmath}`);
+    const result = await renderBeamerFrame(source);
+    expect(text(result)).toContain("See (A); ??.");
+    expect(result.diagnostics.filter(d => d.code === "beamer-unresolved-reference")).toHaveLength(1);
+    expect(result.layout.items.some(item => item.kind === "unsupported")).toBe(false);
+  });
+
   it("resolves forward frame labels, explicit labels and overlay destinations", async () => {
     const source = deck(frame(String.raw`\hyperlink{later<2>}{Go} \hyperref[named]{Named} \hyperlink{target}{Target}`) +
       frame(String.raw`\label<2>{named}\hypertarget<3>{target}{Third}`, "[label=later]"));

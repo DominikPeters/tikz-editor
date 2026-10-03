@@ -715,7 +715,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["beamer_references"],
-    notes: "Beamer document renderer resolves frame labels, label/hypertarget destinations, hyperlink/hyperref links and safe href/url links. Canvas activation is disabled during text editing. Full hyperref package execution and PDF annotations are not implemented."
+    notes: "Beamer document renderer resolves frame labels, label/hypertarget destinations, hyperlink/hyperref links and safe href/url links. Numeric ref/eqref values and document-wide tags support equation/equation* with explicit tags or automatic numbers. Canvas activation is disabled during text editing. Other counters, full hyperref package execution and PDF annotations are not implemented."
   },
   beamer_manual_bibliography: {
     parser: "partial",
@@ -732,6 +732,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "partial",
     fixtures: ["beamer_footnotes"],
     notes: "Beamer frame footnotes support automatic or explicit numeric marks, multiple and wrapped notes, the stock bottom rule and text template, and explicit [frame] notes inside columns or blocks. Glyph sizes, superscript placement and insertion geometry are checked against LuaLaTeX. Minipage-local footnotes, footnotemark/footnotetext and arbitrary template/font redefinitions are not implemented.",
+  },
+  beamer_float_captions: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["beamer_float_captions"],
+    notes: "Beamer figure/table environments participate in centered source-backed flow. Short captions support the default and numbered stock templates, optional short text, stock label separators, caption-name color and the 11pt class small caption font with 7pt skips. Wrapped long captions and arbitrary caption template/font redefinitions are not implemented.",
   },
   render_pipeline: {
     parser: "not-applicable",
