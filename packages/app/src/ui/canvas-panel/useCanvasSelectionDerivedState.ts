@@ -345,6 +345,17 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     return bySource;
   }, [scopeOverlay.boundsByScopeId, sourceBoundsSvg]);
 
+  const editableSelectedSourceIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!snapshot.parseResult) return ids;
+    for (const sourceId of selectedElementIds) {
+      if (resolvePropertyTargetFromParseResult(snapshot.source, snapshot.parseResult, sourceId).kind === "found") {
+        ids.add(sourceId);
+      }
+    }
+    return ids;
+  }, [selectedElementIds, snapshot.parseResult, snapshot.source]);
+
   const resizablePathShapeSourceIds = useMemo(() => {
     if (!snapshot.scene) {
       return new Set<string>();
@@ -353,6 +364,9 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     const result = new Set<string>();
     const statements = snapshot.parseResult?.figure.body;
     for (const sourceId of selectionBoundsBySource.keys()) {
+      if (!editableSelectedSourceIds.has(sourceId)) {
+        continue;
+      }
       if (matrixSourceIds.has(sourceId)) {
         continue;
       }
@@ -367,13 +381,14 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       }
     }
     return result;
-  }, [matrixCellSourceIds, matrixSourceIds, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, treeChildSourceIds]);
+  }, [editableSelectedSourceIds, matrixCellSourceIds, matrixSourceIds, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, treeChildSourceIds]);
 
   const nodeResizeSourceIds = useMemo(() => {
     const sourceIds = new Set<string>();
     for (const handle of selectedHandles) {
       if (
         handle.kind === "node-position"
+        && editableSelectedSourceIds.has(handle.sourceRef.sourceId)
         && !matrixSourceIds.has(handle.sourceRef.sourceId)
         && !matrixCellSourceIds.has(handle.sourceRef.sourceId)
         && !fitNodeSourceIds.has(handle.sourceRef.sourceId)
@@ -387,7 +402,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       }
     }
     return sourceIds;
-  }, [fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, pathAttachedNodeSourceIds, selectedElementIds, selectedHandles]);
+  }, [editableSelectedSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, pathAttachedNodeSourceIds, selectedElementIds, selectedHandles]);
 
   const scopeResizeSourceIds = useMemo(() => {
     const sourceIds = new Set<string>();
@@ -457,11 +472,16 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
 
   const selectionFrameSourceIds = useMemo(() => {
     const ids = new Set<string>(resizeFrameSourceIds);
+    for (const sourceId of selectedNodeSourceIds) {
+      if (!editableSelectedSourceIds.has(sourceId)) {
+        ids.add(sourceId);
+      }
+    }
     for (const sourceId of matrixSelectionSourceIds) {
       ids.add(sourceId);
     }
     return ids;
-  }, [matrixSelectionSourceIds, resizeFrameSourceIds]);
+  }, [editableSelectedSourceIds, matrixSelectionSourceIds, resizeFrameSourceIds, selectedNodeSourceIds]);
 
   const scopeSelectionSourceIds = useMemo(() => {
     const ids = new Set<string>();

@@ -79,10 +79,13 @@ export function resolveAddShapeDraft(
   const shape = normalizeNodeShape(shapeRaw);
   const safeRequestedWidth = Math.max(requestedWidthPt, DEFAULT_NODE_MINIMUM_DIMENSION_PT);
   const safeRequestedHeight = Math.max(requestedHeightPt, DEFAULT_NODE_MINIMUM_DIMENSION_PT);
+  // PGF double arrows use minimum height for length and minimum width for head span.
+  const minimumWidth = shape === "double arrow" ? safeRequestedHeight : safeRequestedWidth;
+  const minimumHeight = shape === "double arrow" ? safeRequestedWidth : safeRequestedHeight;
   const candidates = dedupeConstraintCandidates([
-    buildConstraintCandidate(shape, safeRequestedWidth, safeRequestedHeight),
-    buildConstraintCandidate(shape, safeRequestedWidth),
-    buildConstraintCandidate(shape, undefined, safeRequestedHeight)
+    buildConstraintCandidate(shape, minimumWidth, minimumHeight),
+    buildConstraintCandidate(shape, minimumWidth),
+    buildConstraintCandidate(shape, undefined, minimumHeight)
   ]);
 
   let best = candidates[0] ?? buildConstraintCandidate(shape);

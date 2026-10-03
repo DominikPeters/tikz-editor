@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import { pt, svgBounds, svgPoint, worldPoint } from "../../packages/core/src/coords/index.js";
 import { PT_PER_CM } from "../../packages/core/src/edit/format.js";
 import type { EditHandle } from "../../packages/core/src/semantic/types.js";
+import { generateElementSource } from "../../packages/core/src/edit/element-templates.js";
+import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
+import { resolveAddShapeDraft } from "../../packages/app/src/ui/canvas-panel/add-shape-draft.js";
 import { identityMatrix } from "../../packages/core/src/semantic/transform.js";
 import {
   createBezierTemplateFromBend,
+  createTemplateForToolDrag,
   resolveHandleIdForDrag,
   resolveBezierControlsFromBend,
   projectResizeDimensionsFromOppositeCorner,
@@ -14,6 +18,25 @@ import type { ResizeFrame } from "../../packages/app/src/ui/canvas-panel/resize-
 
 const cm = (value: number): number => value * PT_PER_CM;
 const wp = (x: number, y: number) => worldPoint(pt(x), pt(y));
+
+it("maps a double-arrow drag to the preview and rendered horizontal dimensions", () => {
+  const width = cm(3);
+  const height = cm(1);
+  const preview = resolveAddShapeDraft("double arrow", width, height).preview;
+  expect(preview.bounds.maxX - preview.bounds.minX).toBeCloseTo(width, 6);
+  expect(preview.bounds.maxY - preview.bounds.minY).toBeCloseTo(height, 6);
+
+  const template = createTemplateForToolDrag("addShape", wp(0, 0), wp(width, height), { selectedAddShape: "double arrow" });
+  const snippet = generateElementSource(template, wp(0, 0));
+  const rendered = renderTikzToSvg(String.raw`\begin{tikzpicture}${snippet}\end{tikzpicture}`);
+  const path = rendered.semantic.scene.elements.find(element => element.kind === "Path");
+  if (!path || path.kind !== "Path") throw new Error("Expected double-arrow outline");
+  const points = path.commands.flatMap(command => command.kind === "M" || command.kind === "L" ? [command.to] : []);
+  expect(Math.max(...points.map(point => point.x)) - Math.min(...points.map(point => point.x))).toBeCloseTo(width, 3);
+  expect(Math.max(...points.map(point => point.y)) - Math.min(...points.map(point => point.y))).toBeCloseTo(height, 3);
+  expect(points[1].x).toBeGreaterThan(0);
+  expect(points[4].x).toBeLessThan(0);
+});
 
 type Point = { x: number; y: number };
 

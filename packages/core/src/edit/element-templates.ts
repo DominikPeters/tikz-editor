@@ -57,8 +57,12 @@ export function generateElementSource(template: ElementTemplate, at: WorldPoint)
             optionParts.push(`minimum height=${formatNumber(template.minimumHeightPt * CM_PER_PT)}cm`);
           }
         } else {
-          optionParts.push(`minimum width=${SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM}cm`);
-          optionParts.push(`minimum height=${SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM}cm`);
+          // PGF double arrows measure head span with width and arrow length with height.
+          const swapDimensions = template.shape === "double arrow";
+          const minimumWidth = swapDimensions ? SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM : SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM;
+          const minimumHeight = swapDimensions ? SHAPE_TOOL_DEFAULT_MINIMUM_WIDTH_CM : SHAPE_TOOL_DEFAULT_MINIMUM_HEIGHT_CM;
+          optionParts.push(`minimum width=${minimumWidth}cm`);
+          optionParts.push(`minimum height=${minimumHeight}cm`);
         }
         return `\\node[${optionParts.join(", ")}]${namePart} at ${atCoord} {${text}};`;
       }
