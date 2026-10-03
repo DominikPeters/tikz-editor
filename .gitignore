@@ -166,3 +166,6 @@ MATRIX_PLAN.md
 /skills-lock.json
 /apps/ipad/
 scripts/report-editor-latest-json-hits.sh
+
+# Local quality campaign notes and discovery reproductions
+/quality/
