@@ -934,19 +934,25 @@ function applyUngroupElements(
   return applyUngroupElementsAction(source, action.elementIds, parseOptions);
 }
 
-function resolveNodeTextSpanForElementId(
+function resolveNodeTextTargetForElementId(
   source: string,
   elementId: string,
   parseOptions: EditParseOptions
-): Span | null {
+): { textSpan: Span; sourceId: string } | null {
   const normalizedId = elementId.trim();
   if (normalizedId.length === 0) {
     return null;
   }
 
   const resolvedTarget = resolvePropertyTarget(source, normalizedId, parseOptions);
-  if (resolvedTarget.kind === "found" && resolvedTarget.target.textSpan) {
-    return resolvedTarget.target.textSpan;
+  if (resolvedTarget.kind === "found") {
+    const target = resolvedTarget.target;
+    if (target.textSpan) {
+      return {
+        textSpan: target.textSpan,
+        sourceId: target.ownerSourceId ?? target.matrixSourceId ?? target.treeRootSourceId ?? target.id
+      };
+    }
   }
 
   const statementSnapshot = parseStatementSnapshot(source, parseOptions);
@@ -954,7 +960,7 @@ function resolveNodeTextSpanForElementId(
   if (statementRef?.statement.kind === "Path" && statementRef.statement.command === "node") {
     const nodeItem = statementRef.statement.items.find((item) => item.kind === "Node");
     if (nodeItem?.kind === "Node") {
-      return nodeItem.textSpan;
+      return { textSpan: nodeItem.textSpan, sourceId: statementRef.statement.id };
     }
   }
 
@@ -974,12 +980,12 @@ function resolveNodeTextSpanForElementId(
     if (statement.command === "node" && statement.id === normalizedId) {
       const nodeItem = statement.items.find((item) => item.kind === "Node");
       if (nodeItem?.kind === "Node") {
-        return nodeItem.textSpan;
+        return { textSpan: nodeItem.textSpan, sourceId: statement.id };
       }
     }
     for (const item of statement.items) {
       if (item.kind === "Node" && item.id === normalizedId) {
-        return item.textSpan;
+        return { textSpan: item.textSpan, sourceId: statement.id };
       }
     }
   }
@@ -1135,10 +1141,11 @@ function applyUpdateNodeText(
   action: Extract<EditAction, { kind: "updateNodeText" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
-  const textSpan = resolveNodeTextSpanForElementId(source, action.elementId, parseOptions);
-  if (!textSpan) {
+  const target = resolveNodeTextTargetForElementId(source, action.elementId, parseOptions);
+  if (!target) {
     return { kind: "unsupported", reason: `No editable node text target found for ${action.elementId}` };
   }
+  const { textSpan } = target;
   const updated = replaceSpan(source, textSpan, action.text);
   if (updated.source === source) {
     return { kind: "unsupported", reason: "Node text update would not change the source." };
@@ -1153,7 +1160,7 @@ function applyUpdateNodeText(
         replacement: action.text
       }
     ],
-    changedSourceIds: [action.elementId.trim()]
+    changedSourceIds: [target.sourceId.trim()]
   };
 }
 

@@ -24,6 +24,7 @@ describe("applyEditAction – updateNodeText", () => {
   \node[draw] at (0,0) {$x-y$};
 \end{tikzpicture}`);
     expect(result.patches).toHaveLength(1);
+    expect(result.changedSourceIds).toEqual(["path:0"]);
   });
 
   it("replaces the selected repeated path-attached node text when neighboring coordinates use macros", () => {
@@ -49,6 +50,7 @@ describe("applyEditAction – updateNodeText", () => {
   \draw[<->, thick] (\r+0.02,0) -- node[above, sloped] {$R$} (2*\r-0.01,0);
 \end{tikzpicture}`);
     expect(result.patches).toHaveLength(1);
+    expect(result.changedSourceIds).toEqual(["path:2"]);
   });
 
   it("updates matrix cell text by synthetic matrix-cell ids", () => {
@@ -71,6 +73,7 @@ describe("applyEditAction – updateNodeText", () => {
     expect(result.newSource).toContain("A & Beta");
     expect(result.newSource).toContain("Beta \\\\");
     expect(result.patches).toHaveLength(1);
+    expect(result.changedSourceIds).toEqual(["path:0"]);
   });
 
   it("updates matrix-of-math-nodes cell text by synthetic matrix-cell ids", () => {
@@ -92,6 +95,7 @@ describe("applyEditAction – updateNodeText", () => {
     }
     expect(result.newSource).toContain("x^2 & \\frac{1}{y}");
     expect(result.patches).toHaveLength(1);
+    expect(result.changedSourceIds).toEqual(["path:0"]);
   });
 
   it("updates tree child text by synthetic tree-child ids", () => {
@@ -120,6 +124,7 @@ describe("applyEditAction – updateNodeText", () => {
       throw new Error("Expected nested tree-child text edit to succeed");
     }
     expect(nestedChildResult.newSource).toContain("node {left-left*}");
+    expect(nestedChildResult.changedSourceIds).toEqual(["path:0"]);
 
     const directChildResult = applyEditAction(source, [], {
       kind: "updateNodeText",
@@ -131,6 +136,7 @@ describe("applyEditAction – updateNodeText", () => {
       throw new Error("Expected direct tree-child text edit to succeed");
     }
     expect(directChildResult.newSource).toContain("node {left*}");
+    expect(directChildResult.changedSourceIds).toEqual(["path:0"]);
   });
 
   it("rejects blank, missing, and no-op node text updates", () => {

@@ -256,7 +256,8 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
         diagnostics: []
       };
     }
-    if (!request.textEditMaskSpan && (changedSourceIds.length > 0 || request.inferSourceChanges)) {
+    const inferChangedSource = request.inferSourceChanges && cache.warmSource !== null && cache.warmSource !== request.source;
+    if (!request.textEditMaskSpan && (changedSourceIds.length > 0 || inferChangedSource)) {
       const result = await computeSnapshotIncremental(
         request.source,
         request.sourceRevision ?? null,
