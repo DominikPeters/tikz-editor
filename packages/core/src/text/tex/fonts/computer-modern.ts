@@ -64,6 +64,10 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "lmsans9-regular",
   "lmsans9-oblique",
   "tcrm1000",
+  "cmss9",
+  "cmss12",
+  "cmss17",
+  "lmromandemi10-regular",
 ] as const;
 
 export type DefaultComputerModernTextFont = typeof DEFAULT_COMPUTER_MODERN_TEXT_FONTS[number];
@@ -124,6 +128,9 @@ export const DEFAULT_COMPUTER_MODERN_MATH_FONTS = [
   "rsfs10",
   "rsfs7",
   "rsfs5",
+  "cmss9",
+  "cmss12",
+  "cmss17",
 ] as const;
 
 export type DefaultComputerModernMathFont = typeof DEFAULT_COMPUTER_MODERN_MATH_FONTS[number];

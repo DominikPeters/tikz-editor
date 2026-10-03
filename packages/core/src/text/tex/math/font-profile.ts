@@ -128,6 +128,8 @@ export interface TexMathFontProfile {
     baseAtPt: TexLength
   ) => TexLength;
   readonly resolveMathFont: (request: TexMathFontRequest) => ResolvedTexFont;
+  /** A class can redeclare bold symbol families independently of normal math. */
+  readonly resolveBoldMathFont?: (request: TexMathFontRequest) => ResolvedTexFont | null;
   /**
    * Optional class/package override for math alphabets such as `\mathbf`.
    * Returning null retains the profile-independent LaTeX alphabet mapping.

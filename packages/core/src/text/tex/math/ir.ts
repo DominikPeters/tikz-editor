@@ -309,6 +309,9 @@ export type TexMathAlphabetCommand =
   | "boldmathcal"
   /** Internal effective alphabet for \mathfrak inside a bold math version. */
   | "boldmathfrak"
+  /** Internal effective alphabet for \mathrm inside a bold math version. */
+  | "boldmathrm"
+  | "bm"
   | "boldsymbol"
   | "mathbf"
   | "mathbb"

@@ -716,6 +716,21 @@ describe("TeX math SVG rendering", () => {
     expect(body).toContain('data-tex-font="rsfs10" data-tex-glyph="70"');
   });
 
+  it("renders bm and escaped percent as native glyph paths with authored character spans", () => {
+    const parsed = parseTexMath(String.raw`\bm{x}_i+10\%`, { sourceOffset: 30 });
+    const result = layoutTexMathList(parsed.list);
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+
+    const body = renderTexMathHListSvgBody(result.hlist);
+    expect(body).toContain('data-tex-font="cmmib10" data-tex-glyph="120"');
+    expect(body).toContain('data-tex-font="cmmi7" data-tex-glyph="105"');
+    expect(body).toContain('data-tex-font="cmr10" data-tex-glyph="37"');
+    expect(body).toContain('data-source-start="34" data-source-end="35"');
+    expect(body).toContain('data-source-start="41" data-source-end="43"');
+    expect(body).not.toContain("math-error");
+  });
+
   it("renders bold Fraktur through the genuine Euler bold face", () => {
     const parsed = parseTexMath(String.raw`\boldsymbol{\mathfrak{g}}`);
     const result = layoutTexMathList(parsed.list);

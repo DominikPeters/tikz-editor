@@ -128,15 +128,34 @@ export function createBeamerTexMathFontProfile(
       }
       if (request.family === "operators") {
         return computerModernTexMetricProvider.resolveFont({
-          fontId: atPt <= 8 ? "cmss8" : "cmss10",
+          // beamerbasefont.sty installs these NFSS optical sizes for cmss.
+          fontId: atPt <= 8 ? "cmss8" : atPt <= 9 ? "cmss9" :
+            atPt < 12 ? "cmss10" : atPt < 17.28 ? "cmss12" : "cmss17",
           atPt,
         });
       }
       return base.resolveMathFont(request);
     },
+    resolveBoldMathFont(request) {
+      // Bold pureletters/numbers are selected below through the alphabet
+      // resolver. Greek and symbol families retain their genuine CM faces.
+      if (request.family !== "operators") return null;
+      return computerModernTexMetricProvider.resolveFont({
+        fontId: "cmssbx10",
+        atPt: base.resolveMathStyleAtPt(request.style, texLength(request.baseAtPt ?? 10)),
+      });
+    },
     resolveMathAlphabetFont(request) {
+      if (request.alphabet === "boldmathrm" && /^[A-Za-z0-9]$/.test(request.text)) {
+        // Beamer declares the bold Roman math alphabet with bfdefault=b;
+        // TU Latin Modern therefore uses the demi face, rather than bx text.
+        return computerModernTexMetricProvider.resolveFont({
+          fontId: "lmromandemi10-regular",
+          atPt: base.resolveMathStyleAtPt(request.style, request.baseAtPt),
+        });
+      }
       if (
-        (request.alphabet !== "mathbf" && request.alphabet !== "mathrm") ||
+        (request.alphabet !== "mathbf" && request.alphabet !== "mathrm" && request.alphabet !== "boldsymbol" && request.alphabet !== "bm") ||
         !/^[A-Za-z0-9]$/.test(request.text)
       ) {
         return base.resolveMathAlphabetFont?.(request) ?? null;
@@ -147,8 +166,8 @@ export function createBeamerTexMathFontProfile(
           // beamerbasefont.sty resets \mathrm to the current Roman text
           // family; its \mathbf declaration uses the active math family.
           family: request.alphabet === "mathrm" ? "roman" : "normal",
-          series: request.alphabet === "mathbf" ? "bold" : "medium",
-          shape: "upright",
+          series: request.alphabet === "mathrm" ? "medium" : "bold",
+          shape: (request.alphabet === "boldsymbol" || request.alphabet === "bm") && /^[A-Za-z]$/.test(request.text) ? "italic" : "upright",
         },
         base.resolveMathStyleAtPt(request.style, request.baseAtPt),
         computerModernTexMetricProvider

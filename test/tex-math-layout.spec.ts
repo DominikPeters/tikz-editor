@@ -1239,6 +1239,120 @@ describe("TeX math hlist layout", () => {
     ]);
   });
 
+  it("lays out escaped percent from the operators font without adding math spacing", () => {
+    const result = layout(String.raw`10\%`);
+
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.map((item) => item.kind)).toEqual(["glyph", "glyph", "glyph"]);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => [glyph.fontId, glyph.code]))
+      .toEqual([["cmr10", 49], ["cmr10", 48], ["cmr10", 37]]);
+  });
+
+  it("selects Beamer's declared CM sans optical operator faces at text and script sizes", () => {
+    const fontProfile = createBeamerTexMathFontProfile({
+      family: "sans", series: "medium", shape: "upright", sizePt: 10.95, lineHeightPt: 13.6,
+    });
+    const parsed = parseTexMath(String.raw`\%`);
+    const fonts = [8, 9, 10.95, 12, 14.4, 17.28].map((baseAtPt) => {
+      const result = layoutTexMathList(parsed.list, { fontProfile, baseAtPt });
+      expect(result.supported).toBe(true);
+      return flattenGlyphItems(result.hlist?.items ?? [])[0]?.fontId;
+    });
+
+    expect(fonts).toEqual(["cmss8", "cmss9", "cmss10", "cmss12", "cmss12", "cmss17"]);
+    expect(fontProfile.resolveMathFont({ family: "operators", style: "script", baseAtPt: 14.4 }))
+      .toMatchObject({ id: "cmss10", atPt: 10 });
+    for (const fontId of ["cmss9", "cmss12", "cmss17"]) {
+      expect(computerModernTexMetricProvider.resolveFont({ fontId, atPt: 10 }).data.glyphs?.[37])
+        .toBeTruthy();
+    }
+  });
+
+  it("uses the active Beamer math family for boldsymbol and bm while preserving genuine Greek and symbols", () => {
+    const parsed = parseTexMath(String.raw`\bm{x+1=\alpha\leq\hat y}+x`);
+    const result = layoutTexMathList(parsed.list, {
+      baseAtPt: 10.95,
+      fontProfile: createBeamerTexMathFontProfile({
+        family: "sans", series: "medium", shape: "upright", sizePt: 10.95, lineHeightPt: 13.6,
+      }),
+    });
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => [glyph.text, glyph.fontId]))
+      .toEqual([
+        ["x", "lmsans10-boldoblique"], ["+", "cmbx10"], ["1", "lmsans10-bold"],
+        ["=", "cmbx10"], [String.raw`\alpha`, "cmmib10"], [String.raw`\leq`, "cmbsy10"],
+        [String.raw`\hat`, "cmbx10"], ["y", "lmsans10-boldoblique"],
+        ["+", "cmss10"], ["x", "lmsans10-oblique"],
+      ]);
+  });
+
+  it("keeps Beamer's active bold operators distinct from bm's cached symbol font", () => {
+    const fontProfile = createBeamerTexMathFontProfile({
+      family: "sans", series: "medium", shape: "upright", sizePt: 10.95, lineHeightPt: 13.6,
+    });
+    const result = layoutTexMathList(parseTexMath(String.raw`\bm{+}\boldsymbol{+}`).list, {
+      fontProfile, baseAtPt: 10.95,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => glyph.fontId))
+      .toEqual(["cmbx10", "cmssbx10"]);
+  });
+
+  it("retains the Roman math alphabet through nested Beamer bold versions", () => {
+    const fontProfile = createBeamerTexMathFontProfile({
+      family: "sans", series: "medium", shape: "upright", sizePt: 10.95, lineHeightPt: 13.6,
+    });
+    const result = layoutTexMathList(parseTexMath(String.raw`\bm{\mathrm{R}}+\boldsymbol{\mathrm{S}}+\mathbf{E}`).list, {
+      fontProfile, baseAtPt: 10.95,
+    });
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).filter((glyph) => /^[RSE]$/.test(glyph.text))
+      .map((glyph) => [glyph.text, glyph.fontId]))
+      .toEqual([["R", "lmromandemi10-regular"], ["S", "lmromandemi10-regular"], ["E", "lmsans10-bold"]]);
+  });
+
+  it("reports bm's unsupported synthetic extension fallback instead of painting an unboldened operator", () => {
+    const parsed = parseTexMath(String.raw`\bm{\sum}_{i=1}^{n}`, { sourceOffset: 20 });
+    const result = layoutTexMathList(parsed.list);
+
+    expect(parsed.diagnostics).toEqual([]);
+    expect(result).toEqual({
+      supported: false,
+      hlist: null,
+      errors: [{
+        message: "The bm package's synthetic pmb fallback for extension operators is not supported.",
+        sourceSpan: { start: 20, end: 39 },
+      }],
+    });
+  });
+
+  it("keeps bm single characters unboxed for external scripts and restores the outer math version", () => {
+    const result = layout(String.raw`\bm{f}_i+\bm{\bm y}+z`);
+
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map((glyph) => [glyph.text, glyph.fontId]))
+      .toEqual([
+        ["f", "cmmib10"], ["i", "cmmi7"], ["+", "cmr10"],
+        ["y", "cmmib10"], ["+", "cmr10"], ["z", "cmmi10"],
+      ]);
+    const base = result.hlist?.items[0] as TexMathGlyphLayoutItem;
+    const subscript = result.hlist?.items[1] as TexMathChildHListLayoutItem;
+    expect(subscript).toMatchObject({ kind: "hlist", role: "subscript", x: base.width });
+    expect(subscript.x).toBeLessThan(base.width + base.italicCorrection);
+  });
+
+  it("retains binary and relation glue around bold math characters", () => {
+    for (const command of ["bm", "boldsymbol"]) {
+      const result = layout(`x\\${command}{+}y\\${command}{=}z`);
+      expect(result.supported).toBe(true);
+      expect(result.hlist?.items.filter((item) => item.kind === "glue").map((item) => item.mu))
+        .toEqual([4, 4, 5, 5]);
+    }
+  });
+
   it("uses genuine bold Euler Fraktur at all optical sizes inside boldsymbol", () => {
     const result = layout(String.raw`\boldsymbol{\mathfrak{g}+x_{\mathfrak{h}}+x_{y_{\mathfrak{k}}}}`);
     expect(result.supported).toBe(true);

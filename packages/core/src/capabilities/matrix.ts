@@ -666,6 +666,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["text_tabular"],
     notes: "Shared TeX text boxes support l/c/r, fixed-width p columns, array m/b columns and font/alignment declarations, repeated preambles, multicolumn, intercolumn inserts, scoped registers, row spacing, kernel/array rules and stock booktabs rules, spacing and trimmed partial rules. Cell and preamble glyphs retain source ownership through the common text/math renderer. Column macros, multicolumn boundary inserts, nonparagraph vertical cell material and package-specific table engines remain visible source literals."
   },
+  text_math_fonts: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["text_math_fonts"],
+    notes: "Shared math layout supports scoped math alphabets, boldsymbol and the common bm alphabet with genuine bold fonts, class-specific Latin/operator substitutions, nested Roman alphabets, scripts and accents. Escaped percent uses the active operators font. bm's unavailable bold extension fallback (pmb) is explicitly unsupported; arbitrary math font declarations are not executed. Dedicated parser, spacing, font and LuaLaTeX glyph checks cover these contracts.",
+  },
   text_transform_boxes: {
     parser: "partial",
     semantic: "not-applicable",

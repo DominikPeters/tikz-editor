@@ -1541,9 +1541,18 @@ class TexMathParser {
     const command = this.advance();
     const content = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} content`);
     const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+    const singleAtom = content?.list.items.length === 1 && content.list.items[0]?.kind === "atom"
+      ? content.list.items[0]
+      : null;
+    // bm preserves a math character's class; amsbsy's boldsymbol preserves
+    // binary/relation spacing through \binrel@ while boxing other contents.
+    const atomClass = (alphabet === "bm" || alphabet === "boldsymbol") && singleAtom &&
+      (alphabet === "bm" || singleAtom.atomClass === "bin" || singleAtom.atomClass === "rel")
+      ? singleAtom.atomClass
+      : "ord";
     return this.maybeParseScripts({
       kind: "atom",
-      atomClass: "ord",
+      atomClass,
       nucleus: {
         kind: "alphabet",
         alphabet,
@@ -5977,6 +5986,8 @@ function stackingCommandName(command: string): "overset" | "underset" | "overund
 
 function alphabetCommandName(command: string): TexMathAlphabetCommand | null {
   switch (commandName(command)) {
+    case "bm":
+      return "bm";
     case "boldsymbol":
       return "boldsymbol";
     case "mathbf":
@@ -6324,6 +6335,7 @@ function atomClassForToken(token: TexMathToken): TexMathAtomClass | null {
 }
 
 const ordinaryNamedSymbolCommands = new Set([
+  "%",
   "|",
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
   "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",

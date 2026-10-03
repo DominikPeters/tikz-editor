@@ -658,8 +658,13 @@ export function layoutTexMathList(
       atom.nucleus.kind === "glyph" ? ordNoads.glyphs.get(atom.nucleus) : undefined
     );
     if (!atomLayout) {
+      const bmExtensionFallback = item.nucleus.kind === "alphabet" && item.nucleus.alphabet === "bm" &&
+        item.nucleus.list.items.some((child) => child.kind === "atom" && child.nucleus.kind === "operator" &&
+          child.nucleus.command !== "lim");
       errors.push({
-        message: "Only simple glyph math atoms are supported by the initial math hlist layout.",
+        message: bmExtensionFallback
+          ? "The bm package's synthetic pmb fallback for extension operators is not supported."
+          : "Only simple glyph math atoms are supported by the initial math hlist layout.",
         sourceSpan: item.sourceSpan,
       });
       continue;
@@ -1162,6 +1167,17 @@ function shouldUseOperatorLimits(
 ): boolean {
   if (!atom.subscript && !atom.superscript) {
     return false;
+  }
+  if (atom.nucleus.kind === "alphabet" && atom.nucleus.alphabet === "bm" && atom.nucleus.list.items.length === 1) {
+    const inner = atom.nucleus.list.items[0];
+    if (inner?.kind === "atom" && !inner.subscript && !inner.superscript) {
+      return shouldUseOperatorLimits({
+        ...inner,
+        subscript: atom.subscript,
+        superscript: atom.superscript,
+        ...(atom.limits !== undefined ? { limits: atom.limits } : {}),
+      }, style);
+    }
   }
   if (atom.nucleus.kind !== "operator" && atom.nucleus.kind !== "operator-name" && atom.limits === undefined) {
     return false;
@@ -1795,6 +1811,15 @@ function layoutAlphabetNucleus(
   outerAlphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
   const alphabet = nestedMathAlphabet(nucleus.alphabet, outerAlphabet);
+  const singleAtom = nucleus.list.items.length === 1 && nucleus.list.items[0]?.kind === "atom"
+    ? nucleus.list.items[0]
+    : null;
+  if (nucleus.alphabet === "bm" && singleAtom && !singleAtom.subscript && !singleAtom.superscript) {
+    // bm changes the underlying noad instead of boxing it. Keep the glyph's
+    // italic correction separate so an external subscript starts at its advance.
+    const result = layoutNucleus(singleAtom.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+    return result ? mathAtomLayout({ ...result, sourceSpan: nucleus.sourceSpan }) : null;
+  }
   const result = layoutTexMathList(nucleus.list, {
     fontProfile,
     style,
@@ -1828,21 +1853,24 @@ function nestedMathAlphabet(
   alphabet: TexMathAlphabetCommand,
   outerAlphabet?: TexMathAlphabetCommand
 ): TexMathAlphabetCommand {
-  if (outerAlphabet !== "boldsymbol") {
+  if (outerAlphabet !== "boldsymbol" && outerAlphabet !== "bm") {
     return alphabet;
   }
   switch (alphabet) {
     case "mathrm":
+      return "boldmathrm";
     case "mathbf":
       return "mathbf";
     case "mathit":
-      return "boldsymbol";
+      return outerAlphabet;
     case "mathcal":
       return "boldmathcal";
     case "mathfrak":
       return "boldmathfrak";
     case "boldmathcal":
     case "boldmathfrak":
+    case "boldmathrm":
+    case "bm":
     case "boldsymbol":
     case "mathbb":
     case "mathscr":
@@ -5343,6 +5371,9 @@ function layoutOperatorNucleus(
   if (nucleus.command === "lim") {
     return layoutTextOperatorNucleus(nucleus, fontProfile, style, baseAtPt, "lim", alphabet);
   }
+  // bm's fallback for a font without a bold extension is a synthetic pmb
+  // construction. Keep it explicit until that three-copy paint is supported.
+  if (alphabet === "bm") return null;
   return layoutLargeOperatorNucleus(nucleus, fontProfile, style, baseAtPt);
 }
 
@@ -5354,8 +5385,8 @@ function layoutTextOperatorNucleus(
   text: string,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const font = alphabet === "boldsymbol"
-    ? resolveBoldMathFont(fontProfile, "operators", style, baseAtPt)
+  const font = alphabet === "boldsymbol" || alphabet === "bm"
+    ? resolveBoldMathFont(fontProfile, "operators", style, baseAtPt, alphabet)
     : fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
   const items: TexMathGlyphLayoutItem[] = [];
   let cursor = 0;
@@ -5403,8 +5434,8 @@ function layoutOperatorNameNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const font = alphabet === "boldsymbol"
-    ? resolveBoldMathFont(fontProfile, "operators", style, baseAtPt)
+  const font = alphabet === "boldsymbol" || alphabet === "bm"
+    ? resolveBoldMathFont(fontProfile, "operators", style, baseAtPt, alphabet)
     : fontProfile.resolveMathFont({ family: "operators", style, baseAtPt });
   const items: TexMathHListItem[] = [];
   let cursor = 0;
@@ -6640,8 +6671,8 @@ function resolveMathSymbolParts(
         sourceSpan: nucleus.sourceSpan,
       });
     }
-    const font = alphabet === "boldsymbol"
-      ? resolveBoldMathFont(fontProfile, glyph.family, style, baseAtPt)
+    const font = alphabet === "boldsymbol" || alphabet === "bm"
+      ? resolveBoldMathFont(fontProfile, glyph.family, style, baseAtPt, alphabet)
       : fontProfile.resolveMathFont({
         family: glyph.family,
         style,
@@ -6680,8 +6711,13 @@ function resolveBoldMathFont(
   fontProfile: TexMathFontProfile,
   family: TexMathFontFamily,
   style: TexMathStyle,
-  baseAtPt: TexLength
+  baseAtPt: TexLength,
+  alphabet?: TexMathAlphabetCommand
 ): ResolvedTexFont {
+  // bm caches symbol family replacements when the package loads, before
+  // Beamer's begin-document substitutions. amsbsy selects the active version.
+  const profileFont = alphabet === "bm" ? null : fontProfile.resolveBoldMathFont?.({ family, style, baseAtPt });
+  if (profileFont) return profileFont;
   let fontId: string | null = null;
   if (family === "operators") {
     fontId = style === "script" ? "cmbx7" : style === "scriptscript" ? "cmbx5" : "cmbx10";
@@ -6714,8 +6750,8 @@ function resolveMathAccent(
   }
   return resolvedMathGlyph({
     kind: "glyph",
-    font: alphabet === "boldsymbol"
-      ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt)
+    font: alphabet === "boldsymbol" || alphabet === "bm"
+      ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt, alphabet)
       : fontProfile.resolveMathFont({ family: resolved.family, style, baseAtPt }),
     family: resolved.family,
     code: resolved.code,
@@ -6784,6 +6820,7 @@ function defaultLuaLatexMathAlphabetFontId(
       if (style === "script") return "eufb7";
       if (style === "scriptscript") return "eufb5";
       return "eufb10";
+    case "bm":
     case "boldsymbol":
       if (text !== undefined && /^\d$/.test(text)) {
         if (style === "script") return "cmbx7";
@@ -6793,6 +6830,7 @@ function defaultLuaLatexMathAlphabetFontId(
       if (style === "script") return "cmmib7";
       if (style === "scriptscript") return "cmmib5";
       return "cmmib10";
+    case "boldmathrm":
     case "mathbf":
       if (style === "script") {
         return "cmbx7";
@@ -6966,6 +7004,10 @@ function defaultLuaLatexMathSymbols(
     }
   }
   switch (command) {
+    // LaTeX declares \% with \chardef: in math it keeps character 37 in
+    // the operators family rather than entering a text box or a comment.
+    case "%":
+      return [{ family: "operators", code: 37 }];
     case "Gamma":
       return [{ family: "operators", code: 0 }];
     case "Delta":

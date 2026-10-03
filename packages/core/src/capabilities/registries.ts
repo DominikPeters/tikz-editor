@@ -9,6 +9,7 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // evaluator does not apply; their renderer contracts have dedicated tests.
   // Manual bibliography stock templates share the existing bibliography ID.
   // Source-backed tabular and booktabs share the text alignment ID.
+  // Genuine scoped math alphabets and class font substitutions share one ID.
   // Graphicx text/paragraph transforms share the text transform box ID.
   // Frame footnote projection and stock insertion share the footnote ID.
   // Stock figure/table captions share their source-backed flow capability.

@@ -1411,6 +1411,45 @@ describe("TeX math parser", () => {
     });
   });
 
+  it("parses escaped percent as an ordinary math character with its authored span", () => {
+    const result = parseTexMath(String.raw`10\%`, { sourceOffset: 30 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 2)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 32, end: 34 },
+      nucleus: { kind: "glyph", text: String.raw`\%`, sourceSpan: { start: 32, end: 34 } },
+    });
+  });
+
+  it("preserves bm character classes, scripts, and the original argument source spans", () => {
+    const result = parseTexMath(String.raw`\bm{x}_i+\bm =+\bm{+}+\bm{(}`, { sourceOffset: 20 });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(atomAt(result, 0)).toMatchObject({
+      atomClass: "ord",
+      sourceSpan: { start: 20, end: 28 },
+      nucleus: {
+        kind: "alphabet", alphabet: "bm",
+        commandSourceSpan: { start: 20, end: 23 },
+        sourceSpan: { start: 20, end: 26 },
+        list: { sourceSpan: { start: 24, end: 25 } },
+      },
+      subscript: { sourceSpan: { start: 26, end: 28 } },
+    });
+    expect([atomAt(result, 2).atomClass, atomAt(result, 4).atomClass, atomAt(result, 6).atomClass])
+      .toEqual(["rel", "bin", "open"]);
+  });
+
+  it("preserves amsbsy boldsymbol binary and relation classes while boxing other contents", () => {
+    const result = parseTexMath(String.raw`\boldsymbol{+}\boldsymbol{=}\boldsymbol{(}`);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items.map((item) => item.kind === "atom" ? item.atomClass : null))
+      .toEqual(["bin", "rel", "ord"]);
+    expect(atomAt(result, 0).nucleus).toMatchObject({ kind: "alphabet", alphabet: "boldsymbol" });
+  });
+
   it("parses typewriter and calligraphic math alphabet commands", () => {
     const result = parseTexMath(String.raw`\mathtt{x}+\mathcal{A}`);
     const typewriter = atomAt(result, 0);
