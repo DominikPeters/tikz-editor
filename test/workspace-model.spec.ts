@@ -145,7 +145,7 @@ describe("workspace model", () => {
     });
 
     expect(workspace.activeDocumentId).toBe("doc-b");
-    expect(workspace.tabOrder).toEqual(["doc-b"]);
+    expect(workspace.tabOrder).toEqual(["doc-b", "doc-a"]);
     expect(workspace.recentDocumentIds).toEqual(["doc-b"]);
   });
 
@@ -180,6 +180,15 @@ describe("workspace model", () => {
 
     expect(projected.activeDocumentId).toBe(documentId);
     expect(projected.tabOrder).toEqual([documentId]);
+
+    const recovered = projectState({
+      ...workspace,
+      activeDocumentId: "missing",
+      tabOrder: ["missing"]
+    }, ui);
+    expect(recovered.activeDocumentId).toBe(documentId);
+    expect(recovered.tabOrder).toEqual([documentId]);
+    expect(recovered.documents[documentId].source).toBe(workspace.documents[documentId].source);
 
     const replacement = projectState({
       ...workspace,

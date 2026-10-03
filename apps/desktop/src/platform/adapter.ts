@@ -1,6 +1,7 @@
 import type { AppMenuCommandId } from "@tikz-editor/app/app-menu";
 import type { LinkedTextReadResult, LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
 import type { EditorPlatform, MenuCommandHandler } from "@tikz-editor/app/platform/types";
+import { resolvePlatformStorage, type StorageLike } from "@tikz-editor/app/platform/storage";
 import type { DocumentFileRef } from "@tikz-editor/app/store/types";
 import {
   createDefaultBridge,
@@ -13,11 +14,6 @@ import {
   createNativeDesktopMenuManager,
   serializeDesktopContextMenuItems
 } from "./native-menu";
-
-type StorageLike = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-};
 
 export type DesktopPlatformEnvironment = {
   storage?: StorageLike;
@@ -49,22 +45,6 @@ function logDesktopPlatformDebug(message: string, error?: unknown): void {
   console.info(`[tikz-editor] ${message}`);
 }
 
-function resolveStorage(env: DesktopPlatformEnvironment): StorageLike {
-  if (env.storage) {
-    return env.storage;
-  }
-  if (typeof localStorage !== "undefined") {
-    return localStorage;
-  }
-  const memory = new Map<string, string>();
-  return {
-    getItem: (key) => memory.get(key) ?? null,
-    setItem: (key, value) => {
-      memory.set(key, value);
-    }
-  };
-}
-
 function toDesktopFileRef(path: string, name: string): DocumentFileRef {
   return { kind: "file", name, path, provider: "desktop-fs" };
 }
@@ -94,7 +74,7 @@ function bytesFromBase64(base64: string): Uint8Array {
 
 export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {}): EditorPlatform {
   const mergedEnv = { ...readInjectedTestEnvironment(), ...env };
-  const storage = resolveStorage(mergedEnv);
+  const storage = resolvePlatformStorage(mergedEnv.storage);
   const defaultBridge = mergedEnv.bridge ?? createDefaultBridge();
   let bridgeOverride: DesktopBridge | null = null;
   const getBridge = () => bridgeOverride ?? readInjectedTestEnvironment().bridge ?? mergedEnv.bridge ?? defaultBridge;

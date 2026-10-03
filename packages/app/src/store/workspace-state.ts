@@ -51,6 +51,12 @@ export type WorkspaceSeed = {
   recentDocumentIds: string[];
 };
 
+/** Ordering is recoverable UI metadata; it must not hide valid documents. */
+export function normalizeWorkspaceTabOrder(tabOrder: readonly string[], documentIds: Iterable<string>): string[] {
+  const validIds = new Set(documentIds);
+  return [...new Set([...tabOrder.filter((id) => validIds.has(id)), ...validIds])];
+}
+
 function createDocumentId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -161,18 +167,17 @@ export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePer
     docs[doc.id] = doc;
   }
 
-  const tabOrder = seed.tabOrder.filter((id) => hasDocument(docs, id));
-  const fallbackOrder = tabOrder.length > 0 ? tabOrder : Object.keys(docs);
-  if (fallbackOrder.length === 0) {
+  const tabOrder = normalizeWorkspaceTabOrder(seed.tabOrder, Object.keys(docs));
+  if (tabOrder.length === 0) {
     return createInitialWorkspaceState();
   }
-  const activeDocumentId = hasDocument(docs, seed.activeDocumentId) ? seed.activeDocumentId : fallbackOrder[0];
-  const seededRecents = seed.recentDocumentIds.filter((id) => hasDocument(docs, id));
+  const activeDocumentId = hasDocument(docs, seed.activeDocumentId) ? seed.activeDocumentId : tabOrder[0];
+  const seededRecents = [...new Set(seed.recentDocumentIds.filter((id) => hasDocument(docs, id)))];
   const normalizedRecents = seededRecents.length > 0 ? seededRecents : [activeDocumentId];
   return {
     workspaceVersion: WORKSPACE_VERSION,
     documents: docs,
-    tabOrder: fallbackOrder,
+    tabOrder,
     activeDocumentId,
     recentDocumentIds: normalizedRecents
   };
@@ -182,12 +187,13 @@ function normalizeWorkspaceActiveDocument(workspace: WorkspacePersistedState): W
   if (hasDocument(workspace.documents, workspace.activeDocumentId)) {
     return workspace;
   }
-  const fallbackId = workspace.tabOrder.find((id) => hasDocument(workspace.documents, id));
+  const tabOrder = normalizeWorkspaceTabOrder(workspace.tabOrder, Object.keys(workspace.documents));
+  const fallbackId = tabOrder[0];
   if (fallbackId) {
     return {
       ...workspace,
       activeDocumentId: fallbackId,
-      tabOrder: workspace.tabOrder.filter((id) => hasDocument(workspace.documents, id))
+      tabOrder
     };
   }
   const replacement = createUntitledDocumentSession();

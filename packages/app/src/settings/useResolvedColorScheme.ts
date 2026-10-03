@@ -13,6 +13,7 @@ export function useResolvedColorScheme(): "light" | "dark" {
   useEffect(() => {
     if (colorScheme !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setSystemDark(mq.matches);
     const handler = (e: MediaQueryListEvent) => { setSystemDark(e.matches); };
     mq.addEventListener("change", handler);
     return () => { mq.removeEventListener("change", handler); };

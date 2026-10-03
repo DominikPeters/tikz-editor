@@ -129,7 +129,7 @@ describe("workspace storage migration", () => {
 
     const seed = loadWorkspaceSeed();
     expect(seed?.activeDocumentId).toBe("doc-2");
-    expect(seed?.tabOrder).toEqual(["doc-2"]);
+    expect(seed?.tabOrder).toEqual(["doc-2", "doc-1"]);
     expect(seed?.recentDocumentIds).toEqual(["doc-2"]);
     expect(seed?.documents[0]).toMatchObject({
       id: "doc-1",

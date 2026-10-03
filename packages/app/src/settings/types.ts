@@ -56,6 +56,19 @@ export const EDITOR_FONT_SIZE_OPTIONS = Array.from(
   (_, index) => EDITOR_FONT_SIZE_MIN_PX + index
 );
 
+export const UI_FONT_SIZE_MIN_PX = 10;
+export const UI_FONT_SIZE_MAX_PX = 14;
+export const UI_FONT_SIZE_OPTIONS = Array.from(
+  { length: UI_FONT_SIZE_MAX_PX - UI_FONT_SIZE_MIN_PX + 1 },
+  (_, index) => UI_FONT_SIZE_MIN_PX + index
+);
+export const CANVAS_HANDLE_SIZE_OPTIONS = [7, 9, 11] as const;
+export const CANVAS_ZOOM_SPEED_MIN = 0.0015;
+export const CANVAS_ZOOM_SPEED_MAX = 0.009;
+export const CANVAS_ZOOM_SPEED_STEP = 0.0005;
+export const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
+export const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
+
 export const DEFAULT_SETTINGS: AppSettings = {
   general: {
     uiFontSizePx: 11,

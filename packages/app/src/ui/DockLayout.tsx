@@ -19,6 +19,7 @@ import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import "flexlayout-react/style/gray.css";
 import "./DockLayout.css";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
+import { isDockLayoutJson } from "./dock-layout-validation";
 
 // ── Panel IDs ─────────────────────────────────────────────────────────────────
 
@@ -419,14 +420,24 @@ export function getDockLayoutHandle(): DockLayoutHandle | null {
   return activeDockHandle;
 }
 
+function createLayoutModel(json: unknown): { model: Model; recovered: boolean } {
+  try {
+    if (!isDockLayoutJson(json)) throw new Error("Invalid dock layout structure.");
+    return { model: Model.fromJson(sanitizeLayout(json)), recovered: false };
+  } catch (error) {
+    console.info("[tikz-editor] Failed to apply dock layout; using the default layout.", error);
+    return { model: Model.fromJson(buildDefaultLayout()), recovered: true };
+  }
+}
+
 function createInitialModel(): Model {
   const persisted = loadDockLayout();
-  const json = persisted ? sanitizeLayout(persisted) : buildDefaultLayout();
-  try {
-    return Model.fromJson(json);
-  } catch {
-    return Model.fromJson(buildDefaultLayout());
-  }
+  const { model, recovered } = persisted
+    ? createLayoutModel(persisted)
+    : { model: Model.fromJson(buildDefaultLayout()), recovered: true };
+  // Replace rejected payloads too, so a writable store does not retry them on every mount.
+  if (recovered) saveDockLayout(model.toJson());
+  return model;
 }
 
 export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat }: DockLayoutProps) {
@@ -555,9 +566,8 @@ export function DockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn
       this.applyLayoutJson(builder());
     },
     applyLayoutJson(json: IJsonModel) {
-      const sanitized = sanitizeLayout(json);
-      const newModel = Model.fromJson(sanitized);
-      saveDockLayout(sanitized);
+      const { model: newModel } = createLayoutModel(json);
+      saveDockLayout(newModel.toJson());
       syncLayoutStateToStore(newModel, dispatchRef.current);
       setModelRef.current(newModel);
     },

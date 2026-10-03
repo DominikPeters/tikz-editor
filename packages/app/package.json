@@ -30,6 +30,10 @@
       "types": "./src/platform/types.ts",
       "import": "./src/platform/types.ts"
     },
+    "./platform/storage": {
+      "types": "./src/platform/storage.ts",
+      "import": "./src/platform/storage.ts"
+    },
     "./store/types": {
       "types": "./src/store/types.ts",
       "import": "./src/store/types.ts"

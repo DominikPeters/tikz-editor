@@ -5,11 +5,7 @@ import type {
 } from "@tikz-editor/app/platform/types";
 import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
 import { revisionForText, revisionsMatch, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
-
-type StorageLike = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-};
+import { resolvePlatformStorage, type StorageLike } from "@tikz-editor/app/platform/storage";
 
 type ClipboardLike = {
   readText?: () => Promise<string>;
@@ -91,16 +87,6 @@ function createHandleId(): string {
     return crypto.randomUUID();
   }
   return `handle-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-}
-
-function resolveStorage(env: BrowserPlatformEnvironment): StorageLike | null {
-  if (env.storage) {
-    return env.storage;
-  }
-  if (typeof localStorage !== "undefined") {
-    return localStorage;
-  }
-  return null;
 }
 
 function resolveClipboard(env: BrowserPlatformEnvironment): ClipboardLike | null {
@@ -211,74 +197,71 @@ function saveKnownHandleIds(storage: StorageLike | null, ids: Set<string>): void
   }
 }
 
-function openTextFileWithInput(): Promise<{ source: string; fileRef: DocumentFileRef } | null> {
+function openFileWithInput<T extends object>(
+  accept: string,
+  read: (file: File) => Promise<T>
+): Promise<(T & { fileRef: DocumentFileRef }) | null> {
   return new Promise((resolve) => {
-    if (typeof document === "undefined") {
+    if (typeof document === "undefined" || !document.body) {
       resolve(null);
       return;
     }
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".tex,.tikz,.txt,.svg,.ipe,text/plain,image/svg+xml";
+    input.accept = accept;
     input.style.display = "none";
-    input.addEventListener("change", () => {
+    let completed = false;
+    const cleanup = () => {
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("cancel", onCancel);
+      input.remove();
+    };
+    const onCancel = () => {
+      if (completed) return;
+      completed = true;
+      cleanup();
+      resolve(null);
+    };
+    const onChange = () => {
+      if (completed) return;
+      completed = true;
+      const file = input.files?.[0];
+      cleanup();
+      if (!file) {
+        resolve(null);
+        return;
+      }
       void (async () => {
-        const file = input.files?.[0];
-        if (!file) {
-          input.remove();
+        try {
+          const result = await read(file);
+          resolve({
+            ...result,
+            fileRef: { kind: "file", name: file.name, provider: DOWNLOAD_PROVIDER }
+          });
+        } catch (error) {
+          logBrowserPlatformDebug("Browser file input read failed.", error);
           resolve(null);
-          return;
         }
-        const text = await file.text();
-        input.remove();
-        resolve({
-          source: text,
-          fileRef: {
-            kind: "file",
-            name: file.name,
-            provider: DOWNLOAD_PROVIDER
-          }
-        });
       })();
-    }, { once: true });
+    };
+    input.addEventListener("change", onChange);
+    input.addEventListener("cancel", onCancel);
     document.body.appendChild(input);
-    input.click();
+    try {
+      input.click();
+    } catch (error) {
+      logBrowserPlatformDebug("Browser file input open failed.", error);
+      onCancel();
+    }
   });
 }
 
+function openTextFileWithInput(): Promise<{ source: string; fileRef: DocumentFileRef } | null> {
+  return openFileWithInput(".tex,.tikz,.txt,.svg,.ipe,text/plain,image/svg+xml", async (file) => ({ source: await file.text() }));
+}
+
 function openBinaryFileWithInput(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null> {
-  return new Promise((resolve) => {
-    if (typeof document === "undefined") {
-      resolve(null);
-      return;
-    }
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation";
-    input.style.display = "none";
-    input.addEventListener("change", () => {
-      void (async () => {
-        const file = input.files?.[0];
-        if (!file) {
-          input.remove();
-          resolve(null);
-          return;
-        }
-        const bytes = await file.arrayBuffer();
-        input.remove();
-        resolve({
-          bytes,
-          fileRef: {
-            kind: "file",
-            name: file.name,
-            provider: DOWNLOAD_PROVIDER
-          }
-        });
-      })();
-    }, { once: true });
-    document.body.appendChild(input);
-    input.click();
-  });
+  return openFileWithInput(".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation", async (file) => ({ bytes: await file.arrayBuffer() }));
 }
 
 function downloadTextFile(text: string, fileName: string): boolean {
@@ -331,7 +314,7 @@ async function requestHandlePermission(handle: unknown, mode: "read" | "readwrit
 
 export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {}): EditorPlatform {
   const mergedEnv = { ...readInjectedTestEnvironment(), ...env };
-  const storage = resolveStorage(mergedEnv);
+  const storage = resolvePlatformStorage(mergedEnv.storage);
   const clipboard = resolveClipboard(mergedEnv);
   const fsApi = resolveFsApi(mergedEnv);
   const fsHandleStore = resolveFsHandleStore(mergedEnv);
@@ -358,9 +341,9 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     return await fsHandleStore.load(fileRef.handleId);
   }
 
-  async function openViaFsApi(): Promise<{ source: string; fileRef: DocumentFileRef } | null> {
+  async function openViaFsApi(): Promise<{ source: string; fileRef: DocumentFileRef } | null | undefined> {
     if (!fsApi?.showOpenFilePicker) {
-      return null;
+      return undefined;
     }
     try {
       const handles = await fsApi.showOpenFilePicker({
@@ -384,14 +367,17 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
       };
     } catch (error) {
-      logBrowserPlatformDebug("Browser file picker open failed or was cancelled.", error);
-      return null;
+      if (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError") {
+        return null;
+      }
+      logBrowserPlatformDebug("Browser file picker open failed; trying file input.", error);
+      return undefined;
     }
   }
 
-  async function openBinaryViaFsApi(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null> {
+  async function openBinaryViaFsApi(): Promise<{ bytes: ArrayBuffer; fileRef: DocumentFileRef } | null | undefined> {
     if (!fsApi?.showOpenFilePicker) {
-      return null;
+      return undefined;
     }
     try {
       const handles = await fsApi.showOpenFilePicker({
@@ -413,8 +399,11 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
       };
     } catch (error) {
-      logBrowserPlatformDebug("Browser binary file picker open failed or was cancelled.", error);
-      return null;
+      if (typeof error === "object" && error !== null && "name" in error && error.name === "AbortError") {
+        return null;
+      }
+      logBrowserPlatformDebug("Browser binary file picker open failed; trying file input.", error);
+      return undefined;
     }
   }
 
@@ -618,14 +607,14 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     files: {
       openText: async () => {
         const fsResult = await openViaFsApi();
-        if (fsResult) {
+        if (fsResult !== undefined) {
           return fsResult;
         }
         return await openTextFileWithInput();
       },
       openBinary: async () => {
         const fsResult = await openBinaryViaFsApi();
-        if (fsResult) {
+        if (fsResult !== undefined) {
           return fsResult;
         }
         return await openBinaryFileWithInput();

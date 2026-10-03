@@ -56,12 +56,12 @@ export async function exportStandaloneLatexDownload(
     console.warn("[tikz-editor] Standalone LaTeX export emitted with unresolved diagnostics.", artifact.diagnostics);
   }
   try {
-    const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
-      [artifact.text],
-      { fileName: artifact.fileName, mimeType: artifact.mimeType }
-    );
-    if (platformExportResult) {
-      return true;
+    const files = getActiveEditorPlatform().files;
+    if (files?.exportFile) {
+      return await files.exportFile(
+        [artifact.text],
+        { fileName: artifact.fileName, mimeType: artifact.mimeType }
+      );
     }
 
     if (typeof document === "undefined" || typeof Blob === "undefined") {
@@ -98,16 +98,6 @@ export async function exportSvgDownload(
   svgResult: EmitSvgResult,
   options: { fileName?: string } = {}
 ): Promise<boolean> {
-  if (typeof document === "undefined" || typeof Blob === "undefined") {
-    return reportExportFailure("SVG export is unavailable in this runtime.");
-  }
-  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
-    return reportExportFailure("SVG export requires object URL support.");
-  }
-  if (!document.body) {
-    return reportExportFailure("SVG export requires an active document.");
-  }
-
   const text = await serializeSvgForExport(svgResult);
   return downloadSvgMarkup(text, options);
 }
@@ -178,12 +168,12 @@ export async function exportPngDownload(
 
   try {
     const result = await renderPngExport(svgResult, options);
-    const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
-      [result.blob],
-      { fileName: result.artifact.fileName, mimeType: result.artifact.mimeType }
-    );
-    if (platformExportResult) {
-      return true;
+    const files = getActiveEditorPlatform().files;
+    if (files?.exportFile) {
+      return await files.exportFile(
+        [result.blob],
+        { fileName: result.artifact.fileName, mimeType: result.artifact.mimeType }
+      );
     }
     const objectUrl = URL.createObjectURL(result.blob);
     try {
@@ -226,12 +216,12 @@ export async function exportPdfDownload(
     const artifact = createPdfExportArtifact({ fileName: options.fileName });
     const exportPdf = await loadPdfExporter();
     const blob = await exportPdf(svgElement, svgResult.viewBox.width, svgResult.viewBox.height);
-    const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
-      [blob],
-      { fileName: artifact.fileName, mimeType: artifact.mimeType }
-    );
-    if (platformExportResult) {
-      return true;
+    const files = getActiveEditorPlatform().files;
+    if (files?.exportFile) {
+      return await files.exportFile(
+        [blob],
+        { fileName: artifact.fileName, mimeType: artifact.mimeType }
+      );
     }
     if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
       return reportExportFailure("PDF export requires object URL support.");
@@ -303,12 +293,12 @@ export async function downloadSvgMarkup(
     fileName: options.fileName
   });
   try {
-    const platformExportResult = await getActiveEditorPlatform().files?.exportFile?.(
-      [artifact.text],
-      { fileName: artifact.fileName, mimeType: artifact.mimeType }
-    );
-    if (platformExportResult) {
-      return true;
+    const files = getActiveEditorPlatform().files;
+    if (files?.exportFile) {
+      return await files.exportFile(
+        [artifact.text],
+        { fileName: artifact.fileName, mimeType: artifact.mimeType }
+      );
     }
 
     if (typeof document === "undefined" || typeof Blob === "undefined") {

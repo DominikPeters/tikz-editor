@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useSettingsStore } from "../settings/useSettingsStore";
-import { EDITOR_FONT_SIZE_OPTIONS, type CanvasTextEditPlacement, type ColorPickerAccuracy, type ColorScheme, type GridSize } from "../settings/types";
+import {
+  CANVAS_HANDLE_SIZE_OPTIONS, CANVAS_ZOOM_SPEED_MIN, CANVAS_ZOOM_SPEED_MAX, CANVAS_ZOOM_SPEED_STEP,
+  EDITOR_FONT_SIZE_OPTIONS, UI_FONT_SIZE_OPTIONS, MIN_FORMATTER_MAX_LINE_LENGTH, MAX_FORMATTER_MAX_LINE_LENGTH,
+  type CanvasTextEditPlacement, type ColorPickerAccuracy, type ColorScheme, type GridSize
+} from "../settings/types";
 import { Modal } from "./Modal";
 import css from "./SettingsModal.module.css";
 
@@ -13,8 +17,6 @@ const CATEGORIES: { id: CategoryId; label: string }[] = [
 ];
 
 let rememberedCategory: CategoryId = "general";
-const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
-const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 
 type SettingsModalProps = {
   onClose: () => void;
@@ -109,7 +111,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       value={settings.general.uiFontSizePx}
                       onChange={(e) => { updateGeneralSettings({ uiFontSizePx: Number(e.target.value) }); }}
                     >
-                      {[10, 11, 12, 13, 14].map((size) => (
+                      {UI_FONT_SIZE_OPTIONS.map((size) => (
                         <option key={size} value={size}>{size}px</option>
                       ))}
                     </select>
@@ -328,9 +330,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       value={settings.canvas.handleSizePx}
                       onChange={(e) => { updateCanvasSettings({ handleSizePx: Number(e.target.value) }); }}
                     >
-                      <option value={7}>Small</option>
-                      <option value={9}>Medium</option>
-                      <option value={11}>Large</option>
+                      {CANVAS_HANDLE_SIZE_OPTIONS.map((size, index) => (
+                        <option key={size} value={size}>{["Small", "Medium", "Large"][index]}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -367,9 +369,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-zoom-speed"
                       className={css.range}
                       type="range"
-                      min={0.0015}
-                      max={0.009}
-                      step={0.0005}
+                      min={CANVAS_ZOOM_SPEED_MIN}
+                      max={CANVAS_ZOOM_SPEED_MAX}
+                      step={CANVAS_ZOOM_SPEED_STEP}
                       list="zoom-speed-ticks"
                       value={settings.canvas.zoomSpeed}
                       onChange={(e) => { updateCanvasSettings({ zoomSpeed: Number(e.target.value) }); }}

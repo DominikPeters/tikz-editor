@@ -1,7 +1,8 @@
 import { getActiveEditorPlatform } from "../platform/current";
 import type { DocumentFileRef, ExternalChangeStatus, FileRevision } from "./types";
-import { WORKSPACE_VERSION, type WorkspaceSeed } from "./workspace-state";
+import { normalizeWorkspaceTabOrder, WORKSPACE_VERSION, type WorkspaceSeed } from "./workspace-state";
 import type { IJsonModel } from "flexlayout-react";
+import { isDockLayoutJson } from "../ui/dock-layout-validation";
 
 const WORKSPACE_STORAGE_KEY = "tikz-editor:workspace";
 const DOCK_LAYOUT_STORAGE_KEY = "tikz-editor:dock-layout";
@@ -145,7 +146,7 @@ function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | 
   }
   const tabOrderRaw = Array.isArray(parsed.tabOrder) ? parsed.tabOrder.filter((id): id is string => typeof id === "string") : [];
   const docIds = new Set(docs.map((doc) => doc.id));
-  const tabOrder = tabOrderRaw.filter((id) => docIds.has(id));
+  const tabOrder = normalizeWorkspaceTabOrder(tabOrderRaw, docIds);
   const activeDocumentId =
     typeof parsed.activeDocumentId === "string" && docIds.has(parsed.activeDocumentId)
       ? parsed.activeDocumentId
@@ -153,12 +154,12 @@ function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | 
   if (!Array.isArray(parsed.recentDocumentIds)) {
     return null;
   }
-  const recentDocumentIds = parsed.recentDocumentIds.filter((id): id is string => typeof id === "string" && docIds.has(id));
+  const recentDocumentIds = [...new Set(parsed.recentDocumentIds.filter((id): id is string => typeof id === "string" && docIds.has(id)))];
 
   return {
     workspaceVersion: WORKSPACE_VERSION,
     documents: docs,
-    tabOrder: tabOrder.length > 0 ? tabOrder : docs.map((doc) => doc.id),
+    tabOrder,
     activeDocumentId,
     recentDocumentIds
   };
@@ -185,9 +186,13 @@ export function saveWorkspace(state: {
   activeDocumentId: string;
   recentDocumentIds: string[];
 }): void {
+  const tabOrder = normalizeWorkspaceTabOrder(state.tabOrder, Object.keys(state.documents));
+  const validIds = new Set(tabOrder);
+  const activeDocumentId = validIds.has(state.activeDocumentId) ? state.activeDocumentId : tabOrder[0];
+  const recentDocumentIds = [...new Set(state.recentDocumentIds.filter((id) => validIds.has(id)))];
   const payload: PersistedWorkspace = {
     workspaceVersion: WORKSPACE_VERSION,
-    documents: state.tabOrder
+    documents: tabOrder
       .map((id) => state.documents[id])
       .filter((doc): doc is NonNullable<typeof state.documents[string]> => Boolean(doc))
       .map((doc) => ({
@@ -205,9 +210,9 @@ export function saveWorkspace(state: {
         assistantFigurePath: doc.assistantFigurePath,
         assistantPreviewPath: doc.assistantPreviewPath
       })),
-    tabOrder: [...state.tabOrder],
-    activeDocumentId: state.activeDocumentId,
-    recentDocumentIds: [...state.recentDocumentIds]
+    tabOrder,
+    activeDocumentId,
+    recentDocumentIds: recentDocumentIds.length > 0 ? recentDocumentIds : [activeDocumentId]
   };
   try {
     getActiveEditorPlatform().persistence.save(WORKSPACE_STORAGE_KEY, JSON.stringify(payload));
@@ -223,9 +228,7 @@ export function loadDockLayout(): IJsonModel | null {
     const raw = getActiveEditorPlatform().persistence.load(DOCK_LAYOUT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    // Basic sanity check
-    if (!parsed || typeof parsed !== "object" || !("layout" in parsed)) return null;
-    return parsed as IJsonModel;
+    return isDockLayoutJson(parsed) ? parsed : null;
   } catch (error) {
     logStorageDebug("Failed to load persisted dock layout.", error);
     return null;
@@ -270,8 +273,7 @@ export function loadUserWorkspaces(): UserWorkspace[] {
             typeof item === "object" &&
             typeof (item as Partial<UserWorkspace>).id === "string" &&
             typeof (item as Partial<UserWorkspace>).name === "string" &&
-            (item as Partial<UserWorkspace>).json &&
-            typeof (item as Partial<UserWorkspace>).json === "object" &&
+            isDockLayoutJson((item as Partial<UserWorkspace>).json) &&
             typeof (item as Partial<UserWorkspace>).createdAt === "number"
         )
       );
