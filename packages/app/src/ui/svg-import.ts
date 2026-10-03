@@ -1,5 +1,6 @@
 import type { DocumentFileRef } from "../store/types.js";
 import { parseSvgForImport } from "./svg-path-validation.js";
+import { convertSvgWithClipping } from "./svg-import-clipping.js";
 
 type OpenedTextFile = {
   source: string;
@@ -82,7 +83,7 @@ export function extractTikzPictureBody(tikzSource: string): string {
 async function convertSvgToTikzSource(svgSource: string): Promise<string> {
   const svgElement = parseSvgForImport(svgSource);
   const { svgToTikz } = await import("svg2tikz");
-  return svgToTikz(svgElement, { standalone: false });
+  return convertSvgWithClipping(svgElement, svgToTikz);
 }
 
 async function convertIpeToTikzSource(ipeSource: string): Promise<string> {
