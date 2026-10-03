@@ -1,4 +1,6 @@
 import type { EditorAction, EditorState } from "./store/types";
+import type { EditActionResult } from "@tikz-editor/core/edit/actions";
+import { patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 
 type SessionState = Pick<EditorState, "documents" | "activeDocumentId">;
 export type DocumentEditSession = {
@@ -37,12 +39,18 @@ export function trackDocumentEdit(session: DocumentEditSession, state: SessionSt
 
 /** Cancelling a preview may restore its inactive tab, but never an intervening edit. */
 export function restoreDocumentEdit(
-  session: DocumentEditSession, getState: () => SessionState, dispatch: (action: EditorAction) => void
+  session: DocumentEditSession, getState: () => SessionState, dispatch: (action: EditorAction) => void,
+  preview?: Pick<Extract<EditActionResult, { kind: "success" | "partial" }>, "newSource" | "patches" | "identityMoves">
 ): boolean {
   if (!ownsDocumentEdit(session, getState())) return false;
+  if (preview && (preview.newSource !== session.latestSource ||
+    !patchesMatchSourceTransition(session.baseSource, session.latestSource, preview.patches))) return false;
   dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: session.documentId,
     source: session.baseSource, expectedSource: session.latestSource, expectedSourceRevision: session.latestRevision,
-    changedSourceIds: session.changedSourceIds });
+    changedSourceIds: session.changedSourceIds,
+    patches: preview?.patches.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
+      replacement: session.baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) })),
+    identityMoves: preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan })) });
   trackDocumentEdit(session, getState());
   return session.latestSource === session.baseSource;
 }

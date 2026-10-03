@@ -7,6 +7,7 @@ import { createEditGeometrySession } from "../../packages/core/src/edit/geometry
 import * as patches from "../../packages/core/src/edit/source-patches";
 import { pt, worldPoint, worldVector } from "../../packages/core/src/coords/index";
 import { beginDocumentEdit, trackDocumentEdit } from "../../packages/app/src/edit-session";
+import { deriveSingleSourcePatch } from "../../packages/app/src/store/source-patch-diff";
 import { executeDocumentEdit } from "../../packages/app/src/edit-execution";
 import { makeEmptySnapshot } from "../../packages/app/src/compute";
 import { editorReducer, makeInitialState } from "../../packages/app/src/store/reducer";
@@ -53,7 +54,7 @@ describe("canvas drag ownership and cancellation", () => {
       sourceRevision: current.sourceRevision, activeRootId: current.activeRootId, snapshot: current.snapshot }, action, { geometry });
     if ((result.kind === "success" || result.kind === "partial") && result.newSource !== source) {
       dispatch({ type: "APPLY_EDIT_ACTION", action, historyMergeKey, recordInHistory, precomputedSource: source, precomputedResult: result });
-      return { sourceChanged: true, newSource: result.newSource };
+      return { sourceChanged: true, newSource: result.newSource, result };
     }
     return { sourceChanged: false };
   };
@@ -117,6 +118,14 @@ describe("canvas drag ownership and cancellation", () => {
       latestSource: current.source, editSession: beginDocumentEdit(current),
       geometry: createEditGeometrySession({ source: current.source, parsed: snapshot.parseResult!, semantic: snapshot.semanticResult! }, {}, { activeFigureId: current.activeRootId }),
       snapContext: null, initialSelection: null, selectionAnchorRatio: null, historyMergeKey: "test-owned-gesture" };
+  }
+  function handleDrag(): Extract<DragState, { kind: "handle" }> {
+    const current = state(), snapshot = current.snapshot, handle = snapshot.editHandles.at(-1)!;
+    return { kind: "handle", pointerId: 1, sourceId: handle.sourceRef.sourceId, handleId: handle.id,
+      handleKind: handle.kind, handleEditingId: handle.editingId, lastKnownWorld: handle.world, cursor: "crosshair",
+      geometry: createEditGeometrySession({ source: current.source, parsed: snapshot.parseResult!, semantic: snapshot.semanticResult! }, {}, { activeFigureId: current.activeRootId }),
+      latestSource: current.source, editSession: beginDocumentEdit(current), nodeAnchorTargets: [], matrixCellAnchorHints: [],
+      snapContext: null, gridResizeSnap: null, historyMergeKey: "test-owned-handle", activeEndpointAnchor: null };
   }
   beforeEach(async () => {
     oldState = state();
@@ -226,6 +235,142 @@ describe("canvas drag ownership and cancellation", () => {
     expect(entry.forward.reduce((size, patch) => size + patch.replacement.length, 0)).toBeLessThan(100);
     await act(async () => dispatch({ type: "UNDO" })); expect(state().source).toBe(BASE);
     await act(async () => dispatch({ type: "REDO" })); expect(state().source).toBe(finalSource);
+  });
+  it.each([
+    { name: "rotated turn line", source: String.raw`\begin{tikzpicture}[rotate=90]
+\draw (0,0) -- (1,0) -- ([turn]0:1cm);
+\end{tikzpicture}`, x: 10 },
+    { name: "turn arc", source: String.raw`\begin{tikzpicture}
+\draw (1,0) arc (0:90:1cm) -- ([turn]0:1cm);
+\end{tikzpicture}`, x: -10 },
+    { name: "ordinary Cartesian handle", source: BASE, x: 10 }
+  ])("commits $name after an ambiguous reverse diff and a rendered preview", async fixture => {
+    await act(async () => {
+      dispatch({ type: "CODE_EDITED", source: fixture.source }); ready();
+      dispatch({ type: "SELECT", id: "path:0", additive: false });
+    });
+    const drag = handleDrag(), initialHandle = state().snapshot.editHandles.at(-1)!;
+    const identity = initialHandle.editingId;
+    const historyLength = state().history.length;
+    const target = worldPoint(pt(initialHandle.world.x + fixture.x), pt(initialHandle.world.y + 10));
+    await act(async () => setDragState(drag));
+    await act(async () => {
+      pointer("pointermove", 1, worldPoint(pt(initialHandle.world.x + fixture.x / 2), pt(initialHandle.world.y + 5))); flush();
+    });
+    await act(async () => { pointer("pointermove", 1, target); flush(); });
+    const preview = state().source;
+    expect(preview).not.toBe(fixture.source);
+    expect(deriveSingleSourcePatch(preview, fixture.source)).toBeNull();
+    expect(state().history).toHaveLength(historyLength);
+    await act(async () => ready());
+    expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(identity);
+    await act(async () => pointer("pointerup", 1, target));
+    expect(state().source).toBe(preview);
+    expect(state().history).toHaveLength(historyLength + 1);
+    expect(state().history.at(-1)?.sourceBefore).toBe(fixture.source);
+    expect(state().history.at(-1)?.sourceAfter).toBe(preview);
+    expect(state().documents[state().activeDocumentId].lastEditWarningMessage).toBeNull();
+    expect(dragRef.current).toBeNull();
+    await act(async () => ready());
+    expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(identity);
+    await act(async () => dispatch({ type: "UNDO" }));
+    expect(state().source).toBe(fixture.source);
+    await act(async () => ready());
+    expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(identity);
+    await act(async () => dispatch({ type: "REDO" }));
+    expect(state().source).toBe(preview);
+    await act(async () => ready());
+    expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(identity);
+  });
+  it.each(["pointercancel", "Escape", "blur", "unmount"])("preserves identities when cancelling an ambiguous handle preview on %s", async interruption => {
+    const drag = handleDrag(), handle = state().snapshot.editHandles.at(-1)!;
+    await act(async () => setDragState(drag));
+    await act(async () => {
+      pointer("pointermove", 1, worldPoint(pt(handle.world.x + 10), pt(handle.world.y + 10))); flush();
+    });
+    expect(deriveSingleSourcePatch(state().source, BASE)).toBeNull();
+    await act(async () => ready());
+    const history = state().history;
+    await act(async () => {
+      if (interruption === "unmount") root.unmount();
+      else if (interruption === "Escape") window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      else window.dispatchEvent(Object.assign(new Event(interruption), { pointerId: 1 }));
+    });
+    expect(state().source).toBe(BASE);
+    expect(state().history).toBe(history);
+    expect(dragRef.current).toBeNull();
+    await act(async () => ready());
+    expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(handle.editingId);
+    await act(async () => dispatch({ type: "REDO" }));
+    expect(state().source).toBe(BASE);
+  });
+  it.each(["source revision", "active root", "active document"])("rejects a handle commit after an intervening %s change", async boundary => {
+    const original = boundary === "active root" ? `${BASE}\n${OTHER}` : BASE;
+    await act(async () => { dispatch({ type: "CODE_EDITED", source: original }); ready(); });
+    const documentId = state().activeDocumentId, drag = handleDrag(), handle = state().snapshot.editHandles.at(-1)!;
+    await act(async () => setDragState(drag));
+    await act(async () => { pointer("pointermove", 1, worldPoint(pt(handle.world.x + 10), pt(handle.world.y + 10))); flush(); });
+    const preview = state().source;
+    await act(async () => ready());
+    await act(async () => {
+      if (boundary === "source revision") {
+        dispatch({ type: "CODE_EDITED", source: `${preview}\n% intervening edit` });
+        dispatch({ type: "CODE_EDITED", source: preview });
+      } else if (boundary === "active root") dispatch({ type: "SET_ACTIVE_ROOT", rootId: "figure:1" });
+      else dispatch({ type: "NEW_DOCUMENT", source: OTHER });
+    });
+    const afterInterruption = state();
+    await act(async () => {
+      const event = Object.assign(new Event("pointerup"), { pointerId: 1, clientX: 0, clientY: 0 });
+      window.dispatchEvent(event); flush();
+    });
+    expect(state().source).toBe(boundary === "active root" ? original : afterInterruption.source);
+    expect(state().activeDocumentId).toBe(afterInterruption.activeDocumentId);
+    expect(state().activeRootId).toBe(afterInterruption.activeRootId);
+    expect(state().documents[documentId].source).toBe(boundary === "source revision" ? preview : original);
+    expect(state().documents[documentId].history.some(entry => entry.mergeKey === "test-owned-handle")).toBe(false);
+    expect(dragRef.current).toBeNull();
+  });
+  it("retains the real partial edit warning and changed owners through gesture commit", async () => {
+    const source = String.raw`\begin{tikzpicture}
+\begin{scope}[xshift=1pt]
+\draw (0,0) -- (1,0);
+\end{scope}
+\end{tikzpicture}`;
+    await act(async () => { dispatch({ type: "CODE_EDITED", source }); ready(); });
+    const drag = elementDrag();
+    drag.elementIds = ["missing-path", "scope:0"];
+    const target = worldPoint(pt(3), pt(2));
+    const partial = executeDocumentEdit({ documentId: state().activeDocumentId, source,
+      sourceRevision: state().sourceRevision, activeRootId: state().activeRootId, snapshot: state().snapshot },
+    { kind: "moveElements", elementIds: drag.elementIds, delta: target, baseline: drag.baseline }, { geometry: drag.geometry });
+    expect(partial.kind).toBe("partial");
+    if (partial.kind !== "partial") throw new Error("Expected actual partial move");
+    await act(async () => setDragState(drag));
+    await act(async () => { pointer("pointermove", 1, target); flush(); });
+    await act(async () => ready());
+    await act(async () => pointer("pointerup", 1, target));
+    expect(state().source).toBe(partial.newSource);
+    expect(state().documents[state().activeDocumentId].lastEditWarningMessage).toBe(partial.reason);
+    expect(state().documents[state().activeDocumentId].lastEditChangedSourceIds).toEqual(partial.changedSourceIds);
+    expect(state().history.at(-1)?.sourceBefore).toBe(source);
+    await act(async () => dispatch({ type: "UNDO" })); expect(state().source).toBe(source);
+    await act(async () => dispatch({ type: "REDO" })); expect(state().source).toBe(partial.newSource);
+  });
+  it.each(["revision", "missing ownership", "invalid patches"])("rejects uncertified transient reversal with %s", async invalid => {
+    const current = state(), source = `${current.source}\n% replacement`;
+    const action: Extract<EditorAction, { type: "SET_SOURCE_TRANSIENT" }> = {
+      type: "SET_SOURCE_TRANSIENT", source, expectedSource: current.source, expectedSourceRevision: current.sourceRevision,
+      patches: [{ oldSpan: { from: current.source.length, to: current.source.length },
+        newSpan: { from: current.source.length, to: source.length }, replacement: "\n% replacement" }]
+    };
+    if (invalid === "revision") action.expectedSourceRevision! += 1;
+    else if (invalid === "missing ownership") delete action.expectedSource;
+    else action.patches![0].replacement = "different source";
+    await act(async () => dispatch(action));
+    expect(state().source).toBe(current.source);
+    expect(state().sourceRevision).toBe(current.sourceRevision);
+    expect(state().documents[state().activeDocumentId].editingIdentities).toBe(current.documents[current.activeDocumentId].editingIdentities);
   });
   it("restores an owned inactive document when context cancellation runs", async () => {
     const originId = state().activeDocumentId;

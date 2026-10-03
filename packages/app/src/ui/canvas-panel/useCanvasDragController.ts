@@ -8,7 +8,7 @@ import { projectResizePointer } from "./resize-constraints";
 import type { ApplyActionWithFeedbackFn } from "./types";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
-import type { SourcePatch } from "@tikz-editor/core/edit/types";
+import { advanceIdentityMoves } from "@tikz-editor/core/edit/identity-provenance";
 import type { AdornmentOwnerGeometry } from "@tikz-editor/core/ast/types";
 import {
   applyFrameTransform,
@@ -160,13 +160,18 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   const wasSnappedRef = useRef(false);
   const worldListenersRef = useRef<CanvasWorldListeners | null>(null);
   const moveQueueRef = useRef<ReturnType<typeof createFrameEditQueue<DragState, PointerEvent>> | null>(null);
-  const previewsRef = useRef(new WeakMap<DragState, { action: Parameters<ApplyActionWithFeedbackFn>[0]; patches: SourcePatch[] }>());
+  const previewsRef = useRef(new WeakMap<DragState, {
+    action: Parameters<ApplyActionWithFeedbackFn>[0];
+    result: NonNullable<ReturnType<ApplyActionWithFeedbackFn>["result"]>;
+  }>());
   const cancelGesture = useCallback(() => {
     moveQueueRef.current?.cancel();
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = null;
-    if ("latestSource" in drag && drag.editSession) restoreDocumentEdit(drag.editSession, useEditorStore.getState, dispatch);
+    if ("latestSource" in drag && drag.editSession) {
+      restoreDocumentEdit(drag.editSession, useEditorStore.getState, dispatch, previewsRef.current.get(drag)?.result);
+    }
     previewsRef.current.delete(drag);
     wasSnappedRef.current = false;
     suppressNextBackgroundClickRef.current = true;
@@ -243,10 +248,18 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       if (drag.editSession) trackDocumentEdit(drag.editSession, useEditorStore.getState());
       if (result.newSource != null) {
         const patches = drag.editSession ? useEditorStore.getState().documents[drag.editSession.documentId]?.lastEditPatches : null;
-        if (patches?.length) {
+        if (patches?.length && result.result) {
           const previous = previewsRef.current.get(drag);
-          previewsRef.current.set(drag, { action,
-            patches: composeSourcePatches(drag.editSession!.baseSource, [previous?.patches ?? [], patches]) });
+          const identityMoves = previous
+            ? previous.result.identityMoves && result.result.identityMoves
+              ? advanceIdentityMoves(previous.result.identityMoves, patches, result.result.identityMoves)
+              : undefined
+            : result.result.identityMoves;
+          previewsRef.current.set(drag, { action, result: {
+            ...result.result,
+            patches: composeSourcePatches(drag.editSession!.baseSource, [previous?.result.patches ?? [], patches]),
+            identityMoves
+          } });
         }
         drag.latestSource = result.newSource;
         drag.didEdit = true;
@@ -1350,15 +1363,13 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         const finalSource = drag.latestSource;
         if (preview && canContinueDocumentEdit(drag.editSession, useEditorStore.getState()) &&
           finalSource !== drag.editSession.baseSource) {
-          const patches = preview.patches;
           dragRef.current = null;
-          if (restoreDocumentEdit(drag.editSession, useEditorStore.getState, dispatch)) {
+          if (restoreDocumentEdit(drag.editSession, useEditorStore.getState, dispatch, preview.result)) {
             dispatch({ type: "APPLY_EDIT_ACTION", documentId: drag.editSession.documentId,
               action: preview.action, historyMergeKey: drag.historyMergeKey,
               precomputedSource: drag.editSession.baseSource,
               expectedDocumentRevision: { documentId: drag.editSession.documentId, sourceRevision: drag.editSession.latestRevision },
-              precomputedResult: { kind: "success", newSource: finalSource, patches,
-                changedSourceIds: cleanupElementIds } });
+              precomputedResult: preview.result });
           }
         }
         previewsRef.current.delete(drag);

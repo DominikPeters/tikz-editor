@@ -456,6 +456,9 @@ export type EditorAction =
       expectedSource?: string;
       source: string;
       changedSourceIds?: string[] | null;
+      /** Owned preview reversal, validated against the expected source/revision. */
+      patches?: SourcePatch[];
+      identityMoves?: IdentityMove[];
     }
   | { type: "COMPUTE_REQUESTED"; requestId: string; documentId?: string }
   | { type: "SNAPSHOT_READY"; requestId: string; snapshot: SessionSnapshot; documentId?: string }

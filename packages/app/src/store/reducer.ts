@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import type { AssistantItem } from "../platform/types";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
-import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
+import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import {
   createDocumentSession,
@@ -1146,10 +1146,15 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         if (action.source === doc.source) {
           return doc;
         }
-        const patches = deriveSingleSourcePatch(doc.source, action.source);
+        if ((action.patches || action.identityMoves) && (
+          !action.patches || action.expectedSource == null || action.expectedSourceRevision == null ||
+          !patchesMatchSourceTransition(doc.source, action.source, action.patches)
+        )) return doc;
+        const patches = action.patches ?? deriveSingleSourcePatch(doc.source, action.source);
         return {
           ...doc,
           source: action.source,
+          pendingIdentityMoves: action.identityMoves,
           sourceRevision: doc.sourceRevision + 1,
           lastEditChangedSourceIds: action.changedSourceIds ?? null,
           lastEditChangeToken: doc.lastEditChangeToken + 1,

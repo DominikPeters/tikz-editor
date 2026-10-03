@@ -2,7 +2,7 @@ import type { DocumentEditSession } from "../../edit-session";
 import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { AdornmentOwnerGeometry, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ComplexPathSegment } from "@tikz-editor/core/edit/element-templates";
-import type { EditAction, MoveElementsBaseline, ResizeRole } from "@tikz-editor/core/edit/actions";
+import type { EditAction, EditActionResult, MoveElementsBaseline, ResizeRole } from "@tikz-editor/core/edit/actions";
 import type { PathRectangleResizeBaseline } from "@tikz-editor/core/edit/actions/resize-element";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import type { AxisSnapBuckets, SelectionGeometry, SnapContext, SnapLine } from "@tikz-editor/core/edit/snapping";
@@ -449,6 +449,7 @@ export type SnapDebugLogInput = {
 export type ApplyActionFeedback = {
   sourceChanged: boolean;
   newSource?: string;
+  result?: Extract<EditActionResult, { kind: "success" | "partial" }>;
 };
 
 export type SelectionBounds = {

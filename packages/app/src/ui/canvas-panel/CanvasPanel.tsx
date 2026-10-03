@@ -1778,7 +1778,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             precomputedResult: result
           });
         }
-        return { sourceChanged, newSource: sourceChanged ? result.newSource : undefined };
+        return { sourceChanged, newSource: sourceChanged ? result.newSource : undefined, result };
       }
 
       if (result.kind === "unsupported") {
