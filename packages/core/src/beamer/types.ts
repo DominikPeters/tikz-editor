@@ -198,6 +198,16 @@ export type BeamerRect = {
   height: number;
 };
 
+/** SVG affine matrix in the page's TeX-point, y-down coordinates. */
+export type BeamerPaintTransform = readonly [number, number, number, number, number, number];
+
+export type BeamerTransformedLayout = {
+  /** Intrinsic geometry before the frame body's outer paint transform. */
+  intrinsicBounds: BeamerRect;
+  /** Compose this with local glyph transforms when painting or hit testing. */
+  paintTransform: BeamerPaintTransform;
+};
+
 export type BeamerPageGeometry = {
   /** The documentclass aspectratio option, or Beamer's default `43`. */
   aspectRatio: string;
@@ -246,6 +256,7 @@ export type BeamerFrameLayoutItem = {
 };
 
 export type BeamerParagraphLayout = {
+  transformedLayout?: BeamerTransformedLayout;
   /** Link hit regions in paragraph-local coordinates, after overlay filtering. */
   links?: readonly BeamerLinkRegion[];
   paragraphId: string;
@@ -376,6 +387,7 @@ export type PrepareBeamerDocumentOptions = {
 };
 
 export type BeamerEmbeddedTikzLayout = {
+  transformedLayout?: BeamerTransformedLayout;
   itemId: string;
   sourceSpan: Span;
   bounds: BeamerRect;
@@ -416,6 +428,8 @@ export type BeamerSpacingLayout = {
 };
 
 export type BeamerFrameLayout = {
+  /** Body-only transform; frame title and theme chrome are outside it. */
+  bodyTransform?: BeamerPaintTransform;
   coordinateSystem: {
     unit: "tex-pt";
     origin: "top-left";

@@ -61,4 +61,19 @@ describe("painted graphicx trace contract", () => {
     const wrongAxes = { ...native, coveredLines: native.coveredLines!.map(line => ({ ...line, glyphs: line.glyphs.map(glyph => ({ ...glyph, transform: [-1, 0, 0, 1] as const })) })) };
     expect(compareBeamerPageTraces(wrongAxes, oracle).summary.unmatchedOracleTextLines).toBe(1);
   });
+  it("matches declared invisible glyphs by retained layout origins while keeping their off-page paint evidence", async () => {
+    const rendered = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}[plain,t]{}\onslide<2->{Group} Tail\end{frame}\end{document}`, { step: 1 });
+    const native = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    const hidden = native.coveredLines!.flatMap(line => line.glyphs).map(glyph => ({ ...glyph, hiddenLayout: { x: glyph.x, y: glyph.y }, x: glyph.x + 2007.5, y: glyph.y - 2007.5 }));
+    const oracle: OracleBeamerPageTrace = {
+      coordinateSystem: native.coordinateSystem, page: native.page, shipoutOrigin: { x: 0, y: 0 }, boxes: [], rules: [], glyphs: [...hidden, ...native.glyphs],
+      lines: [{ text: "Group", x: hidden[0].x, baselineY: hidden[0].y, glyphs: hidden }, ...native.lines],
+    };
+    const summary = compareBeamerPageTraces(native, oracle).summary;
+    expect(summary.coveredOverlayTextLines).toBe(1);
+    expect(summary.unmatchedOracleTextLines).toBe(0);
+    expect(summary.comparedGlyphs).toBe(4);
+    const wrongOrigin = { ...oracle, lines: oracle.lines.map(line => ({ ...line, glyphs: line.glyphs.map(glyph => glyph.hiddenLayout ? { ...glyph, hiddenLayout: { ...glyph.hiddenLayout, x: glyph.hiddenLayout.x + 1 } } : glyph) })) };
+    expect(compareBeamerPageTraces(native, wrongOrigin).summary.unmatchedOracleTextLines).toBe(1);
+  });
 });

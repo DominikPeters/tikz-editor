@@ -459,4 +459,23 @@ After pause.`);
     expect(tracedText(result.pages[1])).not.toContain("Hiddenontwo");
     expect(tracedText(result.pages[1])).toContain("Afterpause");
   });
+  it("covers a deferred list label when covering starts before the first item text", async () => {
+    // beamer@begininvisible can run in vertical mode, before LaTeX ships
+    // the label through everypar. Mid-item covering leaves that label painted.
+    const source = deck(String.raw`\begin{enumerate}
+\item \invisible{Introduction}
+\item Prefix \invisible{covered tail}
+\item \uncover<2->{Later}
+\end{enumerate}`);
+    const result = await renderBeamerFramePages(source);
+    const first = tracedText(result.pages[0]);
+    expect(first).not.toContain("Introduction");
+    expect(first).not.toContain("1.");
+    expect(first).not.toContain("3.");
+    expect(first).toContain("2.");
+    expect(first).toContain("Prefix");
+    expect(tracedText(result.pages[1])).toContain("3.");
+    expect(tracedText(result.pages[1])).toContain("Later");
+  });
+
 });

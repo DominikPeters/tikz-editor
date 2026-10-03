@@ -668,6 +668,7 @@ export function simpleTexSegmentToLayoutItems(
         raise: token.ruleRaise ?? texHBoxOffsetY(0),
         width: token.ruleWidth ?? texLength(0),
         height: token.ruleHeight ?? texLength(0),
+        strutBaselineSkipPt: token.ruleIsStrut ? token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? atPt) * 1.2) : undefined,
         metricProvider,
         textFontProfile,
       });
@@ -1141,22 +1142,29 @@ function texRuleBox(params: {
   readonly raise: TexHBoxOffsetY;
   readonly width: TexLength;
   readonly height: TexLength;
+  readonly strutBaselineSkipPt?: TexLength;
   readonly metricProvider: TexMetricProvider;
   readonly textFontProfile: TexTextFontProfile;
 }): TexMathBox {
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
   const width = roundTexPt(params.width);
-  const ruleHeight = roundTexPt(params.height);
-  const raisedHeight = params.height + params.raise;
+  // TeX scans the decimal .7/.3 factors as 16-bit fractions and truncates
+  // their product when rebuilding \strutbox after selecting a font size.
+  const strutPart = (factor: number) => Math.trunc(Math.round(Number(params.strutBaselineSkipPt) * 65536) * Math.round(factor * 65536) / 65536) / 65536;
+  const strutHeight = params.strutBaselineSkipPt === undefined ? undefined : strutPart(.7);
+  const strutDepth = params.strutBaselineSkipPt === undefined ? undefined : strutPart(.3);
+  const ruleHeight = strutHeight === undefined ? roundTexPt(params.height) : strutHeight + strutDepth!;
+  const raise = strutDepth === undefined ? params.raise : 0 - strutDepth;
+  const raisedHeight = ruleHeight + raise;
   const height = texLength(roundTexPt(Math.max(0, raisedHeight)));
-  const depth = texLength(roundTexPt(Math.max(0, 0 - params.raise)));
+  const depth = texLength(roundTexPt(Math.max(0, 0 - raise)));
   const rule = {
     kind: "rule",
     role: "literal-rule",
     x: texHBoxLocalX(0),
     y: texHBoxLocalY(roundTexPt(0 - raisedHeight)),
     width,
-    height: ruleHeight,
+    height: texLength(ruleHeight),
     sourceSpan,
   } satisfies TexMathRuleLayoutItem;
   const hlist: TexMathHList = {
@@ -1166,7 +1174,7 @@ function texRuleBox(params: {
     height,
     depth,
     sourceSpan,
-    items: [rule],
+    items: params.strutBaselineSkipPt === undefined ? [rule] : [],
   };
   return {
     source: params.source,
@@ -1948,6 +1956,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         raise: token.ruleRaise ?? texHBoxOffsetY(0),
         width: token.ruleWidth ?? texLength(0),
         height: token.ruleHeight ?? texLength(0),
+        strutBaselineSkipPt: token.ruleIsStrut ? token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? params.atPt) * 1.2) : undefined,
         metricProvider: params.metricProvider,
         textFontProfile: params.textFontProfile,
       });

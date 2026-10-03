@@ -582,7 +582,10 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
       (paragraph) => paragraph.paragraphId === "frame:3:footline:title"
     )!;
 
-    expect(body.bounds.y).toBeCloseTo(64.501104, 6);
+    // Native float calibration after stock TeX dimension rounding:
+    // frametitle sep=559409sp and its fontdimen5=419011sp. The primary
+    // LuaLaTeX frame keeps identical glyphs/fonts and <0.00014pt Y error.
+    expect(body.bounds.y).toBeCloseTo(64.501105, 6);
     expect(titleBaseline).toBeCloseTo(20.142303, 6);
     const footlineSpaces =
       footlineTitle.report.lines[0]?.segments
@@ -680,7 +683,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
       )!;
       return paragraph.bounds.y + Number(placement.y) + Number(line.ascent);
     };
-    expect(baseline(bodyParagraphs[0], 0)).toBeCloseTo(99.958734, 6);
+    expect(baseline(bodyParagraphs[0], 0)).toBeCloseTo(99.958735, 6);
     expect(columns.bounds.y).toBeCloseTo(194.881934, 6);
     expect(baseline(bodyParagraphs[1], 0)).toBeCloseTo(202.601684, 6);
     expect(result.diagnostics).toEqual([]);
@@ -716,8 +719,8 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
 
     expect(blocks).toHaveLength(3);
     expect(columns.bounds.y).toBeCloseTo(130.370096, 6);
-    expect(baseline(body, 0)).toBeCloseTo(86.966896, 6);
-    expect(baseline(body, 1)).toBeCloseTo(104.966896, 6);
+    expect(baseline(body, 0)).toBeCloseTo(86.966897, 6);
+    expect(baseline(body, 1)).toBeCloseTo(104.966897, 6);
     expect(baseline(necessaryTitle, 0)).toBeCloseTo(148.713096, 6);
     expect(baseline(necessaryBody, 0)).toBeCloseTo(165.260396, 6);
     expect(

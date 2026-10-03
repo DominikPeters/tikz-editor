@@ -2,6 +2,7 @@ import { formatSvgNumber as fmt } from "../../svg/format.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { TexListMarkerProfile } from "../../text/tex/layout-options.js";
 import type { ResolvedTexFont } from "../../text/tex/index.js";
+import type { SimpleTexListKind } from "../../text/tex/ir.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
 import type {
   BeamerThemeTemplateRef,
@@ -11,6 +12,13 @@ import { resolveBeamerThemeColor } from "./resolve.js";
 
 const WHITE = "#ffffff";
 const BLACK = "#000000";
+
+/** beamerbaselocalstructure.sty's makelabel selects the current list-depth role. */
+export function resolveBeamerListLabelColor(theme: ResolvedBeamerTheme, kind: SimpleTexListKind, _labelDepth: number, listDepth: number): string | undefined {
+  const prefix = ["", "sub", "subsub"][Math.max(0, Math.min(listDepth - 1, 2))];
+  const role = kind === "bibliography" ? "bibliography item" : kind === "description" ? "description item" : `${kind} ${prefix}item`;
+  return resolveBeamerThemeColor(theme, role).fg;
+}
 
 /**
  * Resolve the active inner-theme item templates into measured marker boxes.
@@ -45,15 +53,15 @@ export function resolveBeamerItemizeMarkers(
     fontId: "msam7",
     atPt: texLength(6),
   });
-  const structure =
-    resolveBeamerThemeColor(theme, "item").fg ??
-    resolveBeamerThemeColor(theme, "structure").fg ??
-    "#3333b3";
   const canvas =
     resolveBeamerThemeColor(theme, "normal text").bg ?? WHITE;
 
   return theme.templates.bullets.map((template, index) => {
     const family = template.id.split("/").at(-1);
+    const projectedRole = ["item projected", "subitem projected", "subsubitem projected"][index];
+    const structure = (family === "ball" ? resolveBeamerThemeColor(theme, projectedRole).bg : undefined) ??
+      resolveBeamerListLabelColor(theme, "itemize", index + 1, index + 1) ??
+      resolveBeamerThemeColor(theme, "normal text").fg ?? BLACK;
     // The sphere helper selects \normalsize, and the deeper square
     // templates select \small independently of the list body's size.
     const markerSizePt = family === "ball"
@@ -104,6 +112,7 @@ export function resolveBeamerEnumerateMarker(
     return undefined;
   }
   const bodyFont = theme.fonts["normal-text"];
+  const projectedRole = ["item projected", "subitem projected", "subsubitem projected"][Math.max(0, Math.min(labelDepth - 1, 2))];
   const fontProfile = createBeamerTexTextFontProfile(bodyFont);
   const resolvedBodyFont = fontProfile.resolveTextFont(
     fontProfile.defaultFontState,
@@ -145,12 +154,12 @@ export function resolveBeamerEnumerateMarker(
     const centerAboveBaselinePt = 0.75 * projectedXHeightPt;
     const radiusPt = 1.2 * projectedXHeightPt;
     const background =
-      resolveBeamerThemeColor(theme, "item projected").bg ??
+      resolveBeamerThemeColor(theme, projectedRole).bg ??
       resolveBeamerThemeColor(theme, "item").fg ??
       resolveBeamerThemeColor(theme, "structure").fg ??
       "#3333b3";
     const foreground =
-      resolveBeamerThemeColor(theme, "item projected").fg ?? WHITE;
+      resolveBeamerThemeColor(theme, projectedRole).fg ?? WHITE;
     const widthEm = pictureWidthPt / bodyFont.sizePt;
     const heightEm = pictureHeightPt / bodyFont.sizePt;
     return withInMarginEnumerateOffset(theme, xHeightEm, {
@@ -180,12 +189,12 @@ export function resolveBeamerEnumerateMarker(
     const boxHeightPt = 1.85 * projectedXHeightPt;
     const boxDepthPt = 0.4 * projectedXHeightPt;
     const background =
-      resolveBeamerThemeColor(theme, "item projected").bg ??
+      resolveBeamerThemeColor(theme, projectedRole).bg ??
       resolveBeamerThemeColor(theme, "item").fg ??
       resolveBeamerThemeColor(theme, "structure").fg ??
       "#3333b3";
     const foreground =
-      resolveBeamerThemeColor(theme, "item projected").fg ?? WHITE;
+      resolveBeamerThemeColor(theme, projectedRole).fg ?? WHITE;
     const widthEm = boxWidthPt / bodyFont.sizePt;
     const heightEm = boxHeightPt / bodyFont.sizePt;
     const depthEm = boxDepthPt / bodyFont.sizePt;
@@ -225,12 +234,12 @@ export function resolveBeamerEnumerateMarker(
   const paintTopFromBaselineEm = -0.7825 * xHeightEm;
   const paintYEm = xHeightEm + paintTopFromBaselineEm;
   const background =
-    resolveBeamerThemeColor(theme, "item projected").bg ??
+    resolveBeamerThemeColor(theme, projectedRole).bg ??
     resolveBeamerThemeColor(theme, "item").fg ??
     resolveBeamerThemeColor(theme, "structure").fg ??
     "#3333b3";
   const foreground =
-    resolveBeamerThemeColor(theme, "item projected").fg ?? WHITE;
+    resolveBeamerThemeColor(theme, projectedRole).fg ?? WHITE;
   const canvas =
     resolveBeamerThemeColor(theme, "normal text").bg ?? WHITE;
   const size = sphereSizeEm * bodyFont.sizePt * 100;

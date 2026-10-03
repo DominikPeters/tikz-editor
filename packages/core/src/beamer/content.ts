@@ -30,6 +30,7 @@ import type {
   BeamerTitlePageBodyNode,
   BeamerTheoremBodyNode,
   BeamerTikzBodyNode,
+  BeamerUnsupportedBodyNode,
   BeamerVerticalSpaceBodyNode,
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
@@ -39,6 +40,7 @@ import {
   type BeamerTheoremOccurrence,
 } from "./theorems.js";
 import type { BeamerTheoremTemplateVariant } from "./types.js";
+import { parseTcolorboxOptions } from "./tcolorbox.js";
 
 const LIST_ENVIRONMENTS = new Set([
   "itemize",
@@ -111,6 +113,7 @@ export function parseBeamerFrameBody(
       (token.name !== "columns" &&
         token.name !== "tikzpicture" &&
         token.name !== "center" &&
+        token.name !== "tcolorbox" &&
         !isProofEnvironment(token.name) &&
         !theoremOccurrences.has(token.span.from) &&
         !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment))
@@ -676,7 +679,7 @@ function parseBlock(params: {
   diagnostics: Diagnostic[];
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
   overlays: BeamerOverlayModel;
-}): BeamerBlockBodyNode {
+}): BeamerBlockBodyNode | BeamerUnsupportedBodyNode {
   const {
     context,
     ownerId,
@@ -685,6 +688,27 @@ function parseBlock(params: {
     nodeIndex,
     diagnostics,
   } = params;
+  if (begin.name === "tcolorbox") {
+    const options = beamerOptionalArgumentAfter(context, begin.span.to, end.span.from) ?? undefined;
+    const parsed = parseTcolorboxOptions(context.source, options, begin.span);
+    const bodySpan = { from: options?.span.to ?? begin.span.to, to: end.span.from };
+    const setup = beamerControlSequencesIn(context, { from: 0, to: begin.span.from }).find(command => command.name === "tcbset");
+    if (setup) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-setup",
+      span: { from: setup.from, to: setup.to }, message: "Global tcolorbox style declarations are not supported in this preview." });
+    const lowerPart = beamerControlSequencesIn(context, bodySpan).find(command => ["tcblower", "tcbsubtitle"].includes(command.name));
+    const nestedBox = beamerEnvironmentBoundariesIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)));
+    if (lowerPart || nestedBox) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-content",
+      span: nestedBox?.span ?? { from: lowerPart!.from, to: lowerPart!.to }, message: "Lower, subtitle and nested package boxes are not supported in this tcolorbox preview." });
+    diagnostics.push(...parsed.diagnostics);
+    const id = `${ownerId}:tcolorbox:${nodeIndex}`;
+    if (parsed.diagnostics.length) return { kind: "unsupported", id, span: { from: begin.span.from, to: end.span.to }, message: parsed.diagnostics[0].message };
+    return {
+      kind: "block", packageBox: "tcolorbox", environment: "block", id,
+      span: { from: begin.span.from, to: end.span.to }, beginSpan: begin.span, endSpan: end.span,
+      options, title: parsed.title, bodySpan,
+      children: parseBlockLeafContent(context, bodySpan, id, params.overlays, params.theoremOccurrences),
+    };
+  }
   // An action spec (`\begin{block}<2->`) precedes the title; visibility is
   // handled by the frame overlay model, the parser only skips past it.
   const overlay = beamerOverlayArgumentAfter(
@@ -747,8 +771,12 @@ function parseBlockLeafContent(
   const children: BeamerLeafFlowNode[] = [];
   let cursor = bodySpan.from;
   for (let index = 0; index < tokens.length; index += 1) {
-    const endIndex = findUnsupportedEnvironmentEndIndex(context, tokens, index,
-      overlays, theoremOccurrences);
+    const token = tokens[index];
+    // Beamer block leaves do not recursively lower package boxes. Keep their
+    // complete source local instead of feeding begin/end tokens to prose.
+    const endIndex = token.kind === "begin" && token.name === "tcolorbox"
+      ? matchingEnvironmentEnd(tokens, index)
+      : findUnsupportedEnvironmentEndIndex(context, tokens, index, overlays, theoremOccurrences);
     if (endIndex < 0) continue;
     const begin = tokens[index];
     const span = { from: begin.span.from, to: tokens[endIndex].span.to };
@@ -1000,6 +1028,7 @@ function parseColumnFlow(
       token.kind !== "begin" ||
       (
         !isProofEnvironment(token.name) &&
+        token.name !== "tcolorbox" &&
         !theoremOccurrences.has(token.span.from) &&
         !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)
       )
@@ -1265,6 +1294,7 @@ function findUnsupportedEnvironmentEndIndex(
       "tabular",
       "figure",
       "table",
+      "tcolorbox",
       "overprint",
       "center",
       "onlyenv",

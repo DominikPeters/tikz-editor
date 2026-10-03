@@ -1,5 +1,5 @@
-These checked-in LuaLaTeX traces pin command-form columns and a frame whose
-first body material is a display under a size declaration. They retain the
+These checked-in LuaLaTeX traces pin command/default columns, 14pt class sizes,
+stock block/list flow and a leading display under a size declaration. They retain the
 existing exact glyph, rule, font and transform contract.
 
 Regenerate after `npm run compare:beamer-followups` with:

@@ -1,5 +1,6 @@
 import { roundTexPt } from "../fonts/units.js";
 import type { TexListLayoutProfile } from "../layout-options.js";
+import type { SimpleTexFontState } from "../ir.js";
 import {
   texLength,
   texVListX,
@@ -32,6 +33,15 @@ export function texListItemLayoutForParagraph(
   const labelContent = texListItemLabelContent(paragraph, listProfile);
   const labelRightEdge = texListItemLabelRightEdge(stack);
   const descriptionIndent = texListItemDescriptionIndent(stack, paragraph);
+  const labelColor = listProfile?.resolveLabelColor?.(paragraph.listContext.kind, paragraph.listContext.labelDepth, paragraph.listContext.depth);
+  const labelFontState: SimpleTexFontState | undefined = labelColor || paragraph.listContext.kind === "bibliography" || labelKind === "description"
+    ? {
+        family: labelKind === "description" ? "roman" : "normal",
+        series: labelKind === "description" ? "bold" : "medium",
+        shape: "upright",
+        ...(labelColor ? { color: labelColor } : {}),
+      }
+    : undefined;
   return {
     itemIndex: paragraph.listContext.itemIndex,
     ...(labelKind && labelPlacement && labelContent
@@ -40,18 +50,7 @@ export function texListItemLayoutForParagraph(
             kind: labelKind,
             placement: labelPlacement,
             content: labelContent,
-            ...(paragraph.listContext.kind === "bibliography"
-              ? { fontState: { family: "normal", series: "medium", shape: "upright" } }
-              : {}),
-            ...(labelKind === "description"
-              ? {
-                  fontState: {
-                    family: "roman",
-                    series: "bold",
-                    shape: "upright",
-                  },
-                }
-              : {}),
+            ...(labelFontState ? { fontState: labelFontState } : {}),
             ...(labelRightEdge !== undefined ? { rightEdge: labelRightEdge } : {}),
             ...(paragraph.listContext.label
               ? {
@@ -121,7 +120,7 @@ function texListItemLabelContent(
   }
   if (listContext.kind === "enumerate") {
     const marker = listProfile?.resolveEnumerateMarker?.(
-      listContext.itemIndex,
+      listContext.labelCounter ?? listContext.itemIndex,
       listContext.labelDepth
     );
     if (marker) {
@@ -129,7 +128,7 @@ function texListItemLabelContent(
     }
     return {
       kind: "text",
-      text: texDefaultEnumerateLabelText(listContext.itemIndex, listContext.labelDepth),
+      text: texDefaultEnumerateLabelText(listContext.labelCounter ?? listContext.itemIndex, listContext.labelDepth),
     };
   }
   return undefined;

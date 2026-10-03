@@ -307,6 +307,7 @@ export function createMeasuredParagraphVListMeasurer(
       y: cursor,
       advance: measurement.ruleLeadingAdvance,
       metrics: measurement.ruleLeadingMetrics,
+      lastDepth: measurement.lastLineMetrics?.depth ?? measurement.lineOffsets.at(-1)?.metrics?.depth,
     };
   };
 }

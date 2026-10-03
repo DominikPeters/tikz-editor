@@ -47,6 +47,7 @@ import {
 import type {
   TexParagraphItem,
   TexVListDocument,
+  TexVBoxItem,
 } from "./types.js";
 
 export interface TexLayoutParagraphPreparation {
@@ -110,6 +111,9 @@ export function prepareTexLayoutParagraphsFromVList(
     params.options
   );
   const finalParagraphBlockIndex = finalVListParagraphBlockIndex(paragraphItems);
+  // Material boxes execute paragraph declarations in their own TeX group.
+  // Their centering/raggedness must not leak to surrounding frame prose.
+  const materialParagraphStates = new Map<TexVBoxItem, TexParagraphLayoutState>();
   let layoutMode: KnuthPlassLayoutMode = "wrap";
 
   for (const entry of paragraphEntries) {
@@ -140,10 +144,21 @@ export function prepareTexLayoutParagraphsFromVList(
           )
       : scopeContext;
     const blockIndex = paragraph.blockIndex;
-    const paragraphStateResult = paragraphState.resolveParagraph({
+    const materialAncestors = entry.ancestors.filter(ancestor => ancestor.material !== undefined);
+    const materialAncestor = materialAncestors.at(-1);
+    let currentParagraphState = paragraphState;
+    if (materialAncestor) {
+      const outerMaterialState = materialParagraphStates.get(materialAncestors.at(-2)!);
+      currentParagraphState = materialParagraphStates.get(materialAncestor) ?? (outerMaterialState ?? paragraphState).forkMaterialContext();
+      materialParagraphStates.set(materialAncestor, currentParagraphState);
+    }
+    const paragraphStateResult = currentParagraphState.resolveParagraph({
       paragraph,
       scopePolicy: scopeContext.policy,
-      finalParagraphInNode: blockIndex === finalParagraphBlockIndex,
+      // A source-owned parbox/minipage is an independent TeX paragraph
+      // context. TikZ's outer final-paragraph alignment reset does not apply
+      // to its final line.
+      finalParagraphInNode: !scopeContext.materialContextActive && blockIndex === finalParagraphBlockIndex,
     });
     const segments = splitSimpleTexParagraphSegments(
       paragraph,

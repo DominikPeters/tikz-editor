@@ -1,0 +1,48 @@
+\documentclass{beamer}
+\usepackage{tcolorbox}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}{Checks}
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!75!black,title=Check]
+\begin{itemize}
+\item First condition
+\item Second condition
+\end{itemize}
+\end{tcolorbox}
+\end{frame}
+\begin{frame}{Untitled box}
+Before the box.
+\begin{tcolorbox}
+Ordinary text with \emph{emphasis} and inline math $x^2$.
+\end{tcolorbox}
+After the box.
+\end{frame}
+\begin{frame}{Padding}
+\begin{tcolorbox}[title={A title, with punctuation},boxrule=1pt,boxsep=2pt,left=6pt,right=8pt,top=4pt,bottom=5pt,toptitle=3pt,bottomtitle=2pt,arc=3pt,colback=yellow!15!white,colframe=red!70!black]
+First line.\\Second line.
+\end{tcolorbox}
+\end{frame}
+\begin{frame}{Fonts and title fill}
+\begin{tcolorbox}[title=Bold heading,fonttitle=\bfseries,fontupper=\small,colbacktitle=green!30!black,coltitle=yellow,coltext=blue,colback=green!5!white,sharp corners]
+\begin{itemize}
+\item Small text
+\item Another item
+\end{itemize}
+\end{tcolorbox}
+\end{frame}
+\begin{frame}{Columns}
+\begin{columns}[T,onlytextwidth]
+\column{.5\textwidth}
+\begin{tcolorbox}[title=Left,left=2pt,right=2pt,top=1pt,bottom=1pt,boxsep=1pt,boxrule=.5pt,nobeforeafter]
+\begin{enumerate}
+\item One
+\item Two
+\end{enumerate}
+\end{tcolorbox}
+\column{.5\textwidth}
+\begin{tcolorbox}[width=.8\linewidth,colback=red!5!white]
+Right column.
+\end{tcolorbox}
+\end{columns}
+\end{frame}
+\end{document}

@@ -7,7 +7,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(directory, "../../../..");
 const artifacts = path.resolve(root, process.argv[2] ?? "artifacts/beamer-followup-conformance");
 const manifest = JSON.parse(readFileSync(path.join(directory, "../corpus-followups/cases.json"), "utf8"));
-const selected = ["tables-command-columns-totalwidth", "text-small-display-control"];
+const selected = ["tables-command-columns-totalwidth", "tables-default-columns-width", "text-small-display-control", "root-font-14pt", "root-font-11pt-control", "flow-stock-block-control"];
 const sourceFiles = {};
 const pages = [];
 let environment;

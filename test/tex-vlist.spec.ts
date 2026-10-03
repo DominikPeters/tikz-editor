@@ -2707,6 +2707,16 @@ describe("TeX vlist scopes", () => {
     ]);
   });
 
+  it("advances enumerate labels only for default items while retaining item topology", () => {
+    const source = String.raw`\begin{enumerate}\item[Custom] Alpha\item[] Beta\item Gamma\begin{enumerate}\item[Inner] Delta\item Epsilon\end{enumerate}\item Zeta\end{enumerate}\begin{enumerate}\item Eta\end{enumerate}`;
+    const result = layoutSimpleTexParagraph(source, { width: texLength(150) });
+    expect(result.supported).toBe(true);
+    expect(result.report!.lines.map(line => line.segments.map(segment => segment.text ?? "").join(""))).toEqual(["CustomAlpha", "Beta", "1.Gamma", "InnerDelta", "(a)Epsilon", "2.Zeta", "1.Eta"]);
+    const outer = result.listStructure!.find(list => list.beginSpan.from === 0)!;
+    expect(outer.items.map(item => item.itemIndex)).toEqual([1, 2, 3, 4]);
+    expect(outer.items.map(item => source.slice(item.contentSpan.from, item.contentSpan.to))).toEqual(["Alpha", "Beta", String.raw`Gamma\begin{enumerate}\item[Inner] Delta\item Epsilon\end{enumerate}`, "Zeta"]);
+  });
+
   it("records list item label source metadata on list-item vboxes", () => {
     const source = String.raw`\begin{enumerate}\item[Step] Alpha\end{enumerate}\begin{description}\item[Term] Beta\end{description}`;
     const parsed = parseSimpleTexParagraphIr(source);

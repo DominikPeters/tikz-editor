@@ -1,4 +1,5 @@
 import type { Span } from "../ast/types.js";
+import type { TcolorboxGeometry, TcolorboxPlan } from "./tcolorbox.js";
 import type {
   BeamerBlockBodyNode,
   BeamerColumnBodyNode,
@@ -44,7 +45,8 @@ export type PreparedBlock = {
   node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
   plan: BeamerBlockTemplatePlan;
   width: number;
-  title: LaidParagraph;
+  title: LaidParagraph | null;
+  packageBox?: { plan: TcolorboxPlan; geometry: TcolorboxGeometry };
   body: LaidParagraph | null;
   /** Mixed supported text and bounded source cards, positioned within the body. */
   bodyFlow: { items: PositionedFrameFlowItem[]; extent: number } | null;

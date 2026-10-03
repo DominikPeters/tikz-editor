@@ -406,6 +406,11 @@
         "Check",
         "First",
         "Second"
+      ],
+      "paintProbes": [
+        { "id": "box-frame", "x": 30, "y": 110 },
+        { "id": "title-band", "x": 40, "y": 107 },
+        { "id": "box-body", "x": 40, "y": 140 }
       ]
     },
     {

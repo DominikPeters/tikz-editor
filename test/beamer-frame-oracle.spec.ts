@@ -357,6 +357,41 @@ KERN\t1\troot.4\ty\t0\t589824\t-32768\t-32768\t0\t0\t0\t0\t1
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30_000);
 
+  it.runIf(runOracleIntegration)("traces PGF string-backed literal matrices and nested graphicx paint without scaling the frame title", () => {
+    const directory = mkdtempSync(join(tmpdir(), "beamer-pgf-transform-oracle-"));
+    try {
+      const source = readFileSync(new URL("./fixtures/beamer/oracle-pgf-transforms.tex", import.meta.url), "utf8");
+      writeFileSync(join(directory, "probe.tex"), source.replace(String.raw`\begin{document}`, `${beamerProbeInstrumentation()}\n${String.raw`\begin{document}`}`));
+      writeFileSync(join(directory, "beamer-page-trace.lua"), beamerPageTraceLuaSource());
+      execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "--no-shell-escape", `--output-directory=${directory}`, "probe.tex"], {
+        cwd: directory, env: { ...process.env, TEXMFVAR: "/private/tmp", TEXMFCACHE: "/private/tmp", TIKZ_BEAMER_TRACE_DIR: directory }, stdio: "ignore", timeout: 30_000,
+      });
+      const trace = parseBeamerPageTraceTsv(readFileSync(join(directory, "beamer-page-trace.tsv"), "utf8"));
+      type Glyph = { code: number; x: { texPt: number }; y: { texPt: number }; width: { texPt: number }; transform?: number[]; hiddenLayout?: { x: { texPt: number }; y: { texPt: number } } };
+      const pages = trace.pages as unknown as readonly { glyphs: readonly Glyph[] }[];
+      const matrices = [[.5, 0, 0, .5], [0, -.5, .5, 0]];
+      expect(pages).toHaveLength(5);
+      pages.slice(0, 2).forEach((page, index) => {
+        const a = page.glyphs.find(glyph => glyph.code === 65)!;
+        const b = page.glyphs.find(glyph => glyph.code === 66)!;
+        expect(a.transform).toEqual(matrices[index]);
+        expect(b.transform).toEqual(matrices[index]);
+        expect(page.glyphs.find(glyph => glyph.code === 67)!.transform).toBeUndefined();
+        expect(b.x.texPt - a.x.texPt).toBeCloseTo(matrices[index][0] * a.width.texPt, 4);
+        expect(b.y.texPt - a.y.texPt).toBeCloseTo(matrices[index][1] * a.width.texPt, 4);
+      });
+      expect(pages[2].glyphs.find(glyph => glyph.code === 85)!.transform).toBeUndefined();
+      expect(pages[2].glyphs.find(glyph => glyph.code === 65)!.transform).toEqual([.80011, 0, 0, .80011]);
+      const hidden = pages[3].glyphs.find(glyph => glyph.code === 72)!;
+      expect(hidden.hiddenLayout).toBeDefined();
+      // PGF serializes its .99627 dimension conversion as 2000.0258bp.
+      expect(hidden.x.texPt - hidden.hiddenLayout!.x.texPt).toBeCloseTo(2000.0258 * 72.27 / 72 * .80011, 4);
+      expect(hidden.y.texPt - hidden.hiddenLayout!.y.texPt).toBeCloseTo(-2000.0258 * 72.27 / 72 * .80011, 4);
+      expect(pages[3].glyphs.find(glyph => glyph.code === 86)!.hiddenLayout).toBeUndefined();
+      expect(pages[4].glyphs.find(glyph => glyph.code === 72)!.hiddenLayout).toBeUndefined();
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }, 30_000);
+
   it("parses PDF page geometry and Beamer class provenance", () => {
     expect(
       parsePdfInfo(`Pages:           2

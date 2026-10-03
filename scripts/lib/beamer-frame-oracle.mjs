@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 7;
+export const BEAMER_FRAME_ORACLE_VERSION = 9;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -32,6 +32,14 @@ export function beamerProbeInstrumentation() {
 ${dimensionWrites}
 }
 \directlua{dofile((os.getenv("TIKZ_BEAMER_TRACE_DIR") or ".") .. "/beamer-page-trace.lua")}
+% LuaTeX 1.21 cannot retrieve token-backed pdf_literal payloads (its node
+% getter repeats the lua_refid_literal branch). Emit the identical PGF
+% primitive as a string-backed node, whose payload remains inspectable.
+\def\pgfsys@invoke#1{\directlua{tikzeditorbeamerliteral("\luaescapestring{#1}")}}
+\let\tikzeditorbegininvisible\pgfsys@begininvisible
+\let\tikzeditorendinvisible\pgfsys@endinvisible
+\def\pgfsys@begininvisible{\directlua{tikzeditorbeamervisibility=1}\tikzeditorbegininvisible}
+\def\pgfsys@endinvisible{\directlua{tikzeditorbeamervisibility=-1}\tikzeditorendinvisible}
 \AddToHook{shipout/before}{\tikzeditorbeamerprobe}
 \makeatother`;
 }
@@ -57,14 +65,70 @@ local whatsit_id = node.id("whatsit")
 local pdf_save = node.subtype("pdf_save")
 local pdf_restore = node.subtype("pdf_restore")
 local pdf_setmatrix = node.subtype("pdf_setmatrix")
+local pdf_literal = node.subtype("pdf_literal")
 local running_dimension = -1073741824
 local page_index = 0
 local transform = {1, 0, 0, 1, 0, 0}
 local transform_stack = {}
+local hidden_offset = {0, 0}
+local hidden_stack = {}
+
+function tikzeditorbeamerliteral(data)
+  local literal = node.new("whatsit", "pdf_literal")
+  literal.mode, literal.data = 0, data
+  if tikzeditorbeamervisibility then
+    node.setproperty(literal, {beamer_visibility = tikzeditorbeamervisibility})
+    tikzeditorbeamervisibility = nil
+  end
+  node.write(literal)
+end
 
 local function painted_point(x, y)
   return transform[1] * x + transform[3] * y + transform[5],
     transform[2] * x + transform[4] * y + transform[6]
+end
+
+local function concatenate_pdf_matrix(a, b, c, d, e, f, x, y)
+  b, c, f = -b, -c, -f
+  local origin_e, origin_f = x - a*x - c*y + e, y - b*x - d*y + f
+  local t = transform
+  transform = {t[1]*a+t[3]*b, t[2]*a+t[4]*b, t[1]*c+t[3]*d, t[2]*c+t[4]*d,
+    t[1]*origin_e+t[3]*origin_f+t[5], t[2]*origin_e+t[4]*origin_f+t[6]}
+end
+
+-- PGF uses origin-mode PDF literals for graphics state and matrices. Their
+-- translation units are PDF bp; surrounding TeX box shifts already locate
+-- the literal origin, just as for pdf_setmatrix. Ignore path/color operators.
+local function apply_origin_pdf_literal(value, x, y)
+  if value.mode ~= nil and value.mode ~= 0 then return end
+  local operands = {}
+  for token in tostring(value.data):gmatch("%S+") do
+    local number = tonumber(token)
+    if number then
+      operands[#operands + 1] = number
+    else
+      if token == "q" then
+        transform_stack[#transform_stack + 1] = transform
+      elseif token == "Q" then
+        transform = table.remove(transform_stack) or {1, 0, 0, 1, 0, 0}
+      elseif token == "cm" and #operands == 6 then
+        local bp_to_sp = 65536 * 72.27 / 72
+        local property = node.getproperty(value)
+        local visibility = property and property.beamer_visibility
+        if visibility == 1 then
+          hidden_stack[#hidden_stack + 1] = hidden_offset
+          local e, f = operands[5]*bp_to_sp, -operands[6]*bp_to_sp
+          hidden_offset = {hidden_offset[1]+transform[1]*e+transform[3]*f,
+            hidden_offset[2]+transform[2]*e+transform[4]*f}
+        elseif visibility == -1 then
+          hidden_offset = table.remove(hidden_stack) or {0, 0}
+        end
+        concatenate_pdf_matrix(operands[1], operands[2], operands[3], operands[4],
+          operands[5]*bp_to_sp, operands[6]*bp_to_sp, x, y)
+      end
+      operands = {}
+    end
+  end
 end
 
 -- graphicx emits PDF save/setmatrix/restore nodes. PDF uses y-up axes;
@@ -79,11 +143,9 @@ local function apply_pdf_transform(value, x, y)
     local coefficients = {}
     for number in tostring(value.data):gmatch("[%+%-]?[%d%.]+") do coefficients[#coefficients + 1] = tonumber(number) end
     if #coefficients ~= 4 then return end
-    local a, b, c, d = coefficients[1], -coefficients[2], -coefficients[3], coefficients[4]
-    local e, f = x - a * x - c * y, y - b * x - d * y
-    local t = transform
-    transform = {t[1]*a+t[3]*b, t[2]*a+t[4]*b, t[1]*c+t[3]*d, t[2]*c+t[4]*d,
-      t[1]*e+t[3]*f+t[5], t[2]*e+t[4]*f+t[6]}
+    concatenate_pdf_matrix(coefficients[1], coefficients[2], coefficients[3], coefficients[4], 0, 0, x, y)
+  elseif value.subtype == pdf_literal then
+    apply_origin_pdf_literal(value, x, y)
   end
 end
 
@@ -204,6 +266,9 @@ local function write_glyph(path, value, x, baseline)
     font_size(value.font),
     font_name(value.font),
     transform[1], transform[2], transform[3], transform[4],
+    #hidden_stack > 0 and 1 or 0,
+    math.floor(painted_x - hidden_offset[1] + 0.5),
+    math.floor(painted_y - hidden_offset[2] + 0.5),
   }, "\t"), "\n")
 end
 
@@ -318,6 +383,7 @@ local function trace_page(page)
   page_index = page_index + 1
   transform = {1, 0, 0, 1, 0, 0}
   transform_stack = {}
+  hidden_offset, hidden_stack = {0, 0}, {}
   local kind = node.type(page.id)
   trace_file:write(table.concat({
     "PAGE",
@@ -669,6 +735,7 @@ export function parseBeamerPageTraceTsv(tsv) {
         fontSize: dimension(Number(fields[10])),
         fontName: fields[11] ?? "",
         ...parsedTransform(fields, 12),
+        ...(fields[16] === "1" ? { hiddenLayout: { x: dimension(Number(fields[17])), y: dimension(Number(fields[18])) } } : {}),
       });
     } else if (kind === "GLUE" || kind === "KERN") {
       const spacing = {

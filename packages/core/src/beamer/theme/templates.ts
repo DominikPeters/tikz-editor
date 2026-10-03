@@ -30,8 +30,8 @@ import {
   planSidebarPageDecoration,
 } from "./sidebar-templates.js";
 
-const TEX_POINTS_PER_CM = 72.27 / 2.54;
-const DEFAULT_FRAME_TITLE_SEP_PT = 0.3 * TEX_POINTS_PER_CM;
+// Stock sep=0.3cm after TeX dimension scanning (559409sp).
+const DEFAULT_FRAME_TITLE_SEP_PT = 559409 / 65_536;
 // beamerouterthemedefault.sty paints the frametitle color box, while
 // beamerbaseframe.sty adds a separate 0.25em skip to the frame-title box.
 // Keep those dimensions separate: only the former is colored.
@@ -185,18 +185,43 @@ function planDefaultFrameTitle(
   // The default template emits two paragraphs with their font-specific
   // struts. TeX inserts \lineskip when the subtitle's baseline glue would
   // be negative (18pt title strut, 11pt subtitle strut at stock 11pt size).
-  const subtitleBaselineAdvance = 0.3 * titleFont.lineHeightPt +
+  let subtitleBaselineAdvance = 0.3 * titleFont.lineHeightPt +
     Math.max(1, subtitleFont.lineHeightPt - 0.3 * titleFont.lineHeightPt - 0.7 * subtitleFont.lineHeightPt) +
     0.7 * subtitleFont.lineHeightPt;
-  const subtitleExtent = hasSubtitle
+  let subtitleExtent = hasSubtitle
     ? subtitleBaselineAdvance + 0.3 * subtitleFont.lineHeightPt - 0.3 * titleFont.lineHeightPt
     : 0;
-  const paintHeight = (background
+  let paintHeight = (background
     ? DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT
     : EMPTY_BACKGROUND_FRAME_TITLE_HEIGHT_PT) + subtitleExtent;
-  const leadingLineSkip = background
+  let leadingLineSkip = background
     ? 0
     : EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT;
+  let titleBaseline = DEFAULT_FRAME_TITLE_BASELINE_PT;
+  const width = context.page.frameArea.width - 2 * DEFAULT_FRAME_TITLE_SEP_PT;
+  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title", width);
+  if (measured) {
+    const firstAdvance = measured.baselineSkip - measured.firstHeight >= 0
+      ? measured.baselineSkip : measured.firstHeight + 1;
+    titleBaseline = DEFAULT_FRAME_TITLE_SEP_PT - measured.xHeight + firstAdvance;
+    let materialExtent = firstAdvance + measured.extent - measured.firstHeight;
+    if (hasSubtitle) {
+      const subtitle = context.measureFrameHeading?.(context.frame.subtitle!, "frame-subtitle", width);
+      if (subtitle) {
+        const skip = subtitle.baselineSkip - measured.endingDepth - subtitle.firstHeight;
+        const glue = skip >= 0 ? skip : 1;
+        subtitleBaselineAdvance = materialExtent + glue + subtitle.firstHeight - firstAdvance;
+        subtitleExtent = glue + subtitle.extent;
+        materialExtent += subtitleExtent;
+      }
+    }
+    // colorbox's two -1ex skips and sep, plus an extra bottom sep when
+    // painted. The outer empty vbox inserts ordinary interline glue unless
+    // the template's background activates \nointerlineskip.
+    paintHeight = materialExtent - 2 * measured.xHeight + DEFAULT_FRAME_TITLE_SEP_PT * (background ? 2 : 1);
+    const outerSkip = titleFont.lineHeightPt - paintHeight;
+    leadingLineSkip = background ? 0 : outerSkip >= 0 ? outerSkip : 1;
+  }
   const inset = leadingLineSkip + paintHeight +
     DEFAULT_FRAME_TITLE_TRAILING_SKIP_EM *
       // `\beamer@frametitlebox` has ended when beamerbaseframe.sty emits
@@ -246,7 +271,7 @@ function planDefaultFrameTitle(
         verticalAlignment: "top",
         // The template inserts a strut, so the baseline is independent of
         // whether this particular title contains a tall or deep glyph.
-        baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT + leadingLineSkip,
+        baselineY: titleBaseline + leadingLineSkip,
       },
       ...(hasSubtitle ? [{
         kind: "text" as const,
@@ -264,7 +289,7 @@ function planDefaultFrameTitle(
         alignment: ref.options.alignment === "center" ? "center" as const
           : ref.options.alignment === "right" ? "right" as const : "left" as const,
         verticalAlignment: "top" as const,
-        baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT + leadingLineSkip + subtitleBaselineAdvance,
+        baselineY: titleBaseline + leadingLineSkip + subtitleBaselineAdvance,
       }] : []),
     ],
   };

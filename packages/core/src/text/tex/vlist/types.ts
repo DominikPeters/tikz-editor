@@ -448,6 +448,7 @@ export interface PositionedTexVListItem {
   readonly y: TexVListY;
   readonly metrics: TexBoxMetrics;
   readonly baseline?: TexVBoxBaseline;
+  readonly lastDepth?: TexLength;
   readonly children?: readonly PositionedTexVListItem[];
 }
 

@@ -37,6 +37,15 @@ export class TexParagraphLayoutState {
       options.spaceGlueProfile ?? texInitialSpaceGlueProfile(defaultAlignment);
   }
 
+  /** A parbox/minipage groups later declarations while inheriting registers. */
+  public forkMaterialContext(): TexParagraphLayoutState {
+    const nested = new TexParagraphLayoutState(this.defaultAlignment, { ...this.options, tikzTextWidthNode: false });
+    nested.activeAlignment = this.activeAlignment;
+    nested.activeAlignmentProfile = this.activeAlignmentProfile;
+    nested.activeSpaceGlueProfile = this.activeSpaceGlueProfile;
+    return nested;
+  }
+
   public resolveParagraph(params: {
     readonly paragraph: Pick<SimpleTexParagraphBlock, "alignment" | "alignmentProfile">;
     readonly scopePolicy: TexParagraphScopePolicy;

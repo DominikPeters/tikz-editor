@@ -1,0 +1,118 @@
+{
+  "engine": "lualatex",
+  "environment": {
+    "engineBanner": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025) ",
+    "beamerClass": "Document Class: beamer 2025/02/04 v3.72 A class for typesetting presentations"
+  },
+  "sourceSha256": "8a1b4a7c2daa035d36874b440ea3413303bb65dfa374383257aec675ef4f8e3f",
+  "cases": [
+    {
+      "id": "stock-enumerate",
+      "labels": [
+        {
+          "role": "enumerate item",
+          "model": "rgb",
+          "specification": "0.2,0.2,0.7"
+        },
+        {
+          "role": "enumerate item",
+          "model": "rgb",
+          "specification": "0.2,0.2,0.7"
+        },
+        {
+          "role": "enumerate item",
+          "model": "rgb",
+          "specification": "0.2,0.2,0.7"
+        }
+      ],
+      "navigation": "empty"
+    },
+    {
+      "id": "colored-nested-enumerate",
+      "labels": [
+        {
+          "role": "enumerate item",
+          "model": "rgb",
+          "specification": "1,0,0"
+        },
+        {
+          "role": "enumerate subitem",
+          "model": "rgb",
+          "specification": "0,1,0"
+        },
+        {
+          "role": "enumerate subsubitem",
+          "model": "rgb",
+          "specification": "0,0,1"
+        }
+      ],
+      "navigation": "empty"
+    },
+    {
+      "id": "mixed-list-depth",
+      "labels": [
+        {
+          "role": "itemize item",
+          "model": "rgb",
+          "specification": "1,0,0"
+        },
+        {
+          "role": "enumerate item",
+          "model": "rgb",
+          "specification": "0,1,0"
+        }
+      ],
+      "navigation": "empty"
+    },
+    {
+      "id": "colored-nested-itemize",
+      "labels": [
+        {
+          "role": "itemize item",
+          "model": "rgb",
+          "specification": "1,0,0"
+        },
+        {
+          "role": "itemize subitem",
+          "model": "rgb",
+          "specification": "0,1,0"
+        },
+        {
+          "role": "itemize subsubitem",
+          "model": "rgb",
+          "specification": "0,0,1"
+        }
+      ],
+      "navigation": "empty"
+    },
+    {
+      "id": "navigation-default",
+      "labels": [],
+      "navigation": "nonempty"
+    },
+    {
+      "id": "navigation-restored",
+      "labels": [],
+      "navigation": "nonempty"
+    },
+    {
+      "id": "navigation-comment-empty",
+      "labels": [],
+      "navigation": "empty"
+    },
+    {
+      "id": "custom-enumerate-labels",
+      "labels": [
+        {
+          "role": "enumerate item",
+          "model": "rgb",
+          "specification": "1,0,0"
+        }
+      ],
+      "navigation": "empty",
+      "counters": [
+        "1"
+      ]
+    }
+  ]
+}

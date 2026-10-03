@@ -10,7 +10,7 @@ const oracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/fixed-flow-fid
   pages: Array<{ id: string; file: string; frameIndex: number; step: number; trace: OracleBeamerPageTrace }>;
 };
 
-describe("Beamer command columns and leading scoped displays against LuaLaTeX", () => {
+describe("Beamer column glue, scoped sizes and stock block flow against LuaLaTeX", () => {
   for (const page of oracle.pages) {
     it(`matches exact paint and glyph geometry: ${page.id}`, async () => {
       const source = readFileSync(new URL(`./fixtures/beamer/corpus-followups/${page.file}`, import.meta.url), "utf8");

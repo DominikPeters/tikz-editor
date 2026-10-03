@@ -43,6 +43,8 @@ export type BeamerReferenceIndex = {
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
+  /** Live item separation for Beamer shrink/squeeze frames. */
+  crampedLists?: boolean;
   arrayPackage?: boolean;
   tableRegisters?: TexTabularRegisters;
   step: number;

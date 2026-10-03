@@ -1,0 +1,22 @@
+\documentclass{beamer}
+\usepackage{caption}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[plain,t]
+Before.\begin{figure}\rule{40pt}{12pt}\caption*{An unnumbered plot.}\end{figure}After.
+\end{frame}
+\begin{frame}[plain,t]
+\setbeamertemplate{caption}[numbered]
+Before.\begin{figure}\rule{40pt}{12pt}\caption[Short title]{Alpha plot.}\caption*{Unnumbered aside.}\caption{Beta plot.}\end{figure}After.
+\end{frame}
+\begin{frame}[plain,t]
+Before.\begin{figure}\rule{40pt}{12pt}\caption*{A long unnumbered caption describes several observations of the plotted values and explains how the blue and red curves approach the same stable equilibrium after the initial transient has disappeared.}\end{figure}After.
+\end{frame}
+\begin{frame}[plain,t]
+\setbeamertemplate{caption}[numbered]
+Before.\begin{figure}\rule{40pt}{12pt}\caption{A long numbered caption compares the measured values $x=2$ and $y=3$ and describes the change in a simple model when the initial condition is adjusted across a sequence of repeated experiments.}\end{figure}After.
+\end{frame}
+\begin{frame}[plain,t]
+Before.\begin{table}\caption*{An unnumbered table.}\begin{tabular}{lr}Alpha&12\\Beta&345\end{tabular}\end{table}After.
+\end{frame}
+\end{document}

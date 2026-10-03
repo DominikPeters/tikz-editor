@@ -4,6 +4,7 @@ import type {
   PreparedFrameFlowItem,
 } from "./render-model.js";
 import { flattenPositionedTexVListItems } from "../text/tex/vlist/traversal.js";
+import { tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 
 const TEX_LINE_SKIP_PT = 1;
 
@@ -104,6 +105,15 @@ export function positionPreparedFrameFlow(
       continue;
     }
     if (item.kind === "block") {
+      if (item.block.packageBox) {
+        const spacing = tcolorboxSurroundingSpacing(item.block.packageBox.plan, { baselineSkipPt: baselineSkip, previousDepthPt: previousDepth });
+        const contentTop = cursor + spacing.beforePt;
+        const visualBottom = contentTop + item.naturalHeight;
+        items.push({ item, contentTop, referenceY: visualBottom, visualTop: contentTop, visualBottom });
+        cursor = visualBottom + spacing.afterPt;
+        previousDepth = spacing.endingDepthPt;
+        continue;
+      }
       const glue = verticalInterlineGlue(
         previousDepth,
         item.boxHeight,
@@ -247,7 +257,7 @@ export function previousDepthBeforeTrailingVerticalSpace(
   return 0;
 }
 
-export function trailingBeamerTrivlistSkip(source: string): number {
+export function trailingBeamerTrivlistSkip(source: string, topsepPt = 9): number {
   const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/gu;
   let lastEnd = -1;
   for (const match of source.matchAll(endPattern)) {
@@ -257,7 +267,7 @@ export function trailingBeamerTrivlistSkip(source: string): number {
     return 0;
   }
   const suffix = source.slice(lastEnd);
-  return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? 9 : 0;
+  return /^(?:\s|\\vspace\*?\s*\{[^{}]*\})*$/u.test(suffix) ? topsepPt : 0;
 }
 
 export function trailingBeamerListSkip(source: string): number {
@@ -276,7 +286,8 @@ export function trailingBeamerListSkip(source: string): number {
 
 export function leadingBeamerTrivlistAdjustment(
   source: string,
-  paragraph: LaidParagraph
+  paragraph: LaidParagraph,
+  topsepPt = 9
 ): number {
   if (
     !/\\begin\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/u.test(source)
@@ -288,7 +299,7 @@ export function leadingBeamerTrivlistAdjustment(
       item.itemKind === "glue" &&
       item.glue?.origin?.kind === "trivlist-boundary"
   );
-  return Math.max(0, 9 - Number(boundary?.height ?? 9));
+  return Math.max(0, topsepPt - Number(boundary?.height ?? topsepPt));
 }
 
 export function paragraphLastLineDepth(paragraph: LaidParagraph): number {

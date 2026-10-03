@@ -108,7 +108,8 @@ export type SimpleTexVerticalGlueCommandName =
   | "smallskip"
   | "medskip"
   | "bigskip"
-  | "vfill";
+  | "vfill"
+  | "nointerlineskip";
 export type SimpleTexBoxCommandName = "parbox" | "minipage";
 export type SimpleTexBoxAlignment = "top" | "center" | "bottom";
 
@@ -143,6 +144,8 @@ export interface SimpleTexFontState {
   /** Absolute TeX point size selected by an inline declaration. */
   readonly sizePt?: TexLength;
   readonly baselineSkipPt?: TexLength;
+  /** Beamer replaces LaTeX's toggling emphasis command with a scoped itshape. */
+  readonly emphasisStyle?: "latex" | "beamer";
   /** CSS color normalized from the xcolor spelling in the source. */
   readonly color?: string;
   readonly tabularRegisters?: TexTabularRegisters;
@@ -300,6 +303,9 @@ export interface SimpleTexRuleNode extends SimpleTexSourceRange {
   readonly raise: TexHBoxOffsetY;
   readonly width: TexLength;
   readonly height: TexLength;
+  /** A strut reserves the active baseline's height/depth without painting. */
+  readonly strut?: true;
+  readonly strutBaselineSkipPt?: TexLength;
 }
 
 export interface SimpleTexIncludeGraphicsNode extends SimpleTexSourceRange {
@@ -573,6 +579,8 @@ export interface SimpleTexToken {
   readonly ruleRaise?: TexHBoxOffsetY;
   readonly ruleWidth?: TexLength;
   readonly ruleHeight?: TexLength;
+  readonly ruleStrutBaselineSkipPt?: TexLength;
+  readonly ruleIsStrut?: true;
   readonly graphicsFilename?: string;
   readonly graphicsFilenameStart?: number;
   readonly graphicsFilenameEnd?: number;
@@ -738,6 +746,8 @@ export interface SimpleTexListContext {
   readonly depth: number;
   readonly labelDepth: number;
   readonly itemIndex: number;
+  /** Enumerate's counter advances only for items without an authored label. */
+  readonly labelCounter?: number;
   /** Authored item command owning both generated and custom labels. */
   readonly itemCommandSpan?: { readonly start: number; readonly end: number };
   readonly ownLeftMarginEm: number;
@@ -2282,6 +2292,11 @@ function scanSimpleTexVerticalGlueCommand(
   end: number;
   unsupportedCommand: boolean;
 } | null {
+  const noInterlineEnd = scanSimpleTexControlWord(text, start, "nointerlineskip");
+  if (noInterlineEnd !== null) return {
+    node: { kind: "vertical-glue", text: text.slice(start, noInterlineEnd), command: "nointerlineskip", size: texLength(0), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + noInterlineEnd },
+    end: noInterlineEnd, unsupportedCommand: false,
+  };
   for (const preset of [
     { command: "smallskip", size: 3, stretch: 1, shrink: 1 },
     { command: "medskip", size: 6, stretch: 2, shrink: 2 },
@@ -3085,6 +3100,11 @@ function scanSimpleTexRuleCommand(
   end: number;
   unsupportedCommand: boolean;
 } | null {
+  const strutEnd = scanSimpleTexControlWord(text, start, "strut");
+  if (strutEnd !== null) return {
+    node: { kind: "rule", text: text.slice(start, strutEnd), raise: texHBoxOffsetY(0), width: texLength(0), height: texLength(0), strut: true, sourceStart: sourceOffset + start, sourceEnd: sourceOffset + strutEnd },
+    end: skipSimpleTexControlWordSpaces(text, strutEnd), unsupportedCommand: false,
+  };
   const commandEnd = scanSimpleTexControlWord(text, start, "rule");
   if (commandEnd === null) {
     return null;
@@ -4331,6 +4351,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       sizeHistory.push({ from: node.sourceEnd, state: outer });
       return { ...node, children };
     }
+    if (node.kind === "rule" && node.strut) return { ...node, strutBaselineSkipPt: sizeState.baselineSkip };
     if (node.kind !== "style-declaration") return node;
     const name = node.sizeScope?.boundary === "begin" ? node.sizeScope.name : node.sizeCommand;
     if (node.sizeScope?.boundary === "begin") sizeScopes.push(sizeState);
@@ -4375,6 +4396,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly depth: number;
     readonly labelDepth: number;
     itemIndex: number;
+    labelCounter: number;
     itemCommandSpan?: { start: number; end: number };
     readonly ownLeftMarginEm: number;
     readonly totalLeftMarginEm: number;
@@ -4673,6 +4695,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       labelDepth: activeList.labelDepth,
       itemIndex: activeList.itemIndex,
       itemCommandSpan: activeList.itemCommandSpan,
+      ...(activeList.kind === "enumerate" && activeList.labelCounter !== activeList.itemIndex ? { labelCounter: activeList.labelCounter } : {}),
       ownLeftMarginEm: activeList.ownLeftMarginEm,
       totalLeftMarginEm: activeList.totalLeftMarginEm,
       showLabel: pendingListShowLabel,
@@ -4708,6 +4731,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       depth,
       labelDepth,
       itemIndex: 0,
+      labelCounter: 0,
       ownLeftMarginEm: ownMargin,
       totalLeftMarginEm: scopeRole.totalLeftMarginEm,
       scopeRole,
@@ -5041,6 +5065,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         break;
       }
       activeList.itemIndex += 1;
+      // latex.ltx's \@item advances \@listctr only in the no-item-argument
+      // branch; custom and even empty [] labels leave the counter alone.
+      if (activeList.kind === "enumerate" && node.labelNodes === undefined) activeList.labelCounter += 1;
       // Own the marker group with the command token. Covered text inside an
       // optional label must only hide its own glyphs, not the entire label.
       activeList.itemCommandSpan = { start: node.sourceStart, end: node.sourceStart + "\\item".length };
@@ -5475,7 +5502,9 @@ export function simpleTexInlineNodesToTokens(
 
     if (node.kind === "font-command") {
       const childFontState = simpleTexFontStateForCommand(activeFontState, node.command);
+      const beamerEmphasis = node.command === "emph" && activeFontState.emphasisStyle === "beamer";
       if (
+        !beamerEmphasis &&
         simpleTexFontStateHasItalicCorrection(activeFontState) &&
         !simpleTexFontStateHasItalicCorrection(childFontState)
       ) {
@@ -5485,7 +5514,7 @@ export function simpleTexInlineNodesToTokens(
         node.children,
         childFontState
       );
-      markLastTextTokenItalicCorrection(childTokens);
+      if (!beamerEmphasis) markLastTextTokenItalicCorrection(childTokens);
       if (skipPostLineBreakSpace && childTokens[0]?.kind === "space") {
         tokens.push(...childTokens.slice(1));
       } else {
@@ -5553,6 +5582,7 @@ export function simpleTexInlineNodesToTokens(
         ruleRaise: node.raise,
         ruleWidth: node.width,
         ruleHeight: node.height,
+        ...(node.strut ? { ruleIsStrut: true as const, ruleStrutBaselineSkipPt: node.strutBaselineSkipPt ?? activeFontState.baselineSkipPt } : {}),
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
@@ -5777,11 +5807,11 @@ export function simpleTexFontStateForCommand(
   if (command === "emph") {
     return {
       ...current,
-      shape: current.shape === "italic" ? "upright" : "italic",
+      shape: current.emphasisStyle === "beamer" ? "italic" : current.shape === "italic" ? "upright" : "italic",
     };
   }
   if (command === "textnormal") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, color: current.color, tabularRegisters: current.tabularRegisters };
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, color: current.color, tabularRegisters: current.tabularRegisters };
   }
   if (command === "textsf") {
     return { ...current, family: "sans" };
@@ -5797,25 +5827,25 @@ function simpleTexFontStateForDeclaration(
   command: SimpleTexFontDeclarationName
 ): SimpleTexFontState {
   if (command === "it") {
-    return { ...defaultSimpleTexFontState, shape: "italic", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "italic", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "bf") {
-    return { ...defaultSimpleTexFontState, series: "bold", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, series: "bold", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "rm") {
-    return { ...defaultSimpleTexFontState, baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sf") {
-    return { ...defaultSimpleTexFontState, family: "sans", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, family: "sans", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sl") {
-    return { ...defaultSimpleTexFontState, shape: "slanted", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "slanted", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "sc") {
-    return { ...defaultSimpleTexFontState, shape: "small-caps", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "small-caps", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "tt") {
-    return { ...defaultSimpleTexFontState, family: "typewriter", baselineSkipPt: current.baselineSkipPt, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, family: "typewriter", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
   }
   if (command === "em") {
     return {
@@ -5824,7 +5854,7 @@ function simpleTexFontStateForDeclaration(
     };
   }
   if (command === "normalfont") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, color: current.color, tabularRegisters: current.tabularRegisters };
+    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, color: current.color, tabularRegisters: current.tabularRegisters };
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };

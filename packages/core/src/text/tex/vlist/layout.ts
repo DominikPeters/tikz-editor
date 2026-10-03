@@ -32,6 +32,8 @@ export interface TexVListGlueSet {
 
 export interface MeasuredTexVListItem {
   readonly metrics: TexBoxMetrics;
+  /** Depth of the last physical line in a paragraph with several lines. */
+  readonly lastDepth?: TexLength;
   /** Inline displacement relative to the containing VList origin. */
   readonly x?: TexVListLocalX;
   readonly y?: TexVListY;
@@ -109,6 +111,7 @@ export function layoutTexVListItems(
         ))),
         y,
         metrics: measured.metrics,
+        ...(measured.lastDepth !== undefined ? { lastDepth: measured.lastDepth } : {}),
       });
       cursor = measured.cursorAdvance === undefined
         ? texVListY(roundTexPt(y + advance))
@@ -212,7 +215,10 @@ function layoutTexVBoxItem(
     : texVListRootVerticalOffset(laidOutHeight, targetHeight, item.alignment);
   const children = offsetPositionedTexVListItems(laidOut.positioned, childOffset);
   const cursor = texVListY(roundTexPt(top + advance));
-  const baselineY = baselineYForVBox(children, top);
+  const lastBox = children.filter(child => child.item.kind !== "penalty" && (child.item.kind !== "hbox" || child.item.affectsVBoxBaseline !== false)).at(-1);
+  const baselineY = item.material && item.alignment === "bottom"
+    ? texVListY(roundTexPt(cursor - (lastBox?.lastDepth ?? lastBox?.metrics.depth ?? 0)))
+    : baselineYForVBox(children, top);
   return {
     children,
     metrics: metricsForVBox(
@@ -222,7 +228,8 @@ function layoutTexVBoxItem(
       xOffset,
       leftMarginWidth,
       rightMarginWidth,
-      targetWidth
+      targetWidth,
+      baselineY
     ),
     baseline: baselineY === null
       ? { kind: "none" }
@@ -473,9 +480,10 @@ function metricsForVBox(
   xOffset: TexVListX = texVListX(0),
   leftMarginWidth: TexLength = texLength(0),
   rightMarginWidth: TexLength = texLength(0),
-  targetWidth: TexLength | undefined = undefined
+  targetWidth: TexLength | undefined = undefined,
+  baselineOverride?: TexVListY | null
 ): TexBoxMetrics {
-  const baselineY = baselineYForVBox(positioned, top) ?? top;
+  const baselineY = baselineOverride ?? baselineYForVBox(positioned, top) ?? top;
   const contentRight = Math.max(
     leftMarginWidth,
     ...positioned.map((item) => item.x - xOffset + item.metrics.width)

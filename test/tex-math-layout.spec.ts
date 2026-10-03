@@ -1263,7 +1263,7 @@ describe("TeX math hlist layout", () => {
     expect(fontProfile.resolveMathFont({ family: "operators", style: "script", baseAtPt: 14.4 }))
       .toMatchObject({ id: "cmss10", atPt: 10 });
     for (const fontId of ["cmss9", "cmss12", "cmss17"]) {
-      expect(computerModernTexMetricProvider.resolveFont({ fontId, atPt: 10 }).data.glyphs?.[37])
+      expect(computerModernTexMetricProvider.resolveFont({ fontId, atPt: texLength(10) }).data.glyphs?.[37])
         .toBeTruthy();
     }
   });

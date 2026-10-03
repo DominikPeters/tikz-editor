@@ -708,6 +708,26 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "Headless source scanner inventories Beamer frames, sections, frame headers, preamble metadata, and nested TikZ roots. Frame content lowering and rendering are tracked by later Beamer phases."
   },
+  beamer_frame_shrink: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
+    fixtures: ["beamer_frame_shrink"],
+    notes: "Stock shrink frames expand body text widths before layout, apply TeX's minimum/overflow scale and cramped list item separation, and retain unscaled titles/chrome. Body glyphs/rules, caret stops and source hit bounds share the same outer transform. Squeeze uses live cramped item separation without scaling. Frame zoom and arbitrary shrink/template redefinitions remain unsupported.",
+  },
+  beamer_frame_flow: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",
+    fixtures: ["beamer_frame_flow"],
+    notes: "Source-backed frame titles/subtitles and title overlays, empty titles, class size ladders, command/environment columns and default/explicit column glue participate in common paragraph and block/list flow. Stock default heading boxes measure struts and enlarged title content. Exact LuaLaTeX snapshots cover representative scope, packing and font contracts; arbitrary frame/chrome template redefinitions are not executed.",
+  },
+  beamer_theme_colors: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",
+    fixtures: ["beamer_theme_colors"],
+    notes: "Preamble setbeamercolor declarations interleave with theme components, supporting fg/bg expressions, ordered parent/use roles and starred resets, definecolor/colorlet aliases and background-canvas inheritance. Body-local declarations, group execution and arbitrary color macros remain outside this support boundary.",
+  },
+  beamer_tcolorbox: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",
+    fixtures: ["beamer_tcolorbox"],
+    notes: "Basic tcolorbox standard-skin boxes support source-backed titles/body, stock colors/rules/padding/corners, ordinary font and dimension options, minipage text/list layout and surrounding spacing. Skins, breakable/side-by-side or nested boxes, lower panels, global tcbset and arbitrary style code retain bounded unsupported source cards with diagnostics.",
+  },
   beamer_source_placeholders: {
     parser: "partial",
     semantic: "not-applicable",
@@ -747,7 +767,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["beamer_float_captions"],
-    notes: "Beamer figure/table environments participate in centered source-backed flow. Short captions support the default and numbered stock templates, optional short text, stock label separators, caption-name color and the 11pt class small caption font with 7pt skips. Wrapped long captions and arbitrary caption template/font redefinitions are not implemented.",
+    notes: "Beamer figure/table environments participate in centered source-backed flow. Captions support the default and numbered stock templates, optional short text, stock label separators, caption-name color and class-size-specific caption fonts. Ordinary caption/subcaption-package captions support short centered or wrapped ragged-right text and unnumbered caption* without advancing counters. Struts, bottom minipage depth and caption skips are checked against LuaLaTeX. Arbitrary caption template/font/package-option redefinitions are not implemented.",
   },
   beamer_frame_continuations: {
     parser: "partial",

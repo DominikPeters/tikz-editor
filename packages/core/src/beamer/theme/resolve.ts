@@ -2,6 +2,9 @@ import type { Diagnostic } from "../../diagnostics/types.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
+import { beamerClassFontSize, beamerNamedFontSize } from "./font-sizes.js";
+import { scanBeamerNavigationTemplates } from "./template-declarations.js";
+import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorRgb } from "./color-declarations.js";
 import type {
   BeamerThemeColor,
   BeamerThemeComponentProvenance,
@@ -20,6 +23,8 @@ const TEX_POINTS_PER_CM = 72.27 / 2.54;
 type MutableTheme = {
   id: string;
   colors: Record<string, BeamerThemeColor>;
+  colorAliases: Record<string, string>;
+  colorAliasRgb: Record<string, BeamerColorRgb>;
   fonts: Record<BeamerThemeFontRole, BeamerThemeFont>;
   dimensions: BeamerThemeDimensions;
   templates: BeamerThemeTemplates;
@@ -61,7 +66,7 @@ const DEFAULT_REF = (id: string): BeamerThemeTemplateRef => ({
 export function resolveBeamerTheme(
   document: BeamerDocumentModel
 ): ResolvedBeamerTheme {
-  const state = createDefaultTheme();
+  const state = createDefaultTheme(beamerClassFontSize(document));
   const uses = document.preamble.themes
     .flatMap((source) =>
       source.name.value.split(",").map((name): BeamerThemeUse => ({
@@ -71,9 +76,26 @@ export function resolveBeamerTheme(
         source,
       }))
     )
-    .filter((use) => use.name.length > 0);
+    .filter((use) => use.name.length > 0 && !document.preamble.macroDefinitions.some(definition => definition.span.from <= use.source.span.from && definition.span.to >= use.source.span.to));
 
-  for (const use of uses) {
+  const colorEvents = scanBeamerColorDeclarations(document);
+  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document)]
+    .sort((left, right) => left.span.from - right.span.from);
+  for (const event of events) {
+    if (event.kind === "navigation-template") {
+      if (event.templateId) state.templates.navigationSymbols = DEFAULT_REF(event.templateId);
+      if (event.diagnostic) state.diagnostics.push(event.diagnostic);
+      continue;
+    }
+    if (event.kind !== "theme-use") {
+      applyBeamerColorDeclaration(state, event, document.source, role => resolveMutableThemeColor(state, role), (role, field) => {
+        let channels: BeamerColorRgb | null = null;
+        resolveBeamerColorRecord(state.colors, state.colorAliases, state.colorAliasRgb, role, (name, rgb) => { if (name === field) channels = rgb; });
+        return channels;
+      });
+      continue;
+    }
+    const use = event.use;
     const applier = componentRegistry[use.kind].get(normalizeName(use.name));
     if (applier) {
       applier(state, use);
@@ -86,10 +108,13 @@ export function resolveBeamerTheme(
       span: use.source.span,
     });
   }
+  diagnoseBeamerColorDeclarations(state, colorEvents, role => resolveMutableThemeColor(state, role));
 
   return {
     id: state.id,
     colors: freezeRecord(state.colors),
+    colorAliases: Object.freeze({ ...state.colorAliases }),
+    colorAliasRgb: Object.freeze(Object.fromEntries(Object.entries(state.colorAliasRgb).map(([name, channels]) => [name, freezeColorChannels(channels)]))),
     fonts: freezeRecord(state.fonts),
     dimensions: Object.freeze({
       ...state.dimensions,
@@ -115,6 +140,32 @@ export function resolveBeamerThemeColor(
   theme: ResolvedBeamerTheme,
   role: string
 ): ResolvedBeamerThemeColor {
+  return resolveBeamerColorRecord(theme.colors, theme.colorAliases ?? {}, theme.colorAliasRgb ?? {}, role);
+}
+
+function resolveBeamerColorRecord(colors: Readonly<Record<string, BeamerThemeColor>>, aliases: Readonly<Record<string, string>>, aliasRgb: Readonly<Record<string, BeamerColorRgb>>, role: string, captureRgb?: (field: "fg" | "bg", channels: BeamerColorRgb | null) => void): ResolvedBeamerThemeColor {
+  const roleNameForAlias = (name: string) => Object.keys(colors).find(key => key.toLowerCase() === name.toLowerCase());
+  const expressionRgb = (raw: string, seen: ReadonlySet<string>): BeamerColorRgb | null => resolveBeamerColorExpressionRgb(raw, alias => {
+    const match = /^(.*)\.(fg|bg)$/u.exec(alias);
+    const roleName = match && roleNameForAlias(match[1]);
+    if (match && roleName) return roleRgb(roleName, match[2] as "fg" | "bg", seen);
+    return aliasRgb[alias] ?? (aliases[alias] ? resolveBeamerColorExpressionRgb(aliases[alias], () => null) : null);
+  });
+  const roleRgb = (name: string, field: "fg" | "bg", ancestors: ReadonlySet<string>): BeamerColorRgb | null => {
+    if (ancestors.has(name)) return null;
+    const resolved = resolve(name, ancestors)[field];
+    if (resolved === undefined) return null;
+    const seen = new Set(ancestors); seen.add(name);
+    const color = colors[name];
+    const expression = field === "fg" ? color?.fgExpression : color?.bgExpression;
+    if (expression) return expressionRgb(expression.value, seen);
+    if (field === "fg" && color?.fgRgb) return color.fgRgb;
+    if (color?.[field] !== undefined || (field === "fg" ? color?.fgMix : color?.bgMix)) return resolveBeamerColorExpressionRgb(resolved, () => null);
+    for (const parent of [...(color?.parents ?? (color?.parent ? [color.parent] : []))].reverse()) {
+      if (resolve(parent, seen)[field] !== undefined) return roleRgb(parent, field, seen);
+    }
+    return resolveBeamerColorExpressionRgb(resolved, () => null);
+  };
   const resolve = (
     name: string,
     ancestors: ReadonlySet<string>
@@ -124,15 +175,16 @@ export function resolveBeamerThemeColor(
     }
     const seen = new Set(ancestors);
     seen.add(name);
-    const color = theme.colors[name];
+    const color = colors[name];
     if (!color) {
       return {};
     }
-    const parent = color.parent ? resolve(color.parent, seen) : {};
+    const parent = (color.parents ?? (color.parent ? [color.parent] : []))
+      .reduce<ResolvedBeamerThemeColor>((inherited, parentRole) => ({ ...inherited, ...resolve(parentRole, seen) }), {});
     const mixedForeground = color.fgMix
       ? mixThemeForeground(
           foregroundChannels(
-            theme,
+            { colors },
             color.fgMix.foregroundRole,
             resolve(color.fgMix.foregroundRole, seen).fg
           ),
@@ -143,7 +195,7 @@ export function resolveBeamerThemeColor(
     const mixedBackground = color.bgMix
       ? mixThemeForeground(
           foregroundChannels(
-            theme,
+            { colors },
             color.bgMix.foregroundRole,
             resolve(color.bgMix.foregroundRole, seen).fg
           ),
@@ -151,15 +203,23 @@ export function resolveBeamerThemeColor(
           color.bgMix.foregroundPercent
         )
       : undefined;
+    const resolveExpression = (raw: string) => {
+      const channels = raw === "" ? null : expressionRgb(raw, seen);
+      return channels ? beamerColorRgbToCss(channels) : undefined;
+    };
     return {
       ...parent,
       ...(mixedForeground ? { fg: mixedForeground } : {}),
       ...(mixedBackground ? { bg: mixedBackground } : {}),
       ...(color.fg ? { fg: color.fg } : {}),
       ...(color.bg ? { bg: color.bg } : {}),
+      ...(color.fgExpression ? { fg: resolveExpression(color.fgExpression.value) } : {}),
+      ...(color.bgExpression ? { bg: resolveExpression(color.bgExpression.value) } : {}),
     };
   };
-  return resolve(role, new Set());
+  const result = resolve(role, new Set());
+  if (captureRgb) { captureRgb("fg", roleRgb(role, "fg", new Set())); captureRgb("bg", roleRgb(role, "bg", new Set())); }
+  return { ...(result.fg === undefined ? {} : { fg: result.fg }), ...(result.bg === undefined ? {} : { bg: result.bg }) };
 }
 
 function mixThemeForeground(
@@ -178,7 +238,7 @@ function mixThemeForeground(
 }
 
 function foregroundChannels(
-  theme: ResolvedBeamerTheme,
+  theme: Pick<ResolvedBeamerTheme, "colors">,
   role: string,
   resolvedForeground: string | undefined
 ): [number, number, number] | null {
@@ -262,45 +322,41 @@ function resolveMutableThemeColor(
   state: MutableTheme,
   role: string
 ): ResolvedBeamerThemeColor {
-  const resolve = (
-    name: string,
-    ancestors: ReadonlySet<string>
-  ): ResolvedBeamerThemeColor => {
-    if (ancestors.has(name)) {
-      return {};
-    }
-    const color = state.colors[name];
-    if (!color) {
-      return {};
-    }
-    const seen = new Set(ancestors);
-    seen.add(name);
-    return {
-      ...(color.parent ? resolve(color.parent, seen) : {}),
-      ...(color.fg ? { fg: color.fg } : {}),
-      ...(color.bg ? { bg: color.bg } : {}),
-    };
-  };
-  return resolve(role, new Set());
+  return resolveBeamerColorRecord(state.colors, state.colorAliases, state.colorAliasRgb, role);
 }
 
-function createDefaultTheme(): MutableTheme {
+function createDefaultTheme(classSize = "11"): MutableTheme {
   const normalFont: BeamerThemeFont = {
     family: "sans",
     series: "medium",
     shape: "upright",
-    sizePt: 10.95,
-    lineHeightPt: 13.6,
+    ...beamerNamedFontSize(classSize, "normalsize"),
   };
   return {
     id: "default",
+    colorAliases: { fg: "#000000", bg: "#ffffff" },
+    colorAliasRgb: { fg: [0, 0, 0], bg: [1, 1, 1] },
     colors: {
       "normal text": { fg: "#000000", bg: "#ffffff" },
+      "background canvas": { parent: "normal text" },
+      background: { parent: "background canvas" },
       // beamercolorthemedefault.sty's blended blue is rgb(.2,.2,.7).
       // Retain those unquantized channels for xcolor percentage mixes.
       structure: { fg: "#3333b3", fgRgb: [0.2, 0.2, 0.7] },
       "local structure": { parent: "structure" },
       item: { parent: "local structure" },
+      subitem: { parent: "item" },
+      subsubitem: { parent: "subitem" },
+      "item projected": { parent: "item", fg: "#ffffff", bgExpression: { value: "item.fg", span: { from: 0, to: 0 } } },
+      "subitem projected": { parent: "item projected" },
+      "subsubitem projected": { parent: "subitem projected" },
+      "enumerate item": { parent: "item" },
+      "enumerate subitem": { parent: "subitem" },
+      "enumerate subsubitem": { parent: "subsubitem" },
+      "itemize item": { parent: "item" },
+      "itemize subitem": { parent: "subitem" },
+      "itemize subsubitem": { parent: "subsubitem" },
+      "description item": { parent: "item" },
       "bibliography item": { parent: "item" },
       caption: {},
       "caption name": { parent: "structure" },
@@ -421,19 +477,16 @@ function createDefaultTheme(): MutableTheme {
       author: normalFont,
       institute: {
         ...normalFont,
-        sizePt: 8,
-        lineHeightPt: 9.5,
+        ...beamerNamedFontSize(classSize, "scriptsize"),
       },
       date: normalFont,
       "frame-title": {
         ...normalFont,
-        sizePt: 14.4,
-        lineHeightPt: 18,
+        ...beamerNamedFontSize(classSize, "Large"),
       },
       "frame-subtitle": {
         ...normalFont,
-        sizePt: 9,
-        lineHeightPt: 11,
+        ...beamerNamedFontSize(classSize, "footnotesize"),
       },
       headline: {
         ...normalFont,
@@ -479,8 +532,7 @@ function createDefaultTheme(): MutableTheme {
       // selects \large. In the 11pt class profile that is 12pt/14pt.
       "block-title": {
         ...normalFont,
-        sizePt: 12,
-        lineHeightPt: 14,
+        ...beamerNamedFontSize(classSize, "large"),
       },
       "block-body": normalFont,
     },
@@ -512,7 +564,7 @@ function createDefaultTheme(): MutableTheme {
         DEFAULT_REF("beamer/enumeration/default"),
       ],
     },
-    options: {},
+    options: { "class-font-size": classSize },
     appliedComponents: [
       {
         kind: "class-defaults",
@@ -996,25 +1048,18 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
   ["spruce", applySpruceColors],
   ["whale", (state, use) => {
     markApplied(state, "color-theme", "whale", use);
-    state.colors["palette primary"] = { fg: "#ffffff", bg: "#3333b3" };
-    state.colors["palette secondary"] = { fg: "#ffffff", bg: "#262686" };
-    state.colors["palette tertiary"] = { fg: "#ffffff", bg: "#1a1a59" };
+    const expression = (value: string) => ({ value, span: use.source.span });
+    state.colors["palette primary"] = { fg: "#ffffff", use: ["structure"], bgExpression: expression("structure.fg") };
+    state.colors["palette secondary"] = { fg: "#ffffff", use: ["structure"], bgExpression: expression("structure.fg!75!black") };
+    state.colors["palette tertiary"] = { fg: "#ffffff", use: ["structure"], bgExpression: expression("structure.fg!50!black") };
     state.colors["palette quaternary"] = { fg: "#ffffff", bg: "#000000" };
-    state.colors.sidebar = { bg: "#3333b3" };
+    state.colors.sidebar = { use: ["structure"], bgExpression: expression("structure.fg") };
     state.colors["palette sidebar primary"] = {
-      fg: xcolorMixRgb(
-        mutableThemeForegroundRgb(state, "structure", "#3333b3"),
-        WHITE_RGB,
-        10
-      ),
+      use: ["structure"], fgExpression: expression("structure.fg!10!white"),
     };
     state.colors["palette sidebar secondary"] = { fg: WHITE };
     state.colors["palette sidebar tertiary"] = {
-      fg: xcolorMixRgb(
-        mutableThemeForegroundRgb(state, "structure", "#3333b3"),
-        WHITE_RGB,
-        50
-      ),
+      use: ["structure"], fgExpression: expression("structure.fg!50!white"),
     };
     state.colors["palette sidebar quaternary"] = { fg: WHITE };
     state.colors.titlelike = { parent: "palette primary" };
@@ -1035,11 +1080,11 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
   ["seahorse", (state, use) => {
     markApplied(state, "color-theme", "seahorse", use);
     // structure.fg!20/25/30/35!white from beamercolorthemeseahorse.sty.
-    state.colors["palette primary"] = { fg: "#000000", bg: "#d6d6f0" };
-    state.colors["palette secondary"] = { fg: "#000000", bg: "#cccced" };
-    state.colors["palette tertiary"] = { fg: "#000000", bg: "#c2c2e8" };
-    state.colors["palette quaternary"] = { fg: "#000000", bg: "#b8b8e4" };
-    state.colors.sidebar = { bg: "#d6d6f0" };
+    const expression = (value: string) => ({ value, span: use.source.span });
+    for (const [role, percent] of [["primary", 20], ["secondary", 25], ["tertiary", 30], ["quaternary", 35]] as const) {
+      state.colors[`palette ${role}`] = { ...state.colors[`palette ${role}`], fg: "#000000", fgExpression: undefined, fgRgb: undefined, use: ["structure"], bgExpression: expression(`structure.fg!${percent}!white`) };
+    }
+    state.colors.sidebar = { ...state.colors.sidebar, use: ["structure"], bgExpression: expression("structure.fg!20!white") };
     state.colors.titlelike = { parent: "palette primary" };
   }],
   ["metropolis", applyMetropolisColors],
@@ -1861,6 +1906,10 @@ function cmToTexPt(value: number): number {
   return value * TEX_POINTS_PER_CM;
 }
 
+function freezeColorChannels(channels: BeamerColorRgb): BeamerColorRgb {
+  return Object.freeze([channels[0], channels[1], channels[2]]);
+}
+
 function freezeRecord<T extends Record<string, object>>(record: T): Readonly<T> {
   return Object.freeze(
     Object.fromEntries(
@@ -1871,6 +1920,10 @@ function freezeRecord<T extends Record<string, object>>(record: T): Readonly<T> 
           ...(hasRgbChannels(value)
             ? { fgRgb: Object.freeze([...value.fgRgb]) }
             : {}),
+          ...("parents" in value && Array.isArray(value.parents) ? { parents: Object.freeze(value.parents.map((role: unknown) => String(role))) } : {}),
+          ...("use" in value && Array.isArray(value.use) ? { use: Object.freeze(value.use.map((role: unknown) => String(role))) } : {}),
+          ...("fgExpression" in value && value.fgExpression ? { fgExpression: Object.freeze({ ...value.fgExpression }) } : {}),
+          ...("bgExpression" in value && value.bgExpression ? { bgExpression: Object.freeze({ ...value.bgExpression }) } : {}),
           ...("fgMix" in value && value.fgMix
             ? { fgMix: Object.freeze({ ...value.fgMix }) }
             : {}),

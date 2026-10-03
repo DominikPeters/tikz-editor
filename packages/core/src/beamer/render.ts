@@ -57,7 +57,10 @@ import {
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
 import { parseSimpleTexTabularRegisters } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
-import { resolveBeamerColumnWidth } from "./column-dimensions.js";
+import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
+import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
+import { beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
+import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { collectBeamerEditScopes } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
@@ -110,6 +113,7 @@ import {
   planBeamerTitlePageTemplate,
   resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
+  resolveBeamerListLabelColor,
   resolveBeamerTheme,
   resolveBeamerThemeColor,
 } from "./theme/index.js";
@@ -149,6 +153,7 @@ import type {
   BeamerEmbeddedTikzLayout,
   BeamerFrameModel,
   BeamerFrameLayout,
+  BeamerPaintTransform,
   BeamerSpacingLayout,
   BeamerFrameLayoutItem,
   BeamerGraphicsLayout,
@@ -171,10 +176,6 @@ const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 // size11.clo supplies \topsep 9pt plus 3pt minus 5pt. Beamer's frame vbox
 // applies one ordinary-order shrink ratio to these two skips and to display
 // skips in the surrounding body.
-const BEAMER_CENTER_TOPSEP = {
-  naturalPt: 9,
-  shrinkPt: 5,
-} as const;
 // beamerinnerthemedefault.sty's title-page template under the 11pt class
 // profile. The rounded inner theme wraps the title colorbox with the PGF
 // rounded/shadow option but retains these TeX box dimensions.
@@ -227,11 +228,13 @@ const BEAMER_NORMAL_DISPLAY_MATH_PROFILE: TexDisplayMathLayoutProfile = {
 };
 
 function beamerListLayoutProfile(
-  theme: ResolvedBeamerTheme
+  theme: ResolvedBeamerTheme,
+  cramped = false
 ): TexListLayoutProfile {
   const markerCache = new Map<number, ReturnType<typeof resolveBeamerItemizeMarkers>>();
-  return {
+  const profile: TexListLayoutProfile = {
     ...BEAMER_LIST_LAYOUT_PROFILE,
+    trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
     bodyFontSizePtByDepth: [undefined, 10, 9],
     bodyBaselineSkipPtByDepth: [undefined, 12, 11],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
@@ -251,9 +254,11 @@ function beamerListLayoutProfile(
       }
       return markers[Math.min(listDepth - 1, markers.length - 1)];
     },
+    resolveLabelColor: (kind, labelDepth, listDepth) => resolveBeamerListLabelColor(theme, kind, labelDepth, listDepth),
     resolveEnumerateMarker: (itemIndex, labelDepth) =>
       resolveBeamerEnumerateMarker(theme, itemIndex, labelDepth),
   };
+  return cramped ? crampedBeamerListProfile(profile) : profile;
 }
 
 /**
@@ -513,6 +518,7 @@ async function renderBeamerFrameStep(params: {
   const { context, frame, frameIndex, bodyIr, step } = params;
   const { source, document, theme, macroBindings, page } = context;
   const allowFrameBreaks = frame.options?.allowFrameBreaks;
+  const shrink = resolveBeamerFrameShrink(frame);
   const continuationIndex = params.continuation ?? 1;
   if (!Number.isInteger(continuationIndex) || continuationIndex < 1) throw new RangeError("A Beamer continuation page must be a positive integer.");
   const stepCount = bodyIr.overlays.stepCount;
@@ -536,6 +542,20 @@ async function renderBeamerFrameStep(params: {
     step,
     page,
     theme,
+    measureFrameHeading: (value, role, width) => {
+      const projection = projectBeamerOverlayText(createIdentityMappedText(source.slice(value.contentSpan.from, value.contentSpan.to), value.contentSpan.from),
+        value.contentSpan, { ...bodyIr.overlays, pauses: [] }, step);
+      const mapped = concatMappedText([createGeneratedMappedText("\\strut {", "Beamer heading strut", value.span),
+        projection.mapped, createGeneratedMappedText("}\\strut", "Beamer heading strut", value.span)]);
+      const font = theme.fonts[role];
+      const measured = layoutParagraph({ mapped, sourceSpan: value.contentSpan, paragraphId: `${frame.id}:${role}:measure`, role,
+        bounds: { x: 0, y: 0, width, height: 0 }, font, alignment: "left", macroBindings,
+        initialBaselineSkipPt: font.lineHeightPt,
+        references: { ...context.references, theme, step, renderDiagnostics: [] }, graphicsResolver: params.graphicsResolver, paperWidth: page.page.width });
+      return measured ? { firstHeight: paragraphStartingMaterialHeight(measured), extent: paragraphMaterialExtent(measured),
+        endingDepth: paragraphEndingMaterialDepth(measured), baselineSkip: paragraphStartingBaselineSkip(measured, font.lineHeightPt),
+        xHeight: fontXHeightPt(font) } : null;
+    },
   });
   const diagnostics: Diagnostic[] = [
     ...document.diagnostics,
@@ -544,6 +564,7 @@ async function renderBeamerFrameStep(params: {
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
   const references: BeamerReferenceContext = {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
+    crampedLists: shrink != null || frame.options?.entries.some(entry => entry.key === "squeeze"),
     continuationBreaks: allowFrameBreaks == null ? undefined : collectBeamerContinuationBreaks(context.syntax, frame),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
     tableRegisters: parseSimpleTexTabularRegisters(source.slice(document.preamble.span.from, document.preamble.span.to)),
@@ -560,7 +581,7 @@ async function renderBeamerFrameStep(params: {
   const embeddedTikz: BeamerEmbeddedTikzLayout[] = [];
   const modelBuilder = createSvgModelBuilder();
   const pageBackground =
-    resolveBeamerThemeColor(theme, "normal text").bg ?? "#ffffff";
+    resolveBeamerThemeColor(theme, "background canvas").bg ?? "#ffffff";
 
   items.push({
     id: `${frame.id}:background`,
@@ -583,20 +604,22 @@ async function renderBeamerFrameStep(params: {
   const availableContentBounds: BeamerRect = {
     x: page.textArea.x,
     y: chrome.topInset,
-    width: page.textArea.width,
+    width: shrink ? beamerFrameShrinkWidth(page.textArea.width, shrink) : page.textArea.width,
     height: Math.max(
       0,
       page.page.height - chrome.topInset - chrome.bottomInset - (allowFrameBreaks == null ? footnoteInsertion.height : 0)
     ),
   };
   let contentBounds = availableContentBounds;
+  let bodyTransform: BeamerPaintTransform | undefined;
+  const bodyModelBuilder = createSvgModelBuilder();
   const preparedFrameFlow = await prepareFrameFlow({
     source,
     children: bodyIr.children,
-    textWidth: page.textArea.width,
+    textWidth: availableContentBounds.width,
     paperWidth: page.page.width,
     leftSidebarWidth: page.frameArea.x,
-    availableHeight: allowFrameBreaks == null ? availableContentBounds.height : Number.POSITIVE_INFINITY,
+    availableHeight: allowFrameBreaks == null && !shrink ? availableContentBounds.height : Number.POSITIVE_INFINITY,
     diagnostics,
     theme,
     metadata: document.preamble.metadata,
@@ -622,6 +645,8 @@ async function renderBeamerFrameStep(params: {
     overlays: bodyIr.overlays, step,
     continuationSuffix: continuationPages ? beamerContinuationTitleSuffix(document, continuationIndex, continuationCount) : undefined,
   });
+  const bodyItemStart = items.length;
+  const bodyParagraphStart = paragraphs.length;
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
       preparedFrameFlow,
@@ -635,16 +660,20 @@ async function renderBeamerFrameStep(params: {
       availableContentBounds,
       rigidPositioned.extent,
       preparedFrameFlow,
-      frame.options?.alignment ?? "center"
+      shrink ? "top" : frame.options?.alignment ?? "center"
     );
     const positioned = continuationPages?.[continuationIndex - 1] ?? positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt,
-      verticalPacking.fillUnit,
+      shrink ? 0 : verticalPacking.fillUnit,
       frame.options?.plain ? null : 0
     );
     const frameBlockTop =
-      availableContentBounds.y + (continuationPages ? 0 : verticalPacking.topOffset);
+      availableContentBounds.y + (continuationPages || shrink ? 0 : verticalPacking.topOffset);
+    if (shrink) {
+      bodyTransform = beamerFrameBodyTransform(beamerFrameShrinkScale(shrink, rigidPositioned.extent, availableContentBounds.height),
+        { x: availableContentBounds.x, y: frameBlockTop });
+    }
     for (const placement of positioned.items) {
       if (params.work) await params.work.checkpoint();
       if (
@@ -660,7 +689,7 @@ async function renderBeamerFrameStep(params: {
           y: frameBlockTop + placement.contentTop,
           items,
           paragraphs,
-          modelBuilder,
+          modelBuilder: bodyModelBuilder,
           theme,
         });
       } else if (placement.item.kind === "paragraph") {
@@ -670,7 +699,7 @@ async function renderBeamerFrameStep(params: {
           y: frameBlockTop + placement.contentTop,
           items,
           paragraphs,
-          modelBuilder,
+          modelBuilder: bodyModelBuilder,
           theme,
         });
       } else if (placement.item.kind === "columns") {
@@ -679,10 +708,11 @@ async function renderBeamerFrameStep(params: {
           referenceY: frameBlockTop + placement.referenceY,
           spacing,
           bounds: availableContentBounds,
+          paperWidth: page.page.width,
           items,
           paragraphs,
           embeddedTikz,
-          modelBuilder,
+          modelBuilder: bodyModelBuilder,
           theme,
           work: params.work,
         });
@@ -702,7 +732,7 @@ async function renderBeamerFrameStep(params: {
           parentId: null,
           items,
           embeddedTikz,
-          modelBuilder,
+          modelBuilder: bodyModelBuilder,
         });
       } else if (placement.item.kind === "unsupported") {
         emitUnsupportedPlaceholder({
@@ -711,7 +741,7 @@ async function renderBeamerFrameStep(params: {
           y: frameBlockTop + placement.contentTop,
           parentId: null,
           items,
-          modelBuilder,
+          modelBuilder: bodyModelBuilder,
         });
       } else if (placement.item.kind === "vertical-space") {
         const item = placement.item;
@@ -727,7 +757,7 @@ async function renderBeamerFrameStep(params: {
           parentId: null,
           items,
           paragraphs,
-          modelBuilder,
+          modelBuilder: bodyModelBuilder,
           theme,
           visibility:
             placement.item.visibility === "hidden" ? "hidden" : "visible",
@@ -763,7 +793,7 @@ async function renderBeamerFrameStep(params: {
       y: availableContentBounds.y,
       parentId: null,
       items,
-      modelBuilder,
+      modelBuilder: bodyModelBuilder,
     });
     diagnostics.push({
       severity: "warning",
@@ -771,6 +801,15 @@ async function renderBeamerFrameStep(params: {
       message,
       span: frame.bodySpan,
     });
+  }
+
+  const bodyItemEnd = items.length;
+  const bodyParagraphEnd = paragraphs.length;
+  const bodyModel = bodyModelBuilder.build({ viewBox: page.page, defs: [], diagnostics: [] });
+  const transformMarkup = bodyTransform ? `matrix(${bodyTransform.map(fmt).join(" ")})` : null;
+  for (const part of bodyModel.parts) {
+    const markup = transformMarkup ? `<g transform="${transformMarkup}">${part.markup}</g>` : part.markup;
+    modelBuilder.addExistingPart({ ...part, markup, fingerprint: markup });
   }
 
   if (continuationIndex === continuationCount) emitFrameFootnoteInsertion({
@@ -782,6 +821,41 @@ async function renderBeamerFrameStep(params: {
   });
   spacing.push(...collectBeamerParagraphSpacing(paragraphs, items));
   const graphics = collectBeamerGraphicsLayout(paragraphs, items);
+  if (bodyTransform) {
+    const bodyParagraphIds = new Set(paragraphs.slice(bodyParagraphStart, bodyParagraphEnd).map(paragraph => paragraph.paragraphId));
+    for (const item of items.slice(bodyItemStart, bodyItemEnd)) item.bounds = transformBeamerRect(bodyTransform, item.bounds);
+    for (const paragraph of paragraphs.slice(bodyParagraphStart, bodyParagraphEnd)) {
+      paragraph.transformedLayout = { intrinsicBounds: { ...paragraph.bounds }, paintTransform: bodyTransform };
+      paragraph.bounds = transformBeamerRect(bodyTransform, paragraph.bounds);
+      for (const span of [...paragraph.editableTextSpans, ...paragraph.atomicRenderSpans]) {
+        span.hitBounds = span.hitBounds.map(rect => {
+          const transformed = transformBeamerRect(bodyTransform, rect);
+          return svgRect(transformed.x, transformed.y, transformed.width, transformed.height);
+        });
+      }
+      if (paragraph.links) paragraph.links = paragraph.links.map(link => ({ ...link, bounds: {
+        x: link.bounds.x * bodyTransform[0], y: link.bounds.y * bodyTransform[3],
+        width: link.bounds.width * bodyTransform[0], height: link.bounds.height * bodyTransform[3],
+      } }));
+    }
+    for (const tikz of embeddedTikz) {
+      tikz.transformedLayout = { intrinsicBounds: { ...tikz.bounds }, paintTransform: bodyTransform };
+      tikz.bounds = transformBeamerRect(bodyTransform, tikz.bounds);
+    }
+    for (const graphic of graphics.filter(graphic => bodyParagraphIds.has(graphic.paragraphId))) {
+      graphic.bounds = transformBeamerRect(bodyTransform, graphic.bounds);
+      graphic.baselineY = transformBeamerPoint(bodyTransform, { x: 0, y: graphic.baselineY }).y;
+      const item = items.find(item => item.id === graphic.itemId);
+      if (item) item.bounds = graphic.bounds;
+    }
+    for (const entry of spacing.filter(entry => frame.bodySpan.from <= entry.sourceSpan.from && entry.sourceSpan.to <= frame.bodySpan.to)) {
+      const origin = transformBeamerPoint(bodyTransform, entry.bounds);
+      entry.bounds = { ...origin, width: entry.bounds.width * bodyTransform[0], height: entry.bounds.height * bodyTransform[3] };
+      entry.sizePt *= bodyTransform[3];
+      if (entry.relativeUnitPt != null) entry.relativeUnitPt *= bodyTransform[3];
+    }
+    contentBounds = transformBeamerRect(bodyTransform, contentBounds);
+  }
   const model = modelBuilder.build({
     viewBox: page.page,
     defs: [],
@@ -818,6 +892,7 @@ async function renderBeamerFrameStep(params: {
     ...(continuationPages ? { continuation: { index: continuationIndex, count: continuationCount } } : {}),
     page,
     contentBounds,
+    ...(bodyTransform ? { bodyTransform } : {}),
     items,
     paragraphs,
     graphics,
@@ -1173,7 +1248,7 @@ async function prepareFrameFlow(params: {
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
-  const listProfile = beamerListLayoutProfile(params.theme);
+  const listProfile = beamerListLayoutProfile(params.theme, params.references.crampedLists);
   for (const node of params.children) {
     if (params.work) await params.work.checkpoint();
     const visibility = resolveBeamerOverlaySpanVisibility(
@@ -1302,8 +1377,8 @@ async function prepareFrameFlow(params: {
       if (tikz) {
         const surroundingGlue = node.horizontalAlignment === "center"
           ? {
-              top: BEAMER_CENTER_TOPSEP,
-              bottom: BEAMER_CENTER_TOPSEP,
+              top: beamerTrivlistSpacing(params.theme),
+              bottom: beamerTrivlistSpacing(params.theme),
             }
           : {
               top: { naturalPt: 0, shrinkPt: 0 },
@@ -1574,12 +1649,13 @@ function prepareFrameParagraph(params: {
     return null;
   }
   const projectedSource = projection.mapped.text;
-  const trailingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource);
+  const trivlistTopsep = params.listProfile.trivlistTopsepPt ?? 9;
+  const trailingTrivlistSkip = trailingBeamerTrivlistSkip(projectedSource, trivlistTopsep);
   const trailingListSkip = trailingBeamerListSkip(projectedSource);
   const trailingListShrink = trailingListSkip > 0
     ? BEAMER_LIST_LAYOUT_PROFILE.topsepShrinkPtByDepth?.[0] ?? 0
     : 0;
-  const namedSize = activeBeamerNamedSize(projectedSource);
+  const namedSize = activeBeamerNamedSize(projectedSource, params.references.theme);
   return {
     kind: "paragraph",
     visibility: resolveBeamerOverlaySpanVisibility(
@@ -1596,7 +1672,8 @@ function prepareFrameParagraph(params: {
       paragraphStartingBaselineSkip(paragraph, namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt),
     leadingAdjustment: leadingBeamerTrivlistAdjustment(
       paragraphSource,
-      paragraph
+      paragraph,
+      trivlistTopsep
     ),
     endingDepth: paragraphEndingMaterialDepth(paragraph),
     trailingListGlue: {
@@ -1837,6 +1914,7 @@ function prepareBlock(params: {
   paperWidth: number;
   diagnostics: Diagnostic[];
 }): PreparedBlock | null {
+  if (params.node.kind === "block" && params.node.packageBox === "tcolorbox") return prepareTcolorbox(params);
   const plan = planBeamerBlockTemplate({
     environment: params.node.kind === "theorem"
       ? params.node.blockEnvironment
@@ -1936,7 +2014,7 @@ function prepareBlock(params: {
         disableAutomaticHyphenation: true,
         // Lists inside blocks use the same theme templates (margins,
         // markers) as frame-level lists.
-        listProfile: { ...beamerListLayoutProfile(params.theme), suppressInitialTopsep: true },
+        listProfile: { ...beamerListLayoutProfile(params.theme, params.references.crampedLists), suppressInitialTopsep: plan.style !== "default" },
         macroBindings: params.macroBindings,
         references: params.references,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
@@ -1998,7 +2076,9 @@ function prepareBlock(params: {
   }
   const firstBody = body ?? (bodyFlow?.items[0].item.kind === "paragraph"
     ? bodyFlow.items[0].item.paragraph : null);
-  const bodyExtent = body ? paragraphLineExtent(body) : bodyFlow?.extent ?? 0;
+  const bodyExtent = body ? (plan.style === "default"
+    ? paragraphMaterialExtent(body) + trailingBeamerListSkip(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to))
+    : paragraphLineExtent(body)) : bodyFlow?.extent ?? 0;
   const titleLine = title.layout.report.lines[0];
   const titleAscent = Number(titleLine?.ascent ?? firstLineBaselineOffset(title));
   const titleDepth = Number(titleLine?.descent ?? 0);
@@ -2113,6 +2193,42 @@ function prepareBlock(params: {
   };
 }
 
+function prepareTcolorbox(params: Parameters<typeof prepareBlock>[0]): PreparedBlock | null {
+  const node = params.node;
+  if (node.kind !== "block") return null;
+  const font = params.theme.fonts["normal-text"];
+  const { plan, diagnostics } = resolveTcolorboxPlan({ source: params.source,
+    options: parseTcolorboxOptions(params.source, node.options, node.beginSpan),
+    dimensions: { linewidth: texLength(params.width), textwidth: texLength(params.width), columnwidth: texLength(params.width),
+      paperwidth: texLength(params.paperWidth), em: texLength(font.sizePt), ex: texLength(fontXHeightPt(font)) },
+    baselineSkipPt: font.lineHeightPt });
+  params.diagnostics.push(...diagnostics);
+  if (!plan) return null;
+  const measure = (span: Span, role: "block-title" | "block-body", width: number) => {
+    const projection = projectBeamerOverlayText(createIdentityMappedText(params.source.slice(span.from, span.to), span.from), span, params.overlays, params.step);
+    return layoutParagraph({ mapped: projectTcolorboxFontDeclaration(projection.mapped, role === "block-title" ? plan.fontTitle : plan.fontUpper),
+      sourceSpan: span, paragraphId: `${node.id}:${role === "block-title" ? "title" : "body"}`, role,
+      bounds: { x: 0, y: 0, width, height: 0 }, font, alignment: "left",
+      initialBaselineSkipPt: font.lineHeightPt,
+      listProfile: { ...beamerListLayoutProfile(params.theme, params.references.crampedLists), suppressInitialTopsep: true },
+      macroBindings: params.macroBindings, references: params.references, hiddenSourceSpans: projection.hiddenSourceSpans,
+      graphicsResolver: params.graphicsResolver, colorResolver: beamerAlertColorResolver(params.theme),
+      paperWidth: params.paperWidth, textWidth: params.width, columnWidth: params.width });
+  };
+  const title = plan.title.value ? measure(plan.title.contentSpan, "block-title", plan.titleWidthPt) : null;
+  const body = measure(node.bodySpan, "block-body", plan.bodyWidthPt);
+  const geometry = measureTcolorboxGeometry(plan, title ? paragraphLineExtent(title) : 0, body ? paragraphLineExtent(body) : 0);
+  const blockPlan = planBeamerBlockTemplate({ environment: "block", theme: params.theme });
+  return { node, plan: { ...blockPlan, geometry: { ...blockPlan.geometry, beforeSkipPt: 0, afterSkipPt: plan.afterSkipPt,
+    outerBleedPt: 0, shadowExtentPt: 0 } }, packageBox: { plan, geometry },
+    width: plan.widthPt, title, body, bodyFlow: null, titleXOffset: plan.titleXPt,
+    titleTop: geometry.titleTopPt, titleAscent: title ? paragraphStartingMaterialHeight(title) : 0,
+    titleDepth: title ? paragraphEndingMaterialDepth(title) : 0, titleBackgroundHeight: geometry.interiorTopPt,
+    bodyBackgroundTop: geometry.interiorTopPt, bodyParagraphTop: geometry.bodyTopPt, bodyBackgroundHeight: geometry.interiorBottomPt - geometry.interiorTopPt,
+    backgroundTop: 0, backgroundBottom: geometry.heightPt, naturalHeight: geometry.heightPt,
+    flowBoxHeight: geometry.heightPt, endingDepth: plan.afterBalanced ? .3 * font.lineHeightPt : 0 };
+}
+
 function emitPreparedBlock(params: {
   prepared: PreparedBlock;
   x: number;
@@ -2125,6 +2241,11 @@ function emitPreparedBlock(params: {
   visibility?: "visible" | "hidden";
 }): void {
   const block = params.prepared;
+  if (block.packageBox) {
+    emitPreparedTcolorbox(params);
+    return;
+  }
+  if (!block.title) return;
   const geometry = block.plan.geometry;
   const outerBounds = {
     x: params.x - geometry.outerBleedPt,
@@ -2338,6 +2459,38 @@ function emitPreparedBlock(params: {
     childIds,
     visibility: params.visibility,
   });
+}
+
+function emitPreparedTcolorbox(params: Parameters<typeof emitPreparedBlock>[0]): void {
+  const block = params.prepared;
+  if (!block.packageBox) return;
+  const { plan, geometry } = block.packageBox;
+  const hidden = params.visibility === "hidden";
+  const childIds: string[] = [];
+  params.modelBuilder.addPart({ basePartId: `${block.node.id}:background`, sourceId: block.node.id, elementId: null,
+    markup: overlayVisibilityMarkup(`<g transform="translate(${params.x} ${params.y})">${emitTcolorboxBackground(plan, geometry)}</g>`, hidden ? "hidden" : "visible") });
+  for (const [paragraph, dx, dy, color] of [
+    [block.title, plan.titleXPt, geometry.titleTopPt, plan.titleColor],
+    [block.body, plan.bodyXPt, geometry.bodyTopPt, plan.textColor],
+  ] as const) {
+    if (!paragraph) continue;
+    const x = params.x + dx, y = params.y + dy;
+    if (hidden) paragraph.layout.hiddenSourceSpans = [paragraph.layout.sourceSpan];
+    positionParagraphLayout(paragraph.layout, svgPoint(pt(x), pt(y)), paragraphLineExtent(paragraph));
+    params.paragraphs.push(paragraph.layout);
+    childIds.push(paragraph.layout.paragraphId);
+    params.items.push({ id: paragraph.layout.paragraphId, kind: "text", sourceSpan: paragraph.layout.sourceSpan,
+      bounds: paragraph.layout.bounds, parentId: block.node.id, paragraphId: paragraph.layout.paragraphId, visibility: params.visibility });
+    for (const marker of paragraph.listMarkers) params.items.push({ id: marker.id, kind: "list-marker",
+      sourceSpan: marker.sourceSpan ?? paragraph.layout.sourceSpan,
+      bounds: { ...marker.bounds, x: x + marker.bounds.x, y: y + marker.bounds.y },
+      parentId: paragraph.layout.paragraphId, traceAsGlyph: marker.traceAsGlyph, visibility: hidden ? "hidden" : marker.visibility });
+    params.modelBuilder.addPart({ basePartId: paragraph.layout.paragraphId, sourceId: paragraph.layout.paragraphId, elementId: null,
+      markup: overlayVisibilityMarkup(paragraphMarkup(paragraph.svgBody, x, y, color), hidden ? "hidden" : "visible") });
+  }
+  params.items.push({ id: block.node.id, kind: "block", sourceSpan: block.node.span,
+    bounds: { x: params.x, y: params.y, width: plan.widthPt, height: geometry.heightPt }, parentId: params.parentId,
+    childIds, visibility: params.visibility });
 }
 
 function overlayVisibilityMarkup(
@@ -2692,6 +2845,7 @@ async function emitPreparedColumns(params: {
   referenceY: number;
   spacing: BeamerSpacingLayout[];
   bounds: BeamerRect;
+  paperWidth: number;
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
   embeddedTikz: BeamerEmbeddedTikzLayout[];
@@ -2709,18 +2863,19 @@ async function emitPreparedColumns(params: {
       (column, index) => columnTops[index] + column.naturalHeight
     )
   );
-  const columnGap = prepared.length > 1
-    ? Math.max(
-      0,
-      (params.bounds.width -
-        prepared.reduce((sum, column) => sum + column.width, 0)) /
-        (prepared.length - 1)
-    )
-    : 0;
+  const positions = resolveBeamerColumnPositions({
+    options: params.prepared.node.options?.value,
+    widths: prepared.map(column => column.width),
+    textWidth: params.bounds.width,
+    paperWidth: params.paperWidth,
+    textLeft: params.bounds.x,
+    leftMargin: params.theme.dimensions.textMarginLeftPt,
+    rightMargin: params.theme.dimensions.textMarginRightPt,
+  });
   const columnsId = params.prepared.node.id;
   const columnChildIds: string[] = [];
-  let x = params.bounds.x;
   for (let index = 0; index < prepared.length; index += 1) {
+    const x = positions[index];
     const preparedColumn = prepared[index];
     const columnId = preparedColumn.column.id;
     const childIds: string[] = [];
@@ -2856,7 +3011,6 @@ async function emitPreparedColumns(params: {
       parentId: columnsId,
       childIds,
     });
-    x += preparedColumn.width + columnGap;
   }
   params.items.push({
     id: columnsId,
@@ -2913,7 +3067,7 @@ async function prepareColumnContent(params: {
   const width = resolveBeamerColumnWidth(column.width.value, textWidth, params.paperWidth) ?? textWidth;
   const flow: PreparedColumnFlowItem[] = [];
   const bodyFont = theme.fonts["normal-text"];
-  const listProfile = beamerListLayoutProfile(theme);
+  const listProfile = beamerListLayoutProfile(theme, references.crampedLists);
   let previousDepth: number | undefined;
 
   for (const node of column.children) {
@@ -2942,7 +3096,14 @@ async function prepareColumnContent(params: {
     });
     if (prepared) {
       const previous = flow.at(-1);
-      if (previousDepth != null && (prepared.kind === "block" ||
+      if (prepared.kind === "block" && prepared.block.packageBox) {
+        const spacing = tcolorboxSurroundingSpacing(prepared.block.packageBox.plan, {
+          baselineSkipPt: bodyFont.lineHeightPt, previousDepthPt: previousDepth ?? null,
+        });
+        // \addvspace replaces T's negative -1ex lastskip before applying the
+        // box skip. The column's \leavevmode has already cleared minipage mode.
+        prepared.leadingSkipPt = spacing.beforePt + (flow.length === 0 && column.alignment === "T" && !prepared.block.packageBox.plan.noBeforeAfter ? fontXHeightPt(bodyFont) : 0);
+      } else if (previousDepth != null && (prepared.kind === "block" ||
           (prepared.kind === "paragraph" && previous?.kind === "block"))) {
         const nextHeight = prepared.kind === "block"
           ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
@@ -3115,12 +3276,12 @@ async function prepareColumnFlowNode(params: {
       kind: "paragraph",
       visibility,
       paragraph,
-      leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph),
+      leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph, params.listProfile.trivlistTopsepPt),
       // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
       // strut carried by the shared text frontend's enclosing vlist. Lists,
       // on the other hand, intentionally carry their vertical list glue.
       advanceHeight: node.kind === "paragraph"
-        ? paragraphMaterialExtent(paragraph) + trailingBeamerTrivlistSkip(projection.mapped.text)
+        ? paragraphMaterialExtent(paragraph) + trailingBeamerTrivlistSkip(projection.mapped.text, params.listProfile.trivlistTopsepPt)
         : paragraph.height,
       trailingSkipPt:
         node.kind === "list"
@@ -3332,7 +3493,8 @@ function fontXHeightPt(font: BeamerThemeFont): number {
     fontSize,
     profile.metricProvider
   );
-  return Number(resolved.atPt) * resolved.data.fontdimen.xheight;
+  // TeX rounds fractional Lua font parameters when assigning a dimension.
+  return Math.round(Number(resolved.atPt) * resolved.data.fontdimen.xheight * 65_536) / 65_536;
 }
 
 function positionParagraphLayout(
@@ -3398,6 +3560,7 @@ function layoutParagraph(params: {
   mathFont?: BeamerThemeFont;
   alignment: "left" | "center" | "right";
   interwordSpacePt?: number;
+  initialBaselineSkipPt?: number;
   initialPreviousDepth?: number;
   leadingDisplayBaselineSkipPt?: number;
   listProfile?: TexListLayoutProfile;
@@ -3414,7 +3577,7 @@ function layoutParagraph(params: {
 }): LaidParagraph | null {
   // A size declaration preceding the list is an ambient font selection,
   // not an empty paragraph (and must apply to its generated labels too).
-  const leadingSize = activeBeamerNamedSize(params.mapped.text);
+  const leadingSize = activeBeamerNamedSize(params.mapped.text, params.references.theme);
   if (leadingSize && new RegExp(`^\\s*\\\\${leadingSize.command}\\s*\\\\begin\\s*\\{thebibliography\\}`, "u").test(params.mapped.text)) {
     params = {
       ...params,
@@ -3447,13 +3610,14 @@ function layoutParagraph(params: {
   let mapped = params.macroBindings
     ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
     : params.mapped;
-  const namedSize = activeBeamerNamedSize(mapped.text);
-  for (const [command, sizePt, lineHeightPt] of BEAMER_NAMED_FONT_SIZES) {
+  const namedSize = activeBeamerNamedSize(mapped.text, params.references.theme);
+  const namedSizes = beamerNamedFontSizes(params.references.theme);
+  for (const [command, sizePt, lineHeightPt] of namedSizes) {
     mapped = replaceBeamerNamedSize(
       mapped,
       new RegExp(String.raw`\\${command}(?![A-Za-z@])`, "gu"),
       `\\fontsize{${sizePt}pt}{${lineHeightPt}pt}\\selectfont`,
-      `Beamer 11pt class ${command} size`
+      `Beamer class ${command} size`
     );
   }
   mapped = projectBeamerFootnotes(mapped, params.references.footnotes, {
@@ -3463,7 +3627,14 @@ function layoutParagraph(params: {
   });
   mapped = projectBeamerContinuationBreaks(mapped, params.references.continuationBreaks);
   const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
-  mapped = projectBeamerCaptions(mapped, params.references.source, params.references.theme);
+  mapped = projectBeamerCaptions(mapped, params.references.source, params.references.theme, {
+    widthPt: params.bounds.width,
+    measure: tex => layoutSimpleTexParagraph(tex, {
+      width: texLength(10000), font: resolvedFont, metricProvider, textFontProfile,
+      alignment: "ragged-right", graphicsResolver,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
+    }).report?.lines[0]?.naturalWidth ?? 0,
+  });
   const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
     beamerBibliographyStyle({
       source: params.references.source, sourceStart, theme: params.references.theme,
@@ -3482,7 +3653,7 @@ function layoutParagraph(params: {
   );
   mapped = referenceProjection.mapped;
   const layoutOptions = {
-    namedFontSizes: Object.fromEntries(BEAMER_NAMED_FONT_SIZES.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
+    namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
     height: params.targetHeight,
@@ -3514,7 +3685,7 @@ function layoutParagraph(params: {
         params.mathFont ?? params.font
       ),
     }),
-    baselineSkip: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
+    baselineSkip: params.initialBaselineSkipPt ?? namedSize?.lineHeightPt ?? params.font.lineHeightPt,
     tabularProfile: {
       arrayPackage: params.references.arrayPackage,
       registers: params.references.tableRegisters,
@@ -4059,20 +4230,7 @@ function replaceBeamerNamedSize(mapped: MappedText, pattern: RegExp, replacement
   return concatMappedText(parts);
 }
 
-const BEAMER_NAMED_FONT_SIZES = [
-  ["tiny", 6, 7],
-  ["scriptsize", 8, 9.5],
-  ["footnotesize", 9, 11],
-  ["small", 10, 12],
-  ["normalsize", 10.95, 13.6],
-  ["large", 12, 14],
-  ["Large", 14.4, 18],
-  ["LARGE", 17.28, 22],
-  ["huge", 20.74, 25],
-  ["Huge", 24.88, 30],
-] as const;
-
-function activeBeamerNamedSize(source: string): {
+function activeBeamerNamedSize(source: string, theme?: ResolvedBeamerTheme): {
   command: string;
   pattern: RegExp;
   sizePt: number;
@@ -4087,7 +4245,7 @@ function activeBeamerNamedSize(source: string): {
         index: number;
       }
     | null = null;
-  for (const [command, sizePt, lineHeightPt] of BEAMER_NAMED_FONT_SIZES) {
+  for (const [command, sizePt, lineHeightPt] of beamerNamedFontSizes(theme)) {
     const pattern = new RegExp(String.raw`\\${command}(?![A-Za-z@])`, "gu");
     for (const match of source.matchAll(pattern)) {
       if (selected == null || match.index > selected.index) {

@@ -9,6 +9,7 @@ export {
 export {
   resolveBeamerEnumerateMarker,
   resolveBeamerItemizeMarkers,
+  resolveBeamerListLabelColor,
 } from "./list-markers.js";
 export { planBeamerBlockTemplate } from "./blocks.js";
 export { planBeamerNavigationSymbols } from "./navigation-symbols.js";

@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { renderBeamerFrame } from "../packages/core/src/beamer/render.js";
 import { buildBeamerObjectIndex } from "../packages/core/src/beamer/object-index.js";
 
-const UNSUPPORTED_ENVIRONMENT = String.raw`\begin{tcolorbox}Unrendered <tag> & text\end{tcolorbox}`;
+// Use an unknown environment for generic fallback tests: ordinary
+// tcolorbox now has a native renderer.
+const UNSUPPORTED_ENVIRONMENT = String.raw`\begin{unknown}Unrendered <tag> & text\end{unknown}`;
 
 function frameSource(body: string): string {
   return String.raw`\documentclass{beamer}
@@ -19,6 +21,27 @@ function sourceCards(result: Awaited<ReturnType<typeof renderBeamerFrame>>) {
 }
 
 describe("Beamer visible source placeholders", () => {
+  it("renders ordinary package boxes without replacing them with source cards", async () => {
+    const source = frameSource(String.raw`Before.\begin{tcolorbox}[title=Heading]Supported body.\end{tcolorbox}After.`).replace("\\begin{document}", "\\usepackage{tcolorbox}\n\\begin{document}");
+    const result = await renderBeamerFrame(source);
+    expect(sourceCards(result)).toHaveLength(0);
+    expect(result.diagnostics).toEqual([]);
+    const box = result.layout.items.find(item => item.kind === "block")!;
+    expect(source.slice(box.sourceSpan.from, box.sourceSpan.to)).toBe(String.raw`\begin{tcolorbox}[title=Heading]Supported body.\end{tcolorbox}`);
+    expect(result.layout.paragraphs.some(paragraph => paragraph.report.lines.some(line => line.segments.some(segment => segment.text === "Supported")))).toBe(true);
+    expect(result.svg.svg).toContain('data-tcolorbox-layer="frame"');
+  });
+
+  it("keeps unsupported package skins in one source-owned placeholder", async () => {
+    const opaque = String.raw`\begin{tcolorbox}[enhanced]Unrendered body.\end{tcolorbox}`;
+    const source = frameSource(`Before.${opaque}After.`);
+    const result = await renderBeamerFrame(source);
+    const [card] = sourceCards(result);
+    expect(sourceCards(result)).toHaveLength(1);
+    expect(source.slice(card.sourceSpan.from, card.sourceSpan.to)).toBe(opaque);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: "beamer-tcolorbox-unsupported-option", span: expect.objectContaining({ from: source.indexOf("enhanced") }) }));
+  });
+
   it("keeps surrounding text, source spans and non-overlapping flow geometry", async () => {
     const source = frameSource(`Before.\n${UNSUPPORTED_ENVIRONMENT}\nAfter.`);
     const result = await renderBeamerFrame(source);

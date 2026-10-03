@@ -6,6 +6,8 @@ export interface BeamerTraceRect {
 }
 
 export interface BeamerTraceGlyph {
+  /** Layout origin for explicit PGF invisible material; x/y retain real paint. */
+  readonly hiddenLayout?: { readonly x: number; readonly y: number };
   readonly code: number;
   readonly x: number;
   readonly y: number;
@@ -14,7 +16,7 @@ export interface BeamerTraceGlyph {
   readonly depth: number;
   readonly fontName: string;
   readonly fontSize: number;
-  /** Underlying font axes after graphicx/PDF transforms, in y-down coordinates. */
+  /** Underlying font axes after graphicx/PGF/frame transforms, in y-down coordinates. */
   readonly transform?: readonly [number, number, number, number];
 }
 

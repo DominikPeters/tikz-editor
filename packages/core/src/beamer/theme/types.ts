@@ -48,8 +48,13 @@ export type BeamerThemeFont = {
 
 export type BeamerThemeColor = {
   parent?: string;
+  /** Authored parent lists are visited in order, then the role's own fields. */
+  parents?: readonly string[];
+  use?: readonly string[];
   fg?: string;
   bg?: string;
+  fgExpression?: { value: string; span: Span };
+  bgExpression?: { value: string; span: Span };
   /** Optional unquantized RGB channels used when downstream xcolor mixes. */
   fgRgb?: readonly [number, number, number];
   /**
@@ -132,6 +137,9 @@ export type BeamerThemeComponentProvenance = {
 export type ResolvedBeamerTheme = {
   id: string;
   colors: Readonly<Record<string, BeamerThemeColor>>;
+  /** Preamble xcolor definitions; colorlet aliases have declaration-time values. */
+  colorAliases?: Readonly<Record<string, string>>;
+  colorAliasRgb?: Readonly<Record<string, readonly [number, number, number]>>;
   fonts: Readonly<Record<BeamerThemeFontRole, BeamerThemeFont>>;
   dimensions: Readonly<BeamerThemeDimensions>;
   templates: Readonly<BeamerThemeTemplates>;
@@ -344,6 +352,10 @@ export type BeamerTitlePageTemplatePlan = {
 };
 
 export type BeamerFrameTemplateContext = {
+  /** Measured strut-backed paragraphs for the stock frame-title color box. */
+  measureFrameHeading?: (value: BeamerDelimitedSourceValue, role: "frame-title" | "frame-subtitle", width: number) => {
+    firstHeight: number; extent: number; endingDepth: number; baselineSkip: number; xHeight: number;
+  } | null;
   document: BeamerDocumentModel;
   frame: BeamerFrameModel;
   frameIndex: number;

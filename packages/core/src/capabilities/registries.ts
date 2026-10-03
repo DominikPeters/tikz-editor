@@ -15,6 +15,8 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Stock figure/table captions share their source-backed flow capability.
   // Automatic frame splitting and stock continuation titles share one ID.
   // Frame, column and nested block/theorem source cards share the placeholder ID.
+  // Headings/class sizes/columns, preamble color roles and basic tcolorbox
+  // composition have separate document-renderer contracts.
   return FEATURE_IDS.filter((featureId) => {
     const status = capabilityMatrix[featureId][layer];
     return status !== "none" && status !== "not-applicable";

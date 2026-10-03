@@ -53,7 +53,7 @@ describe("ordinary Beamer frame titles and subtitles", () => {
     expect(titles).toEqual(["Alpha", "AlphaBeta"]);
     const beta = source.indexOf("Beta");
     const first = trace(result.pages[0]);
-    expect(first.coveredLines.some(line => line.text === "Beta")).toBe(command === "uncover");
+    expect((first.coveredLines ?? []).some(line => line.text === "Beta")).toBe(command === "uncover");
     const title = result.pages[1].layout.paragraphs.find(paragraph => paragraph.role === "frame-title")!;
     expect(title.report.lines.flatMap(line => line.segments).find(segment => segment.text === "Beta")?.sourceStartRaw).toBe(beta);
     expect(result.pages.every(page => !page.svg.svg.includes("data-tex-literal="))).toBe(true);

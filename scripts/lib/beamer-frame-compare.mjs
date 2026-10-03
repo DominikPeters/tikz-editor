@@ -44,6 +44,7 @@ export function normalizeOracleBeamerPageTrace(pageTrace, pageGeometry) {
     fontName: normalizeFontName(glyph.fontName),
     fontSize: round(glyph.fontSize.texPt),
     ...(nonIdentityAxes(glyph.transform) ? { transform: glyph.transform.map(round) } : {}),
+    ...(glyph.hiddenLayout ? { hiddenLayout: { x: round(glyph.hiddenLayout.x.texPt - origin.x), y: round(glyph.hiddenLayout.y.texPt - origin.y) } } : {}),
   }));
   return {
     coordinateSystem: {
@@ -103,7 +104,15 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   const lines = [];
   const glyphs = [];
   const coveredGlyphs = [];
-  for (const paragraph of render.layout.paragraphs) {
+  for (const paintedParagraph of render.layout.paragraphs) {
+    const transformed = paintedParagraph.transformedLayout;
+    const paragraph = transformed
+      ? { ...paintedParagraph, bounds: transformed.intrinsicBounds }
+      : paintedParagraph;
+    const glyphStart = glyphs.length;
+    const coveredGlyphStart = coveredGlyphs.length;
+    const rectangleStart = rectangles.length;
+    const coveredRectangleStart = coveredRectangles.length;
     const marginLabelSpans = [];
     const marginLabelLines = new Set();
     const collectMarginLabels = (items) => {
@@ -300,12 +309,21 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     coveredGlyphs.push(
       ...nativeVListLabelGlyphs(paragraph, metricProvider, true)
     );
+    if (transformed) {
+      transformTraceGlyphRange(glyphs, glyphStart, transformed.paintTransform);
+      transformTraceGlyphRange(coveredGlyphs, coveredGlyphStart, transformed.paintTransform);
+      transformTraceRectRange(rectangles, rectangleStart, transformed.paintTransform);
+      transformTraceRectRange(coveredRectangles, coveredRectangleStart, transformed.paintTransform);
+    }
   }
-  for (const embedded of render.layout.embeddedTikz) {
+  for (const paintedEmbedded of render.layout.embeddedTikz) {
+    const transformed = paintedEmbedded.transformedLayout;
+    const embedded = transformed ? { ...paintedEmbedded, bounds: transformed.intrinsicBounds } : paintedEmbedded;
     const embeddedGlyphs = nativeEmbeddedTikzGlyphs(
       embedded,
       metricProvider
     );
+    if (transformed) transformTraceGlyphRange(embeddedGlyphs, 0, transformed.paintTransform);
     for (const [embeddedLineIndex, embeddedLine] of
       groupOracleGlyphLines(embeddedGlyphs).entries()) {
       lines.push({
@@ -334,6 +352,25 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
     glyphs,
     coveredLines: groupOracleGlyphLines(coveredGlyphs),
   };
+}
+
+function transformTraceGlyphRange(glyphs, start, matrix) {
+  for (let index = start; index < glyphs.length; index += 1) {
+    const glyph = glyphs[index];
+    const origin = transformPoint(matrix, glyph.x, glyph.y);
+    const axes = multiplyMatrices(matrix, [...glyph.transform ?? [1, 0, 0, 1], 0, 0]).slice(0, 4).map(round);
+    glyphs[index] = { ...glyph, x: round(origin.x), y: round(origin.y), ...(nonIdentityAxes(axes) ? { transform: axes } : { transform: undefined }) };
+  }
+}
+
+function transformTraceRectRange(rectangles, start, matrix) {
+  for (let index = start; index < rectangles.length; index += 1) {
+    const rect = rectangles[index];
+    const points = [[rect.x, rect.y], [rect.x + rect.width, rect.y], [rect.x, rect.y + rect.height], [rect.x + rect.width, rect.y + rect.height]].map(([x, y]) => transformPoint(matrix, x, y));
+    const x = Math.min(...points.map(point => point.x));
+    const y = Math.min(...points.map(point => point.y));
+    rectangles[index] = { ...rect, ...roundedRect({ x, y, width: Math.max(...points.map(point => point.x)) - x, height: Math.max(...points.map(point => point.y)) - y }) };
+  }
 }
 
 function mergeGeneratedTraceSegments(segments) {
@@ -789,6 +826,11 @@ function nativeVListLabelGlyphs(
             positioned.item.sourceSpan?.start,
             positioned.item.sourceSpan?.end,
             paragraph.hiddenSourceSpans
+          ) ||
+          sourceRangeIsHidden(
+            positioned.item.role.itemCommandSpan?.start,
+            positioned.item.role.itemCommandSpan?.end,
+            paragraph.hiddenSourceSpans
           );
         if (isCovered !== covered) {
           continue;
@@ -922,11 +964,12 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
     const visible = [];
     const covered = [];
     for (const glyph of line.glyphs) {
+      const origin = glyph.hiddenLayout ?? glyph;
       const matchingIndex = [...availableCoveredGlyphs].find(index => {
         const candidate = coveredGlyphs[index];
         return candidate.code === glyph.code &&
-          Math.abs(candidate.x - glyph.x) <= .02 &&
-          Math.abs(candidate.y - glyph.y) <= .02 &&
+          Math.abs(candidate.x - origin.x) <= .02 &&
+          Math.abs(candidate.y - origin.y) <= .02 &&
           candidate.fontName === glyph.fontName &&
           Math.abs(candidate.fontSize - glyph.fontSize) <= .01 &&
           axesMatch(candidate.transform, glyph.transform);

@@ -198,6 +198,9 @@ function texLayoutLabelForListContext(
 ): TexLayoutLabel {
   const rightEdge = requiredTexListItemLabelRightEdge(labelBox);
   const labelContent = labelBox.content;
+  // The label's class-owned color applies to generated counters as well as
+  // authored labels; explicit colors inside authored labels still override it.
+  if (labelBox.fontState?.color) font = { ...font, color: labelBox.fontState.color };
   if (labelContent.kind === "source") {
     if (!listContext.label) {
       throw new Error("TeX list-item vbox source label metadata is missing source label content.");
@@ -227,10 +230,10 @@ function texLayoutLabelForListContext(
         kind: "glyph",
         text: labelContent.text,
         code: labelContent.code,
-        font: metricProvider.resolveFont({
+        font: { ...metricProvider.resolveFont({
           fontId: labelContent.fontId,
           atPt: font.atPt,
-        }),
+        }), ...(font.color ? { color: font.color } : {}) },
       }],
       sourceStart: 0,
       sourceEnd: 0,

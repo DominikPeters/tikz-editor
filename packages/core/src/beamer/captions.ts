@@ -4,15 +4,29 @@ import { getTexSyntaxIndex, matchTexSyntaxEnvironments } from "../text/tex/synta
 import { concatMappedText, createGeneratedMappedText, projectInputRange, sliceMappedText, type MappedText } from "../text/source-map.js";
 import { resolveBeamerThemeColor } from "./theme/resolve.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
+import { beamerNamedFontSize } from "./theme/font-sizes.js";
+
+export interface BeamerCaptionLayoutOptions {
+  readonly widthPt: number;
+  /** Measures a font-selected caption as unbroken inline material. */
+  readonly measure: (tex: string) => number;
+}
 
 /** Beamer floats are centered text flow, rather than deferred LaTeX floats. */
-export function projectBeamerCaptions(mapped: MappedText, source: string, theme?: ResolvedBeamerTheme): MappedText {
+export function projectBeamerCaptions(mapped: MappedText, source: string, theme?: ResolvedBeamerTheme, layout?: BeamerCaptionLayoutOptions): MappedText {
   if (!/\\(?:begin\s*\{(?:figure|table)\}|setbeamertemplate(?![A-Za-z@]))/u.test(mapped.text)) return mapped;
   const syntax = getTexSyntaxIndex(mapped.text, beamerDocumentParser);
   const floats = [...matchTexSyntaxEnvironments(syntax).values()].filter(env => env.name === "figure" || env.name === "table");
   const replacements: { span: Span; value: MappedText }[] = [];
   const documentSyntax = getTexSyntaxIndex(source, beamerDocumentParser);
   const documentEnvironments = [...matchTexSyntaxEnvironments(documentSyntax).values()];
+  const captionPackage = documentSyntax.controls.some(command => {
+    if (command.name !== "usepackage" && command.name !== "RequirePackage") return false;
+    const option = documentSyntax.argumentAfter(command.span.to, "optional", source.length);
+    const names = documentSyntax.argumentAfter(option?.span.to ?? command.span.to, "required", source.length);
+    return names != null && source.slice(names.contentSpan.from, names.contentSpan.to)
+      .split(",").some(name => name.trim() === "caption" || name.trim() === "subcaption");
+  });
   const documentFloats = documentEnvironments.filter(env => env.name === "figure" || env.name === "table");
   const templateScopes = [...documentSyntax.groups, ...documentEnvironments];
   const captions = documentSyntax.controls.filter(command => command.name === "caption");
@@ -33,6 +47,8 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
     return createGeneratedMappedText(text, "Beamer float/caption", hit.kind === "source-range" ? { from: hit.from, to: hit.to } : undefined);
   };
   const captionColor = theme ? resolveBeamerThemeColor(theme, "caption name").fg ?? "#3333b3" : "#3333b3";
+  const captionFont = beamerNamedFontSize(String(theme?.options["class-font-size"] ?? "11"), "small");
+  const captionFontDeclaration = `\\fontsize{${captionFont.sizePt}pt}{${captionFont.lineHeightPt}pt}\\selectfont`;
   for (const env of floats) {
     const placement = syntax.argumentAfter(env.begin.span.to, "optional", env.end.span.from);
     replacements.push({ span: { from: env.begin.span.from, to: placement?.span.to ?? env.begin.span.to }, value: generated("\\par\\penalty10000\\begin{center}\\penalty10000", env.begin.span) });
@@ -43,6 +59,9 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
         continue;
       }
       if (command.name !== "caption") continue;
+      // Stock Beamer has no starred caption command; the caption package
+      // supplies it. Keep unsupported authored syntax visible otherwise.
+      if (command.starSpan && !captionPackage) continue;
       const optional = syntax.argumentAfter(command.span.to, "optional", env.contentSpan.to);
       const argument = syntax.argumentAfter(optional?.span.to ?? command.span.to, "required", env.contentSpan.to);
       if (!argument?.complete) continue;
@@ -50,17 +69,32 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
       const hit = projectInputRange(mapped.sourceMap, span.from, span.to);
       const sourceStart = hit.kind === "source-range" ? hit.from : 0;
       const name = env.name === "figure" ? "Figure" : "Table";
-      const number = captions.filter(caption => caption.span.from <= sourceStart && documentFloats.some(float => float.name === env.name && float.contentSpan.from <= caption.span.from && caption.span.to <= float.contentSpan.to)).length;
+      const unnumbered = captionPackage && command.starSpan != null;
+      const number = captions.filter(caption => !(captionPackage && caption.starSpan != null) && caption.span.from <= sourceStart && documentFloats.some(float => float.name === env.name && float.contentSpan.from <= caption.span.from && caption.span.to <= float.contentSpan.to)).length;
       const numbered = templateAt("caption", sourceStart, "default") === "numbered";
       const separatorName = templateAt("caption label separator", sourceStart, "colon");
       const separator = ({ none: "", colon: ":\\ ", period: ".\\ ", space: "\\ ", quad: "\\quad\\ ", endash: "\\ --\\ " } as Record<string, string>)[separatorName] ?? ":\\ ";
       // \caption applies \ignorespaces, including leading comments/newlines.
       const leadingTrivia = /^(?:\s|%[^\r\n]*(?:\r\n|\r|\n|$))*/u.exec(mapped.text.slice(argument.contentSpan.from, argument.contentSpan.to))![0].length;
       const content = sliceMappedText(mapped, argument.contentSpan.from + leadingTrivia, argument.contentSpan.to);
+      const label = unnumbered ? "" : `{\\color{${captionColor}}${name}${numbered ? `~${number}` : ""}${captionPackage && content.text === "" ? "" : separator}}`;
+      if (captionPackage && layout) {
+        // caption3.sty uses a bottom-aligned \parbox, initial/final struts,
+        // and singlelinecheck. Its Beamer adapter centers a short caption
+        // and keeps a longer paragraph ragged right.
+        const font = captionFontDeclaration;
+        const fits = layout.measure(`${font}{}${label}${content.text}`) <= layout.widthPt;
+        replacements.push({ span, value: concatMappedText([
+          generated(`\\par\\vskip7pt\\nointerlineskip\\begin{minipage}[b]{${layout.widthPt}pt}\\${fits ? "centering" : "raggedright"}${font}\\strut{}${label}`, span),
+          content,
+          generated("\\strut\\end{minipage}\\par\\vskip7pt", span),
+        ]) });
+        continue;
+      }
       // beamerbaselocalstructure.sty: both caption skips are 7pt; the
       // default caption font is \small and its short caption is an hbox.
       replacements.push({ span, value: concatMappedText([
-        generated(`\\par\\vskip7pt{\\fontsize{10pt}{12pt}\\selectfont\\mbox{{\\color{${captionColor}}${name}${numbered ? `~${number}` : ""}${separator}}`, span),
+        generated(`\\par\\vskip7pt{${captionFontDeclaration}\\mbox{${label}`, span),
         content,
         generated("}}\\par\\vskip7pt", span),
       ]) });

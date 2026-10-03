@@ -44,6 +44,8 @@ export type BeamerOverlayCommand = {
   readonly kind: BeamerOverlayCommandKind;
   readonly span: Span;
   readonly commandSpan: Span;
+  /** Covering in vertical mode precedes LaTeX's deferred item label. */
+  readonly leadingItemCommandSpan?: Span;
   readonly spec: BeamerOverlaySpec;
   readonly branches: readonly BeamerDelimitedSourceValue[];
   /** Macro syntax removed before the selected branch reaches the TeX frontend. */
@@ -224,6 +226,15 @@ export function scanBeamerFrameOverlays(
         // visibility wrappers interrupt shaping even on the visible step.
         const preserveLabelGroup = ["uncover", "visible", "invisible"].includes(kind) &&
           listLabelSpans.some((label) => containsSpan(label, parsed.command.span));
+        const leadingItem = ["uncover", "visible", "invisible"].includes(kind)
+          ? [...itemControls].reverse().find(item => {
+              if (item.name !== "item" || item.to > command.from) return false;
+              const overlay = beamerOverlayArgumentAfter(context, item.to, frame.bodySpan.to);
+              const label = beamerOptionalArgumentAfter(context, overlay?.span.to ?? item.to, frame.bodySpan.to);
+              const bodyStart = label?.span.to ?? overlay?.span.to ?? item.to;
+              return bodyStart <= command.from && !source.slice(bodyStart, command.from).replace(/%[^\n]*(?:\n|$)/gu, "").trim();
+            }) : undefined;
+        if (leadingItem) parsed.command = { ...parsed.command, leadingItemCommandSpan: { from: leadingItem.from, to: leadingItem.to } };
         pending.push({
           kind: "command",
           sourceOrder: command.from,
@@ -535,6 +546,7 @@ export function projectBeamerOverlayText(
         : beamerOverlaySpecContains(command.spec, step);
       if (!shouldPaint) {
         hidden.push(command.branches[selected].contentSpan);
+        if (command.leadingItemCommandSpan) hidden.push(command.leadingItemCommandSpan);
       }
     }
   }

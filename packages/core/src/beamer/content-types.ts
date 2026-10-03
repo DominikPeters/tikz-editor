@@ -75,6 +75,8 @@ export type BeamerBlockBodyNode = {
   kind: "block";
   id: string;
   environment: BeamerBlockEnvironment;
+  /** Package boxes reuse block flow ownership but do not use a Beamer block template. */
+  packageBox?: "tcolorbox";
   span: Span;
   beginSpan: Span;
   endSpan: Span;

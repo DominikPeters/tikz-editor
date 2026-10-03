@@ -1,0 +1,25 @@
+\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}[plain,t]
+\begin{pgfpicture}
+\pgftransformscale{.5}
+\pgftext[left,base]{AB}
+\end{pgfpicture}\quad C
+\end{frame}
+\begin{frame}[plain,t]
+\begin{pgfpicture}
+\pgftransformscale{.5}
+\pgftext[left,base]{\rotatebox{90}{AB}}
+\end{pgfpicture}\quad C
+\end{frame}
+\begin{frame}[shrink=20]{Unscaled title}
+\begin{enumerate}
+\item AB
+\item C
+\end{enumerate}
+\end{frame}
+\begin{frame}[shrink=20]{Visibility}
+Visible \uncover<2>{Hidden} Tail.
+\end{frame}
+\end{document}

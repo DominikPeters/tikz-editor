@@ -1,6 +1,7 @@
 import type { Span } from "../ast/types.js";
 import { getKnuthPlassParagraphCaretStops } from "../text/knuth-plass/index.js";
 import type { BeamerListTopology, BeamerParagraphLayout } from "./types.js";
+import { transformBeamerPoint } from "./frame-shrink.js";
 
 /**
  * Ordered rendered-caret-stop domain for one Beamer edit scope: the offsets
@@ -68,6 +69,8 @@ export function buildBeamerCaretStopDomain(args: {
   const paragraphs: BeamerCaretDomainParagraph[] = [];
 
   for (const paragraph of args.paragraphs) {
+    const bounds = paragraph.transformedLayout?.intrinsicBounds ?? paragraph.bounds;
+    const paintTransform = paragraph.transformedLayout?.paintTransform;
     paragraphs.push({
       paragraphId: paragraph.paragraphId,
       role: paragraph.role,
@@ -138,14 +141,14 @@ export function buildBeamerCaretStopDomain(args: {
       let y: number;
       let height: number;
       if (line.kind === "display-math" && line.display) {
-        y = paragraph.bounds.y + line.display.y;
+        y = bounds.y + line.display.y;
         height = line.display.height;
       } else {
         const placement = placementByLineIndex.get(line.lineIndex);
         if (!placement) {
           continue;
         }
-        y = paragraph.bounds.y + Number(placement.y);
+        y = bounds.y + Number(placement.y);
         height = Math.max(1, Number(placement.height));
       }
       const seenOffsets = new Set<number>();
@@ -155,10 +158,17 @@ export function buildBeamerCaretStopDomain(args: {
           continue;
         }
         seenOffsets.add(stop.offset);
-        stops.push({ offset: stop.offset, x: paragraph.bounds.x + stop.x });
+        const point = { x: bounds.x + stop.x, y };
+        stops.push({ offset: stop.offset, x: paintTransform ? transformBeamerPoint(paintTransform, point).x : point.x });
         offsetSet.add(stop.offset);
       }
       if (stops.length) {
+        if (paintTransform) {
+          const top = transformBeamerPoint(paintTransform, { x: bounds.x, y });
+          const bottom = transformBeamerPoint(paintTransform, { x: bounds.x, y: y + height });
+          y = Math.min(top.y, bottom.y);
+          height = Math.abs(bottom.y - top.y);
+        }
         rows.push({ paragraphId: paragraph.paragraphId, y, height, stops });
       }
     }

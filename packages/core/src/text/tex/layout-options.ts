@@ -1,6 +1,6 @@
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import type { TexTextFontProfile } from "./fonts/text-profile.js";
-import type { SimpleTexParagraphIrOptions, TexSpaceGlueProfile } from "./ir.js";
+import type { SimpleTexListKind, SimpleTexParagraphIrOptions, TexSpaceGlueProfile } from "./ir.js";
 import type { TexMathBoxProvider } from "./layout-inline-items.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type { TexLength } from "./coordinates.js";
@@ -94,6 +94,8 @@ export interface TexListLayoutProfile {
     itemIndex: number,
     labelDepth: number
   ) => TexListMarkerProfile | undefined;
+  /** Class-owned label color, independent of the surrounding list body. */
+  readonly resolveLabelColor?: (kind: SimpleTexListKind, labelDepth: number, listDepth: number) => string | undefined;
 }
 
 export interface TexDisplayMathGlueProfile {

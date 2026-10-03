@@ -47,6 +47,7 @@ export function createBeamerTexTextFontProfile(
   };
   return {
     ...luaLatexDefaultTextFontProfile,
+    defaultFontState: { ...luaLatexDefaultTextFontProfile.defaultFontState, emphasisStyle: "beamer" },
     id: `lualatex-beamer-${role.family}-${role.series}-${role.shape}`,
     label: `LuaLaTeX Beamer ${role.family}`,
     resolveTextFontId(state, atPt) {

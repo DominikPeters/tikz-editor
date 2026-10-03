@@ -105,7 +105,8 @@ describe("Beamer theme resolution", () => {
     expect(resolveBeamerThemeColor(theme, "block body alerted")).toEqual({ fg: "#000000", bg: "#f9e6e6" });
     expect(resolveBeamerThemeColor(theme, "title in head/foot")).toEqual({
       fg: "#000000",
-      bg: "#cccced",
+      // LuaLaTeX extracts rgb(0.8,0.8,0.925) for this source-defined palette.
+      bg: "#ccccec",
     });
     expect(resolveBeamerThemeColor(theme, "navigation symbols")).toEqual({
       fg: "#adade0",

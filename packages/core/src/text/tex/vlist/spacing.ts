@@ -150,21 +150,26 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
       if (isMaterialTexVBoxItem(item)) {
+        // A parbox/minipage is one physical box in the surrounding flow.
+        // Account for entering/leaving its outer list/center scope there;
+        // its descendant paragraphs start a separate vertical list.
+        const blockIndex = -2_000_000 - (item.sourceSpan?.start ?? 0);
+        const boundaryParagraph: TexParagraphItem = {
+          kind: "paragraph", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, blockIndex,
+          paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true, startsAfterExplicitPar: true, scopePath: item.scopePath, quoteDepth: ancestors.filter(role => role.kind === "quote").length },
+        };
+        planSimpleTexParagraphVerticalSkipsInto([boundaryParagraph], font, listProfile, state, skips, ancestors, pathPrefix);
+        const boundarySkip = skips.at(-1);
+        if (boundarySkip) skips[skips.length - 1] = { ...boundarySkip, vlistPath: path };
         planSimpleTexParagraphVerticalSkipsInto(
           item.items,
           font,
           listProfile,
           createInitialSimpleTexParagraphVerticalSkipState(),
           skips,
-          item.role ? [...ancestors, item.role] : ancestors,
+          item.role ? [item.role] : [],
           path
         );
-        state.previousEmittedQuoteDepth = 0;
-        state.previousEmittedQuotationDepth = 0;
-        state.previousEmittedTrivlistScopes = [];
-        state.previousEmittedListContext = undefined;
-        state.previousEmittedContentKind = "paragraph";
-        state.emittedParagraphCount += 1;
         continue;
       }
       planSimpleTexParagraphVerticalSkipsInto(
@@ -427,6 +432,8 @@ function addParagraphVerticalGlueToItems(
     }
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
+      const skip = verticalSkipByPath.get(texVListPathKey(path));
+      if (skip) items.push(...paragraphBoundaryGlueItems(item, skip));
       items.push({
         ...item,
         items: addParagraphVerticalGlueToItems(item.items, verticalSkipByPath, path),
@@ -445,10 +452,10 @@ function addParagraphVerticalGlueToItems(
 }
 
 function paragraphBoundaryGlueItems(
-  item: TexParagraphItem,
+  item: TexParagraphItem | TexVBoxItem,
   skip: SimpleTexParagraphVerticalSkip
 ): TexGlueItem[] {
-  const scopePath = texVBoxRolePathForParagraph(item.paragraph);
+  const scopePath = item.kind === "paragraph" ? texVBoxRolePathForParagraph(item.paragraph) : item.scopePath ?? [];
   const shared = {
     sourceSpan: item.sourceSpan,
     ...(scopePath.length > 0 ? { scopePath } : {}),
@@ -462,7 +469,7 @@ function paragraphBoundaryGlueItems(
       ...shared,
       origin: {
         kind: "quote-boundary",
-        beforeBlockIndex: item.paragraph.blockIndex,
+        beforeBlockIndex: skip.blockIndex,
       },
       size: skip.quoteSize,
     });
@@ -473,7 +480,7 @@ function paragraphBoundaryGlueItems(
       ...shared,
       origin: {
         kind: "list-boundary",
-        beforeBlockIndex: item.paragraph.blockIndex,
+        beforeBlockIndex: skip.blockIndex,
       },
       size: skip.listSize,
       ...(skip.listStretch != null ? { stretch: skip.listStretch } : {}),
@@ -486,7 +493,7 @@ function paragraphBoundaryGlueItems(
       ...shared,
       origin: {
         kind: "trivlist-boundary",
-        beforeBlockIndex: item.paragraph.blockIndex,
+        beforeBlockIndex: skip.blockIndex,
       },
       size: skip.trivlistSize ?? texLength(0),
     });
@@ -712,21 +719,24 @@ function resolveDisplayMathVerticalGlueInItems(
     readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
     readonly previousDisplaySkipVariant?: TexDisplayMathSkipVariant;
     readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+    readonly previousDepthSuppressed?: boolean;
   } = {}
 ): {
   readonly items: readonly TexVListItem[];
   readonly previousParagraphMeasurement?: TexVListParagraphBoxMeasurement;
   readonly previousDisplaySkipVariant: TexDisplayMathSkipVariant;
   readonly previousDisplayMaterialMetrics?: TexBoxMetrics;
+  readonly previousDepthSuppressed: boolean;
 } {
   const items: TexVListItem[] = [];
   let previousParagraphMeasurement = state.previousParagraphMeasurement;
   let previousDisplaySkipVariant: TexDisplayMathSkipVariant =
     state.previousDisplaySkipVariant ?? "normal";
   let previousDisplayMaterialMetrics = state.previousDisplayMaterialMetrics;
+  let previousDepthSuppressed = state.previousDepthSuppressed ?? false;
   let plainParagraphInterlinePending =
-    previousParagraphMeasurement !== undefined ||
-    previousDisplayMaterialMetrics !== undefined;
+    !previousDepthSuppressed && (previousParagraphMeasurement !== undefined ||
+    previousDisplayMaterialMetrics !== undefined);
   let paragraphBoundaryInterlineAlreadyInserted = false;
   for (let index = 0; index < sourceItems.length; index += 1) {
     const item = sourceItems[index];
@@ -734,6 +744,15 @@ function resolveDisplayMathVerticalGlueInItems(
       continue;
     }
     const path = [...pathPrefix, index];
+    if (item.kind === "glue" && item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") {
+      // \nointerlineskip sets \prevdepth=-1000pt. Glue and penalties do not
+      // restore it; the next physical box is appended without baseline glue.
+      items.push(item);
+      previousDepthSuppressed = true;
+      plainParagraphInterlinePending = false;
+      paragraphBoundaryInterlineAlreadyInserted = false;
+      continue;
+    }
     if (item.kind === "vbox") {
       if (isMaterialTexVBoxItem(item)) {
         const nested = resolveDisplayMathVerticalGlueInItems(
@@ -775,6 +794,7 @@ function resolveDisplayMathVerticalGlueInItems(
         items.push(materialItem);
         previousParagraphMeasurement = undefined;
         previousDisplayMaterialMetrics = materialMetrics;
+        previousDepthSuppressed = false;
         plainParagraphInterlinePending = materialMetrics !== undefined;
         paragraphBoundaryInterlineAlreadyInserted = false;
         continue;
@@ -788,6 +808,7 @@ function resolveDisplayMathVerticalGlueInItems(
           previousParagraphMeasurement,
           previousDisplaySkipVariant,
           previousDisplayMaterialMetrics,
+          previousDepthSuppressed,
         }
       );
       items.push({
@@ -797,6 +818,8 @@ function resolveDisplayMathVerticalGlueInItems(
       previousParagraphMeasurement = nested.previousParagraphMeasurement;
       previousDisplaySkipVariant = nested.previousDisplaySkipVariant;
       previousDisplayMaterialMetrics = nested.previousDisplayMaterialMetrics;
+      previousDepthSuppressed = nested.previousDepthSuppressed;
+      if (previousDepthSuppressed) plainParagraphInterlinePending = false;
       continue;
     }
     if (item.kind === "paragraph") {
@@ -834,6 +857,7 @@ function resolveDisplayMathVerticalGlueInItems(
       }
       previousParagraphMeasurement = paragraphMeasurement;
       previousDisplayMaterialMetrics = undefined;
+      previousDepthSuppressed = false;
       plainParagraphInterlinePending = true;
       paragraphBoundaryInterlineAlreadyInserted = false;
       items.push(item);
@@ -865,6 +889,7 @@ function resolveDisplayMathVerticalGlueInItems(
       ));
       if (
         item.origin.side === "above" &&
+        !previousDepthSuppressed &&
         displayItem &&
         (previousParagraphMeasurement || previousDisplayMaterialMetrics)
       ) {
@@ -911,7 +936,7 @@ function resolveDisplayMathVerticalGlueInItems(
     ) {
       items.push(item);
       plainParagraphInterlinePending = false;
-      if (shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
+      if (!previousDepthSuppressed && shouldInsertParagraphBoundaryInterlineGlue(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,
           index,
@@ -955,7 +980,7 @@ function resolveDisplayMathVerticalGlueInItems(
           texLength(0);
         items.push({
           ...item,
-          size: texOpenedInterlineGlueSize(
+          size: previousDepthSuppressed ? texLength(0) : texOpenedInterlineGlueSize(
             previousDepth,
             nextRow.box.metrics.height,
             item.origin.openedInterline
@@ -970,7 +995,7 @@ function resolveDisplayMathVerticalGlueInItems(
     ) {
       items.push(item);
       plainParagraphInterlinePending = false;
-      if (shouldInsertExplicitVerticalInterlineGlue(sourceItems, index)) {
+      if (!previousDepthSuppressed && shouldInsertExplicitVerticalInterlineGlue(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,
           index,
@@ -1030,14 +1055,17 @@ function resolveDisplayMathVerticalGlueInItems(
         height: item.box.height,
         depth: item.box.depth,
       };
+      previousDepthSuppressed = false;
     } else if (isDisplayAlignmentRowHBox(item)) {
       previousParagraphMeasurement = undefined;
       plainParagraphInterlinePending = false;
       previousDisplayMaterialMetrics = item.box.metrics;
+      previousDepthSuppressed = false;
     } else if (isDisplayEmptyLineHBox(item)) {
       previousParagraphMeasurement = undefined;
       plainParagraphInterlinePending = true;
       previousDisplayMaterialMetrics = item.box.metrics;
+      previousDepthSuppressed = false;
     } else if (item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) {
       plainParagraphInterlinePending = false;
     }
@@ -1048,6 +1076,7 @@ function resolveDisplayMathVerticalGlueInItems(
     previousParagraphMeasurement,
     previousDisplaySkipVariant,
     previousDisplayMaterialMetrics,
+    previousDepthSuppressed,
   };
 }
 
