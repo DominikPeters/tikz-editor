@@ -602,7 +602,10 @@ function renderTexVListLeafBoxSvgMetadata(
   const roleAttribute = item.item.kind === "hbox" && item.item.role
     ? ` data-tex-hbox-role="${item.item.role.kind}"` +
       (item.item.role.kind === "list-label"
-        ? ` data-tex-list-item-index="${item.item.role.itemIndex}"`
+        ? ` data-tex-list-item-index="${item.item.role.itemIndex}"` +
+          (item.item.role.itemCommandSpan
+            ? ` data-source-start="${item.item.role.itemCommandSpan.start}" data-source-end="${item.item.role.itemCommandSpan.end}"`
+            : "")
         : "")
     : "";
   return [
@@ -653,7 +656,7 @@ function renderTexHBoxRenderItemSvg(
     atPt: texLength(item.atPt),
   });
   const body = item.kind === "tex-glyph"
-    ? renderTexGlyphCode(item.code, font, texHBoxX(item.x), texHBoxY(item.baseline))
+    ? renderTexGlyphCode(item.code, font, texHBoxX(item.x), texHBoxY(item.baseline), item.sourceSpan)
     : renderTexGlyphRun(
       item.text,
       font,

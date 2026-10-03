@@ -304,6 +304,7 @@ function texMarginListLabelHBoxFromLayoutLabel(
       depth: listContext.depth,
       labelDepth: listContext.labelDepth,
       itemIndex: listContext.itemIndex,
+      ...(listContext.itemCommandSpan ? { itemCommandSpan: listContext.itemCommandSpan } : {}),
       blockIndex,
     },
     x: texVListLocalXFromOrigin(labelLeft, paragraphOriginX),
@@ -398,23 +399,36 @@ function texLayoutLabelHBoxContent(
       continue;
     }
     if (item.kind === "text") {
-      const shaped = metricProvider.shapeText(item.text, item.font);
-      pendingItems.push({
-        kind: "tex-glyph-run",
-        text: item.text,
-        fontId: item.font.id,
-        atPt: item.font.atPt,
-        ...(item.font.color ? { color: item.font.color } : {}),
-        x: texHBoxX(roundTexPt(width)),
+      const shaped = metricProvider.shapeText(item.text, item.font, {
+        sourceStart: item.sourceStart,
+        includeCaretStops: false,
       });
-      width = texLength(width + shaped.width);
+      let cursor = Number(width);
       for (const shapedItem of shaped.items) {
+        if (shapedItem.kind === "kern") {
+          cursor += shapedItem.width;
+          continue;
+        }
         if (shapedItem.kind !== "glyph") {
           continue;
         }
+        pendingItems.push({
+          kind: "tex-glyph",
+          text: item.text.slice(shapedItem.sourceStart - item.sourceStart, shapedItem.sourceEnd - item.sourceStart),
+          code: shapedItem.code,
+          fontId: item.font.id,
+          atPt: item.font.atPt,
+          ...(item.sourceEnd > item.sourceStart
+            ? { sourceSpan: { start: shapedItem.sourceStart, end: shapedItem.sourceEnd } }
+            : {}),
+          ...(item.font.color ? { color: item.font.color } : {}),
+          x: texHBoxX(roundTexPt(cursor)),
+        });
+        cursor += shapedItem.width;
         height = texLength(Math.max(height, shapedItem.height));
         depth = texLength(Math.max(depth, shapedItem.depth));
       }
+      width = texLength(width + shaped.width);
       continue;
     }
     if (item.kind === "kern") {

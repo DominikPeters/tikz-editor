@@ -135,6 +135,7 @@ export type TexRenderItem =
       readonly kind: "tex-glyph";
       readonly text: string;
       readonly code: number;
+      readonly sourceSpan?: TexSourceSpan;
       readonly fontId: string;
       readonly atPt: TexLength;
       readonly x: TexHBoxX;
@@ -212,6 +213,8 @@ export type TexHBoxRole = {
   readonly depth: number;
   readonly labelDepth: number;
   readonly itemIndex: number;
+  /** Source owner of the list item, independent of its list-local ordinal. */
+  readonly itemCommandSpan?: TexSourceSpan;
   readonly blockIndex: number;
 } | {
   readonly kind: "display-align-row";

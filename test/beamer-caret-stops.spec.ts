@@ -6,9 +6,11 @@ import {
   buildBeamerCaretStopDomain,
   nextBeamerCaretOffset,
   prepareBeamerDocument,
+  renderBeamerFrame,
   verticalBeamerCaretOffset,
   type BeamerCaretDomain,
 } from "../packages/core/src/beamer/index.js";
+import { flattenPositionedTexVListItems } from "../packages/core/src/text/tex/vlist/index.js";
 
 const corpusSource = readFileSync(
   new URL("./fixtures/beamer/editing_corpus_beamer.tex", import.meta.url),
@@ -42,6 +44,49 @@ function rowText(source: string, domain: BeamerCaretDomain, rowIndex: number): s
 }
 
 describe("beamer caret-stop domain", () => {
+  it.each(["tiny", "scriptsize", "footnotesize", "small", "normalsize", "large", "Large", "LARGE", "huge", "Huge"])("preserves authored prose, caret and math origins after %s", async size => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}${"\\"}${size} Before $x^2$ after.\[y\]\end{frame}\end{document}`;
+    const page = await renderBeamerFrame(source);
+    expect(page.diagnostics).toEqual([]);
+    const paragraph = page.layout.paragraphs.find(candidate => candidate.role === "body")!;
+    const segments = paragraph.report.lines.flatMap(line => line.segments);
+    const first = segments.find(segment => segment.kind === "text")!;
+    expect(source.slice(first.sourceStartRaw, first.sourceEndRaw)).toBe(first.text);
+    expect(first.text).toMatch(/^B/u);
+    const inline = segments.find(segment => segment.kind === "math")!;
+    expect(source.slice(inline.sourceStartRaw, inline.sourceEndRaw)).toBe("$x^2$");
+    const display = flattenPositionedTexVListItems(paragraph.vlistLayout.items).find(entry => entry.item.kind === "display-math")!.item;
+    if (display.kind !== "display-math") throw new Error("Missing display island");
+    expect(source.slice(display.box.sourceStart, display.box.sourceEnd)).toBe(String.raw`\[y\]`);
+    const domain = buildBeamerCaretStopDomain({ source, paragraphs: page.layout.paragraphs });
+    expect(domain.offsets).toContain(source.indexOf("Before"));
+    expect(domain.offsets).toContain(source.indexOf("Before") + 1);
+  });
+
+  it.each([
+    [String.raw`Prefix. {\small Before $x$}\normalsize After.\par\fontsize{12pt}{14pt}\selectfont Again.`, [1]],
+    [String.raw`Prefix. {\small Before $x$}\small After.\par Again.`, [1]],
+    [String.raw`\only<2>{Removed}\Huge Before $x$\uncover<2>{ After.}\par Again.`, [1, 2]]
+  ] as const)("preserves unchanged origins across groups, resets, paragraphs and overlays: %s", async (body, steps) => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}{T}` + body + String.raw`\end{frame}\end{document}`;
+    for (const step of steps) {
+      const page = await renderBeamerFrame(source, { step });
+      expect(page.diagnostics).toEqual([]);
+      const paragraphs = page.layout.paragraphs.filter(candidate => candidate.role === "body");
+      for (const segment of paragraphs.flatMap(paragraph => paragraph.report.lines.flatMap(line => line.segments))) {
+        if (segment.kind === "text" || segment.kind === "space") {
+          expect(source.slice(segment.sourceStartRaw, segment.sourceEndRaw)).toBe(segment.text);
+        } else if (segment.kind === "math" && segment.text === "x") {
+          expect(source.slice(segment.sourceStartRaw, segment.sourceEndRaw)).toBe("$x$");
+        }
+      }
+      const domain = buildBeamerCaretStopDomain({ source, paragraphs });
+      expect(domain.offsets).toContain(source.indexOf("Before"));
+      expect(domain.offsets).toContain(source.indexOf("Again"));
+      expect(domain.offsets).toContain(source.indexOf("Again") + 1);
+    }
+  });
+
   it("collapses macro calls to atomic steps and splits rows at explicit line breaks", async () => {
     const domain = await domainFor(corpusSource, 0);
 

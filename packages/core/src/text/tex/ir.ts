@@ -685,6 +685,8 @@ export interface SimpleTexListContext {
   readonly depth: number;
   readonly labelDepth: number;
   readonly itemIndex: number;
+  /** Authored item command owning both generated and custom labels. */
+  readonly itemCommandSpan?: { readonly start: number; readonly end: number };
   readonly ownLeftMarginEm: number;
   readonly totalLeftMarginEm: number;
   readonly showLabel: boolean;
@@ -4049,6 +4051,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly depth: number;
     readonly labelDepth: number;
     itemIndex: number;
+    itemCommandSpan?: { start: number; end: number };
     readonly ownLeftMarginEm: number;
     readonly totalLeftMarginEm: number;
     readonly scopeRole: Extract<SimpleTexScopePathRole, { readonly kind: "list" }>;
@@ -4324,6 +4327,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       depth: activeList.depth,
       labelDepth: activeList.labelDepth,
       itemIndex: activeList.itemIndex,
+      itemCommandSpan: activeList.itemCommandSpan,
       ownLeftMarginEm: activeList.ownLeftMarginEm,
       totalLeftMarginEm: activeList.totalLeftMarginEm,
       showLabel: pendingListShowLabel,
@@ -4674,6 +4678,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         break;
       }
       activeList.itemIndex += 1;
+      // Own the marker group with the command token. Covered text inside an
+      // optional label must only hide its own glyphs, not the entire label.
+      activeList.itemCommandSpan = { start: node.sourceStart, end: node.sourceStart + "\\item".length };
       pendingListShowLabel = true;
       pendingListLabel = node.labelNodes && node.labelSourceStart !== undefined && node.labelSourceEnd !== undefined
         ? {

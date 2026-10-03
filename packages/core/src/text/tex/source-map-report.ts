@@ -29,6 +29,7 @@ import { texLength } from "./coordinates.js";
 import type {
   PositionedTexVListItem,
   TexHitMap,
+  TexHBoxRole,
   TexHorizontalLayout,
   TexGraphicsPlacement,
   TexLineBox,
@@ -373,7 +374,11 @@ function remapPositionedTexVListItem(
 }
 
 function remapTexVListItem(item: TexVListItem, sourceMap: TextSourceMap): TexVListItem {
-  const sourceSpan = item.sourceSpan ? mapTexSourceSpan(item.sourceSpan, sourceMap) : undefined;
+  const sourceSpan = item.sourceSpan
+    ? item.kind === "hbox" && item.role?.kind === "list-label" && item.role.labelKind === "custom"
+      ? mapOptionalLabelSourceSpan(item.sourceSpan, sourceMap)
+      : mapTexSourceSpan(item.sourceSpan, sourceMap)
+    : undefined;
   switch (item.kind) {
     case "paragraph":
       return {
@@ -392,6 +397,7 @@ function remapTexVListItem(item: TexVListItem, sourceMap: TextSourceMap): TexVLi
       return {
         ...item,
         ...(sourceSpan ? { sourceSpan } : {}),
+        ...(item.role ? { role: remapTexHBoxRole(item.role, sourceMap) } : {}),
         box: remapTexHorizontalLayout(item.box, sourceMap)
       };
     case "vbox":
@@ -436,6 +442,11 @@ function remapTexHorizontalLayout(
 ): TexHorizontalLayout {
   return {
     ...layout,
+    renderItems: layout.renderItems.map((item) => item.kind === "tex-math-svg"
+      ? { ...item, svgBody: remapSvgSourceDataAttributes(item.svgBody, sourceMap) }
+      : item.kind === "tex-glyph" && item.sourceSpan
+        ? { ...item, sourceSpan: mapTexSourceSpan(item.sourceSpan, sourceMap) }
+        : item),
     lines: layout.lines?.map((line) => remapTexLineBox(line, sourceMap)),
     hitMap: layout.hitMap ? remapTexHitMap(layout.hitMap, sourceMap) : undefined
   };
@@ -626,10 +637,15 @@ function remapTexVListBoxReportItem(
   item: TexVListBoxReportItem,
   sourceMap: TextSourceMap
 ): TexVListBoxReportItem {
-  const sourceSpan = item.sourceSpan ? mapTexSourceSpan(item.sourceSpan, sourceMap) : undefined;
+  const sourceSpan = item.sourceSpan
+    ? item.hboxRole?.kind === "list-label" && item.hboxRole.labelKind === "custom"
+      ? mapOptionalLabelSourceSpan(item.sourceSpan, sourceMap)
+      : mapTexSourceSpan(item.sourceSpan, sourceMap)
+    : undefined;
   return {
     ...item,
     ...(sourceSpan ? { sourceSpan } : {}),
+    ...(item.hboxRole ? { hboxRole: remapTexHBoxRole(item.hboxRole, sourceMap) } : {}),
     children: item.children?.map((child) => remapTexVListBoxReportItem(child, sourceMap)),
     displayMath: item.displayMath
       ? {
@@ -639,6 +655,21 @@ function remapTexVListBoxReportItem(
         }
       : undefined
   };
+}
+
+function remapTexHBoxRole(role: TexHBoxRole, sourceMap: TextSourceMap): TexHBoxRole {
+  return role.kind === "list-label" && role.itemCommandSpan
+    ? { ...role, itemCommandSpan: mapTexSourceSpan(role.itemCommandSpan, sourceMap) }
+    : role;
+}
+
+function mapOptionalLabelSourceSpan(span: TexSourceSpan, sourceMap: TextSourceMap): TexSourceSpan {
+  const opening = projectInputRange(sourceMap, span.start - 1, span.start);
+  const closing = projectInputRange(sourceMap, span.end, span.end + 1);
+  return opening.kind === "source-range" && closing.kind === "source-range" &&
+    opening.policy === "caret" && closing.policy === "caret" && opening.to <= closing.from
+    ? { start: opening.to, end: closing.from }
+    : mapTexSourceSpan(span, sourceMap);
 }
 
 function remapTexVListParagraphPlacement(
@@ -693,7 +724,13 @@ export function remapSimpleTexListStructureSourceMap(
     for (const item of list.items) {
       const commandSpan = mapSpan(item.commandSpan);
       const contentSpan = mapSpan(item.contentSpan);
-      const labelSpan = item.labelSpan ? mapSpan(item.labelSpan) : undefined;
+      // Brackets retain the authored label extent even when overlay command
+      // wrappers inside them were removed before layout.
+      const labelOpen = item.labelSpan ? mapSpan({ from: item.labelSpan.from - 1, to: item.labelSpan.from }) : undefined;
+      const labelClose = item.labelSpan ? mapSpan({ from: item.labelSpan.to, to: item.labelSpan.to + 1 }) : undefined;
+      const labelSpan = labelOpen && labelClose && labelOpen.to <= labelClose.from
+        ? { from: labelOpen.to, to: labelClose.from }
+        : item.labelSpan ? mapSpan(item.labelSpan) : undefined;
       if (!commandSpan || !contentSpan || (item.labelSpan && !labelSpan)) {
         allItemsMapped = false;
         break;

@@ -91,7 +91,6 @@ export type BeamerOverlayVisibility = "visible" | "hidden" | "removed";
 export type BeamerOverlayTextProjection = {
   readonly mapped: MappedText;
   readonly hiddenSourceSpans: readonly Span[];
-  readonly hiddenListItemIndices: readonly number[];
 };
 
 type PendingSpec =
@@ -152,6 +151,11 @@ export function scanBeamerFrameOverlays(
   const controls = beamerControlSequencesIn(context, frame.bodySpan);
   const listRanges = beamerListRanges(context, frame.bodySpan);
   const itemControls = controls.filter((command) => command.name === "item" || command.name === "bibitem");
+  const listLabelSpans = itemControls.flatMap((command) => {
+    const overlay = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+    const label = beamerOptionalArgumentAfter(context, overlay?.span.to ?? command.to, frame.bodySpan.to);
+    return label ? [label.contentSpan] : [];
+  });
   const explicitItemCommands = new Set<number>();
 
   for (const command of controls) {
@@ -175,10 +179,19 @@ export function scanBeamerFrameOverlays(
         overlayKind
       );
       if (parsed) {
+        // Keep the authored group around covered label text. Beamer's
+        // visibility wrappers interrupt shaping even on the visible step.
+        const preserveLabelGroup = ["uncover", "visible", "invisible"].includes(overlayKind) &&
+          listLabelSpans.some((label) => containsSpan(label, parsed.command.span));
         pending.push({
           kind: "command",
           sourceOrder: command.from,
-          command: parsed.command,
+          command: preserveLabelGroup
+            ? {
+                ...parsed.command,
+                syntaxSpans: overlayCommandSyntaxSpans(parsed.command.span, parsed.command.branches, true),
+              }
+            : parsed.command,
           rawSpec: parsed.rawSpec,
         });
       }
@@ -239,6 +252,10 @@ export function scanBeamerFrameOverlays(
     });
   }
   pending.push(...overlayEnvironmentSpecs(context, frame.bodySpan));
+  const listDefaultsByOwner = new Map<typeof listRanges[number], {
+    argument: NonNullable<ReturnType<typeof beamerOptionalArgumentAfter>>;
+    spec: BeamerDelimitedSourceValue;
+  }>();
   for (const list of listRanges) {
     const defaultArgument = beamerOptionalArgumentAfter(
       context,
@@ -253,6 +270,16 @@ export function scanBeamerFrameOverlays(
     }
     pending.push({ kind: "list-default", sourceOrder: list.from,
       span: { from: list.from, to: list.to }, rawSpec: defaultSpec });
+    listDefaultsByOwner.set(list, { argument: defaultArgument!, spec: defaultSpec });
+  }
+  for (const list of listRanges) {
+    // A nested list without an authored default retains the nearest enclosing
+    // default. Keep that declaration's owner for overlay editing.
+    const owner = listDefaultsByOwner.has(list) ? list : smallestContainingSpan(
+      listRanges.filter(candidate => candidate !== list && listDefaultsByOwner.has(candidate)), list.from
+    );
+    const inherited = owner ? listDefaultsByOwner.get(owner) : undefined;
+    if (!inherited || !owner) continue;
     const peers = itemControls.filter((candidate) =>
       smallestContainingSpan(listRanges, candidate.from) === list
     );
@@ -265,13 +292,13 @@ export function scanBeamerFrameOverlays(
         sourceOrder: command.from,
         commandSpan: { from: command.from, to: command.to },
         listItemIndex: index + 1,
-        overlaySpan: defaultArgument!.span,
+        overlaySpan: inherited.argument.span,
         contentSpan: {
           from: command.to,
           to: peers[index + 1]?.from ?? list.contentTo,
         },
-        rawSpec: defaultSpec,
-        defaultListSpan: { from: list.from, to: list.to },
+        rawSpec: inherited.spec,
+        defaultListSpan: { from: owner.from, to: owner.to },
       });
     }
   }
@@ -427,7 +454,6 @@ export function projectBeamerOverlayText(
 ): BeamerOverlayTextProjection {
   const removals: Span[] = [];
   const hidden: Span[] = [];
-  const hiddenListItemIndices: number[] = [];
   const emptyOnlyPlaceholders: Span[] = [];
 
   for (const command of model.commands) {
@@ -459,9 +485,6 @@ export function projectBeamerOverlayText(
     removals.push(item.overlaySpan);
     if (!beamerOverlaySpecContains(item.spec, step)) {
       hidden.push(item.commandSpan, item.contentSpan);
-      if (intersectSpan(item.contentSpan, sourceSpan)) {
-        hiddenListItemIndices.push(item.listItemIndex);
-      }
     }
   }
   for (const pause of model.pauses) {
@@ -515,7 +538,6 @@ export function projectBeamerOverlayText(
         .map((span) => intersectSpan(span, sourceSpan))
         .filter((span): span is Span => span != null)
     ),
-    hiddenListItemIndices,
   };
 }
 
@@ -566,15 +588,17 @@ function parseOverlayCommand(
 
 function overlayCommandSyntaxSpans(
   span: Span,
-  branches: readonly BeamerDelimitedSourceValue[]
+  branches: readonly BeamerDelimitedSourceValue[],
+  preserveGroups = false
 ): Span[] {
   const result: Span[] = [];
   let cursor = span.from;
   for (const branch of branches) {
-    if (cursor < branch.contentSpan.from) {
-      result.push({ from: cursor, to: branch.contentSpan.from });
+    const branchStart = preserveGroups ? branch.span.from : branch.contentSpan.from;
+    if (cursor < branchStart) {
+      result.push({ from: cursor, to: branchStart });
     }
-    cursor = branch.contentSpan.to;
+    cursor = preserveGroups ? branch.span.to : branch.contentSpan.to;
   }
   if (cursor < span.to) {
     result.push({ from: cursor, to: span.to });

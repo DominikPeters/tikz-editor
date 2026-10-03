@@ -4296,8 +4296,9 @@ describe("simple TeX paragraph layout", () => {
   });
 
   it("represents multi-paragraph list item bodies as nested vboxes", () => {
+    const source = String.raw`\begin{enumerate}\item Alpha \par Beta\item Gamma\end{enumerate}`;
     const result = layoutSimpleTexParagraph(
-      String.raw`\begin{enumerate}\item Alpha \par Beta\item Gamma\end{enumerate}`,
+      source,
       {
         paragraphId: "tex:vlist-list-item-boxes",
         width: 150,
@@ -4381,6 +4382,7 @@ describe("simple TeX paragraph layout", () => {
           labelDepth: 1,
           itemIndex: 1,
           blockIndex: 0,
+          itemCommandSpan: { start: source.indexOf("\\item"), end: source.indexOf("\\item") + 5 },
         },
         width: expect.any(Number),
         totalHeight: expect.any(Number),
@@ -4396,6 +4398,7 @@ describe("simple TeX paragraph layout", () => {
           labelDepth: 1,
           itemIndex: 2,
           blockIndex: 2,
+          itemCommandSpan: { start: source.lastIndexOf("\\item"), end: source.lastIndexOf("\\item") + 5 },
         },
         width: expect.any(Number),
         totalHeight: expect.any(Number),
@@ -4481,6 +4484,7 @@ describe("simple TeX paragraph layout", () => {
           labelDepth: 1,
           itemIndex: 1,
           blockIndex: 0,
+          itemCommandSpan: { start: source.indexOf("\\item"), end: source.indexOf("\\item") + 5 },
         },
         sourceSpan: {
           start: source.indexOf("Step"),
@@ -4498,6 +4502,7 @@ describe("simple TeX paragraph layout", () => {
           labelDepth: 2,
           itemIndex: 1,
           blockIndex: 1,
+          itemCommandSpan: { start: source.lastIndexOf("\\item"), end: source.lastIndexOf("\\item") + 5 },
         },
         sourceSpan: undefined,
       },

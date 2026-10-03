@@ -30,7 +30,9 @@ import {
 import {
   createGeneratedMappedText,
   createIdentityMappedText,
-  mapTransformedTextWithFallback,
+  concatMappedText,
+  projectInputRange,
+  sliceMappedText,
   type MappedText,
 } from "../text/source-map.js";
 import { createTexNodeTextEngine } from "../text/tex-node-text-engine.js";
@@ -1344,7 +1346,6 @@ function prepareFrameParagraph(params: {
     references: params.references,
     targetHeight: params.targetHeight,
     hiddenSourceSpans: projection.hiddenSourceSpans,
-    hiddenListItemIndices: projection.hiddenListItemIndices,
     graphicsResolver: params.graphicsResolver,
     paperWidth: params.paperWidth,
   });
@@ -1646,7 +1647,6 @@ function prepareBlock(params: {
     ? {
         mapped: params.node.titleMapped,
         hiddenSourceSpans: [],
-        hiddenListItemIndices: [],
       }
     : projectBeamerOverlayText(
         createIdentityMappedText(
@@ -1726,7 +1726,6 @@ function prepareBlock(params: {
         macroBindings: params.macroBindings,
         references: params.references,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
-        hiddenListItemIndices: bodyProjection.hiddenListItemIndices,
         graphicsResolver: params.graphicsResolver,
         paperWidth: params.paperWidth,
       })
@@ -2777,7 +2776,6 @@ async function prepareColumnFlowNode(params: {
       macroBindings,
       references,
       hiddenSourceSpans: projection.hiddenSourceSpans,
-      hiddenListItemIndices: projection.hiddenListItemIndices,
       graphicsResolver,
       paperWidth,
     }));
@@ -3079,7 +3077,6 @@ function layoutParagraph(params: {
   references: BeamerReferenceContext;
   targetHeight?: number;
   hiddenSourceSpans?: readonly Span[];
-  hiddenListItemIndices?: readonly number[];
   graphicsResolver?: DocumentGraphicsResolver;
   colorResolver?: NodeTextColorResolver;
   paperWidth?: number;
@@ -3093,7 +3090,7 @@ function layoutParagraph(params: {
     params = {
       ...params,
       font: { ...params.font, sizePt: leadingSize.sizePt, lineHeightPt: leadingSize.lineHeightPt },
-      mapped: mapTransformedTextWithFallback(params.mapped, params.mapped.text.replace(leadingSize.pattern, ""), "Beamer ambient bibliography size"),
+      mapped: replaceBeamerNamedSize(params.mapped, leadingSize.pattern, "", "Beamer ambient bibliography size"),
     };
   }
   const fontSize = texLength(params.font.sizePt);
@@ -3123,12 +3120,10 @@ function layoutParagraph(params: {
     : params.mapped;
   const namedSize = activeBeamerNamedSize(mapped.text);
   if (namedSize) {
-    mapped = mapTransformedTextWithFallback(
+    mapped = replaceBeamerNamedSize(
       mapped,
-      mapped.text.replace(
-        namedSize.pattern,
-        `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont`
-      ),
+      namedSize.pattern,
+      `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont`,
       `Beamer 11pt class ${namedSize.command} size`
     );
   }
@@ -3361,9 +3356,6 @@ function layoutParagraph(params: {
       ...(macroArgumentRuns.length
         ? { macroArgumentRuns }
         : {}),
-      ...(params.hiddenListItemIndices?.length
-        ? { hiddenListItemIndices: params.hiddenListItemIndices }
-        : {}),
       ...(listStructure.length ? { listStructure } : {}),
     },
     svgBody: hideOverlayPaintInSvg(
@@ -3375,8 +3367,7 @@ function layoutParagraph(params: {
         baseFontSizePt: fontSize,
         alignment,
       }),
-      params.hiddenSourceSpans ?? [],
-      params.hiddenListItemIndices ?? []
+      params.hiddenSourceSpans ?? []
     ),
     listMarkers: documentResult.vlistLayout.boxReport.items
       .filter((item) =>
@@ -3415,16 +3406,17 @@ function layoutParagraph(params: {
         const atPt = Number(resolvedFont.atPt);
         return [{
           id: `${params.paragraphId}:marker:${item.path.join("-")}`,
-          ...(item.sourceSpan
+          ...(role.itemCommandSpan
             ? {
                 sourceSpan: {
-                  from: item.sourceSpan.start,
-                  to: item.sourceSpan.end,
+                  from: role.itemCommandSpan.start,
+                  to: role.itemCommandSpan.end,
                 },
               }
             : {}),
           traceAsGlyph: marker.traceAsGlyph ?? marker.glyph != null,
-          visibility: params.hiddenListItemIndices?.includes(role.itemIndex)
+          visibility: role.itemCommandSpan && sourceSpanIsHidden(
+            { from: role.itemCommandSpan.start, to: role.itemCommandSpan.end }, params.hiddenSourceSpans ?? [])
             ? "hidden"
             : "visible",
           bounds: {
@@ -3696,6 +3688,21 @@ function collectMappedMacroArgumentRuns(
   return runs;
 }
 
+function replaceBeamerNamedSize(mapped: MappedText, pattern: RegExp, replacement: string, reason: string): MappedText {
+  const parts: MappedText[] = [];
+  let cursor = 0;
+  for (const match of mapped.text.matchAll(new RegExp(pattern.source, pattern.flags))) {
+    const end = match.index + match[0].length;
+    parts.push(sliceMappedText(mapped, cursor, match.index));
+    const owner = projectInputRange(mapped.sourceMap, match.index, end);
+    parts.push(createGeneratedMappedText(replacement, reason, owner.kind === "source-range"
+      ? { from: owner.from, to: owner.to } : undefined));
+    cursor = end;
+  }
+  parts.push(sliceMappedText(mapped, cursor, mapped.text.length));
+  return concatMappedText(parts);
+}
+
 function activeBeamerNamedSize(source: string): {
   command: string;
   pattern: RegExp;
@@ -3879,13 +3886,12 @@ function applyThemeFamilyToTikz(
 
 function hideOverlayPaintInSvg(
   markup: string,
-  hiddenSpans: readonly Span[],
-  hiddenListItemIndices: readonly number[]
+  hiddenSpans: readonly Span[]
 ): string {
-  if (hiddenSpans.length === 0 && hiddenListItemIndices.length === 0) {
+  if (hiddenSpans.length === 0) {
     return markup;
   }
-  const hiddenSources = markup.replace(
+  return markup.replace(
     /<(path|g)\b([^>]*\bdata-source-start="(\d+)"[^>]*\bdata-source-end="(\d+)"[^>]*)>/gu,
     (whole, tag: string, attributes: string, fromRaw: string, toRaw: string) => {
       if (!sourceSpanIsHidden(
@@ -3900,13 +3906,6 @@ function hideOverlayPaintInSvg(
         : attributes;
       return `<${tag}${visibleAttributes} visibility="hidden"${selfClosing ? " /" : ""}>`;
     }
-  );
-  return hiddenSources.replace(
-    /<g\b([^>]*\bdata-tex-list-item-index="(\d+)"[^>]*)>/gu,
-    (whole, attributes: string, indexRaw: string) =>
-      hiddenListItemIndices.includes(Number(indexRaw))
-        ? `<g${attributes} visibility="hidden">`
-        : whole
   );
 }
 

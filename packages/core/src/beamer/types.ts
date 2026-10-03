@@ -284,8 +284,6 @@ export type BeamerParagraphLayout = {
    * from. Clicking argument output selects the invocation atom.
    */
   macroArgumentRuns?: readonly { span: Span; invocationSpan: Span }[];
-  /** One-based list item ordinals whose labels are covered on this step. */
-  hiddenListItemIndices?: readonly number[];
   /**
    * List-environment topology the text engine retained while parsing this
    * chunk (design/beamer-canvas-editing.md, "Item topology comes from the
