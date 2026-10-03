@@ -8,6 +8,8 @@ import type { ProvenanceOptionList, SemanticContextFrame } from "../context.js";
 import type { SemanticContext } from "../context.js";
 import { evaluateRawCoordinate } from "../coords/evaluate.js";
 import { maybeResolveNamedCoordinateBorderPointFromRaw } from "../nodes/evaluate.js";
+import { applyMatrixToVector } from "../transform.js";
+import type { WorldTransform } from "../../coords/transforms.js";
 
 export type TreeChildCluster = {
   children: ChildOperationItem[];
@@ -147,7 +149,8 @@ export function computeTreeChildOrigin(
   childIndexOneBased: number,
   childCount: number,
   growDirectionDegrees: number,
-  growReverse: boolean
+  growReverse: boolean,
+  transform: WorldTransform
 ): WorldPoint {
   const radians = (growDirectionDegrees * Math.PI) / 180;
   const forward = { x: Math.cos(radians), y: Math.sin(radians) };
@@ -155,10 +158,14 @@ export function computeTreeChildOrigin(
   const centeredIndex = childIndexOneBased - (childCount + 1) / 2;
   const orderSign = growReverse ? -1 : 1;
   const offset = centeredIndex * siblingDistancePt * orderSign;
+  const displacement = applyMatrixToVector(transform, {
+    x: pt(forward.x * levelDistancePt + perpendicular.x * offset),
+    y: pt(forward.y * levelDistancePt + perpendicular.y * offset)
+  });
 
   return worldPoint(
-    pt(parentOrigin.x + forward.x * levelDistancePt + perpendicular.x * offset),
-    pt(parentOrigin.y + forward.y * levelDistancePt + perpendicular.y * offset)
+    pt(parentOrigin.x + displacement.x),
+    pt(parentOrigin.y + displacement.y)
   );
 }
 

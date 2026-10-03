@@ -36,5 +36,6 @@ export type PicEvaluationFn = (
 
 export type PathEvaluationOptions = {
   honorInitialCurrentPoint?: boolean;
+  initialTreeParentCandidate?: { nameRaw: string | null; point: WorldPoint; span: { from: number; to: number } };
   evaluatePicOperation?: PicEvaluationFn;
 };

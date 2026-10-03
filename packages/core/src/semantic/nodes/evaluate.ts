@@ -55,6 +55,7 @@ import {
   resolveNodeAnchor,
   resolveNodeLayer,
   resolveNodeOptionTransform,
+  resolveNodeTransformShape,
   resolveNodeStyle,
   resolveNodeShape,
   withDefaultNodePosition
@@ -557,7 +558,7 @@ export function evaluateNodeItem(
         }
     : adjustedNodeLayout;
   const slopedRotation = resolveSlopedNodeRotation(expandedNodeOptions, segment, effectiveBaseStyleChain);
-  const inheritedNodeTransform: WorldTransform = frame.transformShape
+  const inheritedNodeTransform: WorldTransform = resolveNodeTransformShape(expandedNodeLocalOptions, frame.transformShape)
     ? worldTransform(frame.transform.a, frame.transform.b, frame.transform.c, frame.transform.d, 0, 0)
     : identityMatrix();
   const nodeOptionTransform = resolveNodeOptionTransform(expandedNodeLocalOptions, style, context);

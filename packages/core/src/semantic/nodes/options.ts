@@ -151,6 +151,20 @@ export function resolveNodeOptionScale(
   return computeRelativeTransformScale(frame.transform, resolved.transform);
 }
 
+export function resolveNodeTransformShape(options: OptionListAst | undefined, inherited: boolean): boolean {
+  let transformShape = inherited;
+  for (const entry of options?.entries ?? []) {
+    if (entry.kind === "unknown" || entry.key !== "transform shape") continue;
+    if (entry.kind === "flag") {
+      transformShape = true;
+    } else if (entry.kind === "kv") {
+      const parsed = parseBooleanishNormalized(normalizeOptionValue(entry.valueRaw));
+      if (parsed != null) transformShape = parsed;
+    }
+  }
+  return transformShape;
+}
+
 export function resolveNodeOptionTransform(
   options: PathOptionItem["options"] | undefined,
   baseStyle: ResolvedStyle,

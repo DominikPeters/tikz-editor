@@ -87,6 +87,7 @@ import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
 import { parseNodeDistance } from "./path/node-positioning.js";
 import { DEFAULT_TEXT_FONT_SIZE, defaultStyle, commandDefaultStyle, parseStyleValueAsOptionList, resolveContextDelta } from "./style/resolve.js";
+import { normalizeOptionValue } from "./style/option-utils.js";
 import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "./style/diagnostics.js";
 import { applyCustomStyleDefinition, cloneCustomStyleRegistry } from "./style/custom-styles.js";
 import {
@@ -914,6 +915,41 @@ function markOpaqueDependencySources(
   }
 }
 
+export function resolvePathBoundary(
+  parent: ReturnType<typeof currentFrame>,
+  context: ReturnType<typeof createSemanticContext>,
+  command: Parameters<typeof commandDefaultStyle>[0],
+  sourceRef: StyleSourceRef,
+  explicitLayers: StyleTraceLayerInput[] = []
+) {
+  const before = cloneResolvedStyle(parent.style);
+  const baseStyle = { ...parent.style, ...commandDefaultStyle(command, parent.style) };
+  const baseChain = [...cloneStyleChain(parent.styleChain), {
+    kind: "global" as const,
+    sourceRef: { ...sourceRef, sourceKind: "command-default", label: command },
+    rawOptions: [],
+    before,
+    after: cloneResolvedStyle(baseStyle),
+    resolvedContributions: diffResolvedStyle(before, baseStyle)
+  }];
+  const customStyles = cloneCustomStyleRegistry(parent.customStyles);
+  const resolved = resolveContextDelta(
+    baseStyle, parent.transform,
+    [
+      ...parent.everyPathStyles.map((layer): StyleTraceLayerInput => ({
+        kind: "scope", sourceRef: layer.sourceRef,
+        rawOptions: expandOptionListMacros([layer.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
+      })),
+      ...explicitLayers
+    ],
+    customStyles,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
+    baseChain,
+    (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
+  );
+  return { resolved, customStyles };
+}
+
 function evaluateStatement(
   statement: Statement,
   context: ReturnType<typeof createSemanticContext>,
@@ -931,22 +967,6 @@ function evaluateStatement(
       sourceKind: "path-statement",
       label: statement.command
     };
-    const commandStyleBefore = cloneResolvedStyle(parent.style);
-    const baseStyle = { ...parent.style, ...commandDefaultStyle(statement.command, parent.style) };
-    const commandDefaultEntry = {
-      kind: "global" as const,
-      sourceRef: {
-        sourceId: statement.id,
-        sourceSpan: statement.span,
-        sourceKind: "command-default",
-        label: statement.command
-      },
-      rawOptions: [],
-      before: commandStyleBefore,
-      after: cloneResolvedStyle(baseStyle),
-      resolvedContributions: diffResolvedStyle(commandStyleBefore, baseStyle)
-    };
-    const baseChain = [...cloneStyleChain(parent.styleChain), commandDefaultEntry];
     const optionLists = statement.options ? [statement.options] : [];
     const expandedOptionLists = expandOptionListMacros(
       optionLists,
@@ -959,24 +979,17 @@ function evaluateStatement(
         markFeature(featureUsage, "transform_cm", "supported");
       }
     }
-    const scopedCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
     const scopedPicDefinitions = clonePicDefinitionRegistry(parent.picDefinitions);
     applyPicDefinitionsFromOptionLists(scopedPicDefinitions, expandedOptionLists, commandSourceRef);
-    const resolved = resolveContextDelta(
-      baseStyle,
-      parent.transform,
+    const { resolved, customStyles: scopedCustomStyles } = resolvePathBoundary(
+      parent, context, statement.command, commandSourceRef,
       [
         {
           kind: "command",
           sourceRef: commandSourceRef,
           rawOptions: expandedOptionLists
         }
-      ],
-      scopedCustomStyles,
-      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
-      baseChain,
-      (raw) => resolveContextColorAliasValue(context, raw),
-      parent.axisBasis
+      ]
     );
     const frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, commandSourceRef);
 
@@ -1333,8 +1346,31 @@ function evaluatePicOperationInStatement(
   featureUsage: FeatureUsage,
   statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>
 ): { behindElements: SceneElement[]; frontElements: SceneElement[] } {
+  const result: { behindElements: SceneElement[]; frontElements: SceneElement[] } = { behindElements: [], frontElements: [] };
+  let elementIndexOffset = 0;
+  for (const code of resolvePicCode(item, currentFrame(context).picDefinitions)) {
+    const parts = evaluatePicCodeBody(
+      item, placement, segment, context, diagnostics, featureUsage, statementMacroAttribution, code, elementIndexOffset
+    );
+    result.behindElements.push(...parts.behindElements);
+    result.frontElements.push(...parts.frontElements);
+    elementIndexOffset += parts.behindElements.length + parts.frontElements.length;
+  }
+  return result;
+}
+
+function evaluatePicCodeBody(
+  item: PicOperationItem,
+  placement: WorldPoint,
+  segment: PlacementSegment | null,
+  context: ReturnType<typeof createSemanticContext>,
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage,
+  statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>,
+  resolvedCode: ResolvedPicCode,
+  elementIndexOffset: number
+): { behindElements: SceneElement[]; frontElements: SceneElement[] } {
   const parent = currentFrame(context);
-  const resolvedCode = resolvePicCode(item, parent.picDefinitions);
   if (resolvedCode.kind === "not-found") {
     markFeature(featureUsage, "pic_operation", "unsupported");
     diagnostics.push({
@@ -1378,12 +1414,17 @@ function evaluatePicOperationInStatement(
   const expandedItemOptions = item.options
     ? expandOptionListMacros([item.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
     : [];
-  const picStyleLayers: StyleTraceLayerInput[] = [
-    ...parent.everyPicStyles.map((layer): StyleTraceLayerInput => ({
+  const picScopeStyleName = resolvedCode.codeLayer === "foreground" ? "every front pic" : "every behind pic";
+  const picScopeLayers: StyleTraceLayerInput[] = resolvedCode.codeLayer === "normal"
+    ? parent.everyPicStyles.map((layer): StyleTraceLayerInput => ({
       kind: "scope",
       sourceRef: layer.sourceRef,
       rawOptions: expandOptionListMacros([layer.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
-    })),
+    }))
+    : parent.customStyles.has(picScopeStyleName)
+      ? [{ kind: "scope", sourceRef: picSourceRef, rawOptions: [parseStyleValueAsOptionList(picScopeStyleName)!] }]
+      : [];
+  const picStyleLayers: StyleTraceLayerInput[] = [
     ...(expandedItemOptions.length > 0
       ? [
           {
@@ -1392,7 +1433,8 @@ function evaluatePicOperationInStatement(
             rawOptions: expandedItemOptions
           }
         ]
-      : [])
+      : []),
+    ...picScopeLayers
   ];
 
   const noParentShapeTransform = resolvePicPlacementTransform(
@@ -1519,9 +1561,9 @@ function evaluatePicOperationInStatement(
   }
 
   const stamped = elements.map((element, index) =>
-    stampPicElement(element, index, item, picOrigin, parsed.sourceMapper, resolvedCode.codeSpan)
+    stampPicElement(element, index + elementIndexOffset, item, picOrigin, parsed.sourceMapper, resolvedCode.codeSpan)
   );
-  if (frameMeta.nodeLayerMode === "behind" || resolvedCode.codeLayer === "background") {
+  if (resolvedCode.codeLayer === "background" || (resolvedCode.codeLayer === "normal" && frameMeta.nodeLayerMode === "behind")) {
     return { behindElements: stamped, frontElements: [] };
   }
   void segment;
@@ -2900,6 +2942,7 @@ function containsPgfMathRandomToken(input: string): boolean {
 }
 
 type FrameStyleBuckets = {
+  everyPathStyles: ProvenanceOptionList[];
   everyNodeStyles: ProvenanceOptionList[];
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
@@ -2910,6 +2953,7 @@ type FrameStyleBuckets = {
 type FrameStyleListBucketKey = Exclude<keyof FrameStyleBuckets, "everyShapeNodeStyles">;
 
 const FRAME_STYLE_LIST_BUCKET_KEYS = [
+  "everyPathStyles",
   "everyNodeStyles",
   "everyTextNodePartStyles",
   "everyFitStyles",
@@ -2917,6 +2961,7 @@ const FRAME_STYLE_LIST_BUCKET_KEYS = [
 ] as const satisfies readonly FrameStyleListBucketKey[];
 
 const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, FrameStyleListBucketKey> = {
+  "every path/.style": "everyPathStyles",
   "every node/.style": "everyNodeStyles",
   "every text node part/.style": "everyTextNodePartStyles",
   "every fit/.style": "everyFitStyles",
@@ -2924,6 +2969,7 @@ const FRAME_STYLE_BUCKET_BY_STYLE_KEY: Record<string, FrameStyleListBucketKey> =
 };
 
 const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, FrameStyleListBucketKey> = {
+  "every path/.append style": "everyPathStyles",
   "every node/.append style": "everyNodeStyles",
   "every text node part/.append style": "everyTextNodePartStyles",
   "every fit/.append style": "everyFitStyles",
@@ -2931,6 +2977,7 @@ const FRAME_STYLE_BUCKET_BY_APPEND_KEY: Record<string, FrameStyleListBucketKey> 
 };
 
 const LEGACY_TIKZSTYLE_BUCKET_BY_NAME: Record<string, FrameStyleListBucketKey> = {
+  "every path": "everyPathStyles",
   "every node": "everyNodeStyles",
   "every text node part": "everyTextNodePartStyles",
   "every fit": "everyFitStyles",
@@ -3353,6 +3400,8 @@ export function resolveFrameMeta(
         const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
         if (parsedLayer) {
           styleBuckets[replaceBucket] = [parsedLayer];
+        } else if (replaceBucket === "everyPathStyles" && normalizeOptionValue(entry.valueRaw).length === 0) {
+          styleBuckets.everyPathStyles = [];
         }
         continue;
       }
@@ -3394,6 +3443,14 @@ export function resolveFrameMeta(
         const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
         if (parsedLayer) {
           styleBuckets[appendBucket] = [...styleBuckets[appendBucket], parsedLayer];
+        }
+        continue;
+      }
+
+      if (entry.key === "every path/.prefix style") {
+        const parsedLayer = parseProvenanceStyleLayer(entry, sourceRef);
+        if (parsedLayer) {
+          styleBuckets.everyPathStyles = [parsedLayer, ...styleBuckets.everyPathStyles];
         }
         continue;
       }

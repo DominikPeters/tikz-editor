@@ -284,7 +284,7 @@ export function evaluatePathStatement(
     currentPointCoordinate: null,
     pendingEdgeStartCoordinateRaw: null,
     edgeOperationStart: null,
-    treeParentCandidate: null,
+    treeParentCandidate: options.initialTreeParentCandidate ?? null,
     sawNonLeadingPathItem: false,
     hasPathCurrentPoint: honorInitialCurrentPoint && context.currentPoint != null,
     treeFrameState: frame,

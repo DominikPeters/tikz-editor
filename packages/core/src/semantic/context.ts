@@ -145,6 +145,7 @@ export type SemanticContextFrame = {
   pinDistancePt: number;
   pinEdgeRaw: string | null;
   transformShape: boolean;
+  everyPathStyles: ProvenanceOptionList[];
   everyNodeStyles: ProvenanceOptionList[];
   everyTextNodePartStyles: ProvenanceOptionList[];
   everyFitStyles: ProvenanceOptionList[];
@@ -333,6 +334,7 @@ export function createSemanticContext(
         pinDistancePt: 12.9,
         pinEdgeRaw: null,
         transformShape: false,
+        everyPathStyles: [],
         everyNodeStyles: [],
         everyTextNodePartStyles: [],
         everyFitStyles: [],

@@ -135,26 +135,6 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
     handle: ({ style, transform }) => ({ style, transform, diagnostics: [] })
   },
   {
-    keys: ["every path/.style", "every path/.append style"],
-    handle: ({ valueRaw, style, transform, applyOptionEntry }) => {
-      const nested = parseStyleValueAsOptionList(valueRaw);
-      if (!nested) {
-        return { style, transform, diagnostics: [`invalid-style-value:${valueRaw}`] };
-      }
-
-      let nextStyle = style;
-      let nextTransform = transform;
-      const diagnostics: StyleDiagnosticInput[] = [];
-      for (const entry of nested.entries) {
-        const outcome = applyOptionEntry(entry, nextStyle, nextTransform);
-        nextStyle = outcome.style;
-        nextTransform = outcome.transform;
-        diagnostics.push(...outcome.diagnostics);
-      }
-      return { style: nextStyle, transform: nextTransform, diagnostics };
-    }
-  },
-  {
     keys: ["every shadow/.style", "every shadow/.append style"],
     handle: ({ key, valueRaw, style, transform }) => {
       const nested = parseStyleValueAsOptionList(valueRaw);

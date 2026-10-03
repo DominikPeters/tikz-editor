@@ -7,6 +7,7 @@ import {
   createDefaultCustomStyleRegistry
 } from "../../packages/core/src/semantic/style/custom-styles.js";
 import {
+  applyPicDefinitionsFromOptionLists,
   clonePicDefinitionRegistry,
   createDefaultPicDefinitionRegistry,
   type PicDefinition
@@ -22,14 +23,16 @@ function optionList(raw: string) {
 function picDefinition(name: string, codeRaw: string): PicDefinition {
   return {
     name,
-    codeRaw,
-    sourceRef: {
-      sourceId: `test-pic:${name}:${codeRaw}`,
-      sourceKind: "pic-definition",
-      label: name
-    },
-    parameterized: false,
-    codeLayer: "normal"
+    codes: [{
+      codeRaw,
+      sourceRef: {
+        sourceId: `test-pic:${name}:${codeRaw}`,
+        sourceKind: "pic-definition",
+        label: name
+      },
+      parameterized: false,
+      codeLayer: "normal"
+    }]
   };
 }
 
@@ -49,7 +52,7 @@ describe("layered semantic registries", () => {
     const styleFork = cloneCustomStyleRegistry(styles);
     const picFork = clonePicDefinitionRegistry(pics);
     expect(styleFork.has("local")).toBe(true);
-    expect(picFork.get("local")?.codeRaw).toBe("local-code");
+    expect(picFork.get("local")?.codes[0]?.codeRaw).toBe("local-code");
   });
 
   it("forks custom styles with inherited iteration order and isolated replacement-on-write", () => {
@@ -95,9 +98,17 @@ describe("layered semantic registries", () => {
   it("forks pic definitions with Map-compatible iteration and isolated replacement", () => {
     const parent = createDefaultPicDefinitionRegistry();
     const first = picDefinition("first", "first-code");
-    const inherited = picDefinition("shared", "parent-code");
     parent.set("first", first);
-    parent.set("shared", inherited);
+    applyPicDefinitionsFromOptionLists(parent, [optionList("pics/shared/.style={code={parent-code},background code={parent-background}}")], {
+      sourceId: "test-parent-pics",
+      sourceKind: "pic-definition",
+      label: "shared"
+    });
+    const inherited = parent.get("shared")!;
+    const inheritedSnapshot = structuredClone(inherited);
+    expect(inherited.codes.map(({ codeLayer, codeRaw }) => [codeLayer, codeRaw]))
+      .toEqual([["normal", "parent-code"], ["background", "parent-background"]]);
+    expect(inherited.codes.every((body) => body.codeSpan && body.sourceRef.sourceSpan)).toBe(true);
 
     const child = clonePicDefinitionRegistry(parent);
     const sibling = clonePicDefinitionRegistry(parent);
@@ -111,9 +122,9 @@ describe("layered semantic registries", () => {
     sibling.set("shared", picDefinition("shared", "sibling-code"));
     parent.set("parent-only", picDefinition("parent-only", "parent-only-code"));
 
-    expect(parent.get("shared")?.codeRaw).toBe("parent-code");
-    expect(child.get("shared")?.codeRaw).toBe("child-code");
-    expect(sibling.get("shared")?.codeRaw).toBe("sibling-code");
+    expect(parent.get("shared")).toEqual(inheritedSnapshot);
+    expect(child.get("shared")?.codes.map(({ codeLayer, codeRaw }) => [codeLayer, codeRaw])).toEqual([["normal", "child-code"]]);
+    expect(sibling.get("shared")?.codes.map(({ codeLayer, codeRaw }) => [codeLayer, codeRaw])).toEqual([["normal", "sibling-code"]]);
     expect(child.has("parent-only")).toBe(false);
     expect(parent.has("child-only")).toBe(false);
     expect([...child.keys()]).toEqual(["first", "shared", "child-only"]);
@@ -129,6 +140,6 @@ describe("layered semantic registries", () => {
     const imported = clonePicDefinitionRegistry(callerOwnedMap);
     callerOwnedMap.delete("shared");
     expect(imported).toBeInstanceOf(PersistentMap);
-    expect(imported.get("shared")?.codeRaw).toBe("parent-code");
+    expect(imported.get("shared")).toEqual(inheritedSnapshot);
   });
 });
