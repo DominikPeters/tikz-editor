@@ -136,7 +136,7 @@ export function createBeamerTexMathFontProfile(
     },
     resolveMathAlphabetFont(request) {
       if (
-        request.alphabet !== "mathbf" ||
+        (request.alphabet !== "mathbf" && request.alphabet !== "mathrm") ||
         !/^[A-Za-z0-9]$/.test(request.text)
       ) {
         return base.resolveMathAlphabetFont?.(request) ?? null;
@@ -144,8 +144,10 @@ export function createBeamerTexMathFontProfile(
       return textFontProfile.resolveTextFont(
         {
           ...textFontProfile.defaultFontState,
-          family: "normal",
-          series: "bold",
+          // beamerbasefont.sty resets \mathrm to the current Roman text
+          // family; its \mathbf declaration uses the active math family.
+          family: request.alphabet === "mathrm" ? "roman" : "normal",
+          series: request.alphabet === "mathbf" ? "bold" : "medium",
           shape: "upright",
         },
         base.resolveMathStyleAtPt(request.style, request.baseAtPt),

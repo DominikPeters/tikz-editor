@@ -72,6 +72,23 @@ function layoutAndRender(
 }
 
 describe("public TeX SVG renderer", () => {
+  it.each([
+    String.raw`\[x+y\]`,
+    String.raw`\begin{align*}a&=b\\c&=d\end{align*}`,
+    String.raw`\begin{minipage}{100pt}\[x+y\]\end{minipage}`,
+  ])("renders display-only content without manufacturing prose: %s", source => {
+    const { body, report, vlistLayout } = layoutAndRender(source, {
+      paragraphId: "tex:display-only", sourceOffset: 200,
+    });
+    expect(report.lines).toHaveLength(0);
+    expect(report.runs).toHaveLength(0);
+    expect(body).toContain('data-tex-font="');
+    const sourceStarts = [...body.matchAll(/data-source-start="(\d+)"/gu)].map(match => Number(match[1]));
+    expect(sourceStarts.length).toBeGreaterThan(0);
+    expect(Math.min(...sourceStarts)).toBeGreaterThanOrEqual(200);
+    expect(vlistLayout.metrics.height + vlistLayout.metrics.depth).toBeGreaterThan(0);
+  });
+
   it("supports metric providers that ignore the rendering-only caret hint", () => {
     const { body, report, vlistLayout } = layoutAndRender("office AV é", {
       paragraphId: "tex:custom-render-provider",

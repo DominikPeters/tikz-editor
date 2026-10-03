@@ -1370,7 +1370,7 @@ function prepareFrameParagraph(params: {
     node: params.node,
     paragraph,
     naturalHeight:
-      paragraph.height + trailingTrivlistSkip + trailingListSkip,
+      paragraphMaterialExtent(paragraph) + trailingTrivlistSkip + trailingListSkip,
     boxHeight: paragraphStartingMaterialHeight(paragraph),
     startingBaselineSkip:
       namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt,
@@ -3063,7 +3063,23 @@ function paragraphLineExtent(paragraph: LaidParagraph): number {
         Number(line.descent)
     );
   }
-  return bottom || paragraph.height;
+  for (const item of paragraph.layout.vlistLayout.boxReport.items) {
+    if (item.itemKind === "display-math" || item.hboxRole?.kind === "display-align-row") {
+      bottom = Math.max(bottom, Number(item.y + item.height + item.depth));
+    }
+  }
+  // Block bodies are minipages: \endminipage removes the terminal display
+  // skip with \unskip. The final painted equation still contributes its box.
+  return bottom || paragraphMaterialExtent(paragraph);
+}
+
+function paragraphMaterialExtent(paragraph: LaidParagraph): number {
+  const last = paragraph.layout.vlistLayout.items.at(-1);
+  if (!last) return 0;
+  // The root's synthetic strut baseline can exceed a short line's actual
+  // bottom. Frame flow advances by the material, not that baseline floor.
+  return Number(last.y + (last.item.kind === "glue" && last.item.size < 0
+    ? last.item.size : last.metrics.height + last.metrics.depth));
 }
 
 function fontXHeightPt(font: BeamerThemeFont): number {
@@ -3256,7 +3272,9 @@ function layoutParagraph(params: {
         ? 3
         : (leadingSize?.command ?? namedSize?.command) === "footnotesize" ? 2 : 0,
     },
-    displayMathProfile: BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
+    displayMathProfile: params.role === "block-body"
+      ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE, leadingDisplay: undefined }
+      : BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
     hyphenator: params.disableAutomaticHyphenation
       ? { hyphenate: () => [] }
       : undefined,

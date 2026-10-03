@@ -200,7 +200,9 @@ export function layoutSimpleTexParagraph(
       errors: [reason],
     };
   }
-  if (blocks.length === 0) {
+  // Display equations and other vertical material need no prose paragraph.
+  // Their boxes still pass through the same vlist layout and SVG renderer.
+  if (blocks.length === 0 && (analysis.ir?.items.length ?? 0) === 0) {
     const reason = "Paragraph contains no text runs.";
     return {
       supported: false,

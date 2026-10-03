@@ -68,6 +68,26 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(unsupportedCodeFailures({ source: codeSource, span, render, trace, requiredText: fixture.requiredText })).toEqual([]);
   });
 
+  it("places the display-only matrix block and surrounding prose on the TeX baselines", async () => {
+    const source = readFileSync(new URL("flow.tex", root), "utf8");
+    const render = await prepareBeamerDocument(source).renderFrame({ frameIndex: 3, step: 1 });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    // LuaLaTeX shipout positions from the strict block-aligned-matrix case.
+    // The comparator regenerates this oracle and checks every glyph and font.
+    for (const [text, baseline] of [
+      ["Beforetheblock.", 85.397415], ["Encoding", 104.860870],
+      ["Alpha=", 138.420883], ["Beta=", 156.038406],
+      ["Aftertheblock.", 181.233444],
+    ] as const) {
+      const line = trace.lines.find(candidate => candidate.text === text);
+      expect(line, text).toBeDefined();
+      expect(Math.abs(line!.baselineY - baseline), text).toBeLessThan(.01);
+    }
+    expect(trace.lines.find(line => line.text === "Alpha=")!.glyphs[0].fontName).toBe("lmroman10-regular");
+    expect(render.diagnostics).toEqual([]);
+    expect(render.layout.items.some(item => item.kind === "unsupported")).toBe(false);
+  });
+
   it("rejects the silent disappearance shape observed for code inside an exampleblock", async () => {
     const render = await prepareBeamerDocument(codeSource).renderFrame({ frameIndex: 0, step: 1 });
     const card = render.layout.items.find(item => item.kind === "unsupported")!;

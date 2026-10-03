@@ -147,7 +147,8 @@ export function layoutTexVListFromBrokenParagraphs(
     entries: options.entries,
     initialErrors: options.initialErrors,
   });
-  if (combined.runs.length === 0 || combined.lines.length === 0) {
+  if ((combined.runs.length === 0 || combined.lines.length === 0) &&
+      (document.items.length === 0 || texVListParagraphEntries(document.items).length > 0)) {
     return {
       status: "empty",
       combined,
