@@ -24,7 +24,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{
@@ -2509,11 +2509,17 @@ async fn desktop_show_message_dialog(
 
 #[tauri::command]
 fn desktop_confirm_window_close(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-    window.destroy().map_err(|error| error.to_string())
+    // The frontend reaches this command only after Save/Discard acceptance and
+    // its recovery flush. Explicit exit also quits macOS when other windows exist.
+    app.state::<ExitApprovalState>()
+        .0
+        .store(true, Ordering::Release);
+    app.exit(0);
+    Ok(())
 }
+
+#[derive(Default)]
+struct ExitApprovalState(AtomicBool);
 
 #[tauri::command]
 fn desktop_list_recent_files(app: AppHandle) -> Result<Vec<String>, String> {
@@ -2970,6 +2976,7 @@ pub fn run() {
     let builder = builder
         .manage(RecentFilesState::default())
         .manage(PendingOpenRequestsState::default())
+        .manage(ExitApprovalState::default())
         .manage(LinkedFileWatchState::default())
         .manage(LocalAssetWatchState::default());
 
@@ -3104,6 +3111,18 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
+                // Tauri explicitly cannot cancel its restart exit code. Cocoa's
+                // applicationWillTerminate path is also outside ExitRequested.
+                if *code != Some(tauri::RESTART_EXIT_CODE)
+                    && !app.state::<ExitApprovalState>().0.load(Ordering::Acquire)
+                {
+                    if let Some(window) = app.get_webview_window("main") {
+                        api.prevent_exit();
+                        let _ = window.emit("desktop-window-close-request", ());
+                    }
+                }
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = event {
                 process_associated_open_urls(app, &urls);

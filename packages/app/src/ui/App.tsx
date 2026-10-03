@@ -7,7 +7,7 @@ import {
   filterAppMenuDefinitionForTarget,
   type AppMenuPlatformTarget
 } from "../app-menu";
-import { useEditorStore } from "../store/store";
+import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
 import { rootKey } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, type ComputeRequest, type ComputeResponse } from "../compute";
@@ -334,6 +334,7 @@ export function App() {
       dispatch({ type: "CLOSE_ALL_DOCUMENTS" });
       return;
     }
+    flushPendingWorkspaceSave();
     void getActiveEditorPlatform().window?.close?.();
   }
 

@@ -127,7 +127,7 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.QUIT_APP,
         label: "Quit",
         accelerator: "CmdOrCtrl+Q",
-        platforms: ["desktop-windows", "desktop-linux"]
+        platforms: ["desktop"]
       }
     ]
   },

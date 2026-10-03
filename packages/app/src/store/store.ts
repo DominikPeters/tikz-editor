@@ -141,7 +141,7 @@ function scheduleWorkspaceSave(state: WorkspacePersistedState): void {
   pendingWorkspaceSaveTimer = window.setTimeout(flushPendingWorkspaceSave, HIGH_FREQUENCY_WORKSPACE_SAVE_DELAY_MS);
 }
 
-function flushPendingWorkspaceSave(): void {
+export function flushPendingWorkspaceSave(): void {
   const state = pendingWorkspaceSaveState;
   clearPendingWorkspaceSaveTimer();
   pendingWorkspaceSaveState = null;

@@ -247,6 +247,10 @@ export function createNativeDesktopMenuManager(options: {
       return null;
     }
 
+    if (origin === "platform" && isMacPlatform() && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP) {
+      return null; // The guarded Quit command lives in the macOS application menu.
+    }
+
     const state = commandStates[item.commandId] ?? { enabled: false };
     if (origin === "context-menu" && shouldHideDisabledContextMenuCommand(item.commandId, state)) {
       return null;
@@ -300,10 +304,17 @@ export function createNativeDesktopMenuManager(options: {
     });
     const separator1 = await menuApi.PredefinedMenuItem.new({ item: "Separator" });
     const separator2 = await menuApi.PredefinedMenuItem.new({ item: "Separator" });
-    const quitItem = await menuApi.PredefinedMenuItem.new({
+    const quitState = commandStates[APP_MENU_COMMAND_IDS.QUIT_APP] ?? { enabled: false };
+    const quitItem = await menuApi.MenuItem.new({
+      id: APP_MENU_COMMAND_IDS.QUIT_APP,
       text: `Quit ${APP_DISPLAY_NAME}`,
-      item: "Quit"
+      enabled: quitState.enabled,
+      accelerator: "CmdOrCtrl+Q",
+      action: () => {
+        dispatchCommand(APP_MENU_COMMAND_IDS.QUIT_APP, "platform");
+      }
     });
+    addCommandRef(APP_MENU_COMMAND_IDS.QUIT_APP, { kind: "command", item: quitItem });
 
     const settingsState = commandStates[APP_MENU_COMMAND_IDS.OPEN_SETTINGS] ?? { enabled: false };
     const settingsItem = await menuApi.MenuItem.new({
