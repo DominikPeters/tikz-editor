@@ -726,16 +726,19 @@ function CodeSigningPolicy() {
   return (
     <section className="landingCodeSigningPolicy" id="code-signing-policy" aria-labelledby="code-signing-policy-title">
       <div className="landingCodeSigningPolicyInner">
-        <h2 id="code-signing-policy-title">Code-signing policy</h2>
+        <h2 id="code-signing-policy-title">Code signing policy</h2>
         <p>
-          Official Windows releases are built from the project source on GitHub Actions. Free code signing
+          Official Windows releases: Free code signing
           provided by <a href="https://signpath.io/">SignPath.io</a>, certificate by{" "}
-          <a href="https://signpath.org/">SignPath Foundation</a>. Every production signing request requires
-          manual approval by the release approver. Committer, reviewer, and release approver:{" "}
+          <a href="https://signpath.org/">SignPath Foundation</a>. Committer, reviewer, and release approver:{" "}
           <a href="https://dominik-peters.de/">Dominik Peters</a>.
         </p>
         <p>
-          <strong>Privacy policy:</strong> On startup, the desktop app requests update information from{" "}
+          Official macOS releases: Code signed by Dominik Peters.
+        </p>
+        <p>
+          <strong>Privacy policy:</strong> Unless deactivated during install or from the settings menu, on startup, 
+          the desktop app requests information about the most recent available version from{" "}
           <code>tikz.dev</code>. The server receives standard connection information such as the IP address,
           but the request contains no documents, TikZ source, usage analytics, or persistent identifiers.
         </p>
