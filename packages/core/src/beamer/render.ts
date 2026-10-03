@@ -523,7 +523,13 @@ async function renderBeamerFrameStep(params: {
   );
   const chrome = planBeamerFrameChrome({
     document,
-    frame,
+    frame: {
+      ...frame,
+      title: frame.title && resolveBeamerOverlaySpanVisibility(bodyIr.overlays, frame.title.contentSpan, step) === "removed"
+        ? undefined : frame.title,
+      subtitle: frame.subtitle && resolveBeamerOverlaySpanVisibility(bodyIr.overlays, frame.subtitle.contentSpan, step) === "removed"
+        ? undefined : frame.subtitle,
+    },
     frameIndex: (params.frameCounter?.beforeFrame ?? frameIndex) + (frame.options?.noFrameNumbering ? -1 : allowFrameBreaks == null ? 0 : continuationIndex - 1),
     totalFrames: params.frameCounter?.totalFrames ?? document.frames.length,
     navigation,
@@ -613,6 +619,7 @@ async function renderBeamerFrameStep(params: {
   if (continuationIndex > continuationCount) throw new RangeError(`Beamer continuation page ${continuationIndex} is outside the frame's ${continuationCount} pages.`);
   renderChrome({ chrome, theme, items, paragraphs, modelBuilder, macroBindings, references,
     graphicsResolver: params.graphicsResolver, paperWidth: page.page.width,
+    overlays: bodyIr.overlays, step,
     continuationSuffix: continuationPages ? beamerContinuationTitleSuffix(document, continuationIndex, continuationCount) : undefined,
   });
   if (preparedFrameFlow.length > 0) {
@@ -934,6 +941,8 @@ function renderChrome(params: {
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
   continuationSuffix?: string;
+  overlays: BeamerOverlayModel;
+  step: number;
 }): void {
   const { chrome, theme, items, paragraphs, modelBuilder } = params;
   for (const primitive of chrome.primitives) {
@@ -980,9 +989,17 @@ function renderChrome(params: {
       continue;
     }
 
+    const isFrameHeading = primitive.fontRole === "frame-title" || primitive.fontRole === "frame-subtitle";
+    const projection = isFrameHeading ? projectBeamerOverlayText(
+      mappedTemplateText(primitive), primitive.sourceSpan,
+      // An authored body pause does not cover the separately built title box.
+      { ...params.overlays, pauses: params.overlays.pauses.filter(pause =>
+        primitive.sourceSpan.from <= pause.span.from && pause.span.to <= primitive.sourceSpan.to) },
+      params.step
+    ) : { mapped: mappedTemplateText(primitive), hiddenSourceSpans: [] };
     const mapped = primitive.fontRole === "frame-title" && params.continuationSuffix != null
-      ? concatMappedText([mappedTemplateText(primitive), createGeneratedMappedText(params.continuationSuffix, "Beamer continuation title", primitive.sourceSpan)])
-      : mappedTemplateText(primitive);
+      ? concatMappedText([projection.mapped, createGeneratedMappedText(params.continuationSuffix, "Beamer continuation title", primitive.sourceSpan)])
+      : projection.mapped;
     const font = theme.fonts[primitive.fontRole];
     const laid = layoutParagraph({
       mapped,
@@ -999,6 +1016,7 @@ function renderChrome(params: {
       references: params.references,
       graphicsResolver: params.graphicsResolver,
       paperWidth: params.paperWidth,
+      hiddenSourceSpans: projection.hiddenSourceSpans,
     });
     if (!laid) {
       continue;

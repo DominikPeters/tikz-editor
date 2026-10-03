@@ -148,7 +148,13 @@ export function scanBeamerFrameOverlays(
 ): BeamerOverlayModel {
   const context = beamerSyntaxContext(source, syntax);
   const pending: PendingSpec[] = [];
-  const controls = beamerControlSequencesIn(context, frame.bodySpan);
+  // Frame title arguments are stored before the body but executed when the
+  // frame-title box is built. Their overlays can create pages even when the
+  // body itself has no overlay commands.
+  const controls = beamerControlSequencesIn(context, {
+    from: frame.headerSpan.from,
+    to: frame.bodySpan.to,
+  });
   const listRanges = beamerListRanges(context, frame.bodySpan);
   const itemControls = controls.filter((command) => command.name === "item" || command.name === "bibitem");
   const listLabelSpans = itemControls.flatMap((command) => {
@@ -171,6 +177,17 @@ export function scanBeamerFrameOverlays(
   const declarations: Array<{ from: number; syntaxTo: number; kind: BeamerOverlayCommandKind; spec: BeamerDelimitedSourceValue }> = [];
 
   for (const command of controls) {
+    if (command.name === "frametitle" || command.name === "framesubtitle") {
+      const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+      if (rawSpec) {
+        const optional = command.name === "frametitle"
+          ? beamerOptionalArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to)
+          : null;
+        const content = beamerRequiredArgumentAfter(context, optional?.span.to ?? rawSpec.span.to, frame.bodySpan.to);
+        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, contentSpan: content?.contentSpan });
+      }
+      continue;
+    }
     if (command.name === "footnote") {
       const optional = beamerOptionalArgumentAfter(context, command.to, frame.bodySpan.to);
       const rawSpec = beamerOverlayArgumentAfter(context, optional?.span.to ?? command.to, frame.bodySpan.to);
@@ -595,10 +612,9 @@ function parseOverlayCommand(
   }
   if (!spec) {
     spec = beamerOverlayArgumentAfter(context, cursor, limit);
-    if (!spec) {
-      return null;
-    }
-    cursor = spec.span.to;
+    if (spec) cursor = spec.span.to;
+    else spec = { span: { from: commandTo, to: commandTo },
+      contentSpan: { from: commandTo, to: commandTo }, value: "1-" };
   }
   const span = { from: commandFrom, to: cursor };
   return {

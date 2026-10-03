@@ -323,6 +323,7 @@ function createDefaultTheme(): MutableTheme {
       institute: {},
       date: {},
       frametitle: { parent: "titlelike" },
+      framesubtitle: { parent: "frametitle" },
       "section in head/foot": { parent: "palette tertiary" },
       "section in head/foot shaded": {
         parent: "section in head/foot",
@@ -427,12 +428,12 @@ function createDefaultTheme(): MutableTheme {
       "frame-title": {
         ...normalFont,
         sizePt: 14.4,
-        lineHeightPt: 17.28,
+        lineHeightPt: 18,
       },
       "frame-subtitle": {
         ...normalFont,
-        sizePt: 8,
-        lineHeightPt: 9.5,
+        sizePt: 9,
+        lineHeightPt: 11,
       },
       headline: {
         ...normalFont,

@@ -56,6 +56,37 @@ function listMarkerPaint(page: Awaited<ReturnType<typeof renderBeamerFramePages>
 }
 
 describe("Beamer overlays", () => {
+  it.each(["only", "uncover", "visible", "invisible", "alt", "temporal"])("uses all steps when %s has no angle specification", async command => {
+    const extra = command === "alt" ? "{Other}" : command === "temporal" ? "{Before}{After}" : "";
+    const body = command === "temporal" ? String.raw`\temporal{Before}{Selected}{After}`
+      : `\\${command}{Selected}${extra}`;
+    const source = deck(body + String.raw`\only<2>{Later}`);
+    const result = await renderBeamerFramePages(source);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.pages).toHaveLength(2);
+    for (const page of result.pages) {
+      const visible = buildNativeBeamerPageTrace(page, computerModernTexMetricProvider).lines
+        .filter(line => line.role === "body").map(line => line.text).join(" ");
+      if (command === "invisible") expect(visible).not.toContain("Selected");
+      else expect(visible).toContain("Selected");
+      expect(visible).not.toContain("Before");
+      expect(visible).not.toContain("Other");
+      expect(visible).not.toContain("After");
+    }
+  });
+
+  it("hides a default invisible list's markers and keeps their authored ownership", async () => {
+    const source = deck(String.raw`\invisible{\begin{itemize}\item Hidden\end{itemize}}\only<2>{Later}`);
+    const result = await renderBeamerFramePages(source);
+    expect(result.pages).toHaveLength(2);
+    for (const page of result.pages) {
+      const paint = listMarkerPaint(page);
+      expect(paint).toHaveLength(1);
+      expect(paint[0].visible).toBe(false);
+      expect(source.slice(paint[0].from, paint[0].to)).toBe("\\item");
+    }
+  });
+
   it.each([
     String.raw`\begin{itemize}\item<2> Later\end{itemize}\begin{itemize}\item Always\end{itemize}`,
     String.raw`\begin{itemize}\item Before\pause\item After\end{itemize}`

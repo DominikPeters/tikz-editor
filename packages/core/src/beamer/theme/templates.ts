@@ -6,6 +6,7 @@ import type {
   BeamerThemeTemplateRef,
 } from "./types.js";
 import { planBeamerNavigationSymbols } from "./navigation-symbols.js";
+import { isBlankBeamerFrameHeading } from "../frame-headings.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
 import {
   planMiniFramesFootline,
@@ -116,6 +117,11 @@ const footlinePlanners = new Map<string, EdgePlanner>([
 export function planBeamerFrameChrome(
   context: BeamerFrameTemplateContext
 ): BeamerFrameChromePlan {
+  // \frametitle ignores blank arguments instead of constructing an empty
+  // strut/colorbox. Keep the authored value in the document/edit model.
+  if (context.frame.title && isBlankBeamerFrameHeading(context.document.source, context.frame.title)) {
+    context = { ...context, frame: { ...context.frame, title: undefined } };
+  }
   const sidebar = getPlanner(
     sidebarPlanners,
     context.theme.templates.sidebar
@@ -172,9 +178,22 @@ function planDefaultFrameTitle(
     context.theme,
     "frametitle"
   ).bg;
-  const paintHeight = background
+  const titleFont = context.theme.fonts["frame-title"];
+  const subtitleFont = context.theme.fonts["frame-subtitle"];
+  const hasSubtitle = context.frame.subtitle != null &&
+    !isBlankBeamerFrameHeading(context.document.source, context.frame.subtitle);
+  // The default template emits two paragraphs with their font-specific
+  // struts. TeX inserts \lineskip when the subtitle's baseline glue would
+  // be negative (18pt title strut, 11pt subtitle strut at stock 11pt size).
+  const subtitleBaselineAdvance = 0.3 * titleFont.lineHeightPt +
+    Math.max(1, subtitleFont.lineHeightPt - 0.3 * titleFont.lineHeightPt - 0.7 * subtitleFont.lineHeightPt) +
+    0.7 * subtitleFont.lineHeightPt;
+  const subtitleExtent = hasSubtitle
+    ? subtitleBaselineAdvance + 0.3 * subtitleFont.lineHeightPt - 0.3 * titleFont.lineHeightPt
+    : 0;
+  const paintHeight = (background
     ? DEFAULT_FRAME_TITLE_PAINT_HEIGHT_PT
-    : EMPTY_BACKGROUND_FRAME_TITLE_HEIGHT_PT;
+    : EMPTY_BACKGROUND_FRAME_TITLE_HEIGHT_PT) + subtitleExtent;
   const leadingLineSkip = background
     ? 0
     : EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT;
@@ -229,6 +248,24 @@ function planDefaultFrameTitle(
         // whether this particular title contains a tall or deep glyph.
         baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT + leadingLineSkip,
       },
+      ...(hasSubtitle ? [{
+        kind: "text" as const,
+        id: `${context.frame.id}:frame-subtitle:text`,
+        sourceSpan: context.frame.subtitle!.contentSpan,
+        bounds: {
+          x: context.page.frameArea.x + DEFAULT_FRAME_TITLE_SEP_PT,
+          y: DEFAULT_FRAME_TITLE_TEXT_TOP_PT + subtitleBaselineAdvance,
+          width: context.page.frameArea.width - 2 * DEFAULT_FRAME_TITLE_SEP_PT,
+          height: subtitleFont.lineHeightPt,
+        },
+        source: { kind: "mapped" as const, value: context.frame.subtitle! },
+        fontRole: "frame-subtitle" as const,
+        colorRole: "framesubtitle",
+        alignment: ref.options.alignment === "center" ? "center" as const
+          : ref.options.alignment === "right" ? "right" as const : "left" as const,
+        verticalAlignment: "top" as const,
+        baselineY: DEFAULT_FRAME_TITLE_BASELINE_PT + leadingLineSkip + subtitleBaselineAdvance,
+      }] : []),
     ],
   };
 }
