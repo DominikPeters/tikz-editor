@@ -63,6 +63,7 @@ import type {
   TexMathGlyphNucleus,
   TexMathLineNucleus,
   TexMathList,
+  TexMathItem,
   TexMathMatrixEnvironment,
   TexMathMatrixNucleus,
   TexMathNucleus,
@@ -91,7 +92,6 @@ import {
   spaceTexMathList,
   texMathSpacingBetween,
   type TexMathResolvedGlue,
-  type TexMathSpacedItem,
 } from "./spacing.js";
 import { parseTexMath } from "./parser.js";
 import { texMathSymbolDeclaration } from "./symbol-definitions.js";
@@ -118,6 +118,8 @@ export interface TexMathGlyphLayoutItem {
   readonly depth: TexLength;
   readonly italicCorrection: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
+  /** Original character ownership when make_ord collapses a ligature. */
+  readonly sourceCharacterSpans?: readonly TexMathSourceSpan[];
   /** Optional glyph-local paint for styled prose embedded in an LR box. */
   readonly color?: string;
 }
@@ -381,6 +383,7 @@ export interface ResolvedMathGlyph {
   readonly yOffset: TexHBoxOffsetY;
   readonly advance: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
+  readonly sourceCharacterSpans?: readonly TexMathSourceSpan[];
 }
 
 type MathGlyphSpec = {
@@ -530,13 +533,14 @@ export function layoutTexMathList(
   const alphabet = options.alphabet;
   const suppressAmsNestedAccentAdjustment = options.suppressAmsNestedAccentAdjustment === true;
   let currentAlphabet = alphabet;
-  let sawMathitAlphabetDeclaration = false;
-  const spaced = spaceTexMathList(list, { style });
+  const ordNoads = prepareOrdNoads(list, fontProfile, style, baseAtPt, alphabet);
+  const spaced = spaceTexMathList(ordNoads.list, { style });
   const items: TexMathHListItem[] = [];
   const errors: TexMathLayoutError[] = [];
   let cursor = 0;
   let height = 0;
   let depth = 0;
+  let atomIndex = 0;
 
   for (let itemIndex = 0; itemIndex < spaced.items.length; itemIndex += 1) {
     const item = spaced.items[itemIndex];
@@ -607,7 +611,6 @@ export function layoutTexMathList(
     }
     if (item.kind === "alphabet-change") {
       currentAlphabet = item.alphabet;
-      sawMathitAlphabetDeclaration ||= item.alphabet === "mathit";
       continue;
     }
     if (item.kind === "penalty") {
@@ -639,22 +642,20 @@ export function layoutTexMathList(
       });
       continue;
     }
+    // Spacing recursively normalizes Bin classes. Recursive layout still
+    // needs the authored nested lists for parsing-time group eligibility.
+    // Macro-generated noads can share one source span, so match by order.
+    const atom = { ...(ordNoads.atoms[atomIndex++] ?? item), atomClass: item.atomClass };
     const atomLayout = layoutAtom(
-      item,
+      atom,
       fontProfile,
       currentStyle,
       currentCramped,
       baseAtPt,
       currentAlphabet,
       suppressAmsNestedAccentAdjustment,
-      shouldSuppressOrdNoadItalicCorrection(
-        item,
-        spaced.items[itemIndex + 1],
-        fontProfile,
-        currentStyle,
-        baseAtPt,
-        currentAlphabet
-      )
+      atom.nucleus.kind === "glyph" && ordNoads.suppressItalic.has(atom.nucleus),
+      atom.nucleus.kind === "glyph" ? ordNoads.glyphs.get(atom.nucleus) : undefined
     );
     if (!atomLayout) {
       errors.push({
@@ -667,6 +668,11 @@ export function layoutTexMathList(
       items.push(offsetMathLayoutItem(atomItem, texHBoxOffsetX(cursor)));
     }
     cursor = roundTexPt(cursor + atomLayout.width);
+    const pairKern = atom.nucleus.kind === "glyph" ? ordNoads.kerns.get(atom.nucleus) : undefined;
+    if (pairKern) {
+      items.push(mathKernLayoutItem({ kind: "kern", x: cursor, ...pairKern, reason: "text-kern" }));
+      cursor = roundTexPt(cursor + pairKern.width);
+    }
     height = Math.max(height, atomLayout.height);
     depth = Math.max(depth, atomLayout.depth);
   }
@@ -690,7 +696,7 @@ export function layoutTexMathList(
   });
   return {
     supported: true,
-    hlist: alphabet || sawMathitAlphabetDeclaration ? normalizeAlphabetHList(hlist, alphabet ?? "mathit") : hlist,
+    hlist,
     errors: [],
   };
 }
@@ -958,9 +964,12 @@ function layoutAtom(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand,
   suppressAmsNestedAccentAdjustment = false,
-  suppressTrailingItalicCorrection = false
+  suppressTrailingItalicCorrection = false,
+  ordGlyph?: ResolvedMathGlyph
 ): TexMathAtomLayout | null {
-  const nucleus = layoutNucleus(
+  const nucleus = ordGlyph && atom.nucleus.kind === "glyph"
+    ? layoutGlyphNucleus(atom.nucleus, fontProfile, style, baseAtPt, alphabet, ordGlyph)
+    : layoutNucleus(
     atom.nucleus,
     fontProfile,
     style,
@@ -1066,52 +1075,85 @@ function layoutAtom(
 }
 
 /**
- * TeX's `make_ord` pass marks an ordinary character noad as a math text
- * character when the next noad is another ordinary character in the same
- * math family. The first character consequently does not contribute its
- * italic correction; only the end of the run does. This is observable for
- * sans math runs such as `Cx`, where the Latin Modern Sans oblique `C` has a
- * non-zero italic correction.
+ * tex.web's make_ord runs before inter-noad spacing. Only the left noad
+ * must be ordinary and script-free; the right can be Ord through Punct
+ * and retain its scripts. Math text characters suppress italic correction
+ * only in fonts with nonzero interword space. Zero-space math fonts keep it.
+ * Generated ligatures use TeX's ordinary collapsing operation; scripts
+ * from the right noad move to the replacement character.
  */
-function shouldSuppressOrdNoadItalicCorrection(
-  atom: TexMathAtom,
-  nextItem: TexMathSpacedItem | undefined,
+function prepareOrdNoads(
+  list: TexMathList,
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
-): boolean {
-  if (
-    atom.atomClass !== "ord" ||
-    atom.subscript ||
-    atom.superscript ||
-    atom.nucleus.kind !== "glyph" ||
-    nextItem?.kind !== "atom" ||
-    nextItem.atomClass !== "ord" ||
-    nextItem.nucleus.kind !== "glyph" ||
-    atom.sourceSpan.end > nextItem.sourceSpan.start
-  ) {
-    return false;
+) {
+  const authoredItems = list.items.map((item) => {
+    // math_group simplifies on every closing brace, before an isolated
+    // Bin can become Ord. Inspect original child classes at every level.
+    if (item.kind !== "atom" || item.nucleus.kind !== "list") return item;
+    let nucleus: TexMathNucleus = item.nucleus;
+    while (nucleus.kind === "list") {
+      const child: TexMathItem | undefined = nucleus.list.items[0];
+      if (nucleus.list.items.length !== 1 || child?.kind !== "atom" || child.atomClass !== "ord" ||
+        child.subscript || child.superscript) return item;
+      nucleus = child.nucleus;
+    }
+    return nucleus.kind === "glyph" ? { ...item, nucleus } : item;
+  });
+  const normalized = normalizeTexMathAtomClasses({ ...list, items: authoredItems });
+  const items: TexMathItem[] = normalized.items.map((item, index) => {
+    // Normalize this list's classes without replacing original nested IR.
+    const authored = authoredItems[index];
+    return item.kind === "atom" && authored.kind === "atom"
+      ? { ...authored, atomClass: item.atomClass } : item;
+  });
+  const glyphs = new WeakMap<TexMathGlyphNucleus, ResolvedMathGlyph>();
+  const suppressItalic = new WeakSet<TexMathGlyphNucleus>();
+  const kerns = new WeakMap<TexMathGlyphNucleus, { width: TexLength; sourceSpan: TexMathSourceSpan }>();
+  let activeStyle = style;
+  let activeAlphabet = alphabet;
+  const singleGlyph = (nucleus: TexMathGlyphNucleus): ResolvedMathGlyph | undefined => {
+    const override = glyphs.get(nucleus);
+    if (override) return override;
+    const parts = resolveMathSymbolParts(nucleus, fontProfile, activeStyle, baseAtPt, activeAlphabet);
+    return parts.length === 1 && parts[0].kind === "glyph" ? parts[0] : undefined;
+  };
+  for (let index = 0; index < items.length; index += 1) {
+    const atom = items[index];
+    if (atom.kind === "style-change") { activeStyle = atom.style; continue; }
+    if (atom.kind === "alphabet-change") { activeAlphabet = atom.alphabet; continue; }
+    const next = items[index + 1];
+    if (atom.kind !== "atom" || atom.atomClass !== "ord" || atom.subscript || atom.superscript ||
+      atom.nucleus.kind !== "glyph" || next?.kind !== "atom" || next.atomClass === "inner" ||
+      next.nucleus.kind !== "glyph" || atom.sourceSpan.end > next.sourceSpan.start) continue;
+    const left = singleGlyph(atom.nucleus);
+    const right = singleGlyph(next.nucleus);
+    if (!left || left.family !== right?.family || left.font.id !== right.font.id ||
+      left.font.atPt !== right.font.atPt) continue;
+    const rule = left.font.data.ligKerns.find((entry) => entry[1] === left.code && entry[2] === right.code);
+    if (rule?.[0] === "lig") {
+      const sourceSpan = { start: atom.nucleus.sourceSpan.start, end: next.nucleus.sourceSpan.end };
+      const nucleus: TexMathGlyphNucleus = { kind: "glyph", text: left.text + right.text, sourceSpan };
+      const metric = requiredCharMetric(left.font, rule[3]);
+      glyphs.set(nucleus, { ...left, code: rule[3], text: nucleus.text, sourceSpan,
+        sourceCharacterSpans: [...left.sourceCharacterSpans ?? [left.sourceSpan], ...right.sourceCharacterSpans ?? [right.sourceSpan]],
+        advance: tfmToPt(left.font, metric.width) });
+      items[index] = { ...atom, nucleus, subscript: next.subscript, superscript: next.superscript,
+        sourceSpan: { start: atom.sourceSpan.start, end: next.sourceSpan.end } };
+      items.splice(index + 1, 1);
+      index -= 1; // TeX restarts on the replacement, permitting ff+i -> ffi.
+      continue;
+    }
+    if ((left.font.data.fontdimen.space ?? 0) !== 0) suppressItalic.add(atom.nucleus);
+    if (rule?.[0] === "kern") kerns.set(atom.nucleus, {
+      width: texLength(roundTexPt(tfmToPt(left.font, rule[3]))),
+      sourceSpan: { start: atom.nucleus.sourceSpan.end, end: next.nucleus.sourceSpan.start },
+    });
   }
-  const currentGlyph = resolveMathGlyph(
-    atom.nucleus,
-    fontProfile,
-    style,
-    baseAtPt,
-    alphabet
-  );
-  const nextGlyph = resolveMathGlyph(
-    nextItem.nucleus,
-    fontProfile,
-    style,
-    baseAtPt,
-    alphabet
-  );
-  return currentGlyph !== null &&
-    nextGlyph !== null &&
-    currentGlyph.family === nextGlyph.family &&
-    currentGlyph.font.id === nextGlyph.font.id &&
-    currentGlyph.font.atPt === nextGlyph.font.atPt;
+  const atoms = items.filter((item): item is TexMathAtom => item.kind === "atom");
+  return { list: { ...list, items }, glyphs, suppressItalic, kerns, atoms };
 }
 
 function shouldUseOperatorLimits(
@@ -1763,7 +1805,7 @@ function layoutAlphabetNucleus(
   if (!result.supported) {
     return null;
   }
-  const hlist = normalizeAlphabetHList(result.hlist, alphabet);
+  const hlist = result.hlist;
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
   return mathAtomLayout({
     items: [child],
@@ -1810,57 +1852,6 @@ function nestedMathAlphabet(
       // synthetic bold face merely because the surrounding math version is bold.
       return alphabet;
   }
-}
-
-function normalizeAlphabetHList(
-  hlist: TexMathHList,
-  alphabet: TexMathAlphabetCommand
-): TexMathHList {
-  if (alphabet !== "mathit") {
-    return hlist;
-  }
-  return collapseInternalMathitItalicKerns(hlist);
-}
-
-function collapseInternalMathitItalicKerns(hlist: TexMathHList): TexMathHList {
-  let removedWidth = 0;
-  const items: TexMathHListItem[] = [];
-  for (let index = 0; index < hlist.items.length; index += 1) {
-    const item = hlist.items[index];
-    if (
-      item?.kind === "kern" &&
-      item.reason === "italic-correction" &&
-      hlist.items[index + 1]?.kind === "glyph"
-    ) {
-      removedWidth = roundTexPt(removedWidth + item.width);
-      continue;
-    }
-    if (item) {
-      items.push(offsetMathLayoutItem(item, texHBoxOffsetX(-removedWidth)));
-    }
-  }
-  if (removedWidth === 0) {
-    return omitScriptAlphabetTrailingItalicKern(hlist);
-  }
-  return omitScriptAlphabetTrailingItalicKern(mathHList({
-    ...hlist,
-    width: roundTexPt(hlist.width - removedWidth),
-    items,
-  }));
-}
-
-function omitScriptAlphabetTrailingItalicKern(hlist: TexMathHList): TexMathHList {
-  if (hlist.style !== "script" && hlist.style !== "scriptscript") {
-    return hlist;
-  }
-  const last = hlist.items.at(-1);
-  if (last?.kind !== "kern" || last.reason !== "italic-correction") {
-    return hlist;
-  }
-  return mathHList({
-    ...hlist,
-    items: hlist.items.slice(0, -1),
-  });
 }
 
 const TEX_AMSMATH_ALIGNMENT_PAIR_GAP_PT = 10;
@@ -6491,9 +6482,10 @@ function layoutGlyphNucleus(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: TexLength,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  ordGlyph?: ResolvedMathGlyph
 ): TexMathAtomLayout | null {
-  const parts = resolveMathSymbolParts(nucleus, fontProfile, style, baseAtPt, alphabet);
+  const parts = ordGlyph ? [ordGlyph] : resolveMathSymbolParts(nucleus, fontProfile, style, baseAtPt, alphabet);
   if (parts.length === 0) {
     return null;
   }
@@ -6535,6 +6527,7 @@ function layoutGlyphNucleus(
       depth: glyphDepth,
       italicCorrection,
       sourceSpan: glyph.sourceSpan,
+      ...(glyph.sourceCharacterSpans ? { sourceCharacterSpans: glyph.sourceCharacterSpans } : {}),
     }));
     cursor = roundTexPt(cursor + glyph.advance);
     height = Math.max(height, roundTexPt(0 - glyph.yOffset + glyphHeight));

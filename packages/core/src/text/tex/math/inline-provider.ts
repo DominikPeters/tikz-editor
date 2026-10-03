@@ -634,19 +634,22 @@ function addMathItemCaretMapEntries(
       const y = texHBoxY(roundTexPt(translateTexHBoxY(originY, item.y)));
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       const caretY = texHBoxY(roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd)));
-      addLinearMathCaretMapEntries({
-        sourceStart: item.sourceSpan.start,
-        sourceEnd: item.sourceSpan.end,
-        xStart: x,
-        xEnd: texHBoxX(roundTexPt(x + item.width)),
-        y: caretY,
-        height: texLength(Math.max(0, caretY - hitBounds.yStart)),
-        depth: texLength(Math.max(0, hitBounds.yEnd - caretY)),
-        hitBounds,
-        kind: "glyph-boundary",
-        sourceSpan: item.sourceSpan,
-        priority: 100,
-        addEntry,
+      const characterSpans = mathGlyphSourceCharacterSpans(item) ?? [item.sourceSpan];
+      characterSpans.forEach((span, index) => {
+        const xStart = texHBoxX(roundTexPt(x + item.width * index / characterSpans.length));
+        const xEnd = texHBoxX(roundTexPt(x + item.width * (index + 1) / characterSpans.length));
+        const geometry = { y: caretY, height: texLength(Math.max(0, caretY - hitBounds.yStart)),
+          depth: texLength(Math.max(0, hitBounds.yEnd - caretY)), hitBounds, addEntry };
+        const previous = characterSpans[index - 1];
+        if (previous && previous.end < span.start) {
+          // Braces between ligature characters own source positions, but
+          // contribute no advance to the single rendered glyph.
+          addLinearMathCaretMapEntries({ ...geometry, sourceStart: previous.end, sourceEnd: span.start,
+            xStart, xEnd: xStart, kind: "group-boundary",
+            sourceSpan: { start: previous.end, end: span.start }, priority: 50 });
+        }
+        addLinearMathCaretMapEntries({ ...geometry, sourceStart: span.start, sourceEnd: span.end,
+          xStart, xEnd, kind: "glyph-boundary", sourceSpan: span, priority: 100 });
       });
       continue;
     }
@@ -1259,7 +1262,15 @@ function enforceMonotoneProjectedCaretStops(stops: number[], width: number): voi
 }
 
 function mathGlyphCoversConstructSpan(item: Extract<TexMathHListItem, { readonly kind: "glyph" }>): boolean {
-  return item.sourceSpan.end - item.sourceSpan.start > Math.max(1, item.text.length);
+  return !mathGlyphSourceCharacterSpans(item) && item.sourceSpan.end - item.sourceSpan.start > Math.max(1, item.text.length);
+}
+
+function mathGlyphSourceCharacterSpans(item: Extract<TexMathHListItem, { readonly kind: "glyph" }>): readonly TexMathSourceSpan[] | undefined {
+  const spans = item.sourceCharacterSpans;
+  // Construct remapping may replace the whole glyph span; old local
+  // character ownership must then follow the existing construct handling.
+  return spans?.[0]?.start === item.sourceSpan.start && spans.at(-1)?.end === item.sourceSpan.end
+    ? spans : undefined;
 }
 
 function parseMathBoxContent(params: {
