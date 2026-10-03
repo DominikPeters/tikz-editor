@@ -14,6 +14,7 @@ import {
   type BeamerOverlayModel, type BeamerOverlaySpec,
 } from "./overlay.js";
 import type { BeamerDocumentModel, BeamerRect } from "./types.js";
+import type { BeamerFootnoteIndex } from "./footnotes.js";
 
 export type BeamerLinkDestination =
   | { kind: "frame"; frameId: string; step: number }
@@ -37,6 +38,7 @@ export type BeamerReferenceIndex = {
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
   step: number;
+  footnotes?: BeamerFootnoteIndex;
   theme?: ResolvedBeamerTheme;
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];

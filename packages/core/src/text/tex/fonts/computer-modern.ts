@@ -45,6 +45,8 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "lmmono10-regular",
   "lmmono10-italic",
   "lmmono8-regular",
+  "lmmono9-regular",
+  "lmmono12-regular",
   "lmmonoslant10-regular",
   "lmmonocaps10-regular",
   "lmmonolt10-bold",

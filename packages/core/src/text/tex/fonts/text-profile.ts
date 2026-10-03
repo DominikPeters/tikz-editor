@@ -165,7 +165,8 @@ export function luaLatexDefaultFontIdForState(
     if (state.shape === "slanted") {
       return "lmmonoslant10-regular";
     }
-    return atPt <= 8 ? "lmmono8-regular" : "lmmono10-regular";
+    // NFSS optical-size intervals from LaTeX's tulmtt.fd.
+    return atPt < 8.5 ? "lmmono8-regular" : atPt < 9.5 ? "lmmono9-regular" : atPt < 11 ? "lmmono10-regular" : "lmmono12-regular";
   }
   if (state.family === "sans") {
     if (state.series === "bold" && state.shape === "italic") {

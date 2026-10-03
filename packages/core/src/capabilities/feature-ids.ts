@@ -98,6 +98,7 @@ export const FEATURE_IDS = [
   "beamer_hyperlinks",
   // Manual entries and stock Beamer templates, verified against LuaLaTeX.
   "beamer_manual_bibliography",
+  "beamer_footnotes",
   "render_pipeline"
 ] as const;
 

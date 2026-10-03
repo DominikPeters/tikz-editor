@@ -262,6 +262,16 @@ const DEFAULT_OTF_GLYPHS = [
     codeRanges: LATIN_TEXT_CODE_RANGES,
   },
   {
+    fontName: "lmmono9-regular",
+    fileName: "lmmono9-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
+    fontName: "lmmono12-regular",
+    fileName: "lmmono12-regular.otf",
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+  },
+  {
     fontName: "lmmonoslant10-regular",
     fileName: "lmmonoslant10-regular.otf",
     codeRanges: LATIN_TEXT_CODE_RANGES,

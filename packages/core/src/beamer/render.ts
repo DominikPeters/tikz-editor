@@ -1,4 +1,5 @@
 import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
+import { buildBeamerFrameFootnotes, beamerFootnoteTextMapped, projectBeamerFootnotes } from "./footnotes.js";
 import {
   buildBeamerReferenceIndex,
   projectBeamerReferences,
@@ -79,6 +80,7 @@ import type {
 } from "./content-types.js";
 import { resolveBeamerPageGeometry } from "./geometry.js";
 import {
+  beamerOverlaySpecContains,
   projectBeamerOverlayText,
   resolveBeamerOverlaySpanVisibility,
   scanBeamerFrameOverlays,
@@ -455,7 +457,10 @@ async function renderBeamerFrameStep(params: {
     ...theme.diagnostics,
   ];
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
-  const references: BeamerReferenceContext = { ...context.references, step, theme, renderDiagnostics: diagnostics };
+  const references: BeamerReferenceContext = {
+    ...context.references, step, theme, renderDiagnostics: diagnostics,
+    footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
+  };
   const items: BeamerFrameLayoutItem[] = [];
   const spacing: BeamerSpacingLayout[] = [];
   const paragraphs: BeamerParagraphLayout[] = [];
@@ -489,13 +494,18 @@ async function renderBeamerFrameStep(params: {
     paperWidth: page.page.width,
   });
 
+  const footnoteInsertion = prepareFrameFootnoteInsertion({
+    source, frame, references, theme, textWidth: page.textArea.width,
+    paperWidth: page.page.width, macroBindings, overlays: bodyIr.overlays, step,
+    graphicsResolver: params.graphicsResolver,
+  });
   const availableContentBounds: BeamerRect = {
     x: page.textArea.x,
     y: chrome.topInset,
     width: page.textArea.width,
     height: Math.max(
       0,
-      page.page.height - chrome.topInset - chrome.bottomInset
+      page.page.height - chrome.topInset - chrome.bottomInset - footnoteInsertion.height
     ),
   };
   let contentBounds = availableContentBounds;
@@ -667,6 +677,13 @@ async function renderBeamerFrameStep(params: {
     });
   }
 
+  emitFrameFootnoteInsertion({
+    prepared: footnoteInsertion,
+    x: page.textArea.x,
+    y: page.page.height - chrome.bottomInset - footnoteInsertion.height,
+    width: page.textArea.width,
+    items, paragraphs, modelBuilder, theme,
+  });
   spacing.push(...collectBeamerParagraphSpacing(paragraphs, items));
   const graphics = collectBeamerGraphicsLayout(paragraphs, items);
   const model = modelBuilder.build({
@@ -947,6 +964,81 @@ function firstLineBaselineOffset(paragraph: LaidParagraph): number {
     (candidate) => candidate.lineIndex === firstLine.lineIndex
   );
   return Number(placement?.y ?? 0) + Number(firstLine.ascent);
+}
+
+type PreparedFootnoteInsertion = {
+  height: number;
+  notes: readonly { paragraph: LaidParagraph; top: number; visibility: BeamerOverlayVisibility }[];
+};
+
+function prepareFrameFootnoteInsertion(params: {
+  source: string;
+  frame: BeamerFrameModel;
+  references: BeamerReferenceContext;
+  theme: ResolvedBeamerTheme;
+  textWidth: number;
+  paperWidth: number;
+  macroBindings: ReadonlyMap<string, MacroBinding>;
+  overlays: BeamerOverlayModel;
+  step: number;
+  graphicsResolver?: DocumentGraphicsResolver;
+}): PreparedFootnoteInsertion {
+  const font = { ...params.theme.fonts["normal-text"], sizePt: 9, lineHeightPt: 11, series: "medium", shape: "upright" } as const;
+  const notes: Array<PreparedFootnoteInsertion["notes"][number]> = [];
+  let height = 0;
+  let previousDepth: number | null = null;
+  for (const note of params.references.footnotes?.values() ?? []) {
+    const enclosingVisibility = resolveBeamerOverlaySpanVisibility(params.overlays, note.span, params.step);
+    const spec = params.references.specs.get(note.span.from);
+    const visibility = enclosingVisibility === "removed" ? "removed" : spec && !beamerOverlaySpecContains(spec, params.step) ? "hidden" : enclosingVisibility;
+    if (visibility === "removed") continue;
+    const projection = projectBeamerOverlayText(createIdentityMappedText(params.source.slice(note.bodySpan.from, note.bodySpan.to), note.bodySpan.from), note.bodySpan, params.overlays, params.step);
+    const paragraph = layoutParagraph({
+      mapped: beamerFootnoteTextMapped(params.source, note, font, projection.mapped), sourceSpan: note.span,
+      paragraphId: `${params.frame.id}:footnote:${note.span.from}`, role: "footnote",
+      bounds: { x: 0, y: 0, width: params.textWidth, height: 0 }, font,
+      alignment: "left", references: params.references, macroBindings: params.macroBindings,
+      hiddenSourceSpans: visibility === "hidden" ? [...projection.hiddenSourceSpans, note.span] : projection.hiddenSourceSpans,
+      graphicsResolver: params.graphicsResolver, paperWidth: params.paperWidth,
+    });
+    if (!paragraph) {
+      params.references.renderDiagnostics.push({ severity: "warning", code: "beamer-render-unsupported-footnote", message: "This frame footnote's content could not be laid out.", span: note.bodySpan });
+      continue;
+    }
+    // Each invocation opens a new vbox, then unboxes the earlier notes.
+    // Unboxing retains that new box's ignored prevdepth, so no interline
+    // glue is inserted between separate footnote paragraphs.
+    notes.push({ paragraph, top: height, visibility });
+    height += paragraphMaterialExtent(paragraph);
+    previousDepth = paragraphEndingMaterialDepth(paragraph);
+  }
+  // The frame vbox fixes its height; the final footnote strut's depth is
+  // outside that height, just as in \unvbox\beamer@footins.
+  return { notes, height: Math.max(0, height - (previousDepth ?? 0)) };
+}
+
+function emitFrameFootnoteInsertion(params: {
+  prepared: PreparedFootnoteInsertion;
+  x: number;
+  y: number;
+  width: number;
+  items: BeamerFrameLayoutItem[];
+  paragraphs: BeamerParagraphLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  theme: ResolvedBeamerTheme;
+}): void {
+  if (!params.prepared.notes.length) return;
+  const owner = params.prepared.notes[0].paragraph.layout;
+  const color = textColor(params.theme, "footnote");
+  const bounds = { x: params.x, y: params.y - 3, width: .4 * params.width, height: .4 };
+  params.items.push({ id: `${owner.paragraphId}:rule:background`, kind: "text", sourceSpan: owner.sourceSpan, bounds, parentId: null });
+  params.modelBuilder.addPart({ basePartId: `${owner.paragraphId}:rule`, sourceId: owner.paragraphId, elementId: null, markup: rectMarkup(bounds, color) });
+  for (const { paragraph, top, visibility } of params.prepared.notes) {
+    positionParagraphLayout(paragraph.layout, svgPoint(pt(params.x), pt(params.y + top)), paragraph.height);
+    params.paragraphs.push(paragraph.layout);
+    params.items.push({ id: paragraph.layout.paragraphId, kind: "text", sourceSpan: paragraph.layout.sourceSpan, bounds: paragraph.layout.bounds, paragraphId: paragraph.layout.paragraphId, parentId: null, visibility: visibility === "hidden" ? "hidden" : "visible" });
+    params.modelBuilder.addPart({ basePartId: paragraph.layout.paragraphId, sourceId: paragraph.layout.paragraphId, elementId: null, markup: paragraphMarkup(paragraph.svgBody, params.x, params.y + top, color) });
+  }
 }
 
 async function prepareFrameFlow(params: {
@@ -3243,6 +3335,11 @@ function layoutParagraph(params: {
       `Beamer 11pt class ${namedSize.command} size`
     );
   }
+  mapped = projectBeamerFootnotes(mapped, params.references.footnotes, {
+    ...params.font,
+    sizePt: namedSize?.sizePt ?? params.font.sizePt,
+    lineHeightPt: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
+  });
   const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
   const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
     beamerBibliographyStyle({
@@ -3560,6 +3657,7 @@ const EDITABLE_BEAMER_PARAGRAPH_ROLES =
     "body",
     "block-title",
     "block-body",
+    "footnote",
     "title",
     "subtitle",
     "author",

@@ -159,6 +159,12 @@ export function scanBeamerFrameOverlays(
   const explicitItemCommands = new Set<number>();
 
   for (const command of controls) {
+    if (command.name === "footnote") {
+      const optional = beamerOptionalArgumentAfter(context, command.to, frame.bodySpan.to);
+      const rawSpec = beamerOverlayArgumentAfter(context, optional?.span.to ?? command.to, frame.bodySpan.to);
+      if (rawSpec) pending.push({ kind: "reference", sourceOrder: command.from, rawSpec });
+      continue;
+    }
     if (["label", "hypertarget", "hyperlink"].includes(command.name)) {
       const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
       if (rawSpec) {

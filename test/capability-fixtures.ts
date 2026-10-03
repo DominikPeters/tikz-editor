@@ -323,6 +323,8 @@ export const capabilityFixtures: Record<string, string> = {
 \alt<2>{During}{Otherwise}
 \end{frame}
 \end{document}`,
+  beamer_footnotes: String.raw`\documentclass{beamer}
+\begin{document}\begin{frame}Alpha\footnote{A frame note.}\end{frame}\end{document}`,
   beamer_references: String.raw`\documentclass{beamer}
 \begin{document}
 \begin{frame}See \hyperlink{refs}{references} and \cite{example}.\end{frame}

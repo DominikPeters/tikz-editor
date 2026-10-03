@@ -709,6 +709,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_references"],
     notes: "Beamer document renderer supports manual thebibliography/bibitem entries, numeric/custom citation labels, multi-key cite with an optional note, and citation navigation. Stock bibliography markers (default/article, text, book, online, triangle), label widths, hanging indentation, entry colors and newblock spacing are checked against LuaLaTeX. Arbitrary bibliography template/font/color redefinitions and BibTeX/biblatex processing are not implemented."
   },
+  beamer_footnotes: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["beamer_footnotes"],
+    notes: "Beamer frame footnotes support automatic or explicit numeric marks, multiple and wrapped notes, the stock bottom rule and text template, and explicit [frame] notes inside columns or blocks. Glyph sizes, superscript placement and insertion geometry are checked against LuaLaTeX. Minipage-local footnotes, footnotemark/footnotetext and arbitrary template/font redefinitions are not implemented.",
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

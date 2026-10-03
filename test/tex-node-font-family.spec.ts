@@ -21,6 +21,14 @@ function measure(input: NodeTextMeasureRequest) {
 
 describe("initial native node font family", () => {
   it.each([
+    [8.49, "lmmono8-regular"], [8.5, "lmmono9-regular"],
+    [9.49, "lmmono9-regular"], [9.5, "lmmono10-regular"],
+    [10.99, "lmmono10-regular"], [11, "lmmono12-regular"],
+  ] as const)("selects the NFSS typewriter optical size at %spt", (size, face) => {
+    const rendered = measure({ ...request("URL", "monospace"), fontSizePt: size });
+    expect(faces(rendered.body)).toEqual([face]);
+  });
+  it.each([
     ["serif", "rmfamily", "lmroman10-regular"],
     ["sans", "sffamily", "lmsans10-regular"],
     ["monospace", "ttfamily", "lmmono10-regular"]
@@ -82,10 +90,10 @@ describe("initial native node font family", () => {
     expect(initial.body.match(/data-tex-linebox="true"/g)?.length).toBe(explicit.body.match(/data-tex-linebox="true"/g)?.length);
   });
 
-  it.each([8, 12] as const)("uses existing typewriter optical faces at %spt", size => {
+  it.each([8, 12] as const)("matches explicit typewriter optical faces at %spt", size => {
     const initial = measure({ ...request("iii", "monospace"), fontSizePt: size });
     const explicit = measure({ ...request(String.raw`{\ttfamily iii}`), fontSizePt: size });
-    expect(faces(initial.body)).toEqual([size === 8 ? "lmmono8-regular" : "lmmono10-regular"]);
+    expect(faces(initial.body)).toEqual([size === 8 ? "lmmono8-regular" : "lmmono12-regular"]);
     expect(initial.metrics.width).toBeCloseTo(explicit.metrics.width, 9);
   });
 
