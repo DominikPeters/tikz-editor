@@ -23,7 +23,7 @@ export function texLayoutItemsForParagraphPlan(
 ): readonly TexLayoutInlineItem[] {
   const contentItems = simpleTexSegmentToLayoutItems(
     plan.segment,
-    params.atPt,
+    plan.fontSizePt ?? params.atPt,
     params.metricProvider,
     plan.spaceGlueProfile,
     params.mathBoxProvider,

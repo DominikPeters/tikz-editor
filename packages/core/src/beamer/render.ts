@@ -217,6 +217,8 @@ function beamerListLayoutProfile(
 ): TexListLayoutProfile {
   return {
     ...BEAMER_LIST_LAYOUT_PROFILE,
+    bodyFontSizePtByDepth: [undefined, 10, 9],
+    bodyBaselineSkipPtByDepth: [undefined, 12, 11],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
     itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
     resolveEnumerateMarker: (itemIndex, labelDepth) =>
@@ -1716,7 +1718,7 @@ function prepareBlock(params: {
         disableAutomaticHyphenation: true,
         // Lists inside blocks use the same theme templates (margins,
         // markers) as frame-level lists.
-        listProfile: beamerListLayoutProfile(params.theme),
+        listProfile: { ...beamerListLayoutProfile(params.theme), suppressInitialTopsep: true },
         macroBindings: params.macroBindings,
         references: params.references,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
@@ -2520,6 +2522,7 @@ async function emitPreparedColumns(params: {
         );
         continue;
       }
+      if (flowItem.kind === "paragraph" || flowItem.kind === "block") flowY += flowItem.leadingSkipPt ?? 0;
       if (flowItem.kind === "vertical-space") {
         params.spacing.push({ command: flowItem.node.command, sourceSpan: flowItem.node.span,
           sizePt: flowItem.height, relativeUnitPt: flowItem.relativeUnitPt,
@@ -2653,10 +2656,10 @@ function columnFlowAdvance(
   hasNext: boolean
 ): number {
   if (item.kind === "paragraph") {
-    return item.advanceHeight + (hasNext ? item.trailingSkipPt : 0);
+    return (item.leadingSkipPt ?? 0) + item.advanceHeight + (hasNext ? item.trailingSkipPt : 0);
   }
   if (item.kind === "block") {
-    return item.height + (hasNext ? item.block.plan.geometry.afterSkipPt : 0);
+    return (item.leadingSkipPt ?? 0) + item.height + (hasNext ? item.block.plan.geometry.afterSkipPt : 0);
   }
   return item.height;
 }
@@ -2716,18 +2719,28 @@ async function prepareColumnContent(params: {
       leadingDisplayBaselineSkipPt: column.alignment === "T" && flow.length === 0 ? 0 : undefined,
     });
     if (prepared) {
+      const previous = flow.at(-1);
+      if (previousDepth != null && (prepared.kind === "block" ||
+          (prepared.kind === "paragraph" && previous?.kind === "block"))) {
+        const nextHeight = prepared.kind === "block"
+          ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
+        const interline = bodyFont.lineHeightPt - previousDepth - nextHeight;
+        prepared.leadingSkipPt = interline < 0 ? 1 : interline;
+      }
       flow.push(prepared);
       if (prepared.kind === "paragraph") {
         previousDepth = paragraphLastLineDepth(prepared.paragraph);
       } else if (prepared.kind === "tikzpicture" || prepared.kind === "unsupported") {
         previousDepth = 0;
+      } else if (prepared.kind === "block") {
+        previousDepth = prepared.block.endingDepth;
       }
     }
   }
 
   const naturalHeight = flow.reduce(
     (height, item, index) =>
-      height +
+      height + ((item.kind === "paragraph" || item.kind === "block") ? item.leadingSkipPt ?? 0 : 0) +
       (item.kind === "paragraph"
         ? item.advanceHeight +
           (flow[index + 1] ? item.trailingSkipPt : 0)
@@ -3032,6 +3045,7 @@ function firstFlowReferenceFromTop(
 ): number {
   let offset = 0;
   for (const item of flow) {
+    if (item.kind === "paragraph" || item.kind === "block") offset += item.leadingSkipPt ?? 0;
     if (item.kind === "vertical-space") {
       offset += item.height;
       continue;

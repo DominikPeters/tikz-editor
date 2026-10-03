@@ -63,6 +63,11 @@ export interface TexListMarkerProfile {
  * selected `\@listi`, `\@listii`, and `\@listiii`.
  */
 export interface TexListLayoutProfile {
+  /** Class-owned body font switches; omitted depths inherit the ambient font. */
+  readonly bodyFontSizePtByDepth?: readonly (number | undefined)[];
+  readonly bodyBaselineSkipPtByDepth?: readonly (number | undefined)[];
+  /** LaTeX suppresses the first list's opening glue in a fresh minipage. */
+  readonly suppressInitialTopsep?: boolean;
   readonly leftMarginEmByDepth: readonly number[];
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
   readonly bibliographyParsepPt?: number;

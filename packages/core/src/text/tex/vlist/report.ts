@@ -203,6 +203,8 @@ export function layoutTexVListFromCombinedParagraphReport(
     lineBoxes: builtReport.lineBoxes,
     paragraphLineAssignments,
     lineHeight,
+    baselineSkips: new Map(texVListParagraphEntries(document.items).flatMap(({ item }) =>
+      item.paragraph.baselineSkip != null ? [[item.blockIndex, item.paragraph.baselineSkip] as const] : [])),
   });
   const layout = layoutTexVListFromHorizontalParagraphs(document, {
     width: options.width,

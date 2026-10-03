@@ -34,18 +34,20 @@ export function createTexVListParagraphHorizontalLayoutsFromLineBoxes(params: {
   readonly lineBoxes: readonly TexLineBox[];
   readonly paragraphLineAssignments: readonly TexVListParagraphLineAssignment[];
   readonly lineHeight: TexLength;
+  readonly baselineSkips?: ReadonlyMap<number, TexLength>;
 }): TexVListParagraphHorizontalLayouts {
   const lineBoxByIndex = new Map(params.lineBoxes.map((line) => [line.lineIndex, line]));
   return {
     report: params.report,
     paragraphLayouts: params.paragraphLineAssignments.map((assignment) => ({
+      baselineSkip: params.baselineSkips?.get(assignment.blockIndex),
       blockIndex: assignment.blockIndex,
       vlistPath: assignment.vlistPath,
       lineIndices: assignment.lineIndices,
       horizontal: texHorizontalLayoutForParagraphAssignment(
         assignment,
         lineBoxByIndex,
-        params.lineHeight
+        params.baselineSkips?.get(assignment.blockIndex) ?? params.lineHeight
       ),
     })),
   };
@@ -129,6 +131,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
     : texLength(0);
   let precedingAdjustmentSize = texLength(0);
   return {
+    baselineSkip: paragraph.baselineSkip,
     blockIndex: paragraph.blockIndex,
     vlistPath: paragraph.vlistPath,
     lineIndices,

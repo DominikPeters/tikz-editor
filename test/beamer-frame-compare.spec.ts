@@ -352,5 +352,9 @@ Fraction:
       glyphCodeMatch: true,
       fontMatch: true,
     });
+    const changedSize = { ...native, lines: native.lines.map(line => ({
+      ...line, glyphs: line.glyphs.map(g => ({ ...g, fontSize: 9 })),
+    })) };
+    expect(compareBeamerPageTraces(changedSize, oracle).summary.fontMatch).toBe(false);
   });
 });

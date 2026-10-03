@@ -96,6 +96,42 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(render.layout.items.some(item => item.kind === "unsupported")).toBe(false);
   });
 
+  it("matches the nested block/list flow, including the paragraph after the block", async () => {
+    const source = readFileSync(new URL("flow.tex", root), "utf8");
+    const render = await prepareBeamerDocument(source).renderFrame({ frameIndex: 1, step: 1 });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    for (const [text, baseline] of [
+      ["Beforetheblock.", 90.687302], ["Othercolumn.", 90.807755],
+      ["Result", 110.150757], ["Alpha", 125.750061],
+      ["Beta", 139.750061], ["Gamma", 156.350067],
+      ["Aftertheblock.", 177.585526],
+    ] as const) {
+      const line = trace.lines.find(candidate => candidate.text === text)!;
+      expect(line, text).toBeDefined();
+      expect(Math.abs(line.baselineY - baseline), text).toBeLessThan(.01);
+    }
+    expect(trace.lines.find(line => line.text === "Beta")!.glyphs.every(g => g.fontSize === 10)).toBe(true);
+    expect(render.diagnostics).toEqual([]);
+  });
+
+  it("applies all three stock list body fonts and restores the outer size on exit", async () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}[t]
+\begin{itemize}\item Alpha
+\begin{enumerate}\item Beta
+\begin{itemize}\item Delta\end{itemize}
+\item Epsilon\end{enumerate}
+\item Gamma\end{itemize}
+\end{frame}\end{document}`;
+    const render = await prepareBeamerDocument(source).renderFrame({ frameIndex: 0, step: 1 });
+    const trace = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider);
+    for (const [text, size] of [["Alpha", 10.95], ["Beta", 10], ["Delta", 9], ["Epsilon", 10], ["Gamma", 10.95]] as const) {
+      const line = trace.lines.find(candidate => candidate.text.endsWith(text))!;
+      expect(line, text).toBeDefined();
+      expect(line.glyphs.slice(-text.length).every(g => g.fontSize === size), text).toBe(true);
+    }
+    expect(render.diagnostics).toEqual([]);
+  });
+
   it.each([
     { frame: 5, x: 194.522522, baseline: 134.946899 },
     { frame: 19, x: 63.929550, baseline: 120.596008 },

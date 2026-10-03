@@ -54,6 +54,7 @@ export interface TexLayoutParagraphPreparation {
 }
 
 export interface TexLayoutParagraphPlan {
+  readonly fontSizePt?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
   readonly segmentIndex: number;
@@ -110,6 +111,9 @@ export function prepareTexLayoutParagraphsFromVList(
 
   for (const entry of paragraphEntries) {
     const paragraph = entry.item.paragraph;
+    const paragraphFont = paragraph.fontSizePt != null
+      ? { ...params.font, atPt: paragraph.fontSizePt }
+      : params.font;
     const scopeContext = texParagraphScopeContext(entry.ancestors);
     const suppressAncestorBreakMargins =
       paragraph.ignoreAncestorBreakMargins === true ||
@@ -159,7 +163,7 @@ export function prepareTexLayoutParagraphsFromVList(
         listItemLayout: suppressAncestorBreakMargins
           ? undefined
           : scopeContext.listItemLayout,
-        font: params.font,
+        font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font : paragraphFont,
         metricProvider: params.metricProvider,
         spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
@@ -202,6 +206,7 @@ export function prepareTexLayoutParagraphsFromVList(
         firstAdjustment?.sourceSpan !== undefined &&
         trailingNode.sourceEnd <= firstAdjustment.sourceSpan.start;
       paragraphPlans.push({
+        fontSizePt: paragraph.fontSizePt,
         blockIndex,
         vlistPath: entry.path,
         segmentIndex,

@@ -91,6 +91,7 @@ export type PreparedColumnFlowItem =
       kind: "paragraph";
       visibility: BeamerOverlayVisibility;
       paragraph: LaidParagraph;
+      leadingSkipPt?: number;
       advanceHeight: number;
       trailingSkipPt: number;
     }
@@ -117,6 +118,7 @@ export type PreparedColumnFlowItem =
       visibility: BeamerOverlayVisibility;
       block: PreparedBlock;
       height: number;
+      leadingSkipPt?: number;
     };
 
 export type PreparedColumnContent = {

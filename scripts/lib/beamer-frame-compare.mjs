@@ -1043,7 +1043,9 @@ function compareGlyphLines(native, oracle) {
     glyphs.push({
       index,
       codeMatch: nativeGlyph.code === oracleGlyph.code,
-      fontMatch: nativeGlyph.fontName === oracleGlyph.fontName,
+      fontMatch: nativeGlyph.fontName === oracleGlyph.fontName &&
+        Number.isFinite(nativeGlyph.fontSize) && Number.isFinite(oracleGlyph.fontSize) &&
+        Math.abs(nativeGlyph.fontSize - oracleGlyph.fontSize) <= .01,
       native: nativeGlyph,
       oracle: oracleGlyph,
       delta: {

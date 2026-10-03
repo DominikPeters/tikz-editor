@@ -3141,7 +3141,7 @@ describe("TeX vlist spacing", () => {
       }
     );
 
-    expect(skips.map((skip) => skip.listSize)).toEqual([3, 2, 2]);
+    expect(skips.map((skip) => skip.listSize)).toEqual([3, 2, 3]);
   });
 
   it("plans LaTeX trivlist vertical skips for center environments", () => {

@@ -9,6 +9,7 @@ import {
   materializeParagraphVerticalGlueInVList,
 } from "./spacing.js";
 import type { TexVListDocument } from "./types.js";
+import { texLength } from "../coordinates.js";
 
 export interface PreparedSimpleTexVList {
   readonly materialized: TexVListDocument;
@@ -36,7 +37,7 @@ export function prepareSimpleTexVList(
   displayMathProfile?: TexDisplayMathLayoutProfile
 ): PreparedSimpleTexVList {
   const paragraphGlue = materializeParagraphVerticalGlueInVList(
-    vlist,
+    applyListBodyFonts(vlist, listProfile),
     font,
     listProfile
   );
@@ -48,4 +49,18 @@ export function prepareSimpleTexVList(
     materialized,
     normalized: groupSimpleTexVListScopes(materialized, font, listProfile),
   };
+}
+
+function applyListBodyFonts(vlist: TexVListDocument, profile?: TexListLayoutProfile): TexVListDocument {
+  return { ...vlist, items: vlist.items.map(item => {
+    if (item.kind === "vbox") return { ...item, items: applyListBodyFonts({ kind: "vlist", items: item.items }, profile).items };
+    if (item.kind !== "paragraph" || !item.paragraph.listContext || item.paragraph.listContext.kind === "bibliography") return item;
+    const depth = item.paragraph.listContext.depth - 1;
+    const size = profile?.bodyFontSizePtByDepth?.[depth];
+    const skip = profile?.bodyBaselineSkipPtByDepth?.[depth];
+    return { ...item, paragraph: { ...item.paragraph,
+      ...(size != null ? { fontSizePt: texLength(size) } : {}),
+      ...(skip != null ? { baselineSkip: texLength(skip) } : {}),
+    } };
+  }) };
 }

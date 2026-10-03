@@ -219,7 +219,8 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const followsDisplay = state.previousEmittedContentKind === "display";
     const exitsTrivlistScope =
       state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
-    const listVerticalSkipBefore = followsDisplay
+    const suppressInitialTopsep = !hasPreviousEmittedParagraph && listProfile?.suppressInitialTopsep === true;
+    const listVerticalSkipBefore = followsDisplay || suppressInitialTopsep
       ? texLength(0)
       : texArticleListVerticalSkipBefore(
           state,
@@ -231,7 +232,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
           font,
           listProfile
         );
-    const listFlex = followsDisplay
+    const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
       : texProfileListVerticalGlueFlex(
           state.previousEmittedListContext,
@@ -770,7 +771,7 @@ function resolveDisplayMathVerticalGlueInItems(
           texInterlineGlueSize(
             previousDepth,
             paragraphMeasurement.ruleLeadingMetrics.height,
-            options.lineHeight
+            paragraphMeasurement.baselineSkip ?? options.lineHeight
           )
         );
         // A list-label hbox rides directly before its paragraph — an
@@ -879,7 +880,7 @@ function resolveDisplayMathVerticalGlueInItems(
             texInterlineGlueSize(
               texParagraphLastLineDepth(previousParagraphMeasurement),
               nextParagraph.ruleLeadingMetrics.height,
-              options.lineHeight
+              nextParagraph.baselineSkip ?? options.lineHeight
             )
           ));
           paragraphBoundaryInterlineAlreadyInserted = true;
@@ -889,7 +890,7 @@ function resolveDisplayMathVerticalGlueInItems(
             texInterlineGlueSize(
               previousDisplayMaterialMetrics.depth,
               nextParagraph.ruleLeadingMetrics.height,
-              options.lineHeight
+              nextParagraph.baselineSkip ?? options.lineHeight
             )
           ));
           paragraphBoundaryInterlineAlreadyInserted = true;
@@ -942,7 +943,7 @@ function resolveDisplayMathVerticalGlueInItems(
             texInterlineGlueSize(
               previousDepth,
               nextParagraph.ruleLeadingMetrics.height,
-              options.lineHeight
+              nextParagraph.baselineSkip ?? options.lineHeight
             )
           ));
           paragraphBoundaryInterlineAlreadyInserted = true;
@@ -1819,13 +1820,18 @@ function texArticleListVerticalSkipBefore(
     );
   }
   if (current.depth < previous.depth) {
-    return texArticleListExitBoundarySkip(
+    const exitSkip = texArticleListExitBoundarySkip(
       state,
       previous.depth,
       current.depth,
       font,
       profile
     );
+    // A new outer item follows \endlist with \addvspace{\itemsep};
+    // the larger of that skip and the inner list's closing topsep survives.
+    return current.showLabel
+      ? texLength(Math.max(exitSkip, texArticleListItemBoundarySkip(current.depth, font, profile)))
+      : exitSkip;
   }
   if (
     current.kind === previous.kind &&

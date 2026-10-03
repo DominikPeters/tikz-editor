@@ -172,6 +172,7 @@ export interface TexHorizontalLayout {
 }
 
 export interface TexVListParagraphHorizontalLayout {
+  readonly baselineSkip?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
@@ -179,6 +180,8 @@ export interface TexVListParagraphHorizontalLayout {
 }
 
 export interface TexParagraphInput extends SimpleTexSegmentInput {
+  readonly fontSizePt?: TexLength;
+  readonly baselineSkip?: TexLength;
   readonly blockIndex: number;
   readonly dimensionContext?: TexDimensionContext;
   /**
@@ -559,6 +562,7 @@ export interface TexVListParagraphLineOffset {
 }
 
 export interface TexVListParagraphBoxMeasurement {
+  readonly baselineSkip?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
   readonly lineIndices: readonly number[];
