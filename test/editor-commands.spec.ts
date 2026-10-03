@@ -29,11 +29,23 @@ import {
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import type { EditorAction } from "../packages/app/src/store/types.js";
 import { setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
+import { makeEmptySnapshot } from "../packages/app/src/compute.js";
+import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 
 const SOURCE = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
   \draw (0,1) -- (1,1);
 \end{tikzpicture}`;
+
+function commandState(source: string, rendered: ReturnType<typeof renderTikzToSvg>) {
+  let state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source });
+  state = editorReducer(state, { type: "COMPUTE_REQUESTED", requestId: "clipboard-ready" });
+  return editorReducer(state, { type: "SNAPSHOT_READY", requestId: "clipboard-ready", snapshot: {
+    ...makeEmptySnapshot(source), parseResult: rendered.parse, semanticResult: rendered.semantic,
+    activeRootId: rendered.parse.activeFigureId, figures: rendered.parse.figures,
+    scene: rendered.semantic.scene, editHandles: rendered.semantic.editHandles, svg: rendered.svg
+  } });
+}
 
 function uniqueMatrixCellIds(
   rendered: ReturnType<typeof renderTikzToSvg>,
@@ -407,6 +419,7 @@ describe("editor-commands", () => {
   it("pasteSelectionFromSystemClipboard reads custom MIME payloads", async () => {
     const dispatch = vi.fn<(action: EditorAction) => void>();
     const rendered = renderTikzToSvg(SOURCE);
+    const state = commandState(SOURCE, rendered);
     const payload = {
       version: 1,
       snippets: ["\\draw (4,4) -- (5,5);"],
@@ -426,6 +439,7 @@ describe("editor-commands", () => {
     });
 
     const didPaste = await pasteSelectionFromSystemClipboard({
+      getState: () => state,
       source: SOURCE,
       snapshotSource: SOURCE,
       scene: rendered.semantic.scene,
@@ -590,8 +604,10 @@ describe("editor-commands", () => {
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const dispatch = vi.fn<(action: EditorAction) => void>();
     const rendered = renderTikzToSvg(SOURCE);
+    const state = commandState(SOURCE, rendered);
 
     const didCut = await cutSelection({
+      getState: () => state,
       source: SOURCE,
       snapshotSource: SOURCE,
       scene: rendered.semantic.scene,
@@ -603,6 +619,9 @@ describe("editor-commands", () => {
     expect(didCut).toBe(true);
     expect(dispatch).toHaveBeenCalledWith({
       type: "APPLY_EDIT_ACTION",
+      documentId: state.activeDocumentId,
+      precomputedSource: SOURCE,
+      expectedDocumentRevision: { documentId: state.activeDocumentId, sourceRevision: state.sourceRevision },
       action: {
         kind: "deleteElement",
         elementId: "path:0"

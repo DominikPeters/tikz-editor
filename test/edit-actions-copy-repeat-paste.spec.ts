@@ -758,6 +758,29 @@ describe("applyEditAction – repeatElements", () => {
 });
 
 describe("applyEditAction – pasteStatements", () => {
+  it.each([0, 1])("uses the active picture %i boundary when no anchor is selected", (index) => {
+    const first = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const second = String.raw`\begin{tikzpicture}
+  \draw (2,0) -- (3,0);
+\end{tikzpicture}`;
+    const trailing = String.raw`% A comment mentions \end{tikzpicture}`;
+    const source = `${first}\n${second}\n${trailing}`;
+    const activeFigureId = parseTikz(source).figures[index].id;
+    const result = applyEditAction(source, [], {
+      kind: "pasteStatements", snippets: [String.raw`\draw[red] (4,4) -- (5,5);`], delta: wp(0, 0)
+    }, { parseOptions: { activeFigureId } });
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") return;
+    expectPatchesReconstructSource(source, result);
+    const pictures = parseTikz(result.newSource).figures;
+    expect(result.newSource.slice(pictures[index].span.from, pictures[index].span.to)).toContain(String.raw`\draw[red]`);
+    expect(result.newSource.slice(pictures[1 - index].span.from, pictures[1 - index].span.to)).toBe(index === 0 ? second : first);
+    expect(result.newSource.endsWith(trailing)).toBe(true);
+    expect(result.selectedSourceIds).toHaveLength(1);
+  });
+
   it("rejects empty paste snippets", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);

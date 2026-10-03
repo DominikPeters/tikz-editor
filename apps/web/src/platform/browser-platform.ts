@@ -4,7 +4,7 @@ import type {
   PlatformUpdateApi
 } from "@tikz-editor/app/platform/types";
 import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
-import { revisionForText, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
+import { revisionForText, revisionsMatch, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
 
 type StorageLike = {
   getItem: (key: string) => string | null;
@@ -423,6 +423,10 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     if (!canWrite) {
       return false;
     }
+    return await writeWithHandle(text, handle);
+  }
+
+  async function writeWithHandle(text: string, handle: unknown): Promise<boolean> {
     const maybeHandle = handle as { createWritable?: () => Promise<{ write: (value: string) => Promise<void>; close: () => Promise<void> }> };
     if (typeof maybeHandle.createWritable !== "function") {
       return false;
@@ -440,6 +444,10 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
 
   async function readLinkedText(fileRef: DocumentFileRef): Promise<LinkedTextReadResult> {
     const handle = await resolvePersistedHandle(fileRef);
+    return await readLinkedTextFromHandle(fileRef, handle);
+  }
+
+  async function readLinkedTextFromHandle(fileRef: DocumentFileRef, handle: unknown): Promise<LinkedTextReadResult> {
     if (!handle) {
       return { status: "permission-needed" };
     }
@@ -477,31 +485,31 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     text: string,
     expectedRevision: FileRevision | null
   ): Promise<LinkedTextWriteResult> {
-    const current = await readLinkedText(fileRef);
-    if (current.status !== "ok") {
+    const handle = await resolvePersistedHandle(fileRef);
+    async function checkDiskRevision(): Promise<LinkedTextReadResult | Extract<LinkedTextWriteResult, { status: "changed-on-disk" }>> {
+      const current = await readLinkedTextFromHandle(fileRef, handle);
+      if (current.status === "ok" && expectedRevision && !revisionsMatch(current.revision, expectedRevision)) {
+        return { ...current, status: "changed-on-disk" };
+      }
       return current;
     }
-    if (
-      expectedRevision &&
-      (current.revision.hash !== expectedRevision.hash ||
-        current.revision.mtimeMs !== expectedRevision.mtimeMs ||
-        current.revision.size !== expectedRevision.size)
-    ) {
-      return {
-        status: "changed-on-disk",
-        source: current.source,
-        revision: current.revision,
-        fileRef: current.fileRef
-      };
+    const initial = await checkDiskRevision();
+    if (initial.status !== "ok") {
+      return initial;
     }
-    const handle = await resolvePersistedHandle(fileRef);
-    if (!handle) {
+    if (!(await requestHandlePermission(handle, "readwrite"))) {
       return { status: "permission-needed" };
     }
-    if (!(await saveWithHandle(text, handle))) {
+    // Permission prompts can stay open while another editor changes the file.
+    // Validate again after the prompt, without another permission wait before writing.
+    const beforeWrite = await checkDiskRevision();
+    if (beforeWrite.status !== "ok") {
+      return beforeWrite;
+    }
+    if (!(await writeWithHandle(text, handle))) {
       return { status: "failed", reason: "Could not write the linked file." };
     }
-    const saved = await readLinkedText(fileRef);
+    const saved = await readLinkedTextFromHandle(fileRef, handle);
     if (saved.status === "ok") {
       return {
         status: "saved",

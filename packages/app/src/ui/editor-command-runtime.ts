@@ -12,7 +12,7 @@ import { isMacLikePlatform } from "./key-labels";
 import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
-import type { DocumentFileRef, EditorAction, SnapModes, ToolMode } from "../store/types";
+import type { DocumentFileRef, EditorAction, EditorState, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
 import { resolveEquationNodeTargetFromSelection, type EquationNodeTarget } from "./equation-utils";
 import {
@@ -119,6 +119,7 @@ type RuntimeInput = {
   indentSize?: 2 | 4;
   updateCanvasSettings: (patch: Partial<AppSettings["canvas"]>) => void;
   dispatch: Dispatch;
+  getState?: () => Pick<EditorState, "documents" | "activeDocumentId">;
   onOpenExample?: () => void;
   onOpenFromArxiv?: () => void;
   onOpenSvgExport?: (svgResult: EmitSvgResult) => void;
@@ -225,6 +226,8 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
 
   const commandContext = {
     source,
+    documentId: activeDocumentId,
+    sourceRevision: input.sourceRevision,
     activeRootId,
     parseOptions,
     figureCount: snapshot.figures?.length ?? 0,
@@ -233,7 +236,8 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     editHandles: snapshot.editHandles,
     selectedElementIds,
     activeHandleId,
-    dispatch
+    dispatch,
+    getState: input.getState ?? useEditorStore.getState
   };
 
   const availability = actionAvailability(commandContext);
@@ -466,6 +470,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           dispatch({
             type: "MARK_DOCUMENT_SAVED",
             documentId: activeDocumentId,
+            savedSource: source,
             fileRef: result.fileRef
           });
         });
@@ -493,6 +498,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
           dispatch({
             type: "MARK_DOCUMENT_SAVED",
             documentId: activeDocumentId,
+            savedSource: source,
             fileRef: result.fileRef
           });
         });

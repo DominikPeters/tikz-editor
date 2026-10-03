@@ -389,6 +389,8 @@ export type EditorAction =
   | {
       type: "MARK_DOCUMENT_SAVED";
       documentId?: string;
+      /** Exact contents written by an asynchronous save; omitted for synchronous opens. */
+      savedSource?: string;
       fileRef?: DocumentFileRef | null;
       diskRevision?: FileRevision | null;
       lastKnownDiskSource?: string | null;

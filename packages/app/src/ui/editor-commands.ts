@@ -25,7 +25,12 @@ import type { OptionListAst } from "@tikz-editor/core/options/types";
 import type { EditHandle, SceneElement, SceneFigure } from "@tikz-editor/core/semantic/types";
 import type { ForeachOriginFrame } from "@tikz-editor/core/semantic/types";
 import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
-import type { EditorAction } from "../store/types";
+import type { EditorAction, EditorState } from "../store/types";
+import { beginDocumentEdit, canContinueDocumentEdit, type DocumentEditSession } from "../edit-session";
+import { executeDocumentEdit, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
+import { buildEditParseOptions } from "../edit-parse-options";
+import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { useEditorStore } from "../store/store";
 import {
   buildSelectionPngBase64,
   buildSelectionSvgSync,
@@ -46,6 +51,8 @@ type Dispatch = (action: EditorAction) => void;
 
 type SelectionCommandContext = {
   source: string;
+  documentId?: string;
+  sourceRevision?: number;
   activeRootId?: string | null;
   parseOptions?: EditParseOptions;
   figureCount?: number;
@@ -55,6 +62,10 @@ type SelectionCommandContext = {
   selectedElementIds: ReadonlySet<string>;
   activeHandleId?: string | null;
   dispatch: Dispatch;
+  getState?: () => Pick<EditorState, "documents" | "activeDocumentId">;
+  clipboardSession?: DocumentEditSession;
+  clipboardEditContext?: EditExecutionContext;
+  parseSource?: string;
 };
 
 type PasteCommandContext = SelectionCommandContext;
@@ -77,7 +88,53 @@ const matrixActionCache = new WeakMap<SelectionCommandContext, Map<string, boole
 
 export type PasteSelectionResult =
   | { kind: "success" }
+  | { kind: "cancelled" }
   | { kind: "failure"; reason: ClipboardReadFailureReason | "unsupported" };
+
+/** Capture one clipboard operation before its first await, including its root. */
+export function beginClipboardEdit(context: SelectionCommandContext): SelectionCommandContext | null {
+  if (context.clipboardSession) return isClipboardEditCurrent(context) ? context : null;
+  const getState = context.getState ?? useEditorStore.getState;
+  const state = getState();
+  const session = beginDocumentEdit(state);
+  if (context.source !== session.latestSource ||
+    (context.documentId !== undefined && context.documentId !== session.documentId) ||
+    (context.sourceRevision !== undefined && context.sourceRevision !== session.latestRevision) ||
+    (context.activeRootId !== undefined && context.activeRootId !== session.activeRootId)) return null;
+  const document = state.documents[session.documentId];
+  const editContext: EditExecutionContext = {
+    documentId: session.documentId, source: session.latestSource, sourceRevision: session.latestRevision,
+    activeRootId: session.activeRootId, snapshot: document.snapshot
+  };
+  const nestedSpan = resolveNestedEditSpan(editContext);
+  const parseSource = nestedSpan ? maskSourceOutsideSpan(context.source, nestedSpan) : context.source;
+  return {
+    ...context,
+    getState,
+    clipboardSession: session,
+    clipboardEditContext: editContext,
+    parseSource,
+    activeRootId: session.activeRootId,
+    parseOptions: buildEditParseOptions({
+      ...editContext, source: parseSource,
+      activeRootId: nestedSpan ? document.snapshot.activeRootId : session.activeRootId,
+      analysis: "none", overrides: { indentSize: context.parseOptions?.indentSize }
+    }),
+    dispatch: action => {
+      if (!canContinueDocumentEdit(session, getState())) return;
+      context.dispatch(action.type === "APPLY_EDIT_ACTION" ? {
+        ...action,
+        documentId: session.documentId,
+        precomputedSource: session.latestSource,
+        expectedDocumentRevision: { documentId: session.documentId, sourceRevision: session.latestRevision }
+      } : action);
+    }
+  };
+}
+
+export function isClipboardEditCurrent(context: SelectionCommandContext): boolean {
+  return !context.clipboardSession || canContinueDocumentEdit(context.clipboardSession, (context.getState ?? useEditorStore.getState)());
+}
 
 export function isCodeMirrorEventTarget(target: EventTarget | null): boolean {
   const element = target as { closest?: (selector: string) => unknown } | null;
@@ -201,11 +258,13 @@ export async function cutSelection(context: SelectionCommandContext): Promise<bo
     return false;
   }
 
-  const didCopy = await copySelection(context, { pasteBehavior: "preserve" });
-  if (!didCopy) {
+  const ownedContext = beginClipboardEdit(context);
+  if (!ownedContext) return false;
+  const didCopy = await copySelection(ownedContext, { pasteBehavior: "preserve" });
+  if (!didCopy || !isClipboardEditCurrent(ownedContext)) {
     return false;
   }
-  return deleteSelection(context);
+  return deleteSelection(ownedContext);
 }
 
 export function cutSelectionToClipboardData(
@@ -234,11 +293,14 @@ export function pasteSelectionFromClipboardData(
 export async function pasteSelectionFromSystemClipboard(
   context: PasteCommandContext
 ): Promise<PasteSelectionResult> {
+  const ownedContext = beginClipboardEdit(context);
+  if (!ownedContext) return { kind: "cancelled" };
   const readResult = await readClipboardPayloadFromSystemClipboard();
+  if (!isClipboardEditCurrent(ownedContext)) return { kind: "cancelled" };
   if (readResult.kind === "failure") {
     return readResult;
   }
-  const didPaste = runPasteFromPayload(context, readResult.payload);
+  const didPaste = runPasteFromPayload(ownedContext, readResult.payload);
   return didPaste ? { kind: "success" } : { kind: "failure", reason: "unsupported" };
 }
 
@@ -263,7 +325,7 @@ export function pasteSnippetsWithOffset(
 }
 
 function runPasteFromPayload(context: PasteCommandContext, payload: TikzClipboardPayload): boolean {
-  if (!canPasteSelection(context)) {
+  if (!isClipboardEditCurrent(context) || !canPasteSelection(context)) {
     return false;
   }
 
@@ -280,10 +342,11 @@ function runPasteFromPayload(context: PasteCommandContext, payload: TikzClipboar
     anchorElementId: anchor?.id,
     delta
   };
-  const parseActiveFigureId = resolvedContextActiveFigureId(context);
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const precomputedResult = context.clipboardEditContext
+    ? executeDocumentEdit(context.clipboardEditContext, action, { parseOptions: { indentSize: context.parseOptions?.indentSize } })
+    : applyEditAction(context.source, context.editHandles as EditHandle[], action, {
     parseOptions: {
-      activeFigureId: parseActiveFigureId,
+      activeFigureId: resolvedContextActiveFigureId(context),
       sourceFingerprint: context.parseOptions?.sourceFingerprint
     }
   });
@@ -1079,7 +1142,7 @@ function selectedSnippets(context: SelectionCommandContext): string[] {
   for (const id of selectedElementIds) {
     const parsed = parseEditableTargetId(id);
     if (parsed.kind === "node-adornment") {
-      const resolved = resolvePropertyTarget(source, id, parseOptions);
+      const resolved = resolvePropertyTarget(context.parseSource ?? source, id, parseOptions);
       if (resolved.kind === "found" && resolved.target.optionSpan) {
         const snippet = source.slice(resolved.target.optionSpan.from, resolved.target.optionSpan.to).trim();
         if (snippet.length > 0) {
@@ -1092,7 +1155,7 @@ function selectedSnippets(context: SelectionCommandContext): string[] {
   }
 
   if (statementIds.length > 0) {
-    const snapshot = parseStatementSnapshot(source, parseOptions);
+    const snapshot = parseStatementSnapshot(context.parseSource ?? source, parseOptions);
     const refs = resolveStatementRefs(snapshot, statementIds);
     refs.sort((left, right) => {
       if (left.span.from !== right.span.from) {
@@ -1182,7 +1245,7 @@ function selectedStatementRefs(context: SelectionCommandContext) {
   }
 
   const statementIds = [...selectedElementIds].filter((id) => parseEditableTargetId(id).kind === "statement");
-  const snapshot = parseStatementSnapshot(source, parseOptionsForContext(context));
+  const snapshot = parseStatementSnapshot(context.parseSource ?? source, parseOptionsForContext(context));
   const refs = resolveStatementRefs(snapshot, statementIds);
   refs.sort((left, right) => {
     if (left.span.from !== right.span.from) {
@@ -1642,6 +1705,7 @@ function resolveFlattenForeachTarget(context: SelectionCommandContext): ForeachO
 }
 
 function resolvedContextActiveFigureId(context: SelectionCommandContext): string | null | undefined {
+  if (context.parseOptions?.activeFigureId !== undefined) return context.parseOptions.activeFigureId;
   return parseWindowRootId(context.activeRootId, context.figureCount ?? 0);
 }
 

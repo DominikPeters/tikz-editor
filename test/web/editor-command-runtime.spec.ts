@@ -5,6 +5,7 @@ import { createEditorCommandRuntime } from "../../packages/app/src/ui/editor-com
 import * as DockLayoutModule from "../../packages/app/src/ui/DockLayout.js";
 import type { EditorAction } from "../../packages/app/src/store/types.js";
 import { setActiveEditorPlatform } from "../../packages/app/src/platform/current.js";
+import { makeInitialState } from "../../packages/app/src/store/reducer.js";
 
 const svgToTikzMock = vi.hoisted(() => vi.fn<(source: string) => string>());
 const convertIpeToTikzMock = vi.hoisted(() => vi.fn<(source: string) => { tikz: string; diagnostics: Array<{ severity: "warning" | "error"; message: string }> }>());
@@ -40,6 +41,24 @@ function uniqueMatrixCellIds(
 }
 
 describe("editor-command-runtime", () => {
+  it.each([APP_MENU_COMMAND_IDS.SAVE_DOCUMENT, APP_MENU_COMMAND_IDS.SAVE_DOCUMENT_AS])(
+    "%s stamps the written source on the fallback save completion", async command => {
+      const dispatch = vi.fn<(action: EditorAction) => void>();
+      let finishSave!: (value: { status: "saved"; fileRef: null }) => void;
+      const saveText = vi.fn((_source: string) => new Promise<{ status: "saved"; fileRef: null }>(resolve => { finishSave = resolve; }));
+      setActiveEditorPlatform({ id: "test-save", persistence: { load: () => null, save() {} }, files: { saveText } });
+      const input = makeInput({ dispatch, snapshot: makeSnapshot(renderTikzToSvg(SOURCE)), selectedElementIds: new Set() });
+      const runtime = createEditorCommandRuntime(input);
+      expect(runtime.runCommand(command, "menu")).toBe(true);
+      input.source = `${SOURCE}\n% newer edits`;
+      finishSave({ status: "saved", fileRef: null });
+      await vi.waitFor(() => expect(dispatch).toHaveBeenCalledWith({
+        type: "MARK_DOCUMENT_SAVED", documentId: "doc-1", savedSource: SOURCE, fileRef: null
+      }));
+      expect(saveText.mock.calls[0][0]).toBe(SOURCE);
+    }
+  );
+
   afterEach(() => {
     vi.restoreAllMocks();
     svgToTikzMock.mockReset();
@@ -1403,6 +1422,12 @@ function makeInput({
   return {
     source,
     activeRootId,
+    getState: () => {
+      const initial = makeInitialState();
+      return { activeDocumentId: "doc-1", documents: { "doc-1": {
+        ...initial.documents[initial.activeDocumentId], id: "doc-1", source, activeRootId, snapshot
+      } } };
+    },
     snapshot,
     toolMode: "select" as const,
     selectedElementIds,

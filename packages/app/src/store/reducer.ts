@@ -438,8 +438,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       workspace = updateDocument(workspace, documentId, (doc) => ({
         ...doc,
-        savedSource: doc.source,
-        dirty: false,
+        savedSource: action.savedSource ?? doc.source,
+        dirty: doc.source !== (action.savedSource ?? doc.source),
         fileRef: action.fileRef ?? doc.fileRef,
         title: (action.fileRef ?? doc.fileRef)?.name ?? doc.title,
         diskRevision: action.diskRevision !== undefined ? action.diskRevision : doc.diskRevision,

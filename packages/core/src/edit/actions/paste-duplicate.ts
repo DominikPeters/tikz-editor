@@ -91,13 +91,15 @@ export function applyPasteStatementsAction(
   const snapshot = getStatementSnapshot(source, parseOptions, caches);
   const anchorId = action.anchorElementId?.trim();
   const anchorRef = anchorId ? snapshot.byId.get(anchorId) : undefined;
+  const parsed = anchorRef ? null : parseTikzForEdit(source, parseOptions);
+  const activeFigure = parsed?.figures.find(figure => figure.id === parsed.activeFigureId);
 
   const insertionWorldPoint = anchorRef
     ? {
         offset: anchorRef.span.to,
         indent: lineIndentAtOffset(source, anchorRef.span.from)
       }
-    : resolveRootInsertionPoint(source);
+    : resolveRootInsertionPoint(source, activeFigure);
 
   const insertion = formatSnippetsForInsertion(renamedSnippets, insertionWorldPoint.indent, {
     trailingNewline: !anchorRef,

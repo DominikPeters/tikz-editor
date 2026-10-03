@@ -1,4 +1,4 @@
-import type { Statement, Span } from "../ast/types.js";
+import type { Statement, Span, TikzFigureInventoryItem } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 
@@ -152,9 +152,9 @@ export function lineIndentAtOffset(source: string, offset: number): string {
   return prefix.match(/^[ \t]*/)?.[0] ?? "";
 }
 
-export function resolveRootInsertionPoint(source: string): { offset: number; indent: string } {
+export function resolveRootInsertionPoint(source: string, figure?: TikzFigureInventoryItem): { offset: number; indent: string } {
   const endToken = "\\end{tikzpicture}";
-  const endIndex = source.lastIndexOf(endToken);
+  const endIndex = figure?.endSpan.from ?? source.lastIndexOf(endToken);
   if (endIndex < 0) {
     return {
       offset: source.length,

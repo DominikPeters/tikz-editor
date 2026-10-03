@@ -12,9 +12,12 @@ import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditorPlatform } from "../../platform/types";
 import type { ToolMode } from "../../store/types";
+import { useEditorStore } from "../../store/store";
 import type { WorldPoint } from "../coords/types";
 import {
   canPasteSelection,
+  beginClipboardEdit,
+  isClipboardEditCurrent,
   copySelection,
   copySelectionToClipboardData,
   cutSelection,
@@ -162,6 +165,42 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS,
     computeAutoScaleForImportedTikz
   } = args;
+
+  const documentId = useEditorStore(state => state.activeDocumentId);
+  const sourceRevision = useEditorStore(state => state.sourceRevision);
+  const activeRootId = useEditorStore(state => state.activeRootId);
+  const captureClipboardEdit = useCallback(() => beginClipboardEdit({
+    documentId, sourceRevision, activeRootId, source,
+    snapshotSource: snapshot.source, scene: snapshot.scene,
+    editHandles: snapshot.editHandles, selectedElementIds, dispatch
+  }), [documentId, sourceRevision, activeRootId, source, snapshot, selectedElementIds, dispatch]);
+
+  const pasteImportedSnippet = useCallback((
+    context: NonNullable<ReturnType<typeof beginClipboardEdit>>,
+    converted: { tikzSource: string; snippet: string; body: string },
+    format: string,
+    operation = "paste"
+  ) => {
+    if (!isClipboardEditCurrent(context)) return;
+    const scale = computeAutoScaleForImportedTikz(converted.tikzSource, context.scene, snapshot.svg?.viewBox ?? null);
+    const snippet = scale == null ? converted.snippet : buildScopeWrappedSnippet(converted.body, { scale });
+    if (!pasteSnippetsWithOffset(context, [snippet])) setWarning(`${format} import ${operation} failed.`);
+  }, [computeAutoScaleForImportedTikz, snapshot.svg?.viewBox, setWarning]);
+
+  const pasteSvgFile = useCallback(async (
+    file: File, context: NonNullable<ReturnType<typeof beginClipboardEdit>>, operation: "paste" | "drop"
+  ) => {
+    try {
+      const source = await file.text();
+      if (!isClipboardEditCurrent(context)) return;
+      const converted = await convertSvgToScopeSnippet(source);
+      if (!isClipboardEditCurrent(context)) return;
+      if (converted.kind === "failure") { setWarning(converted.message); return; }
+      pasteImportedSnippet(context, converted, "SVG", operation);
+    } catch (error) {
+      if (isClipboardEditCurrent(context)) setWarning(`SVG import failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [pasteImportedSnippet, setWarning]);
 
   const onViewportKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -379,68 +418,24 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
 
   const onViewportPaste = useCallback(
     (event: ReactClipboardEvent<HTMLDivElement>) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-      if (isEditableClipboardTarget(event.target)) {
-        return;
-      }
-      const svgFile = findSvgFileInDataTransfer(event.clipboardData);
-      if (svgFile) {
-        event.preventDefault();
-        void svgFile.text().then(async (svgSource) => {
-          const converted = await convertSvgToScopeSnippet(svgSource);
-          if (converted.kind === "failure") {
-            setWarning(converted.message);
-            return;
-          }
-          const scale = computeAutoScaleForImportedTikz(converted.tikzSource, snapshot.scene, snapshot.svg?.viewBox ?? null);
-          const snippet = scale == null ? converted.snippet : buildScopeWrappedSnippet(converted.body, { scale });
-          const pasted = pasteSnippetsWithOffset(
-            {
-              source,
-              snapshotSource: snapshot.source,
-              scene: snapshot.scene,
-              editHandles: snapshot.editHandles,
-              selectedElementIds,
-              dispatch
-            },
-            [snippet]
-          );
-          if (!pasted) {
-            setWarning("SVG import paste failed.");
-          }
-        });
-        return;
-      }
+      if (event.defaultPrevented || isEditableClipboardTarget(event.target)) return;
       event.preventDefault();
-      const pasteContext = {
-        source,
-        snapshotSource: snapshot.source,
-        scene: snapshot.scene,
-        editHandles: snapshot.editHandles,
-        selectedElementIds,
-        dispatch
-      };
-      if (!canPasteSelection(pasteContext)) {
-        return;
-      }
+      const pasteContext = captureClipboardEdit();
+      if (!pasteContext || !canPasteSelection(pasteContext)) return;
+      const svgFile = findSvgFileInDataTransfer(event.clipboardData);
+      if (svgFile) { void pasteSvgFile(svgFile, pasteContext, "paste"); return; }
       void (async () => {
         const readCustomText = platform.clipboard?.readCustomText;
         if (typeof readCustomText === "function") {
           try {
             const customTikz = await readCustomText(DESKTOP_TIKZ_CLIPBOARD_FORMATS);
+            if (!isClipboardEditCurrent(pasteContext)) return;
             if (customTikz?.text?.trim()) {
               const payload = parseClipboardPayloadJson(customTikz.text);
-              if (payload) {
-                const result = pasteSelectionFromPayload(pasteContext, payload);
-                if (result.kind === "success") {
-                  return;
-                }
-              }
+              if (payload && pasteSelectionFromPayload(pasteContext, payload).kind === "success") return;
             }
           } catch (error) {
-            // Fall through to existing dataTransfer/system fallback.
+            if (!isClipboardEditCurrent(pasteContext)) return;
             logClipboardImportDebug("Desktop custom TikZ clipboard read failed; falling back to standard paste data.", error);
           }
         }
@@ -449,80 +444,42 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         if (typeof readCustomBytes === "function") {
           try {
             const custom = await readCustomBytes(DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS);
+            if (!isClipboardEditCurrent(pasteContext)) return;
             if (custom?.bytesBase64?.trim()) {
               let decoded: Uint8Array;
-              try {
-                decoded = decodeBase64Bytes(custom.bytesBase64);
-              } catch (error) {
+              try { decoded = decodeBase64Bytes(custom.bytesBase64); }
+              catch (error) {
                 setWarning(`PowerPoint import failed: ${error instanceof Error ? error.message : String(error)}`);
                 return;
               }
               const converted = await convertPowerPointClipboardToScopeSnippet(decoded);
-              if (converted.kind === "failure") {
-                setWarning(converted.message);
-                return;
-              }
-              const scale = computeAutoScaleForImportedTikz(converted.tikzSource, snapshot.scene, snapshot.svg?.viewBox ?? null);
-              const snippet = scale == null ? converted.snippet : buildScopeWrappedSnippet(converted.body, { scale });
-              const pasted = pasteSnippetsWithOffset(
-                {
-                  source,
-                  snapshotSource: snapshot.source,
-                  scene: snapshot.scene,
-                  editHandles: snapshot.editHandles,
-                  selectedElementIds,
-                  dispatch
-                },
-                [snippet]
-              );
-              if (!pasted) {
-                setWarning("PowerPoint import paste failed.");
-              }
+              if (!isClipboardEditCurrent(pasteContext)) return;
+              if (converted.kind === "failure") { setWarning(converted.message); return; }
+              pasteImportedSnippet(pasteContext, converted, "PowerPoint");
               return;
             }
           } catch (error) {
-            // Fall through to existing warning behavior.
+            if (!isClipboardEditCurrent(pasteContext)) return;
             logClipboardImportDebug("PowerPoint clipboard import failed before conversion completed.", error);
           }
         }
 
-        const result = pasteSelectionFromClipboardData(
-          pasteContext,
-          event.clipboardData
-        );
-        if (result.kind === "success") {
-          return;
-        }
+        const result = pasteSelectionFromClipboardData(pasteContext, event.clipboardData);
+        if (result.kind === "success" || result.kind === "cancelled") return;
 
         if (typeof readCustomText === "function") {
           try {
             const custom = await readCustomText(DESKTOP_SVG_CLIPBOARD_FORMATS);
+            if (!isClipboardEditCurrent(pasteContext)) return;
             if (custom?.text?.trim()) {
               const converted = await convertSvgToScopeSnippet(custom.text);
-              if (converted.kind === "failure") {
-                setWarning(converted.message);
-                return;
-              }
-              const scale = computeAutoScaleForImportedTikz(converted.tikzSource, snapshot.scene, snapshot.svg?.viewBox ?? null);
-              const snippet = scale == null ? converted.snippet : buildScopeWrappedSnippet(converted.body, { scale });
-              const pasted = pasteSnippetsWithOffset(
-                {
-                  source,
-                  snapshotSource: snapshot.source,
-                  scene: snapshot.scene,
-                  editHandles: snapshot.editHandles,
-                  selectedElementIds,
-                  dispatch
-                },
-                [snippet]
-              );
-              if (!pasted) {
-                setWarning("SVG import paste failed.");
-              }
+              if (!isClipboardEditCurrent(pasteContext)) return;
+              if (converted.kind === "failure") { setWarning(converted.message); return; }
+              pasteImportedSnippet(pasteContext, converted, "SVG");
               return;
             }
           } catch (error) {
-            // Fall through to existing warning behavior.
+            if (!isClipboardEditCurrent(pasteContext)) return;
             logClipboardImportDebug("SVG clipboard import failed before conversion completed.", error);
           }
         }
@@ -530,61 +487,26 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         if (typeof readCustomText === "function") {
           try {
             const custom = await readCustomText(DESKTOP_KEYNOTE_CLIPBOARD_FORMATS);
+            if (!isClipboardEditCurrent(pasteContext)) return;
             if (custom?.text?.trim()) {
               const converted = await convertKeynoteClipboardToScopeSnippet(custom.text);
-              if (converted.kind === "failure") {
-                setWarning(converted.message);
-                return;
-              }
-              const scale = computeAutoScaleForImportedTikz(converted.tikzSource, snapshot.scene, snapshot.svg?.viewBox ?? null);
-              const snippet = scale == null ? converted.snippet : buildScopeWrappedSnippet(converted.body, { scale });
-              const pasted = pasteSnippetsWithOffset(
-                {
-                  source,
-                  snapshotSource: snapshot.source,
-                  scene: snapshot.scene,
-                  editHandles: snapshot.editHandles,
-                  selectedElementIds,
-                  dispatch
-                },
-                [snippet]
-              );
-              if (!pasted) {
-                setWarning("Keynote import paste failed.");
-              }
+              if (!isClipboardEditCurrent(pasteContext)) return;
+              if (converted.kind === "failure") { setWarning(converted.message); return; }
+              pasteImportedSnippet(pasteContext, converted, "Keynote");
               return;
             }
           } catch (error) {
-            // Fall through to existing warning behavior.
+            if (!isClipboardEditCurrent(pasteContext)) return;
             logClipboardImportDebug("Keynote clipboard import failed before conversion completed.", error);
           }
         }
-        if (result.reason === "invalid") {
-          setWarning("Clipboard did not contain a valid TikZ payload.");
-          return;
-        }
-        if (result.reason === "empty") {
-          return;
-        }
-        setWarning("Paste failed. Try copying again, then press Cmd/Ctrl+V while the canvas is focused.");
+        if (result.reason === "invalid") { setWarning("Clipboard did not contain a valid TikZ payload."); return; }
+        if (result.reason !== "empty") setWarning("Paste failed. Try copying again, then press Cmd/Ctrl+V while the canvas is focused.");
       })();
     },
-    [
-      DESKTOP_SVG_CLIPBOARD_FORMATS,
-      DESKTOP_KEYNOTE_CLIPBOARD_FORMATS,
-      DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS,
-      DESKTOP_TIKZ_CLIPBOARD_FORMATS,
-      computeAutoScaleForImportedTikz,
-      dispatch,
-      platform,
-      selectedElementIds,
-      setWarning,
-      snapshot.editHandles,
-      snapshot.scene,
-      snapshot.source,
-      snapshot.svg?.viewBox,
-      source
-    ]
+    [captureClipboardEdit, pasteImportedSnippet, pasteSvgFile, platform, setWarning,
+      DESKTOP_TIKZ_CLIPBOARD_FORMATS, DESKTOP_SVG_CLIPBOARD_FORMATS,
+      DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS, DESKTOP_KEYNOTE_CLIPBOARD_FORMATS]
   );
 
   const onViewportDragOver = useCallback(
@@ -614,31 +536,10 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       }
       event.preventDefault();
       event.stopPropagation();
-      void svgFile.text().then(async (svgSource) => {
-        const converted = await convertSvgToScopeSnippet(svgSource);
-        if (converted.kind === "failure") {
-          setWarning(converted.message);
-          return;
-        }
-        const scale = computeAutoScaleForImportedTikz(converted.tikzSource, snapshot.scene, snapshot.svg?.viewBox ?? null);
-        const snippet = scale == null ? converted.snippet : buildScopeWrappedSnippet(converted.body, { scale });
-        const pasted = pasteSnippetsWithOffset(
-          {
-            source,
-            snapshotSource: snapshot.source,
-            scene: snapshot.scene,
-            editHandles: snapshot.editHandles,
-            selectedElementIds,
-            dispatch
-          },
-          [snippet]
-        );
-        if (!pasted) {
-          setWarning("SVG import drop failed.");
-        }
-      });
+      const context = captureClipboardEdit();
+      if (context && canPasteSelection(context)) void pasteSvgFile(svgFile, context, "drop");
     },
-    [dispatch, selectedElementIds, setWarning, snapshot.editHandles, snapshot.scene, snapshot.source, snapshot.svg?.viewBox, source, computeAutoScaleForImportedTikz]
+    [captureClipboardEdit, pasteSvgFile]
   );
 
   const onViewportCopy = useCallback(
@@ -649,31 +550,19 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       if (isEditableClipboardTarget(event.target)) {
         return;
       }
+      const context = captureClipboardEdit();
+      if (!context) return;
       const supportsNativeClipboardBundle = typeof platform.clipboard?.writeBundle === "function";
       if (supportsNativeClipboardBundle) {
         event.preventDefault();
         void copySelection(
-          {
-            source,
-            snapshotSource: snapshot.source,
-            scene: snapshot.scene,
-            editHandles: snapshot.editHandles,
-            selectedElementIds,
-            dispatch
-          },
+          context,
           { pasteBehavior: "offset" }
         );
         return;
       }
       const copied = copySelectionToClipboardData(
-        {
-          source,
-          snapshotSource: snapshot.source,
-          scene: snapshot.scene,
-          editHandles: snapshot.editHandles,
-          selectedElementIds,
-          dispatch
-        },
+        context,
         event.clipboardData,
         { pasteBehavior: "offset" }
       );
@@ -682,7 +571,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       }
       event.preventDefault();
     },
-    [dispatch, platform, selectedElementIds, snapshot.editHandles, snapshot.scene, snapshot.source, source]
+    [captureClipboardEdit, platform]
   );
 
   const onViewportCut = useCallback(
@@ -693,30 +582,18 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       if (isEditableClipboardTarget(event.target)) {
         return;
       }
+      const context = captureClipboardEdit();
+      if (!context) return;
       const supportsNativeClipboardBundle = typeof platform.clipboard?.writeBundle === "function";
       if (supportsNativeClipboardBundle) {
         event.preventDefault();
         void cutSelection(
-          {
-            source,
-            snapshotSource: snapshot.source,
-            scene: snapshot.scene,
-            editHandles: snapshot.editHandles,
-            selectedElementIds,
-            dispatch
-          }
+          context
         );
         return;
       }
       const cut = cutSelectionToClipboardData(
-        {
-          source,
-          snapshotSource: snapshot.source,
-          scene: snapshot.scene,
-          editHandles: snapshot.editHandles,
-          selectedElementIds,
-          dispatch
-        },
+        context,
         event.clipboardData
       );
       if (!cut) {
@@ -724,7 +601,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       }
       event.preventDefault();
     },
-    [dispatch, platform, selectedElementIds, snapshot.editHandles, snapshot.scene, snapshot.source, source]
+    [captureClipboardEdit, platform]
   );
 
   return {

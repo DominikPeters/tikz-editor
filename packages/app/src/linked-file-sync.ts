@@ -51,6 +51,14 @@ export function isLinkedFileRef(fileRef: DocumentFileRef | null | undefined): fi
   return fileRef?.provider === "desktop-fs" || (fileRef?.kind === "browser-file" && fileRef.provider === "browser-fsa");
 }
 
+/** File ownership ignores presentation names for handles/paths that identify a file. */
+export function sameDocumentFileRef(left: DocumentFileRef | null, right: DocumentFileRef | null): boolean {
+  if (!left || !right) return left === right;
+  return left.kind === right.kind && left.provider === right.provider &&
+    left.handleId === right.handleId && left.path === right.path &&
+    (left.handleId != null || left.path != null || left.name === right.name);
+}
+
 export function decideLinkedFileRefresh(doc: DocumentSession, readResult: LinkedTextReadResult): LinkedFileRefreshDecision {
   if (!isLinkedFileRef(doc.fileRef)) {
     return { kind: "no-change" };
