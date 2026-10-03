@@ -309,7 +309,7 @@ function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {
     return {
       kind,
       open: true,
-      round: true,
+      round: false,
       reversed: false,
       bend: false,
       afterLineEnd: false,
@@ -330,7 +330,7 @@ function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {
     return {
       kind,
       open: true,
-      round: true,
+      round: false,
       reversed: false,
       bend: false,
       afterLineEnd: false,
@@ -351,7 +351,7 @@ function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {
     return {
       kind,
       open: true,
-      round: true,
+      round: false,
       reversed: false,
       bend: false,
       afterLineEnd: false,
@@ -531,7 +531,7 @@ function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {
 }
 
 function normalizeArrowLineWidth(value: number): number {
-  return Number.isFinite(value) && value > 0 ? value : 0.4;
+  return Number.isFinite(value) && value >= 0 ? value : 0.4;
 }
 
 function buildLatexTip(nominalLength: number, nominalWidth: number | null, requestedLineWidth: number): ArrowTip {
@@ -539,20 +539,6 @@ function buildLatexTip(nominalLength: number, nominalWidth: number | null, reque
   const width = Math.max(1, nominalWidth ?? length * DEFAULT_GEOMETRIC_WIDTH_FACTOR);
   // Cap line width at one fifth of the length.
   const lineWidth = Math.max(0, Math.min(normalizeArrowLineWidth(requestedLineWidth), 0.2 * length));
-
-  const slope = length / Math.max(EPSILON, width);
-  const frontMiter = Math.sqrt(1 + 9 * slope * slope) * lineWidth;
-  void frontMiter;
-
-  // Back-tip miter approximation from pgflibraryarrows.meta.code.tex.
-  // Note: the normalization uses the nominal length, not the inner length.
-  const x0 = 0.3 * length;
-  const y0 = 0.2333333 * width;
-  const scale = 1 / Math.max(EPSILON, Math.hypot(x0, y0));
-  const nx = x0 * scale;
-  const ny = y0 * scale;
-  const ratio = (ny + 1) / Math.max(EPSILON, nx);
-  const halfWidth = 0.5 * width - 0.5 * ratio * lineWidth;
 
   return {
     kind: "latex",
@@ -564,7 +550,7 @@ function buildLatexTip(nominalLength: number, nominalWidth: number | null, reque
     color: null,
     fill: null,
     length: Math.max(1, length),
-    width: Math.max(1, 2 * halfWidth),
+    width,
     inset: null,
     sep: 0,
     lineWidth,
@@ -741,6 +727,7 @@ function applyArrowTipOptions(base: ArrowTip, optionsRaw: string | null, context
           insetExplicit = true;
         } else {
           inset = parsed;
+          insetExplicit = true;
         }
       }
       continue;
@@ -825,10 +812,10 @@ function applyArrowTipOptions(base: ArrowTip, optionsRaw: string | null, context
 
   if (isGeometricMetaTip) {
     if (!widthExplicit) {
-      nominalWidth = nominalLength * DEFAULT_GEOMETRIC_WIDTH_FACTOR;
+      nominalWidth = nominalLength * (tip.kind === "kite" ? DEFAULT_KITE_WIDTH_FACTOR : DEFAULT_GEOMETRIC_WIDTH_FACTOR);
     }
     if (!insetExplicit) {
-      nominalInset = nominalLength * DEFAULT_STEALTH_INSET_FACTOR;
+      nominalInset = nominalLength * (tip.kind === "kite" ? DEFAULT_KITE_INSET_FACTOR : DEFAULT_STEALTH_INSET_FACTOR);
     }
 
     if (tip.kind === "stealth") {
@@ -863,7 +850,9 @@ function applyArrowTipOptions(base: ArrowTip, optionsRaw: string | null, context
       ...tip,
       length: Math.max(0, length),
       width: Math.max(0, width),
-      inset: tip.inset == null && inset <= EPSILON ? null : Math.max(0, inset),
+      inset: (tip.kind === "tee-barb" || tip.kind === "bar") && !insetExplicit
+        ? 0.5 * length
+        : tip.inset == null && inset <= EPSILON ? null : Math.max(0, inset),
       lineWidth: Math.max(0, lineWidth)
     };
   }

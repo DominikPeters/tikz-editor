@@ -30,14 +30,23 @@ export type StealthShapeParameters = {
 type ArrowTipInput = Omit<ArrowTip, "afterLineEnd"> & { afterLineEnd?: boolean };
 
 export function normalizeArrowTip(tip: ArrowTipInput, contextLineWidth: number, fallbackColor: string): NormalizedArrowTip {
-  const lineWidth = normalizeLineWidth(tip.lineWidth, contextLineWidth);
+  const length = Number.isFinite(tip.length) ? Math.max(0.01, tip.length) : 0.01;
+  const width = Number.isFinite(tip.width) ? Math.max(0.01, tip.width) : 0.01;
+  let lineWidth = normalizeLineWidth(tip.lineWidth, contextLineWidth);
+  if (tip.kind === "latex") lineWidth = Math.min(lineWidth, 0.2 * length);
+  if (tip.kind === "stealth" || tip.kind === "triangle") {
+    lineWidth = Math.min(lineWidth, 0.25 * (length - (tip.kind === "triangle" ? 0 : tip.inset ?? length * DEFAULT_STEALTH_INSET_FACTOR)));
+  }
+  if (tip.kind === "kite") lineWidth = Math.min(lineWidth, 0.4 * length, 0.4 * width);
+  if (tip.kind === "square" || tip.kind === "circle") lineWidth = Math.min(lineWidth, 0.5 * length);
   return {
     ...tip,
     afterLineEnd: tip.afterLineEnd ?? false,
-    length: Math.max(0.01, tip.length),
-    width: Math.max(0.01, tip.width),
+    contextLineWidth: normalizeLineWidth(contextLineWidth, DEFAULT_CONTEXT_LINE_WIDTH),
+    length,
+    width,
     sep: Math.max(0, tip.sep),
-    lineWidth,
+    lineWidth: Math.max(0, lineWidth),
     color: tip.color ?? fallbackColor
   };
 }
@@ -81,7 +90,7 @@ export function computeArrowShortening(side: ArrowSide, tips: NormalizedArrowTip
   }
 
   return {
-    lineEndShortening: Math.max(0, lineEndShortening),
+    lineEndShortening,
     totalLength,
     plans
   };
@@ -104,13 +113,13 @@ export function buildArrowTipMetrics(tip: NormalizedArrowTip, contextLineWidth: 
     return metrics;
   }
 
-  if (tip.kind === "stealth") {
-    const params = computeStealthShapeParameters(tip);
+  if (tip.kind === "stealth" || tip.kind === "triangle") {
+    const params = computeStealthShapeParameters(tip.kind === "triangle" ? { ...tip, inset: 0 } : tip);
     let metrics: ArrowTipMetrics = {
       tipEnd: tip.round ? params.innerLength + params.backMiter + 0.5 * params.lineWidth : params.length,
       backEnd: tip.round ? params.backMiter - 0.5 * params.lineWidth : 0,
       lineEnd: tip.reversed
-        ? params.innerLength + params.backMiter - 0.25 * normalizeLineWidth(contextLineWidth, contextLineWidth)
+        ? params.innerLength + params.backMiter - 0.25 * params.lineWidth
         : params.inset + params.insetMiter - 0.25 * params.lineWidth,
       visualTipEnd: tip.round ? params.innerLength + params.backMiter + 0.5 * params.lineWidth : params.length,
       visualBackEnd: params.inset,
@@ -123,18 +132,19 @@ export function buildArrowTipMetrics(tip: NormalizedArrowTip, contextLineWidth: 
   }
 
   if (tip.kind === "kite") {
-    let metrics: ArrowTipMetrics = {
-      tipEnd: tip.length,
-      backEnd: 0,
-      lineEnd: Math.max(0, tip.inset ?? 0.25 * tip.length),
-      visualTipEnd: tip.length,
-      visualBackEnd: Math.max(0, tip.inset ?? 0),
+    const params = computeKiteShapeParameters(tip);
+    const roundedBackEnd = (tip.inset ?? 0.25 * tip.length) / tip.width * tip.lineWidth - 0.5 * tip.lineWidth;
+    const metrics: ArrowTipMetrics = {
+      tipEnd: tip.round ? params.front + 0.5 * tip.lineWidth : tip.length,
+      backEnd: tip.round ? roundedBackEnd : 0,
+      lineEnd: tip.reversed
+        ? params.front - contextLineWidth + tip.lineWidth
+        : params.back + contextLineWidth - tip.lineWidth,
+      visualTipEnd: tip.round ? params.front + 0.5 * tip.lineWidth : tip.length,
+      visualBackEnd: tip.round ? roundedBackEnd : 0,
       sep: tip.sep
     };
-    if (tip.reversed) {
-      metrics = reverseMetrics(metrics);
-    }
-    return metrics;
+    return tip.reversed ? reverseMetrics(metrics) : metrics;
   }
 
   if (tip.kind === "cm-rightarrow") {
@@ -152,80 +162,65 @@ export function buildArrowTipMetrics(tip: NormalizedArrowTip, contextLineWidth: 
     return metrics;
   }
 
-  if (tip.kind === "bar") {
-    let metrics: ArrowTipMetrics = {
-      tipEnd: 0,
-      backEnd: 0,
-      lineEnd: 0,
-      visualTipEnd: 0,
-      visualBackEnd: 0,
+  const halfStroke = 0.5 * tip.lineWidth;
+  let familyMetrics: ArrowTipMetrics | null = null;
+  if (tip.kind === "bar" || tip.kind === "tee-barb") {
+    const params = computeTeeBarbShapeParameters(tip);
+    familyMetrics = {
+      tipEnd: params.front + (tip.round && !params.frontClamped ? halfStroke : 0),
+      backEnd: params.back - (tip.round && !params.backClamped ? halfStroke : 0),
+      lineEnd: (tip.reversed ? 1 : -1) * 0.25 * tip.lineWidth,
+      visualTipEnd: params.front,
+      visualBackEnd: halfStroke,
       sep: tip.sep
     };
-    if (tip.reversed) {
-      metrics = reverseMetrics(metrics);
-    }
-    return metrics;
-  }
-
-  if (tip.kind === "hooks" || tip.kind === "straight-barb" || tip.kind === "arc-barb") {
-    let metrics: ArrowTipMetrics = {
-      tipEnd: tip.length,
-      backEnd: 0,
-      lineEnd: tip.length,
-      visualTipEnd: tip.length,
-      visualBackEnd: 0,
+  } else if (tip.kind === "straight-barb") {
+    const frontMiter = halfStroke * Math.hypot(1, 2 * tip.length / tip.width);
+    familyMetrics = {
+      tipEnd: tip.length + (tip.round ? halfStroke : frontMiter),
+      backEnd: -halfStroke,
+      lineEnd: tip.length - (tip.reversed ? 0 : halfStroke),
+      visualTipEnd: tip.length + (tip.round ? halfStroke : frontMiter),
+      visualBackEnd: tip.length + halfStroke,
       sep: tip.sep
     };
-    if (tip.reversed) {
-      metrics = reverseMetrics(metrics);
-    }
-    return metrics;
-  }
-
-  if (tip.kind === "tee-barb") {
-    let metrics: ArrowTipMetrics = {
-      tipEnd: Math.max(tip.length, tip.inset ?? 0),
-      backEnd: Math.min(0, -(tip.inset ?? 0)),
-      lineEnd: 0,
-      visualTipEnd: Math.max(tip.length, tip.inset ?? 0),
-      visualBackEnd: Math.min(0, -(tip.inset ?? 0)),
-      sep: tip.sep
+  } else if (tip.kind === "hooks") {
+    const arc = tip.arc ?? 180;
+    const radius = tip.length - halfStroke;
+    const sin = Math.sin(arc * Math.PI / 180);
+    const tipEnd = (arc < 90 ? sin * radius : radius) + halfStroke;
+    const backEnd = arc >= 270 ? -radius - halfStroke
+      : arc > 180 ? sin * radius - halfStroke
+      : arc >= 90 && tip.round ? -halfStroke : 0;
+    familyMetrics = {
+      tipEnd, backEnd,
+      lineEnd: (tip.reversed ? 0.5 : 0.25) * tip.lineWidth,
+      visualTipEnd: tipEnd, visualBackEnd: backEnd, sep: tip.sep
     };
-    if (tip.reversed) {
-      metrics = reverseMetrics(metrics);
-    }
-    return metrics;
-  }
-
-  if (tip.kind === "triangle" || tip.kind === "triangle-cap") {
-    let metrics: ArrowTipMetrics = {
-      tipEnd: tip.length,
-      backEnd: 0,
-      lineEnd: 0.1 * tip.length,
-      visualTipEnd: tip.length,
-      visualBackEnd: 0,
-      sep: tip.sep
+  } else if (tip.kind === "arc-barb") {
+    const halfArc = (tip.arc ?? 180) / 2;
+    const cosine = Math.cos(halfArc * Math.PI / 180);
+    const radius = tip.length - (tip.round ? halfStroke : halfArc < 90 ? tip.lineWidth : 0);
+    const backEnd = cosine * radius - (tip.round ? halfStroke : 0);
+    familyMetrics = {
+      tipEnd: tip.length, backEnd,
+      lineEnd: tip.length - halfStroke,
+      visualTipEnd: tip.length, visualBackEnd: tip.length, sep: tip.sep
     };
-    if (tip.reversed) {
-      metrics = reverseMetrics(metrics);
-    }
-    return metrics;
-  }
-
-  if (tip.kind === "square" || tip.kind === "circle" || tip.kind === "round-cap" || tip.kind === "butt-cap") {
-    let metrics: ArrowTipMetrics = {
-      tipEnd: tip.length,
-      backEnd: 0,
-      lineEnd: 0,
-      visualTipEnd: tip.length,
-      visualBackEnd: 0,
-      sep: tip.sep
+  } else if (tip.kind === "square" || tip.kind === "circle") {
+    familyMetrics = {
+      tipEnd: tip.length, backEnd: 0,
+      lineEnd: tip.reversed ? tip.length - halfStroke : halfStroke,
+      visualTipEnd: tip.length, visualBackEnd: 0, sep: tip.sep
     };
-    if (tip.reversed) {
-      metrics = reverseMetrics(metrics);
-    }
-    return metrics;
+  } else if (tip.kind === "round-cap" || tip.kind === "butt-cap" || tip.kind === "triangle-cap") {
+    familyMetrics = {
+      tipEnd: tip.length, backEnd: 0,
+      lineEnd: tip.reversed && tip.kind !== "butt-cap" ? tip.length + 0.5 * contextLineWidth : -0.5 * contextLineWidth,
+      visualTipEnd: tip.length, visualBackEnd: 0, sep: tip.sep
+    };
   }
+  if (familyMetrics) return tip.reversed ? reverseMetrics(familyMetrics) : familyMetrics;
 
   if (tip.kind === "rays") {
     let metrics: ArrowTipMetrics = {
@@ -278,7 +273,9 @@ export function computeLatexShapeParameters(tip: NormalizedArrowTip): LatexShape
   const slope = length / Math.max(EPSILON, width);
   const frontMiter = Math.sqrt(1 + 9 * slope * slope) * lineWidth;
   const innerLength = Math.max(0.01, length - 0.5 * frontMiter - 0.5 * lineWidth);
-  const halfBackWidth = Math.max(0.01, width / 2);
+  const norm = Math.hypot(0.3 * length, 0.2333333 * width);
+  const backMiterRatio = (0.2333333 * width + norm) / (0.3 * length);
+  const halfBackWidth = width / 2 - 0.5 * backMiterRatio * lineWidth;
   return {
     length,
     width,
@@ -331,6 +328,30 @@ export function computeStealthShapeParameters(tip: NormalizedArrowTip): StealthS
   };
 }
 
+export function computeKiteShapeParameters(tip: NormalizedArrowTip): { front: number; back: number; topX: number; topY: number } {
+  const inset = tip.inset ?? 0.25 * tip.length;
+  const halfWidth = tip.width / 2;
+  const front = tip.length - 0.5 * tip.lineWidth * Math.hypot(1, 2 * (tip.length - inset) / tip.width);
+  const back = 0.5 * tip.lineWidth * Math.hypot(1, 2 * inset / tip.width);
+  const a = Math.atan2(tip.length - inset, halfWidth);
+  const b = Math.atan2(inset, halfWidth);
+  const halfAngle = 0.5 * (a + b);
+  const miter = 0.5 * tip.lineWidth / Math.max(EPSILON, Math.sin(halfAngle));
+  const angle = halfAngle - b - Math.PI / 2;
+  return { front, back, topX: inset + Math.cos(angle) * miter, topY: halfWidth + Math.sin(angle) * miter };
+}
+
+export function computeTeeBarbShapeParameters(tip: NormalizedArrowTip): { front: number; back: number; frontClamped: boolean; backClamped: boolean } {
+  const inset = tip.inset ?? 0.5 * tip.length;
+  const frontClamped = tip.length - inset < 0.5 * tip.lineWidth;
+  const backClamped = -inset > -0.5 * tip.lineWidth;
+  return {
+    front: Math.max(tip.length - inset, 0.5 * tip.lineWidth),
+    back: Math.min(-inset, -0.5 * tip.lineWidth),
+    frontClamped, backClamped
+  };
+}
+
 function reverseMetrics(metrics: ArrowTipMetrics): ArrowTipMetrics {
   return {
     tipEnd: -metrics.backEnd,
@@ -343,8 +364,8 @@ function reverseMetrics(metrics: ArrowTipMetrics): ArrowTipMetrics {
 }
 
 function normalizeLineWidth(lineWidth: number | null | undefined, fallback: number): number {
-  const resolvedFallback = Number.isFinite(fallback) && fallback > 0 ? fallback : DEFAULT_CONTEXT_LINE_WIDTH;
-  if (!Number.isFinite(lineWidth) || lineWidth == null || lineWidth <= 0) {
+  const resolvedFallback = Number.isFinite(fallback) && fallback >= 0 ? fallback : DEFAULT_CONTEXT_LINE_WIDTH;
+  if (!Number.isFinite(lineWidth) || lineWidth == null || lineWidth < 0) {
     return resolvedFallback;
   }
   return lineWidth;

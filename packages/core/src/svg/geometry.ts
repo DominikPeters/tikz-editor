@@ -1,10 +1,11 @@
 import { worldToSvgPoint } from "../coords/svg.js";
 import { pt } from "../coords/scalars.js";
-import { svgPoint, svgBounds } from "../coords/points.js";
-import type { SvgBounds, SvgPoint } from "../coords/points.js";
+import { svgPoint, svgBounds, worldPoint } from "../coords/points.js";
+import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/points.js";
 import type { SvgTransform } from "../coords/transforms.js";
 import type { ScenePathCommand } from "../semantic/types.js";
 import type { SvgViewBox } from "./types.js";
+import { commandsToSegments, sampleFrameFromStartExtrapolated, sampleFrameFromEndExtrapolated } from "../geometry/path-sampler.js";
 
 export function computeSvgPathBounds(commands: ScenePathCommand[], viewBox: Pick<SvgViewBox, "y" | "height">): SvgBounds | null {
   let minX = Number.POSITIVE_INFINITY;
@@ -78,6 +79,110 @@ export function computeSvgPathBounds(commands: ScenePathCommand[], viewBox: Pick
     return null;
   }
 
+  return svgBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
+}
+
+type StrokeDirection = { x: number; y: number };
+type StrokeSegment = { from: WorldPoint; to: WorldPoint; start: StrokeDirection; end: StrokeDirection };
+
+/** Conservative curve-stroke bounds, with actual SVG miter joins and square caps. */
+export function computeSvgStrokedPathBounds(
+  commands: ScenePathCommand[],
+  viewBox: Pick<SvgViewBox, "y" | "height">,
+  stroke: { strokeWidth: number; lineCap: "butt" | "round" | "square"; lineJoin: "miter" | "round" | "bevel"; miterLimit?: number }
+): SvgBounds | null {
+  const centerline = computeSvgPathBounds(commands, viewBox);
+  if (!centerline || !(stroke.strokeWidth > 0)) return centerline;
+  const halfWidth = stroke.strokeWidth / 2;
+  let minX = centerline.minX - halfWidth;
+  let minY = centerline.minY - halfWidth;
+  let maxX = centerline.maxX + halfWidth;
+  let maxY = centerline.maxY + halfWidth;
+  const include = (point: WorldPoint, dx: number, dy: number): void => {
+    const mapped = worldToSvgPoint(worldPoint(pt(point.x + dx), pt(point.y + dy)), viewBox);
+    minX = Math.min(minX, mapped.x);
+    minY = Math.min(minY, mapped.y);
+    maxX = Math.max(maxX, mapped.x);
+    maxY = Math.max(maxY, mapped.y);
+  };
+  const direction = (from: WorldPoint, to: WorldPoint): StrokeDirection | null => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    return length > 1e-9 ? { x: dx / length, y: dy / length } : null;
+  };
+  const includeJoin = (before: StrokeSegment, after: StrokeSegment): void => {
+    if (stroke.lineJoin !== "miter") return;
+    const incoming = before.end;
+    const outgoing = after.start;
+    const turn = incoming.x * outgoing.y - incoming.y * outgoing.x;
+    const denominator = 1 + incoming.x * outgoing.x + incoming.y * outgoing.y;
+    if (Math.abs(turn) < 1e-9 || denominator <= 1e-9) return;
+    const side = turn > 0 ? -1 : 1;
+    const dx = side * halfWidth * (-incoming.y - outgoing.y) / denominator;
+    const dy = side * halfWidth * (incoming.x + outgoing.x) / denominator;
+    // SVG's default miter limit is 4. Larger intersections become bevels,
+    // which already fit the half-width envelope above.
+    if (Math.hypot(dx, dy) <= (stroke.miterLimit ?? 4) * halfWidth + 1e-9) include(after.from, dx, dy);
+  };
+  const includeCap = (point: WorldPoint, tangent: StrokeDirection, side: number): void => {
+    if (stroke.lineCap !== "square") return;
+    for (const normalSide of [-1, 1]) {
+      include(point, halfWidth * (side * tangent.x - normalSide * tangent.y),
+        halfWidth * (side * tangent.y + normalSide * tangent.x));
+    }
+  };
+  let segments: StrokeSegment[] = [];
+  const flush = (closed: boolean): void => {
+    for (let index = 1; index < segments.length; index += 1) includeJoin(segments[index - 1], segments[index]);
+    if (segments.length > 0) {
+      const first = segments[0];
+      const last = segments[segments.length - 1];
+      if (closed) includeJoin(last, first);
+      else {
+        includeCap(first.from, first.start, -1);
+        includeCap(last.to, last.end, 1);
+      }
+    }
+    segments = [];
+  };
+  let previous: WorldPoint | null = null;
+  let subpathStart: WorldPoint | null = null;
+  for (const command of commands) {
+    if (command.kind === "M") {
+      flush(false);
+      previous = subpathStart = command.to;
+      continue;
+    }
+    if (command.kind === "Z") {
+      if (previous && subpathStart) {
+        const tangent = direction(previous, subpathStart);
+        if (tangent) segments.push({ from: previous, to: subpathStart, start: tangent, end: tangent });
+      }
+      flush(true);
+      previous = subpathStart;
+      continue;
+    }
+    if (!previous) {
+      previous = subpathStart = command.to;
+      continue;
+    }
+    let start: StrokeDirection | null;
+    let end: StrokeDirection | null;
+    if (command.kind === "C") {
+      start = direction(previous, command.c1) ?? direction(previous, command.c2) ?? direction(previous, command.to);
+      end = direction(command.c2, command.to) ?? direction(command.c1, command.to) ?? direction(previous, command.to);
+    } else if (command.kind === "A") {
+      const arc = commandsToSegments([{ kind: "M", to: previous }, command]);
+      start = sampleFrameFromStartExtrapolated(arc, 0)?.tangent ?? null;
+      end = sampleFrameFromEndExtrapolated(arc, 0)?.tangent ?? null;
+    } else {
+      start = end = direction(previous, command.to);
+    }
+    if (start && end) segments.push({ from: previous, to: command.to, start, end });
+    previous = command.to;
+  }
+  flush(false);
   return svgBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
 }
 

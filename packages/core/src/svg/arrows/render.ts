@@ -6,7 +6,6 @@ import {
   clonePathCommand,
   commandsToSegments,
   flattenSubpaths,
-  hasDrawablePathCommands,
   perpendicular,
   sampleFrameFromEndExtrapolated,
   sampleFrameFromStartExtrapolated,
@@ -15,6 +14,7 @@ import {
 } from "../../geometry/path-sampler.js";
 import { placeLocalPathsBent, placeLocalPathsRigid } from "./place.js";
 import { buildLocalTipPaths } from "./shapes.js";
+import { resolveTipPaint } from "./paint.js";
 import { shortenOpenSubpath } from "./shorten.js";
 import type { ArrowSide, Frame, NormalizedArrowTip, RenderedArrowPath, RenderedArrowTipPath } from "./types.js";
 
@@ -31,23 +31,19 @@ export function renderPathWithArrows(path: ScenePath): RenderedArrowPath {
   const startTips = normalizeMarkerTips(path.style.markerStart, path.style.lineWidth, markerColor);
   const endTips = normalizeMarkerTips(path.style.markerEnd, path.style.lineWidth, markerColor);
   const shouldEmitTips = shouldEmitPathTips(path, subpaths, startTips.length > 0 || endTips.length > 0);
-  const styleStartShortening = Math.max(0, path.style.shortenStart);
-  const styleEndShortening = Math.max(0, path.style.shortenEnd);
-  const hasStyleShortening = styleStartShortening > 0 || styleEndShortening > 0;
+  const styleStartShortening = path.style.shortenStart;
+  const styleEndShortening = path.style.shortenEnd;
+  const hasStyleShortening = styleStartShortening !== 0 || styleEndShortening !== 0;
   if (!shouldEmitTips && !hasStyleShortening) {
     return { shaftCommands: clonedCommands, tipPaths: [] };
   }
 
   const lastSubpath = subpaths[subpaths.length - 1] ?? [];
-  if (shouldEmitTips && !hasDrawablePathCommands(lastSubpath)) {
-    return { shaftCommands: shortenSubpathsForStyle(subpaths, styleStartShortening, styleEndShortening), tipPaths: [] };
-  }
-
   const startShortening = shouldEmitTips ? computeArrowShortening("start", startTips, path.style.lineWidth) : { lineEndShortening: 0, totalLength: 0, plans: [] };
   const endShortening = shouldEmitTips ? computeArrowShortening("end", endTips, path.style.lineWidth) : { lineEndShortening: 0, totalLength: 0, plans: [] };
   const lastSubpathStartShortening = styleStartShortening + startShortening.lineEndShortening;
   const lastSubpathEndShortening = styleEndShortening + endShortening.lineEndShortening;
-  const shortenedLastSubpath = shortenOpenSubpath(lastSubpath, lastSubpathStartShortening, lastSubpathEndShortening);
+  const shortenedLastSubpath = shortenOpenSubpath(lastSubpath, lastSubpathStartShortening, lastSubpathEndShortening, [...startTips, ...endTips].some(tip => tip.bend));
 
   const shaftSubpaths = [
     ...subpaths.slice(0, -1).map((subpath) => shortenSubpathForStyle(subpath, styleStartShortening, styleEndShortening))
@@ -62,14 +58,12 @@ export function renderPathWithArrows(path: ScenePath): RenderedArrowPath {
 
   const originalSegments = commandsToSegments(lastSubpath);
   const shortenedSegments = commandsToSegments(shortenedLastSubpath.commands);
-  if (originalSegments.length === 0 || shortenedSegments.length === 0) {
-    return { shaftCommands, tipPaths };
-  }
-
-  const startLineEndFrameForward = sampleFrameFromStartExtrapolated(shortenedSegments, 0);
-  const endLineEndFrameForward = sampleFrameFromEndExtrapolated(shortenedSegments, 0);
-  const startOriginalEndFrameForward = sampleFrameFromStartExtrapolated(originalSegments, styleStartShortening);
-  const endOriginalEndFrameForward = sampleFrameFromEndExtrapolated(originalSegments, styleEndShortening);
+  const startLineEndFrameForward = shortenedLastSubpath.startFrameForward ?? sampleFrameFromStartExtrapolated(shortenedSegments, 0)
+    ?? sampleFrameFromStartExtrapolated(originalSegments, shortenedLastSubpath.appliedStartShortening);
+  const endLineEndFrameForward = shortenedLastSubpath.endFrameForward ?? sampleFrameFromEndExtrapolated(shortenedSegments, 0)
+    ?? sampleFrameFromEndExtrapolated(originalSegments, shortenedLastSubpath.appliedEndShortening);
+  const startOriginalEndFrameForward = shortenedLastSubpath.startFrameForward ?? sampleFrameFromStartExtrapolated(originalSegments, styleStartShortening);
+  const endOriginalEndFrameForward = shortenedLastSubpath.endFrameForward ?? sampleFrameFromEndExtrapolated(originalSegments, styleEndShortening);
   if (!startLineEndFrameForward || !endLineEndFrameForward || !startOriginalEndFrameForward || !endOriginalEndFrameForward) {
     return { shaftCommands, tipPaths };
   }
@@ -104,20 +98,12 @@ export function renderPathWithArrows(path: ScenePath): RenderedArrowPath {
   return { shaftCommands, tipPaths };
 }
 
-function shortenSubpathsForStyle(
-  subpaths: ScenePathCommand[][],
-  startShortening: number,
-  endShortening: number
-): ScenePathCommand[] {
-  return flattenSubpaths(subpaths.map((subpath) => shortenSubpathForStyle(subpath, startShortening, endShortening)));
-}
-
 function shortenSubpathForStyle(
   subpath: ScenePathCommand[],
   startShortening: number,
   endShortening: number
 ): ScenePathCommand[] {
-  if ((startShortening <= 0 && endShortening <= 0) || subpath.some((command) => command.kind === "Z")) {
+  if ((startShortening === 0 && endShortening === 0) || subpath.some((command) => command.kind === "Z")) {
     return subpath.map((command) => clonePathCommand(command));
   }
   return shortenOpenSubpath(subpath, startShortening, endShortening).commands;
@@ -150,11 +136,11 @@ function renderSideTips(args: {
     const localPaths = buildLocalTipPaths(normalized, metrics);
     const offset = plan.offset + shorteningDelta;
 
-    const placedPaths = plan.bend
+    const placedPaths = plan.bend && args.originalSegments.length > 0 && args.originalSegments.some(segment => segment.length > 1e-6)
       ? placeLocalPathsBent(localPaths, offset, (xOffset) => frameAlongPathForSide(args.side, args.originalSegments, args.appliedShortening, xOffset))
       : placeLocalPathsRigid(localPaths, sideFrame, offset);
 
-    const paint = resolveTipPaint(normalized, args.contextLineWidth, args.markerColor);
+    const paint = resolveTipPaint(normalized, args.markerColor);
     for (const commands of placedPaths) {
       rendered.push({
         commands,
@@ -166,7 +152,8 @@ function renderSideTips(args: {
         fill: paint.fill,
         strokeWidth: paint.strokeWidth,
         lineCap: paint.lineCap,
-        lineJoin: paint.lineJoin
+        lineJoin: paint.lineJoin,
+        miterLimit: paint.miterLimit
       });
     }
   }
@@ -230,46 +217,6 @@ function resolveMarkerColor(path: ScenePath): string {
   return DEFAULT_ARROW_COLOR;
 }
 
-function resolveTipPaint(
-  tip: NormalizedArrowTip,
-  contextLineWidth: number,
-  markerColor: string
-): {
-  stroke: string;
-  fill: string;
-  strokeWidth: number;
-  lineCap: "butt" | "round" | "square";
-  lineJoin: "miter" | "round" | "bevel";
-} {
-  const color = tip.color ?? markerColor;
-  const strokeOnlyKinds = new Set([
-    "bar",
-    "hooks",
-    "cm-rightarrow",
-    "straight-barb",
-    "arc-barb",
-    "tee-barb",
-    "rays"
-  ]);
-  const fillDefault = tip.open || strokeOnlyKinds.has(tip.kind) ? "none" : color;
-  const fill = tip.fill ?? fillDefault;
-
-  const explicitStrokeOnly = strokeOnlyKinds.has(tip.kind);
-  const shouldStroke = explicitStrokeOnly || tip.open || tip.lineWidth > 0;
-  const stroke = shouldStroke ? color : "none";
-  const fallbackWidth = Number.isFinite(contextLineWidth) && contextLineWidth > 0 ? contextLineWidth : 0.4;
-  const strokeWidth = stroke === "none" ? 0 : Math.max(tip.lineWidth, fallbackWidth);
-
-  const rounded = tip.round || tip.kind === "cm-rightarrow" || tip.kind === "hooks" || tip.kind === "circle" || tip.kind === "round-cap";
-  return {
-    stroke,
-    fill,
-    strokeWidth,
-    lineCap: rounded ? "round" : "butt",
-    lineJoin: rounded ? "round" : "miter"
-  };
-}
-
 function shouldEmitPathTips(path: ScenePath, subpaths: ScenePathCommand[][], hasAnyTip: boolean): boolean {
   if (!hasAnyTip) {
     return false;
@@ -284,11 +231,11 @@ function shouldEmitPathTips(path: ScenePath, subpaths: ScenePathCommand[][], has
   }
 
   const lastSubpath = subpaths[subpaths.length - 1] ?? [];
-  if (lastSubpath.some((command) => command.kind === "Z")) {
+  if (path.arrowTipsSuppressed || subpaths.some(subpath => subpath.some(command => command.kind === "Z"))) {
     return false;
   }
 
-  const hasDrawableLastSubpath = hasDrawablePathCommands(lastSubpath);
+  const hasDrawableLastSubpath = commandsToSegments(lastSubpath).some(segment => segment.length > 1e-6);
   if (!hasDrawableLastSubpath && (path.style.tipsMode === "proper" || path.style.tipsMode === "on proper draw")) {
     return false;
   }

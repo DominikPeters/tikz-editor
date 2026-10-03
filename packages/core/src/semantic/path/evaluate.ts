@@ -9,6 +9,7 @@ import { parseTikz } from "../../parser/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import {
   readNamedCoordinate,
+  readNamedNodeGeometry,
   resolveContextColorAliasValue,
   withDependencySource,
   writeNamedCoordinate,
@@ -295,6 +296,8 @@ export function evaluatePathStatement(
   };
   const pointsClose = (left: WorldPoint, right: WorldPoint): boolean => Math.hypot(left.x - right.x, left.y - right.y) <= 1e-6;
   const defaultPathOrigin = applyMatrix(frameTransform, wp(0, 0));
+  let failedPathCoordinate = false;
+  const deferredShapeMoves = new WeakSet<ScenePathCommand>();
   const setCurrentPoint = (
     point: WorldPoint | null,
     logicalPoint: WorldPoint | null = point,
@@ -1883,6 +1886,7 @@ export function evaluatePathStatement(
         pushDiagnostic(code, `Coordinate evaluation issue: ${code}`, item.span.from, item.span.to);
       }
       if (!evaluated.world) {
+        failedPathCoordinate = true;
         continue;
       }
       builder.treeParentCandidate = {
@@ -2065,6 +2069,21 @@ export function evaluatePathStatement(
         builder.previousSegmentRoundedCorners = null;
       }
 
+      if (!hasOperatorSegment && item.form === "named") {
+        const rawName = expandPathItemRaw(item.x, context).trim();
+        if (!rawName.includes(".")) {
+          const scopedName = applyNameScope(rawName, context);
+          const geometry = readNamedNodeGeometry(context, scopedName) ??
+            (scopedName !== rawName ? readNamedNodeGeometry(context, rawName) : undefined);
+          const move = builder.activePath.commands[builder.activePath.commands.length - 1];
+          // TikZ defers a bare shape-reference moveto until a drawable operation
+          // resolves its border. It leaves earlier committed moves intact.
+          if (geometry && geometry.shape !== "coordinate" && move?.kind === "M") {
+            deferredShapeMoves.add(move);
+          }
+        }
+      }
+
       const shouldAdvancePoint = item.relativePrefix ? item.relativePrefix === "++" : true;
       if (shouldAdvancePoint) {
         setCurrentPoint(advancedPoint, evaluated.world, coordinateRef);
@@ -2092,6 +2111,7 @@ export function evaluatePathStatement(
       if (item.keyword === "..") {
         const parsedCurve = parseBezierFromItems(statement.items, index, context);
         if (!parsedCurve) {
+          failedPathCoordinate = true;
           markFeature("path_operator_curves", "unsupported");
           pushDiagnostic(
             "unsupported-path-operator",
@@ -2130,6 +2150,7 @@ export function evaluatePathStatement(
         }
 
         if (!parsedCurve.endPoint) {
+          failedPathCoordinate = true;
           markFeature("path_operator_curves", "unsupported");
           pushDiagnostic("invalid-curve-target", "Failed to evaluate curve control or target point.", item.span.from, item.span.to);
           index = parsedCurve.consumedIndex;
@@ -2590,6 +2611,24 @@ export function evaluatePathStatement(
 
   if (builder.activePath && hasDrawablePathSegments(builder.activePath)) {
     geometryElements.push(builder.activePath);
+  } else if (builder.activePath &&
+    statement.command !== "node" && statement.command !== "coordinate" && !failedPathCoordinate && builder.currentOperator == null &&
+      (builder.activePath.style.tipsMode === "true" || (builder.activePath.style.tipsMode === "on draw" &&
+        (builder.activePath.style.drawExplicit || (builder.activePath.style.stroke != null && builder.activePath.style.stroke !== "none")))) &&
+      (builder.activePath.style.markerStart || builder.activePath.style.markerEnd)) {
+    const committedMoves = builder.activePath.commands.filter(command => !deferredShapeMoves.has(command));
+    if (committedMoves.length > 0) {
+      builder.activePath.commands = committedMoves;
+      geometryElements.push(builder.activePath);
+    }
+  }
+
+  const authoredGeometry = geometryElements.filter(element => element.sourceRef.sourceId === statement.id);
+  if (authoredGeometry.some(element => element.kind === "Circle" || element.kind === "Ellipse" ||
+    (element.kind === "Path" && element.commands.some(command => command.kind === "Z")))) {
+    for (const element of authoredGeometry) {
+      if (element.kind === "Path") element.arrowTipsSuppressed = true;
+    }
   }
 
   const preActionElements: SceneElement[] = [];
@@ -2647,6 +2686,11 @@ export function evaluatePathStatement(
 
   let statementElements = [...preActionElements, ...behindNodeElements, ...mainGeometry, ...frontNodeElements, ...postActionElements];
   statementElements = attachClipChainToElements(statementElements, outputClipChain);
+  for (const element of statementElements) {
+    if (element.kind === "Path") {
+      element.pictureSizeRelevant ??= !builder.style.clip && !builder.style.useAsBoundingBox && frame.pictureSizeRelevant;
+    }
+  }
   if (!builder.style.clip && !builder.style.useAsBoundingBox && frame.pictureSizeRelevant) {
     extendPictureBounds(context, computeBounds(statementElements));
   }

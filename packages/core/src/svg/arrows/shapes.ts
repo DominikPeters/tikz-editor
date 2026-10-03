@@ -1,7 +1,7 @@
 import { arrowLocalPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { ArrowLocalPoint } from "../../coords/points.js";
-import { computeLatexShapeParameters, computeStealthShapeParameters } from "./metrics.js";
+import { computeKiteShapeParameters, computeLatexShapeParameters, computeStealthShapeParameters, computeTeeBarbShapeParameters } from "./metrics.js";
 import type { ArrowLocalPathCommand, ArrowTipMetrics, NormalizedArrowTip } from "./types.js";
 
 function alPoint(x: number, y: number): ArrowLocalPoint {
@@ -32,16 +32,13 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
     ];
   }
 
-  if (tip.kind === "bar") {
-    return [[moveTo(0, -halfWidth), lineTo(0, halfWidth)]];
-  }
-
   if (tip.kind === "hooks") {
-    const arcFactor = Math.max(0.25, Math.min(2, (tip.arc ?? 180) / 180));
-    const controlX = tip.length * 0.45 * arcFactor;
-    const upper = quadraticAsCubic(moveTo(tip.length, 0), controlX, halfWidth, 0, halfWidth);
-    const lower = quadraticAsCubic(moveTo(tip.length, 0), controlX, -halfWidth, 0, -halfWidth);
-    return [upper, lower];
+    const rx = tip.length - tip.lineWidth / 2;
+    const ry = (tip.width - tip.lineWidth) / 4;
+    const arc = (tip.arc ?? 180) - 90;
+    const upper = ellipseArc(rx, ry, 0, ry, arc, -90);
+    const lower = ellipseArc(rx, ry, 0, -ry, 90, -arc);
+    return [[...upper, ...lower.slice(1)]];
   }
 
   if (tip.kind === "straight-barb") {
@@ -49,19 +46,20 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
   }
 
   if (tip.kind === "arc-barb") {
-    const arcFactor = Math.max(0.25, Math.min(2, (tip.arc ?? 180) / 180));
-    const controlX = tip.length * (0.3 + 0.35 * arcFactor);
-    return [[moveTo(0, halfWidth), cubicTo(controlX, halfWidth, controlX, -halfWidth, 0, -halfWidth)]];
+    return [ellipseArc(tip.length - tip.lineWidth / 2, halfWidth - tip.lineWidth / 2, 0, 0, (tip.arc ?? 180) / 2, -(tip.arc ?? 180) / 2)];
   }
 
-  if (tip.kind === "tee-barb") {
-    const inset = Math.max(0, Math.min(tip.length, tip.inset ?? tip.length * 0.5));
-    const backX = -inset;
-    return [
-      [moveTo(0, -halfWidth), lineTo(0, halfWidth)],
-      [moveTo(backX, halfWidth), lineTo(tip.length, halfWidth)],
-      [moveTo(backX, -halfWidth), lineTo(tip.length, -halfWidth)]
-    ];
+  if (tip.kind === "tee-barb" || tip.kind === "bar") {
+    const { front, back } = computeTeeBarbShapeParameters(tip);
+    const halfStroke = tip.lineWidth / 2;
+    const top = halfWidth - halfStroke;
+    if (Math.abs(front - back - tip.lineWidth) < 1e-6) {
+      return [[moveTo(0, halfWidth), lineTo(0, -halfWidth)]];
+    }
+    if (front === halfStroke) {
+      return [[moveTo(back, top), lineTo(0, top), lineTo(0, -top), lineTo(back, -top)]];
+    }
+    return [[moveTo(back, top), lineTo(front, top), moveTo(0, top), lineTo(0, -top), moveTo(back, -top), lineTo(front, -top)]];
   }
 
   if (tip.kind === "implies") {
@@ -82,8 +80,8 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
     ];
   }
 
-  if (tip.kind === "stealth") {
-    const params = computeStealthShapeParameters(tip);
+  if (tip.kind === "stealth" || tip.kind === "triangle") {
+    const params = computeStealthShapeParameters(tip.kind === "triangle" ? { ...tip, inset: 0 } : tip);
     const tipX = params.innerLength + params.backMiter;
     const topX = params.backMiter;
     const insetX = params.inset + params.insetMiter;
@@ -106,34 +104,38 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
     ];
   }
 
-  if (tip.kind === "triangle") {
-    return [[moveTo(0, halfWidth), lineTo(tip.length, 0), lineTo(0, -halfWidth), close()]];
-  }
-
-  if (tip.kind === "triangle-cap") {
-    return [[moveTo(0, halfWidth), lineTo(tip.length, 0), lineTo(0, -halfWidth), close()]];
-  }
-
   if (tip.kind === "kite") {
-    const inset = Math.max(0, Math.min(tip.length - 1e-3, tip.inset ?? tip.length * 0.25));
-    return [[moveTo(tip.length, 0), lineTo(inset, halfWidth), lineTo(0, 0), lineTo(inset, -halfWidth), close()]];
+    const params = computeKiteShapeParameters(tip);
+    return [[moveTo(params.front, 0), lineTo(params.topX, params.topY), lineTo(params.back, 0), lineTo(params.topX, -params.topY), close()]];
   }
 
-  if (tip.kind === "square" || tip.kind === "butt-cap") {
-    return [[moveTo(0, halfWidth), lineTo(tip.length, halfWidth), lineTo(tip.length, -halfWidth), lineTo(0, -halfWidth), close()]];
+  if (tip.kind === "square") {
+    const inset = tip.lineWidth / 2;
+    return [[moveTo(tip.length - inset, halfWidth - inset), lineTo(inset, halfWidth - inset), lineTo(inset, -halfWidth + inset), lineTo(tip.length - inset, -halfWidth + inset), close()]];
   }
 
-  if (tip.kind === "circle" || tip.kind === "round-cap") {
-    const rx = Math.max(0.01, tip.length / 2);
-    const cx = rx;
-    return [
-      [
-        moveTo(cx + rx, 0),
-        arcTo(rx, halfWidth, 0, false, true, cx - rx, 0),
-        arcTo(rx, halfWidth, 0, false, true, cx + rx, 0),
-        close()
-      ]
-    ];
+  if (tip.kind === "circle") {
+    return [[...ellipseArc(tip.length / 2 - tip.lineWidth / 2, halfWidth - tip.lineWidth / 2, tip.length / 2, 0, 0, 360), close()]];
+  }
+
+  if (tip.kind === "round-cap" || tip.kind === "butt-cap" || tip.kind === "triangle-cap") {
+    const shaftHalfWidth = tip.contextLineWidth / 2;
+    const back = -0.75 * tip.contextLineWidth;
+    // Reversed Round/Triangle Cap drawing adds a shaft-width rectangle,
+    // and reverses the curved/pointed front inside that rectangle.
+    if (tip.reversed && tip.kind !== "butt-cap") {
+      const front = tip.kind === "round-cap"
+        ? ellipseArc(tip.length, shaftHalfWidth, 0, 0, 90, -90).slice(1)
+        : [lineTo(tip.length, 0), lineTo(0, -shaftHalfWidth), lineTo(tip.length, -shaftHalfWidth)];
+      return [[moveTo(tip.length - back, shaftHalfWidth), lineTo(tip.length, shaftHalfWidth),
+        lineTo(0, shaftHalfWidth), ...front, lineTo(tip.length - back, -shaftHalfWidth), close()]];
+    }
+    const frontPaths = tip.kind === "round-cap"
+      ? [moveTo(back, shaftHalfWidth), lineTo(0, shaftHalfWidth), ...ellipseArc(tip.length, shaftHalfWidth, 0, 0, 90, -90).slice(1), lineTo(back, -shaftHalfWidth), close()]
+      : tip.kind === "triangle-cap"
+        ? [moveTo(back, shaftHalfWidth), lineTo(0, shaftHalfWidth), lineTo(tip.length, 0), lineTo(0, -shaftHalfWidth), lineTo(back, -shaftHalfWidth), close()]
+        : [moveTo(back, shaftHalfWidth), lineTo(0, shaftHalfWidth), lineTo(tip.length, shaftHalfWidth), lineTo(tip.length, -shaftHalfWidth), lineTo(back, -shaftHalfWidth), close()];
+    return [frontPaths];
   }
 
   if (tip.kind === "rays") {
@@ -180,20 +182,23 @@ function transformPath(path: ArrowLocalPathCommand[], map: (x: number, y: number
   });
 }
 
-function quadraticAsCubic(start: ArrowLocalPathCommand, cx: number, cy: number, x: number, y: number): ArrowLocalPathCommand[] {
-  if (start.kind !== "M") {
-    return [start];
+function ellipseArc(rx: number, ry: number, cx: number, cy: number, startDegrees: number, endDegrees: number): ArrowLocalPathCommand[] {
+  const start = startDegrees * Math.PI / 180;
+  const end = endDegrees * Math.PI / 180;
+  const count = Math.max(1, Math.ceil(Math.abs(end - start) / (Math.PI / 2)));
+  const delta = (end - start) / count;
+  const result: ArrowLocalPathCommand[] = [moveTo(cx + rx * Math.cos(start), cy + ry * Math.sin(start))];
+  for (let index = 0; index < count; index += 1) {
+    const a = start + index * delta;
+    const b = a + delta;
+    const k = 4 / 3 * Math.tan(delta / 4);
+    result.push(cubicTo(
+      cx + rx * (Math.cos(a) - k * Math.sin(a)), cy + ry * (Math.sin(a) + k * Math.cos(a)),
+      cx + rx * (Math.cos(b) + k * Math.sin(b)), cy + ry * (Math.sin(b) - k * Math.cos(b)),
+      cx + rx * Math.cos(b), cy + ry * Math.sin(b)
+    ));
   }
-  const p0 = start.to;
-  const c1 = arrowLocalPoint(
-    pt(p0.x + (2 / 3) * (cx - p0.x)),
-    pt(p0.y + (2 / 3) * (cy - p0.y))
-  );
-  const c2 = arrowLocalPoint(
-    pt(x + (2 / 3) * (cx - x)),
-    pt(y + (2 / 3) * (cy - y))
-  );
-  return [start, { kind: "C", c1, c2, to: arrowLocalPoint(pt(x), pt(y)) }];
+  return result;
 }
 
 function moveTo(x: number, y: number): ArrowLocalPathCommand {
@@ -209,26 +214,6 @@ function cubicTo(c1x: number, c1y: number, c2x: number, c2y: number, x: number, 
     kind: "C",
     c1: arrowLocalPoint(pt(c1x), pt(c1y)),
     c2: arrowLocalPoint(pt(c2x), pt(c2y)),
-    to: arrowLocalPoint(pt(x), pt(y))
-  };
-}
-
-function arcTo(
-  rx: number,
-  ry: number,
-  xAxisRotation: number,
-  largeArc: boolean,
-  sweep: boolean,
-  x: number,
-  y: number
-): ArrowLocalPathCommand {
-  return {
-    kind: "A",
-    rx,
-    ry,
-    xAxisRotation,
-    largeArc,
-    sweep,
     to: arrowLocalPoint(pt(x), pt(y))
   };
 }

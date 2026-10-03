@@ -1928,6 +1928,7 @@ export function ArrowTipPreview({
               strokeWidth={path.strokeWidth}
               strokeLinecap={path.lineCap}
               strokeLinejoin={path.lineJoin}
+              strokeMiterlimit={path.miterLimit}
             />
           ))}
         </g>

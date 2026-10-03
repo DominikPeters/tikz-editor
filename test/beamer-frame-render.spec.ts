@@ -489,11 +489,12 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
 
     expect(displayBoundaries).toHaveLength(6);
     expect(displayBoundaries.map((item) => Number(item.height))).toEqual(
-      displayBoundaries.map(() => expect.closeTo(5.021192, 6))
+      // PGF arrow hulls enlarge the embedded picture, requiring full glue shrink.
+      displayBoundaries.map(() => expect.closeTo(5, 6))
     );
     expect(result.layout.embeddedTikz).toHaveLength(1);
     expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
-      186.190826,
+      186.063674,
       6
     );
     expect(result.diagnostics).toEqual([]);

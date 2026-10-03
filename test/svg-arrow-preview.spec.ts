@@ -33,6 +33,7 @@ describe("SVG arrow tip previews", () => {
     expect(latex.paths[0]?.d).toContain("C ");
     expect(latex.paths[0]?.fill).toBe("none");
     expect(latex.paths[0]?.stroke).toBe("blue");
+    expect(latex.paths[0]?.miterLimit).toBe(10);
     expect(stealth.paths[0]?.fill).toBe("red");
     expect(stealth.paths[0]?.lineJoin).toBe("round");
     expect(kiteBackAnchored.xBounds.min).toBeGreaterThanOrEqual(0);
@@ -68,4 +69,35 @@ describe("SVG arrow tip previews", () => {
       }
     }
   });
+
+  it.each(["latex", "stealth", "straight-barb"] as const)("keeps independent %s preview outlines", kind => {
+    for (const lineWidth of [0, 0.2, 2]) {
+      const preview = renderArrowTipPreviewPaths(tip(kind, { length: 15, width: 10, lineWidth }), 4, "black");
+      expect(preview.paths[0]?.strokeWidth).toBe(lineWidth);
+    }
+  });
+
+  it.each([["latex", 14.43904], ["stealth", 14.68379]] as const)("matches the PGF thin-outline %s front vertex", (kind, front) => {
+    const preview = renderArrowTipPreviewPaths(tip(kind, { length: 15, width: 10, lineWidth: 0.2 }), 4, "black", { anchor: "back" });
+    const x = Number(preview.paths[0]?.d.match(/^M (-?[\d.]+)/)?.[1]);
+    expect(x).toBeCloseTo(front, 3);
+  });
+
+  it("insets the Square outline by half its effective width", () => {
+    const preview = renderArrowTipPreviewPaths(tip("square", { lineWidth: 0.4 }), 0.4, "black", { anchor: "back" });
+    expect(preview.paths[0]?.d).toBe("M 7.8 2.3 L 0.2 2.3 L 0.2 -2.3 L 7.8 -2.3 Z");
+  });
+
+  it("uses shaft width for filled cap geometry", () => {
+    const thin = renderArrowTipPreviewPaths(tip("round-cap", { width: 5 }), 0.4);
+    const thick = renderArrowTipPreviewPaths(tip("round-cap", { width: 5 }), 4);
+    expect(thin.paths[0]?.stroke).toBe("none");
+    expect(thick.paths[0]?.stroke).toBe("none");
+    expect(thin.paths[0]?.d).toContain("0.2");
+    expect(thick.paths[0]?.d).toContain("2");
+    expect(thin.paths[0]?.d).not.toBe(thick.paths[0]?.d);
+    const open = renderArrowTipPreviewPaths(tip("round-cap", { open: true, fill: "none" }), 0.4, "blue");
+    expect(open.paths[0]?.fill).toBe("blue");
+  });
+
 });

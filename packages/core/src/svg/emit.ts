@@ -454,18 +454,14 @@ export function emitSvgModel(
     let paintTransform = svgElementTransform;
     let preparedGeometry: PreparedElementGeometry;
     if (element.kind === "Path") {
-      if (!hasDrawablePathCommands(element.commands)) {
-        return undefined;
-      }
       const renderedPath = renderPathWithArrows(element);
-      if (!hasDrawablePathCommands(renderedPath.shaftCommands)) {
+      if (!hasDrawablePathCommands(renderedPath.shaftCommands) && renderedPath.tipPaths.length === 0) {
         return undefined;
       }
-      const d = encodePathData(renderedPath.shaftCommands, viewBox);
-      if (d.length === 0) {
-        return undefined;
-      }
-      elementBounds = computeSvgPathBounds(renderedPath.shaftCommands, viewBox);
+      const shaftHasDrawableSegment = hasDrawablePathCommands(renderedPath.shaftCommands);
+      const d = shaftHasDrawableSegment ? encodePathData(renderedPath.shaftCommands, viewBox) : "";
+      elementBounds = computeSvgPathBounds(shaftHasDrawableSegment ? renderedPath.shaftCommands
+        : renderedPath.tipPaths.flatMap(tip => tip.commands), viewBox);
       if (!elementBounds) {
         return undefined;
       }
@@ -479,6 +475,7 @@ export function emitSvgModel(
         bounds: elementBounds,
         transform: svgElementTransform,
       };
+      if (!shaftHasDrawableSegment) return preparedGeometry;
     } else if (element.kind === "Circle") {
       const center = toSvgPoint(element.center, viewBox);
       elementBounds = computeEllipsePaintBounds(center, element.radius, element.radius, paintTransform);
@@ -526,7 +523,11 @@ export function emitSvgModel(
     }
 
     if (element.kind === "Path") {
-      if (!hasDrawablePathCommands(element.commands)) {
+      const preparedPath =
+        preparedGeometry?.kind === "Path" ? preparedGeometry : undefined;
+      const renderedPath =
+        preparedPath?.renderedPath ?? renderPathWithArrows(element);
+      if (!hasDrawablePathCommands(element.commands) && renderedPath.tipPaths.length === 0) {
         diagnostics.push({
           code: "empty-path",
           message: `Skipping path ${element.id} because it has no drawable segments.`,
@@ -534,10 +535,6 @@ export function emitSvgModel(
         continue;
       }
 
-      const preparedPath =
-        preparedGeometry?.kind === "Path" ? preparedGeometry : undefined;
-      const renderedPath =
-        preparedPath?.renderedPath ?? renderPathWithArrows(element);
       const shaftHasDrawableSegment = hasDrawablePathCommands(
         renderedPath.shaftCommands
       );
@@ -1290,6 +1287,7 @@ function arrowTipAttributes(
     `stroke-width="${fmt(tipPath.strokeWidth)}"`,
     `stroke-linecap="${tipPath.lineCap}"`,
     `stroke-linejoin="${tipPath.lineJoin}"`,
+    `stroke-miterlimit="${fmt(tipPath.miterLimit)}"`,
     `stroke-opacity="${fmt(style.strokeOpacity)}"`,
     `fill-opacity="${fmt(style.fillOpacity)}"`,
   ];

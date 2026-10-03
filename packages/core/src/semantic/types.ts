@@ -213,6 +213,10 @@ export type ScenePath = {
   origin?: SceneElementOrigin;
   shapeHint?: ScenePathShapeHint | null;
   undecoratedCommands?: ScenePathCommand[];
+  /** A closed subpath in the authored path suppresses arrows on every emitted piece. */
+  arrowTipsSuppressed?: boolean;
+  /** Mirrors the semantic frame's permission to enlarge automatic picture bounds. */
+  pictureSizeRelevant?: boolean;
   style: ResolvedStyle;
   styleChain: StyleChainEntry[];
   clipChain?: SceneClipPath[];
