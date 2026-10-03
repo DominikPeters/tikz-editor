@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { installNodeSvgEnvironment } from "svg2tikz/node-env";
 import { APP_MENU_COMMAND_IDS } from "../../packages/app/src/app-menu/index.js";
 import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
 import { createEditorCommandRuntime } from "../../packages/app/src/ui/editor-command-runtime.js";
@@ -7,7 +8,7 @@ import type { EditorAction } from "../../packages/app/src/store/types.js";
 import { setActiveEditorPlatform } from "../../packages/app/src/platform/current.js";
 import { makeInitialState } from "../../packages/app/src/store/reducer.js";
 
-const svgToTikzMock = vi.hoisted(() => vi.fn<(source: string) => string>());
+const svgToTikzMock = vi.hoisted(() => vi.fn<(source: string | Element) => string>());
 const convertIpeToTikzMock = vi.hoisted(() => vi.fn<(source: string) => { tikz: string; diagnostics: Array<{ severity: "warning" | "error"; message: string }> }>());
 
 vi.mock("svg2tikz", () => ({
@@ -1171,54 +1172,63 @@ describe("editor-command-runtime", () => {
   });
 
   it("routes import svg command through svg conversion and opens a new document", async () => {
-    const dispatch = vi.fn<(action: EditorAction) => void>();
-    const rendered = renderTikzToSvg(SOURCE);
-    svgToTikzMock.mockReturnValue(String.raw`\begin{tikzpicture}
+    const domDescriptors = ["DOMParser", "document"].map(key => ({ key, descriptor: Object.getOwnPropertyDescriptor(globalThis, key) }));
+    installNodeSvgEnvironment();
+    try {
+      const dispatch = vi.fn<(action: EditorAction) => void>();
+      const rendered = renderTikzToSvg(SOURCE);
+      svgToTikzMock.mockReturnValue(String.raw`\begin{tikzpicture}
   \draw (4,4)--(5,5);
 \end{tikzpicture}`);
-    setActiveEditorPlatform({
-      id: "test-platform",
-      persistence: {
-        load: () => null,
-        save: () => undefined
-      },
-      files: {
-        openText: async () => ({
-          source: `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
-          fileRef: { kind: "file", name: "shape.svg" }
+      setActiveEditorPlatform({
+        id: "test-platform",
+        persistence: {
+          load: () => null,
+          save: () => undefined
+        },
+        files: {
+          openText: async () => ({
+            source: `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+            fileRef: { kind: "file", name: "shape.svg" }
+          })
+        }
+      });
+
+      const runtime = createEditorCommandRuntime(
+        makeInput({
+          dispatch,
+          snapshot: makeSnapshot(rendered),
+          selectedElementIds: new Set(),
+          historyIndex: 0,
+          historyLength: 1
         })
-      }
-    });
+      );
 
-    const runtime = createEditorCommandRuntime(
-      makeInput({
-        dispatch,
-        snapshot: makeSnapshot(rendered),
-        selectedElementIds: new Set(),
-        historyIndex: 0,
-        historyLength: 1
-      })
-    );
+      const ran = runtime.runCommand(APP_MENU_COMMAND_IDS.IMPORT_SVG, "menu");
+      expect(ran).toBe(true);
 
-    const ran = runtime.runCommand(APP_MENU_COMMAND_IDS.IMPORT_SVG, "menu");
-    expect(ran).toBe(true);
+      await vi.waitFor(() => {
+        expect(svgToTikzMock).toHaveBeenCalledTimes(1);
+        expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "NEW_DOCUMENT" }));
+      });
 
-    await vi.waitFor(() => {
-      expect(svgToTikzMock).toHaveBeenCalledTimes(1);
-      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "NEW_DOCUMENT" }));
-    });
-
-    expect(dispatch).toHaveBeenNthCalledWith(1, {
-      type: "NEW_DOCUMENT",
-      source: String.raw`\begin{tikzpicture}
+      expect(dispatch).toHaveBeenNthCalledWith(1, {
+        type: "NEW_DOCUMENT",
+        source: String.raw`\begin{tikzpicture}
   \draw (4,4)--(5,5);
 \end{tikzpicture}`,
-      title: "shape.tex"
-    });
-    expect(dispatch).toHaveBeenNthCalledWith(2, {
-      type: "MARK_DOCUMENT_SAVED",
-      fileRef: { kind: "virtual", name: "shape.tex" }
-    });
+        title: "shape.tex"
+      });
+      expect(dispatch).toHaveBeenNthCalledWith(2, {
+        type: "MARK_DOCUMENT_SAVED",
+        fileRef: { kind: "virtual", name: "shape.tex" }
+      });
+    } finally {
+      for (const { key, descriptor } of domDescriptors) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    }
   });
 
   it("routes import ipe command through ipe conversion and opens a new virtual tex document", async () => {
