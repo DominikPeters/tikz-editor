@@ -58,24 +58,6 @@ export async function requestThumbnail(request: ThumbnailRenderRequest): Promise
   });
 }
 
-export function cancelThumbnail(requestId: string): void {
-  if (!requestId) {
-    return;
-  }
-  const worker = getWorker();
-  const pending = pendingRequests.get(requestId);
-  if (pending) {
-    pending.reject(new Error("thumbnail-request-cancelled"));
-    dropPending(requestId, pending.groupId);
-  }
-  if (worker) {
-    worker.postMessage({
-      type: "cancelRequest",
-      requestId
-    });
-  }
-}
-
 export function cancelGroup(groupId: string): void {
   if (!groupId) {
     return;

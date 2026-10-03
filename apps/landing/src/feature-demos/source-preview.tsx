@@ -3,12 +3,9 @@ import type { ReactNode } from "react";
 
 export type SourceTokenKind =
   | "keyword"
-  | "typeName"
   | "string"
   | "number"
-  | "comment"
   | "punctuation"
-  | "meta"
   | "text";
 
 export type SourceToken = {
@@ -31,12 +28,9 @@ export function sourceLine(...tokens: SourceToken[]): SourceLine {
 
 export const sourceText = (text: string): SourceToken => ({ kind: "text", text });
 export const sourceKeyword = (text: string): SourceToken => ({ kind: "keyword", text });
-export const sourceTypeName = (text: string): SourceToken => ({ kind: "typeName", text });
 export const sourceString = (text: string): SourceToken => ({ kind: "string", text });
 export const sourceNumber = (text: string): SourceToken => ({ kind: "number", text });
-export const sourceComment = (text: string): SourceToken => ({ kind: "comment", text });
 export const sourcePunctuation = (text: string): SourceToken => ({ kind: "punctuation", text });
-export const sourceMeta = (text: string): SourceToken => ({ kind: "meta", text });
 
 export function formatTikzNumber(value: number): string {
   const rounded = Math.round(value * 10) / 10;

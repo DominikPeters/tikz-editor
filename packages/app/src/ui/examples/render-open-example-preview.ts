@@ -53,11 +53,6 @@ async function renderOpenExamplePreviewWithRenderer(
   }
 }
 
-export async function renderOpenExamplePreview(example: TikzOpenExample): Promise<OpenExamplePreview> {
-  const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
-  return renderOpenExamplePreviewWithRenderer(example, renderTikzToSvgAsync);
-}
-
 export async function renderOpenExamplePreviews(
   examples: readonly TikzOpenExample[]
 ): Promise<OpenExamplePreview[]> {

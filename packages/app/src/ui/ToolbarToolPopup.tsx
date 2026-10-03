@@ -84,46 +84,11 @@ export function ToolbarPopupSection({
   );
 }
 
-export type ToolbarPopupChoice = {
-  id: string;
-  label: string;
-};
-
 export type ToolbarPopupVisualChoice = {
   id: string;
   label: string;
   previewSvg?: string | null;
 };
-
-export function ToolbarPopupChoiceList({
-  choices,
-  selectedId,
-  onSelect
-}: {
-  choices: readonly ToolbarPopupChoice[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className={css.choiceList} role="listbox" aria-label="Subtools">
-      {choices.map((choice) => {
-        const selected = choice.id === selectedId;
-        return (
-          <button
-            key={choice.id}
-            type="button"
-            role="option"
-            aria-selected={selected}
-            className={[css.choiceButton, selected ? css.choiceButtonSelected : ""].filter(Boolean).join(" ")}
-            onClick={() => { onSelect(choice.id); }}
-          >
-            {choice.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export function ToolbarPopupVisualChoiceGrid({
   choices,

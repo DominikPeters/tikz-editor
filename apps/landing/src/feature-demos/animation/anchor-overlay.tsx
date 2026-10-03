@@ -1,5 +1,4 @@
 import { forwardRef, memo } from "react";
-import type { Point } from "./points";
 
 export type RectBounds = {
   x: number;
@@ -14,15 +13,6 @@ export type AnchorDot = {
   y: number;
   active?: boolean;
 };
-
-export function buildCardinalAnchorDots(center: Point, radius: number): AnchorDot[] {
-  return [
-    { key: "n", x: center.x, y: center.y - radius },
-    { key: "e", x: center.x + radius, y: center.y },
-    { key: "s", x: center.x, y: center.y + radius },
-    { key: "w", x: center.x - radius, y: center.y }
-  ];
-}
 
 export function buildRectAnchorDots(bounds: RectBounds): AnchorDot[] {
   const x0 = bounds.x;

@@ -59,5 +59,3 @@ export function deferred<T>() {
   const promise = new Promise<T>((finish, fail) => { resolve = finish; reject = fail; });
   return { promise, resolve, reject };
 }
-
-export const memoryPersistence = { load: () => null, save: () => {} };

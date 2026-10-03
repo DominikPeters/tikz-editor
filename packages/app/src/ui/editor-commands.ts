@@ -4,7 +4,8 @@ import { getEditActionAvailability } from "@tikz-editor/core/edit/action-availab
 import { pt, worldPoint } from "@tikz-editor/core/coords/index";
 import { PT_PER_CM } from "@tikz-editor/core/edit/format";
 import type {
-  resolveTransformInspectorValues} from "@tikz-editor/core/edit/property-write-builders";
+  resolveTransformInspectorValues
+} from "@tikz-editor/core/edit/property-write-builders";
 import {
   buildTransformSetPropertyMutations,
   resolveTransformInspectorMutationContext,
@@ -994,37 +995,6 @@ export function removeMatrixColumn(context: SelectionCommandContext): boolean {
     action
   });
   return true;
-}
-
-export function canAlignSelection(context: SelectionCommandContext, mode: AlignMode): boolean {
-  const actionId =
-    mode === "left"
-      ? "align-left"
-      : mode === "center"
-        ? "align-center"
-        : mode === "right"
-          ? "align-right"
-          : mode === "top"
-            ? "align-top"
-            : mode === "middle"
-              ? "align-middle"
-              : "align-bottom";
-  return availabilityFor(context)[actionId].enabled;
-}
-
-export function canDistributeSelection(context: SelectionCommandContext, axis: DistributeAxis): boolean {
-  const actionId = axis === "horizontal" ? "distribute-horizontal" : "distribute-vertical";
-  return availabilityFor(context)[actionId].enabled;
-}
-
-export function canRotateSelection(context: SelectionCommandContext, direction: "left" | "right"): boolean {
-  const actionId = direction === "left" ? "transform-rotateLeft90" : "transform-rotateRight90";
-  return availabilityFor(context)[actionId].enabled;
-}
-
-export function canFlipSelection(context: SelectionCommandContext, axis: "horizontal" | "vertical"): boolean {
-  const actionId = axis === "horizontal" ? "transform-flipHorizontal" : "transform-flipVertical";
-  return availabilityFor(context)[actionId].enabled;
 }
 
 export function splitSelectedPath(context: SelectionCommandContext): boolean {

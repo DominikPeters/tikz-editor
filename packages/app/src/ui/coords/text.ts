@@ -1,9 +1,5 @@
-import { svgPoint, textareaLocalPoint, viewportBounds, px } from "@tikz-editor/core/coords/index";
-import type { ClientBounds, ClientPoint, SvgBounds, SvgPoint, TextareaLocalPoint, ViewportBounds, ViewportPoint } from "./types";
-
-export function clientPointToTextareaLocal(point: ClientPoint, textareaRect: DOMRect): TextareaLocalPoint {
-  return textareaLocalPoint(px(point.x - textareaRect.left), px(point.y - textareaRect.top));
-}
+import { svgPoint, viewportBounds, px } from "@tikz-editor/core/coords/index";
+import type { ClientBounds, SvgBounds, SvgPoint, ViewportBounds, ViewportPoint } from "./types";
 
 export function clientBoundsToViewport(bounds: ClientBounds, viewportRect: DOMRect | null): ViewportBounds {
   const left = viewportRect?.left ?? 0;

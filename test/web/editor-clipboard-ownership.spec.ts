@@ -12,7 +12,7 @@ import { setActiveEditorPlatform } from "../../packages/app/src/platform/current
 import { APP_MENU_COMMAND_IDS } from "../../packages/app/src/app-menu";
 import { createEditorCommandRuntime } from "../../packages/app/src/ui/editor-command-runtime";
 import { pasteSelectionFromSystemClipboard } from "../../packages/app/src/ui/editor-commands";
-import { useCanvasKeyboardClipboard, type UseCanvasKeyboardClipboardArgs } from "../../packages/app/src/ui/canvas-panel/useCanvasKeyboardClipboard";
+import { useCanvasKeyboardClipboard } from "../../packages/app/src/ui/canvas-panel/useCanvasKeyboardClipboard";
 import * as imports from "../../packages/app/src/ui/svg-import";
 import { formatDocumentRootId } from "../../packages/core/src/document/root-id";
 
@@ -68,7 +68,7 @@ describe("clipboard operation ownership", () => {
       DESKTOP_TIKZ_CLIPBOARD_FORMATS: ["tikz"], DESKTOP_SVG_CLIPBOARD_FORMATS: ["svg"],
       DESKTOP_KEYNOTE_CLIPBOARD_FORMATS: ["keynote"], DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS: ["powerpoint"],
       computeAutoScaleForImportedTikz: () => null
-    } as UseCanvasKeyboardClipboardArgs);
+    });
     return null;
   }
 

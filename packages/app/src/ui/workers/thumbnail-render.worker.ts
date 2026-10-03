@@ -18,7 +18,6 @@ type ThumbnailWorkerGlobalScope = {
 const workerContext = self as unknown as ThumbnailWorkerGlobalScope;
 
 const queue: ThumbnailRenderRequest[] = [];
-const cancelledRequestIds = new Set<string>();
 const cancelledGroupIds = new Set<string>();
 const graphicsResolvers = new Map<string, DocumentGraphicsResolver>();
 let busy = false;
@@ -37,19 +36,13 @@ workerContext.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage>) =
     return;
   }
 
-  if (message.type === "cancelRequest") {
-    cancelledRequestIds.add(message.requestId);
-    removeQueuedRequest((entry) => entry.requestId === message.requestId);
-    return;
-  }
-
   if (message.type === "cancelGroup") {
     cancelledGroupIds.add(message.groupId);
     removeQueuedRequest((entry) => entry.groupId === message.groupId);
     return;
   }
 
-  if (cancelledRequestIds.has(message.requestId) || cancelledGroupIds.has(message.groupId)) {
+  if (cancelledGroupIds.has(message.groupId)) {
     return;
   }
   queue.push(message);
@@ -134,8 +127,8 @@ function shiftNextRenderable(): ThumbnailRenderRequest | null {
   return null;
 }
 
-function isCancelled(request: { requestId: string; groupId: string }): boolean {
-  return cancelledRequestIds.has(request.requestId) || cancelledGroupIds.has(request.groupId);
+function isCancelled(request: { groupId: string }): boolean {
+  return cancelledGroupIds.has(request.groupId);
 }
 
 function removeQueuedRequest(predicate: (entry: ThumbnailRenderRequest) => boolean): void {
@@ -149,15 +142,9 @@ function removeQueuedRequest(predicate: (entry: ThumbnailRenderRequest) => boole
 }
 
 function cleanupCancellationMarks(): void {
-  // Keep sets bounded; remove marks no longer relevant for queued work.
-  const queuedRequestIds = new Set(queue.map((entry) => entry.requestId));
+  // Keep the set bounded; remove marks no longer relevant for queued work.
   const queuedGroupIds = new Set(queue.map((entry) => entry.groupId));
 
-  for (const requestId of cancelledRequestIds) {
-    if (!queuedRequestIds.has(requestId)) {
-      cancelledRequestIds.delete(requestId);
-    }
-  }
   for (const groupId of cancelledGroupIds) {
     if (!queuedGroupIds.has(groupId)) {
       cancelledGroupIds.delete(groupId);

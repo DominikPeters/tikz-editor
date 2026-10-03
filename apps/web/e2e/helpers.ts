@@ -6,10 +6,6 @@ export function tabSwitchButtons(page: Page): Locator {
   return page.locator("[data-testid^='tab-switch-']");
 }
 
-export function tabCloseButtons(page: Page): Locator {
-  return page.locator("[data-testid^='tab-close-']");
-}
-
 export async function resetStorageBeforeNavigation(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
@@ -98,16 +94,6 @@ export async function runMenuCommandIfEnabled(
   }
   await command.click();
   return true;
-}
-
-export async function expectMenuCommandEnabled(page: Page, section: MenuSection, commandId: string, enabled: boolean): Promise<void> {
-  await openMenuSection(page, section);
-  const command = page.getByTestId(`menu-cmd-${commandId}`);
-  if (enabled) {
-    await expect(command).toBeEnabled();
-  } else {
-    await expect(command).toBeDisabled();
-  }
 }
 
 export async function setSource(page: Page, source: string): Promise<void> {
@@ -588,12 +574,6 @@ export async function dragLocatorBy(page: Page, locator: Locator, dx: number, dy
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(startX + dx, startY + dy, { steps: 8 });
-}
-
-export async function injectBrowserPlatformEnv(page: Page, env: Record<string, unknown>): Promise<void> {
-  await page.addInitScript((injected) => {
-    (globalThis as { __TIKZ_EDITOR_BROWSER_PLATFORM_ENV__?: unknown }).__TIKZ_EDITOR_BROWSER_PLATFORM_ENV__ = injected;
-  }, env);
 }
 
 export async function injectNoFsApiFallback(page: Page): Promise<void> {

@@ -246,11 +246,6 @@ select {
   font-weight: 650;
 }
 
-.sourceToken--typeName {
-  color: #0f766e;
-  font-weight: 650;
-}
-
 .sourceToken--string {
   color: #9a3412;
 }
@@ -259,74 +254,8 @@ select {
   color: #15803d;
 }
 
-.sourceToken--comment {
-  color: #6b7280;
-  font-style: italic;
-}
-
 .sourceToken--punctuation {
   color: #78716c;
-}
-
-.sourceToken--meta {
-  color: #7c3aed;
-}
-
-.fakeToolbarRow {
-  display: flex;
-  justify-content: center;
-  padding: 8px 10px 6px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-header);
-}
-
-.fakeToolbarGroup {
-  display: inline-flex;
-  align-items: center;
-  overflow: hidden;
-  border: 1px solid var(--border-light);
-  border-radius: 3px;
-  background: var(--btn-disabled-bg);
-}
-
-.fakeToolbarButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-right: 1px solid var(--border-light);
-  background: var(--btn-disabled-bg);
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.fakeToolbarButton:last-child {
-  border-right: 0;
-}
-
-.fakeToolbarButton:hover {
-  background: color-mix(in srgb, var(--bg-header) 64%, var(--btn-disabled-bg));
-  color: var(--text);
-}
-
-.fakeToolbarButtonActive {
-  background: color-mix(in srgb, var(--text) 12%, transparent);
-  color: var(--text);
-}
-
-.fakeToolbarButtonPressed {
-  background: color-mix(in srgb, var(--text) 18%, transparent);
-  color: var(--text);
-}
-
-.fakeToolbarButtonIcon {
-  display: block;
-  width: 14px;
-  height: 14px;
 }
 
 .snapOverlay {

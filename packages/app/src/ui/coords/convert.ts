@@ -3,7 +3,6 @@ import { pt, px } from "@tikz-editor/core/coords/index";
 import type { CanvasTransform } from "../../store/types";
 import type { ClientPoint, SvgPoint, ViewportPoint, WorldPoint } from "./types";
 import {
-  clientPoint,
   svgPoint,
   svgToWorldPoint as coreSvgToWorldPoint,
   viewportPoint,
@@ -14,13 +13,6 @@ export function clientToViewport(point: ClientPoint, viewportRect: DOMRect | nul
   return viewportPoint(
     px(point.x - (viewportRect?.left ?? 0)),
     px(point.y - (viewportRect?.top ?? 0))
-  );
-}
-
-export function viewportToClient(point: ViewportPoint, viewportRect: DOMRect | null): ClientPoint {
-  return clientPoint(
-    px(point.x + (viewportRect?.left ?? 0)),
-    px(point.y + (viewportRect?.top ?? 0))
   );
 }
 
@@ -45,10 +37,6 @@ export function svgToWorld(point: SvgPoint, viewBox: SvgViewBox): WorldPoint {
 
 export function worldToSvg(point: WorldPoint, viewBox: SvgViewBox): SvgPoint {
   return coreWorldToSvgPoint(point, viewBox);
-}
-
-export function worldToViewport(point: WorldPoint, transform: CanvasTransform, viewBox: SvgViewBox): ViewportPoint {
-  return svgToViewport(worldToSvg(point, viewBox), transform, viewBox);
 }
 
 export function clientToSvg(

@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "@lezer/common": "^1.5.1",
+    "@lezer/lr": "^1.4.8",
     "@tikz-editor/lezer-tex": "0.6.0",
     "@tikz-editor/lezer-tikz": "0.6.0",
     "xml-formatter": "^3.6.7"

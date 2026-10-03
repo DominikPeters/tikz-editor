@@ -4,5 +4,5 @@
     "target": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
-  "include": ["src"]
+  "include": ["src", "../../packages/app/src/types/pdfjs-dist-legacy.d.ts"]
 }

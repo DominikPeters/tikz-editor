@@ -74,7 +74,7 @@ CI enforces capability drift via `test/capabilities.spec.ts`.
 
 ## Corpus
 
-The repository includes `pgf-docs/`, a copy of the PGF manual source files used for testing and capability tracking. `pgf-src/` contains PGF source files for reference.
+`pgf-docs/` and `pgf-src/` are optional, gitignored local reference directories; they are not included in a checkout. `pgf-docs/` contains PGF manual sources used for corpus tests and renderer comparisons, while `pgf-src/` contains PGF implementation sources. The corpus regression test is skipped when `pgf-docs/` is absent.
 
 ## Codespaces
 

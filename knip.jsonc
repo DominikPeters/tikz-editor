@@ -1,7 +1,6 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  // The CI command ratchets the current baseline of unused value exports.
-  // Lower its --max-issues value whenever existing findings are removed.
+  // CI rejects unused value exports; there is no remaining issue allowance.
   "include": ["exports"],
   "ignoreExportsUsedInFile": true
 }

@@ -49,6 +49,9 @@ web_modules/
 *.tsbuildinfo
 .DS_Store
 
+# Office lock files
+~$*
+
 # Optional npm cache directory
 .npm
 

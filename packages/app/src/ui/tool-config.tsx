@@ -1,6 +1,5 @@
 import React from "react";
 import { BASIC_PICKER_COLORS } from "../colors/color-palette";
-import type { SnapToolPointerKind } from "@tikz-editor/core/edit/snapping";
 import type { ToolMode } from "../store/types";
 
 // ── Custom Tool Icons ─────────────────────────────────────────────────────────
@@ -240,16 +239,6 @@ export function toolModeAutoOpensPopup(mode: ToolMode): boolean {
 
 export function isToolCreateMode(mode: ToolMode): mode is ToolCreateMode {
   return TOOL_CREATE_MODE_SET.has(mode as ToolCreateMode);
-}
-
-export function toolCreateSnapKind(mode: ToolCreateMode): SnapToolPointerKind {
-  if (mode === "addGrid" || mode === "addRect" || mode === "addEllipse" || mode === "addShape") {
-    return "rect-corner";
-  }
-  if (mode === "addCircle") {
-    return "circle-edge";
-  }
-  return "line-end";
 }
 
 export function shouldConstrainToolCreateToSquare(mode: ToolCreateMode): boolean {

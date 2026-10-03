@@ -30,11 +30,6 @@ export type ThumbnailRegisterGraphicsMessage = {
   bundle: DocumentGraphicsPreviewBundle;
 };
 
-export type ThumbnailCancelRequest = {
-  type: "cancelRequest";
-  requestId: string;
-};
-
 export type ThumbnailCancelGroup = {
   type: "cancelGroup";
   groupId: string;
@@ -43,7 +38,6 @@ export type ThumbnailCancelGroup = {
 export type ThumbnailWorkerRequestMessage =
   | ThumbnailRegisterGraphicsMessage
   | ThumbnailRenderRequest
-  | ThumbnailCancelRequest
   | ThumbnailCancelGroup;
 
 export type ThumbnailRenderSuccess = {

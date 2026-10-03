@@ -1,7 +1,5 @@
-import { formatNumber } from "@tikz-editor/core/edit/format";
 import {
   computeScrubbedValue,
-  fractionDigits,
   shouldStartScrub,
   type ScrubModifierState
 } from "../../scrub-utils";
@@ -20,11 +18,6 @@ export type NumberScrubMoveResult = {
   nextState: NumberScrubState;
   didActivate: boolean;
   nextValue: number | null;
-};
-
-export type NumberScrubFormat = {
-  precision: number;
-  minDisplayPrecision: number;
 };
 
 export function createNumberScrubState(input: {
@@ -84,14 +77,5 @@ export function updateNumberScrubState(
     },
     didActivate,
     nextValue
-  };
-}
-
-export function deriveNumberScrubFormat(value: number, step: number): NumberScrubFormat {
-  const sourcePrecision = fractionDigits(formatNumber(value));
-  const stepPrecision = fractionDigits(step.toString());
-  return {
-    precision: Math.max(sourcePrecision, stepPrecision),
-    minDisplayPrecision: sourcePrecision
   };
 }
