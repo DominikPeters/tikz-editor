@@ -4,6 +4,8 @@ import { gotoApp, resetStorageBeforeNavigation } from "./helpers";
 type UpdateEnvOptions = {
   updateAvailable?: boolean;
   installFails?: boolean;
+  automaticChecks?: boolean;
+  preferenceFails?: boolean;
 };
 
 test.beforeEach(async ({ page }) => {
@@ -16,12 +18,16 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
     const installFails = opts.installFails ?? false;
     const progressEvents: unknown[] = [];
     let relaunchCalls = 0;
+    let checkCalls = 0;
+    let automaticChecks = opts.automaticChecks ?? true;
 
     (globalThis as typeof globalThis & {
       __UPDATE_TEST__?: {
         setUpdateAvailable: (available: boolean) => void;
         getProgressEvents: () => unknown[];
         getRelaunchCalls: () => number;
+        getCheckCalls: () => number;
+        getAutomaticChecks: () => boolean;
       };
       __TIKZ_EDITOR_BROWSER_PLATFORM_ENV__?: unknown;
     }).__UPDATE_TEST__ = {
@@ -29,7 +35,9 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
         updateAvailable = available;
       },
       getProgressEvents: () => progressEvents,
-      getRelaunchCalls: () => relaunchCalls
+      getRelaunchCalls: () => relaunchCalls,
+      getCheckCalls: () => checkCalls,
+      getAutomaticChecks: () => automaticChecks
     };
 
     (globalThis as typeof globalThis & {
@@ -37,14 +45,25 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
     }).__TIKZ_EDITOR_BROWSER_PLATFORM_ENV__ = {
       id: "desktop-tauri",
       updates: {
-        checkForUpdate: async () => updateAvailable
+        getAutomaticUpdateChecks: async () => {
+          // Exercise the asynchronous preference read before the first request.
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          if (opts.preferenceFails) throw new Error("preference unavailable");
+          return automaticChecks;
+        },
+        setAutomaticUpdateChecks: async (enabled: boolean) => { automaticChecks = enabled; },
+        resetAutomaticUpdateChecks: async () => { automaticChecks = true; return automaticChecks; },
+        checkForUpdate: async () => {
+          checkCalls += 1;
+          return updateAvailable
           ? {
               version: "0.2.0",
               currentVersion: "0.1.0",
               date: "2026-05-08T12:00:00Z",
               body: "## Highlights\n\n- Update notes\n- **Bold note**"
             }
-          : null,
+          : null;
+        },
         installUpdate: async (onProgress: (event: unknown) => void) => {
           if (installFails) {
             throw new Error("download failed");
@@ -67,6 +86,55 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
     };
   }, options);
 }
+
+async function getCheckCalls(page: Page): Promise<number> {
+  return await page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getCheckCalls: () => number };
+  }).__UPDATE_TEST__?.getCheckCalls() ?? 0);
+}
+
+test("disabled automatic checks make no startup request but allow manual checks", async ({ page }) => {
+  await installUpdateEnv(page, { automaticChecks: false });
+  await gotoApp(page);
+  await page.evaluate(() => {
+    (globalThis as typeof globalThis & {
+      __TIKZ_EDITOR_APP_TEST_API__?: { runCommand?: (id: string) => boolean };
+    }).__TIKZ_EDITOR_APP_TEST_API__?.runCommand?.("file.open-settings");
+  });
+  const preference = page.getByRole("checkbox", { name: "Automatically Check for Updates on Startup" });
+  const generalGroup = page.locator("#setting-ui-font-size").locator("..").locator("..");
+  await expect(generalGroup.locator("#setting-automatic-update-checks")).toHaveCount(1);
+  await expect(preference).toBeEnabled();
+  await expect(preference).not.toBeChecked();
+  expect(await getCheckCalls(page)).toBe(0);
+  await preference.check();
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getAutomaticChecks: () => boolean };
+  }).__UPDATE_TEST__?.getAutomaticChecks())).toBe(true);
+  await preference.uncheck();
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getAutomaticChecks: () => boolean };
+  }).__UPDATE_TEST__?.getAutomaticChecks())).toBe(false);
+  await page.getByTestId("settings-reset-general").click();
+  await expect(preference).toBeChecked();
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getAutomaticChecks: () => boolean };
+  }).__UPDATE_TEST__?.getAutomaticChecks())).toBe(true);
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await runCheckForUpdatesCommand(page);
+  await expect(page.getByTestId("update-modal")).toBeVisible();
+  expect(await getCheckCalls(page)).toBe(1);
+});
+
+test("a failed preference read does not enable automatic network requests", async ({ page }) => {
+  await installUpdateEnv(page, { preferenceFails: true });
+  await gotoApp(page);
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+    __TIKZ_EDITOR_APP_TEST_API__?: { runCommand?: (id: string) => boolean };
+  }).__TIKZ_EDITOR_APP_TEST_API__?.runCommand?.("file.open-settings"))).toBe(true);
+  await expect(page.getByRole("alert")).toHaveText("Could not load update preferences.");
+  expect(await getCheckCalls(page)).toBe(0);
+});
 
 async function runCheckForUpdatesCommand(page: Page): Promise<void> {
   await page.evaluate(() => {

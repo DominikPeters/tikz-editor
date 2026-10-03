@@ -127,6 +127,9 @@ export type DesktopBridge = {
   checkCodexStatus?: () => Promise<{ installed: boolean; has_npm: boolean; has_brew: boolean; has_wsl: boolean }>;
   installCodex?: (method: "npm" | "brew" | "wsl") => Promise<string>;
   checkForUpdate?: () => Promise<UpdateInfo | null>;
+  getAutomaticUpdateChecks?: () => Promise<boolean>;
+  setAutomaticUpdateChecks?: (enabled: boolean) => Promise<void>;
+  resetAutomaticUpdateChecks?: () => Promise<boolean>;
   installUpdate?: (onProgress: (progress: UpdateInstallProgress) => void) => Promise<void>;
   relaunch?: () => Promise<void>;
   assistantEnsureDocumentThread?: (params: {
@@ -197,6 +200,11 @@ export function createDefaultBridge(): DesktopBridge {
   let pendingUpdate: Update | null = null;
 
   return {
+    getAutomaticUpdateChecks: async () => await invoke<boolean>("desktop_get_automatic_update_checks"),
+    resetAutomaticUpdateChecks: async () => await invoke<boolean>("desktop_reset_automatic_update_checks"),
+    setAutomaticUpdateChecks: async (enabled) => {
+      await invoke<void>("desktop_set_automatic_update_checks", { enabled });
+    },
     openText: async (path, options) => await invoke<DesktopOpenTextResult | null>("desktop_open_text", {
       path,
       addToRecent: options?.addToRecent

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <!-- Checkbox properties are empty when unchecked; persist an explicit "0". -->
+    <Property Id="TIKZ_AUTOMATIC_UPDATE_CHECKS" Secure="yes" />
+    <Property Id="TIKZ_STORED_UPDATE_CHECKS" Value="0" Secure="yes" />
+    <Property Id="TIKZ_UPDATE_CHOICE_MADE" Secure="yes" />
+    <Property Id="TIKZ_PREVIOUS_UPDATE_CHECKS" Secure="yes">
+      <RegistrySearch Id="PreviousAutomaticUpdateChecks" Root="HKCU"
+                      Key="Software\TikZEditor\Preferences" Name="AutomaticUpdateChecks"
+                      Type="raw" Win64="no" />
+    </Property>
+    <!-- Set the default after search, not in the Property table: the execute
+         sequence must not restore "1" after the UI clears the checkbox. -->
+    <SetProperty Id="TIKZ_AUTOMATIC_UPDATE_CHECKS" Value="1"
+                 After="AppSearch" Sequence="both">
+      (NOT TIKZ_PREVIOUS_UPDATE_CHECKS OR TIKZ_PREVIOUS_UPDATE_CHECKS = "1") AND NOT TIKZ_UPDATE_CHOICE_MADE
+    </SetProperty>
+    <SetProperty Id="TIKZ_STORED_UPDATE_CHECKS" Value="1"
+                 Before="InstallInitialize" Sequence="execute">
+      TIKZ_AUTOMATIC_UPDATE_CHECKS
+    </SetProperty>
+    <DirectoryRef Id="TARGETDIR">
+      <!-- Retain this user preference across uninstall/reinstall and major upgrades. -->
+      <Component Id="AutomaticUpdateChecksPreference" Guid="96F16D39-9353-4676-AB95-724D1D0D4A97"
+                 Permanent="yes" Win64="no">
+        <RegistryValue Root="HKCU" Key="Software\TikZEditor\Preferences"
+                       Name="AutomaticUpdateChecks" Type="string"
+                       Value="[TIKZ_STORED_UPDATE_CHECKS]" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    <UI>
+      <Dialog Id="TikzUpdateChecksDlg" Width="370" Height="270" Title="[ProductName] Setup">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15"
+                 Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Update checks" />
+        <Control Id="AutomaticUpdateChecks" Type="CheckBox" X="20" Y="70" Width="330" Height="30"
+                 Property="TIKZ_AUTOMATIC_UPDATE_CHECKS" CheckBoxValue="1"
+                 Text="Automatically check for updates when TikZ Editor starts" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back">
+          <Publish Event="NewDialog" Value="InstallDirDlg">1</Publish>
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next">
+          <Publish Property="TIKZ_UPDATE_CHOICE_MADE" Value="1" Order="1">1</Publish>
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" Order="2">1</Publish>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+        </Control>
+      </Dialog>
+      <!-- Override the stock forward/back routes for a normal installation. -->
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="TikzUpdateChecksDlg" Order="5">
+        WIXUI_INSTALLDIR_VALID = "1"
+      </Publish>
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="TikzUpdateChecksDlg" Order="5">
+        NOT Installed
+      </Publish>
+    </UI>
+  </Fragment>
+</Wix>

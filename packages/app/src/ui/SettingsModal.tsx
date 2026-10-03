@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getActiveEditorPlatform } from "../platform/current";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import {
   CANVAS_HANDLE_SIZE_OPTIONS, CANVAS_ZOOM_SPEED_MIN, CANVAS_ZOOM_SPEED_MAX, CANVAS_ZOOM_SPEED_STEP,
@@ -25,6 +26,7 @@ type SettingsModalProps = {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [activeCategory, setActiveCategory] = useState<CategoryId>(rememberedCategory);
   const [formatterMaxLineLengthInput, setFormatterMaxLineLengthInput] = useState<string | null>(null);
+  const automaticUpdates = useAutomaticUpdateChecksSetting();
 
   const selectCategory = (id: CategoryId) => {
     rememberedCategory = id;
@@ -53,6 +55,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const resetActiveCategoryToDefaults = () => {
     if (activeCategory === "general") {
       resetGeneralSettings();
+      void automaticUpdates.reset();
       return;
     }
     if (activeCategory === "editor") {
@@ -167,12 +170,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       <option value="exact">Exact</option>
                     </select>
                   </div>
+                  <AutomaticUpdateChecksSetting preference={automaticUpdates} />
                 </div>
                 <div className={css.resetRow}>
                   <button
                     type="button"
                     className={css.resetButton}
                     data-testid="settings-reset-general"
+                    disabled={automaticUpdates.busy || (automaticUpdates.available && automaticUpdates.enabled === null)}
                     onClick={resetActiveCategoryToDefaults}
                   >
                     Reset to Defaults
@@ -398,5 +403,77 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
       </Modal.Body>
     </Modal>
+  );
+}
+
+function useAutomaticUpdateChecksSetting() {
+  const updates = getActiveEditorPlatform().updates;
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    if (updates?.getAutomaticUpdateChecks) {
+      void updates.getAutomaticUpdateChecks().then((value) => {
+        if (!disposed) setEnabled(value);
+      }).catch(() => {
+        if (!disposed) setError("Could not load update preferences.");
+      });
+    }
+    return () => { disposed = true; };
+  }, [updates]);
+
+  const save = async (value: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await updates?.setAutomaticUpdateChecks?.(value);
+      setEnabled(value);
+    } catch {
+      setError("Could not save update preferences.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async () => {
+    if (!updates?.resetAutomaticUpdateChecks) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setEnabled(await updates.resetAutomaticUpdateChecks());
+    } catch {
+      setError("Could not reset update preferences.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return {
+    available: Boolean(updates?.getAutomaticUpdateChecks && updates.setAutomaticUpdateChecks),
+    enabled, busy, error, save, reset
+  };
+}
+
+function AutomaticUpdateChecksSetting({ preference }: { preference: ReturnType<typeof useAutomaticUpdateChecksSetting> }) {
+  const { available, enabled, busy, error, save } = preference;
+  if (!available) return null;
+
+  return (
+    <div className={css.settingRow}>
+      <label className={css.settingLabel} htmlFor="setting-automatic-update-checks">
+        Automatically Check for Updates on Startup
+        {error ? <span className={css.settingDesc} role="alert">{error}</span> : null}
+      </label>
+      <input
+        id="setting-automatic-update-checks"
+        type="checkbox"
+        className={css.checkbox}
+        checked={enabled ?? false}
+        disabled={enabled === null || busy}
+        onChange={(event) => { void save(event.target.checked); }}
+      />
+    </div>
   );
 }

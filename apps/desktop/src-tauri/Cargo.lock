@@ -4789,6 +4789,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+ "winreg",
 ]
 
 [[package]]

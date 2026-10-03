@@ -620,6 +620,17 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       }
     },
     updates: {
+      getAutomaticUpdateChecks: async () => await getBridge().getAutomaticUpdateChecks?.() ?? true,
+      resetAutomaticUpdateChecks: async () => {
+        const reset = getBridge().resetAutomaticUpdateChecks;
+        if (!reset) throw new Error("Update preferences are unavailable.");
+        return await reset();
+      },
+      setAutomaticUpdateChecks: async (enabled) => {
+        const setter = getBridge().setAutomaticUpdateChecks;
+        if (!setter) throw new Error("Update preferences are unavailable.");
+        await setter(enabled);
+      },
       checkForUpdate: async () => {
         const checkForUpdate = getBridge().checkForUpdate;
         if (!checkForUpdate) {

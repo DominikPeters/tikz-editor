@@ -49,7 +49,9 @@ describe("desktop Tauri platform config split", () => {
       silent: true
     });
     expect(bundleWindows?.nsis).toEqual({
-      installMode: "currentUser"
+      installMode: "currentUser",
+      template: "windows/installer.nsi",
+      installerHooks: "windows/update-checks.nsh"
     });
   });
 });

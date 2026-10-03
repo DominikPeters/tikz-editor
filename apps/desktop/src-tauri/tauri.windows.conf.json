@@ -21,7 +21,13 @@
         "silent": true
       },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "template": "windows/installer.nsi",
+        "installerHooks": "windows/update-checks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["windows/update-checks.wxs"],
+        "componentRefs": ["AutomaticUpdateChecksPreference"]
       }
     }
   }

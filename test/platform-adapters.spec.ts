@@ -62,6 +62,22 @@ function runPlatformContract(name: string, create: () => EditorPlatform) {
 }
 
 describe("platform adapter contracts", () => {
+  it("desktop adapter round-trips the native automatic-update preference", async () => {
+    let enabled = false;
+    const platform = createDesktopPlatformAdapter({
+      bridge: makeDesktopBridge({
+        getAutomaticUpdateChecks: async () => enabled,
+        setAutomaticUpdateChecks: async (value) => { enabled = value; },
+        resetAutomaticUpdateChecks: async () => { enabled = true; return enabled; }
+      })
+    });
+    expect(await platform.updates?.getAutomaticUpdateChecks?.()).toBe(false);
+    await platform.updates?.setAutomaticUpdateChecks?.(true);
+    expect(await platform.updates?.getAutomaticUpdateChecks?.()).toBe(true);
+    await platform.updates?.setAutomaticUpdateChecks?.(false);
+    expect(await platform.updates?.resetAutomaticUpdateChecks?.()).toBe(true);
+    expect(await platform.updates?.getAutomaticUpdateChecks?.()).toBe(true);
+  });
   runPlatformContract("web adapter", () => {
     const storageMap = new Map<string, string>();
     let clipboardText = "";

@@ -270,6 +270,9 @@ export type UpdateInstallProgress =
   | { type: "finished" };
 
 export type PlatformUpdateApi = {
+  getAutomaticUpdateChecks?: () => Promise<boolean>;
+  setAutomaticUpdateChecks?: (enabled: boolean) => Promise<void>;
+  resetAutomaticUpdateChecks?: () => Promise<boolean>;
   checkForUpdate: () => Promise<UpdateInfo | null>;
   installUpdate: (onProgress: (progress: UpdateInstallProgress) => void) => Promise<void>;
   relaunch: () => Promise<void>;

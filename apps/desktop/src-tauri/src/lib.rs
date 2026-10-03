@@ -1,4 +1,5 @@
 mod assistant;
+mod update_preferences;
 
 use assistant::{
     AssistantAccountSnapshot, AssistantModelOption, AssistantState, AssistantThreadStatePayload,
@@ -3054,6 +3055,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            update_preferences::desktop_get_automatic_update_checks,
+            update_preferences::desktop_set_automatic_update_checks,
+            update_preferences::desktop_reset_automatic_update_checks,
             desktop_check_codex_status,
             desktop_show_about_panel,
             desktop_install_codex,

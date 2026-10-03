@@ -548,7 +548,11 @@ export function App() {
       return;
     }
     startupUpdateCheckStarted = true;
-    void runUpdateCheck().catch((error: unknown) => {
+    const updates = platform.updates;
+    void (async () => {
+      const enabled = await updates.getAutomaticUpdateChecks?.() ?? true;
+      if (enabled) await runUpdateCheck();
+    })().catch((error: unknown) => {
       if (typeof console !== "undefined" && typeof console.info === "function") {
         console.info("[tikz-editor] Startup update check failed.", error);
       }
