@@ -4,6 +4,19 @@ import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/i
 import { buildNativeBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
 
 describe("Beamer initial vertical flow", () => {
+  it("normalizes every named size and uses the final repeated declaration", async () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}
+\begin{frame}[plain,t]\small Alpha \normalsize Beta \small Gamma\end{frame}
+\end{document}`;
+    const rendered = await prepareBeamerDocument(source).renderFrame({ frameIndex: 0, step: 1 });
+    const trace = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    for (const [code, size] of [[65, 10], [66, 10.95], [71, 10]] as const) {
+      const glyph = trace.lines.flatMap(line => line.glyphs).find(glyph => glyph.code === code)!;
+      expect(glyph.fontSize).toBeCloseTo(size, 4);
+    }
+    expect(rendered.diagnostics).toEqual([]);
+  });
+
   it("suppresses the first interline glue on plain frames, including tall inline material", async () => {
     const source = String.raw`\documentclass{beamer}
 \begin{document}

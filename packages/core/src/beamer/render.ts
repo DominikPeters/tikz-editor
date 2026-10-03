@@ -3327,12 +3327,12 @@ function layoutParagraph(params: {
     ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
     : params.mapped;
   const namedSize = activeBeamerNamedSize(mapped.text);
-  if (namedSize) {
+  for (const [command, sizePt, lineHeightPt] of BEAMER_NAMED_FONT_SIZES) {
     mapped = replaceBeamerNamedSize(
       mapped,
-      namedSize.pattern,
-      `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont`,
-      `Beamer 11pt class ${namedSize.command} size`
+      new RegExp(String.raw`\\${command}(?![A-Za-z@])`, "gu"),
+      `\\fontsize{${sizePt}pt}{${lineHeightPt}pt}\\selectfont`,
+      `Beamer 11pt class ${command} size`
     );
   }
   mapped = projectBeamerFootnotes(mapped, params.references.footnotes, {
@@ -3923,24 +3923,25 @@ function replaceBeamerNamedSize(mapped: MappedText, pattern: RegExp, replacement
   return concatMappedText(parts);
 }
 
+const BEAMER_NAMED_FONT_SIZES = [
+  ["tiny", 6, 7],
+  ["scriptsize", 8, 9.5],
+  ["footnotesize", 9, 11],
+  ["small", 10, 12],
+  ["normalsize", 10.95, 13.6],
+  ["large", 12, 14],
+  ["Large", 14.4, 18],
+  ["LARGE", 17.28, 22],
+  ["huge", 20.74, 25],
+  ["Huge", 24.88, 30],
+] as const;
+
 function activeBeamerNamedSize(source: string): {
   command: string;
   pattern: RegExp;
   sizePt: number;
   lineHeightPt: number;
 } | null {
-  const sizes = [
-    ["tiny", 6, 7],
-    ["scriptsize", 8, 9.5],
-    ["footnotesize", 9, 11],
-    ["small", 10, 12],
-    ["normalsize", 10.95, 13.6],
-    ["large", 12, 14],
-    ["Large", 14.4, 18],
-    ["LARGE", 17.28, 22],
-    ["huge", 20.74, 25],
-    ["Huge", 24.88, 30],
-  ] as const;
   let selected:
     | {
         command: string;
@@ -3950,11 +3951,12 @@ function activeBeamerNamedSize(source: string): {
         index: number;
       }
     | null = null;
-  for (const [command, sizePt, lineHeightPt] of sizes) {
+  for (const [command, sizePt, lineHeightPt] of BEAMER_NAMED_FONT_SIZES) {
     const pattern = new RegExp(String.raw`\\${command}(?![A-Za-z@])`, "gu");
-    const match = pattern.exec(source);
-    if (match && (selected == null || match.index > selected.index)) {
-      selected = { command, pattern, sizePt, lineHeightPt, index: match.index };
+    for (const match of source.matchAll(pattern)) {
+      if (selected == null || match.index > selected.index) {
+        selected = { command, pattern, sizePt, lineHeightPt, index: match.index };
+      }
     }
   }
   return selected && {
