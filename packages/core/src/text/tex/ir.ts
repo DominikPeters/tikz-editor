@@ -156,6 +156,7 @@ interface SimpleTexSourceRange {
 export interface SimpleTexTextNode extends SimpleTexSourceRange {
   readonly kind: "text";
   readonly text: string;
+  readonly breakAfterPenalty?: number;
 }
 
 export interface SimpleTexSpaceNode extends SimpleTexSourceRange {
@@ -256,7 +257,7 @@ export interface SimpleTexStyleDeclarationNode extends SimpleTexSourceRange {
   readonly baselineSkipPt?: TexLength;
   readonly sizeScope?: { readonly boundary: "begin" | "end"; readonly name: string };
   readonly sizeCommand?: string;
-  readonly listRegisters?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep", string>>;
+  readonly listRegisters?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep" | "parskip", string>>;
   readonly color?: string;
   readonly tabularRegisters?: TexTabularRegisters;
 }
@@ -744,7 +745,7 @@ export interface SimpleTexListContext {
   readonly showLabel: boolean;
   readonly label?: SimpleTexListLabel;
   readonly fontSizePt?: TexLength;
-  readonly spacing?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep", { readonly sizePt: number; readonly stretchPt: number; readonly shrinkPt: number }>>;
+  readonly spacing?: Partial<Record<"topsep" | "partopsep" | "itemsep" | "parsep" | "parskip", { readonly sizePt: number; readonly stretchPt: number; readonly shrinkPt: number }>>;
 }
 
 export interface SimpleTexListLabel {
@@ -941,7 +942,7 @@ export function analyzeSimpleTexParagraph(
     if (codePoint === undefined) {
       continue;
     }
-    if (codePoint < 0x20 && codePoint !== 0x0a) {
+    if (codePoint < 0x20 && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) {
       return {
         ir,
         fallbackReason: `Paragraph contains unsupported OT1 character U+${codePoint.toString(16).toUpperCase()}.`,
@@ -1385,6 +1386,9 @@ function scanSimpleTexIrNodes(
         index = lineBreak.end;
         continue;
       }
+
+      const url = scanSimpleTexUrl(text, index, sourceOffset);
+      if (url) { nodes.push(url.node); index = url.end; continue; }
 
       const transform = scanSimpleTexTransformCommand(text, index, sourceOffset, resolveColorAlias);
       if (transform) { nodes.push(transform.node); index = transform.end; continue; }
@@ -3677,10 +3681,58 @@ function snapshotTabularRegisters(registers: TexTabularRegisters, font: TexTabul
   return Object.fromEntries(Object.entries(registers).map(([name, value]) => [name, typeof value === "string" ? { value, font: { family: font.family, series: font.series, shape: font.shape, sizePt: font.sizePt } } : value]));
 }
 
+/** Stock url.sty: typewriter glyphs with binary/relation break penalties. */
+function scanSimpleTexUrl(text: string, start: number, sourceOffset: number): { node: SimpleTexFontCommandNode; end: number } | null {
+  const commandEnd = scanSimpleTexControlWord(text, start, "url");
+  if (commandEnd === null) return null;
+  const open = skipSimpleTexControlWordSpaces(text, commandEnd);
+  if (text[open] !== "{") return null;
+  let depth = 1;
+  let end = open + 1;
+  for (; end < text.length; end++) {
+    if (text[end] === "{") depth++;
+    if (text[end] === "}" && --depth === 0) break;
+  }
+  if (end >= text.length) return null;
+  const children: SimpleTexInlineNode[] = [];
+  const breaks = new Set(".@\\/!_|;>]),?&'+=#%");
+  const opening = new Set("([{<");
+  const atoms = Array.from({ length: end - open - 1 }, (_, index) => {
+    const from = open + 1 + index;
+    const char = text[from];
+    return { from, char, mathClass: char === ":" ? 3 : opening.has(char) ? 4 : breaks.has(char) ? 2 : 0 };
+  }).filter(atom => !/[ \t\r\n]/u.test(atom.char));
+  // url.sty uses math atoms. TeX demotes binary atoms after open/bin/rel
+  // atoms, before relations, and at either end of the formula.
+  for (let index = 0; index < atoms.length; index++) {
+    const atom = atoms[index];
+    const previous = atoms[index - 1];
+    if (atom.mathClass === 2 && (!previous || [2, 3, 4].includes(previous.mathClass))) atom.mathClass = 0;
+    if (atom.mathClass === 3 && previous?.mathClass === 2) previous.mathClass = 0;
+  }
+  if (atoms.at(-1)?.mathClass === 2) atoms.at(-1)!.mathClass = 0;
+  for (let index = 0; index < atoms.length; index++) {
+    const atom = atoms[index];
+    const next = atoms[index + 1];
+    const penalty = next && next.mathClass !== 4 && (atom.mathClass === 2 || atom.mathClass === 3) ? atom.mathClass === 3 ? 500 : 700 : undefined;
+    children.push({ kind: "text", text: atom.char, sourceStart: sourceOffset + atom.from, sourceEnd: sourceOffset + atom.from + 1, ...(penalty !== undefined ? { breakAfterPenalty: penalty } : {}) });
+  }
+  return { node: { kind: "font-command", command: "texttt", text: text.slice(start, end + 1), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + end + 1, contentStart: sourceOffset + open + 1, contentEnd: sourceOffset + end, children }, end: end + 1 };
+}
+
 function scanSimpleTexTabularRegister(text: string, start: number, sourceOffset: number): { node: SimpleTexStyleDeclarationNode; end: number } | null {
-  const command = /^\\(setlength|renewcommand)\b/u.exec(text.slice(start));
+  const command = /^\\(setlength|renewcommand|def)\b/u.exec(text.slice(start));
   if (!command) return null;
-  const register = tabularGroup(text, start + command[0].length);
+  let cursor = start + command[0].length;
+  if (command[1] === "renewcommand" && text[cursor] === "*") cursor++;
+  if (command[1] === "def") {
+    cursor = skipSimpleTexControlWordSpaces(text, cursor);
+    const registerEnd = scanSimpleTexControlWord(text, cursor, "arraystretch");
+    const value = registerEnd === null ? null : tabularGroup(text, registerEnd);
+    if (!value || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value.content.trim())) return null;
+    return { node: { kind: "style-declaration", text: text.slice(start, value.end), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + value.end, tabularRegisters: { arraystretch: Number(value.content) } }, end: value.end };
+  }
+  const register = tabularGroup(text, cursor);
   const value = register && tabularGroup(text, register.end);
   if (!register || !value) return null;
   const name = register.content.trim().replace(/^\\/u, "");
@@ -3697,7 +3749,7 @@ function scanSimpleTexListRegister(text: string, start: number, sourceOffset: nu
   const value = register && tabularGroup(text, register.end);
   if (!register || !value) return null;
   const name = register.content.trim().replace(/^\\/u, "");
-  if (name !== "itemsep") return null;
+  if (name !== "itemsep" && name !== "parsep" && name !== "parskip") return null;
   // Keep authored glue until the active font is known at the assignment site.
   const parts = value.content.trim().split(/\s+(?:plus|minus)\s+/u);
   if (!parts.every(part => parseTexDimensionExpression(part) != null)) return null;
@@ -5675,6 +5727,7 @@ export function simpleTexInlineNodesToTokens(
       sourceEnd: node.sourceEnd,
       fontState: activeFontState,
     });
+    if (node.breakAfterPenalty !== undefined) tokens.push({ kind: "penalty", text: "", sourceStart: node.sourceEnd, sourceEnd: node.sourceEnd, penalty: node.breakAfterPenalty, fontState: activeFontState });
   }
   return tokens;
 }

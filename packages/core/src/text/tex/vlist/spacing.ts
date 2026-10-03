@@ -1828,9 +1828,11 @@ function listProfileForContext(profile: TexListLayoutProfile | undefined, contex
     itemsepPtByDepth: replace(profile.itemsepPtByDepth, authored?.itemsep?.sizePt ?? size?.itemsepPt)!,
     itemsepStretchPtByDepth: replace(profile.itemsepStretchPtByDepth, authored?.itemsep?.stretchPt ?? size?.itemsepStretchPt),
     itemsepShrinkPtByDepth: replace(profile.itemsepShrinkPtByDepth, authored?.itemsep?.shrinkPt ?? size?.itemsepShrinkPt),
-    parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parsep?.sizePt ?? size?.parsepPt)!,
-    parsepStretchPtByDepth: replace(profile.parsepStretchPtByDepth, authored?.parsep?.stretchPt ?? size?.parsepStretchPt),
-    parsepShrinkPtByDepth: replace(profile.parsepShrinkPtByDepth, authored?.parsep?.shrinkPt ?? size?.parsepShrinkPt),
+    // \list copies \parsep into \parskip on entry. A later assignment to
+    // \parsep alone does not change the active paragraph glue.
+    parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parskip?.sizePt ?? size?.parsepPt)!,
+    parsepStretchPtByDepth: replace(profile.parsepStretchPtByDepth, authored?.parskip?.stretchPt ?? size?.parsepStretchPt),
+    parsepShrinkPtByDepth: replace(profile.parsepShrinkPtByDepth, authored?.parskip?.shrinkPt ?? size?.parsepShrinkPt),
   };
 }
 

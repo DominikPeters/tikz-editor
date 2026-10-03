@@ -334,9 +334,10 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
         generated("{", invocation);
         const start = length;
         if (command.name === "url") {
-          generated("\\texttt{", invocation);
-          // URL punctuation is literal, not TeX math/alignment syntax.
-          generated(raw(content).replace(/[\\{}%#$&_~^]/gu, (char) => ({ "\\": "\\textbackslash{}", "~": "\\textasciitilde{}", "^": "\\textasciicircum{}" })[char] ?? `\\${char}`), invocation);
+          // Keep literal URL glyphs and their source ownership for the text
+          // frontend's stock url.sty breakpoints.
+          generated("\\url{", invocation);
+          append(sliceMappedText(mapped, content.from, content.to));
           generated("}", invocation);
         } else visit(content.from, content.to, depth + 1);
         if (destination && active) links.push({ span: { from: start, to: length }, destination, label: key });
