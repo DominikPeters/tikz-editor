@@ -188,6 +188,7 @@ IncludeGraphicsCmd {
 }
 
 MathTextCmd {
+  @specialize<ControlWord, "\\intertext"> |
   @specialize<ControlWord, "\\text"> |
   @specialize<ControlWord, "\\textrm"> |
   @specialize<ControlWord, "\\textsf"> |
