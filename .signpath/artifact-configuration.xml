@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
   <zip-file>
     <!--
       The first signing request contains the application executable. The second
       contains the NSIS bootstrapper and the MSI. Exactly one top-level PE file
       is expected in either request.
     -->
-    <pe-file path="*.exe" min-matches="1" max-matches="1">
+    <pe-file path="*.exe" min-matches="1" max-matches="1"
+             product-name="TikZ Editor" product-version="${version}">
       <authenticode-sign />
     </pe-file>
 
@@ -18,7 +22,8 @@
       subject="TikZ Editor"
       author="tikz">
       <!-- Sign the installed application as well as the MSI container. -->
-      <pe-file path="**/tikz-editor.exe">
+      <pe-file path="**/tikz-editor.exe"
+               product-name="TikZ Editor" product-version="${version}">
         <authenticode-sign />
       </pe-file>
       <authenticode-sign />

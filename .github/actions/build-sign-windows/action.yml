@@ -57,6 +57,23 @@ runs:
       shell: pwsh
       run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
 
+    - name: Validate product metadata and read signing version
+      id: metadata
+      shell: pwsh
+      run: |
+        $configPath = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\tauri.conf.json"
+        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $version = [string]$config.version
+        if ($config.productName -cne "TikZ Editor" -or [string]::IsNullOrWhiteSpace($version)) {
+          throw "Expected TikZ Editor with an explicit version in tauri.conf.json."
+        }
+        $executable = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\target\release\tikz-editor.exe"
+        $metadata = (Get-Item -LiteralPath $executable).VersionInfo
+        if ($metadata.ProductName -cne $config.productName -or $metadata.ProductVersion -cne $version) {
+          throw "Application product metadata does not match the Tauri product name and version."
+        }
+        "version=$version" >> $env:GITHUB_OUTPUT
+
     - name: Stage unsigned application executable
       shell: pwsh
       run: |
@@ -86,6 +103,8 @@ runs:
         wait-for-completion: true
         wait-for-completion-timeout-in-seconds: ${{ inputs.wait-for-completion-timeout-in-seconds }}
         output-artifact-directory: ${{ runner.temp }}\signpath-signed-app
+        parameters: |
+          version: ${{ toJSON(steps.metadata.outputs.version) }}
 
     - name: Install signed application executable
       shell: pwsh
@@ -141,6 +160,8 @@ runs:
         wait-for-completion: true
         wait-for-completion-timeout-in-seconds: ${{ inputs.wait-for-completion-timeout-in-seconds }}
         output-artifact-directory: ${{ runner.temp }}\signpath-signed-installers
+        parameters: |
+          version: ${{ toJSON(steps.metadata.outputs.version) }}
 
     - name: Regenerate Tauri updater signatures
       shell: pwsh
