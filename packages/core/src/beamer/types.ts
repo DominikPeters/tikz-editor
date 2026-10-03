@@ -41,6 +41,9 @@ export type BeamerFrameOptions = {
   alignment: "top" | "center" | "bottom";
   fragile: boolean;
   plain: boolean;
+  /** Fraction of textheight used by TeX's continuation \vsplit; default .95. */
+  allowFrameBreaks?: number;
+  noFrameNumbering?: boolean;
   label?: string;
 };
 
@@ -422,6 +425,8 @@ export type BeamerFrameLayout = {
   frameIndex: number;
   step: number;
   stepCount: number;
+  /** Continuation pages are separate from overlay steps. */
+  continuation?: { index: number; count: number };
   page: BeamerPageGeometry;
   contentBounds: BeamerRect;
   items: BeamerFrameLayoutItem[];
@@ -457,6 +462,8 @@ export type RenderBeamerFrameOptions = {
   frameIndex?: number;
   /** One-based overlay step. */
   step?: number;
+  /** One-based continuation page of an allowframebreaks frame; default 1. */
+  continuation?: number;
   /** Resolves document-local graphics for frame text and embedded TikZ. */
   graphicsResolver?: DocumentGraphicsResolver;
 };
@@ -474,6 +481,7 @@ export type RenderBeamerFramePagesResult = {
   document: BeamerDocumentModel;
   frame: BeamerFrameModel;
   stepCount: number;
+  pageCount: number;
   pages: RenderBeamerFrameResult[];
   diagnostics: Diagnostic[];
 };

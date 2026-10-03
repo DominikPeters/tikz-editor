@@ -19,9 +19,10 @@ const BLACK = "#000000";
  * marker painting, VList box geometry, and editor hit geometry share one box.
  */
 export function resolveBeamerItemizeMarkers(
-  theme: ResolvedBeamerTheme
+  theme: ResolvedBeamerTheme,
+  ambientSizePt = theme.fonts["normal-text"].sizePt
 ): readonly TexListMarkerProfile[] {
-  const font = theme.fonts["normal-text"];
+  const font = { ...theme.fonts["normal-text"], sizePt: ambientSizePt };
   const fontProfile = createBeamerTexTextFontProfile(font);
   const resolvedFont = fontProfile.resolveTextFont(
     fontProfile.defaultFontState,
@@ -52,17 +53,33 @@ export function resolveBeamerItemizeMarkers(
     resolveBeamerThemeColor(theme, "normal text").bg ?? WHITE;
 
   return theme.templates.bullets.map((template, index) => {
-    const marker = markerForTemplate({
+    const family = template.id.split("/").at(-1);
+    // The sphere helper selects \normalsize, and the deeper square
+    // templates select \small independently of the list body's size.
+    const markerSizePt = family === "ball"
+      ? theme.fonts["normal-text"].sizePt
+      : family === "square" && index > 0 ? 10 : font.sizePt;
+    const markerXHeightEm = markerSizePt === font.sizePt ? xHeightEm : fontProfile.resolveTextFont(
+      fontProfile.defaultFontState, texLength(markerSizePt), fontProfile.metricProvider
+    ).data.fontdimen.xheight;
+    const templateMarker = markerForTemplate({
       template,
       depth: index + 1,
-      fontSizePt: font.sizePt,
-      xHeightEm,
+      fontSizePt: markerSizePt,
+      xHeightEm: markerXHeightEm,
       triangleFont,
       circleFont,
       tinySymbolFont,
       structure,
       canvas,
     });
+    const scale = markerSizePt / font.sizePt;
+    const marker = scale === 1 ? templateMarker : {
+      ...templateMarker,
+      widthEm: templateMarker.widthEm * scale,
+      heightEm: templateMarker.heightEm * scale,
+      depthEm: templateMarker.depthEm * scale,
+    };
     return theme.templates.block.id === "beamer/block/inmargin"
       ? {
           ...marker,

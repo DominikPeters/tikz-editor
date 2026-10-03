@@ -273,6 +273,8 @@ export type BeamerChromeTemplatePlan = {
 
 export type BeamerFrameChromePlan = {
   topInset: number;
+  headlineInset: number;
+  frameTitleInset: number;
   bottomInset: number;
   primitives: BeamerTemplatePrimitive[];
 };

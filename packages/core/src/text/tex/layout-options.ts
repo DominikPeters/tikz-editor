@@ -89,7 +89,7 @@ export interface TexListLayoutProfile {
   readonly parsepShrinkPtByDepth?: readonly number[];
   readonly initialItemBaselineAdjustmentPt: number;
   readonly itemizeMarkersByDepth?: readonly TexListMarkerProfile[];
-  readonly resolveItemizeMarker?: (labelDepth: number, fontSizePt: number | undefined) => TexListMarkerProfile | undefined;
+  readonly resolveItemizeMarker?: (labelDepth: number, fontSizePt: number | undefined, listDepth?: number) => TexListMarkerProfile | undefined;
   readonly resolveEnumerateMarker?: (
     itemIndex: number,
     labelDepth: number

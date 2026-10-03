@@ -16,6 +16,7 @@ import {
 import type { BeamerDocumentModel, BeamerRect } from "./types.js";
 import type { BeamerFootnoteIndex } from "./footnotes.js";
 import type { TexTabularRegisters } from "../text/tex/tabular/types.js";
+import type { BeamerContinuationBreaks } from "./continuations.js";
 
 export type BeamerLinkDestination =
   | { kind: "frame"; frameId: string; step: number }
@@ -46,6 +47,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   tableRegisters?: TexTabularRegisters;
   step: number;
   footnotes?: BeamerFootnoteIndex;
+  continuationBreaks?: BeamerContinuationBreaks;
   theme?: ResolvedBeamerTheme;
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];

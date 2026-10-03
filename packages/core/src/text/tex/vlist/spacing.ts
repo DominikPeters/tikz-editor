@@ -217,7 +217,10 @@ function planSimpleTexParagraphVerticalSkipsInto(
 
     const paragraph = item.paragraph;
     const scope = paragraphScopeFromVListAncestors(item, ancestors, state);
-    const resolvedListProfile = listProfileForContext(listProfile, scope.listContext ?? state.previousEmittedListContext);
+    const resolvedListProfile = listProfileForContext(
+      listProfileForContext(listProfile, state.previousEmittedListContext),
+      scope.listContext
+    );
     const hasPreviousEmittedParagraph = state.emittedParagraphCount > 0;
     const startsAfterExplicitPar = item.paragraph.startsAfterExplicitPar === true;
     const startsListInVerticalMode = startsAfterExplicitPar ||
@@ -398,7 +401,7 @@ export function addParagraphVerticalGlueToVList(
 ): TexVListDocument {
   const verticalSkipByPath = new Map<string, SimpleTexParagraphVerticalSkip>();
   for (const skip of skips) {
-    if (skip.segmentIndex === 0 && skip.size > 0) {
+    if (skip.segmentIndex === 0 && (skip.size > 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0)) {
       verticalSkipByPath.set(texVListPathKey(skip.vlistPath), skip);
     }
   }
@@ -464,7 +467,7 @@ function paragraphBoundaryGlueItems(
       size: skip.quoteSize,
     });
   }
-  if (skip.listSize > 0) {
+  if (skip.listSize > 0 || (skip.listStretch ?? 0) !== 0 || (skip.listShrink ?? 0) !== 0) {
     glues.push({
       kind: "glue",
       ...shared,
@@ -2068,7 +2071,7 @@ function texArticleNestedListBoundarySkip(
     return texLength(texProfileDepthValue(
       profile.topsepPtByDepth,
       Math.max(previousDepth, currentDepth)
-    ));
+    ) + texProfileDepthValue(profile.parsepPtByDepth, Math.min(previousDepth, currentDepth)));
   }
   return texEmSkip(
     texDepthIndexedEm(
@@ -2169,6 +2172,22 @@ function texProfileListVerticalGlueFlex(
   } else if (!hasPreviousEmittedParagraph && current) {
     depth = current.depth;
   } else if (previous && current) {
+    if (current.depth > previous.depth) {
+      // The first paragraph in the new list also ships its parsep; even a
+      // zero-natural parsep can stretch in Beamer's finite autobreak glue.
+      return {
+        stretch: texLength(texProfileOptionalDepthValue(profile.topsepStretchPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepStretchPtByDepth, current.depth)),
+        shrink: texLength(texProfileOptionalDepthValue(profile.topsepShrinkPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepShrinkPtByDepth, current.depth)),
+      };
+    }
+    if (current.showLabel && current.depth < previous.depth) {
+      // endlist cancels its own topsep when the parent's next item follows;
+      // the remaining boundary is the outer itemsep and parsep.
+      return {
+        stretch: texLength(texProfileOptionalDepthValue(profile.itemsepStretchPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepStretchPtByDepth, current.depth)),
+        shrink: texLength(texProfileOptionalDepthValue(profile.itemsepShrinkPtByDepth, current.depth) + texProfileOptionalDepthValue(profile.parsepShrinkPtByDepth, current.depth)),
+      };
+    }
     depth = Math.max(previous.depth, current.depth);
   }
   return {

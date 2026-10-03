@@ -142,8 +142,13 @@ export function planBeamerFrameChrome(
 
   return {
     topInset: headline.inset + frameTitle.inset,
+    headlineInset: headline.inset,
+    frameTitleInset: frameTitle.inset,
     bottomInset: footline.inset,
-    primitives: [
+    // Plain frames use the empty page style. Keep the document's measured
+    // chrome insets available to continuation splitting, but suppress its
+    // headline, footline, sidebar and navigation paint.
+    primitives: context.frame.options?.plain ? frameTitle.primitives : [
       ...sidebar.primitives,
       ...navigationSymbols,
       ...headline.primitives,

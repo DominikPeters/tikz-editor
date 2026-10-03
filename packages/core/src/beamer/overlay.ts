@@ -1,7 +1,6 @@
 import type { Span } from "../ast/types.js";
 import {
   concatMappedText,
-  createGeneratedMappedText,
   sliceMappedText,
   type MappedText,
 } from "../text/source-map.js";
@@ -84,6 +83,7 @@ export type BeamerOverlayModel = {
   readonly pauses: readonly BeamerOverlayPause[];
   readonly referenceSpecs: readonly BeamerOverlayReference[];
   readonly stepCount: number;
+  readonly overprints?: readonly { readonly span: Span; readonly contentSpan: Span; readonly width?: BeamerDelimitedSourceValue; readonly branches: readonly BeamerOverlayCommand[] }[];
 };
 
 export type BeamerOverlayVisibility = "visible" | "hidden" | "removed";
@@ -157,6 +157,18 @@ export function scanBeamerFrameOverlays(
     return label ? [label.contentSpan] : [];
   });
   const explicitItemCommands = new Set<number>();
+  const overprints: Array<{ span: Span; contentSpan: Span; width?: BeamerDelimitedSourceValue }> = [];
+  const environmentBoundaries = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
+  const overprintStarts: typeof environmentBoundaries[number][] = [];
+  for (const boundary of environmentBoundaries) {
+    if (boundary.name !== "overprint") continue;
+    if (boundary.kind === "begin") { overprintStarts.push(boundary); continue; }
+    const begin = overprintStarts.pop();
+    if (!begin) continue;
+    const width = beamerOptionalArgumentAfter(context, begin.span.to, boundary.span.from) ?? undefined;
+    overprints.push({ span: { from: begin.span.from, to: boundary.span.to }, contentSpan: { from: width?.span.to ?? begin.span.to, to: boundary.span.from }, ...(width ? { width } : {}) });
+  }
+  const declarations: Array<{ from: number; syntaxTo: number; kind: BeamerOverlayCommandKind; spec: BeamerDelimitedSourceValue }> = [];
 
   for (const command of controls) {
     if (command.name === "footnote") {
@@ -177,17 +189,23 @@ export function scanBeamerFrameOverlays(
     }
     const overlayKind = OVERLAY_COMMANDS.get(command.name);
     if (overlayKind) {
+      let commandTo = command.to;
+      const visibleOnslide = command.name === "onslide" && source[commandTo] === "+";
+      if (visibleOnslide) commandTo += 1;
+      const kind = command.name === "onslide"
+        ? command.starred ? "only" : visibleOnslide ? "visible" : "uncover"
+        : overlayKind;
       const parsed = parseOverlayCommand(
         context,
         frame.bodySpan.to,
         command.from,
-        command.to,
-        overlayKind
+        commandTo,
+        kind
       );
       if (parsed) {
         // Keep the authored group around covered label text. Beamer's
         // visibility wrappers interrupt shaping even on the visible step.
-        const preserveLabelGroup = ["uncover", "visible", "invisible"].includes(overlayKind) &&
+        const preserveLabelGroup = ["uncover", "visible", "invisible"].includes(kind) &&
           listLabelSpans.some((label) => containsSpan(label, parsed.command.span));
         pending.push({
           kind: "command",
@@ -200,6 +218,13 @@ export function scanBeamerFrameOverlays(
             : parsed.command,
           rawSpec: parsed.rawSpec,
         });
+      } else if (command.name === "onslide" && !command.starred) {
+        const spec = beamerOverlayArgumentAfter(context, commandTo, frame.bodySpan.to);
+        const syntaxTo = spec?.span.to ?? commandTo;
+        // Declaration form changes covering until the next declaration. A bare
+        // \onslide closes the current cover and makes following material visible.
+        declarations.push({ from: command.from, syntaxTo, kind,
+          spec: spec ?? { span: { from: commandTo, to: commandTo }, contentSpan: { from: commandTo, to: commandTo }, value: "1-" } });
       }
       continue;
     }
@@ -256,6 +281,17 @@ export function scanBeamerFrameOverlays(
       contentSpan: { from: overlay.span.to, to: contentTo },
       rawSpec: overlay,
     });
+  }
+  for (const [index, declaration] of declarations.entries()) {
+    // overprint installs a local declaration handler; its final minipage ends
+    // at the environment boundary instead of covering subsequent frame text.
+    const owner = overprints.find(overprint => declaration.from >= overprint.contentSpan.from && declaration.from < overprint.contentSpan.to);
+    const to = Math.min(declarations[index + 1]?.from ?? frame.bodySpan.to, owner?.contentSpan.to ?? frame.bodySpan.to);
+    const contentSpan = { from: declaration.syntaxTo, to };
+    pending.push({ kind: "command", sourceOrder: declaration.from, rawSpec: declaration.spec,
+      command: { kind: owner ? "only" : declaration.kind, commandSpan: { from: declaration.from, to: declaration.syntaxTo },
+        span: { from: declaration.from, to }, branches: [{ span: contentSpan, contentSpan, value: source.slice(contentSpan.from, contentSpan.to) }],
+        syntaxSpans: [{ from: declaration.from, to: declaration.syntaxTo }] } });
   }
   pending.push(...overlayEnvironmentSpecs(context, frame.bodySpan));
   const listDefaultsByOwner = new Map<typeof listRanges[number], {
@@ -367,6 +403,8 @@ export function scanBeamerFrameOverlays(
     pauses,
     referenceSpecs,
     stepCount,
+    ...(overprints.length ? { overprints: overprints.map(overprint => ({ ...overprint,
+      branches: commands.filter(command => command.commandSpan.from >= overprint.contentSpan.from && command.commandSpan.to <= overprint.contentSpan.to && declarations.some(declaration => declaration.from === command.commandSpan.from)) })) } : {}),
   };
 }
 
@@ -460,14 +498,10 @@ export function projectBeamerOverlayText(
 ): BeamerOverlayTextProjection {
   const removals: Span[] = [];
   const hidden: Span[] = [];
-  const emptyOnlyPlaceholders: Span[] = [];
 
   for (const command of model.commands) {
     removals.push(...command.syntaxSpans);
     const selected = selectedOverlayBranch(command, step);
-    if (command.kind === "only" && selected < 0) {
-      emptyOnlyPlaceholders.push(command.span);
-    }
     for (const [index, branch] of command.branches.entries()) {
       if (index !== selected) {
         removals.push(branch.contentSpan);
@@ -516,19 +550,6 @@ export function projectBeamerOverlayText(
       ));
     }
     cursor = Math.max(cursor, removal.to);
-    const placeholder = emptyOnlyPlaceholders.find(
-      (candidate) =>
-        candidate.from === removal.from &&
-        candidate.to <= removal.to &&
-        containsSpan(sourceSpan, candidate)
-    );
-    if (placeholder) {
-      parts.push(createGeneratedMappedText(
-        String.raw`\mbox{}`,
-        "Inactive Beamer only branch",
-        placeholder
-      ));
-    }
   }
   if (cursor < sourceSpan.to) {
     parts.push(sliceMappedText(
@@ -646,8 +667,13 @@ function resolveOverlaySpec(
   nextPauseCounter: number;
 } {
   let sawPlus = false;
-  const resolved = source.value
-    .replace(/(?:presentation|beamer|all)\s*:/gu, "")
+  // Beamer's mode alternatives are separated by `|`, not comma. A handout
+  // selector must never contaminate the presentation overlay numbers.
+  const presentation = source.value.split("|").flatMap(part => {
+    const mode = /^\s*([A-Za-z]+)\s*:\s*([\s\S]*)$/u.exec(part);
+    return mode ? ["presentation", "beamer", "all"].includes(mode[1]) ? [mode[2]] : [] : [part];
+  }).join(",");
+  const resolved = presentation
     .replace(/([+.])(?:\(([-+]?\d+)\))?/gu, (_whole, symbol, offsetRaw) => {
       const offset = Number(offsetRaw ?? 0);
       if (symbol === "+") {

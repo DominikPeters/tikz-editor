@@ -3,8 +3,17 @@ import type {
   PositionedFrameFlowItem,
   PreparedFrameFlowItem,
 } from "./render-model.js";
+import { flattenPositionedTexVListItems } from "../text/tex/vlist/traversal.js";
 
 const TEX_LINE_SKIP_PT = 1;
+
+/** TeX uses the size active at the end of the first paragraph. */
+export function paragraphStartingBaselineSkip(paragraph: LaidParagraph, fallback: number): number {
+  const first = flattenPositionedTexVListItems(paragraph.layout.vlistLayout.items)
+    .find(positioned => positioned.item.kind === "paragraph");
+  return first?.item.kind === "paragraph" && first.item.paragraph.baselineSkip !== undefined
+    ? Number(first.item.paragraph.baselineSkip) : fallback;
+}
 
 /**
  * Position already-measured frame material using TeX's `\prevdepth` and

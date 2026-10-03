@@ -1,5 +1,7 @@
 import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
+import { projectBeamerOverprints } from "./overprint.js";
 import { buildBeamerFrameFootnotes, beamerFootnoteTextMapped, projectBeamerFootnotes } from "./footnotes.js";
+import { beamerContinuationTitleSuffix, collectBeamerContinuationBreaks, projectBeamerContinuationBreaks, splitBeamerFrameContinuations } from "./continuations.js";
 import {
   buildBeamerReferenceIndex,
   projectBeamerReferences,
@@ -64,6 +66,7 @@ import {
   paragraphEndingMaterialDepth,
   paragraphLastLineDepth,
   paragraphStartingMaterialHeight,
+  paragraphStartingBaselineSkip,
   positionPreparedFrameFlow,
   previousDepthBeforeTrailingVerticalSpace,
   trailingBeamerListSkip,
@@ -186,6 +189,10 @@ const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
   trivlistTopsepPt: 9,
   // Beamer globally zeros \partopsep after size11.clo is loaded.
   trivlistPartopsepPt: 0,
+  sizeOverrides: [
+    { fontSizePt: 10, topsepPt: 6, topsepStretchPt: 2, topsepShrinkPt: 2, parsepPt: 3, parsepStretchPt: 2, parsepShrinkPt: 1, itemsepPt: 3, itemsepStretchPt: 2, itemsepShrinkPt: 1 },
+    { fontSizePt: 9, topsepPt: 4, topsepStretchPt: 2, topsepShrinkPt: 2, parsepPt: 2, parsepStretchPt: 1, parsepShrinkPt: 1, itemsepPt: 2, itemsepStretchPt: 1, itemsepShrinkPt: 1 },
+  ],
   leftMarginEmByDepth: [2, 2, 2],
   topsepPtByDepth: [3, 2, 2],
   topsepStretchPtByDepth: [2, 1, 1],
@@ -222,12 +229,28 @@ const BEAMER_NORMAL_DISPLAY_MATH_PROFILE: TexDisplayMathLayoutProfile = {
 function beamerListLayoutProfile(
   theme: ResolvedBeamerTheme
 ): TexListLayoutProfile {
+  const markerCache = new Map<number, ReturnType<typeof resolveBeamerItemizeMarkers>>();
   return {
     ...BEAMER_LIST_LAYOUT_PROFILE,
     bodyFontSizePtByDepth: [undefined, 10, 9],
     bodyBaselineSkipPtByDepth: [undefined, 12, 11],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
     itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
+    resolveItemizeMarker: (depth, sizePt, listDepth = depth) => {
+      const size = sizePt ?? theme.fonts["normal-text"].sizePt;
+      let markers = markerCache.get(size);
+      if (!markers) {
+        const scale = size / theme.fonts["normal-text"].sizePt;
+        markers = resolveBeamerItemizeMarkers(theme, size).map(marker => ({ ...marker,
+          widthEm: marker.widthEm * scale, heightEm: marker.heightEm * scale, depthEm: marker.depthEm * scale,
+          ...(marker.rightEdgeOffsetEm === undefined ? {} : { rightEdgeOffsetEm: marker.rightEdgeOffsetEm * scale }),
+          ...(marker.glyph ? { glyph: { ...marker.glyph, baselineOffsetEm: marker.glyph.baselineOffsetEm * scale } } : {}),
+          ...(marker.paintBoundsEm ? { paintBoundsEm: { x: marker.paintBoundsEm.x * scale, y: marker.paintBoundsEm.y * scale, width: marker.paintBoundsEm.width * scale, height: marker.paintBoundsEm.height * scale } } : {}),
+        }));
+        markerCache.set(size, markers);
+      }
+      return markers[Math.min(listDepth - 1, markers.length - 1)];
+    },
     resolveEnumerateMarker: (itemIndex, labelDepth) =>
       resolveBeamerEnumerateMarker(theme, itemIndex, labelDepth),
   };
@@ -265,9 +288,10 @@ function createBeamerRenderContext(
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
-  const overlaysByFrameId = new Map(document.frames.map((frame) => [
-    frame.id, scanBeamerFrameOverlays(source, frame, syntaxContext.syntax),
-  ]));
+  const overlaysByFrameId = new Map(document.frames.map((frame) => {
+    const overlays = scanBeamerFrameOverlays(source, frame, syntaxContext.syntax);
+    return [frame.id, frame.options?.allowFrameBreaks == null ? overlays : { ...overlays, stepCount: 1 }] as const;
+  }));
   const macroBindings = collectMacroBindings(document.preamble.macroDefinitions);
   // The table frontend evaluates this kernel register and its local
   // assignments. Expanding it as a user macro would rewrite the target
@@ -323,6 +347,7 @@ export function prepareBeamerDocument(
 ): PreparedBeamerDocument {
   const context = createBeamerRenderContext(source, options);
   const bodyIrByFrameIndex = new Map<number, BeamerFrameBodyIr>();
+  const counterContexts = new Map<DocumentGraphicsResolver | undefined, Promise<{ beforeFrames: number[]; totalFrames: number }>>();
 
   const requireFrame = (frameIndex: number): BeamerFrameModel => {
     const frame = context.document.frames[frameIndex];
@@ -364,6 +389,32 @@ export function prepareBeamerDocument(
     }
   };
 
+  // Beamer increments framenumber for every allowframebreaks continuation,
+  // while ordinary overlays retain one frame number. Measure only the frames
+  // that can split, once per graphics resolver, to make totals and later
+  // frames independent of the order in which callers request their pages.
+  const frameCounterContext = (graphicsResolver?: DocumentGraphicsResolver, work?: BeamerRenderWork) => {
+    let pending = counterContexts.get(graphicsResolver);
+    if (!pending) {
+      pending = (async () => {
+        const beforeFrames: number[] = [];
+        let totalFrames = 0;
+        for (const [frameIndex, frame] of context.document.frames.entries()) {
+          beforeFrames.push(totalFrames);
+          if (frame.options?.noFrameNumbering) continue;
+          if (frame.options?.allowFrameBreaks == null) { totalFrames++; continue; }
+          if (work) await work.checkpoint();
+          const measured = await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr: frameBodyIr(frameIndex), step: 1, graphicsResolver, work });
+          totalFrames += measured.layout.continuation?.count ?? 1;
+        }
+        return { beforeFrames, totalFrames };
+      })();
+      counterContexts.set(graphicsResolver, pending);
+      void pending.catch(() => { if (counterContexts.get(graphicsResolver) === pending) counterContexts.delete(graphicsResolver); });
+    }
+    return pending;
+  };
+
   return {
     document: context.document,
     theme: context.theme,
@@ -378,14 +429,18 @@ export function prepareBeamerDocument(
       const bodyIr = frameBodyIr(frameIndex);
       const step = options.step ?? 1;
       requireStep(bodyIr, step);
+      const work = options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined;
+      const counters = await frameCounterContext(options.graphicsResolver, work);
       return renderBeamerFrameStep({
         context,
         frame,
         frameIndex,
         bodyIr,
         step,
+        continuation: options.continuation,
+        frameCounter: { beforeFrame: counters.beforeFrames[frameIndex], totalFrames: counters.totalFrames },
         graphicsResolver: options.graphicsResolver,
-        work: options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined,
+        work,
       });
     },
     async renderFramePages(options = {}) {
@@ -396,6 +451,8 @@ export function prepareBeamerDocument(
       const stepCount = bodyIr.overlays.stepCount;
       const pages: RenderBeamerFrameResult[] = [];
       const work = options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined;
+      const counters = await frameCounterContext(options.graphicsResolver, work);
+      const frameCounter = { beforeFrame: counters.beforeFrames[frameIndex], totalFrames: counters.totalFrames };
       for (let step = 1; step <= stepCount; step += 1) {
         if (work) await work.checkpoint();
         pages.push(
@@ -405,15 +462,22 @@ export function prepareBeamerDocument(
             frameIndex,
             bodyIr,
             step,
+            frameCounter,
             graphicsResolver: options.graphicsResolver,
             work,
           })
         );
       }
+      const continuationCount = pages[0]?.layout.continuation?.count ?? 1;
+      for (let continuation = 2; continuation <= continuationCount; continuation += 1) {
+        if (work) await work.checkpoint();
+        pages.push(await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr, step: 1, continuation, frameCounter, graphicsResolver: options.graphicsResolver, work }));
+      }
       return {
         document: context.document,
         frame,
         stepCount,
+        pageCount: pages.length,
         pages,
         diagnostics: pages.flatMap((page) => page.diagnostics),
       };
@@ -441,11 +505,16 @@ async function renderBeamerFrameStep(params: {
   frameIndex: number;
   bodyIr: BeamerFrameBodyIr;
   step: number;
+  continuation?: number;
+  frameCounter?: { beforeFrame: number; totalFrames: number };
   graphicsResolver?: DocumentGraphicsResolver;
   work?: BeamerRenderWork;
 }): Promise<RenderBeamerFrameResult> {
   const { context, frame, frameIndex, bodyIr, step } = params;
   const { source, document, theme, macroBindings, page } = context;
+  const allowFrameBreaks = frame.options?.allowFrameBreaks;
+  const continuationIndex = params.continuation ?? 1;
+  if (!Number.isInteger(continuationIndex) || continuationIndex < 1) throw new RangeError("A Beamer continuation page must be a positive integer.");
   const stepCount = bodyIr.overlays.stepCount;
   const navigation = createBeamerFrameNavigationSnapshot(
     document,
@@ -455,8 +524,8 @@ async function renderBeamerFrameStep(params: {
   const chrome = planBeamerFrameChrome({
     document,
     frame,
-    frameIndex,
-    totalFrames: document.frames.length,
+    frameIndex: (params.frameCounter?.beforeFrame ?? frameIndex) + (frame.options?.noFrameNumbering ? -1 : allowFrameBreaks == null ? 0 : continuationIndex - 1),
+    totalFrames: params.frameCounter?.totalFrames ?? document.frames.length,
     navigation,
     step,
     page,
@@ -469,6 +538,7 @@ async function renderBeamerFrameStep(params: {
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
   const references: BeamerReferenceContext = {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
+    continuationBreaks: allowFrameBreaks == null ? undefined : collectBeamerContinuationBreaks(context.syntax, frame),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
     tableRegisters: parseSimpleTexTabularRegisters(source.slice(document.preamble.span.from, document.preamble.span.to)),
     arrayPackage: context.syntax.controlsIn(document.preamble.span).some(control => {
@@ -499,18 +569,6 @@ async function renderBeamerFrameStep(params: {
     elementId: null,
     markup: rectMarkup(page.page, pageBackground),
   });
-  renderChrome({
-    chrome,
-    theme,
-    items,
-    paragraphs,
-    modelBuilder,
-    macroBindings,
-    references,
-    graphicsResolver: params.graphicsResolver,
-    paperWidth: page.page.width,
-  });
-
   const footnoteInsertion = prepareFrameFootnoteInsertion({
     source, frame, references, theme, textWidth: page.textArea.width,
     paperWidth: page.page.width, macroBindings, overlays: bodyIr.overlays, step,
@@ -522,7 +580,7 @@ async function renderBeamerFrameStep(params: {
     width: page.textArea.width,
     height: Math.max(
       0,
-      page.page.height - chrome.topInset - chrome.bottomInset - footnoteInsertion.height
+      page.page.height - chrome.topInset - chrome.bottomInset - (allowFrameBreaks == null ? footnoteInsertion.height : 0)
     ),
   };
   let contentBounds = availableContentBounds;
@@ -532,7 +590,7 @@ async function renderBeamerFrameStep(params: {
     textWidth: page.textArea.width,
     paperWidth: page.page.width,
     leftSidebarWidth: page.frameArea.x,
-    availableHeight: availableContentBounds.height,
+    availableHeight: allowFrameBreaks == null ? availableContentBounds.height : Number.POSITIVE_INFINITY,
     diagnostics,
     theme,
     metadata: document.preamble.metadata,
@@ -542,6 +600,20 @@ async function renderBeamerFrameStep(params: {
     step,
     graphicsResolver: params.graphicsResolver,
     work: params.work,
+  });
+  const continuationPages = allowFrameBreaks == null ? null : splitBeamerFrameContinuations({
+    flow: preparedFrameFlow, baselineSkip: theme.fonts["normal-text"].lineHeightPt,
+    plain: frame.options?.plain ?? false, factor: allowFrameBreaks,
+    paperHeight: page.page.height, textHeight: page.page.height - chrome.headlineInset - chrome.bottomInset,
+    titleHeight: chrome.frameTitleInset, alignment: frame.options?.alignment ?? "center",
+    footnoteHeight: footnoteInsertion.height, breaks: references.continuationBreaks!,
+    plainExitHeight: frame.options?.plain ? chrome.bottomInset : 0,
+  });
+  const continuationCount = continuationPages?.length ?? 1;
+  if (continuationIndex > continuationCount) throw new RangeError(`Beamer continuation page ${continuationIndex} is outside the frame's ${continuationCount} pages.`);
+  renderChrome({ chrome, theme, items, paragraphs, modelBuilder, macroBindings, references,
+    graphicsResolver: params.graphicsResolver, paperWidth: page.page.width,
+    continuationSuffix: continuationPages ? beamerContinuationTitleSuffix(document, continuationIndex, continuationCount) : undefined,
   });
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
@@ -558,14 +630,14 @@ async function renderBeamerFrameStep(params: {
       preparedFrameFlow,
       frame.options?.alignment ?? "center"
     );
-    const positioned = positionPreparedFrameFlow(
+    const positioned = continuationPages?.[continuationIndex - 1] ?? positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt,
       verticalPacking.fillUnit,
       frame.options?.plain ? null : 0
     );
     const frameBlockTop =
-      availableContentBounds.y + verticalPacking.topOffset;
+      availableContentBounds.y + (continuationPages ? 0 : verticalPacking.topOffset);
     for (const placement of positioned.items) {
       if (params.work) await params.work.checkpoint();
       if (
@@ -694,7 +766,7 @@ async function renderBeamerFrameStep(params: {
     });
   }
 
-  emitFrameFootnoteInsertion({
+  if (continuationIndex === continuationCount) emitFrameFootnoteInsertion({
     prepared: footnoteInsertion,
     x: page.textArea.x,
     y: page.page.height - chrome.bottomInset - footnoteInsertion.height,
@@ -736,6 +808,7 @@ async function renderBeamerFrameStep(params: {
     frameIndex,
     step,
     stepCount,
+    ...(continuationPages ? { continuation: { index: continuationIndex, count: continuationCount } } : {}),
     page,
     contentBounds,
     items,
@@ -860,6 +933,7 @@ function renderChrome(params: {
   references: BeamerReferenceContext;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
+  continuationSuffix?: string;
 }): void {
   const { chrome, theme, items, paragraphs, modelBuilder } = params;
   for (const primitive of chrome.primitives) {
@@ -906,7 +980,9 @@ function renderChrome(params: {
       continue;
     }
 
-    const mapped = mappedTemplateText(primitive);
+    const mapped = primitive.fontRole === "frame-title" && params.continuationSuffix != null
+      ? concatMappedText([mappedTemplateText(primitive), createGeneratedMappedText(params.continuationSuffix, "Beamer continuation title", primitive.sourceSpan)])
+      : mappedTemplateText(primitive);
     const font = theme.fonts[primitive.fontRole];
     const laid = layoutParagraph({
       mapped,
@@ -1449,8 +1525,18 @@ function prepareFrameParagraph(params: {
     params.overlays,
     params.step
   );
+  const overprintMapped = projectBeamerOverprints({ mapped: projection.mapped, sourceSpan: params.node.span, overlays: params.overlays, step: params.step,
+    width: raw => raw === undefined ? params.textWidth : resolveBeamerColumnWidth(raw, params.textWidth, params.paperWidth),
+    measure: (mapped, width) => {
+      const measured = layoutParagraph({ mapped, sourceSpan: params.node.span, paragraphId: `${params.node.id}:overprint-measure`, role: "body", bounds: { x: 0, y: 0, width, height: 0 }, font: params.bodyFont,
+        colorResolver: params.colorResolver, alignment: "left", listProfile: params.listProfile, macroBindings: params.macroBindings, references: params.references, graphicsResolver: params.graphicsResolver, paperWidth: params.paperWidth });
+      if (!measured) return null;
+      const height = paragraphStartingMaterialHeight(measured);
+      return { height, depth: paragraphMaterialExtent(measured) - height };
+    },
+  });
   const paragraph = layoutParagraph({
-    mapped: projection.mapped,
+    mapped: overprintMapped,
     sourceSpan: params.node.span,
     paragraphId: params.node.id,
     role: "body",
@@ -1489,7 +1575,7 @@ function prepareFrameParagraph(params: {
       paragraphMaterialExtent(paragraph) + trailingTrivlistSkip + trailingListSkip,
     boxHeight: paragraphStartingMaterialHeight(paragraph),
     startingBaselineSkip:
-      namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt,
+      paragraphStartingBaselineSkip(paragraph, namedSize?.lineHeightPt ?? params.bodyFont.lineHeightPt),
     leadingAdjustment: leadingBeamerTrivlistAdjustment(
       paragraphSource,
       paragraph
@@ -3357,6 +3443,7 @@ function layoutParagraph(params: {
     sizePt: namedSize?.sizePt ?? params.font.sizePt,
     lineHeightPt: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
   });
+  mapped = projectBeamerContinuationBreaks(mapped, params.references.continuationBreaks);
   const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
   mapped = projectBeamerCaptions(mapped, params.references.source, params.references.theme);
   const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
@@ -3377,6 +3464,7 @@ function layoutParagraph(params: {
   );
   mapped = referenceProjection.mapped;
   const layoutOptions = {
+    namedFontSizes: Object.fromEntries(BEAMER_NAMED_FONT_SIZES.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
     height: params.targetHeight,
@@ -3626,7 +3714,12 @@ function layoutParagraph(params: {
         // Same fallback the layout itself uses: block bodies omit an
         // explicit profile but still lay out (and paint) default markers.
         const listProfile = params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE;
-        const marker =
+        const labelOwner = documentResult.vlistLayout.boxReport.items.filter(candidate =>
+          candidate.listItem?.label && candidate.path.length < item.path.length &&
+          candidate.path.every((value, index) => item.path[index] === value)
+        ).at(-1);
+        const labelContent = labelOwner?.listItem?.label?.content;
+        const marker = labelContent?.kind === "marker" ? labelContent.marker :
           role.listKind === "itemize"
             ? listProfile.itemizeMarkersByDepth?.[
                 Math.max(

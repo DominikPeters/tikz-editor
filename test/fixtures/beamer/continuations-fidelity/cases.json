@@ -1,0 +1,285 @@
+{
+  "formatVersion": 1,
+  "description": "Full-document continuation correspondence and stock page-breaking fidelity.",
+  "fidelity": [
+    {
+      "id": "automatic",
+      "file": "automatic.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "AutomaticpagesIIAlphaIBetaIGammaIDeltaIEpsilonIZeta"
+        ],
+        [
+          "AutomaticpagesIIIEtaITheta"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "blocks",
+      "file": "blocks.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "BlockpagesIAlphaAblockbody.IFirstISecond"
+        ],
+        [
+          "BlockpagesIIBetaAnotherblockbody."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "bottom",
+      "file": "bottom.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 3,
+      "oracleTextByPage": [
+        [
+          "BottompagesIAlpha."
+        ],
+        [
+          "BottompagesIIBeta."
+        ],
+        [
+          "BottompagesIIIGamma."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "counters-frame-1",
+      "file": "counters.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "CounterpagesIAlpha.1/5"
+        ],
+        [
+          "CounterpagesIIBeta.2/5"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "counters-frame-2",
+      "file": "counters.tex",
+      "frame": 2,
+      "family": "continuations",
+      "pages": 1,
+      "oracleTextByPage": [
+        [
+          "NextframeGamma.3/5"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "counters-frame-3",
+      "file": "counters.tex",
+      "frame": 3,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "LastpagesIDelta.4/5"
+        ],
+        [
+          "LastpagesIIEpsilon.5/5"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "display",
+      "file": "display.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "DisplaypagesIBefore.ab=cAfter."
+        ],
+        [
+          "DisplaypagesIIBeforeagain.x2+y2=z2Afteragain."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "final-footnotes",
+      "file": "final-footnotes.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "FinalnotesIAlpha1."
+        ],
+        [
+          "FinalnotesIIBeta2.1A"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "forced",
+      "file": "forced.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 3,
+      "oracleTextByPage": [
+        [
+          "ForcedpagesIAlpha."
+        ],
+        [
+          "ForcedpagesIIBeta."
+        ],
+        [
+          "ForcedpagesIIIGamma."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "from-second",
+      "file": "from-second.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "ContinuedtitleAlpha."
+        ],
+        [
+          "Continuedtitle(cont.)Beta."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "horizontal-break",
+      "file": "horizontal-break.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "HorizontalbreakIAlpha.Betawithseveralordinarywordsto"
+        ],
+        [
+          "HorizontalbreakIIcontinuewithmorewordsonthenextlineandathirdline"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "nested-lists",
+      "file": "nested-lists.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "NestedpagesI1.AlphaIBetaIGamma2.DeltaIEpsilon"
+        ],
+        [
+          "NestedpagesIIIZeta3.Eta4.Theta"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "paragraphs",
+      "file": "paragraphs.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 3,
+      "oracleTextByPage": [
+        [
+          "ParagraphpagesIAlphaparagraphwithseveralordinarywordsto"
+        ],
+        [
+          "ParagraphpagesIIDeltaparagraphwithseveralordinarywordsto"
+        ],
+        [
+          "ParagraphpagesIIIZetaparagraphwithseveralordinarywordsto"
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "plain",
+      "file": "plain.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "PlainpagesIAlpha."
+        ],
+        [
+          "PlainpagesIIBeta."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "single-frame-check",
+      "file": "single-frame-check.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 1,
+      "oracleTextByPage": [
+        [
+          "AsinglepageAlpha."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "top",
+      "file": "top.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 3,
+      "oracleTextByPage": [
+        [
+          "ToppagesIAlphawithx2."
+        ],
+        [
+          "ToppagesIIBeta."
+        ],
+        [
+          "ToppagesIIIGamma."
+        ]
+      ],
+      "images": 0
+    },
+    {
+      "id": "unnumbered",
+      "file": "unnumbered.tex",
+      "frame": 1,
+      "family": "continuations",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "UnnumberedpagesIAlpha.0/0"
+        ],
+        [
+          "UnnumberedpagesIIBeta.0/0"
+        ]
+      ],
+      "images": 0
+    }
+  ],
+  "recognition": []
+}

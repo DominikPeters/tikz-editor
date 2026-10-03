@@ -102,6 +102,7 @@ export const FEATURE_IDS = [
   "beamer_manual_bibliography",
   "beamer_footnotes",
   "beamer_float_captions",
+  "beamer_frame_continuations",
   "render_pipeline"
 ] as const;
 

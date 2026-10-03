@@ -145,7 +145,7 @@ Explanation
     expect(beamerBuildStateAt(model, branch, 1).label).toBe("Absent");
   });
 
-  it("does not flatten disjoint steps, advanced rules or relative counter instructions", () => {
+  it("preserves disjoint steps, mode selectors and unsupported relative instructions", () => {
     const model = modelFor(deck(String.raw`\only<1,3-4>{Explicit}
 \only<+->{Relative}
 \only<handout:1|2>{Advanced}
@@ -153,7 +153,7 @@ Explanation
     const explicit = rowFor(model, "Text · Explicit");
     expect([1, 2, 3, 4].map((step) => beamerBuildStateAt(model, explicit, step).label)).toEqual(["Visible", "Absent", "Visible", "Visible"]);
     expect(rowFor(model, "Text · Relative").editable).toBe(false);
-    expect(beamerBuildStateAt(model, rowFor(model, "Text · Advanced"), 1).visibility).toBe("unknown");
+    expect([1, 2].map(step => beamerBuildStateAt(model, rowFor(model, "Text · Advanced"), step).label)).toEqual(["Absent", "Visible"]);
     expect(model.rows.at(-1)).toMatchObject({ kind: "unsupported", editable: false });
   });
 
@@ -164,8 +164,14 @@ Explanation
     expect(beamerBuildStateAt(model, model.rows[0], 2).label).toBe("Visible");
   });
 
+  it("models a supported declaration's covered state until its numeric range begins", () => {
+    const model = modelFor(deck(String.raw`\onslide<3-> \only<2->{Content}`));
+    expect(beamerBuildStateAt(model, model.rows[1], 2).label).toBe("Covered");
+    expect(beamerBuildStateAt(model, model.rows[1], 3).label).toBe("Visible");
+  });
+
   it("does not claim visibility after an unsupported stateful command", () => {
-    const model = modelFor(deck(String.raw`\onslide<3-> \only<2>{Content}`));
+    const model = modelFor(deck(String.raw`\mode<article> \only<2>{Content}`));
     expect(beamerBuildStateAt(model, model.rows[1], 2).label).toBe("Unknown preceding rule");
   });
 

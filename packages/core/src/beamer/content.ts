@@ -1239,6 +1239,7 @@ function findUnsupportedEnvironmentEndIndex(
       "tabular",
       "figure",
       "table",
+      "overprint",
       "center",
       "onlyenv",
       "uncoverenv",

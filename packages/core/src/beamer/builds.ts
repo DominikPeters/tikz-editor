@@ -185,7 +185,7 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
   }
 
   // Keep unsupported overlay-bearing commands discoverable, without guessing
-  // their paint or counter semantics (e.g. \alert<2>, a macro, bare \onslide).
+  // their paint or counter semantics (e.g. \alert<2>, a macro, declaration \mode).
   for (const control of context.syntax.controlsIn(frame.bodySpan)) {
     if (["begin", "end", "item"].includes(control.name) || overlays.commands.some((command) => command.commandSpan.from === control.span.from)) continue;
     const spec = beamerOverlayArgumentAfter(context, control.span.to, frame.bodySpan.to);

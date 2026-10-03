@@ -325,6 +325,12 @@ export const capabilityFixtures: Record<string, string> = {
 \alt<2>{During}{Otherwise}
 \end{frame}
 \end{document}`,
+  beamer_frame_continuations: String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}[allowframebreaks]{Continued}
+Alpha.\newpage Beta.\par\framebreak Gamma.
+\end{frame}
+\end{document}`,
   beamer_footnotes: String.raw`\documentclass{beamer}
 \begin{document}\begin{frame}Alpha\footnote{A frame note.}\end{frame}\end{document}`,
   beamer_float_captions: String.raw`\documentclass{beamer}

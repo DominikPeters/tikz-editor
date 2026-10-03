@@ -741,6 +741,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_float_captions"],
     notes: "Beamer figure/table environments participate in centered source-backed flow. Short captions support the default and numbered stock templates, optional short text, stock label separators, caption-name color and the 11pt class small caption font with 7pt skips. Wrapped long captions and arbitrary caption template/font redefinitions are not implemented.",
   },
+  beamer_frame_continuations: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["beamer_frame_continuations"],
+    notes: "Beamer allowframebreaks renders forced and automatic continuation pages at legal vertical breaks, with stock continuation titles, list glue, split topskip, and footnotes on the final page. Continuation page count is distinct from overlay step count. LuaLaTeX glyph and rule snapshots cover these contracts. Arbitrary continuation template definitions and custom output-routine changes are not implemented.",
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

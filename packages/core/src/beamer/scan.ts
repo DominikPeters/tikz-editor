@@ -347,6 +347,8 @@ function parseFrameOptions(
   let alignment: BeamerFrameOptions["alignment"] = "center";
   let fragile = false;
   let plain = false;
+  let allowFrameBreaks: number | undefined;
+  let noFrameNumbering = false;
   let label: string | undefined;
 
   for (const entry of entries) {
@@ -365,6 +367,11 @@ function parseFrameOptions(
       plain = entry.value !== "false";
     } else if (entry.key === "label") {
       label = entry.value;
+    } else if (entry.key === "allowframebreaks") {
+      const factor = entry.value == null ? .95 : Number(entry.value);
+      if (Number.isFinite(factor) && factor > 0) allowFrameBreaks = factor;
+    } else if (entry.key === "noframenumbering") {
+      noFrameNumbering = entry.value !== "false";
     }
   }
 
@@ -374,6 +381,8 @@ function parseFrameOptions(
     alignment,
     fragile,
     plain,
+    ...(allowFrameBreaks == null ? {} : { allowFrameBreaks }),
+    ...(noFrameNumbering ? { noFrameNumbering } : {}),
     label,
   };
 }
