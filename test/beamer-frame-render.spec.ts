@@ -582,7 +582,7 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
       (paragraph) => paragraph.paragraphId === "frame:3:footline:title"
     )!;
 
-    expect(body.bounds.y).toBeCloseTo(64.501088, 6);
+    expect(body.bounds.y).toBeCloseTo(64.501104, 6);
     expect(titleBaseline).toBeCloseTo(20.142303, 6);
     const footlineSpaces =
       footlineTitle.report.lines[0]?.segments
@@ -592,7 +592,10 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     expect(footlineSpaces[0]).toBeCloseTo(2.124, 6);
     expect(footlineSpaces[1]).toBeCloseTo(2.124, 6);
     expect(baselines).toHaveLength(4);
-    expect(baselines[1] - baselines[0]).toBeCloseTo(29.510575, 6);
+    // LuaTeX's .7/.3 baselineskip struts are 623900/267389 scaled points.
+    expect(rows[1].height).toBeCloseTo(623900 / 65536, 6);
+    expect(rows[1].depth).toBeCloseTo(267389 / 65536, 6);
+    expect(baselines[1] - baselines[0]).toBeCloseTo(29.510533, 6);
     expect(baselines[2] - baselines[1]).toBeCloseTo(16.6, 6);
     expect(baselines[3] - baselines[2]).toBeCloseTo(16.6, 6);
     expect(result.svg.svg).toContain('data-tex-font="cmmi8"');
