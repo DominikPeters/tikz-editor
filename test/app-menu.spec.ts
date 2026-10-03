@@ -147,7 +147,7 @@ describe("app menu definition", () => {
     expect(macHelp?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.CHECK_FOR_UPDATES)).toBe(false);
   });
 
-  it("filters Quit into File on Windows and Linux, but not macOS or web", () => {
+  it("exposes Quit for native platforms and omits it on web", () => {
     const windowsFile = filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, "desktop-windows")
       .find((section) => section.id === "file");
     const linuxFile = filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, "desktop-linux")
@@ -159,7 +159,7 @@ describe("app menu definition", () => {
 
     expect(windowsFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(true);
     expect(linuxFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(true);
-    expect(macFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(false);
+    expect(macFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(true);
     expect(webFile?.items.some((item) => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.QUIT_APP)).toBe(false);
   });
 

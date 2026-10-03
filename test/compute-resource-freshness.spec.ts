@@ -108,8 +108,8 @@ describe("compute explicit render bounds", () => {
       const explicit = await computeSnapshot({ id: "explicit", documentId, source: simple, sourceRevision: 0, renderViewBox: box, ...extras });
       expect(explicit.snapshot.svg?.viewBox).toEqual(box);
       expect(explicit.snapshot.svgModel?.viewBox).toEqual(box);
-      if (mode === "full" || mode === "masked") expect(explicit.snapshot.incremental).toBeNull();
-      else expect(explicit.snapshot.incremental).not.toBeNull();
+      if (mode === "incremental") expect(explicit.snapshot.incremental).not.toBeNull();
+      else expect(explicit.snapshot.incremental).toBeNull();
       const automatic = await computeSnapshot({ id: "automatic", documentId, source: simple, sourceRevision: 0, ...extras });
       expect(automatic.snapshot.svg?.viewBox).not.toEqual(box);
       expect(automatic.snapshot.svg?.viewBox.width).toBeLessThan(box.width);
