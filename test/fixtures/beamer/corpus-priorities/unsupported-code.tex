@@ -1,0 +1,80 @@
+% Recognition contracts only: these environments are currently unsupported.
+\documentclass[aspectratio=169]{beamer}
+\usepackage{alltt}
+\usepackage{listings}
+\usetheme{Madrid}
+\usecolortheme{seahorse}
+\author{}
+\date{}
+\begin{document}
+
+\begin{frame}[fragile]{Alltt recognition}
+BeforeOpaque.
+\begin{alltt}
+  echo hello
+  echo world
+\end{alltt}
+AfterOpaque.
+\end{frame}
+
+\begin{frame}[fragile]{Listing recognition}
+BeforeOpaque.
+\begin{lstlisting}[language=Java]
+  int value = 1;
+  // \only<9>{code, not an overlay}
+  // \begin{frame} code, not a frame
+\end{lstlisting}
+AfterOpaque.
+\end{frame}
+
+\begin{frame}[fragile]{Alltt column recognition}
+\begin{columns}[T,totalwidth=\textwidth]
+\begin{column}{.47\textwidth}
+BeforeOpaque.
+\begin{alltt}
+  echo hello
+  echo world
+\end{alltt}
+AfterOpaque.
+\end{column}
+\begin{column}{.47\textwidth}OtherColumn.\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Listing column recognition}
+\begin{columns}[T,totalwidth=\textwidth]
+\begin{column}{.47\textwidth}
+BeforeOpaque.
+\begin{lstlisting}[language=Java]
+  int value = 1;
+  // \only<9>{code, not an overlay}
+\end{lstlisting}
+AfterOpaque.
+\end{column}
+\begin{column}{.47\textwidth}OtherColumn.\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Alltt block recognition}
+\begin{exampleblock}{Result}
+BeforeOpaque.
+\begin{alltt}
+  echo hello
+  echo world
+\end{alltt}
+AfterOpaque.
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}[fragile]{Listing block recognition}
+\begin{exampleblock}{Result}
+BeforeOpaque $a\cdot b$.
+\begin{lstlisting}[escapechar=|]
+  sum := 0;
+  sum := sum + |$a_i b_i$|;
+\end{lstlisting}
+AfterOpaque.
+\end{exampleblock}
+\end{frame}
+
+\end{document}

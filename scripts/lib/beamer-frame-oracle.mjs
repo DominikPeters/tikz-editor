@@ -31,7 +31,7 @@ export function beamerProbeInstrumentation() {
   \typeout{TIKZ_BEAMER_META aspectRatio \insertaspectratio}%
 ${dimensionWrites}
 }
-\directlua{dofile("beamer-page-trace.lua")}
+\directlua{dofile((os.getenv("TIKZ_BEAMER_TRACE_DIR") or ".") .. "/beamer-page-trace.lua")}
 \AddToHook{shipout/before}{\tikzeditorbeamerprobe}
 \makeatother`;
 }
@@ -44,7 +44,7 @@ ${dimensionWrites}
  * integers and also exposes TeX-point values.
  */
 export function beamerPageTraceLuaSource() {
-  return String.raw`local trace_path = "beamer-page-trace.tsv"
+  return String.raw`local trace_path = (os.getenv("TIKZ_BEAMER_TRACE_DIR") or ".") .. "/beamer-page-trace.tsv"
 local trace_file = assert(io.open(trace_path, "w"))
 local glyph_id = node.id("glyph")
 local glue_id = node.id("glue")

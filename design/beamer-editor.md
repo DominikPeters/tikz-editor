@@ -72,7 +72,7 @@ These were settled in design discussion and are treated as fixed below:
 
 ## Corpus Evidence
 
-Scanned 22 real decks (511 frames) found under `~/GitHub` — academic talks in
+The initial scan covered 22 real decks (511 frames) found under `~/GitHub` — academic talks in
 computational social choice, several authors. Biased toward one community,
 but real. Construct frequencies:
 
@@ -96,9 +96,9 @@ but real. Construct frequencies:
 | `align` (display math) | 30 | 10/22 | native display-math boxes needed |
 | overlay angle specs `<...>` | 116 | — | explicit specs dominate |
 | `\only<` / `item<` / `\uncover<` | 32 / 21 / 6 | — | `\only` is the common form |
-| `\pause` | 4 | 4/22 | rare; renumbering concern is nearly moot |
+| `\pause` | 4 | 4/22 | uncommon in this initial sample |
 | `\setbeamertemplate` | 9 | 4/22 | structural theme hacks are rare |
-| `[fragile]` / verbatim | 0 | 0/22 | not needed for v1 |
+| `[fragile]` / verbatim | 0 | 0/22 | absent from this initial sample |
 | `textpos` / free placement | ~0 | — | overlay-layer drawing is a want, not a need |
 
 Theme usage: 13× `moloch` (maintained metropolis fork, with options
@@ -110,14 +110,72 @@ Consequences adopted in this document:
 1. Tables move into the core plan (they were "deferred" in the text-layout
    doc; the corpus says otherwise for slides).
 2. Theme presets must accept *options* (`moloch` is used with option lists).
-3. `\pause` preservation policy is simple because `\pause` is rare.
+3. Overlay preservation requires broader evidence than the initial low `\pause` count.
 4. Macro expansion strategy matters more than any single environment.
-5. `[fragile]`/verbatim support can wait indefinitely.
+5. The initial sample did not establish a priority for `[fragile]`/verbatim;
+   the broader review below establishes that code coverage belongs in the plan.
 
 The scanner that produced these numbers is maintained as
 `scripts/scan-beamer-corpus.mjs`; the construct list should also join the
 capabilities matrix (`packages/core/src/capabilities/`), so subset coverage
 is a tracked metric, not a guess.
+
+### Broader source and manual review, 2026-10-02
+
+Eight downloaded source collections now provide 211 candidate entry points.
+The conservative expanded-source scanner discovers 3936 frames, or 3666 complete
+distinct source forms after exact-source deduplication per repository. These
+counts exclude incomplete recovery spans and can miss command-form and
+macro-generated frames. They describe this corpus, not general package popularity.
+
+| Feature family | Complete source forms | Collections |
+| --- | ---: | ---: |
+| Tables (`tabular`, rules, related constructs) | 178 | 7/8 |
+| Graphics/paragraph wrappers | 104 | 7/8 |
+| Explicit overlays and `\pause` | 482 | 6/8 |
+| Aligned display math | 231 | 6/8 |
+| Frame sizing/break options | 199 | 6/8 |
+| Code/listings/verbatim | 100 | 6/8 |
+
+The second manual review inspected 34 additional source frames across all eight
+collections, with 39 native snapshots and 62 generated TeX reference pages.
+Thirty-three frames have compiled references; one requires an unavailable private
+package. This was a feature-diverse purposive sample, not a fidelity pass-rate
+measurement. Author-engine references identify content/flow gaps; typography
+scores still require the fixed LuaLaTeX/font profile and valid document state.
+
+The strongest candidates are ordinary composition failures: tables become literal
+source, `figure` wrappers hide otherwise loadable assets, math/code block bodies
+disappear, and a footnote can replace an entire surrounding list. Built-in
+`overprint` with declaration-form `\onslide` produces five TeX states where native
+discovery finds one. `allowframebreaks` produces three or four continuation pages
+where native emits a single clipped slide. Continuation pages need their own
+mapping, separate from overlay states. For `alltt` and `lstlisting`, the immediate
+requirement is recognizing unsupported environments and preserving supported
+siblings, including inside blocks. Full code typesetting is a separate feature
+decision.
+
+The candidate list in [beamer-corpus-todos.json](beamer-corpus-todos.json) records
+21 tasks, priorities, standard/package provenance, source paths/frame numbers,
+observations, positive controls and unresolved causes. Defined interfaces of
+`amsmath`, `graphicx`/`booktabs`, algorithm packages, `pgfplots`,
+`tcolorbox` and `siunitx` merit coverage. An author-defined `wideitemize`,
+`myboxtitle`, `Procedure` or slide wrapper instead motivates generic expansion of
+supported source definitions; those names should not become renderer features.
+
+`compare:beamer-priorities` runs 20 minimal fidelity frames through the existing
+exact glyph/font/geometry gates and six code-environment recognition frames
+through a separate source-preservation contract. Its manifest links reproductions
+to the candidate list. Count mismatches fail without asserting a correspondence
+between continuations and overlays; current failures are not accepted goldens.
+
+`scripts/shortlist-beamer-corpus.mjs` selects cases by repository/feature diversity
+and optionally reports text-engine literal fallbacks and unsupported/missing
+content suspicions. These signals improve triage but cannot certify fidelity:
+one inspected `exampleblock` loses both prose and code with no literal fallback
+or unsupported item. Paint-aware content coverage and valid full-project oracle
+state are separate evaluation TODOs. The ignored gallery is
+`artifacts/beamer-corpus-renderer/manual-review-round2/index.html`.
 
 ## Document Model
 

@@ -6,7 +6,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, delimiter, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -37,6 +37,8 @@ Options:
   --page <n>           One-based compiled overlay page. Default: last page.
   --out-dir <dir>      Artifact root. Default: artifacts/beamer-frame-probe.
   --name <name>        Stable artifact directory name.
+  --source-dir <dir>   Resolve deck-relative dependencies from this directory.
+  --tex-root <dir>     Also search this snapshot recursively for TeX packages.
   --trace-only         Write LuaLaTeX geometry without SVG/text conversion tools.
   --help               Show this help.
 `.trim();
@@ -51,6 +53,8 @@ function parseArgs(argv) {
     name: null,
     help: false,
     traceOnly: false,
+    sourceDir: null,
+    texRoot: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -73,6 +77,12 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--name" && next) {
       options.name = next;
+      index += 1;
+    } else if (arg === "--source-dir" && next) {
+      options.sourceDir = resolve(next);
+      index += 1;
+    } else if (arg === "--tex-root" && next) {
+      options.texRoot = resolve(next);
       index += 1;
     } else {
       throw new Error(`Unknown or incomplete argument: ${arg}`);
@@ -157,23 +167,48 @@ function collectEnvironment() {
   };
 }
 
-function compileProbe(runDir) {
-  const stdout = execFileSync(
-    "lualatex",
-    [
-      "--interaction=nonstopmode",
-      "--halt-on-error",
-      "--file-line-error",
-      "probe.tex",
-    ],
-    {
-      cwd: runDir,
-      encoding: "utf8",
-      env: texOracleEnv(),
-      maxBuffer: 30 * 1024 * 1024,
+function compileProbe(runDir, options) {
+  const sourceDir = options.sourceDir ?? dirname(options.inputPath);
+  const searchPaths = [runDir, sourceDir, ...(options.texRoot ? [`${options.texRoot}//`] : [])];
+  const searchPath = searchPaths.join(delimiter) + delimiter;
+  const navigationSeed = readFileSync(join(runDir, "probe.nav"), "utf8");
+  // A fresh isolated frame can contain local labels/references. The second
+  // pass resolves those and replaces the shipout trace with the final output.
+  for (let pass = 1; pass <= 2; pass += 1) {
+    // Compilation rewrites .nav with just the isolated frame. Restore the
+    // original deck context on each pass while retaining .aux label state.
+    writeFileSync(join(runDir, "probe.nav"), navigationSeed, "utf8");
+    let stdout;
+    try {
+      stdout = execFileSync(
+        "lualatex",
+        [
+          "--interaction=nonstopmode",
+          "--halt-on-error",
+          "--file-line-error",
+          "--no-shell-escape",
+          `--output-directory=${runDir}`,
+          join(runDir, "probe.tex"),
+        ],
+        {
+          cwd: sourceDir,
+          encoding: "utf8",
+          env: texOracleEnv({
+            TEXINPUTS: searchPath + (process.env.TEXINPUTS ?? ""),
+            BIBINPUTS: searchPath + (process.env.BIBINPUTS ?? ""),
+            TIKZ_BEAMER_TRACE_DIR: runDir,
+          }),
+          maxBuffer: 30 * 1024 * 1024,
+        }
+      );
+    } catch (error) {
+      writeFileSync(join(runDir, `lualatex-pass-${pass}.txt`), `${error.stdout ?? ""}\n${error.stderr ?? ""}`);
+      writeFileSync(join(runDir, "lualatex-stdout.txt"), `${error.stdout ?? ""}\n${error.stderr ?? ""}`);
+      throw error;
     }
-  );
-  writeFileSync(join(runDir, "lualatex-stdout.txt"), stdout, "utf8");
+    writeFileSync(join(runDir, `lualatex-pass-${pass}.txt`), stdout, "utf8");
+    writeFileSync(join(runDir, "lualatex-stdout.txt"), stdout, "utf8");
+  }
 }
 
 function renderArtifacts(runDir, pageNumber) {
@@ -190,7 +225,8 @@ function renderArtifacts(runDir, pageNumber) {
     ],
     { cwd: runDir, stdio: "ignore" }
   );
-  execFileSync(
+  // The Lua trace supplies comparison geometry; MuPDF extraction is optional.
+  if (commandOutput("mutool", ["-v"])) execFileSync(
     "mutool",
     [
       "draw",
@@ -257,7 +293,7 @@ async function main() {
     "utf8"
   );
 
-  compileProbe(runDir);
+  compileProbe(runDir, options);
   const log = readFileSync(join(runDir, "probe.log"), "utf8");
   const texTrace = parseBeamerProbeLog(log);
   const pdfInfoOutput = execFileSync("pdfinfo", ["probe.pdf"], {
@@ -272,7 +308,8 @@ async function main() {
     );
   }
   if (!options.traceOnly) renderArtifacts(runDir, pageNumber);
-  const structuredText = options.traceOnly ? { pages: [] } : summarizeMutoolStructuredText(
+  const hasStructuredText = !options.traceOnly && commandOutput("mutool", ["-v"]);
+  const structuredText = !hasStructuredText ? { pages: [] } : summarizeMutoolStructuredText(
     JSON.parse(
       readFileSync(join(runDir, "structured-text.json"), "utf8")
     )
@@ -294,6 +331,8 @@ async function main() {
       frameTitle: probe.frame.title?.value ?? null,
       compiledPage: pageNumber,
       compilationScope: "original-preamble-and-selected-source-frame",
+      sourceDirectory: options.sourceDir ?? dirname(options.inputPath),
+      texRoot: options.texRoot,
     },
     environment: collectEnvironment(),
     pdf,
@@ -321,7 +360,8 @@ async function main() {
       pageTrace: "beamer-page-trace.tsv",
       log: "probe.log",
       pdf: "probe.pdf",
-      ...(!options.traceOnly ? { svg: "probe.svg", structuredText: "structured-text.json" } : {}),
+      ...(!options.traceOnly ? { svg: "probe.svg" } : {}),
+      ...(hasStructuredText ? { structuredText: "structured-text.json" } : {}),
     },
     scannerDiagnostics: document.diagnostics,
   };

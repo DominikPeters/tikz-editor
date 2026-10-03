@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   mkdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { basename, extname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
@@ -43,6 +43,7 @@ Options:
   --inner-theme <name> Override \\useinnertheme.
   --outer-theme <name> Override \\useoutertheme.
   --structural-only    Skip raster comparison artifacts.
+  --pdf-only           Use PDF paint as oracle, without dvisvgm conversion.
   --assert-structural  Fail when the structural fidelity contract is exceeded.
   --help               Show this help.
 `.trim();
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     width: defaultRasterWidth,
     themeVariant: {},
     structuralOnly: false,
+    pdfOnly: false,
     assertStructural: false,
     help: false,
   };
@@ -103,6 +105,8 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--structural-only") {
       options.structuralOnly = true;
+    } else if (arg === "--pdf-only") {
+      options.pdfOnly = true;
     } else if (arg === "--assert-structural") {
       options.assertStructural = true;
     } else {
@@ -190,16 +194,19 @@ function runOracle(options, runDir, inputPath) {
     oracleRoot,
     "--name",
     "frame",
+    "--source-dir",
+    options.sourceDir ?? dirname(options.inputPath),
   ];
+  if (options.texRoot) args.push("--tex-root", options.texRoot);
   if (options.pageNumber != null) {
     args.push("--page", String(options.pageNumber));
   }
-  if (options.structuralOnly) args.push("--trace-only");
+  if (options.structuralOnly || options.pdfOnly) args.push("--trace-only");
   runRequired(process.execPath, args);
   return join(oracleRoot, "frame");
 }
 
-function rasterizeSvg(inputPath, outputPath, width, height) {
+export function rasterizeSvg(inputPath, outputPath, width, height) {
   runRequired("rsvg-convert", [
     "--format",
     "png",
@@ -220,7 +227,7 @@ function rasterizeSvg(inputPath, outputPath, width, height) {
   ]);
 }
 
-function rasterizePdfPage(
+export function rasterizePdfPage(
   inputPath,
   outputPath,
   pageNumber,
@@ -298,7 +305,7 @@ function relativeArtifact(runDir, path) {
   return relative(runDir, path);
 }
 
-function structuralContractFailures(summary) {
+export function structuralContractFailures(summary) {
   const failures = [];
   for (const key of [
     "unmatchedNativeRectangles",
@@ -322,7 +329,7 @@ function structuralContractFailures(summary) {
     ["maxAbsoluteGlyphDxPt", 0.02],
     ["maxAbsoluteGlyphDyPt", 0.01],
   ]) {
-    if (summary[key] > tolerance) {
+    if (!Number.isFinite(summary[key]) || summary[key] > tolerance) {
       failures.push(`${key}=${summary[key]} (maximum ${tolerance})`);
     }
   }
@@ -369,16 +376,13 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const { computerModernTexMetricProvider } = coreRenderer;
   const preparedDocument = runtime.preparedDocument ??
     coreRenderer.prepareBeamerDocument(source);
-  const renderedPages = await preparedDocument.renderFramePages({
+  const stepCount = preparedDocument.frameStepCount(options.frameNumber - 1);
+  const selectedPage = options.pageNumber ?? stepCount;
+  const render = runtime.render ?? await preparedDocument.renderFrame({
     frameIndex: options.frameNumber - 1,
+    step: selectedPage,
+    graphicsResolver: runtime.graphicsResolver,
   });
-  const selectedPage = options.pageNumber ?? renderedPages.stepCount;
-  const render = renderedPages.pages[selectedPage - 1];
-  if (!render) {
-    throw new RangeError(
-      `Overlay page ${selectedPage} does not exist; frame ${options.frameNumber} has ${renderedPages.stepCount} pages.`
-    );
-  }
   const rendererSvg = join(runDir, "renderer.svg");
   writeFileSync(rendererSvg, render.svg.svg, "utf8");
 
@@ -387,6 +391,21 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const oracleReport = JSON.parse(
     readFileSync(join(oracleDir, "report.json"), "utf8")
   );
+  if (oracleReport.pdf.pageCount !== stepCount) {
+    // Preserve evidence before failing. Different counts provide no valid
+    // one-to-one mapping, so do not compare an arbitrary pair of pages.
+    writeFileSync(join(runDir, "report.json"), JSON.stringify({
+      formatVersion: 4,
+      status: "page-count-mismatch",
+      input: { path: options.inputPath, frameNumber: options.frameNumber, overlayStep: selectedPage, overlayStepCount: stepCount },
+      correspondence: { valid: false, nativeOverlayStepCount: stepCount, oraclePageCount: oracleReport.pdf.pageCount },
+      renderer: { diagnostics: render.diagnostics },
+      oracle: { report: relativeArtifact(runDir, join(oracleDir, "report.json")), page: oracleReport.pdf },
+      structural: null,
+      artifacts: { input: "input.tex", rendererSvg: "renderer.svg", oraclePdf: relativeArtifact(runDir, join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf")) },
+    }, null, 2) + "\n");
+    throw new Error(`Overlay page counts differ: renderer=${stepCount}, oracle=${oracleReport.pdf.pageCount}. Cannot establish page correspondence.`);
+  }
   const nativePageTrace = buildNativeBeamerPageTrace(
     render,
     computerModernTexMetricProvider
@@ -429,7 +448,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
     //
     // Keep the PDF raster below as the primary full-paint oracle because
     // dvisvgm omits PGF radial shadings used by projected Beamer markers.
-    rasterizeSvg(oracleSvg, oracleVectorPng, options.width, rasterHeight);
+    if (!options.pdfOnly) rasterizeSvg(oracleSvg, oracleVectorPng, options.width, rasterHeight);
     // dvisvgm preserves the selected oracle page as a useful vector artifact,
     // but it drops Beamer's PGF radial shadings. Raster the same selected PDF
     // page directly so theme markers and other PDF paint operators remain in
@@ -442,7 +461,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
       rasterHeight
     );
     createVisualComparisons(runDir);
-    createSameRasterizerComparisons(runDir);
+    if (!options.pdfOnly) createSameRasterizerComparisons(runDir);
   }
 
   const report = {
@@ -482,19 +501,22 @@ export async function compareBeamerFrame(options, runtime = {}) {
       width: options.width,
       height: rasterHeight,
       background: "white",
+      normalizedRmse: rasterRmse(join(runDir, "oracle.png"), join(runDir, "renderer.png")),
     },
     artifacts: {
       input: "input.tex",
       rendererSvg: "renderer.svg",
-      oracleSvg: relativeArtifact(runDir, oracleSvg),
+      ...(!options.structuralOnly && !options.pdfOnly ? { oracleSvg: relativeArtifact(runDir, oracleSvg) } : {}),
       ...(options.structuralOnly ? {} : {
         rendererPng: "renderer.png",
         oraclePng: "oracle.png",
-        oracleVectorPng: "oracle-vector.png",
         sideBySidePng: "side-by-side.png",
         differencePng: "difference.png",
-        sideBySideVectorPng: "side-by-side-vector.png",
-        differenceVectorPng: "difference-vector.png",
+        ...(!options.pdfOnly ? {
+          oracleVectorPng: "oracle-vector.png",
+          sideBySideVectorPng: "side-by-side-vector.png",
+          differenceVectorPng: "difference-vector.png",
+        } : {}),
         overlayPng: "overlay.png",
       }),
       nativePageTrace: "native-page-trace.json",
@@ -521,6 +543,18 @@ export async function compareBeamerFrame(options, runtime = {}) {
     }
   }
   return { report, reportPath, runDir };
+}
+
+function rasterRmse(expected, actual) {
+  const result = spawnSync("magick", ["compare", "-metric", "RMSE", expected, actual, "null:"], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0 && result.status !== 1) {
+    throw new Error(`Raster metric failed: ${result.error?.message ?? result.stderr}`);
+  }
+  const match = `${result.stdout}${result.stderr}`.match(/\(([\d.eE+-]+)\)/u);
+  if (!match || !Number.isFinite(Number(match[1]))) throw new Error("Invalid raster RMSE output.");
+  return Number(match[1]);
 }
 
 function isMain(metaUrl) {

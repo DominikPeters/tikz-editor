@@ -1,0 +1,34 @@
+{
+  "formatVersion": 1,
+  "description": "Minimal original reproductions of the strongest manual corpus findings. Fidelity cases must pass the existing exact glyph/font/geometry contract; opaque code cases use recognition contracts only. No current failures are accepted as goldens.",
+  "fidelity": [
+    { "id": "plain-control", "file": "flow.tex", "frame": 1, "family": "control", "pages": 1, "oracleText": ["Baseline"] },
+    { "id": "nested-block-list-columns", "file": "flow.tex", "frame": 2, "family": "nested-flow", "todos": ["B01"], "evidence": ["r2-16"], "pages": 1, "oracleText": ["Alpha", "Beta", "Gamma", "Other"] },
+    { "id": "block-inline-math", "file": "flow.tex", "frame": 3, "family": "nested-flow", "todos": ["B01", "B05"], "evidence": ["r2-43"], "pages": 1, "oracleText": ["Alpha"] },
+    { "id": "block-aligned-matrix", "file": "flow.tex", "frame": 4, "family": "math", "todos": ["B01", "B05"], "evidence": ["r2-34"], "pages": 1, "oracleText": ["Alpha", "Beta"] },
+    { "id": "list-cases", "file": "flow.tex", "frame": 5, "family": "nested-flow", "todos": ["B01", "B05"], "evidence": ["r2-41"], "pages": 1, "oracleText": ["Alpha", "Beta"] },
+    { "id": "footnote-lists", "file": "flow.tex", "frame": 6, "family": "nested-flow", "todos": ["B01", "B10"], "evidence": ["r2-17"], "pages": 1, "oracleText": ["Alpha", "Beta", "Epsilon", "Contact"] },
+    { "id": "figure-image-caption", "file": "flow.tex", "frame": 7, "family": "wrappers", "todos": ["B03"], "evidence": ["r2-12"], "pages": 1, "images": 1, "oracleText": ["Alpha"] },
+    { "id": "direct-image-control", "file": "flow.tex", "frame": 8, "family": "control", "evidence": ["r2-45"], "pages": 1, "images": 1, "oracleText": ["Alpha"] },
+    { "id": "basic-tabular", "file": "flow.tex", "frame": 9, "family": "tables", "todos": ["B02"], "evidence": ["r2-15", "r2-32"], "pages": 1, "oracleText": ["Alpha", "Beta", "Gamma"] },
+    { "id": "booktabs-column", "file": "flow.tex", "frame": 10, "family": "tables", "todos": ["B02"], "evidence": ["r2-01"], "pages": 1, "oracleText": ["Alpha", "Beta", "Gamma", "Other"] },
+    { "id": "rotatebox", "file": "flow.tex", "frame": 11, "family": "wrappers", "todos": ["B04"], "evidence": ["r2-21"], "pages": 1, "oracleText": ["Alpha"] },
+    { "id": "scalebox-minipage", "file": "flow.tex", "frame": 12, "family": "wrappers", "todos": ["B04"], "evidence": ["r2-31"], "pages": 1, "oracleText": ["Alpha", "Beta"] },
+    { "id": "declaration-onslide", "file": "flow.tex", "frame": 13, "family": "overlays", "todos": ["B06"], "evidence": ["leeper-overlays"], "pages": 3, "oracleText": ["Alpha", "Beta", "Gamma"] },
+    { "id": "overprint-handout-selectors", "file": "flow.tex", "frame": 14, "family": "overlays", "todos": ["B06"], "evidence": ["r2-29"], "pages": 3, "oracleTextByPage": [["Alpha"], ["Beta", "Second"], ["Gamma"]] },
+    { "id": "item-overlay-control", "file": "flow.tex", "frame": 15, "family": "control", "pages": 2, "oracleText": ["Alpha", "Beta"] },
+    { "id": "forced-continuations", "file": "flow.tex", "frame": 16, "family": "continuations", "todos": ["B07"], "evidence": ["r2-01", "r2-13"], "pages": 3, "oracleTextByPage": [["Alpha"], ["Beta"], ["Gamma"]] },
+    { "id": "automatic-continuations", "file": "flow.tex", "frame": 17, "family": "continuations", "todos": ["B07"], "evidence": ["r2-33"], "pages": 2, "oracleText": ["Alpha", "Theta"] },
+    { "id": "equation-split-ref", "file": "flow.tex", "frame": 18, "family": "math", "todos": ["B05", "B12"], "evidence": ["r2-28"], "pages": 1, "oracleText": ["Alpha"] },
+    { "id": "column-cases", "file": "flow.tex", "frame": 19, "family": "math", "todos": ["B05"], "evidence": ["r2-03"], "pages": 1, "oracleText": ["Alpha", "Other"] },
+    { "id": "size-and-list-spacing", "file": "flow.tex", "frame": 20, "family": "nested-flow", "todos": ["B09"], "evidence": ["r2-09", "r2-23"], "pages": 1, "oracleText": ["Alpha", "Beta", "Gamma", "Delta"] }
+  ],
+  "recognition": [
+    { "id": "alltt-top-level", "file": "unsupported-code.tex", "frame": 1, "environment": "alltt", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
+    { "id": "lstlisting-top-level", "file": "unsupported-code.tex", "frame": 2, "environment": "lstlisting", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
+    { "id": "alltt-column", "file": "unsupported-code.tex", "frame": 3, "environment": "alltt", "requiredText": ["BeforeOpaque", "AfterOpaque", "OtherColumn"] },
+    { "id": "lstlisting-column", "file": "unsupported-code.tex", "frame": 4, "environment": "lstlisting", "requiredText": ["BeforeOpaque", "AfterOpaque", "OtherColumn"] },
+    { "id": "alltt-block", "file": "unsupported-code.tex", "frame": 5, "environment": "alltt", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
+    { "id": "lstlisting-block", "file": "unsupported-code.tex", "frame": 6, "environment": "lstlisting", "requiredText": ["BeforeOpaque", "AfterOpaque"] }
+  ]
+}
