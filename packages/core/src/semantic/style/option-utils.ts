@@ -142,8 +142,13 @@ export function parseFontStyle(
   return Object.keys(parsed).length > 0 ? parsed : null;
 }
 
-export function parseAxisVector(raw: string, axis: "x" | "y"): TransformAxisVector | null {
-  const pair = parseCoordinateLike(raw);
+export function parseAxisVector(raw: string, axis: "x" | "y", resolveCoordinate?: (raw: string) => WorldPoint | null): TransformAxisVector | null {
+  const normalized = normalizeOptionValue(raw);
+  if (normalized.startsWith("(") && resolveCoordinate) {
+    const point = resolveCoordinate(normalized);
+    return point ? transformAxisVector(point.x, point.y) : null;
+  }
+  const pair = parseCoordinateLike(normalized);
   if (pair) {
     const x = parseLength(pair.x, "cm");
     const y = parseLength(pair.y, "cm");
@@ -153,7 +158,7 @@ export function parseAxisVector(raw: string, axis: "x" | "y"): TransformAxisVect
     return transformAxisVector(x, y);
   }
 
-  const length = parseLength(raw, "cm");
+  const length = parseLength(normalized, "cm");
   if (length == null) {
     return null;
   }
@@ -185,7 +190,7 @@ export function parseCmTransformValue(
     return null;
   }
 
-  const parsedCoordinate = parseCoordinateLike(translationRaw);
+  const parsedCoordinate = resolveCoordinate ? null : parseCoordinateLike(translationRaw);
   if (parsedCoordinate) {
     const x = parseLength(parsedCoordinate.x, "cm");
     const y = parseLength(parsedCoordinate.y, "cm");
@@ -230,7 +235,7 @@ export function parseRotateAroundValue(
     return null;
   }
 
-  const parsedCoordinate = parseCoordinateLike(coordinateRaw);
+  const parsedCoordinate = resolveCoordinate ? null : parseCoordinateLike(coordinateRaw);
   if (parsedCoordinate) {
     const x = parseLength(parsedCoordinate.x, "cm");
     const y = parseLength(parsedCoordinate.y, "cm");

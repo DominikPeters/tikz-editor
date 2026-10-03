@@ -92,7 +92,8 @@ export function resolveNodeStyle(
       cloneCustomStyleRegistry(frame.customStyles),
       undefined,
       [],
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      frame.axisBasis
     );
     resolvedStyle = resolved.style;
   }
@@ -144,7 +145,8 @@ export function resolveNodeOptionScale(
     cloneCustomStyleRegistry(frame.customStyles),
     undefined,
     [],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
   return computeRelativeTransformScale(frame.transform, resolved.transform);
 }
@@ -182,7 +184,8 @@ export function resolveNodeOptionTransform(
     cloneCustomStyleRegistry(frame.customStyles),
     undefined,
     [],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
 
   return computeRelativeTransformMatrix(frame.transform, resolved.transform);
@@ -299,7 +302,8 @@ export function expandNodeOptionsForShape(
     cloneCustomStyleRegistry(frame.customStyles),
     undefined,
     [],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
 
   return resolved.expandedOptionLists[0] ?? options;

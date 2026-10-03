@@ -1,3 +1,4 @@
+import type { AxisBasis } from "./coords/axis-basis.js";
 import type { AdornmentOwnerGeometry, CoordinateForm, Span } from "../ast/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
@@ -453,6 +454,9 @@ export type ResolvedStyle = {
   // Whether draw mode was explicitly enabled via options (for example `draw`).
   drawExplicit: boolean;
   radius: number | null;
+  radiusUsesBasis?: boolean;
+  xRadiusUsesBasis?: boolean;
+  yRadiusUsesBasis?: boolean;
   xRadius: number | null;
   yRadius: number | null;
   roundedCorners: number | null;
@@ -569,7 +573,11 @@ export type EditHandlePositioningContext = {
   currentAnchorHH: number;
 };
 
+export type CoordinateSourceUnits = { x?: string; y?: string; radius?: string };
+
 type CoordinateEditHandleBase = EditHandleBase & {
+  axisBasis?: AxisBasis;
+  sourceUnits?: CoordinateSourceUnits;
   handleType: "coordinate";
   kind: "node-position" | "path-point" | "path-control";
   insertion?: EditHandleInsertion;

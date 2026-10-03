@@ -21,11 +21,11 @@ export function rewritePreciseFrameCoordinate(
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
   const fine = { fractionDigits: 6 };
   if (handle.coordinateForm === "cartesian") {
-    return formatCoordinate(oldRaw, formatNumber(point.x, fine), formatNumber(point.y, fine));
+    return formatCoordinate(oldRaw, formatNumber(point.x, fine), formatNumber(point.y, fine), handle.sourceUnits);
   }
   if (handle.coordinateForm === "polar") {
     return formatPolarCoordinate(oldRaw, formatNumber(Math.atan2(point.y, point.x) * 180 / Math.PI, fine),
-      formatNumber(Math.hypot(point.x, point.y), fine));
+      formatNumber(Math.hypot(point.x, point.y), fine), handle.sourceUnits);
   }
   return rewriteCoordinate(newWorld, handle, source, bypassSnapping);
 }

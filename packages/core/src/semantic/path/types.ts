@@ -5,7 +5,7 @@ import type { SceneElement } from "../types.js";
 
 export type FeatureMarkFn = (featureId: FeatureId, status: "supported" | "unsupported") => void;
 export type DiagnosticPushFn = (code: string, message: string, spanFrom: number, spanTo: number) => void;
-export type ArcParameters = { startAngle: number; endAngle: number; rx: number; ry: number };
+export type ArcParameters = { startAngle: number; endAngle: number; rx: number; ry: number; usesBasis?: boolean };
 export type PlacementSegment =
   | { kind: "line"; from: WorldPoint; to: WorldPoint }
   | { kind: "hv"; operator: "-|" | "|-"; from: WorldPoint; bend: WorldPoint; to: WorldPoint }
@@ -17,6 +17,8 @@ export type PlacementSegment =
       params: ArcParameters;
       /** Transformed zero/ninety-degree axes; absent on legacy identity-frame segments. */
       basis?: { x: WorldVector; y: WorldVector };
+      /** PGF timer axes after XY basis conversion, before the CTM. */
+      localBasis?: { x: WorldVector; y: WorldVector };
       /** Final PGF cubic control in world space, used only by TikZ `turn` lookup. */
       turnLookupControl?: WorldPoint;
     };

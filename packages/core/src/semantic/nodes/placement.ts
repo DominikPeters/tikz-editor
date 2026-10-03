@@ -1,3 +1,4 @@
+import { coordinateTransform } from "../coords/axis-basis.js";
 import { nextEditHandleId } from "../edit-handles.js";
 import type { PathItem, PathOptionItem, Span } from "../../ast/types.js";
 import { frameLocalPoint, worldPoint } from "../../coords/points.js";
@@ -77,6 +78,7 @@ export function resolveNodeTargetPoint(
 
   if (opts.allowImplicitOriginHandle) {
     const frame = context.stack[context.stack.length - 1];
+    const coordinateFrame = coordinateTransform(frame.transform, frame.axisBasis);
     const insertionOffset = resolveImplicitNodePlacementInsertionOffset(item, context.source);
     const implicitWorldPoint = defaultPoint ?? context.currentPoint ?? wp(0, 0);
     context.editHandles.push({
@@ -92,10 +94,9 @@ export function resolveNodeTargetPoint(
       coordinateSpace: "frame-local",
       world: implicitWorldPoint,
       local: frameLocalPoint(pt(0), pt(0)),
-      frame: frame
-        ? frameTransform(frame.transform.a, frame.transform.b, frame.transform.c, frame.transform.d, frame.transform.e, frame.transform.f)
-        : frameTransform(1, 0, 0, 1, 0, 0),
-      transform: frame?.transform ?? { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+      frame: frameTransform(coordinateFrame.a, coordinateFrame.b, coordinateFrame.c, coordinateFrame.d, coordinateFrame.e, coordinateFrame.f),
+      transform: coordinateFrame,
+      axisBasis: frame.axisBasis,
       sourceText: "",
       coordinateForm: "cartesian",
       rewriteMode: "direct",

@@ -9,7 +9,7 @@ import {
   type SemanticContext
 } from "../semantic/context.js";
 import { createSemanticEvaluationRun, evaluateSemanticStatementByIndex } from "../semantic/evaluate.js";
-import { evaluateRawCoordinate } from "../semantic/coords/evaluate.js";
+import { evaluateTransformCoordinate } from "../semantic/coords/evaluate.js";
 import { extractOnBackgroundLayerOptionLayers, makeEveryOnBackgroundLayerOptionLayer } from "../semantic/backgrounds.js";
 import { cloneCustomStyleRegistry } from "../semantic/style/custom-styles.js";
 import { expandOptionListMacros } from "../semantic/style/macro-options.js";
@@ -50,8 +50,8 @@ export function createStatementFrameResolver(context: SemanticContext, statement
         kind: statement.kind === "Path" ? "command" : "scope",
         sourceRef,
         rawOptions: expanded
-      }], customStyles, (raw) => evaluateRawCoordinate(raw, context).world, frame.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw));
+      }], customStyles, (raw, basis) => evaluateTransformCoordinate(raw, context, basis), frame.styleChain,
+      (raw) => resolveContextColorAliasValue(context, raw), frame.axisBasis);
       // Background layer styles run after the entire scope option list. An
       // authored prefix excludes this final stage; a full candidate includes it.
       if (statement.kind === "Scope" && includeScopeFinalOptions) {
@@ -60,8 +60,8 @@ export function createStatementFrameResolver(context: SemanticContext, statement
           const everyLayer = makeEveryOnBackgroundLayerOptionLayer(sourceRef);
           resolved = resolveContextDelta(resolved.style, resolved.transform,
             [everyLayer, ...backgroundLayers].map(layer => ({ kind: "scope", sourceRef: layer.sourceRef, rawOptions: layer.rawOptions })),
-            customStyles, (raw) => evaluateRawCoordinate(raw, context).world, resolved.chain,
-            (raw) => resolveContextColorAliasValue(context, raw));
+            customStyles, (raw, basis) => evaluateTransformCoordinate(raw, context, basis), resolved.chain,
+            (raw) => resolveContextColorAliasValue(context, raw), resolved.axisBasis);
         }
       }
       return asFrame(resolved.transform);

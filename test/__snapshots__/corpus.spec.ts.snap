@@ -22,9 +22,9 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     "elementTotals": {
       "circles": 431,
       "ellipses": 40,
-      "paths": 8170,
+      "paths": 7791,
       "texts": 4298,
-      "total": 12939,
+      "total": 12560,
     },
     "semanticEmptySceneRate": 0.3301,
     "semanticEmptySceneSnippets": 722,
@@ -32,8 +32,8 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     "semanticErrorSnippets": 107,
     "semanticUnsupportedRate": 0.471,
     "semanticUnsupportedSnippets": 1030,
-    "semanticWarningRate": 0.4787,
-    "semanticWarningSnippets": 1047,
+    "semanticWarningRate": 0.4778,
+    "semanticWarningSnippets": 1045,
   },
   "semanticCoverage": {
     "allUnknownSnippetRate": 0.1966,

@@ -25,8 +25,12 @@ export function rewriteCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordina
   const inner = parsed.x.slice(1, -1);
   const tail = trailingTerm(inner);
   const numeric = CARTESIAN.exec(tail.text);
+  const customBasis = handle.axisBasis && (Math.abs(handle.axisBasis.x.x - 72.27 / 2.54) > 1e-9 || Math.abs(handle.axisBasis.x.y) > 1e-9 || Math.abs(handle.axisBasis.y.x) > 1e-9 || Math.abs(handle.axisBasis.y.y - 72.27 / 2.54) > 1e-9);
   let rewritten: string;
-  if (numeric) {
+  if (customBasis) {
+    const end = inner.trimEnd().length;
+    rewritten = `${inner.slice(0, end)}+(${formatNumber(delta.x, { fractionDigits: 6 })}pt,${formatNumber(delta.y, { fractionDigits: 6 })}pt)${inner.slice(end)}`;
+  } else if (numeric) {
     const x = rewriteScalar(numeric[1], tail.sign * delta.x);
     const y = rewriteScalar(numeric[2], tail.sign * delta.y);
     if (x != null && y != null) {

@@ -1,7 +1,9 @@
+import { defaultAxisBasis, type AxisBasisState } from "../coords/axis-basis.js";
 import type { OptionEntry } from "../../options/types.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
-import { parseCoordinateLike, parseLength } from "../coords/parse-length.js";
+import { parseCoordinateLike, parseLength, parseLengthWithInfo } from "../coords/parse-length.js";
 import { applyMatrix, inverseMatrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../transform.js";
+import { worldVector } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldTransform } from "../../coords/transforms.js";
@@ -16,7 +18,7 @@ import {
 } from "../types.js";
 import { parseArrowSideSpecification, parseArrowSpecification, parseTipsMode } from "./arrows.js";
 import type { ApplyEntryFn, ApplyOutcome } from "./apply-types.js";
-import { DEFAULT_TEXT_FONT_SIZE, NON_STYLE_OPTION_KEYS, PT_PER_CM } from "./constants.js";
+import { DEFAULT_TEXT_FONT_SIZE, NON_STYLE_OPTION_KEYS } from "./constants.js";
 import { clamp01, mixNormalizedColors, normalizeColor, normalizeShadingName, type ColorAliasResolver } from "./colors.js";
 import { parseDashPattern, parseDashValue } from "./dash.js";
 import {
@@ -38,6 +40,7 @@ type KvHandlerContext = {
   style: ResolvedStyle;
   transform: WorldTransform;
   applyOptionEntry: ApplyEntryFn;
+  axisState: AxisBasisState;
   resolveCoordinate?: (raw: string) => WorldPoint | null;
   resolveColorAlias?: ColorAliasResolver;
 };
@@ -73,7 +76,8 @@ export function applyKvEntry(
   transform: WorldTransform,
   applyOptionEntry: ApplyEntryFn,
   resolveCoordinate?: (raw: string) => WorldPoint | null,
-  resolveColorAlias?: ColorAliasResolver
+  resolveColorAlias?: ColorAliasResolver,
+  axisState: AxisBasisState = { basis: defaultAxisBasis() }
 ): ApplyOutcome {
   if (isPicCodeOptionKey(key) || isPicDefinitionOptionKey(key)) {
     return { style, transform, diagnostics: [] };
@@ -87,6 +91,7 @@ export function applyKvEntry(
       style,
       transform,
       applyOptionEntry,
+      axisState,
       resolveCoordinate,
       resolveColorAlias
     });
@@ -663,27 +668,15 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   },
   {
     keys: ["radius"],
-    handle: styleLengthHandler(
-      "cm",
-      "invalid-radius",
-      (style, radius) => ({ ...style, radius })
-    )
+    handle: radiusLengthHandler("radius", "radiusUsesBasis", "invalid-radius")
   },
   {
     keys: ["x radius"],
-    handle: styleLengthHandler(
-      "cm",
-      "invalid-x-radius",
-      (style, xRadius) => ({ ...style, xRadius })
-    )
+    handle: radiusLengthHandler("xRadius", "xRadiusUsesBasis", "invalid-x-radius")
   },
   {
     keys: ["y radius"],
-    handle: styleLengthHandler(
-      "cm",
-      "invalid-y-radius",
-      (style, yRadius) => ({ ...style, yRadius })
-    )
+    handle: radiusLengthHandler("yRadius", "yRadiusUsesBasis", "invalid-y-radius")
   },
   {
     keys: ["rounded corners"],
@@ -827,7 +820,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
     keys: ["shift"],
     handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
       const normalizedShift = normalizeOptionValue(valueRaw);
-      const vector = parseCoordinateLike(normalizedShift);
+      const vector = resolveCoordinate ? null : parseCoordinateLike(normalizedShift);
       if (vector) {
         const x = parseLength(vector.x, "cm");
         const y = parseLength(vector.y, "cm");
@@ -883,7 +876,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   {
     keys: ["rotate around", "/tikz/rotate around"],
     handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
-      const parsed = parseRotateAroundValue(valueRaw, (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate));
+      const parsed = parseRotateAroundValue(valueRaw, resolveCoordinate ? (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate) : undefined);
       if (!parsed) {
         return { style, transform, diagnostics: [`invalid-rotate-around:${valueRaw}`] };
       }
@@ -905,7 +898,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   {
     keys: ["cm", "/tikz/cm"],
     handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
-      const parsed = parseCmTransformValue(valueRaw, (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate));
+      const parsed = parseCmTransformValue(valueRaw, resolveCoordinate ? (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate) : undefined);
       if (!parsed) {
         return { style, transform, diagnostics: [`invalid-cm:${valueRaw}`] };
       }
@@ -918,38 +911,24 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   },
   {
     keys: ["x"],
-    handle: ({ valueRaw, style, transform }) => {
-      const parsed = parseAxisVector(valueRaw, "x");
+    handle: ({ valueRaw, style, transform, axisState, resolveCoordinate }) => {
+      const parsed = parseAxisVector(valueRaw, "x", resolveCoordinate ? (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate) : undefined);
       if (!parsed) {
         return { style, transform, diagnostics: [`invalid-x-axis:${valueRaw}`] };
       }
-      return {
-        style,
-        transform: {
-          ...transform,
-          a: parsed.x / PT_PER_CM,
-          b: parsed.y / PT_PER_CM
-        },
-        diagnostics: []
-      };
+      axisState.basis = { ...axisState.basis, x: worldVector(pt(parsed.x), pt(parsed.y)) };
+      return { style, transform, diagnostics: [] };
     }
   },
   {
     keys: ["y"],
-    handle: ({ valueRaw, style, transform }) => {
-      const parsed = parseAxisVector(valueRaw, "y");
+    handle: ({ valueRaw, style, transform, axisState, resolveCoordinate }) => {
+      const parsed = parseAxisVector(valueRaw, "y", resolveCoordinate ? (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate) : undefined);
       if (!parsed) {
         return { style, transform, diagnostics: [`invalid-y-axis:${valueRaw}`] };
       }
-      return {
-        style,
-        transform: {
-          ...transform,
-          c: parsed.x / PT_PER_CM,
-          d: parsed.y / PT_PER_CM
-        },
-        diagnostics: []
-      };
+      axisState.basis = { ...axisState.basis, y: worldVector(pt(parsed.x), pt(parsed.y)) };
+      return { style, transform, diagnostics: [] };
     }
   }
 ]);
@@ -967,6 +946,18 @@ function createKvHandlerMap(
     }
   }
   return handlers;
+}
+
+function radiusLengthHandler(
+  key: "radius" | "xRadius" | "yRadius",
+  basisKey: "radiusUsesBasis" | "xRadiusUsesBasis" | "yRadiusUsesBasis",
+  diagnosticCode: string
+): KvHandler {
+  return ({ valueRaw, style, transform }) => {
+    const parsed = parseLengthWithInfo(valueRaw, "cm");
+    if (!parsed) return { style, transform, diagnostics: [`${diagnosticCode}:${valueRaw}`] };
+    return { style: { ...style, [key]: parsed.value, [basisKey]: !parsed.hasExplicitUnit }, transform, diagnostics: [] };
+  };
 }
 
 function styleLengthHandler(

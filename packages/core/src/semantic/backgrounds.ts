@@ -240,7 +240,7 @@ export function generateBackgroundHookElements(
           });
         },
         currentFrame(context).macroBindings,
-        identityMatrix()
+        currentFrame(context).axisBasis
       );
       const stepX = steps?.stepX ?? DEFAULT_GRID_STEP;
       const stepY = steps?.stepY ?? DEFAULT_GRID_STEP;
@@ -338,7 +338,8 @@ function resolveBackgroundHookStyle(
     currentFrame(context).customStyles,
     undefined,
     [commandEntry],
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    currentFrame(context).axisBasis
   );
 
   return {

@@ -1,3 +1,4 @@
+import { evaluateTransformCoordinate } from "../coords/evaluate.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { EdgeOperationItem, PathStatement, Span } from "../../ast/types.js";
 import {
@@ -98,7 +99,6 @@ export function handleChildOperationCluster(params: {
     options?: { honorInitialCurrentPoint?: boolean }
   ) => SceneElement[];
   frontNodeElements: SceneElement[];
-  evaluateRawCoordinateWorld: (rawCoordinate: string) => WorldPoint | null;
 }): { consumed: number; treeParentCandidate: TreeParentCandidate } {
   const {
     statement,
@@ -111,8 +111,7 @@ export function handleChildOperationCluster(params: {
     pushDiagnostic,
     emittedTreeHookDiagnostics,
     evaluatePathStatement,
-    frontNodeElements,
-    evaluateRawCoordinateWorld
+    frontNodeElements
   } = params;
   let treeParentCandidate = params.treeParentCandidate;
 
@@ -206,9 +205,10 @@ export function handleChildOperationCluster(params: {
       parentFrame.transform,
       styleLayers,
       childCustomStyles,
-      evaluateRawCoordinateWorld,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parentFrame.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parentFrame.axisBasis
     );
     for (const diagnostic of resolvedChildStyle.diagnostics) {
       pushStyleDiagnostic(pushDiagnostic, diagnostic, "Tree child option issue", child.span);
@@ -300,6 +300,7 @@ export function handleChildOperationCluster(params: {
       style: resolvedChildStyle.style,
       styleChain: resolvedChildStyle.chain,
       transform: resolvedChildStyle.transform,
+      axisBasis: resolvedChildStyle.axisBasis,
       customStyles: childCustomStyles,
       picDefinitions: childPicDefinitions,
       colorAliases: parentFrame.colorAliases.fork(),
@@ -483,9 +484,10 @@ export function handleChildOperationCluster(params: {
         activeTreeFrame.transform,
         edgeOptionLayers,
         activeTreeFrame.customStyles,
-        evaluateRawCoordinateWorld,
+        (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
         activeTreeFrame.styleChain,
-        (raw) => resolveContextColorAliasValue(context, raw)
+        (raw) => resolveContextColorAliasValue(context, raw),
+        activeTreeFrame.axisBasis
       );
       for (const diagnostic of resolvedTreeEdgeStyle.diagnostics) {
         const code = styleDiagnosticCode(diagnostic);

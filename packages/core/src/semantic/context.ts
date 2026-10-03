@@ -1,5 +1,6 @@
 import type { WorldTransform } from "../coords/transforms.js";
 import type { WorldPoint, WorldBounds } from "../coords/points.js";
+import { defaultAxisBasis, type AxisBasis } from "./coords/axis-basis.js";
 import { PT_PER_CM } from "../coords/source.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
@@ -123,6 +124,7 @@ export type SemanticContextFrame = {
   style: ResolvedStyle;
   styleChain: StyleChainEntry[];
   transform: WorldTransform;
+  axisBasis: AxisBasis;
   layer: string;
   /** Immutable by convention so child frames can share it until a clip operation replaces it. */
   clipChain: readonly SceneClipPath[];
@@ -307,6 +309,7 @@ export function createSemanticContext(
           }
         ],
         transform: initialTransform,
+        axisBasis: defaultAxisBasis(),
         layer: MAIN_SCENE_LAYER,
         clipChain: [],
         pictureSizeRelevant: true,

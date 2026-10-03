@@ -1,3 +1,5 @@
+import { coordinateTransform, defaultAxisBasis, type AxisBasis } from "../coords/axis-basis.js";
+import { worldTransform } from "../../coords/transforms.js";
 import { frameLocalPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import { frameTransform } from "../../coords/transforms.js";
@@ -5,10 +7,8 @@ import type { FrameTransform } from "../../coords/transforms.js";
 import { worldToFrameLocal, worldVectorToFrameLocal, applyFrameTransform } from "../../coords/frame.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import type { CoordinateForm, CoordinateItem } from "../../ast/types.js";
-import { parseLength, parseQuantityExpression } from "../coords/parse-length.js";
+import { coordinateSourceUnit, parseLengthWithInfo, parseQuantityExpression } from "../coords/parse-length.js";
 import type { EvaluatedCoordinate } from "../coords/evaluate.js";
-import { applyMatrixToVector } from "../transform.js";
-import { DEFAULT_GRID_STEP } from "./constants.js";
 import type { PlacementSegment } from "./types.js";
 
 function wv(x: number, y: number): WorldVector {
@@ -73,7 +73,8 @@ export function evaluateTurnCoordinate(
   item: CoordinateItem,
   currentPoint: WorldPoint | null,
   transform: { a: number; b: number; c: number; d: number; e: number; f: number },
-  lastPlacementSegment: PlacementSegment | null
+  lastPlacementSegment: PlacementSegment | null,
+  axisBasis: AxisBasis = defaultAxisBasis()
 ): EvaluatedCoordinate | null {
   const hasTurnOption = item.options?.entries.some(
     (entry) =>
@@ -106,7 +107,7 @@ export function evaluateTurnCoordinate(
   }
 
   const angleQuantity = parseQuantityExpression(item.x.trim());
-  const radius = parseLength(item.y, "cm");
+  const radius = parseLengthWithInfo(item.y, "cm");
   if (angleQuantity?.kind !== "scalar" || radius == null) {
     return {
       kind: "invalid",
@@ -130,17 +131,20 @@ export function evaluateTurnCoordinate(
     currentPoint.x,
     currentPoint.y
   );
+  const composed = coordinateTransform(worldTransform(turnFrame.a, turnFrame.b, turnFrame.c, turnFrame.d, turnFrame.e, turnFrame.f), axisBasis, !radius.hasExplicitUnit, !radius.hasExplicitUnit);
+  const coordinateFrame = frameTransform(composed.a, composed.b, composed.c, composed.d, composed.e, composed.f);
   const radians = (angleQuantity.value * Math.PI) / 180;
   const localVector = frameLocalPoint(
-    pt(radius * Math.cos(radians)),
-    pt(radius * Math.sin(radians))
+    pt(radius.value * Math.cos(radians)),
+    pt(radius.value * Math.sin(radians))
   );
 
   return {
     kind: "transformed",
-    world: applyFrameTransform(turnFrame, localVector),
+    world: applyFrameTransform(coordinateFrame, localVector),
     local: localVector,
-    frame: turnFrame,
+    frame: coordinateFrame,
+    sourceUnits: { radius: coordinateSourceUnit(item.y) },
     origin: "turn",
     relativeBase: currentPoint,
     coordinateForm: polarForm,
@@ -150,15 +154,11 @@ export function evaluateTurnCoordinate(
   };
 }
 
+
+/** TikZ's initial grid spacing is dimensional 1cm, independent of XY vectors. */
 export function resolveDefaultGridStep(
-  transform: { a: number; b: number; c: number; d: number },
-  axis: "x" | "y"
+  _transform: { a: number; b: number; c: number; d: number },
+  _axis: "x" | "y"
 ): number {
-  const oneCoordinateUnit = parseLength("1", "cm") ?? DEFAULT_GRID_STEP;
-  const vector =
-    axis === "x"
-      ? applyMatrixToVector(transform, wv(oneCoordinateUnit, 0))
-      : applyMatrixToVector(transform, wv(0, oneCoordinateUnit));
-  const magnitude = Math.hypot(vector.x, vector.y);
-  return Number.isFinite(magnitude) && magnitude > 1e-9 ? magnitude : DEFAULT_GRID_STEP;
+  return 72.27 / 2.54;
 }

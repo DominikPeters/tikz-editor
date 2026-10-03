@@ -1,3 +1,5 @@
+import { defaultAxisBasis, type AxisBasis } from "../coords/axis-basis.js";
+import { PT_PER_CM } from "../../coords/source.js";
 import type { WorldTransform } from "../../coords/transforms.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -5,11 +7,11 @@ import type { WorldPoint } from "../../coords/points.js";
 import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import type { OptionListAst } from "../../options/types.js";
 import type { PathOptionItem } from "../../ast/types.js";
-import { applyMatrix, applyMatrixToVector } from "../transform.js";
+import { applyMatrix } from "../transform.js";
 import type { ResolvedStyle, ScenePath } from "../types.js";
 import { MAIN_SCENE_LAYER } from "../types.js";
 import type { DiagnosticPushFn } from "./types.js";
-import { parseCoordinateLike, parseLength } from "../coords/parse-length.js";
+import { parseCoordinateLike, parseLengthWithInfo } from "../coords/parse-length.js";
 import { coordinateInner, normalizeOptionValue, toRadians } from "./shared.js";
 import { DEFAULT_GRID_STEP } from "./constants.js";
 import type { StyleChainEntry } from "../style-chain.js";
@@ -29,170 +31,106 @@ function gridPolarStep(x: number, y: number): GridPolarStep {
 
 const GRID_POSITION_EPSILON = 1e-6;
 
+export type GridStepValues = Readonly<{ x: string; y: string }>;
+export const DEFAULT_GRID_STEP_VALUES: GridStepValues = Object.freeze({ x: "1cm", y: "1cm" });
+export type GridSpacing = { stepX: number; stepY: number; rawSteps: GridStepValues };
+
 export function extractGridSteps(
   item: PathOptionItem,
   pushDiagnostic: DiagnosticPushFn,
   macroBindings: ReadonlyMap<string, MacroBinding>,
-  transform: WorldTransform
-): { stepX?: number; stepY?: number } | null {
-  return extractGridStepsFromOptionList(item.options, pushDiagnostic, macroBindings, transform);
+  basis: AxisBasis = defaultAxisBasis(),
+  inheritedSteps: GridStepValues = DEFAULT_GRID_STEP_VALUES
+): GridSpacing | null {
+  return extractGridStepsFromOptionList(item.options, pushDiagnostic, macroBindings, basis, inheritedSteps);
 }
 
 export function extractGridStepsFromOptionList(
   options: OptionListAst,
   pushDiagnostic: DiagnosticPushFn,
   macroBindings: ReadonlyMap<string, MacroBinding>,
-  transform: WorldTransform
-): { stepX?: number; stepY?: number } | null {
-  let stepX: number | undefined;
-  let stepY: number | undefined;
-
+  basis: AxisBasis = defaultAxisBasis(),
+  inheritedSteps: GridStepValues = DEFAULT_GRID_STEP_VALUES
+): GridSpacing | null {
+  let xRaw = inheritedSteps.x;
+  let yRaw = inheritedSteps.y;
+  let changed = false;
+  const valid = (raw: string): boolean => {
+    const length = parseLengthWithInfo(raw, "cm");
+    return length != null && length.value >= 0;
+  };
+  const invalid = (from: number, to: number): void => {
+    pushDiagnostic("invalid-grid-step", "Grid step must provide nonnegative lengths.", from, to);
+  };
   for (const entry of options.entries) {
-    if (entry.kind !== "kv") {
-      continue;
-    }
-
+    if (entry.kind !== "kv") continue;
+    const value = normalizeOptionValue(expandPathMacroBindings(entry.valueRaw, macroBindings));
     if (entry.key === "step") {
-      const expandedValue = expandPathMacroBindings(entry.valueRaw, macroBindings);
-      const pair = parseCoordinateLike(expandedValue);
+      const pair = parseCoordinateLike(value);
       if (pair) {
-        const parsedX = parseLength(pair.x, "cm");
-        const parsedY = parseLength(pair.y, "cm");
-        if (parsedX == null || parsedY == null || parsedX < 0 || parsedY < 0) {
-          pushDiagnostic("invalid-grid-step", "Grid `step` coordinate must provide positive lengths.", entry.span.from, entry.span.to);
-          continue;
+        if (!valid(pair.x) || !valid(pair.y)) { invalid(entry.span.from, entry.span.to); continue; }
+        xRaw = pair.x;
+        yRaw = pair.y;
+      } else {
+        const polar = parsePolarStep(value, basis);
+        if (polar) {
+          xRaw = `${polar.x}pt`;
+          yRaw = `${polar.y}pt`;
+        } else {
+          if (!valid(value)) { invalid(entry.span.from, entry.span.to); continue; }
+          xRaw = yRaw = value;
         }
-        stepX = resolveGridAxisStep(parsedX, "x", hasExplicitLengthUnit(pair.x), transform);
-        stepY = resolveGridAxisStep(parsedY, "y", hasExplicitLengthUnit(pair.y), transform);
-        continue;
       }
-
-      const polar = parsePolarStep(expandPathMacroBindings(entry.valueRaw, macroBindings));
-      if (polar) {
-        stepX = Math.abs(polar.x);
-        stepY = Math.abs(polar.y);
-        continue;
-      }
-
-      const scalar = parseLength(
-        expandPathMacroBindings(entry.valueRaw, macroBindings),
-        "cm"
-      );
-      if (scalar == null || scalar < 0) {
-        pushDiagnostic("invalid-grid-step", "Grid `step` must be a positive length.", entry.span.from, entry.span.to);
-        continue;
-      }
-      const hasUnit = hasExplicitLengthUnit(entry.valueRaw);
-      stepX = resolveGridAxisStep(scalar, "x", hasUnit, transform);
-      stepY = resolveGridAxisStep(scalar, "y", hasUnit, transform);
-      continue;
-    }
-
-    if (entry.key === "xstep" || entry.key === "x step") {
-      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, macroBindings), "cm");
-      if (parsed == null || parsed < 0) {
-        pushDiagnostic("invalid-grid-step", "Grid `xstep` must be a positive length.", entry.span.from, entry.span.to);
-        continue;
-      }
-      stepX = resolveGridAxisStep(parsed, "x", hasExplicitLengthUnit(entry.valueRaw), transform);
-      continue;
-    }
-
-    if (entry.key === "ystep" || entry.key === "y step") {
-      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, macroBindings), "cm");
-      if (parsed == null || parsed < 0) {
-        pushDiagnostic("invalid-grid-step", "Grid `ystep` must be a positive length.", entry.span.from, entry.span.to);
-        continue;
-      }
-      stepY = resolveGridAxisStep(parsed, "y", hasExplicitLengthUnit(entry.valueRaw), transform);
+      changed = true;
+    } else if (entry.key === "xstep" || entry.key === "x step") {
+      if (!valid(value)) { invalid(entry.span.from, entry.span.to); continue; }
+      xRaw = value;
+      changed = true;
+    } else if (entry.key === "ystep" || entry.key === "y step") {
+      if (!valid(value)) { invalid(entry.span.from, entry.span.to); continue; }
+      yRaw = value;
+      changed = true;
     }
   }
-
-  if (stepX == null && stepY == null) {
+  if (!changed) return null;
+  const x = parseLengthWithInfo(xRaw, "cm");
+  const y = parseLengthWithInfo(yRaw, "cm");
+  if (!x || !y || x.value < 0 || y.value < 0) {
+    pushDiagnostic("invalid-grid-step", "Grid step must provide nonnegative lengths.", options.span.from, options.span.to);
     return null;
   }
-
-  return { stepX, stepY };
+  // tikz@gridB adds the two pre-CTM vectors, then uses their canvas x/y components.
+  const xVector = x.hasExplicitUnit ? wp(x.value, 0) : wp(x.value / PT_PER_CM * basis.x.x, x.value / PT_PER_CM * basis.x.y);
+  const yVector = y.hasExplicitUnit ? wp(0, y.value) : wp(y.value / PT_PER_CM * basis.y.x, y.value / PT_PER_CM * basis.y.y);
+  return { stepX: Math.abs(xVector.x + yVector.x), stepY: Math.abs(xVector.y + yVector.y), rawSteps: { x: xRaw, y: yRaw } };
 }
 
 export function extractGridStepsFromOptionLists(
   optionLists: readonly OptionListAst[],
   pushDiagnostic: DiagnosticPushFn,
   macroBindings: ReadonlyMap<string, MacroBinding>,
-  transform: WorldTransform
-): { stepX?: number; stepY?: number } | null {
-  let stepX: number | undefined;
-  let stepY: number | undefined;
-
-  for (const options of optionLists) {
-    const parsed = extractGridStepsFromOptionList(options, pushDiagnostic, macroBindings, transform);
-    if (!parsed) {
-      continue;
-    }
-    if (parsed.stepX != null) {
-      stepX = parsed.stepX;
-    }
-    if (parsed.stepY != null) {
-      stepY = parsed.stepY;
-    }
-  }
-
-  if (stepX == null && stepY == null) {
-    return null;
-  }
-
-  return { stepX, stepY };
+  basis: AxisBasis = defaultAxisBasis(),
+  inheritedSteps: GridStepValues = DEFAULT_GRID_STEP_VALUES
+): GridSpacing | null {
+  if (optionLists.length === 0) return null;
+  return extractGridStepsFromOptionList({ ...optionLists[0], entries: optionLists.flatMap(list => list.entries) }, pushDiagnostic, macroBindings, basis, inheritedSteps);
 }
 
-function parsePolarStep(raw: string): GridPolarStep | null {
+function parsePolarStep(raw: string, basis: AxisBasis): GridPolarStep | null {
   const inner = coordinateInner(raw);
-  if (!inner) {
-    return null;
-  }
-
-  const parts = splitAllAtTopLevel(inner, ":").map((part) => part.trim());
-  if (parts.length !== 2) {
-    return null;
-  }
-
+  if (!inner) return null;
+  const parts = splitAllAtTopLevel(inner, ":").map(part => part.trim());
+  if (parts.length !== 2) return null;
   const angle = Number(parts[0]);
-  const radius = parseLength(parts[1], "cm");
-  if (!Number.isFinite(angle) || radius == null) {
-    return null;
-  }
-
+  const radius = parseLengthWithInfo(parts[1], "cm");
+  if (!Number.isFinite(angle) || !radius) return null;
   const radians = toRadians(angle);
-  return gridPolarStep(
-    radius * Math.cos(radians),
-    radius * Math.sin(radians)
+  const x = radius.value * Math.cos(radians);
+  const y = radius.value * Math.sin(radians);
+  return radius.hasExplicitUnit ? gridPolarStep(x, y) : gridPolarStep(
+    (basis.x.x * x + basis.y.x * y) / PT_PER_CM,
+    (basis.x.y * x + basis.y.y * y) / PT_PER_CM
   );
-}
-
-function resolveGridAxisStep(
-  step: number,
-  axis: "x" | "y",
-  hasExplicitUnit: boolean,
-  transform: WorldTransform
-): number {
-  if (hasExplicitUnit) {
-    return Math.abs(step);
-  }
-
-  const delta =
-    axis === "x"
-      ? applyMatrixToVector(transform, wp(step, 0))
-      : applyMatrixToVector(transform, wp(0, step));
-  const magnitude = Math.hypot(delta.x, delta.y);
-  if (!Number.isFinite(magnitude) || magnitude <= 1e-9) {
-    return Math.abs(step);
-  }
-  return Math.abs(magnitude);
-}
-
-function hasExplicitLengthUnit(raw: string): boolean {
-  const compact = normalizeOptionValue(raw).replace(/\s+/g, "");
-  const match = compact.match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))([A-Za-z]+)?$/);
-  return Boolean(match?.[2]);
 }
 
 export function makeGridElements(
@@ -284,12 +222,8 @@ function makeAffineGridElements(
 
   const spacingX = stepX >= 0 ? stepX : DEFAULT_GRID_STEP;
   const spacingY = stepY >= 0 ? stepY : DEFAULT_GRID_STEP;
-  const axisX = applyMatrixToVector(transform, wp(1, 0));
-  const axisY = applyMatrixToVector(transform, wp(0, 1));
-  const axisXScale = Math.hypot(axisX.x, axisX.y);
-  const axisYScale = Math.hypot(axisY.x, axisY.y);
-  const localStepX = axisXScale > 1e-9 ? spacingX / axisXScale : spacingX;
-  const localStepY = axisYScale > 1e-9 ? spacingY / axisYScale : spacingY;
+  const localStepX = spacingX;
+  const localStepY = spacingY;
 
   const paths: ScenePath[] = [];
   if (localStepX > 1e-9) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { worldPoint as makeWorldPoint } from "../../packages/core/src/coords/points.js";
+import { defaultAxisBasis } from "../../packages/core/src/semantic/coords/axis-basis.js";
+import { worldVector, worldPoint as makeWorldPoint } from "../../packages/core/src/coords/points.js";
 import type { WorldPoint } from "../../packages/core/src/coords/points.js";
 import { pt } from "../../packages/core/src/coords/scalars.js";
 import { worldTransform } from "../../packages/core/src/coords/transforms.js";
@@ -1354,19 +1355,19 @@ describe("semantic grid helpers", () => {
     const macros = new Map();
     macros.set("\\s", { kind: "text", value: "0.5cm", provenance: [] });
 
-    const transform = worldTransform(2, 0, 0, 3, 0, 0);
-    expect(extractGridStepsFromOptionList(options(kv("step", "1")), push, macros, transform)).toMatchObject({
+    const basis = { x: worldVector(pt(56.905511811), pt(0)), y: worldVector(pt(0), pt(85.3582677165)) };
+    expect(extractGridStepsFromOptionList(options(kv("step", "1")), push, macros, basis)).toMatchObject({
       stepX: 56.905511811,
       stepY: 85.3582677165
     });
-    expect(extractGridStepsFromOptionList(options(kv("step", "(1cm, 2)")), push, macros, transform)).toMatchObject({
+    expect(extractGridStepsFromOptionList(options(kv("step", "(1cm, 2)")), push, macros, basis)).toMatchObject({
       stepX: 28.4527559055,
       stepY: 170.716535433
     });
-    const polar = extractGridStepsFromOptionList(options(kv("step", "(45:1cm)")), push, macros, identityTransform);
+    const polar = extractGridStepsFromOptionList(options(kv("step", "(45:1cm)")), push, macros, defaultAxisBasis());
     expect(polar?.stepX).toBeCloseTo(20.119, 3);
     expect(polar?.stepY).toBeCloseTo(20.119, 3);
-    expect(extractGridStepsFromOptionList(options(kv("x step", "0.5cm"), kv("y step", "2mm")), push, macros, transform)).toMatchObject({
+    expect(extractGridStepsFromOptionList(options(kv("x step", "0.5cm"), kv("y step", "2mm")), push, macros, basis)).toMatchObject({
       stepX: 14.22637795275,
       stepY: 5.6905511811
     });
@@ -1374,9 +1375,9 @@ describe("semantic grid helpers", () => {
     const combined = extractGridStepsFromOptionLists([
       options(kv("step", "1cm")),
       options(kv("xstep", "2cm"))
-    ], push, macros, identityTransform);
+    ], push, macros, defaultAxisBasis());
     expect(combined).toMatchObject({ stepX: 56.905511811, stepY: 28.4527559055 });
-    expect(extractGridStepsFromOptionList(options(flag("help lines")), push, macros, identityTransform)).toBeNull();
+    expect(extractGridStepsFromOptionList(options(flag("help lines")), push, macros, defaultAxisBasis())).toBeNull();
   });
 
   it("reports invalid grid steps and falls back for singular affine grids", () => {
@@ -1384,7 +1385,7 @@ describe("semantic grid helpers", () => {
     const push = (code: string) => diagnostics.push(code);
     const macros = new Map();
 
-    expect(extractGridStepsFromOptionList(options(kv("step", "(1,-2)"), kv("xstep", "bad"), kv("ystep", "-1")), push, macros, identityTransform)).toBeNull();
+    expect(extractGridStepsFromOptionList(options(kv("step", "(1,-2)"), kv("xstep", "bad"), kv("ystep", "-1")), push, macros, defaultAxisBasis())).toBeNull();
     expect(diagnostics).toEqual(["invalid-grid-step", "invalid-grid-step", "invalid-grid-step"]);
 
     const style = defaultStyle();
@@ -1417,9 +1418,9 @@ describe("semantic grid helpers", () => {
   it("builds transformed affine grid lines with cloned styles", () => {
     const style = { ...defaultStyle(), stroke: "#123456" };
     const transform = worldTransform(1, 1, -1, 1, 10, 20);
-    const paths = makeGridElements("source", "grid", p(10, 20), p(10, 76.9055), 28.4527559055, 28.4527559055, style, [], span, transform);
+    const paths = makeGridElements("source", "grid", p(10, 20), p(10, 20 + 2 * 28.4527559055), 28.4527559055, 28.4527559055, style, [], span, transform);
 
-    expect(paths.length).toBeGreaterThan(2);
+    expect(paths.length).toBe(4);
     expect(paths.every((path) => path.style.stroke === "#123456")).toBe(true);
     expect(paths.some((path) => {
       const [move, line] = path.commands;
@@ -1471,9 +1472,9 @@ describe("semantic turn-coordinate helpers", () => {
     expect(evaluateTurnCoordinate(coordinate({}), p(0, 0), identity, degenerate)?.world?.x).toBeGreaterThan(0);
   });
 
-  it("resolves transformed default grid steps with fallback for degenerate axes", () => {
-    expect(resolveDefaultGridStep({ a: 2, b: 0, c: 0, d: 3 }, "x")).toBeCloseTo(56.9055, 3);
-    expect(resolveDefaultGridStep({ a: 2, b: 0, c: 0, d: 3 }, "y")).toBeCloseTo(85.3583, 3);
+  it("keeps default grid steps dimensional under transformed or degenerate axes", () => {
+    expect(resolveDefaultGridStep({ a: 2, b: 0, c: 0, d: 3 }, "x")).toBeCloseTo(28.4528, 3);
+    expect(resolveDefaultGridStep({ a: 2, b: 0, c: 0, d: 3 }, "y")).toBeCloseTo(28.4528, 3);
     expect(resolveDefaultGridStep({ a: 0, b: 0, c: 0, d: 0 }, "x")).toBeCloseTo(28.4528, 3);
   });
 });

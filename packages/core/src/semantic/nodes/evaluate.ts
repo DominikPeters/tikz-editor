@@ -15,7 +15,7 @@ import {
   type ProvenanceOptionList,
   type SemanticContext
 } from "../context.js";
-import { evaluateRawCoordinate } from "../coords/evaluate.js";
+import { evaluateTransformCoordinate, evaluateRawCoordinate } from "../coords/evaluate.js";
 import {
   currentAnchorForDirection,
   resolveNodePositioningTarget,
@@ -1099,9 +1099,10 @@ function resolveNodeStyleTrace(params: {
     frame.transform,
     layers,
     cloneCustomStyleRegistry(frame.customStyles),
-    (raw) => evaluateRawCoordinate(raw, params.context).world,
+    (raw, basis) => evaluateTransformCoordinate(raw, params.context, basis),
     params.baseStyleChain,
-    (raw) => resolveContextColorAliasValue(params.context, raw)
+    (raw) => resolveContextColorAliasValue(params.context, raw),
+    frame.axisBasis
   );
 
   const scaledStyle = applyNodeTransformScale(resolved.style, params.transformScale);
@@ -1470,7 +1471,7 @@ function segmentTangent(
     // Glyph rotation uses PGF's local timer axes, while auto placement uses
     // world directions. The node transform supplies any retained CTM.
     const arcSegment: PlacementSegment = arcFrame === "local"
-      ? { kind: "arc", from: segment.from, to: segment.to, params: segment.params }
+      ? { kind: "arc", from: segment.from, to: segment.to, params: segment.params, basis: segment.localBasis }
       : segment;
     const arcTangent = tangentAtPlacementSegment(
       arcSegment,

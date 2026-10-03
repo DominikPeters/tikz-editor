@@ -79,7 +79,7 @@ import {
   makeEveryOnBackgroundLayerOptionLayer
 } from "./backgrounds.js";
 import type { SemanticDependencyGraph } from "./dependencies.js";
-import { evaluateRawCoordinate } from "./coords/evaluate.js";
+import { evaluateTransformCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
 import type { PlacementSegment } from "./path/types.js";
@@ -278,9 +278,10 @@ export function createSemanticEvaluationRun(
       parent.transform,
       rootOptionLayers,
       rootCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parent.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parent.axisBasis
     );
     if (containsCmOption(rootDelta.expandedOptionLists)) {
       markFeature(featureUsage, "transform_cm", "supported");
@@ -293,6 +294,7 @@ export function createSemanticEvaluationRun(
       style: rootDelta.style,
       styleChain: rootDelta.chain,
       transform: rootDelta.transform,
+      axisBasis: rootDelta.axisBasis,
       layer: parent.layer,
       clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
@@ -971,9 +973,10 @@ function evaluateStatement(
         }
       ],
       scopedCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       baseChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parent.axisBasis
     );
     const frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, commandSourceRef);
 
@@ -1011,6 +1014,7 @@ function evaluateStatement(
       style: resolved.style,
       styleChain: resolved.chain,
       transform: resolved.transform,
+      axisBasis: resolved.axisBasis,
       layer: parent.layer,
       clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
@@ -1150,9 +1154,10 @@ function evaluateStatement(
         }
       ],
       scopedCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parent.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw),
+      parent.axisBasis
     );
     let scopeResolved = resolved;
     let frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, scopeSourceRef);
@@ -1173,9 +1178,10 @@ function evaluateStatement(
           rawOptions: layer.rawOptions
         })),
         scopedCustomStyles,
-        (raw) => evaluateRawCoordinate(raw, context).world,
+        (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
         resolved.chain,
-        (raw) => resolveContextColorAliasValue(context, raw)
+        (raw) => resolveContextColorAliasValue(context, raw),
+        resolved.axisBasis
       );
       frameMeta = resolveFrameMeta(frameMeta, scopeResolved.expandedOptionLists, scopeSourceRef);
       backgroundDiagnostics.push(...scopeResolved.diagnostics);
@@ -1184,6 +1190,7 @@ function evaluateStatement(
       style: scopeResolved.style,
       styleChain: scopeResolved.chain,
       transform: scopeResolved.transform,
+      axisBasis: scopeResolved.axisBasis,
       layer: scopeLayer,
       clipChain: parent.clipChain,
       pictureSizeRelevant: parent.pictureSizeRelevant,
@@ -1406,9 +1413,9 @@ function evaluatePicOperationInStatement(
     noParentShapeTransform,
     picStyleLayers,
     picCustomStyles,
-    (raw) => evaluateRawCoordinate(raw, context).world,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
     parent.styleChain,
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
   );
   let frameMeta = resolveFrameMeta(parent, resolvedPicStyle.expandedOptionLists, picSourceRef);
 
@@ -1423,9 +1430,9 @@ function evaluatePicOperationInStatement(
       ),
       picStyleLayers,
       picCustomStyles,
-      (raw) => evaluateRawCoordinate(raw, context).world,
+      (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
       parent.styleChain,
-      (raw) => resolveContextColorAliasValue(context, raw)
+      (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
     );
     frameMeta = resolveFrameMeta(parent, resolvedPicStyle.expandedOptionLists, picSourceRef);
   }
@@ -1469,6 +1476,7 @@ function evaluatePicOperationInStatement(
     style: resolvedPicStyle.style,
     styleChain: resolvedPicStyle.chain,
     transform: resolvedPicStyle.transform,
+    axisBasis: resolvedPicStyle.axisBasis,
     clipChain: parent.clipChain,
     customStyles: picCustomStyles,
     picDefinitions,
@@ -2001,13 +2009,15 @@ function applyOptionListsToCurrentFrame(
       }
     ],
     frame.customStyles,
-    (raw) => evaluateRawCoordinate(raw, context).world,
+    (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
     frame.styleChain,
-    (raw) => resolveContextColorAliasValue(context, raw)
+    (raw) => resolveContextColorAliasValue(context, raw),
+    frame.axisBasis
   );
   frame.style = resolved.style;
   frame.styleChain = resolved.chain;
   frame.transform = resolved.transform;
+  frame.axisBasis = resolved.axisBasis;
   applyPicDefinitionsFromOptionLists(frame.picDefinitions, expandedOptionLists, sourceRef);
   if (featureUsage && collectBackgroundOptionEffects(context, resolved.expandedOptionLists, sourceRef)) {
     markFeature(featureUsage, "backgrounds_library", "supported");

@@ -1,3 +1,4 @@
+import type { AxisBasis } from "./coords/axis-basis.js";
 import type { WorldTransform } from "../coords/transforms.js";
 import type { Span } from "../ast/types.js";
 import type { OptionListAst } from "../options/types.js";
@@ -56,6 +57,7 @@ export type StyleTraceLayerInput =
     };
 
 export type ResolvedStyleTrace = {
+  axisBasis: AxisBasis;
   style: ResolvedStyle;
   transform: WorldTransform;
   diagnostics: StyleDiagnostic[];

@@ -32,6 +32,8 @@ export function createEditHandle(
     kind,
     world: evaluated.world,
     sourceText,
+    axisBasis: context.stack[context.stack.length - 1].axisBasis,
+    sourceUnits: evaluated.sourceUnits,
     coordinateForm: evaluated.coordinateForm,
     relativePrefix: evaluated.relativePrefix,
     rewriteTargetHandleId: opts.rewriteTargetHandleId

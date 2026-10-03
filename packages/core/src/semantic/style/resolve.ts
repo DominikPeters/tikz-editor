@@ -1,3 +1,4 @@
+import { defaultAxisBasis, type AxisBasis, type AxisBasisState } from "../coords/axis-basis.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import type { Span } from "../../ast/types.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -15,7 +16,7 @@ import {
 } from "../style-chain.js";
 import { parseArrowSpecification } from "./arrows.js";
 import { applyFlagEntry } from "./apply-flag.js";
-import type { ApplyOutcome } from "./apply-types.js";
+import type { ApplyEntryFn, ApplyOutcome } from "./apply-types.js";
 import { applyKvEntry } from "./apply-kv.js";
 import type { ColorAliasResolver } from "./colors.js";
 import type { CustomStyleRegistry } from "./custom-styles.js";
@@ -37,7 +38,7 @@ import { parseStyleValueAsOptionList } from "./option-utils.js";
 
 export type ResolvedContextDelta = ResolvedStyleTrace;
 
-export type CoordinateResolver = (raw: string) => WorldPoint | null;
+export type CoordinateResolver = (raw: string, basis?: AxisBasis) => WorldPoint | null;
 
 export function resolveContextDelta(
   baseStyle: ResolvedStyle,
@@ -46,11 +47,13 @@ export function resolveContextDelta(
   customStyles: CustomStyleRegistry = new PersistentMap(),
   resolveCoordinate?: CoordinateResolver,
   baseChain: StyleChainEntry[] = [],
-  resolveColorAliasValue?: ColorAliasResolver
+  resolveColorAliasValue?: ColorAliasResolver,
+  baseAxisBasis: AxisBasis = defaultAxisBasis()
 ): ResolvedContextDelta {
   const diagnostics: StyleDiagnostic[] = [];
   let style = cloneResolvedStyle(baseStyle);
   let transform = baseTransform;
+  const axisState: AxisBasisState = { basis: baseAxisBasis };
   const chain = cloneStyleChain(baseChain);
   const expandedEntries: OptionEntry[] = [];
   const resolveColorAlias = resolveColorAliasValue;
@@ -131,7 +134,7 @@ export function resolveContextDelta(
     }
 
     layerExpandedEntries.push(entry);
-    const outcome = applyOptionEntry(entry, style, transform, resolveCoordinate, resolveColorAlias);
+    const outcome = applyOptionEntry(entry, style, transform, resolveCoordinate, resolveColorAlias, axisState);
     style = outcome.style;
     transform = outcome.transform;
     diagnostics.push(
@@ -149,6 +152,7 @@ export function resolveContextDelta(
     style,
     transform,
     diagnostics,
+    axisBasis: axisState.basis,
     expandedOptionLists: buildExpandedOptionLists(topLevelOptionLists, expandedEntries),
     chain
   };
@@ -218,8 +222,12 @@ function applyOptionEntry(
   style: ResolvedStyle,
   transform: WorldTransform,
   resolveCoordinate?: CoordinateResolver,
-  resolveColorAlias?: ColorAliasResolver
+  resolveColorAlias?: ColorAliasResolver,
+  axisState: AxisBasisState = { basis: defaultAxisBasis() }
 ): ApplyOutcome {
+  const applyNested: ApplyEntryFn = (nested, nestedStyle, nestedTransform) =>
+    applyOptionEntry(nested, nestedStyle, nestedTransform, resolveCoordinate, resolveColorAlias, axisState);
+  const resolveWithBasis = resolveCoordinate ? (raw: string) => resolveCoordinate(raw, axisState.basis) : undefined;
   if (entry.kind === "unknown") {
     const parsedArrow = parseArrowSpecification(entry.raw, style);
     if (parsedArrow) {
@@ -235,7 +243,7 @@ function applyOptionEntry(
       const diagnostics: StyleDiagnosticInput[] = [];
       for (const list of style.everyShadowStyles) {
         for (const nestedEntry of list.entries) {
-          const outcome = applyOptionEntry(nestedEntry, nextStyle, nextTransform, resolveCoordinate, resolveColorAlias);
+          const outcome = applyOptionEntry(nestedEntry, nextStyle, nextTransform, resolveCoordinate, resolveColorAlias, axisState);
           nextStyle = outcome.style;
           nextTransform = outcome.transform;
           diagnostics.push(...outcome.diagnostics);
@@ -253,7 +261,7 @@ function applyOptionEntry(
       entry.key === "circular glow"
     ) {
       return withEntryDiagnosticSpans(
-        applyKvEntry(entry.key, "", style, transform, applyOptionEntry, resolveCoordinate, resolveColorAlias),
+        applyKvEntry(entry.key, "", style, transform, applyNested, resolveWithBasis, resolveColorAlias, axisState),
         entry
       );
     }
@@ -262,7 +270,7 @@ function applyOptionEntry(
   }
 
   return withEntryDiagnosticSpans(
-    applyKvEntry(entry.key, entry.valueRaw, style, transform, applyOptionEntry, resolveCoordinate, resolveColorAlias),
+    applyKvEntry(entry.key, entry.valueRaw, style, transform, applyNested, resolveWithBasis, resolveColorAlias, axisState),
     entry
   );
 }

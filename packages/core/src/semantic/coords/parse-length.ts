@@ -17,6 +17,13 @@ export type ParseLengthOptions = {
   unitFactors?: Readonly<Partial<Record<"em" | "ex", number>>>;
 };
 
+/** Preserve simple authored units; expressions with declared units can be rewritten in pt. */
+export function coordinateSourceUnit(raw: string): string | undefined {
+  const normalized = normalizeLengthInput(raw);
+  const match = normalized.match(/(?:\d|\.)\s*(cm|mm|pt|bp|pc|in|dd|cc|sp|em|ex)\s*$/u);
+  return match?.[1] ?? (hasExplicitLengthUnit(normalized) ? "pt" : undefined);
+}
+
 export function parseLength(
   input: string,
   defaultUnit: "cm" | "pt",

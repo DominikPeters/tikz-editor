@@ -1,3 +1,5 @@
+import { coordinateTransform, type AxisBasis } from "../coords/axis-basis.js";
+import { worldTransform } from "../../coords/transforms.js";
 import { worldBounds, worldPoint } from "../../coords/points.js";
 import type { WorldPoint, WorldBounds } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -20,7 +22,7 @@ import {
   shouldCaptureStandaloneNodeNameCoordinate
 } from "../nodes/evaluate.js";
 import { pointAtPlacementSegment, resolveNodePositionFraction } from "../nodes/placement.js";
-import { evaluateCoordinate, evaluateRawCoordinate } from "../coords/evaluate.js";
+import { evaluateTransformCoordinate, evaluateCoordinate, evaluateRawCoordinate } from "../coords/evaluate.js";
 import type { EvaluatedCoordinate } from "../coords/evaluate.js";
 import type { ResolvedStyle, SceneClipPath, SceneElement, ScenePath, ScenePathCommand } from "../types.js";
 import { appendArcCommand, extractArcParameters, parseArcShorthand } from "./arc.js";
@@ -36,7 +38,7 @@ import {
   makePath,
   makeRectangleElement
 } from "./elements.js";
-import { extractGridSteps, extractGridStepsFromOptionLists, makeGridElements } from "./grid.js";
+import { DEFAULT_GRID_STEP_VALUES, extractGridSteps, extractGridStepsFromOptionLists, makeGridElements, type GridStepValues } from "./grid.js";
 import { parseCircleRadiusFromCoordinateRaw, parseCoordinateOperation, parseEllipseRadiiFromCoordinateRaw } from "./parsers.js";
 import { parseParabolaFromItems } from "./parabola.js";
 import { extractCircleShapeOptions, extractEllipseRadii, extractRoundedCorners } from "./shape-options.js";
@@ -52,7 +54,7 @@ import {
 } from "./label-quotes.js";
 import { expandMacroBindings } from "../../macros/index.js";
 import type { DiagnosticPushFn, FeatureMarkFn, PathEvaluationOptions, PlacementSegment } from "./types.js";
-import { applyMatrix, identityMatrix } from "../transform.js";
+import { applyMatrix } from "../transform.js";
 import { createEditHandle } from "../edit-handles.js";
 import { parseStyleValueAsOptionList, resolveContextDelta } from "../style/resolve.js";
 import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "../style/diagnostics.js";
@@ -74,7 +76,7 @@ import {
 } from "./tree-child.js";
 import { buildGraphPlan } from "./graph.js";
 import { resolveSizeAwareGraphNodePoints, type RuntimeGraphNode } from "./graph-size-aware-placement.js";
-import { evaluateTurnCoordinate, resolveDefaultGridStep } from "./evaluate-coordinate-helpers.js";
+import { evaluateTurnCoordinate } from "./evaluate-coordinate-helpers.js";
 import {
   buildPlotExpressionEntries,
   emitPlotPath,
@@ -193,7 +195,7 @@ type PathBuilderState = {
   pendingEllipseCenter: WorldPoint | null;
   pendingEllipseRadii: PendingRadii | null;
   pendingArc: { from: WorldPoint } | null;
-  pendingGrid: { from: WorldPoint; stepX: number; stepY: number } | null;
+  pendingGrid: { from: WorldPoint; stepX: number; stepY: number; rawSteps: GridStepValues } | null;
   pendingNamedCoordinate: { name: string } | null;
   pendingSegmentPlacements: Array<{ name: string; fraction: number }>;
   pendingSegmentNodes: NodeItem[];
@@ -375,13 +377,11 @@ export function evaluatePathStatement(
     if (!builder.pendingCircleCenter) {
       return;
     }
-    const fallbackRadius = builder.pendingCircleRadius ?? (builder.style.radius != null ? { value: builder.style.radius, applyFrameTransform: true } : null);
+    const fallbackRadius = builder.pendingCircleRadius ?? (builder.style.radius != null ? { value: builder.style.radius, applyFrameTransform: builder.style.radiusUsesBasis ?? true } : null);
     if (fallbackRadius != null) {
       const circleTransform = resolveLengthTransform(
         fallbackRadius.applyFrameTransform,
-        frameTransform,
-        builder.statementStyleChain
-      );
+        frameTransform, frame.axisBasis);
       builder.activePath = emitCircleOrEllipse({
         geometry: transformCircleGeometry(fallbackRadius.value, circleTransform),
         center: builder.pendingCircleCenter,
@@ -397,14 +397,12 @@ export function evaluatePathStatement(
       });
     } else {
       const fallbackRadii = builder.pendingCircleRadii ?? {
-        rx: { value: builder.style.xRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: true },
-        ry: { value: builder.style.yRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: true }
+        rx: { value: builder.style.xRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: builder.style.xRadiusUsesBasis ?? true },
+        ry: { value: builder.style.yRadius ?? DEFAULT_GRID_STEP, applyFrameTransform: builder.style.yRadiusUsesBasis ?? true }
       };
       const ellipseTransform = resolveLengthTransform(
         fallbackRadii.rx.applyFrameTransform || fallbackRadii.ry.applyFrameTransform,
-        frameTransform,
-        builder.statementStyleChain
-      );
+        frameTransform, frame.axisBasis);
       builder.activePath = emitCircleOrEllipse({
         geometry: {
           kind: "ellipse",
@@ -760,9 +758,10 @@ export function evaluatePathStatement(
               frameTransform,
               edgeOptionLayers,
               frame.customStyles,
-              (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
+              (rawCoordinate, basis) => evaluateTransformCoordinate(rawCoordinate, context, basis),
               builder.statementStyleChain,
-              (raw) => resolveContextColorAliasValue(context, raw)
+              (raw) => resolveContextColorAliasValue(context, raw),
+              frame.axisBasis
             )
           );
           for (const diagnostic of resolvedEdgeStyle.diagnostics) {
@@ -842,7 +841,7 @@ export function evaluatePathStatement(
               path = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, item.span);
               path.commands.push({ kind: "M", to: builder.pendingArc.from });
             }
-            const appended = appendArcCommand(path.commands, builder.pendingArc.from, arcParams, frameTransform);
+            const appended = appendArcCommand(path.commands, builder.pendingArc.from, arcParams, frameTransform, frame.axisBasis);
             builder.activePath = path;
             setCurrentPoint(appended.endpoint);
             builder.lastPlacementSegment = appended.segment;
@@ -858,9 +857,11 @@ export function evaluatePathStatement(
             expandedItem,
             pushDiagnostic,
             builder.treeFrameState.macroBindings,
-            builder.treeFrameState.transform
+            builder.treeFrameState.axisBasis,
+            builder.pendingGrid.rawSteps
           );
           if (parsed) {
+            builder.pendingGrid.rawSteps = parsed.rawSteps;
             if (parsed.stepX != null && parsed.stepX >= 0) {
               builder.pendingGrid.stepX = parsed.stepX;
             }
@@ -903,9 +904,10 @@ export function evaluatePathStatement(
                 }
               ],
               optionCustomStyles,
-              (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
+              (rawCoordinate, basis) => evaluateTransformCoordinate(rawCoordinate, context, basis),
               builder.treeFrameState.styleChain,
-              (raw) => resolveContextColorAliasValue(context, raw)
+              (raw) => resolveContextColorAliasValue(context, raw),
+              builder.treeFrameState.axisBasis
             );
             for (const diagnostic of optionResolved.diagnostics) {
               pushStyleDiagnostic(pushDiagnostic, diagnostic, "Path option issue", item.span);
@@ -919,6 +921,7 @@ export function evaluatePathStatement(
               style: optionResolved.style,
               styleChain: optionResolved.chain,
               transform: optionResolved.transform,
+              axisBasis: optionResolved.axisBasis,
               customStyles: optionCustomStyles,
               picDefinitions: optionPicDefinitions
             };
@@ -1103,9 +1106,10 @@ export function evaluatePathStatement(
                 frameTransform,
                 pinEdgeOptionLayers,
                 frame.customStyles,
-                (raw) => evaluateRawCoordinate(raw, context).world,
+                (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
                 builder.statementStyleChain,
-                (raw) => resolveContextColorAliasValue(context, raw)
+                (raw) => resolveContextColorAliasValue(context, raw),
+                frame.axisBasis
               );
               for (const diagnostic of resolvedPinEdgeStyle.diagnostics) {
                 pushStyleDiagnostic(pushDiagnostic, diagnostic, "Pin edge option issue", spec.span);
@@ -1257,9 +1261,10 @@ export function evaluatePathStatement(
               }
             ],
             frame.customStyles,
-            (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
+            (rawCoordinate, basis) => evaluateTransformCoordinate(rawCoordinate, context, basis),
             builder.statementStyleChain,
-            (raw) => resolveContextColorAliasValue(context, raw)
+            (raw) => resolveContextColorAliasValue(context, raw),
+            frame.axisBasis
           );
           operationStyle = {
             ...resolvedDecorateOptions.style,
@@ -1556,9 +1561,10 @@ export function evaluatePathStatement(
           frameTransform,
           edgeOptionLayers,
           frame.customStyles,
-          (raw) => evaluateRawCoordinate(raw, context).world,
+          (raw, basis) => evaluateTransformCoordinate(raw, context, basis),
           builder.statementStyleChain,
-          (raw) => resolveContextColorAliasValue(context, raw)
+          (raw) => resolveContextColorAliasValue(context, raw),
+          frame.axisBasis
         );
         for (const diagnostic of resolvedEdgeStyle.diagnostics) {
           const code = styleDiagnosticCode(diagnostic);
@@ -1635,9 +1641,10 @@ export function evaluatePathStatement(
               }
             ],
             optionCustomStyles,
-            (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world,
+            (rawCoordinate, basis) => evaluateTransformCoordinate(rawCoordinate, context, basis),
             builder.statementStyleChain,
-            (raw) => resolveContextColorAliasValue(context, raw)
+            (raw) => resolveContextColorAliasValue(context, raw),
+            builder.treeFrameState.axisBasis
           );
           operationTransform = optionResolved.transform;
           for (const diagnostic of optionResolved.diagnostics) {
@@ -1735,7 +1742,7 @@ export function evaluatePathStatement(
         if (builder.pendingCircleCenter) {
           const radius = parseCircleRadiusFromCoordinateRaw(expandPathItemRaw(item.raw, context));
           if (radius != null) {
-            const circleTransform = resolveLengthTransform(radius.applyFrameTransform, frameTransform, builder.statementStyleChain);
+            const circleTransform = resolveLengthTransform(radius.applyFrameTransform, frameTransform, frame.axisBasis);
             builder.activePath = emitCircleOrEllipse({
               geometry: transformCircleGeometry(radius.value, circleTransform),
               center: builder.pendingCircleCenter,
@@ -1763,9 +1770,7 @@ export function evaluatePathStatement(
       if (parsedRadii) {
           const ellipseTransform = resolveLengthTransform(
             parsedRadii.rx.applyFrameTransform || parsedRadii.ry.applyFrameTransform,
-            frameTransform,
-            builder.statementStyleChain
-          );
+            frameTransform, frame.axisBasis);
           const geometry = transformEllipseGeometry(parsedRadii.rx.value, parsedRadii.ry.value, 0, ellipseTransform);
           markFeature("keyword_ellipse", "supported");
           builder.activePath = emitCircleOrEllipse({
@@ -1796,7 +1801,7 @@ export function evaluatePathStatement(
             path = makePath(statement.id, item.id, builder.style, builder.statementStyleChain, item.span);
             path.commands.push({ kind: "M", to: builder.pendingArc.from });
           }
-          const appended = appendArcCommand(path.commands, builder.pendingArc.from, shorthand, frameTransform);
+          const appended = appendArcCommand(path.commands, builder.pendingArc.from, shorthand, frameTransform, frame.axisBasis);
           builder.activePath = path;
           setCurrentPoint(appended.endpoint);
           builder.lastPlacementSegment = appended.segment;
@@ -1860,7 +1865,7 @@ export function evaluatePathStatement(
       }
 
       const evaluated: EvaluatedCoordinate =
-        evaluateTurnCoordinate(item, builder.currentPointLogical ?? context.currentPoint, frameTransform, builder.lastPlacementSegment) ??
+        evaluateTurnCoordinate(item, builder.currentPointLogical ?? context.currentPoint, frameTransform, builder.lastPlacementSegment, frame.axisBasis) ??
         evaluateCoordinate(item, context);
       const handleKind = statement.command === "node" ? "node-position" : "path-point";
       if (item.form === "calc") {
@@ -2340,12 +2345,13 @@ export function evaluatePathStatement(
           builder.statementStyleChain.flatMap((entry) => entry.rawOptions),
           pushDiagnostic,
           builder.treeFrameState.macroBindings,
-          builder.treeFrameState.transform
+          builder.treeFrameState.axisBasis
         );
         builder.pendingGrid = {
           from: effectiveGridStart,
-          stepX: gridStepDefaults?.stepX ?? resolveDefaultGridStep(builder.treeFrameState.transform, "x"),
-          stepY: gridStepDefaults?.stepY ?? resolveDefaultGridStep(builder.treeFrameState.transform, "y")
+          stepX: gridStepDefaults?.stepX ?? DEFAULT_GRID_STEP,
+          stepY: gridStepDefaults?.stepY ?? DEFAULT_GRID_STEP,
+          rawSteps: gridStepDefaults?.rawSteps ?? DEFAULT_GRID_STEP_VALUES
         };
         builder.lastPlacementSegment = null;
         continue;
@@ -2519,8 +2525,7 @@ export function evaluatePathStatement(
         pushDiagnostic,
         emittedTreeHookDiagnostics,
         evaluatePathStatement,
-        frontNodeElements,
-        evaluateRawCoordinateWorld: (rawCoordinate) => evaluateRawCoordinate(rawCoordinate, context).world
+        frontNodeElements
       });
       if (handled.consumed <= 0) {
         continue;
@@ -2561,9 +2566,7 @@ export function evaluatePathStatement(
     };
     const ellipseTransform = resolveLengthTransform(
       radii.rx.applyFrameTransform || radii.ry.applyFrameTransform,
-      frameTransform,
-      builder.statementStyleChain
-    );
+      frameTransform, frame.axisBasis);
     const geometry = transformEllipseGeometry(radii.rx.value, radii.ry.value, 0, ellipseTransform);
     builder.activePath = emitCircleOrEllipse({
       geometry: { kind: "ellipse", ...geometry },
@@ -2751,39 +2754,11 @@ function extendPictureBounds(context: SemanticContext, bounds: WorldBounds | und
 }
 
 function resolveLengthTransform(
-  applyFrameTransform: boolean,
-  frameTransform: { a: number; b: number; c: number; d: number },
-  styleChain: StyleChainEntry[]
-): { a: number; b: number; c: number; d: number } {
-  if (applyFrameTransform) {
-    return frameTransform;
-  }
-  return explicitLengthNeedsFrameTransform(styleChain) ? frameTransform : identityMatrix();
-}
-
-function explicitLengthNeedsFrameTransform(styleChain: StyleChainEntry[]): boolean {
-  for (const layer of styleChain) {
-    for (const optionList of layer.rawOptions) {
-      for (const entry of optionList.entries) {
-        if (entry.kind !== "kv") {
-          continue;
-        }
-        if (
-          entry.key === "scale" ||
-          entry.key === "xscale" ||
-          entry.key === "yscale" ||
-          entry.key === "rotate" ||
-          entry.key === "rotate around" ||
-          entry.key === "/tikz/rotate around" ||
-          entry.key === "cm" ||
-          entry.key === "/tikz/cm"
-        ) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
+  applyBasis: boolean,
+  transform: { a: number; b: number; c: number; d: number },
+  axisBasis: AxisBasis
+) {
+  return coordinateTransform(worldTransform(transform.a, transform.b, transform.c, transform.d, 0, 0), axisBasis, applyBasis, applyBasis);
 }
 
 function resolveNamedCoordinateRewriteHandleId(rawName: string, context: SemanticContext): string | undefined {

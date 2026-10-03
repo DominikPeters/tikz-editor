@@ -11,7 +11,7 @@ import type { WorldPoint } from "../coords/points.js";
 import { ptToCm } from "../coords/source.js";
 import { worldToLocal, worldDeltaToLocalDelta, localToSourceUnits } from "./coords.js";
 import { CM_PER_PT, formatNumber, type NumberFormatOptions } from "./format.js";
-import { formatCoordinate, formatPolarCoordinate } from "./style.js";
+import { formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate } from "./style.js";
 import { rewriteCalcCoordinate } from "./rewrite-calc.js";
 
 /**
@@ -45,9 +45,10 @@ export function rewriteCoordinate(
       return rewriteCartesian(newWorld, handle, source);
     case "polar":
       return rewritePolar(newWorld, handle, source);
+    case "explicit":
+      return rewriteCanvas(newWorld, handle, source);
     case "xyz":
     case "calc":
-    case "explicit":
     case "named":
     case "unknown":
       return null;
@@ -104,8 +105,16 @@ function rewriteCartesian(
   }
   const cm = localToSourceUnits(local);
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y));
+  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
   return applyInsertionSyntax(source, handle, coordinate);
+}
+
+function rewriteCanvas(newWorld: WorldPoint, handle: EditHandle, source: string): string | null {
+  if (!isFrameLocalCoordinateEditHandle(handle)) return null;
+  const local = worldToLocal(newWorld, handle.frame);
+  if (!local) return null;
+  const cm = localToSourceUnits(local);
+  return formatCanvasCoordinate(source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to), formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
 }
 
 function rewritePolar(
@@ -123,7 +132,7 @@ function rewritePolar(
   const cm = localToSourceUnits(local);
   const { angleDeg, radius } = toPolar(cm);
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
-  const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius));
+  const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits);
   return applyInsertionSyntax(source, handle, coordinate);
 }
 
@@ -148,13 +157,17 @@ function rewriteDelta(
   const oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
   if (handle.coordinateForm === "polar") {
     const { angleDeg, radius } = toPolar(cm);
-    const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius));
+    const coordinate = formatPolarCoordinate(oldRaw, formatNumber(angleDeg), formatNumber(radius), handle.sourceUnits);
     return applyInsertionSyntax(source, handle, coordinate);
+  }
+  if (handle.coordinateForm === "explicit") {
+    const coordinate = formatCanvasCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
+    return coordinate ? applyInsertionSyntax(source, handle, coordinate) : null;
   }
   if (handle.coordinateForm === "xyz") {
     return null;
   }
-  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y));
+  const coordinate = formatCoordinate(oldRaw, formatNumber(cm.x), formatNumber(cm.y), handle.sourceUnits);
   return applyInsertionSyntax(source, handle, coordinate);
 }
 

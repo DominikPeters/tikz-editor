@@ -1,3 +1,5 @@
+import { coordinateTransform, defaultAxisBasis, type AxisBasis } from "../coords/axis-basis.js";
+import { worldTransform } from "../../coords/transforms.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
@@ -5,7 +7,7 @@ import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import type { DiagnosticPushFn, ArcParameters, PlacementSegment } from "./types.js";
 import { coordinateInner, toRadians } from "./shared.js";
-import { parseLength } from "../coords/parse-length.js";
+import { parseLengthWithInfo } from "../coords/parse-length.js";
 import type { MacroBinding, MacroExpansionTraceEvent } from "../../macros/index.js";
 import type { ResolvedStyle, ScenePathCommand } from "../types.js";
 import { applyMatrixToVector } from "../transform.js";
@@ -30,6 +32,8 @@ export function extractArcParameters(
   let deltaAngle: number | null = null;
   let rx: number | null = style.xRadius ?? style.radius;
   let ry: number | null = style.yRadius ?? style.radius;
+  let scalarX = style.xRadius != null ? style.xRadiusUsesBasis ?? true : style.radiusUsesBasis ?? true;
+  let scalarY = style.yRadius != null ? style.yRadiusUsesBasis ?? true : style.radiusUsesBasis ?? true;
 
   for (const entry of item.options.entries) {
     if (entry.kind !== "kv") {
@@ -51,20 +55,23 @@ export function extractArcParameters(
         deltaAngle = parsed;
       }
     } else if (entry.key === "radius") {
-      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, macroBindings, macroTraceCollector), "cm");
+      const parsed = parseLengthWithInfo(expandPathMacroBindings(entry.valueRaw, macroBindings, macroTraceCollector), "cm");
       if (parsed != null) {
-        rx = parsed;
-        ry = parsed;
+        rx = parsed.value;
+        ry = parsed.value;
+        scalarX = scalarY = !parsed.hasExplicitUnit;
       }
     } else if (entry.key === "x radius") {
-      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, macroBindings, macroTraceCollector), "cm");
+      const parsed = parseLengthWithInfo(expandPathMacroBindings(entry.valueRaw, macroBindings, macroTraceCollector), "cm");
       if (parsed != null) {
-        rx = parsed;
+        rx = parsed.value;
+        scalarX = !parsed.hasExplicitUnit;
       }
     } else if (entry.key === "y radius") {
-      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, macroBindings, macroTraceCollector), "cm");
+      const parsed = parseLengthWithInfo(expandPathMacroBindings(entry.valueRaw, macroBindings, macroTraceCollector), "cm");
       if (parsed != null) {
-        ry = parsed;
+        ry = parsed.value;
+        scalarY = !parsed.hasExplicitUnit;
       }
     }
   }
@@ -80,12 +87,17 @@ export function extractArcParameters(
     return null;
   }
 
+  if (scalarX !== scalarY) {
+    pushDiagnostic("invalid-arc-parameters", "Arc radii cannot mix dimensions and dimensionless values.", item.span.from, item.span.to);
+    return null;
+  }
   if (rx != null && ry != null) {
     return {
       startAngle,
       endAngle: resolvedEndAngle,
       rx,
-      ry
+      ry,
+      usesBasis: scalarX
     };
   }
 
@@ -113,29 +125,33 @@ export function parseArcShorthand(raw: string): ArcParameters | null {
   const radiiSpec = parts[2];
   const elliptical = radiiSpec.match(/^(.+?)\s+and\s+(.+)$/i);
   if (elliptical) {
-    const rx = parseLength(elliptical[1].trim(), "cm");
-    const ry = parseLength(elliptical[2].trim(), "cm");
+    const rx = parseLengthWithInfo(elliptical[1].trim(), "cm");
+    const ry = parseLengthWithInfo(elliptical[2].trim(), "cm");
     if (rx == null || ry == null) {
       return null;
     }
-    return { startAngle, endAngle, rx, ry };
+    if (rx.hasExplicitUnit !== ry.hasExplicitUnit) return null;
+    return { startAngle, endAngle, rx: rx.value, ry: ry.value, usesBasis: !rx.hasExplicitUnit };
   }
 
-  const radius = parseLength(radiiSpec, "cm");
+  const radius = parseLengthWithInfo(radiiSpec, "cm");
   if (radius == null) {
     return null;
   }
 
-  return { startAngle, endAngle, rx: radius, ry: radius };
+  return { startAngle, endAngle, rx: radius.value, ry: radius.value, usesBasis: !radius.hasExplicitUnit };
 }
 
 export function appendArcCommand(
   commands: ScenePathCommand[],
   from: WorldPoint,
   params: ArcParameters,
-  transform: { a: number; b: number; c: number; d: number } = { a: 1, b: 0, c: 0, d: 1 }
+  transform: { a: number; b: number; c: number; d: number } = { a: 1, b: 0, c: 0, d: 1 },
+  axisBasis: AxisBasis = defaultAxisBasis()
 ): { endpoint: WorldPoint; segment: PlacementSegment } {
-  const geometry = computeArcGeometry(from, params, transform);
+  const localTransform = coordinateTransform(worldTransform(1, 0, 0, 1, 0, 0), axisBasis, params.usesBasis ?? false, params.usesBasis ?? false);
+  const worldAxesTransform = coordinateTransform(worldTransform(transform.a, transform.b, transform.c, transform.d, 0, 0), axisBasis, params.usesBasis ?? false, params.usesBasis ?? false);
+  const geometry = computeArcGeometry(from, params, worldAxesTransform);
   commands.push({
     kind: "A",
     rx: geometry.rx,
@@ -153,7 +169,11 @@ export function appendArcCommand(
       to: geometry.endpoint,
       params,
       basis: geometry.basis,
-      turnLookupControl: arcTurnLookupControl(geometry.endpoint, params, transform)
+      localBasis: {
+        x: applyMatrixToVector(localTransform, worldVector(pt(params.rx), pt(0))),
+        y: applyMatrixToVector(localTransform, worldVector(pt(0), pt(params.ry)))
+      },
+      turnLookupControl: arcTurnLookupControl(geometry.endpoint, params, worldAxesTransform)
     }
   };
 }
