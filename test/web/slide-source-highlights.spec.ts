@@ -16,9 +16,14 @@ Summary.
 \end{frame}
 \end{document}`;
 
-it.each(["ranges-first", "source-first"])("highlights exactly the moved frame when updates arrive %s", order => {
-  const moved = editBeamerSlides(source, { kind: "move", frameIds: ["frame:1"], destination: { kind: "before", frameId: "frame:0" } })!;
-  const request = { source: moved.source, figures: scanBeamerDocument(moved.source).frames, activeRootId: "frame:0" };
+it.each([
+  ["move", "ranges-first"], ["move", "source-first"],
+  ["insert", "ranges-first"], ["insert", "source-first"]
+] as const)("highlights exactly the active frame after %s when updates arrive %s", (kind, order) => {
+  const moved = editBeamerSlides(source, kind === "move"
+    ? { kind, frameIds: ["frame:1"], destination: { kind: "before", frameId: "frame:0" } }
+    : { kind, destination: { kind: "after", frameId: "frame:0" } })!;
+  const request = { source: moved.source, figures: scanBeamerDocument(moved.source).frames, activeRootId: moved.selectedFrameIds[0] };
   let state = EditorState.create({ doc: source, extensions: [figureOverlayField] });
   state = state.update({ effects: setFigureOverlay.of({ source, figures: scanBeamerDocument(source).frames, activeRootId: "frame:1" }) }).state;
   const changes = moved.patches.map(patch => ({ from: patch.oldSpan.from, to: patch.oldSpan.to, insert: patch.replacement }));
@@ -31,5 +36,6 @@ it.each(["ranges-first", "source-first"])("highlights exactly the moved frame wh
   }
   const ranges: number[][] = [];
   state.field(figureOverlayField).decorations.between(0, state.doc.length, (from, to) => { ranges.push([from, to]); });
-  expect(ranges).toEqual([[0, request.figures[0].span.from], [request.figures[0].span.to, moved.source.length]]);
+  const active = request.figures.find(frame => frame.id === request.activeRootId)!;
+  expect(ranges).toEqual([[0, active.span.from], [active.span.to, moved.source.length]]);
 });

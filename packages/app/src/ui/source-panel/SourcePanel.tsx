@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { clamp } from "@tikz-editor/core/utils/math";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore } from "../../settings/useSettingsStore";
@@ -454,11 +454,16 @@ function useExternalSourceSync(
   lastEditPatches: readonly SourceSyncPatch[] | null,
   lastEditPatchBaseRevision: number | null,
   coalesceToAnimationFrame: boolean,
-  throttleMs = 0
+  throttleMs = 0,
+  onSourceSynced?: () => void
 ) {
   const rafIdRef = useRef<number | null>(null);
   const throttleIdRef = useRef<number | null>(null);
   const pendingSyncRef = useRef<PendingExternalSourceSync | null>(null);
+  const onSourceSyncedRef = useRef(onSourceSynced);
+  useLayoutEffect(() => {
+    onSourceSyncedRef.current = onSourceSynced;
+  }, [onSourceSynced]);
 
   useEffect(() => {
     return () => {
@@ -495,6 +500,7 @@ function useExternalSourceSync(
       }
       pendingSyncRef.current = null;
       plugin.syncExternalSource(source, sourceRevision, lastEditPatches, null, false);
+      onSourceSyncedRef.current?.();
       return;
     }
 
@@ -535,6 +541,7 @@ function useExternalSourceSync(
         pending.patchChain,
         pending.coalescedToAnimationFrame
       );
+      onSourceSyncedRef.current?.();
     };
     if (throttleMs > 0) {
       if (throttleIdRef.current != null) {
@@ -1230,29 +1237,13 @@ export function SourcePanel() {
     });
   }, [selectedElementIds]);
 
-  // ── Sync store source → CodeMirror (for WYSIWYG changes) ───────────────────
-  useExternalSourceSync(
-    viewRef,
-    source,
-    sourceRevision,
-    lastEditPatches,
-    lastEditPatchBaseRevision,
-    activeCanvasDragKind != null || lastEditPatches != null,
-    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0
-  );
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
-  }, [activeRootId, figureOverlaySignature, figures, snapshot.source]);
-
   const prevActiveFigureIdRef = useRef(activeRootId);
-  useEffect(() => {
+  const syncActiveFigureSelection = useCallback(() => {
     const view = viewRef.current;
-    if (!view) {
+    // A slide edit changes source and root selection before the new render
+    // snapshot and the coalesced CodeMirror update arrive. Do not consume the
+    // root change using positions from either older document.
+    if (!view || snapshot.source !== source || view.state.doc.toString() !== source) {
       return;
     }
     const activeFigure = figures.find((figure) => figure.id === activeRootId);
@@ -1286,7 +1277,29 @@ export function SourcePanel() {
     view.dispatch({
       effects: EditorView.scrollIntoView(anchor, { y: "start", yMargin: 8 })
     });
-  }, [activeRootId, figures]);
+  }, [activeRootId, figures, snapshot.source, source]);
+
+  // ── Sync store source → CodeMirror (for WYSIWYG changes) ───────────────────
+  useExternalSourceSync(
+    viewRef,
+    source,
+    sourceRevision,
+    lastEditPatches,
+    lastEditPatchBaseRevision,
+    activeCanvasDragKind != null || lastEditPatches != null,
+    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0,
+    syncActiveFigureSelection
+  );
+
+  useEffect(syncActiveFigureSelection, [syncActiveFigureSelection]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) {
+      return;
+    }
+    view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
+  }, [activeRootId, figureOverlaySignature, figures, snapshot.source]);
 
   useEffect(() => {
     if (!activeColorPicker) {

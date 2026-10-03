@@ -312,10 +312,12 @@ test("keeps source dimming aligned with the active slide after reorder and undo"
   });
   await expect.poll(async () => (await dimmed("Response time:")).every(Boolean)).toBe(true);
   await expect.poll(async () => (await dimmed("Summary.")).some(Boolean)).toBe(false);
+  await expect(page.locator(".cm-activeLine")).toHaveText(String.raw`\begin{frame}{Results}`);
   await card(page, "Results").focus(); await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => readStoreSource(page)).toBe(source);
   await expect.poll(async () => (await dimmed("Response time:")).every(Boolean)).toBe(true);
   await expect.poll(async () => (await dimmed("Summary.")).some(Boolean)).toBe(false);
+  await expect(page.locator(".cm-activeLine")).toHaveText(String.raw`\begin{frame}{Results}`);
 });
 
 test("copies and pastes selected slides through clipboard events and undoes once", async ({ page }) => {
@@ -363,4 +365,39 @@ test("uses a counted stack as the multi-slide drag image and removes it on cance
   await expect(ghost).toHaveCount(0);
   expect(await readStoreSource(page)).toBe(SOURCE);
   await transfer.dispose();
+});
+
+
+test("keeps the new slide's source boundaries and caret aligned after insertion and undo", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  const source = UNITS_SOURCE.replace("Summary: 15\\unit", "Summary.");
+  await setSource(page, source);
+  await page.evaluate(() => (window as unknown as { __TIKZ_EDITOR_APP_TEST_API__: { runCommand: (id: string) => boolean } }).__TIKZ_EDITOR_APP_TEST_API__.runCommand("view.toggle-source-panel"));
+  await expect(page.locator(".cm-content")).toBeVisible();
+  await card(page, "Latency").click();
+  await nav(page).getByRole("button", { name: "New slide", exact: true }).click();
+  await expect(nav(page).locator("[data-slide-id]")).toHaveCount(3);
+  const highlights = () => page.locator(".cm-line").evaluateAll(lines => lines.map(line => {
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let bright = "", dim = "";
+    while (walker.nextNode()) {
+      const text = walker.currentNode.textContent ?? "";
+      if (walker.currentNode.parentElement?.closest(".cm-figure-dimmed")) dim += text;
+      else bright += text;
+    }
+    return { bright: bright.trim(), dim: dim.trim() };
+  }));
+  await expect.poll(async () => (await highlights()).filter(line => line.bright).map(line => line.bright))
+    .toEqual([String.raw`\begin{frame}`, String.raw`\end{frame}`]);
+  await expect(page.locator(".cm-activeLine")).toHaveText(String.raw`\begin{frame}`);
+  await selected(page).focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(source);
+  await expect.poll(async () => (await highlights()).filter(line => line.bright).map(line => line.bright))
+    .toEqual([String.raw`\begin{frame}{Latency}`, String.raw`Response time: 12\unit`, String.raw`\end{frame}`]);
+  await expect(page.locator(".cm-activeLine")).toHaveText(String.raw`\begin{frame}{Latency}`);
+  await selected(page).focus(); await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(nav(page).locator("[data-slide-id]")).toHaveCount(3);
+  await expect.poll(async () => (await highlights()).filter(line => line.bright).map(line => line.bright))
+    .toEqual([String.raw`\begin{frame}`, String.raw`\end{frame}`]);
+  await expect(page.locator(".cm-activeLine")).toHaveText(String.raw`\begin{frame}`);
 });
