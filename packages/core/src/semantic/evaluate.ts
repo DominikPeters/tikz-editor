@@ -18,8 +18,8 @@ import type {
 } from "../ast/types.js";
 import { pt } from "../coords/scalars.js";
 import type { Diagnostic } from "../diagnostics/types.js";
-import { FEATURE_IDS } from "../capabilities/feature-ids.js";
-import type { FeatureId } from "../capabilities/feature-ids.js";
+import { initializeFeatureUsage, markFeatureUsage as markFeature, mergeFeatureUsage } from "./feature-usage.js";
+export { initializeFeatureUsage } from "./feature-usage.js";
 import { expandForeachFigure } from "../foreach/index.js";
 import {
   DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
@@ -150,6 +150,8 @@ export type SemanticStatementEvaluationRecord = {
   diagnosticsStart: number;
   diagnosticsEnd: number;
   effectSummary: SemanticStatementEffectSummary;
+  /** Sparse usage emitted by this statement, independent of prior providers. */
+  featureUsage: FeatureUsage;
 };
 
 export type SemanticEvaluationRun = {
@@ -378,16 +380,18 @@ export function evaluateSemanticStatementByIndex(
   const diagnosticsStart = run.diagnostics.length;
   const beforeCurrentPoint = run.context.currentPoint ? { ...run.context.currentPoint } : null;
   const beforePathStartPoint = run.context.pathStartPoint ? { ...run.context.pathStartPoint } : null;
+  const featureUsage: FeatureUsage = {};
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(
       { rng: run.context.mathRandom },
       () => {
         if (scopeStep === "leave") { popFrame(run.context); return []; }
-        return evaluateStatement(statement, run.context, run.diagnostics, run.featureUsage, run.statementMacroAttribution, scopeStep === "enter");
+        return evaluateStatement(statement, run.context, run.diagnostics, featureUsage, run.statementMacroAttribution, scopeStep === "enter");
       }
     )
   );
+  mergeFeatureUsage(run.featureUsage, featureUsage);
   const sourceId = run.statementAttribution.get(statement)?.sourceId ?? statement.id;
   const statementSourceMap = run.statementSourceMaps.get(statement);
   const sourceSpan = statementSourceMap
@@ -459,6 +463,7 @@ export function evaluateSemanticStatementByIndex(
     handleEnd: run.context.editHandles.length,
     diagnosticsStart,
     diagnosticsEnd: run.diagnostics.length,
+    featureUsage,
     effectSummary
   };
 }
@@ -2799,30 +2804,6 @@ function containsCmOption(optionLists: OptionListAst[]): boolean {
 
 function isCmOptionEntry(entry: OptionEntry): boolean {
   return entry.kind === "kv" && (entry.key === "cm" || entry.key === "/tikz/cm");
-}
-
-export function initializeFeatureUsage(): FeatureUsage {
-  const usage: FeatureUsage = {};
-  for (const featureId of FEATURE_IDS) {
-    usage[featureId] = "unused";
-  }
-  return usage;
-}
-
-function markFeature(featureUsage: FeatureUsage, featureId: FeatureId, status: "supported" | "unsupported"): void {
-  if (!(featureId in featureUsage)) {
-    return;
-  }
-
-  const current = featureUsage[featureId];
-  if (status === "unsupported") {
-    featureUsage[featureId] = "used-unsupported";
-    return;
-  }
-
-  if (current !== "used-unsupported") {
-    featureUsage[featureId] = "used-supported";
-  }
 }
 
 function markForeachFeaturesFromFigure(figure: TikzFigure, featureUsage: FeatureUsage): void {

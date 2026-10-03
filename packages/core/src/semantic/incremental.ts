@@ -25,6 +25,7 @@ import {
   type EvaluateTikzResult
 } from "./evaluate.js";
 import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
+import { mergeFeatureUsage } from "./feature-usage.js";
 import type {
   EditHandle,
   EvaluateOptions,
@@ -108,12 +109,12 @@ type SemanticStatementFragment = {
   editHandles: EditHandle[];
   diagnostics: Diagnostic[];
   effectSummary: SemanticStatementEffectSummary;
+  featureUsage: FeatureUsage;
 };
 
 type CapturedSemanticCheckpoints = {
   kind: "captured";
   checkpointsBeforeStatement: Map<number, SemanticContextSnapshot>;
-  featureUsageBeforeStatement: Map<number, FeatureUsage>;
 };
 
 type SemanticCheckpointCache = CapturedSemanticCheckpoints;
@@ -128,7 +129,6 @@ type CachedSemanticRun = {
   checkpointCache: SemanticCheckpointCache;
   dependencies: EvaluateTikzResult["dependencies"];
   sourceStatementFirstIndexBySourceId: Map<string, number>;
-  finalFeatureUsage: FeatureUsage;
 };
 
 type SelectiveReplayPlan = {
@@ -254,16 +254,6 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
     }
 
     const startCheckpoint = preparedCheckpoints.checkpointsBeforeStatement.get(restoreIndex)!;
-    const startFeatureUsage = preparedCheckpoints.featureUsageBeforeStatement.get(restoreIndex);
-    if (!startFeatureUsage) {
-      const full = yield* evaluateFullyAndCache(
-        run,
-        statementIds,
-        "feature-checkpoint-missing"
-      );
-      if (version === runVersion) cached = full.cached;
-      return full.output;
-    }
 
     const selectivePlan = planSelectiveReplay(previous.statementFragments, restoreIndex, affectedStatementIndices);
     if (selectivePlan) {
@@ -279,7 +269,6 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
           checkpointInterval,
           previousCheckpoints: preparedCheckpoints,
           startCheckpoint,
-          startFeatureUsage,
           checkpointPreparation
         });
         if (version === runVersion) cached = selective.cached;
@@ -295,7 +284,6 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
             checkpointInterval,
             previousCheckpoints: preparedCheckpoints,
             startCheckpoint,
-            startFeatureUsage,
             affectedStatementCount: new Set(affectedStatementIndices).size,
             fallbackReason: "selective-replay-error",
             checkpointPreparation
@@ -324,7 +312,6 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         checkpointInterval,
         previousCheckpoints: preparedCheckpoints,
         startCheckpoint,
-        startFeatureUsage,
         affectedStatementCount: new Set(affectedStatementIndices).size,
         checkpointPreparation
       });
@@ -364,7 +351,6 @@ function* evaluateFullyAndCache(
   const checkpointInterval = Math.max(DEFAULT_CHECKPOINT_INTERVAL, Math.ceil(statementCount / 128));
   const statementFragments: SemanticStatementFragment[] = [];
   const checkpointsBeforeStatement = new Map<number, SemanticContextSnapshot>();
-  const featureUsageBeforeStatement = new Map<number, FeatureUsage>();
   run.captureGeometryCheckpoints = false;
   run.geometryCheckpoints = checkpointsBeforeStatement;
 
@@ -374,7 +360,6 @@ function* evaluateFullyAndCache(
         statementIndex,
         snapshotSemanticContext(run.context, { editHandlesMode: "length" })
       );
-      featureUsageBeforeStatement.set(statementIndex, cloneFeatureUsage(run.featureUsage));
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     statementFragments.push(createStatementFragment(evaluated, run.context.sourceFingerprint));
@@ -384,7 +369,6 @@ function* evaluateFullyAndCache(
     statementCount,
     snapshotSemanticContext(run.context, { editHandlesMode: "length" })
   );
-  featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(run.featureUsage));
 
   const semantic = finalizeSemanticEvaluationRun(
     run,
@@ -397,10 +381,9 @@ function* evaluateFullyAndCache(
     statementFragments,
     editHandles: semantic.editHandles,
     checkpointInterval,
-    checkpointCache: { kind: "captured", checkpointsBeforeStatement, featureUsageBeforeStatement },
+    checkpointCache: { kind: "captured", checkpointsBeforeStatement },
     dependencies: semantic.dependencies,
     sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
-    finalFeatureUsage: cloneFeatureUsage(semantic.featureUsage)
   };
   return {
     output: {
@@ -431,7 +414,6 @@ function* evaluateIncrementalSuffix(args: {
   checkpointInterval: number;
   previousCheckpoints: CapturedSemanticCheckpoints;
   startCheckpoint: SemanticContextSnapshot;
-  startFeatureUsage: FeatureUsage;
   affectedStatementCount: number;
   fallbackReason?: IncrementalSemanticFallbackReason;
   checkpointPreparation: IncrementalSemanticCheckpointPreparation;
@@ -448,7 +430,6 @@ function* evaluateIncrementalSuffix(args: {
     checkpointInterval,
     previousCheckpoints,
     startCheckpoint,
-    startFeatureUsage,
     affectedStatementCount,
     fallbackReason,
     checkpointPreparation
@@ -458,7 +439,6 @@ function* evaluateIncrementalSuffix(args: {
   restoreSemanticContext(run.context, startCheckpoint, {
     editHandleSource: previous.editHandles
   });
-  assignFeatureUsage(run.featureUsage, startFeatureUsage);
 
   const nextFragments = yield* bindFragmentsToCurrentSource(run, previous.statementFragments.slice(0, restoreIndex), resolveSpan);
   run.context.editHandles = nextFragments.flatMap(fragment => fragment.editHandles);
@@ -468,10 +448,7 @@ function* evaluateIncrementalSuffix(args: {
     previousCheckpoints.checkpointsBeforeStatement,
     restoreIndex
   );
-  const featureUsageBeforeStatement = cloneCheckpointsBefore(
-    previousCheckpoints.featureUsageBeforeStatement,
-    restoreIndex
-  );
+  yield* restorePrefixFeatureUsage(run.featureUsage, previous.statementFragments, restoreIndex);
   run.captureGeometryCheckpoints = false;
   run.geometryCheckpoints = checkpointsBeforeStatement;
 
@@ -481,7 +458,6 @@ function* evaluateIncrementalSuffix(args: {
         statementIndex,
         snapshotSemanticContext(run.context, { editHandlesMode: "length" })
       );
-      featureUsageBeforeStatement.set(statementIndex, cloneFeatureUsage(run.featureUsage));
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
@@ -491,7 +467,6 @@ function* evaluateIncrementalSuffix(args: {
     statementCount,
     snapshotSemanticContext(run.context, { editHandlesMode: "length" })
   );
-  featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(run.featureUsage));
 
   const semantic = finalizeSemanticEvaluationRun(
     run,
@@ -522,12 +497,10 @@ function* evaluateIncrementalSuffix(args: {
       checkpointInterval,
       checkpointCache: {
         kind: "captured",
-        checkpointsBeforeStatement,
-        featureUsageBeforeStatement
+        checkpointsBeforeStatement
       },
       dependencies: semantic.dependencies,
       sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
-      finalFeatureUsage: cloneFeatureUsage(semantic.featureUsage)
     }
   };
 }
@@ -543,7 +516,6 @@ function* evaluateSelectively(args: {
   checkpointInterval: number;
   previousCheckpoints: CapturedSemanticCheckpoints;
   startCheckpoint: SemanticContextSnapshot;
-  startFeatureUsage: FeatureUsage;
   checkpointPreparation: IncrementalSemanticCheckpointPreparation;
 }): Generator<void, {
   output: IncrementalSemanticEvaluateResult;
@@ -560,7 +532,6 @@ function* evaluateSelectively(args: {
     checkpointInterval,
     previousCheckpoints,
     startCheckpoint,
-    startFeatureUsage,
     checkpointPreparation
   } = args;
   const statementCount = run.expandedFigureBody.length;
@@ -569,7 +540,6 @@ function* evaluateSelectively(args: {
     editHandleSource: previous.editHandles
   });
   retargetEditHandlesSourceFingerprint(run.context.editHandles, run.context.sourceFingerprint);
-  assignFeatureUsage(run.featureUsage, startFeatureUsage);
   run.diagnostics.length = run.baseDiagnosticsCount;
 
   const nextFragments = previous.statementFragments.slice();
@@ -577,10 +547,7 @@ function* evaluateSelectively(args: {
     previousCheckpoints.checkpointsBeforeStatement,
     restoreIndex
   );
-  const featureUsageBeforeStatement = cloneCheckpointsBefore(
-    previousCheckpoints.featureUsageBeforeStatement,
-    restoreIndex
-  );
+  yield* restorePrefixFeatureUsage(run.featureUsage, previous.statementFragments, restoreIndex);
   run.captureGeometryCheckpoints = false;
   run.geometryCheckpoints = checkpointsBeforeStatement;
 
@@ -590,7 +557,6 @@ function* evaluateSelectively(args: {
         statementIndex,
         snapshotSemanticContext(run.context, { editHandlesMode: "length" })
       );
-      featureUsageBeforeStatement.set(statementIndex, cloneFeatureUsage(run.featureUsage));
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
     nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
@@ -612,13 +578,6 @@ function* evaluateSelectively(args: {
         statementIndex,
         snapshotSemanticContext(run.context, { editHandlesMode: "length" })
       );
-      featureUsageBeforeStatement.set(
-        statementIndex,
-        cloneFeatureUsage(
-          previousCheckpoints.featureUsageBeforeStatement.get(statementIndex)
-            ?? previous.finalFeatureUsage
-        )
-      );
     }
     if (fragment.effectSummary.entersScope) {
       // Resolve the unchanged scope options against the current enclosing frame.
@@ -627,19 +586,15 @@ function* evaluateSelectively(args: {
     } else {
       applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.sourceId });
       run.context.editHandles.push(...fragment.editHandles);
+      mergeFeatureUsage(run.featureUsage, fragment.featureUsage);
     }
     yield;
   }
-  const finalFeatureUsage = mergeFeatureUsageAfterSelectiveReplay(
-    previous.finalFeatureUsage,
-    startFeatureUsage,
-    run.featureUsage
-  );
+  const finalFeatureUsage = cloneFeatureUsage(run.featureUsage);
   checkpointsBeforeStatement.set(
     statementCount,
     snapshotSemanticContext(run.context, { editHandlesMode: "length" })
   );
-  featureUsageBeforeStatement.set(statementCount, cloneFeatureUsage(finalFeatureUsage));
 
   const currentFragments = yield* bindFragmentsToCurrentSource(run, nextFragments, resolveSpan);
   const recomputedSourceIds = new Set(currentFragments
@@ -683,12 +638,10 @@ function* evaluateSelectively(args: {
       checkpointInterval,
       checkpointCache: {
         kind: "captured",
-        checkpointsBeforeStatement,
-        featureUsageBeforeStatement
+        checkpointsBeforeStatement
       },
       dependencies: semantic.dependencies,
       sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
-      finalFeatureUsage: cloneFeatureUsage(semantic.featureUsage)
     }
   };
 }
@@ -759,7 +712,8 @@ function createStatementFragment(
     elements: evaluated.elements,
     editHandles: evaluated.editHandles,
     diagnostics: evaluated.diagnostics,
-    effectSummary: evaluated.effectSummary
+    effectSummary: evaluated.effectSummary,
+    featureUsage: evaluated.featureUsage
   };
 }
 
@@ -937,26 +891,16 @@ function cloneFeatureUsage(featureUsage: FeatureUsage): FeatureUsage {
   return { ...featureUsage };
 }
 
-function assignFeatureUsage(target: FeatureUsage, source: FeatureUsage): void {
-  for (const key of Object.keys(target)) {
-    target[key] = source[key] ?? target[key];
+function* restorePrefixFeatureUsage(
+  usage: FeatureUsage,
+  fragments: readonly SemanticStatementFragment[],
+  statementIndexExclusive: number
+): Generator<void, void, void> {
+  // The new run supplies current figure/preamble usage, including foreach scans.
+  for (let index = 0; index < statementIndexExclusive; index += 1) {
+    mergeFeatureUsage(usage, fragments[index].featureUsage);
+    yield;
   }
-}
-
-function mergeFeatureUsageAfterSelectiveReplay(
-  previousFinal: FeatureUsage,
-  replayStart: FeatureUsage,
-  replayCurrent: FeatureUsage
-): FeatureUsage {
-  const merged = cloneFeatureUsage(previousFinal);
-  for (const key of Object.keys(merged)) {
-    const current = replayCurrent[key];
-    if (current == null || current === replayStart[key]) {
-      continue;
-    }
-    merged[key] = current;
-  }
-  return merged;
 }
 
 function mapSourceStatementFirstIndices(
