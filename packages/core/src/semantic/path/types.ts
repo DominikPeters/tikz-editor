@@ -1,4 +1,4 @@
-import type { WorldPoint } from "../../coords/points.js";
+import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import type { FeatureId } from "../../capabilities/feature-ids.js";
 import type { PicOperationItem } from "../../ast/types.js";
 import type { SceneElement } from "../types.js";
@@ -15,6 +15,8 @@ export type PlacementSegment =
       from: WorldPoint;
       to: WorldPoint;
       params: ArcParameters;
+      /** Transformed zero/ninety-degree axes; absent on legacy identity-frame segments. */
+      basis?: { x: WorldVector; y: WorldVector };
       /** Final PGF cubic control in world space, used only by TikZ `turn` lookup. */
       turnLookupControl?: WorldPoint;
     };

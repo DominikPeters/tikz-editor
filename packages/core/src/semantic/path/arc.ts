@@ -1,6 +1,6 @@
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
-import type { WorldPoint } from "../../coords/points.js";
+import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import type { DiagnosticPushFn, ArcParameters, PlacementSegment } from "./types.js";
@@ -152,6 +152,7 @@ export function appendArcCommand(
       from,
       to: geometry.endpoint,
       params,
+      basis: geometry.basis,
       turnLookupControl: arcTurnLookupControl(geometry.endpoint, params, transform)
     }
   };
@@ -190,6 +191,7 @@ function computeArcGeometry(
   ry: number;
   xAxisRotation: number;
   sweep: boolean;
+  basis: { x: WorldVector; y: WorldVector };
 } {
   const startRadians = toRadians(params.startAngle);
   const endRadians = toRadians(params.endAngle);
@@ -220,7 +222,8 @@ function computeArcGeometry(
     rx: ellipse.rx,
     ry: ellipse.ry,
     xAxisRotation: ellipse.rotation,
-    sweep: determinant < 0 ? !baseSweep : baseSweep
+    sweep: determinant < 0 ? !baseSweep : baseSweep,
+    basis: { x: basisX, y: basisY }
   };
 }
 

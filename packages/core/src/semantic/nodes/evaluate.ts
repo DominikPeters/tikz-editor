@@ -25,7 +25,8 @@ import {
 import {
   resolvePathAttachedNodeRegime,
   resolvePathAttachedNodeSloped,
-  resolvePathPositionFraction
+  resolvePathPositionFraction,
+  tangentAtPlacementSegment
 } from "../path/path-attached.js";
 import type { DiagnosticPushFn, FeatureMarkFn, PlacementSegment } from "../path/types.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -1298,7 +1299,7 @@ function resolveAutoNodeAnchor(
   }
 
   if (sloped) {
-    const tangent = segmentTangent(segment);
+    const tangent = segmentTangent(segment, options);
     if (!tangent) {
       return null;
     }
@@ -1320,7 +1321,7 @@ function resolveAutoNodeAnchor(
     return dot >= 0 ? "south" : "north";
   }
 
-  const tangent = segmentTangent(segment);
+  const tangent = segmentTangent(segment, options);
   if (!tangent) {
     return null;
   }
@@ -1350,7 +1351,7 @@ function resolveSlopedNodeRotation(
     return null;
   }
 
-  const tangent = segmentTangent(segment);
+  const tangent = segmentTangent(segment, options, "local");
   if (!tangent) {
     return null;
   }
@@ -1450,7 +1451,11 @@ function expandNodePlacementOptions(options: OptionListAst | undefined, context:
   };
 }
 
-function segmentTangent(segment: PlacementSegment): WorldPoint | null {
+function segmentTangent(
+  segment: PlacementSegment,
+  options: NodeItem["options"],
+  arcFrame: "local" | "world" = "world"
+): WorldPoint | null {
   let tangent: WorldPoint;
   if (segment.kind === "line") {
     tangent = wp(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
@@ -1462,7 +1467,16 @@ function segmentTangent(segment: PlacementSegment): WorldPoint | null {
       tangent = wp(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
     }
   } else {
-    tangent = wp(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
+    // Glyph rotation uses PGF's local timer axes, while auto placement uses
+    // world directions. The node transform supplies any retained CTM.
+    const arcSegment: PlacementSegment = arcFrame === "local"
+      ? { kind: "arc", from: segment.from, to: segment.to, params: segment.params }
+      : segment;
+    const arcTangent = tangentAtPlacementSegment(
+      arcSegment,
+      resolvePathPositionFraction(options) ?? 1
+    );
+    tangent = wp(arcTangent.x, arcTangent.y);
   }
 
   const len = Math.hypot(tangent.x, tangent.y);

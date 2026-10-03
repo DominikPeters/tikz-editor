@@ -1,6 +1,7 @@
 import type { OptionEntry } from "../../options/types.js";
+import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { parseCoordinateLike, parseLength } from "../coords/parse-length.js";
-import { multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../transform.js";
+import { applyMatrix, inverseMatrix, multiplyMatrix, rotationMatrix, scaleMatrix, translationMatrix } from "../transform.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldTransform } from "../../coords/transforms.js";
@@ -47,6 +48,18 @@ type KvHandlerRegistration = {
   keys: readonly string[];
   handle: KvHandler;
 };
+
+function resolveTransformCoordinate(
+  raw: string,
+  transform: WorldTransform,
+  resolveCoordinate?: (raw: string) => WorldPoint | null
+): WorldPoint | null {
+  const resolved = resolveCoordinate?.(raw);
+  if (parseCoordinate(raw).form !== "named") return resolved ?? null;
+  const inverse = resolved ? inverseMatrix(transform) : null;
+  // PGF's named-anchor lookup undoes the current CTM before transform composition.
+  return resolved && inverse ? applyMatrix(inverse, resolved) : null;
+}
 
 function normalizeOptionColor(valueRaw: string, style: ResolvedStyle, resolveColorAlias?: ColorAliasResolver): string {
   const currentColor = style.textColor ?? style.stroke ?? style.fill ?? "black";
@@ -827,7 +840,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
         }
       }
 
-      const resolved = resolveCoordinate?.(normalizedShift);
+      const resolved = resolveTransformCoordinate(normalizedShift, transform, resolveCoordinate);
       if (resolved) {
         return {
           style,
@@ -870,7 +883,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   {
     keys: ["rotate around", "/tikz/rotate around"],
     handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
-      const parsed = parseRotateAroundValue(valueRaw, resolveCoordinate);
+      const parsed = parseRotateAroundValue(valueRaw, (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate));
       if (!parsed) {
         return { style, transform, diagnostics: [`invalid-rotate-around:${valueRaw}`] };
       }
@@ -892,7 +905,7 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   {
     keys: ["cm", "/tikz/cm"],
     handle: ({ valueRaw, style, transform, resolveCoordinate }) => {
-      const parsed = parseCmTransformValue(valueRaw, resolveCoordinate);
+      const parsed = parseCmTransformValue(valueRaw, (raw) => resolveTransformCoordinate(raw, transform, resolveCoordinate));
       if (!parsed) {
         return { style, transform, diagnostics: [`invalid-cm:${valueRaw}`] };
       }

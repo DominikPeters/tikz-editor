@@ -11,7 +11,7 @@ import type { StyleChainEntry } from "../style-chain.js";
 import type { ScenePathAttachment } from "../types.js";
 import type { PlacementSegment } from "./types.js";
 
-type ArcParams = Extract<PlacementSegment, { kind: "arc" }>["params"];
+type ArcSegment = Extract<PlacementSegment, { kind: "arc" }>;
 
 export type PathPositionPreset =
   | "at start"
@@ -122,7 +122,8 @@ export function approximatePlacementSegmentLength(segment: PlacementSegment): nu
   }
   if (segment.kind === "arc") {
     const delta = Math.abs(segment.params.endAngle - segment.params.startAngle) * (Math.PI / 180);
-    const avgRadius = (Math.abs(segment.params.rx) + Math.abs(segment.params.ry)) / 2;
+    const basis = arcBasis(segment);
+    const avgRadius = (Math.hypot(basis.x.x, basis.x.y) + Math.hypot(basis.y.x, basis.y.y)) / 2;
     return delta * avgRadius;
   }
   let length = 0;
@@ -149,12 +150,13 @@ export function pointAtPlacementSegment(segment: PlacementSegment, t: number): W
   if (segment.kind === "cubic") {
     return cubicPoint(segment.from, segment.c1, segment.c2, segment.to, normalized);
   }
-  const center = arcCenter(segment.from, segment.params);
+  const basis = arcBasis(segment);
+  const center = arcCenter(segment, basis);
   const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * normalized;
   const radians = (angle * Math.PI) / 180;
   return worldPoint(
-    pt(center.x + segment.params.rx * Math.cos(radians)),
-    pt(center.y + segment.params.ry * Math.sin(radians))
+    center.x + basis.x.x * Math.cos(radians) + basis.y.x * Math.sin(radians),
+    center.y + basis.x.y * Math.cos(radians) + basis.y.y * Math.sin(radians)
   );
 }
 
@@ -183,9 +185,10 @@ export function tangentAtPlacementSegment(segment: PlacementSegment, t: number):
   const angle = segment.params.startAngle + (segment.params.endAngle - segment.params.startAngle) * normalized;
   const radians = (angle * Math.PI) / 180;
   const delta = segment.params.endAngle >= segment.params.startAngle ? 1 : -1;
+  const basis = arcBasis(segment);
   return worldVector(
-    -segment.params.rx * Math.sin(radians) * delta,
-    segment.params.ry * Math.cos(radians) * delta
+    (-1 * basis.x.x * Math.sin(radians) + basis.y.x * Math.cos(radians)) * delta,
+    (-1 * basis.x.y * Math.sin(radians) + basis.y.y * Math.cos(radians)) * delta
   );
 }
 
@@ -215,13 +218,22 @@ export function closestPointOnPlacementSegment(
       referenceT);
   }
 
-  const center = arcCenter(segment.from, segment.params);
+  const basis = arcBasis(segment);
+  const center = arcCenter(segment, basis);
   const dx = point.x - center.x;
   const dy = point.y - center.y;
-  const rawAngle = Math.atan2(
-    segment.params.rx * dy,
-    segment.params.ry * dx
-  ) * 180 / Math.PI;
+  const determinant = basis.x.x * basis.y.y - basis.x.y * basis.y.x;
+  // Keep the existing radial projection policy in the arc's parameter frame.
+  // Collapsed axes have no inverse; project onto each surviving axis instead.
+  const xNormSquared = basis.x.x * basis.x.x + basis.x.y * basis.x.y;
+  const yNormSquared = basis.y.x * basis.y.x + basis.y.y * basis.y.y;
+  const localX = Math.abs(determinant) > 1e-12
+    ? (basis.y.y * dx - basis.y.x * dy) / determinant
+    : xNormSquared > 1e-12 ? (basis.x.x * dx + basis.x.y * dy) / xNormSquared : 0;
+  const localY = Math.abs(determinant) > 1e-12
+    ? (basis.x.x * dy - basis.x.y * dx) / determinant
+    : yNormSquared > 1e-12 ? (basis.y.x * dx + basis.y.y * dy) / yNormSquared : 0;
+  const rawAngle = Math.atan2(localY, localX) * 180 / Math.PI;
   if (extrapolate) {
     const sweep = segment.params.endAngle - segment.params.startAngle;
     const referenceAngle = segment.params.startAngle + sweep * referenceT;
@@ -577,11 +589,18 @@ function closestPointOnCubic(
   return { t, point: cubicPoint(c0, c1, c2, c3, t) };
 }
 
-function arcCenter(from: WorldPoint, params: ArcParams): WorldPoint {
-  const startRadians = (params.startAngle * Math.PI) / 180;
+function arcBasis(segment: ArcSegment): NonNullable<ArcSegment["basis"]> {
+  return segment.basis ?? {
+    x: worldVector(segment.params.rx, 0),
+    y: worldVector(0, segment.params.ry)
+  };
+}
+
+function arcCenter(segment: ArcSegment, basis: NonNullable<ArcSegment["basis"]>): WorldPoint {
+  const startRadians = (segment.params.startAngle * Math.PI) / 180;
   return worldPoint(
-    from.x - params.rx * Math.cos(startRadians),
-    from.y - params.ry * Math.sin(startRadians)
+    segment.from.x - basis.x.x * Math.cos(startRadians) - basis.y.x * Math.sin(startRadians),
+    segment.from.y - basis.x.y * Math.cos(startRadians) - basis.y.y * Math.sin(startRadians)
   );
 }
 
