@@ -12,6 +12,7 @@ export function computeSvgPathBounds(commands: ScenePathCommand[], viewBox: Pick
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
   let previous: SvgPoint | null = null;
+  let subpathStart: SvgPoint | null = null;
 
   const includePoint = (point: SvgPoint) => {
     minX = Math.min(minX, point.x);
@@ -22,6 +23,7 @@ export function computeSvgPathBounds(commands: ScenePathCommand[], viewBox: Pick
 
   for (const command of commands) {
     if (command.kind === "Z") {
+      previous = subpathStart;
       continue;
     }
 
@@ -65,6 +67,9 @@ export function computeSvgPathBounds(commands: ScenePathCommand[], viewBox: Pick
     }
 
     const point = worldToSvgPoint(command.to, viewBox);
+    if (command.kind === "M") {
+      subpathStart = point;
+    }
     includePoint(point);
     previous = point;
   }
