@@ -25,6 +25,7 @@ import type {
   BeamerColumnsBodyNode,
   BeamerFrameBodyIr,
   BeamerFrameBodyNode,
+  BeamerLeafFlowNode,
   BeamerParagraphBodyNode,
   BeamerTitlePageBodyNode,
   BeamerTheoremBodyNode,
@@ -165,7 +166,6 @@ export function parseBeamerFrameBody(
         : isProofEnvironment(token.name) ||
             theoremOccurrences.has(token.span.from)
           ? parseTheorem({
-              source,
               context,
               ownerId: frame.id,
               begin: token,
@@ -173,15 +173,18 @@ export function parseBeamerFrameBody(
               nodeIndex,
               occurrence: theoremOccurrences.get(token.span.from) ?? null,
               theoremTemplate,
+              theoremOccurrences,
+              overlays,
             })
           : parseBlock({
-            source,
             context,
             ownerId: frame.id,
             begin: token,
             end,
             nodeIndex,
             diagnostics,
+            theoremOccurrences,
+            overlays,
           })
       )
     );
@@ -202,7 +205,6 @@ export function parseBeamerFrameBody(
 }
 
 function parseTheorem(params: {
-  source: string;
   context: BeamerSyntaxContext;
   ownerId: string;
   begin: BeamerEnvironmentBoundary;
@@ -210,9 +212,10 @@ function parseTheorem(params: {
   nodeIndex: number;
   occurrence: BeamerTheoremOccurrence | null;
   theoremTemplate: BeamerTheoremTemplateVariant;
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  overlays: BeamerOverlayModel;
 }): BeamerTheoremBodyNode {
   const {
-    source,
     context,
     ownerId,
     begin,
@@ -290,13 +293,8 @@ function parseTheorem(params: {
     value: titleMapped.text,
   };
   const bodySpan = { from: cursor, to: end.span.from };
-  const children: BeamerTheoremBodyNode["children"] = [];
-  pushTextNode(
-    source,
-    bodySpan,
-    `${ownerId}:theorem:${nodeIndex}`,
-    children
-  );
+  const children = parseBlockLeafContent(context, bodySpan,
+    `${ownerId}:theorem:${nodeIndex}`, params.overlays, params.theoremOccurrences);
   return {
     kind: "theorem",
     id: `${ownerId}:theorem:${nodeIndex}`,
@@ -670,16 +668,16 @@ function frameTikzFlowNode(params: {
 }
 
 function parseBlock(params: {
-  source: string;
   context: BeamerSyntaxContext;
   ownerId: string;
   begin: BeamerEnvironmentBoundary;
   end: BeamerEnvironmentBoundary;
   nodeIndex: number;
   diagnostics: Diagnostic[];
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>;
+  overlays: BeamerOverlayModel;
 }): BeamerBlockBodyNode {
   const {
-    source,
     context,
     ownerId,
     begin,
@@ -721,8 +719,8 @@ function parseBlock(params: {
     from: fallbackTitle.span.to,
     to: end.span.from,
   };
-  const children: BeamerBlockBodyNode["children"] = [];
-  pushTextNode(source, bodySpan, `${ownerId}:block:${nodeIndex}`, children);
+  const children = parseBlockLeafContent(context, bodySpan,
+    `${ownerId}:block:${nodeIndex}`, params.overlays, params.theoremOccurrences);
   return {
     kind: "block",
     id: `${ownerId}:block:${nodeIndex}`,
@@ -735,6 +733,33 @@ function parseBlock(params: {
     bodySpan,
     children,
   };
+}
+
+/** Keep an unsupported block child local without swallowing supported siblings. */
+function parseBlockLeafContent(
+  context: BeamerSyntaxContext,
+  bodySpan: Span,
+  ownerId: string,
+  overlays: BeamerOverlayModel,
+  theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
+): BeamerLeafFlowNode[] {
+  const tokens = beamerEnvironmentBoundariesIn(context, bodySpan);
+  const children: BeamerLeafFlowNode[] = [];
+  let cursor = bodySpan.from;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const endIndex = findUnsupportedEnvironmentEndIndex(context, tokens, index,
+      overlays, theoremOccurrences);
+    if (endIndex < 0) continue;
+    const begin = tokens[index];
+    const span = { from: begin.span.from, to: tokens[endIndex].span.to };
+    pushTextNode(context.source, { from: cursor, to: span.from }, ownerId, children);
+    children.push({ kind: "unsupported", id: `${ownerId}:unsupported:${span.from}`,
+      span, message: `The ${begin.name} environment is not supported in this preview.` });
+    cursor = span.to;
+    index = endIndex;
+  }
+  pushTextNode(context.source, { from: cursor, to: bodySpan.to }, ownerId, children);
+  return children;
 }
 
 function parseColumns(params: {
@@ -963,7 +988,6 @@ function parseColumnFlow(
     const node = isProofEnvironment(token.name) ||
         theoremOccurrences.has(token.span.from)
       ? parseTheorem({
-          source,
           context,
           ownerId: `${frameId}:column:${columnIndex}`,
           begin: token,
@@ -971,15 +995,18 @@ function parseColumnFlow(
           nodeIndex,
           occurrence: theoremOccurrences.get(token.span.from) ?? null,
           theoremTemplate,
+          theoremOccurrences,
+          overlays,
         })
       : parseBlock({
-          source,
           context,
           ownerId: `${frameId}:column:${columnIndex}`,
           begin: token,
           end,
           nodeIndex,
           diagnostics,
+          theoremOccurrences,
+          overlays,
         });
     structural.push({ span: node.span, node });
     nodeIndex += 1;

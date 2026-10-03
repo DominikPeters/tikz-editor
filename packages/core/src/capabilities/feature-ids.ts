@@ -94,7 +94,7 @@ export const FEATURE_IDS = [
   "beamer_document_scan",
   "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.
   "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.
-  "beamer_source_placeholders",
+  "beamer_source_placeholders", // Bounded opaque content in frame, column, block and theorem flow.
   "beamer_hyperlinks",
   // Manual entries and stock Beamer templates, verified against LuaLaTeX.
   "beamer_manual_bibliography",

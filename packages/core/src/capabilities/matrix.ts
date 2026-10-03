@@ -691,7 +691,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "partial",
     fixtures: ["beamer_source_placeholders"],
     notes:
-      "Beamer frame and column flow render bounded source cards for unsupported environments and failed paragraph layout, with overlay-aware geometry and click-to-source selection. Nested block-body and inline fallback remain separate."
+      "Beamer frame, column, block and theorem flow render bounded source cards for unsupported environments and failed paragraph layout, preserving supported siblings, overlay-aware geometry and click-to-source selection. Inline fallback remains separate."
   },
   beamer_hyperlinks: {
     parser: "partial",

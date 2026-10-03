@@ -46,6 +46,8 @@ export type PreparedBlock = {
   width: number;
   title: LaidParagraph;
   body: LaidParagraph | null;
+  /** Mixed supported text and bounded source cards, positioned within the body. */
+  bodyFlow: { items: PositionedFrameFlowItem[]; extent: number } | null;
   titleXOffset: number;
   titleTop: number;
   titleAscent: number;

@@ -1130,6 +1130,7 @@ async function prepareFrameFlow(params: {
         step: params.step,
         graphicsResolver: params.graphicsResolver,
         paperWidth: params.paperWidth,
+        diagnostics: params.diagnostics,
       }));
       if (block) {
         result.push({
@@ -1614,6 +1615,7 @@ function prepareBlock(params: {
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
+  diagnostics: Diagnostic[];
 }): PreparedBlock | null {
   const plan = planBeamerBlockTemplate({
     environment: params.node.kind === "theorem"
@@ -1685,20 +1687,6 @@ function prepareBlock(params: {
   if (!title) {
     return null;
   }
-  const bodyNode = params.node.children.find(
-    (node): node is BeamerParagraphBodyNode => node.kind === "paragraph"
-  );
-  const bodyProjection = bodyNode
-    ? projectBeamerOverlayText(
-        createIdentityMappedText(
-          params.source.slice(bodyNode.span.from, bodyNode.span.to),
-          bodyNode.span.from
-        ),
-        bodyNode.span,
-        params.overlays,
-        params.step
-      )
-    : null;
   const theoremBodyFont =
     params.node.kind === "theorem" &&
     params.node.theoremStyle === "plain" &&
@@ -1708,11 +1696,17 @@ function prepareBlock(params: {
           shape: "italic" as const,
         }
       : params.theme.fonts[plan.bodyFontRole];
-  const body = bodyNode && bodyProjection
-    ? layoutParagraph({
+  const layoutBody = (node: BeamerParagraphBodyNode, paragraphId: string) => {
+    const bodyProjection = projectBeamerOverlayText(
+      createIdentityMappedText(params.source.slice(node.span.from, node.span.to), node.span.from),
+      node.span,
+      params.overlays,
+      params.step
+    );
+    return layoutParagraph({
         mapped: bodyProjection.mapped,
-        sourceSpan: bodyNode.span,
-        paragraphId: `${params.node.id}:body`,
+        sourceSpan: node.span,
+        paragraphId,
         role: "block-body",
         bounds: { x: 0, y: 0, width: params.width, height: 0 },
         font: theoremBodyFont,
@@ -1728,21 +1722,75 @@ function prepareBlock(params: {
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
         graphicsResolver: params.graphicsResolver,
         paperWidth: params.paperWidth,
-      })
+      });
+  };
+  // Keep supported block bodies in one paragraph so their list/display glue
+  // stays in the shared text layout. Split only around opaque environments.
+  const onlyChild = params.node.children.length === 1 ? params.node.children[0] : null;
+  const body = onlyChild?.kind === "paragraph"
+    ? layoutBody(onlyChild, `${params.node.id}:body`)
     : null;
+  let bodyFlow: PreparedBlock["bodyFlow"] = null;
+  if (!body && params.node.children.length > 0) {
+    const flow: PreparedFrameFlowItem[] = [];
+    for (const child of params.node.children) {
+      const visibility = resolveBeamerOverlaySpanVisibility(params.overlays, child.span, params.step);
+      if (visibility === "removed") continue;
+      if (child.kind === "paragraph") {
+        const paragraph = onlyChild ? null : layoutBody(child, `${child.id}:body`);
+        if (paragraph) {
+          flow.push({
+            kind: "paragraph", visibility, node: child, paragraph,
+            naturalHeight: paragraphLineExtent(paragraph),
+            boxHeight: paragraphStartingMaterialHeight(paragraph),
+            startingBaselineSkip: theoremBodyFont.lineHeightPt,
+            leadingAdjustment: 0,
+            endingDepth: paragraphEndingMaterialDepth(paragraph),
+            trailingListGlue: { naturalPt: 0, shrinkPt: 0 },
+            trailingVerticalSpacePreviousDepth: null,
+          });
+          continue;
+        }
+        if (!hasProjectedContent(params.source, child.span, params.overlays, params.step, params.references)) continue;
+      }
+      const message = child.kind === "unsupported"
+        ? child.message
+        : "This block content could not be laid out in the preview.";
+      params.diagnostics.push({
+        severity: "warning", code: "beamer-render-unsupported-flow-node",
+        message, span: child.span,
+      });
+      const placeholder = prepareUnsupportedPlaceholder(params.source, { ...child, message }, params.width);
+      flow.push({ kind: "unsupported", visibility, placeholder, height: placeholder.height });
+    }
+    if (flow.length > 0) {
+      const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
+      const origin = positioned.items[0].contentTop;
+      bodyFlow = {
+        extent: positioned.extent - origin,
+        items: positioned.items.map(item => ({
+          ...item, contentTop: item.contentTop - origin,
+          referenceY: item.referenceY - origin,
+          visualTop: item.visualTop - origin, visualBottom: item.visualBottom - origin,
+        })),
+      };
+    }
+  }
+  const firstBody = body ?? (bodyFlow?.items[0].item.kind === "paragraph"
+    ? bodyFlow.items[0].item.paragraph : null);
+  const bodyExtent = body ? paragraphLineExtent(body) : bodyFlow?.extent ?? 0;
   const titleLine = title.layout.report.lines[0];
   const titleAscent = Number(titleLine?.ascent ?? firstLineBaselineOffset(title));
   const titleDepth = Number(titleLine?.descent ?? 0);
   const geometry = plan.geometry;
   if (plan.style === "inmargin") {
     const titleFirstBaseline = firstLineBaselineOffset(title);
-    const bodyFirstBaseline = body ? firstLineBaselineOffset(body) : 0;
+    const bodyFirstBaseline = firstBody ? firstLineBaselineOffset(firstBody) : 0;
     const hboxHeight = Math.max(titleFirstBaseline, bodyFirstBaseline);
     const titleTop =
       geometry.beforeSkipPt + hboxHeight - titleFirstBaseline;
     const bodyParagraphTop =
       geometry.beforeSkipPt + hboxHeight - bodyFirstBaseline;
-    const bodyExtent = body ? paragraphLineExtent(body) : 0;
     const contentBottom = Math.max(
       titleTop + paragraphLineExtent(title),
       bodyParagraphTop + bodyExtent
@@ -1757,6 +1805,7 @@ function prepareBlock(params: {
       width: params.width,
       title,
       body,
+      bodyFlow,
       titleXOffset:
         -params.leftSidebarWidth + 0.5 * normalXHeight,
       titleTop,
@@ -1789,11 +1838,11 @@ function prepareBlock(params: {
   const titleBoxExtent =
     titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
   const bodyBaselineInset =
-    body && geometry.bodyFirstBaselineSkipPt != null
+    firstBody && geometry.bodyFirstBaselineSkipPt != null
       ? geometry.bodyFirstBaselineSkipPt +
         geometry.bodyInitialVSkipEx *
           fontXHeightPt(params.theme.fonts[plan.bodyFontRole]) -
-        firstLineBaselineOffset(body)
+        firstLineBaselineOffset(firstBody)
       : geometry.bodyTopPaddingPt;
   const bodyParagraphTop =
     geometry.beforeSkipPt +
@@ -1801,7 +1850,6 @@ function prepareBlock(params: {
     titleBoxExtent +
     geometry.titleBodyGapPt +
     bodyBaselineInset;
-  const bodyExtent = body ? paragraphLineExtent(body) : 0;
   const bodyBackgroundHeight =
     bodyBaselineInset +
     bodyExtent +
@@ -1818,6 +1866,7 @@ function prepareBlock(params: {
     width: params.width,
     title,
     body,
+    bodyFlow,
     titleXOffset: 0,
     titleTop: backgroundTop + geometry.roundedTopInsetPt,
     titleAscent,
@@ -1951,60 +2000,80 @@ function emitPreparedBlock(params: {
   });
 
   const childIds = [block.title.layout.paragraphId];
-  if (block.body) {
-    const bodyY = params.y + block.bodyParagraphTop;
-    if (params.visibility === "hidden") {
-      block.body.layout.hiddenSourceSpans = [block.node.span];
+  const bodyParagraphs = block.body
+    ? [{ paragraph: block.body, top: 0, visibility: "visible" as const }]
+    : (block.bodyFlow?.items ?? []).flatMap(({ item, contentTop }) => {
+        if (item.kind === "unsupported") {
+          if (item.visibility !== "hidden" && params.visibility !== "hidden") {
+            emitUnsupportedPlaceholder({
+              placeholder: item.placeholder, x: params.x,
+              y: params.y + block.bodyParagraphTop + contentTop,
+              parentId: block.node.id, items: params.items, modelBuilder: params.modelBuilder,
+            });
+            childIds.push(item.placeholder.id);
+          }
+          return [];
+        }
+        return item.kind === "paragraph"
+          ? [{ paragraph: item.paragraph, top: contentTop, visibility: item.visibility }]
+          : [];
+      });
+  for (const [bodyIndex, entry] of bodyParagraphs.entries()) {
+    const body = entry.paragraph;
+    const visibility = params.visibility === "hidden" || entry.visibility === "hidden" ? "hidden" : "visible";
+    const bodyY = params.y + block.bodyParagraphTop + entry.top;
+    if (visibility === "hidden") {
+      body.layout.hiddenSourceSpans = [body.layout.sourceSpan];
     }
     positionParagraphLayout(
-      block.body.layout,
+      body.layout,
       svgPoint(pt(params.x), pt(bodyY)),
-      paragraphLineExtent(block.body)
+      paragraphLineExtent(body)
     );
-    params.paragraphs.push(block.body.layout);
-    childIds.push(block.body.layout.paragraphId);
+    params.paragraphs.push(body.layout);
+    childIds.push(body.layout.paragraphId);
     params.items.push({
-      id: block.body.layout.paragraphId,
+      id: body.layout.paragraphId,
       kind: "text",
-      sourceSpan: block.body.layout.sourceSpan,
-      bounds: block.body.layout.bounds,
+      sourceSpan: body.layout.sourceSpan,
+      bounds: body.layout.bounds,
       parentId: block.node.id,
-      paragraphId: block.body.layout.paragraphId,
-      visibility: params.visibility,
+      paragraphId: body.layout.paragraphId,
+      visibility,
     });
-    for (const marker of block.body.listMarkers) {
+    for (const marker of body.listMarkers) {
       params.items.push({
         id: marker.id,
         kind: "list-marker",
-        sourceSpan: marker.sourceSpan ?? block.body.layout.sourceSpan,
+        sourceSpan: marker.sourceSpan ?? body.layout.sourceSpan,
         bounds: {
           x: params.x + marker.bounds.x,
           y: bodyY + marker.bounds.y,
           width: marker.bounds.width,
           height: marker.bounds.height,
         },
-        parentId: block.body.layout.paragraphId,
+        parentId: body.layout.paragraphId,
         traceAsGlyph: marker.traceAsGlyph,
-        visibility: params.visibility === "hidden" ? "hidden" : marker.visibility,
+        visibility: visibility === "hidden" ? "hidden" : marker.visibility,
       });
     }
     params.modelBuilder.addPart({
-      basePartId: block.body.layout.paragraphId,
-      sourceId: block.body.layout.paragraphId,
+      basePartId: body.layout.paragraphId,
+      sourceId: body.layout.paragraphId,
       elementId: null,
       markup: overlayVisibilityMarkup(
         paragraphMarkup(
-          block.body.svgBody,
+          body.svgBody,
           params.x,
           bodyY,
           bodyColor.fg ?? textColor(params.theme, "normal text")
         ),
-        params.visibility
+        visibility
       ),
     });
-    if (block.node.kind === "theorem" && block.node.qed) {
+    if (block.node.kind === "theorem" && block.node.qed && bodyIndex === bodyParagraphs.length - 1) {
       const qedRects = proofQedRectangles({
-        block,
+        block: { ...block, body },
         bodyY,
         x: params.x,
         fontSizePt: params.theme.fonts[block.plan.bodyFontRole].sizePt,
@@ -2749,6 +2818,7 @@ async function prepareColumnFlowNode(params: {
       step,
       graphicsResolver,
       paperWidth,
+      diagnostics,
     }));
     return block
       ? { kind: "block", visibility, block, height: block.naturalHeight }

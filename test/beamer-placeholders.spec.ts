@@ -75,6 +75,53 @@ After.
     expect(card.sourceSpan.to - card.sourceSpan.from).toBeGreaterThan(10_000);
   });
 
+  it.each(["block", "exampleblock", "theorem", "proof"])("preserves supported siblings and source ownership inside %s", async environment => {
+    const heading = environment.endsWith("block") ? "{Heading}" : "";
+    const source = frameSource(String.raw`\begin{${environment}}${heading}
+Before.
+${UNSUPPORTED_ENVIRONMENT}
+Between.
+\begin{alltt}second opaque region\end{alltt}
+After.
+\end{${environment}}`);
+    const result = await renderBeamerFrame(source);
+    const cards = sourceCards(result);
+    expect(cards).toHaveLength(2);
+    const block = result.layout.items.find(item => item.kind === "block")!;
+    const paragraphs = result.layout.paragraphs.filter(paragraph => paragraph.role === "block-body");
+    expect(paragraphs.map(paragraph => source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to)))
+      .toEqual(["Before.", "Between.", "After."]);
+    expect(source.slice(cards[0].sourceSpan.from, cards[0].sourceSpan.to)).toBe(UNSUPPORTED_ENVIRONMENT);
+    for (const [index, card] of cards.entries()) {
+      expect(card.parentId).toBe(block.id);
+      expect(block.childIds).toContain(card.id);
+      expect(card.bounds.height).toBeLessThanOrEqual(54);
+      expect(paragraphs[index].bounds.y + paragraphs[index].bounds.height).toBeLessThanOrEqual(card.bounds.y);
+      expect(card.bounds.y + card.bounds.height).toBeLessThanOrEqual(paragraphs[index + 1].bounds.y);
+      expect(card.bounds.y + card.bounds.height).toBeLessThanOrEqual(block.bounds.y + block.bounds.height);
+      expect(result.diagnostics).toContainEqual(expect.objectContaining({
+        code: "beamer-render-unsupported-flow-node", span: card.sourceSpan,
+      }));
+    }
+  });
+
+  it.each(["uncover", "only"])("preserves %s source-card visibility and spacing inside blocks", async command => {
+    const source = frameSource(String.raw`\begin{block}{Heading}
+Before.
+${"\\"}${command}<2>{${UNSUPPORTED_ENVIRONMENT}}
+After.
+\end{block}`);
+    const hidden = await renderBeamerFrame(source, { step: 1 });
+    const visible = await renderBeamerFrame(source, { step: 2 });
+    expect(sourceCards(hidden)).toHaveLength(0);
+    expect(sourceCards(visible)).toHaveLength(1);
+    const afterY = (result: typeof hidden) => result.layout.paragraphs.find(paragraph =>
+      source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to).includes("After.")
+    )!.bounds.y;
+    if (command === "uncover") expect(afterY(hidden)).toBeCloseTo(afterY(visible), 6);
+    else expect(afterY(hidden)).toBeLessThan(afterY(visible));
+  });
+
   it.each(["", "% only a comment", String.raw`\only<2>{Later}`])("does not flag empty or removed content: %s", async (body) => {
     const result = await renderBeamerFrame(frameSource(body), { step: 1 });
     expect(sourceCards(result)).toHaveLength(0);
