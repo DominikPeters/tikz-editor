@@ -41,7 +41,8 @@ export type ApplyActionWithFeedbackFn = (
   action: EditAction,
   historyMergeKey?: string,
   sourceOverride?: string,
-  geometry?: EditGeometrySession
+  geometry?: EditGeometrySession,
+  recordInHistory?: boolean
 ) => ApplyActionFeedback;
 
 export type CanvasContextMenuState = {

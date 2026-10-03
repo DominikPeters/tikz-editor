@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, type MutableRefObject, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
 import { viewportPoint as makeViewportPoint, clientPoint, px } from "@tikz-editor/core/coords/index";
 import { clamp, distanceSquared, viewportToSvgPoint } from "./geometry";
 import { resolveToolCreateCurrentWorld } from "./interaction-helpers";
@@ -8,6 +8,7 @@ import type { CanvasSnapshot, DragState, PendingTouchViewport, StateSetter, Valu
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 
 export type UseCanvasViewportEffectsArgs = {
+  canvasContextKey?: string;
   dragRef: MutableRefObject<DragState | null>;
   pendingTouchViewportRef: MutableRefObject<PendingTouchViewport | null>;
   setDragState: ValueSetter<DragState | null>;
@@ -47,6 +48,15 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     MAX_SCALE,
     setFitToContentModeActive
   } = args;
+  const dispatchTransformRef = useRef(dispatchCanvasTransform);
+  useLayoutEffect(() => { dispatchTransformRef.current = dispatchCanvasTransform; });
+  const [interactionViewport, setInteractionViewport] = useState<HTMLDivElement | null>(null);
+  // A stable ref can point at a replaced DOM node; inspect it after every commit.
+  // The identity comparison makes the setter a no-op while the surface is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    setInteractionViewport(current => current === viewportRef.current ? current : viewportRef.current);
+  });
 
   useEffect(() => {
     const onModifierKeyChange = (event: KeyboardEvent) => {
@@ -83,7 +93,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
   }, [dragRef, setToolCursorWorld, setToolDraft]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
+    const viewport = interactionViewport;
     if (!viewport) return;
 
     const updateSize = () => {
@@ -100,7 +110,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     observer.observe(viewport);
 
     return () => { observer.disconnect(); };
-  }, [setViewportSize, viewportRef]);
+  }, [setViewportSize, interactionViewport]);
 
   useLayoutEffect(() => {
     if (!svgResult) {
@@ -130,7 +140,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
   }, [canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, svgResult]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
+    const viewport = interactionViewport;
     if (!viewport) return;
 
     const activeTouchPointers = new Map<number, ClientPoint>();
@@ -203,7 +213,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         setFitToContentModeActive(false);
       }
 
-      dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
+      dispatchTransformRef.current({ translateX, translateY, scale: nextScale });
     };
 
     const onWheel = (event: WheelEvent) => {
@@ -246,11 +256,11 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
         const translateX = viewportPoint.x - (svgPoint.x - currentSvg.viewBox.x) * nextScale;
         const translateY = viewportPoint.y - (svgPoint.y - currentSvg.viewBox.y) * nextScale;
 
-        dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
+        dispatchTransformRef.current({ translateX, translateY, scale: nextScale });
         return;
       }
 
-      dispatchCanvasTransform({
+      dispatchTransformRef.current({
         translateX: currentTransform.translateX - event.deltaX,
         translateY: currentTransform.translateY - event.deltaY,
         scale: currentTransform.scale
@@ -297,34 +307,43 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       }
       pinchGesture = null;
     };
+    const clearTouchGesture = () => {
+      activeTouchPointers.clear();
+      pinchGesture = null;
+      clearPendingTouchViewport();
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      if (activeTouchPointers.has(event.pointerId)) clearTouchGesture();
+    };
 
     viewport.addEventListener("wheel", onWheel, { passive: false });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: false });
     window.addEventListener("pointermove", onPointerMove, { passive: false });
     window.addEventListener("pointerup", onPointerUp, { passive: false });
-    window.addEventListener("pointercancel", onPointerUp, { passive: false });
+    window.addEventListener("pointercancel", onPointerCancel, { passive: false });
+    window.addEventListener("blur", clearTouchGesture);
 
     return () => {
       viewport.removeEventListener("wheel", onWheel);
       viewport.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      activeTouchPointers.clear();
-      pinchGesture = null;
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("blur", clearTouchGesture);
+      clearTouchGesture();
     };
   }, [
     MAX_SCALE,
     MIN_SCALE,
     canvasTransformRef,
-    dispatchCanvasTransform,
+    args.canvasContextKey,
     dragRef,
     fitToContentModeActiveRef,
     pendingTouchViewportRef,
     setDragState,
     setFitToContentModeActive,
     svgResultRef,
-    viewportRef,
+    interactionViewport,
     zoomSpeed
   ]);
 }

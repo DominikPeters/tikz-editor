@@ -17,7 +17,7 @@ import {
   resolveTransformInspectorMutationContextFromOptionEntries
 } from "../property-write-builders.js";
 import { computeMinimalReplacementPatch, replaceSpan } from "../patch.js";
-import { correctMovedCalcDependencies } from "../calc-move.js";
+import { correctMovedCoordinateDependencies } from "../calc-move.js";
 import { resolvePropertyTarget, type PropertyTarget } from "../property-target.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { applyTextReplacements } from "../statement-ops.js";
@@ -66,14 +66,15 @@ export function applyMoveElementsAction(
     editHandles = baseline.editHandles;
     parseOptions = { ...parseOptions, sourceFingerprint: baseline.sourceFingerprint };
   }
-  const normalizedIds = normalizeElementIds(elementIds);
-  if (normalizedIds.length === 0) {
+  const requestedIds = normalizeElementIds(elementIds);
+  if (requestedIds.length === 0) {
     return { kind: "unsupported", reason: "No element ids were provided for moveElements" };
   }
 
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
+  const normalizedIds = collapseMovedScopeDescendants(parsed.figure.body, requestedIds, editHandles);
   const fitBlockedId = normalizedIds.find((elementId) =>
     sourceUsesFitNodeFromParseResult(source, parsed, elementId)
   );
@@ -93,7 +94,7 @@ export function applyMoveElementsAction(
   );
   const matrixElementIdSet = new Set(matrixElementIds);
   const treeRootElementIdSet = new Set(treeRootElementIds);
-  const changedSourceIds = expandChangedSourceIdsForMovedElements(parsed.figure.body, normalizedIds);
+  const changedSourceIds = expandChangedSourceIdsForMovedElements(parsed.figure.body, requestedIds, editHandles);
   // Returning a drag to its origin must also preserve the original spelling
   // and precision of coordinates, including values that cannot be formatted
   // exactly by the normal coordinate writer.
@@ -122,6 +123,7 @@ export function applyMoveElementsAction(
   let movedAny = false;
   const movedPathShapeDeltas = new Map<string, WorldPoint>();
   const movedSourceDeltas = new Map<string, WorldPoint>();
+  const inheritedSourceIds = new Set<string>();
 
   if (nonMatrixElementIds.length > 0) {
     const byHandles = applyMoveElementsUsingHandleRewrites(currentSource, editHandles, nonMatrixElementIds, delta, parseOptions);
@@ -200,8 +202,9 @@ export function applyMoveElementsAction(
       currentSource = byScopeTransform.newSource;
       patches.push(...byScopeTransform.patches);
       movedAny = true;
-      for (const sourceId of expandChangedSourceIdsForMovedElements(parsed.figure.body, scopeElementIds)) {
+      for (const sourceId of expandChangedSourceIdsForMovedElements(parsed.figure.body, scopeElementIds, editHandles)) {
         movedSourceDeltas.set(sourceId, delta);
+        inheritedSourceIds.add(sourceId);
       }
       if (byScopeTransform.kind === "partial") {
         reasons.push(byScopeTransform.reason);
@@ -227,12 +230,12 @@ export function applyMoveElementsAction(
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);
 
-  const calcCorrected = correctMovedCalcDependencies(source, currentSource, editHandles, movedSourceDeltas, parseOptions, geometry);
-  if (calcCorrected == null) {
-    return { kind: "unsupported", reason: "Could not preserve dependencies between the selected calc coordinates." };
+  const dependencyCorrected = correctMovedCoordinateDependencies(source, currentSource, editHandles, movedSourceDeltas, parseOptions, geometry, inheritedSourceIds);
+  if (dependencyCorrected == null) {
+    return { kind: "unsupported", reason: "Could not preserve dependencies between the selected coordinates." };
   }
-  if (calcCorrected !== currentSource) {
-    currentSource = calcCorrected;
+  if (dependencyCorrected !== currentSource) {
+    currentSource = dependencyCorrected;
     patches.splice(0, patches.length, computeMinimalReplacementPatch(source, currentSource));
   }
 
@@ -332,14 +335,31 @@ function applyMoveElementsUsingHandleRewrites(
   if (rewritable.some((handle) => handle.sourceRef.sourceFingerprint !== sourceFingerprint)) {
     return { kind: "error", message: "Handle does not match current source (stale handle)." };
   }
+  const spanCounts = new Map<string, number>();
+  for (const handle of editHandles) {
+    const key = `${handle.sourceRef.sourceSpan.from}:${handle.sourceRef.sourceSpan.to}`;
+    spanCounts.set(key, (spanCounts.get(key) ?? 0) + 1);
+  }
+  if (rewritable.some((handle) =>
+    spanCounts.get(`${handle.sourceRef.sourceSpan.from}:${handle.sourceRef.sourceSpan.to}`)! > 1)) {
+    return { kind: "unsupported", reason: "Handle span is shared by expanded statements (foreach/macro), cannot move safely." };
+  }
 
   type PendingReplacement = { span: { from: number; to: number }; text: string };
   const pending: PendingReplacement[] = [];
+  let deferredDependencies = false;
 
   for (const handle of rewritable) {
     const actualText = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
     if (actualText !== handle.sourceText) {
       skippedHandles.push(handle.id);
+      continue;
+    }
+
+    // Keep authored offsets until all direct coordinates and ancestor frames
+    // have moved. The shared dependency pass then uses their fresh bases.
+    if (handle.rewriteMode === "delta" || handle.handleType === "node-positioning") {
+      deferredDependencies = true;
       continue;
     }
 
@@ -352,7 +372,7 @@ function applyMoveElementsUsingHandleRewrites(
     }
   }
 
-  if (pending.length === 0) {
+  if (pending.length === 0 && !deferredDependencies) {
     return { kind: "unsupported", reason: "No coordinate rewrites succeeded" };
   }
 
@@ -1067,6 +1087,8 @@ function applyElementDeltaMapStrict(
       };
     }
 
+    if (handle.rewriteMode === "delta" || handle.handleType === "node-positioning") continue;
+
     const text = rewriteCoordinate(
       worldPoint(pt(handle.world.x + delta.x), pt(handle.world.y + delta.y)),
       handle,
@@ -1095,7 +1117,8 @@ function applyElementDeltaMapStrict(
     pending.push({ span: handle.sourceRef.sourceSpan, text });
   }
 
-  if (pending.length === 0) {
+  if (pending.length === 0 && !selectedHandles.some((handle) =>
+    handle.rewriteMode === "delta" || handle.handleType === "node-positioning")) {
     return { kind: "unsupported", reason: "Arrange operation would not change the source." };
   }
 
@@ -1127,13 +1150,17 @@ function applyElementDeltaMapStrict(
   currentSource = pivotUpdates.source;
   patches.push(...pivotUpdates.patches);
 
-  const calcCorrected = correctMovedCalcDependencies(source, currentSource, editHandles, deltasBySource, parseOptions);
-  if (calcCorrected == null) {
-    return { kind: "unsupported", reason: "Could not preserve dependencies between the arranged calc coordinates." };
+  const dependencyCorrected = correctMovedCoordinateDependencies(source, currentSource, editHandles, deltasBySource, parseOptions);
+  if (dependencyCorrected == null) {
+    return { kind: "unsupported", reason: "Could not preserve dependencies between the arranged coordinates." };
   }
-  if (calcCorrected !== currentSource) {
-    currentSource = calcCorrected;
+  if (dependencyCorrected !== currentSource) {
+    currentSource = dependencyCorrected;
     patches.splice(0, patches.length, computeMinimalReplacementPatch(source, currentSource));
+  }
+
+  if (currentSource === source) {
+    return { kind: "unsupported", reason: "Arrange operation would not change the source." };
   }
 
   return {
@@ -1403,7 +1430,8 @@ function findScopeStatementById(
 
 function expandChangedSourceIdsForMovedElements(
   statements: readonly Statement[],
-  elementIds: readonly string[]
+  elementIds: readonly string[],
+  editHandles: readonly EditHandle[] = []
 ): string[] {
   const expanded: string[] = [];
   const seen = new Set<string>();
@@ -1434,7 +1462,45 @@ function expandChangedSourceIdsForMovedElements(
       continue;
     }
     visitScope(scope);
+    for (const handle of editHandles) {
+      if (containsSpan(scope.span, handle.sourceRef.sourceSpan)) push(handle.sourceRef.sourceId);
+    }
   }
 
   return expanded;
+}
+
+/** A selected scope owns its descendants' translation; preserve all requested
+ * ids separately for invalidation and editor identity reconciliation. */
+function collapseMovedScopeDescendants(
+  statements: readonly Statement[],
+  elementIds: readonly string[],
+  editHandles: readonly EditHandle[]
+): string[] {
+  const selectedScopes = elementIds.flatMap((id) => {
+    const scope = findScopeStatementById(statements, id);
+    return scope ? [scope] : [];
+  });
+  if (selectedScopes.length === 0) return [...elementIds];
+  const spansBySource = new Map<string, Span>();
+  const visit = (body: readonly Statement[]) => {
+    for (const statement of body) {
+      spansBySource.set(statement.id, statement.span);
+      if (statement.kind === "Scope") visit(statement.body);
+    }
+  };
+  visit(statements);
+  for (const handle of editHandles) {
+    if (!spansBySource.has(handle.sourceRef.sourceId)) {
+      spansBySource.set(handle.sourceRef.sourceId, handle.sourceRef.sourceSpan);
+    }
+  }
+  return elementIds.filter((id) => {
+    const span = spansBySource.get(id);
+    return !span || !selectedScopes.some((scope) => scope.id !== id && containsSpan(scope.span, span));
+  });
+}
+
+function containsSpan(parent: Span, child: Span): boolean {
+  return parent.from <= child.from && parent.to >= child.to;
 }

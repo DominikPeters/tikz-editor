@@ -197,19 +197,17 @@ export function useInspectorModel(args: {
   });
 
   useEffect(() => {
-    return useEditorStore.subscribe((s, prev) => {
+    return useEditorStore.subscribe((s) => {
       const k = s.activeCanvasDragKind;
       if (k === "element" || k === "resize" || k === "rotate" || k === "handle") return;
-      if (s.source !== prev.source || s.snapshot !== prev.snapshot) {
+      if (s.source === s.snapshot.source) {
         // When the source has changed but the snapshot hasn't caught up yet
         // (snapshot.source !== source), skip the update. The expensive inspector
         // useMemo hooks (descriptors, provenance) would use mismatched sources,
         // causing cache misses and redundant full parses. Wait for SNAPSHOT_READY
         // to bring both into sync, then update in one shot.
-        if (s.source !== s.snapshot.source) {
-          return;
-        }
-        setSourceSnapshot({ source: s.source, snapshot: s.snapshot });
+        setSourceSnapshot(current => current.source === s.source && current.snapshot === s.snapshot
+          ? current : { source: s.source, snapshot: s.snapshot });
       }
     });
   }, []);

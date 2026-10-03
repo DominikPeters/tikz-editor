@@ -768,6 +768,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const leftRulerRef = useRef<SVGSVGElement | null>(null);
   const interactionSvgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const cancelCanvasGestureRef = useRef<(() => void) | null>(null);
   const suppressNextBackgroundClickRef = useRef(false);
   const pathDraftRef = useRef<PathToolDraft | null>(null);
   const freehandDraftRef = useRef<FreehandToolDraft | null>(null);
@@ -862,6 +863,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       return;
     }
     previousCanvasContextKeyRef.current = nextContextKey;
+    cancelCanvasGestureRef.current?.();
 
     pathDraftRef.current = null;
     freehandDraftRef.current = null;
@@ -1763,7 +1765,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   );
 
   const applyActionWithFeedback = useCallback(
-    (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession): ApplyActionFeedback => {
+    (action: EditAction, historyMergeKey?: string, sourceOverride?: string, geometry?: EditGeometrySession, recordInHistory?: boolean): ApplyActionFeedback => {
       const sourceForEdit = sourceOverride ?? source;
       const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot }, action, {
         geometry,
@@ -1785,6 +1787,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             type: "APPLY_EDIT_ACTION",
             action,
             historyMergeKey,
+            recordInHistory,
             precomputedSource: sourceForEdit,
             precomputedResult: result
           });
@@ -2984,6 +2987,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   });
 
   useCanvasViewportEffects({
+    canvasContextKey: rootKey(activeDocumentId, activeRootId),
     dragRef,
     pendingTouchViewportRef,
     setDragState,
@@ -3297,7 +3301,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     svgResultRef
   ]);
 
-  useCanvasDragController(dragControllerConfig);
+  cancelCanvasGestureRef.current = useCanvasDragController({ ...dragControllerConfig, setFreehandDraft });
 
   useEffect(() => () => { setActiveCanvasDragKind(null); }, [setActiveCanvasDragKind]);
 

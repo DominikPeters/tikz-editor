@@ -1,4 +1,4 @@
-import { canContinueDocumentEdit, trackDocumentEdit } from "../../edit-session";
+import { canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
 import { createFrameEditQueue } from "../frame-edit-queue";
 import { applyEditAction } from "@tikz-editor/core/edit/actions";
@@ -6,7 +6,9 @@ import { resolveResizeFrameForSource } from "./resize-frames";
 import { snapToolCreatePointer } from "./tool-pointer-snap";
 import { projectResizePointer } from "./resize-constraints";
 import type { ApplyActionWithFeedbackFn } from "./types";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import type { AdornmentOwnerGeometry } from "@tikz-editor/core/ast/types";
 import {
   applyFrameTransform,
@@ -139,6 +141,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     setToolDraft,
     setBezierBendDraft,
     setPathSegmentDraft,
+    setFreehandDraft,
     commitPathToolSegment,
     appendFreehandSamplePoint,
     finalizeFreehandDraft,
@@ -156,15 +159,48 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   } = params;
   const wasSnappedRef = useRef(false);
   const worldListenersRef = useRef<CanvasWorldListeners | null>(null);
+  const moveQueueRef = useRef<ReturnType<typeof createFrameEditQueue<DragState, PointerEvent>> | null>(null);
+  const previewsRef = useRef(new WeakMap<DragState, { action: Parameters<ApplyActionWithFeedbackFn>[0]; patches: SourcePatch[] }>());
+  const cancelGesture = useCallback(() => {
+    moveQueueRef.current?.cancel();
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    if ("latestSource" in drag && drag.editSession) restoreDocumentEdit(drag.editSession, useEditorStore.getState, dispatch);
+    previewsRef.current.delete(drag);
+    wasSnappedRef.current = false;
+    suppressNextBackgroundClickRef.current = true;
+    setDragState(null);
+    setToolDraft(null);
+    setBezierBendDraft(null);
+    setPathSegmentDraft(null);
+    if (drag.kind === "tool-freehand") setFreehandDraft?.(null);
+    setPendingBezier(null);
+    setToolCursorWorld(null);
+    setMarqueeDraft(null);
+    setNodeAnchorOverlay(null);
+    setPathAttachedNodePreview(null);
+    setDragTooltip(null);
+    setSnapLines([]);
+  }, [dispatch, dragRef, setDragState, setToolDraft, setBezierBendDraft, setPathSegmentDraft,
+    setFreehandDraft, setPendingBezier, setToolCursorWorld, setMarqueeDraft, setNodeAnchorOverlay,
+    setPathAttachedNodePreview, setDragTooltip, setSnapLines, suppressNextBackgroundClickRef]);
+  const cancelGestureRef = useRef(cancelGesture);
+  useLayoutEffect(() => { cancelGestureRef.current = cancelGesture; });
+  const previousSurfaceRef = useRef(interactionSvgRef.current);
+  useLayoutEffect(() => {
+    if (previousSurfaceRef.current !== interactionSvgRef.current) {
+      previousSurfaceRef.current = interactionSvgRef.current;
+      cancelGesture();
+    }
+  });
 
   // Source formatting may slightly change a requested snap. Only show guides
   // when the recomputed scene actually satisfies the retained targets.
   useLayoutEffect(() => {
     const drag = dragRef.current;
     if (drag && "latestSource" in drag && (source !== drag.latestSource || (drag.editSession && !canContinueDocumentEdit(drag.editSession, useEditorStore.getState())))) {
-      setDragState(null);
-      setSnapLines([]);
-      setDragTooltip(null);
+      cancelGesture();
       return;
     }
     if (drag?.kind === "handle") {
@@ -172,10 +208,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       const currentHandleId = resolveHandleIdForDrag({ ...drag }, snapshotEditHandles);
       const handle = snapshotEditHandles.find(handle => handle.id === currentHandleId);
       if (!handle) {
-        setDragState(null);
-        setSnapLines([]);
-        setNodeAnchorOverlay(null);
-        setDragTooltip(null);
+        cancelGesture();
         setWarning("The edited handle changed. Start a new drag.");
         wasSnappedRef.current = false;
         return;
@@ -201,14 +234,20 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     setSnapLines(lines);
     if (lines.length > 0 && !wasSnappedRef.current) onSnapFeedback?.();
     wasSnappedRef.current = lines.length > 0;
-  }, [dragRef, snapshotEditHandles, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip, setNodeAnchorOverlay, setWarning]);
+  }, [dragRef, snapshotEditHandles, snapshotSource, source, snapshotScene, scopeOverlay, setSnapLines, onSnapFeedback, liveResizeFramesRef, setDragState, setDragTooltip, setNodeAnchorOverlay, setWarning, cancelGesture]);
 
   useLayoutEffect(() => {
     function applyGestureAction(drag: Extract<DragState, { latestSource: string }>, action: Parameters<ApplyActionWithFeedbackFn>[0]) {
       if (drag.editSession && !canContinueDocumentEdit(drag.editSession, useEditorStore.getState())) return { sourceChanged: false };
-      const result = applyActionWithFeedback(action, drag.historyMergeKey, drag.latestSource, drag.geometry);
+      const result = applyActionWithFeedback(action, drag.historyMergeKey, drag.latestSource, drag.geometry, false);
       if (drag.editSession) trackDocumentEdit(drag.editSession, useEditorStore.getState());
       if (result.newSource != null) {
+        const patches = drag.editSession ? useEditorStore.getState().documents[drag.editSession.documentId]?.lastEditPatches : null;
+        if (patches?.length) {
+          const previous = previewsRef.current.get(drag);
+          previewsRef.current.set(drag, { action,
+            patches: composeSourcePatches(drag.editSession!.baseSource, [previous?.patches ?? [], patches]) });
+        }
         drag.latestSource = result.newSource;
         drag.didEdit = true;
       }
@@ -988,10 +1027,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       const resolvedHandleId = drag.geometry ? drag.handleId : resolveHandleIdForDrag(drag, snapshotEditHandles);
       if (!resolvedHandleId) {
         drag.activeEndpointAnchor = null;
-        setDragState(null);
-        setSnapLines([]);
-        setNodeAnchorOverlay(null);
-        setDragTooltip(null);
+        cancelGesture();
         setWarning("The edited handle changed. Start a new drag.");
         maybeTriggerSnapFeedback(false);
         return;
@@ -1309,6 +1345,24 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       }
 
       const cleanupElementIds = propertyCleanupElementIdsForDrag(drag);
+      if ("latestSource" in drag && drag.editSession) {
+        const preview = previewsRef.current.get(drag);
+        const finalSource = drag.latestSource;
+        if (preview && canContinueDocumentEdit(drag.editSession, useEditorStore.getState()) &&
+          finalSource !== drag.editSession.baseSource) {
+          const patches = preview.patches;
+          dragRef.current = null;
+          if (restoreDocumentEdit(drag.editSession, useEditorStore.getState, dispatch)) {
+            dispatch({ type: "APPLY_EDIT_ACTION", documentId: drag.editSession.documentId,
+              action: preview.action, historyMergeKey: drag.historyMergeKey,
+              precomputedSource: drag.editSession.baseSource,
+              expectedDocumentRevision: { documentId: drag.editSession.documentId, sourceRevision: drag.editSession.latestRevision },
+              precomputedResult: { kind: "success", newSource: finalSource, patches,
+                changedSourceIds: cleanupElementIds } });
+          }
+        }
+        previewsRef.current.delete(drag);
+      }
       if ("historyMergeKey" in drag && drag.didEdit && cleanupElementIds.length > 0) {
         schedulePropertyCleanup(drag.latestSource, cleanupElementIds, drag.historyMergeKey);
       }
@@ -1349,6 +1403,11 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       if (event.repeat) {
         return;
       }
+      if (event.key === "Escape" && dragRef.current && "latestSource" in dragRef.current) {
+        event.preventDefault(); event.stopPropagation();
+        cancelGesture();
+        return;
+      }
       applyRotateModifierKeyTransition(event, true);
     }
 
@@ -1371,6 +1430,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     };
   }, [
     applyActionWithFeedback,
+    cancelGesture,
     schedulePropertyCleanup,
     creationFillColor,
     creationStrokeColor,
@@ -1421,6 +1481,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       worldListenersRef.current?.onPointerMove(event);
       if ("latestSource" in owner && owner.editSession) trackDocumentEdit(owner.editSession, useEditorStore.getState());
     });
+    moveQueueRef.current = queue;
     const onPointerMove = (event: PointerEvent) => {
       const drag = dragRef.current;
       if (drag && "latestSource" in drag && drag.pointerId === event.pointerId) {
@@ -1434,38 +1495,41 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
       const drag = dragRef.current;
       if (drag?.pointerId !== event.pointerId) return;
       if ("latestSource" in drag && drag.editSession && !canContinueDocumentEdit(drag.editSession, useEditorStore.getState())) {
-        queue.cancel();
-        setDragState(null);
-        setSnapLines([]);
-        setDragTooltip(null);
+        cancelGestureRef.current();
         return;
       }
-      if (event.type === "pointercancel") queue.cancel();
-      else {
-        if (movingDrag === drag && "latestSource" in drag) queue.push(drag, event);
-        queue.flush();
-      }
+      if (movingDrag === drag && "latestSource" in drag) queue.push(drag, event);
+      queue.flush();
       worldListenersRef.current?.onPointerUp(event);
       movingDrag = null;
     };
+    const onPointerCancel = (event: PointerEvent) => {
+      if (dragRef.current?.pointerId === event.pointerId) cancelGestureRef.current();
+    };
+    const onBlur = () => { cancelGestureRef.current(); };
     const onKeyDown = (event: KeyboardEvent) => worldListenersRef.current?.onKeyDown(event);
     const onKeyUp = (event: KeyboardEvent) => worldListenersRef.current?.onKeyUp(event);
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+    window.addEventListener("blur", onBlur);
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
 
     return () => {
       queue.cancel();
+      cancelGestureRef.current();
+      if (moveQueueRef.current === queue) moveQueueRef.current = null;
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("blur", onBlur);
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
     };
   }, [dragRef, setDragState, setSnapLines, setDragTooltip]);
+  return cancelGesture;
 }
 
 function propertyCleanupElementIdsForDrag(drag: DragState): string[] {

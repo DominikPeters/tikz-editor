@@ -49,6 +49,7 @@ export type UseCanvasDragControllerParams = {
   setToolDraft: (draft: Extract<DragState, { kind: "tool-create" }> | null) => void;
   setBezierBendDraft: (draft: Extract<DragState, { kind: "tool-bezier-bend" }> | null) => void;
   setPathSegmentDraft: (draft: Extract<DragState, { kind: "tool-path-segment" }> | null) => void;
+  setFreehandDraft?: (draft: null) => void;
   commitPathToolSegment: (segment: PathToolGestureSegment) => void;
   appendFreehandSamplePoint: (point: WorldPoint) => WorldPoint[] | null;
   finalizeFreehandDraft: (overridePoints?: WorldPoint[]) => void;

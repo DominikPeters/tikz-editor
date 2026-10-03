@@ -2134,7 +2134,8 @@ export function evaluatePathStatement(
         const addCurveHandle = (
           coordinate: CoordinateItem | undefined,
           evaluated: EvaluatedCoordinate | undefined,
-          kind: "path-control" | "path-point"
+          kind: "path-control" | "path-point",
+          relativeBase = context.currentPoint
         ) => {
           if (!coordinate || !evaluated) {
             return;
@@ -2143,7 +2144,8 @@ export function evaluatePathStatement(
             evaluated.coordinateForm === "named"
               ? resolveNamedCoordinateRewriteHandleId(coordinate.x, context)
               : undefined;
-          const handle = createEditHandle(evaluated, coordinate.span, statement.id, kind, context, {
+          const handleContext = relativeBase === context.currentPoint ? context : { ...context, currentPoint: relativeBase };
+          const handle = createEditHandle(evaluated, coordinate.span, statement.id, kind, handleContext, {
             rewriteTargetHandleId
           });
           if (handle) {
@@ -2152,7 +2154,7 @@ export function evaluatePathStatement(
         };
 
         addCurveHandle(parsedCurve.control1Coordinate, parsedCurve.control1Evaluation, "path-control");
-        addCurveHandle(parsedCurve.control2Coordinate, parsedCurve.control2Evaluation, "path-control");
+        addCurveHandle(parsedCurve.control2Coordinate, parsedCurve.control2Evaluation, "path-control", parsedCurve.endPoint);
         addCurveHandle(parsedCurve.endCoordinate, parsedCurve.endEvaluation, "path-point");
 
         const curveFrom = context.currentPoint;
