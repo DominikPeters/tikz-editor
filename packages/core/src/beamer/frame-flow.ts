@@ -14,11 +14,12 @@ const TEX_LINE_SKIP_PT = 1;
 export function positionPreparedFrameFlow(
   flow: readonly PreparedFrameFlowItem[],
   baselineSkip: number,
-  fillUnit = 0
+  fillUnit = 0,
+  initialPreviousDepth: number | null = 0
 ): { items: PositionedFrameFlowItem[]; extent: number } {
   const items: PositionedFrameFlowItem[] = [];
   let cursor = 0;
-  let previousDepth = 0;
+  let previousDepth = initialPreviousDepth;
   for (let index = 0; index < flow.length; index += 1) {
     const item = flow[index];
     if (item.kind === "title-page") {
@@ -47,11 +48,11 @@ export function positionPreparedFrameFlow(
         visualBottom: cursor,
       });
       cursor += item.height;
-      previousDepth = 0;
+      if (previousDepth != null) previousDepth = 0;
       continue;
     }
     if (item.kind === "unsupported") {
-      const contentTop = cursor + TEX_LINE_SKIP_PT;
+      const contentTop = cursor + (previousDepth == null ? 0 : TEX_LINE_SKIP_PT);
       const visualBottom = contentTop + item.height;
       items.push({
         item,
@@ -235,7 +236,7 @@ export function previousDepthBeforeTrailingVerticalSpace(
 }
 
 export function trailingBeamerTrivlistSkip(source: string): number {
-  const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright)\s*\}/gu;
+  const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/gu;
   let lastEnd = -1;
   for (const match of source.matchAll(endPattern)) {
     lastEnd = (match.index ?? 0) + match[0].length;
@@ -266,7 +267,7 @@ export function leadingBeamerTrivlistAdjustment(
   paragraph: LaidParagraph
 ): number {
   if (
-    !/\\begin\s*\{\s*(?:center|flushleft|flushright)\s*\}/u.test(source)
+    !/\\begin\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/u.test(source)
   ) {
     return 0;
   }
@@ -283,10 +284,11 @@ export function paragraphLastLineDepth(paragraph: LaidParagraph): number {
 }
 
 function verticalInterlineGlue(
-  previousDepth: number,
+  previousDepth: number | null,
   height: number,
   baselineSkip: number
 ): number {
+  if (previousDepth == null) return 0;
   const candidate = baselineSkip - previousDepth - height;
   return candidate >= 0 ? candidate : TEX_LINE_SKIP_PT;
 }

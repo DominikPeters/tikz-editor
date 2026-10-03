@@ -519,7 +519,11 @@ async function renderBeamerFrameStep(params: {
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
       preparedFrameFlow,
-      theme.fonts["normal-text"].lineHeightPt
+      theme.fonts["normal-text"].lineHeightPt,
+      0,
+      // beamerbaseframe.sty issues \nointerlineskip after its initial
+      // empty vbox on plain frames, before the first authored material.
+      frame.options?.plain ? null : 0
     );
     const verticalPacking = resolveFrameVerticalPacking(
       availableContentBounds,
@@ -530,7 +534,8 @@ async function renderBeamerFrameStep(params: {
     const positioned = positionPreparedFrameFlow(
       preparedFrameFlow,
       theme.fonts["normal-text"].lineHeightPt,
-      verticalPacking.fillUnit
+      verticalPacking.fillUnit,
+      frame.options?.plain ? null : 0
     );
     const frameBlockTop =
       availableContentBounds.y + verticalPacking.topOffset;
@@ -1841,16 +1846,20 @@ function prepareBlock(params: {
     titleAscent + Math.max(titleDepth, geometry.titleDepthFloorPt);
   const bodyBaselineInset =
     firstBody && geometry.bodyFirstBaselineSkipPt != null
-      ? geometry.bodyFirstBaselineSkipPt +
-        geometry.bodyInitialVSkipEx *
-          fontXHeightPt(params.theme.fonts[plan.bodyFontRole]) -
-        firstLineBaselineOffset(firstBody)
+      ? (geometry.bodyFirstBaselineSkipPt - paragraphStartingMaterialHeight(firstBody) >= 0
+          ? geometry.bodyFirstBaselineSkipPt - paragraphStartingMaterialHeight(firstBody)
+          : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
+  const bodyBoxHeight = bodyBaselineInset + bodyExtent - (firstBody ? paragraphEndingMaterialDepth(firstBody) : 0);
+  const titleBodyInterline = params.theme.fonts[plan.bodyFontRole].lineHeightPt - titleDepth - bodyBoxHeight;
+  const titleBodyGap = plan.style === "default" && geometry.flowBoxHeight === "title-ascent"
+    ? titleBodyInterline >= 0 ? titleBodyInterline : 1
+    : geometry.titleBodyGapPt;
   const bodyParagraphTop =
     geometry.beforeSkipPt +
     geometry.boxTopSkipPt +
     titleBoxExtent +
-    geometry.titleBodyGapPt +
+    titleBodyGap +
     bodyBaselineInset;
   const bodyBackgroundHeight =
     bodyBaselineInset +
@@ -2725,7 +2734,7 @@ async function prepareColumnContent(params: {
         const nextHeight = prepared.kind === "block"
           ? prepared.block.flowBoxHeight : paragraphStartingMaterialHeight(prepared.paragraph);
         const interline = bodyFont.lineHeightPt - previousDepth - nextHeight;
-        prepared.leadingSkipPt = interline < 0 ? 1 : interline;
+        prepared.leadingSkipPt = (prepared.leadingSkipPt ?? 0) + (interline < 0 ? 1 : interline);
       }
       flow.push(prepared);
       if (prepared.kind === "paragraph") {
@@ -2893,11 +2902,12 @@ async function prepareColumnFlowNode(params: {
       kind: "paragraph",
       visibility,
       paragraph,
+      leadingSkipPt: leadingBeamerTrivlistAdjustment(projection.mapped.text, paragraph),
       // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
       // strut carried by the shared text frontend's enclosing vlist. Lists,
       // on the other hand, intentionally carry their vertical list glue.
       advanceHeight: node.kind === "paragraph"
-        ? paragraphLineExtent(paragraph)
+        ? paragraphMaterialExtent(paragraph) + trailingBeamerTrivlistSkip(projection.mapped.text)
         : paragraph.height,
       trailingSkipPt:
         node.kind === "list"
