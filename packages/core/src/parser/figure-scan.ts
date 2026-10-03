@@ -1,3 +1,12 @@
+import {
+  readTexBalancedDelimited,
+  readTexControlSequence,
+  readTexEnvironmentDelimiter,
+  skipTexComment,
+  skipTexVerbatim,
+  skipTexWhitespaceAndComments
+} from "./tex-lexical.js";
+
 export type ScannedFigure = {
   span: { from: number; to: number };
   beginSpan: { from: number; to: number };
@@ -10,33 +19,54 @@ type FigureCandidate = Omit<ScannedFigure, "isTemplate"> & {
 };
 
 export function scanTikzFigures(source: string): ScannedFigure[] {
-  const beginPattern = /\\begin\{tikzpicture\*?\}/g;
   const candidates: FigureCandidate[] = [];
   let hasPlaceholderCandidate = false;
-  let match = beginPattern.exec(source);
+  let cursor = 0;
+  let begin: { from: number; to: number; name: string } | null = null;
 
-  while (match) {
-    const beginRaw = match[0];
-    const beginFrom = match.index;
-    const beginTo = beginFrom + beginRaw.length;
-    const endToken = beginRaw.endsWith("*}") ? "\\end{tikzpicture*}" : "\\end{tikzpicture}";
-    const endFrom = source.indexOf(endToken, beginTo);
-    if (endFrom < 0) {
-      break;
+  while (cursor < source.length) {
+    if (source.charAt(cursor) === "%") {
+      cursor = skipTexComment(source, cursor);
+      continue;
     }
-    const endTo = endFrom + endToken.length;
-    const inner = source.slice(beginTo, endFrom);
+    const command = readTexControlSequence(source, cursor);
+    if (!command) {
+      cursor += 1;
+      continue;
+    }
+    cursor = command.to;
+    const verbatimEnd = skipTexVerbatim(source, command);
+    if (verbatimEnd !== null) {
+      cursor = verbatimEnd;
+      continue;
+    }
+    const environment = readTexEnvironmentDelimiter(source, command.from);
+    if (!environment) {
+      continue;
+    }
+    cursor = environment.to;
+    if (environment.name !== "tikzpicture" && environment.name !== "tikzpicture*") {
+      continue;
+    }
+    if (environment.kind === "begin") {
+      // Preserve the existing recovery boundary for malformed nested pictures.
+      begin ??= environment;
+      continue;
+    }
+    if (environment.name !== begin?.name) {
+      continue;
+    }
+    const inner = source.slice(begin.to, environment.from);
     const containsUnresolvedPlaceholder = containsUnresolvedMacroPlaceholder(inner);
     hasPlaceholderCandidate ||= containsUnresolvedPlaceholder;
 
     candidates.push({
-      span: { from: beginFrom, to: endTo },
-      beginSpan: { from: beginFrom, to: beginTo },
-      endSpan: { from: endFrom, to: endTo },
+      span: { from: begin.from, to: environment.to },
+      beginSpan: { from: begin.from, to: begin.to },
+      endSpan: { from: environment.from, to: environment.to },
       containsUnresolvedPlaceholder
     });
-    beginPattern.lastIndex = endTo;
-    match = beginPattern.exec(source);
+    begin = null;
   }
 
   if (!hasPlaceholderCandidate) {
@@ -60,7 +90,7 @@ function collectMacroDefinitionBodySpans(source: string): Array<{ from: number; 
   while (cursor < source.length) {
     const char = source.charAt(cursor);
     if (char === "%") {
-      cursor = skipComment(source, cursor);
+      cursor = skipTexComment(source, cursor);
       continue;
     }
     if (char !== "\\") {
@@ -68,7 +98,7 @@ function collectMacroDefinitionBodySpans(source: string): Array<{ from: number; 
       continue;
     }
 
-    const command = readControlSequence(source, cursor);
+    const command = readTexControlSequence(source, cursor);
     if (!command) {
       cursor += 1;
       continue;
@@ -109,7 +139,7 @@ function containsUnresolvedMacroPlaceholder(source: string): boolean {
     const char = source.charAt(cursor);
 
     if (char === "%") {
-      cursor = skipComment(source, cursor);
+      cursor = skipTexComment(source, cursor);
       continue;
     }
 
@@ -135,109 +165,23 @@ function containsUnresolvedMacroPlaceholder(source: string): boolean {
   return false;
 }
 
-function skipComment(source: string, from: number): number {
-  let cursor = from;
-  while (cursor < source.length) {
-    const char = source.charAt(cursor);
-    cursor += 1;
-    if (char === "\n" || char === "\r") {
-      break;
-    }
-  }
-  return cursor;
-}
-
-function skipWhitespaceAndComments(source: string, from: number): number {
-  let cursor = from;
-  while (cursor < source.length) {
-    const char = source.charAt(cursor);
-    if (/\s/u.test(char)) {
-      cursor += 1;
-      continue;
-    }
-    if (char === "%") {
-      cursor = skipComment(source, cursor);
-      continue;
-    }
-    break;
-  }
-  return cursor;
-}
-
-function readControlSequence(source: string, from: number): { raw: string; from: number; to: number } | null {
-  if (source.charAt(from) !== "\\") {
-    return null;
-  }
-  let cursor = from + 1;
-  while (cursor < source.length && /[A-Za-z@]/u.test(source.charAt(cursor))) {
-    cursor += 1;
-  }
-  if (cursor === from + 1) {
-    cursor = Math.min(source.length, from + 2);
-  }
-  return {
-    raw: source.slice(from, cursor),
-    from,
-    to: cursor
-  };
-}
-
-function readBalancedDelimited(
-  source: string,
-  from: number,
-  openChar: "{" | "[",
-  closeChar: "}" | "]"
-): { from: number; to: number } | null {
-  if (source.charAt(from) !== openChar) {
-    return null;
-  }
-  let depth = 0;
-  let cursor = from;
-  while (cursor < source.length) {
-    const char = source.charAt(cursor);
-    if (char === "%") {
-      cursor = skipComment(source, cursor);
-      continue;
-    }
-    if (char === "\\") {
-      cursor += 2;
-      continue;
-    }
-    if (char === openChar) {
-      depth += 1;
-      cursor += 1;
-      continue;
-    }
-    if (char === closeChar) {
-      depth -= 1;
-      cursor += 1;
-      if (depth === 0) {
-        return { from, to: cursor - 1 };
-      }
-      continue;
-    }
-    cursor += 1;
-  }
-  return null;
-}
-
 function tryReadDefBodySpan(source: string, fromCursor: number): { from: number; to: number } | null {
-  let cursor = skipWhitespaceAndComments(source, fromCursor);
-  const name = readControlSequence(source, cursor);
+  let cursor = skipTexWhitespaceAndComments(source, fromCursor);
+  const name = readTexControlSequence(source, cursor);
   if (!name) {
     return null;
   }
   cursor = name.to;
 
   while (cursor < source.length) {
-    cursor = skipWhitespaceAndComments(source, cursor);
+    cursor = skipTexWhitespaceAndComments(source, cursor);
     const char = source.charAt(cursor);
     if (char === "{") {
-      const group = readBalancedDelimited(source, cursor, "{", "}");
+      const group = readTexBalancedDelimited(source, cursor, "{", "}");
       return group ? { from: group.from + 1, to: group.to - 1 } : null;
     }
     if (char === "\\") {
-      const control = readControlSequence(source, cursor);
+      const control = readTexControlSequence(source, cursor);
       if (!control) {
         return null;
       }
@@ -250,37 +194,37 @@ function tryReadDefBodySpan(source: string, fromCursor: number): { from: number;
 }
 
 function tryReadNewCommandBodySpan(source: string, fromCursor: number): { from: number; to: number } | null {
-  let cursor = skipWhitespaceAndComments(source, fromCursor);
+  let cursor = skipTexWhitespaceAndComments(source, fromCursor);
   if (source.charAt(cursor) === "*") {
     cursor += 1;
   }
-  cursor = skipWhitespaceAndComments(source, cursor);
+  cursor = skipTexWhitespaceAndComments(source, cursor);
 
-  const directName = readControlSequence(source, cursor);
+  const directName = readTexControlSequence(source, cursor);
   if (directName) {
     cursor = directName.to;
   } else {
-    const nameGroup = readBalancedDelimited(source, cursor, "{", "}");
+    const nameGroup = readTexBalancedDelimited(source, cursor, "{", "}");
     if (!nameGroup) {
       return null;
     }
-    cursor = nameGroup.to + 1;
+    cursor = nameGroup.to;
   }
 
-  cursor = skipWhitespaceAndComments(source, cursor);
-  const arityGroup = readBalancedDelimited(source, cursor, "[", "]");
+  cursor = skipTexWhitespaceAndComments(source, cursor);
+  const arityGroup = readTexBalancedDelimited(source, cursor, "[", "]");
   if (arityGroup) {
-    cursor = arityGroup.to + 1;
+    cursor = arityGroup.to;
   }
 
-  cursor = skipWhitespaceAndComments(source, cursor);
-  const optionalGroup = readBalancedDelimited(source, cursor, "[", "]");
+  cursor = skipTexWhitespaceAndComments(source, cursor);
+  const optionalGroup = readTexBalancedDelimited(source, cursor, "[", "]");
   if (optionalGroup) {
-    cursor = optionalGroup.to + 1;
+    cursor = optionalGroup.to;
   }
 
-  cursor = skipWhitespaceAndComments(source, cursor);
-  const body = readBalancedDelimited(source, cursor, "{", "}");
+  cursor = skipTexWhitespaceAndComments(source, cursor);
+  const body = readTexBalancedDelimited(source, cursor, "{", "}");
   if (!body) {
     return null;
   }

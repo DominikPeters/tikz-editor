@@ -1,4 +1,5 @@
 import type { OptionEntry, OptionListAst } from "./types.js";
+import { readTexBalancedDelimited } from "../parser/tex-lexical.js";
 
 export function parseOptionListRaw(raw: string, absoluteFrom = 0): OptionListAst {
   const normalized = raw.trim();
@@ -179,30 +180,8 @@ function looksLikeColorSpecification(token: string): boolean {
 }
 
 function findOptionCloseIndex(raw: string): number {
-  if (!raw.includes("[")) {
-    return raw.length;
-  }
-
-  let depth = 0;
-  for (let i = 0; i < raw.length; i += 1) {
-    const char = raw[i];
-    if (char === "\\") {
-      i += 1;
-      continue;
-    }
-    if (char === "[") {
-      depth += 1;
-      continue;
-    }
-    if (char === "]") {
-      depth -= 1;
-      if (depth === 0) {
-        return i;
-      }
-    }
-  }
-
-  return raw.length;
+  const span = readTexBalancedDelimited(raw, raw.indexOf("["), "[", "]");
+  return span ? span.to - 1 : raw.length;
 }
 
 function findTopLevelSeparator(input: string, separator: string): number {
@@ -234,11 +213,11 @@ function findTopLevelSeparator(input: string, separator: string): number {
       braceDepth = Math.max(0, braceDepth - 1);
       continue;
     }
-    if (char === "[") {
+    if (char === "[" && braceDepth === 0) {
       bracketDepth += 1;
       continue;
     }
-    if (char === "]") {
+    if (char === "]" && braceDepth === 0) {
       bracketDepth = Math.max(0, bracketDepth - 1);
       continue;
     }
@@ -285,11 +264,11 @@ function splitTopLevelWithRanges(input: string, separator: string): Array<{ valu
       braceDepth = Math.max(0, braceDepth - 1);
       continue;
     }
-    if (char === "[") {
+    if (char === "[" && braceDepth === 0) {
       bracketDepth += 1;
       continue;
     }
-    if (char === "]") {
+    if (char === "]" && braceDepth === 0) {
       bracketDepth = Math.max(0, bracketDepth - 1);
       continue;
     }

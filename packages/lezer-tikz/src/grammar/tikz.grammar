@@ -11,8 +11,10 @@
 }
 
 TikzEnvironment {
-  BeginTikz OptionList? BodyItem* EndTikz
+  BeginTikz Comment* (OptionList BodyItem* | bodyStart BodyItem*)? EndTikz
 }
+
+bodyStart { Statement | StrayToken }
 
 BodyItem {
   Comment |
@@ -21,7 +23,7 @@ BodyItem {
 }
 
 TikzInline {
-  InlineTikzCmd OptionList? BodyItem*
+  InlineTikzCmd Comment* (OptionList BodyItem* | bodyStart BodyItem*)?
 }
 
 Statement {
@@ -47,7 +49,7 @@ StyleDefinitionStatement {
 }
 
 ScopeStatement {
-  BeginScope OptionList? BodyItem* EndScope
+  BeginScope Comment* (OptionList BodyItem* | bodyStart BodyItem*)? EndScope
 }
 
 ForeachStatement {
@@ -568,6 +570,7 @@ StylePayload {
 
 GroupPart {
   Comment |
+  "]" |
   ScopeStatement |
   PgfMathStatement |
   Group |
@@ -608,6 +611,7 @@ GroupPart {
 
 StylePayloadPart {
   Comment |
+  "]" |
   StylePayload |
   Coordinate |
   OptionList |
@@ -792,6 +796,7 @@ StrayToken {
 
 // Word keywords specialize Identifier so they only match as whole words.
 AtKw { @specialize<Identifier, "at"> }
+InlineTikzCmd { @specialize<CommandName, "\\tikz"> }
 BendKw { @specialize<Identifier, "bend"> }
 CycleKw { @specialize<Identifier, "cycle"> }
 CircleKw { @specialize<Identifier, "circle"> }
@@ -839,7 +844,6 @@ ForeachKw { @specialize<Identifier, "foreach"> }
     PgfMathSetMacroCmd,
     PgfMathParseCmd,
     PgfMathSetSeedCmd,
-    InlineTikzCmd,
     EndTikz,
     FillDrawCmd,
     FillCmd,
@@ -887,7 +891,6 @@ ForeachKw { @specialize<Identifier, "foreach"> }
   Comment { "%" ![\n\r]* }
 
   BeginTikz { "\\begin{tikzpicture}" | "\\begin{tikzpicture*}" }
-  InlineTikzCmd { "\\tikz" ![A-Za-z@] }
   EndTikz { "\\end{tikzpicture}" | "\\end{tikzpicture*}" }
 
   DrawCmd { "\\draw" }

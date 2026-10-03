@@ -13,6 +13,7 @@ import {
 } from "./shared.js";
 import { parseTikz } from "./index.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
+import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 
 export type IncrementalParseTrigger = "drag-element" | "drag-handle" | "other";
 
@@ -97,8 +98,6 @@ type CachedIncrementalParseState = {
 
 const SNIPPET_PREFIX = "\\begin{tikzpicture}\n";
 const SNIPPET_SUFFIX = "\n\\end{tikzpicture}";
-const BEGIN_TIKZ_PATTERN = /\\begin\{tikzpicture\*?\}/u;
-const END_TIKZ_PATTERN = /\\end\{tikzpicture\*?\}/u;
 
 export function createIncrementalParseSession(): IncrementalParseSession {
   return createSession(null);
@@ -219,7 +218,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         }
       }
 
-      const nextFigures = shiftFigureInventory(cached.figures, patches);
+      const nextFigures = shiftFigureInventory(cached.figures, patches, input.source);
       const nextActiveFigureSpan = resolveActiveFigureSpan(
         nextFigures.map((figure) => figure.span),
         activeFigureId ?? cached.activeFigureId
@@ -487,7 +486,7 @@ function decideFallbackReason(input: {
   if (!activeFigureSpan) {
     return "active-figure-unresolved";
   }
-  const delimiterSpans = resolveFigureDelimiterSpans(input.cached.source, activeFigureSpan);
+  const delimiterSpans = resolveFigureDelimiterSpans(input.cached.figures, activeFigureSpan);
   for (const patch of input.patches) {
     if (
       patch.oldSpan.from < activeFigureSpan.from ||
@@ -626,9 +625,16 @@ function partitionDiagnostics(
 
 function shiftFigureInventory(
   figures: readonly TikzFigureInventoryItem[],
-  patches: readonly SourcePatch[]
+  patches: readonly SourcePatch[],
+  source: string
 ): TikzFigureInventoryItem[] {
-  return figures.map((figure) => shiftSpansDeep(structuredClone(figure), patches));
+  const lineStarts = buildLineStarts(source);
+  return figures.map((figure) => {
+    const shifted = shiftSpansDeep(structuredClone(figure), patches);
+    shifted.startLine = lineForOffset(shifted.span.from, lineStarts);
+    shifted.endLine = lineForOffset(Math.max(shifted.span.from, shifted.span.to - 1), lineStarts);
+    return shifted;
+  });
 }
 
 function shiftDiagnosticPartition(
@@ -778,24 +784,17 @@ function spansOverlap(left: Span, right: Span): boolean {
   return left.from < right.to && right.from < left.to;
 }
 
-function resolveFigureDelimiterSpans(source: string, figureSpan: Span): {
+function resolveFigureDelimiterSpans(figures: readonly TikzFigureInventoryItem[], figureSpan: Span): {
   begin: Span;
   end: Span;
 } {
-  const figureSource = source.slice(figureSpan.from, figureSpan.to);
-  const beginMatch = BEGIN_TIKZ_PATTERN.exec(figureSource);
-  const endMatch = END_TIKZ_PATTERN.exec(figureSource);
-  const beginLength = beginMatch?.at(0)?.length ?? 0;
-  const endLength = endMatch?.at(0)?.length ?? 0;
+  const figure = figures.find((candidate) => candidate.span.from === figureSpan.from && candidate.span.to === figureSpan.to);
+  if (!figure) {
+    throw new Error("Active figure is missing from the inventory");
+  }
   return {
-    begin: {
-      from: figureSpan.from,
-      to: figureSpan.from + beginLength
-    },
-    end: {
-      from: Math.max(figureSpan.from, figureSpan.to - endLength),
-      to: figureSpan.to
-    }
+    begin: figure.beginSpan,
+    end: figure.endSpan
   };
 }
 
