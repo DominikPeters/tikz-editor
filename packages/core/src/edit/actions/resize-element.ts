@@ -26,7 +26,7 @@ import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { parseCircleRadiusFromCoordinateRaw, parseEllipseRadiiFromCoordinateRaw } from "../../semantic/path/parsers.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
 import { resolveNodeShape } from "../../semantic/nodes/options.js";
-import { inverseMatrix } from "../../semantic/transform.js";
+import { applyMatrix, inverseMatrix, multiplyMatrix } from "../../semantic/transform.js";
 import { collectSourceWorldBounds } from "../snapping/index.js";
 import { worldToLocal } from "../coords.js";
 import { replaceSpan } from "../patch.js";
@@ -35,11 +35,13 @@ import {
   CM_PER_PT,
   formatNumber,
   pointDimensionFormatOptions,
-  pointDistanceFormatOptions,
   type DragFormatPrecision
 } from "../format.js";
 import { applyTextReplacements } from "../statement-ops.js";
 import { resolveTransformInspectorMutationContextFromOptionEntries } from "../property-write-builders.js";
+import { resolveStatementOptionFrame, resolveStatementParentFrame } from "../parent-frame.js";
+import { mutateOrderedOptionEntries, planOrderedScopeTranslation } from "./move-arrange-actions.js";
+import type { OptionEntry } from "../../options/types.js";
 import {
   applyOptionMutationsToTarget,
   normalizeOptionKey,
@@ -180,13 +182,12 @@ export function applyResizeElementAction(
   }
 
   const resolveSourceEvaluation = createResizeSourceEvaluationResolver(evaluateOptions, parseOptions, geometry, elementId);
-  const { parsed, semantic, boundsBySource } = resolveSourceEvaluation(source);
+  const { parsed, semantic } = resolveSourceEvaluation(source);
   if (sourceUsesFitNodeFromParseResult(source, parsed, elementId)) {
     return { kind: "unsupported", reason: FIT_DIRECT_MANIPULATION_BLOCK_REASON };
   }
-  const scopeBoundsById = buildScopeBoundsById(parsed.figure.body, boundsBySource);
   if (findScopeStatementById(parsed.figure.body, elementId)) {
-    return restoreResizeBaselineOnNoop(applyResizeScope(source, action, resolved.target, scopeBoundsById, parsed.figure.body), geometry, elementId);
+    return restoreResizeBaselineOnNoop(applyResizeScope(source, action, resolved.target, parsed.figure.body, semantic.scene.elements, parseOptions, geometry, evaluateOptions), geometry, elementId);
   }
   const hasNodePositionHandle = semantic.editHandles.some(
     (handle) => handle.sourceRef.sourceId === elementId && handle.kind === "node-position"
@@ -563,153 +564,122 @@ function applyResizeScope(
   source: string,
   action: ResizeElementAction,
   target: PropertyTarget,
-  scopeBoundsById: ReadonlyMap<string, { minX: number; minY: number; maxX: number; maxY: number }>,
-  statements: readonly Statement[]
+  statements: readonly Statement[],
+  elements: readonly SceneElement[],
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession,
+  evaluateOptions: EvaluateOptions = {}
 ): EditActionResultLike {
-  const bounds = action.referenceBounds ?? scopeBoundsById.get(action.elementId);
-  if (!bounds) {
-    return { kind: "unsupported", reason: "No geometry bounds were found for the selected scope." };
+  const unsupported = (reason: string): EditActionResultLike => ({ kind: "unsupported", reason });
+  const referenceTransform = action.referenceScopeTransform;
+  if (referenceTransform && [referenceTransform.xscale, referenceTransform.yscale, referenceTransform.xshift, referenceTransform.yshift]
+    .some(value => !Number.isFinite(value))) {
+    return unsupported("Scope resize produced a non-finite transform.");
   }
-
-  const currentWidth = bounds.maxX - bounds.minX;
-  const currentHeight = bounds.maxY - bounds.minY;
+  const parent = resolveStatementParentFrame(source, action.elementId, parseOptions, geometry, evaluateOptions);
+  const full = resolveStatementOptionFrame(source, action.elementId, undefined, parseOptions, geometry, evaluateOptions);
+  const inverseParent = parent && inverseMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f));
+  if (!parent || !full || !inverseParent) return unsupported("Could not resolve the scope resize coordinate frame.");
+  const toParentFrame = (frame: FrameTransform) => multiplyMatrix(inverseParent,
+    worldTransform(frame.a, frame.b, frame.c, frame.d, frame.e, frame.f));
+  const own = toParentFrame(full);
+  let base = own;
+  if (Math.abs(own.b) > 1e-8 || Math.abs(own.c) > 1e-8 || own.a <= 1e-12 || own.d <= 1e-12) {
+    return unsupported("Scope resize currently supports only non-rotated scopes with positive axis scales.");
+  }
+  // Measure geometry in the inherited frame. Inverting a rotated world AABB
+  // would enlarge it and move the fixed edge, so transform the scene instead.
+  const localBounds = buildScopeBoundsById(statements, collectSourceWorldBounds([...elements], inverseParent)).get(action.elementId);
+  let bounds = localBounds;
+  if (action.referenceBounds && Math.abs(parent.b) < 1e-8 && Math.abs(parent.c) < 1e-8) {
+    const before = action.referenceBounds;
+    const first = applyMatrix(inverseParent, wp(before.minX, before.minY));
+    const second = applyMatrix(inverseParent, wp(before.maxX, before.maxY));
+    bounds = { minX: Math.min(first.x, second.x), maxX: Math.max(first.x, second.x),
+      minY: Math.min(first.y, second.y), maxY: Math.max(first.y, second.y) };
+  }
+  if (action.referenceScopeTransform && !geometry) {
+    const authored = resolveTransformInspectorMutationContextFromOptionEntries(target.options?.entries).values;
+    const reference = action.referenceScopeTransform;
+    // Legacy callers provide an aggregate baseline but no original source.
+    // That reconstructs only the canonical shift-before-axis-scale frame.
+    if (!action.referenceBounds || Math.abs(own.a - authored.xscale) > 1e-8 || Math.abs(own.d - authored.yscale) > 1e-8 ||
+        Math.abs(own.e - authored.xshift) > 1e-8 || Math.abs(own.f - authored.yshift) > 1e-8) {
+      return unsupported("Scope resize needs its original geometry baseline to preserve this authored transform order.");
+    }
+    if (reference.xscale <= 1e-12 || reference.yscale <= 1e-12) return unsupported("Scope resize requires a non-zero baseline scale.");
+    base = worldTransform(reference.xscale, 0, 0, reference.yscale, reference.xshift, reference.yshift);
+    if (bounds && (Math.abs(parent.b) >= 1e-8 || Math.abs(parent.c) >= 1e-8)) {
+      // The original world AABB cannot recover a rotated local box. The
+      // canonical baseline affine can recover it from the current geometry.
+      bounds = { minX: base.e + base.a / own.a * (bounds.minX - own.e),
+        maxX: base.e + base.a / own.a * (bounds.maxX - own.e),
+        minY: base.f + base.d / own.d * (bounds.minY - own.f),
+        maxY: base.f + base.d / own.d * (bounds.maxY - own.f) };
+    }
+  }
+  if (!bounds) return unsupported("No geometry bounds were found for the selected scope.");
+  const currentWidth = bounds.maxX - bounds.minX, currentHeight = bounds.maxY - bounds.minY;
   if (!(currentWidth > RESIZE_EPSILON) || !(currentHeight > RESIZE_EPSILON)) {
-    return { kind: "unsupported", reason: "Resize requires a scope with non-zero bounds." };
+    return unsupported("Resize requires a scope with non-zero bounds.");
   }
-
   const affectsWidth = action.role.includes("left") || action.role.includes("right");
   const affectsHeight = action.role.includes("top") || action.role.includes("bottom");
-  if (!affectsWidth && !affectsHeight) {
-    return { kind: "unsupported", reason: `Unsupported resize role: ${action.role}` };
-  }
-
-  const currentContext = resolveTransformInspectorMutationContextFromOptionEntries(target.options?.entries);
-  if (Math.abs(currentContext.values.rotate) > 1e-6) {
-    return { kind: "unsupported", reason: "Scope resize currently supports only non-rotated scopes." };
-  }
-  const baseValues = action.referenceScopeTransform ?? currentContext.values;
-
+  if (!affectsWidth && !affectsHeight) return unsupported(`Unsupported resize role: ${action.role}`);
+  const pointer = applyMatrix(inverseParent, action.newWorld);
   const fixed = resolveFixedScopePoint(bounds, action.role);
-  let nextWidth = affectsWidth ? Math.abs(action.newWorld.x - fixed.x) : currentWidth;
-  let nextHeight = affectsHeight ? Math.abs(action.newWorld.y - fixed.y) : currentHeight;
-
-  if (action.preserveAspect && affectsWidth && affectsHeight) {
-    const uniformScale = Math.max(nextWidth / currentWidth, nextHeight / currentHeight);
-    nextWidth = currentWidth * uniformScale;
-    nextHeight = currentHeight * uniformScale;
+  let ratioX = affectsWidth ? Math.max(Math.abs(pointer.x - fixed.x), RESIZE_EPSILON) / currentWidth : 1;
+  let ratioY = affectsHeight ? Math.max(Math.abs(pointer.y - fixed.y), RESIZE_EPSILON) / currentHeight : 1;
+  if (action.preserveAspect && affectsWidth && affectsHeight) ratioX = ratioY = Math.max(ratioX, ratioY);
+  if (Math.abs(ratioX - 1) < 1e-10 && Math.abs(ratioY - 1) < 1e-10 &&
+      Math.abs(base.a - own.a) < 1e-10 && Math.abs(base.d - own.d) < 1e-10 &&
+      Math.abs(base.e - own.e) < 1e-10 && Math.abs(base.f - own.f) < 1e-10) {
+    return unsupported("Resize would not change node constraints.");
   }
-
-  nextWidth = Math.max(nextWidth, RESIZE_EPSILON);
-  nextHeight = Math.max(nextHeight, RESIZE_EPSILON);
-
-  const scaleRatioX = affectsWidth ? nextWidth / currentWidth : 1;
-  const scaleRatioY = affectsHeight ? nextHeight / currentHeight : 1;
-  const nextValues = {
-    xscale: baseValues.xscale * scaleRatioX,
-    yscale: baseValues.yscale * scaleRatioY,
-    xshift: affectsWidth
-      ? fixed.x - scaleRatioX * (fixed.x - baseValues.xshift)
-      : baseValues.xshift,
-    yshift: affectsHeight
-      ? fixed.y - scaleRatioY * (fixed.y - baseValues.yshift)
-      : baseValues.yshift
-  };
-
-  if (
-    !Number.isFinite(nextValues.xscale) ||
-    !Number.isFinite(nextValues.yscale) ||
-    !Number.isFinite(nextValues.xshift) ||
-    !Number.isFinite(nextValues.yshift)
-  ) {
-    return { kind: "unsupported", reason: "Scope resize produced a non-finite transform." };
+  const entries = target.options?.entries ?? [];
+  const scaleMutations = new Map<string, OptionMutation>();
+  const writtenRatios = { xscale: 1, yscale: 1 };
+  for (const [axis, ratio] of [["xscale", ratioX * base.a / own.a], ["yscale", ratioY * base.d / own.d]] as const) {
+    if (Math.abs(ratio - 1) < 1e-12) continue;
+    const candidates = entries.filter((entry): entry is Extract<OptionEntry, { kind: "kv" }> =>
+      entry.kind === "kv" && normalizeOptionKey(entry.key).replace(/^\/tikz\//, "") === axis);
+    if (candidates.length > 1) return unsupported("Scope resize cannot safely rewrite repeated scale entries.");
+    const current = candidates[0] ? Number(candidates[0].valueRaw.trim()) : 1;
+    if (!Number.isFinite(current)) return unsupported("Scope resize requires numeric authored scale entries.");
+    const formatted = formatNumber(current * ratio, action.formatPrecision === "snapped" ? { fractionDigits: 12 } : undefined);
+    writtenRatios[axis] = Number(formatted) / current;
+    scaleMutations.set(candidates[0] ? normalizeOptionKey(candidates[0].key) : axis, { kind: "set", value: formatted });
   }
-
-  const rewritten = applyScopeTransformRewrite(source, target, nextValues, action.formatPrecision);
-  if (!rewritten) {
-    return { kind: "unsupported", reason: "Resize would not change node constraints." };
+  const scaledEntries = mutateOrderedOptionEntries(entries, scaleMutations);
+  const scaledFrame = resolveStatementOptionFrame(source, action.elementId, scaledEntries, parseOptions, geometry, evaluateOptions, true);
+  if (!scaledFrame) return unsupported("Could not resolve the scope resize coordinate frame.");
+  const scaledOwn = toParentFrame(scaledFrame);
+  // The written scale precision determines the displacement. Use that same
+  // effective ratio for the anchor correction rather than chasing the pointer.
+  const effectiveX = scaledOwn.a / own.a, effectiveY = scaledOwn.d / own.d;
+  if (Math.abs(scaledOwn.b) > 1e-8 || Math.abs(scaledOwn.c) > 1e-8 || effectiveX <= 0 || effectiveY <= 0 ||
+      Math.abs(effectiveX - writtenRatios.xscale) > 1e-8 || Math.abs(effectiveY - writtenRatios.yscale) > 1e-8) {
+    return unsupported("Scope resize cannot preserve the authored transform order.");
   }
-
-  return {
-    kind: "success",
-    newSource: rewritten.source,
-    patches: [rewritten.patch],
-    changedSourceIds: expandScopeChangedSourceIds(statements, [action.elementId])
-  };
+  const desiredOwn = { ...scaledOwn, e: fixed.x - scaledOwn.a / base.a * (fixed.x - base.e), f: fixed.y - scaledOwn.d / base.d * (fixed.y - base.f) };
+  const desired = multiplyMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f),
+    worldTransform(desiredOwn.a, desiredOwn.b, desiredOwn.c, desiredOwn.d, desiredOwn.e, desiredOwn.f));
+  const shiftMutations = planOrderedScopeTranslation(scaledEntries, wp(desired.e - scaledFrame.e, desired.f - scaledFrame.f),
+    prefix => resolveStatementOptionFrame(source, action.elementId, prefix, parseOptions, geometry, evaluateOptions),
+    action.formatPrecision, entries.length);
+  if (!shiftMutations) return unsupported("Could not keep the scope resize anchor in its authored coordinate frame.");
+  // New shifts precede new scales; existing entries retain their exact order.
+  const mutations = new Map([...shiftMutations, ...scaleMutations]);
+  const finalFrame = resolveStatementOptionFrame(source, action.elementId, mutateOrderedOptionEntries(entries, mutations),
+    parseOptions, geometry, evaluateOptions, true);
+  if (!finalFrame || !["a", "b", "c", "d"].every(key => Math.abs(finalFrame[key as "a"] - desired[key as "a"]) < 1e-8)) {
+    return unsupported("Scope resize cannot preserve the authored transform order.");
+  }
+  const rewritten = applyOptionMutationsToTarget(source, target, mutations);
+  if (!rewritten) return unsupported("Resize would not change node constraints.");
+  return { kind: "success", newSource: rewritten.source, patches: [rewritten.patch],
+    changedSourceIds: expandScopeChangedSourceIds(statements, [action.elementId]) };
 }
-
-function applyScopeTransformRewrite(
-  source: string,
-  target: PropertyTarget,
-  values: { xscale: number; yscale: number; xshift: number; yshift: number },
-  formatPrecision: DragFormatPrecision | undefined
-): OptionMutationApplyResult | null {
-  const orderedSetMutations = new Map<string, OptionMutation>();
-  if (Math.abs(values.xshift) > RESIZE_EPSILON) {
-    orderedSetMutations.set("xshift", {
-      kind: "set",
-      value: `${formatNumber(values.xshift, pointDistanceFormatOptions(formatPrecision))}pt`
-    });
-  }
-  if (Math.abs(values.yshift) > RESIZE_EPSILON) {
-    orderedSetMutations.set("yshift", {
-      kind: "set",
-      value: `${formatNumber(values.yshift, pointDistanceFormatOptions(formatPrecision))}pt`
-    });
-  }
-  if (Math.abs(values.xscale - 1) > RESIZE_EPSILON) {
-    orderedSetMutations.set("xscale", { kind: "set", value: formatNumber(values.xscale, formatPrecision === "snapped" ? { fractionDigits: 12 } : undefined) });
-  }
-  if (Math.abs(values.yscale - 1) > RESIZE_EPSILON) {
-    orderedSetMutations.set("yscale", { kind: "set", value: formatNumber(values.yscale, formatPrecision === "snapped" ? { fractionDigits: 12 } : undefined) });
-  }
-
-  if (target.options && target.optionsSpan) {
-    const transformMutations = new Map<string, OptionMutation>(
-      [...SCOPE_TRANSFORM_OPTION_KEYS].map((key) => [key, { kind: "remove" }])
-    );
-    for (const [key, mutation] of orderedSetMutations) {
-      transformMutations.set(key, mutation);
-    }
-    const replacement = rewriteSourceBackedOptionListMutations(
-      source,
-      target.optionsSpan,
-      target.options,
-      transformMutations,
-      target.optionsFormat
-    );
-    const oldSpan = target.optionsSpan;
-    const previous = source.slice(oldSpan.from, oldSpan.to);
-    if (previous === replacement) {
-      return null;
-    }
-    const updated = replaceSpan(source, oldSpan, replacement);
-    return {
-      source: updated.source,
-      patch: {
-        oldSpan,
-        newSpan: updated.changedSpan,
-        replacement
-      }
-    };
-  }
-
-  return applyOptionMutationsToTarget(source, target, orderedSetMutations);
-}
-
-const SCOPE_TRANSFORM_OPTION_KEYS = new Set([
-  "scale",
-  "/tikz/scale",
-  "xscale",
-  "/tikz/xscale",
-  "yscale",
-  "/tikz/yscale",
-  "shift",
-  "/tikz/shift",
-  "xshift",
-  "/tikz/xshift",
-  "yshift",
-  "/tikz/yshift"
-]);
 
 function resolveFixedScopePoint(
   bounds: { minX: number; minY: number; maxX: number; maxY: number },

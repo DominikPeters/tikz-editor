@@ -1321,6 +1321,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     scopeOverlay
   } = useCanvasSelectionDerivedState({
     snapshot,
+    textEngine: textEngineRef.current,
     selectedElementIds,
     collapsedDensePathSourceIds,
     svgResult,

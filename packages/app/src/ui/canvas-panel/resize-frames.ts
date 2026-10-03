@@ -122,6 +122,24 @@ export function resolveResizeFrameFromBounds(
   return buildResizeFrame(sourceId, centerWorld, cornersByRoleWorld, viewBox);
 }
 
+/** Scope handles follow the parent's axes, matching the scope edit action. */
+export function resolveResizeFrameInFrame(
+  sourceId: string,
+  bounds: WorldBounds,
+  frame: FrameTransform,
+  viewBox: SvgViewBox
+): ResizeFrame | null {
+  if (!(bounds.maxX - bounds.minX > EPSILON) || !(bounds.maxY - bounds.minY > EPSILON) ||
+    Math.abs(frame.a * frame.d - frame.b * frame.c) < EPSILON) return null;
+  const point = (x: number, y: number) => applyFrameTransform(frame, frameLocalPoint(pt(x), pt(y)));
+  return buildResizeFrame(sourceId, point((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2), {
+    "top-left": point(bounds.minX, bounds.maxY),
+    "top-right": point(bounds.maxX, bounds.maxY),
+    "bottom-right": point(bounds.maxX, bounds.minY),
+    "bottom-left": point(bounds.minX, bounds.minY)
+  }, viewBox);
+}
+
 function resolvePathResizeFrame(
   path: ScenePath,
   sourceElements: readonly SceneElement[],

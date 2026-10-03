@@ -1,5 +1,7 @@
 import { worldBounds, worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
+import type { WorldTransform } from "../../coords/transforms.js";
+import { applyMatrix, identityMatrix, multiplyMatrix } from "../../semantic/transform.js";
 import type {
   SceneElement,
   ScenePath,
@@ -91,14 +93,14 @@ export function selectionSnapPointsFromBounds(bounds: WorldBounds): SelectionSna
   ];
 }
 
-export function collectSourceWorldBounds(elements: SceneElement[]): Map<string, SnapBounds> {
+export function collectSourceWorldBounds(elements: SceneElement[], frame?: WorldTransform): Map<string, SnapBounds> {
   const boundsBySource = new Map<string, SnapBounds>();
 
   for (const element of elements) {
     if (element.adornment) {
       continue;
     }
-    const bounds = elementBoundsInWorld(element);
+    const bounds = frame ? elementBoundsInFrame(element, frame) : elementBoundsInWorld(element);
     if (!bounds) continue;
     addBoundsForSourceId(boundsBySource, element.sourceRef.sourceId, bounds);
     if (element.matrixCell) {
@@ -218,6 +220,33 @@ function elementBoundsInWorld(element: SceneElement): WorldBounds | null {
   return element.transform ? transformBounds(bounds, element.transform) : bounds;
 }
 
+/** Tight geometry bounds after an affine frame conversion, before any AABB. */
+function elementBoundsInFrame(element: SceneElement, frame: WorldTransform): WorldBounds | null {
+  const transform = multiplyMatrix(frame, element.transform ?? identityMatrix());
+  if (element.kind === "Path") return pathBoundsInWorld(element, transform);
+  if (element.kind === "Circle" || element.kind === "Ellipse") {
+    const center = applyMatrix(transform, element.center);
+    const rx = element.kind === "Circle" ? element.radius : element.rx;
+    const ry = element.kind === "Circle" ? element.radius : element.ry;
+    const angle = element.kind === "Circle" ? 0 : (element.rotation ?? 0) * Math.PI / 180;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const ux = rx * (transform.a * cos + transform.c * sin);
+    const uy = rx * (transform.b * cos + transform.d * sin);
+    const vx = ry * (-transform.a * sin + transform.c * cos);
+    const vy = ry * (-transform.b * sin + transform.d * cos);
+    const ex = Math.hypot(ux, vx), ey = Math.hypot(uy, vy);
+    return worldBounds(pt(center.x - ex), pt(center.y - ey), pt(center.x + ex), pt(center.y + ey));
+  }
+  const width = element.textBlockWidth ?? estimateTextBlockWidth(element.text, element.style.fontSize);
+  const height = element.textBlockHeight ?? Math.max(1, element.text.split("\n").length) * element.style.fontSize * 1.15;
+  const angle = (element.rotation ?? 0) * Math.PI / 180;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const center = applyMatrix(transform, element.position);
+  const ex = Math.abs(transform.a * cos + transform.c * sin) * width / 2 + Math.abs(-transform.a * sin + transform.c * cos) * height / 2;
+  const ey = Math.abs(transform.b * cos + transform.d * sin) * width / 2 + Math.abs(-transform.b * sin + transform.d * cos) * height / 2;
+  return worldBounds(pt(center.x - ex), pt(center.y - ey), pt(center.x + ex), pt(center.y + ey));
+}
+
 function isElementReferenceSnappable(element: SceneElement): boolean {
   if (element.kind !== "Path") {
     return true;
@@ -244,7 +273,7 @@ function textBoundsInWorld(element: SceneText): WorldBounds {
   );
 }
 
-function pathBoundsInWorld(path: ScenePath): WorldBounds | null {
+function pathBoundsInWorld(path: ScenePath, transform?: WorldTransform): WorldBounds | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -260,7 +289,9 @@ function pathBoundsInWorld(path: ScenePath): WorldBounds | null {
     minY = Math.min(minY, y);
     maxY = Math.max(maxY, y);
   };
-  const includePoint = (point: WorldPoint) => {
+  const mapPoint = (point: WorldPoint) => transform ? applyMatrix(transform, point) : point;
+  const includePoint = (rawPoint: WorldPoint) => {
+    const point = mapPoint(rawPoint);
     includeX(point.x);
     includeY(point.y);
   };
@@ -277,10 +308,11 @@ function pathBoundsInWorld(path: ScenePath): WorldBounds | null {
 
     if (command.kind === "C") {
       if (previous) {
-        for (const x of cubicAxisExtrema(previous.x, command.c1.x, command.c2.x, command.to.x)) {
+        const p0 = mapPoint(previous), c1 = mapPoint(command.c1), c2 = mapPoint(command.c2), end = mapPoint(command.to);
+        for (const x of cubicAxisExtrema(p0.x, c1.x, c2.x, end.x)) {
           includeX(x);
         }
-        for (const y of cubicAxisExtrema(previous.y, command.c1.y, command.c2.y, command.to.y)) {
+        for (const y of cubicAxisExtrema(p0.y, c1.y, c2.y, end.y)) {
           includeY(y);
         }
       } else {
@@ -292,7 +324,7 @@ function pathBoundsInWorld(path: ScenePath): WorldBounds | null {
     }
 
     if (command.kind === "A" && previous) {
-      const arc = arcBounds(previous, command);
+      const arc = arcBounds(previous, command, transform);
       includeX(arc.minX);
       includeX(arc.maxX);
       includeY(arc.minY);
@@ -350,14 +382,13 @@ function cubicAxisExtrema(p0: number, c1: number, c2: number, p3: number): numbe
  */
 function arcBounds(
   from: WorldPoint,
-  command: { rx: number; ry: number; xAxisRotation: number; largeArc: boolean; sweep: boolean; to: WorldPoint }
+  command: { rx: number; ry: number; xAxisRotation: number; largeArc: boolean; sweep: boolean; to: WorldPoint },
+  transform?: WorldTransform
 ): { minX: number; minY: number; maxX: number; maxY: number } {
-  const endpointsOnly = {
-    minX: Math.min(from.x, command.to.x),
-    minY: Math.min(from.y, command.to.y),
-    maxX: Math.max(from.x, command.to.x),
-    maxY: Math.max(from.y, command.to.y)
-  };
+  const first = transform ? applyMatrix(transform, from) : from;
+  const last = transform ? applyMatrix(transform, command.to) : command.to;
+  const endpointsOnly = { minX: Math.min(first.x, last.x), minY: Math.min(first.y, last.y),
+    maxX: Math.max(first.x, last.x), maxY: Math.max(first.y, last.y) };
 
   let rx = Math.abs(command.rx);
   let ry = Math.abs(command.ry);
@@ -419,16 +450,19 @@ function arcBounds(
     if (!angleOnArc(angle)) {
       return;
     }
-    const x = cx + rx * Math.cos(angle) * cosPhi - ry * Math.sin(angle) * sinPhi;
-    const y = cy + rx * Math.cos(angle) * sinPhi + ry * Math.sin(angle) * cosPhi;
+    const raw = worldPoint(pt(cx + rx * Math.cos(angle) * cosPhi - ry * Math.sin(angle) * sinPhi),
+      pt(cy + rx * Math.cos(angle) * sinPhi + ry * Math.sin(angle) * cosPhi));
+    const point = transform ? applyMatrix(transform, raw) : raw;
+    const x = point.x, y = point.y;
     bounds.minX = Math.min(bounds.minX, x);
     bounds.maxX = Math.max(bounds.maxX, x);
     bounds.minY = Math.min(bounds.minY, y);
     bounds.maxY = Math.max(bounds.maxY, y);
   };
 
-  const thetaX = Math.atan2(-ry * sinPhi, rx * cosPhi);
-  const thetaY = Math.atan2(ry * cosPhi, rx * sinPhi);
+  const matrix = transform ?? identityMatrix();
+  const thetaX = Math.atan2(ry * (-matrix.a * sinPhi + matrix.c * cosPhi), rx * (matrix.a * cosPhi + matrix.c * sinPhi));
+  const thetaY = Math.atan2(ry * (-matrix.b * sinPhi + matrix.d * cosPhi), rx * (matrix.b * cosPhi + matrix.d * sinPhi));
   includeAngle(thetaX);
   includeAngle(thetaX + Math.PI);
   includeAngle(thetaY);

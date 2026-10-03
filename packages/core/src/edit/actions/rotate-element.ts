@@ -1,8 +1,9 @@
-import type { EditGeometrySession } from "../geometry-session.js";
+import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, Statement, Span } from "../../ast/types.js";
+import type { OptionEntry } from "../../options/types.js";
 import { pt } from "../../coords/scalars.js";
-import { frameTransform, worldTransform, type FrameTransform } from "../../coords/transforms.js";
+import { worldTransform, type FrameTransform } from "../../coords/transforms.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import type {
@@ -14,7 +15,7 @@ import type {
 } from "../../semantic/types.js";
 import { isFrameLocalCoordinateEditHandle } from "../../semantic/types.js";
 import { applyTextReplacements } from "../statement-ops.js";
-import { rewriteCoordinate } from "../rewrite.js";
+import { rewritePreciseFrameCoordinate } from "../frame-coordinate.js";
 import { CM_PER_PT, formatNumber } from "../format.js";
 import { normalizeOptionKey } from "../option-mutations.js";
 import {
@@ -31,6 +32,8 @@ import {
   type TransformInspectorMutationContext
 } from "../property-write-builders.js";
 import { findPathStatementById } from "../statement-find.js";
+import { applyMatrix, inverseMatrix } from "../../semantic/transform.js";
+import { replaceSpan } from "../patch.js";
 
 const ROTATE_EPSILON = 1e-6;
 
@@ -42,12 +45,6 @@ export type RotateElementAction = {
   angleDeg: number;
   mode: "property" | "origin" | "center-pivot";
   baselineSource?: string;
-};
-
-type BaselineContext = {
-  source: string;
-  parsed: ReturnType<typeof parseTikzForEdit>;
-  semantic: ReturnType<typeof evaluateTikzFigure>;
 };
 
 type RectangleRotateContext = {
@@ -104,7 +101,6 @@ function applyPropertyRotate(
   if (resolvedTarget.kind !== "found") {
     return { kind: "unsupported", reason: resolvedTarget.reason };
   }
-
   const context = resolveTransformInspectorMutationContextFromOptionEntries(
     resolvedTarget.target.options?.entries
   );
@@ -160,16 +156,42 @@ function applyCenterPivotRotate(
     return { kind: "unsupported", reason: resolvedTarget.reason };
   }
 
+  if (resolvedTarget.target.kind !== "path-statement" || resolvedTarget.target.id !== context.target.id) {
+    return { kind: "unsupported", reason: "Center-pivot rotate requires the selected path's own options." };
+  }
+  const entries = context.target.options?.entries ?? [];
+  const rotations = entries.filter(isRotationOption);
+  if (rotations.length > 1) {
+    return { kind: "unsupported", reason: "Center-pivot rotate requires one authored path rotation." };
+  }
+  const rotation = rotations[0];
+  const rotationIndex = rotation ? entries.indexOf(rotation) : entries.length;
+  const prefixFrame = baseline.optionFrame(action.elementId, entries.slice(0, rotationIndex));
+  const prefix = prefixFrame && asWorldTransform(prefixFrame);
+  const inversePrefix = prefix && inverseMatrix(prefix);
+  if (!prefixFrame || !prefix || !inversePrefix) {
+    return { kind: "unsupported", reason: "Center-pivot rotate requires an invertible coordinate frame." };
+  }
+
   const transformContext = resolveTransformInspectorMutationContextFromOptionEntries(
     resolvedTarget.target.options?.entries
   );
   const baseAngleDeg = transformContext.values.rotate;
-  const pivot = resolveCenterPivot(context);
+  // The pivot belongs to the frame at the authored rotation option. Parent
+  // stretch/skew still composes with the local rotation, as it does in TikZ.
+  const pivot = applyMatrix(inversePrefix, resolveCenterPivot(context));
   const deltaDeg = normalizeSignedDeg(action.angleDeg - baseAngleDeg);
-  const nextTransform = rotateAroundFrameTransform(action.angleDeg, pivot);
   const rotateMutation = buildCenterPivotRotateMutations(action.angleDeg, pivot);
+  const nextRotation = centerRotationOption(action.angleDeg, pivot, rotation?.span ?? context.target.span);
+  const nextEntries = rotation
+    ? entries.flatMap(entry => entry === rotation ? nextRotation ? [nextRotation] : [] : [entry])
+    : nextRotation ? [...entries, nextRotation] : entries;
+  const nextTransform = baseline.optionFrame(action.elementId, nextEntries);
+  if (!nextTransform) {
+    return { kind: "unsupported", reason: "Could not resolve the replacement rotation frame." };
+  }
   const coordinateRewrites = context.kind === "rectangle"
-    ? buildRectangleCoordinateRewrites(source, context, pivot, deltaDeg, nextTransform)
+    ? buildRectangleCoordinateRewrites(source, context, pivot, deltaDeg, nextTransform, prefixFrame)
     : buildEllipseLikeCoordinateRewrites(source, context, nextTransform);
   if (coordinateRewrites.kind === "unsupported") {
     return coordinateRewrites;
@@ -177,7 +199,11 @@ function applyCenterPivotRotate(
 
   let nextSource = source;
   const patches: SourcePatch[] = [];
-  const optionApplied = applyOptionMutationsToTarget(nextSource, resolvedTarget.target, rotateMutation);
+  // Replace the existing rotation in place: moving it past a named style
+  // would change the linear part of an ellipse even at the same angle.
+  const optionApplied = rotation && nextRotation
+    ? replaceRotationOption(nextSource, rotation, nextRotation)
+    : applyOptionMutationsToTarget(nextSource, resolvedTarget.target, rotateMutation);
   if (optionApplied) {
     nextSource = optionApplied.source;
     patches.push(optionApplied.patch);
@@ -206,10 +232,37 @@ function buildBaselineContext(
   source: string,
   evaluateOptions: EvaluateOptions | undefined,
   parseOptions: EditParseOptions
-): BaselineContext {
+): EditGeometrySession {
   const parsed = parseTikzForEdit(source, { ...parseOptions });
   const semantic = evaluateTikzFigure(parsed.figure, source, evaluateOptions);
-  return { source, parsed, semantic };
+  return createEditGeometrySession({ source, parsed, semantic }, evaluateOptions, parseOptions);
+}
+
+function asWorldTransform(transform: FrameTransform) {
+  return worldTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
+}
+
+function isRotationOption(entry: OptionEntry): boolean {
+  if (entry.kind !== "kv") return false;
+  const key = normalizeOptionKey(entry.key);
+  return key === "rotate" || key === "/tikz/rotate" || key === "rotate around" || key === "/tikz/rotate around";
+}
+
+function centerRotationOption(angleDeg: number, pivot: WorldPoint, span: Span): OptionEntry | undefined {
+  const normalizedAngle = normalizeTinyNumber(angleDeg);
+  if (Math.abs(normalizedAngle) <= ROTATE_EPSILON) return undefined;
+  const valueRaw = `{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`;
+  return { kind: "kv", key: "rotate around", valueRaw, raw: `rotate around=${valueRaw}`, span };
+}
+
+function replaceRotationOption(source: string, rotation: OptionEntry, nextRotation: OptionEntry) {
+  const replacement = nextRotation.raw;
+  const updated = replaceSpan(source, rotation.span, replacement);
+  if (updated.source === source) return null;
+  return {
+    source: updated.source,
+    patch: { oldSpan: rotation.span, newSpan: updated.changedSpan, replacement }
+  };
 }
 
 function buildPropertyRotateMutations(
@@ -247,7 +300,7 @@ function buildCenterPivotRotateMutations(angleDeg: number, pivot: WorldPoint): M
   } else {
     mutations.set("rotate around", {
       kind: "set",
-      value: `{${formatNumber(normalizedAngle)}:${formatWorldPointCoordinateRaw(pivot)}}`
+      value: `{${formatNumber(normalizedAngle, { fractionDigits: 6 })}:${formatWorldPointCoordinateRaw(pivot)}}`
     });
   }
   return mutations;
@@ -403,10 +456,15 @@ function buildRectangleCoordinateRewrites(
   context: RectangleRotateContext,
   pivot: WorldPoint,
   deltaDeg: number,
-  nextTransform: FrameTransform
+  nextTransform: FrameTransform,
+  prefixFrame: FrameTransform
 ): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
-  const targetStart = rotateWorldPointAroundCenter(context.startHandle.world, pivot, deltaDeg);
-  const targetOpposite = rotateWorldPointAroundCenter(context.oppositeHandle.world, pivot, deltaDeg);
+  const prefix = asWorldTransform(prefixFrame);
+  const inversePrefix = inverseMatrix(prefix)!;
+  const rotateLocalPoint = (point: WorldPoint) => applyMatrix(prefix,
+    rotateWorldPointAroundCenter(applyMatrix(inversePrefix, point), pivot, deltaDeg));
+  const targetStart = rotateLocalPoint(context.startHandle.world);
+  const targetOpposite = rotateLocalPoint(context.oppositeHandle.world);
   const startRewriteHandle = withFrameTransform(context.startHandle, nextTransform);
   const oppositeRewriteHandle = withFrameTransform(context.oppositeHandle, nextTransform);
   const replacements = [
@@ -448,7 +506,7 @@ function rewriteHandleTargets(
       return { kind: "unsupported", reason: "Some selected handles are stale. Wait for recompute and try again." };
     }
 
-    const text = rewriteCoordinate(target.newWorld, handle, source);
+    const text = rewritePreciseFrameCoordinate(target.newWorld, handle, source);
     if (text == null) {
       return { kind: "unsupported", reason: "Could not rewrite one or more coordinates for center-pivot rotate." };
     }
@@ -573,20 +631,6 @@ function isDirectFrameLocalHandle(handle: EditHandle): handle is EditHandle & {
   return isFrameLocalCoordinateEditHandle(handle) && handle.rewriteMode === "direct";
 }
 
-function rotateAroundFrameTransform(angleDeg: number, pivot: WorldPoint): FrameTransform {
-  const radians = (angleDeg * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return frameTransform(
-    cos,
-    sin,
-    -sin,
-    cos,
-    pivot.x - cos * pivot.x + sin * pivot.y,
-    pivot.y - sin * pivot.x - cos * pivot.y
-  );
-}
-
 function rotateWorldPointAroundCenter(point: WorldPoint, center: WorldPoint, degrees: number): WorldPoint {
   const radians = (degrees * Math.PI) / 180;
   const cos = Math.cos(radians);
@@ -600,7 +644,7 @@ function rotateWorldPointAroundCenter(point: WorldPoint, center: WorldPoint, deg
 }
 
 function formatWorldPointCoordinateRaw(point: WorldPoint): string {
-  return `(${formatNumber(point.x * CM_PER_PT)},${formatNumber(point.y * CM_PER_PT)})`;
+  return `(${formatNumber(point.x * CM_PER_PT, { fractionDigits: 6 })},${formatNumber(point.y * CM_PER_PT, { fractionDigits: 6 })})`;
 }
 
 function adjustReplacementsForPriorPatches(

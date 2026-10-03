@@ -1,13 +1,15 @@
 import { useMemo } from "react";
-import { svgBounds, svgPoint, worldBounds, worldPoint, worldVector, pt } from "@tikz-editor/core/coords/index";
+import { svgBounds, svgPoint, worldBounds, worldPoint, worldVector, worldTransform, pt } from "@tikz-editor/core/coords/index";
 import type { NodeItem, PathItem, PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "@tikz-editor/core/edit/fit";
 import { resolvePropertyTargetFromParseResult } from "@tikz-editor/core/edit/property-target";
 import { resolveTransformInspectorMutationContextFromOptionEntries } from "@tikz-editor/core/edit/property-write-builders";
 import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
+import { createEditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
+import { inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
-import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "@tikz-editor/core/semantic/types";
+import type { EditHandle, EvaluateOptions, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import {
@@ -23,7 +25,7 @@ import { computeDragCapability } from "./drag-capability";
 import { deriveCurveControlLines } from "./curve-controls";
 import { buildHitRegions, type HitRegion } from "./hit-regions";
 import { resolveResizeFrameForSource } from "./resize-frames";
-import { resolveResizeFrameFromBounds } from "./resize-frames";
+import { resolveResizeFrameInFrame } from "./resize-frames";
 import { RESIZE_FRAME_CORNER_ROLES } from "./resize-frames";
 import { resolveRotateHandlePosition } from "./rotate-handle";
 import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex } from "./scope-overlay";
@@ -62,6 +64,7 @@ export type UseCanvasSelectionDerivedStateArgs = {
   toolMode: ToolMode;
   viewportSize: { width: number; height: number };
   ROTATE_HANDLE_OFFSET_PX: number;
+  textEngine?: EvaluateOptions["textEngine"];
 };
 
 const SIDE_RESIZE_HANDLE_MIN_DIMENSION_PX = 96;
@@ -484,12 +487,21 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       return frames;
     }
     const statements = snapshot.parseResult?.figure.body;
+    const geometry = snapshot.parseResult && snapshot.semanticResult && scopeResizeSourceIds.size > 0
+      ? createEditGeometrySession({ source: snapshot.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { textEngine: args.textEngine })
+      : null;
     for (const sourceId of resizeFrameSourceIds) {
       if (scopeResizeSourceIds.has(sourceId)) {
-        const scopeBounds = scopeOverlay.boundsByScopeId.get(sourceId);
-        const frame = scopeBounds
-          ? resolveResizeFrameFromBounds(sourceId, scopeBounds, svgResult.viewBox)
-          : null;
+        const parent = geometry?.parentFrame(sourceId);
+        const inverse = parent ? inverseMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f)) : null;
+        const elements = snapshot.scene.elements.filter(element =>
+          scopeOverlay.ancestorScopeIdsBySourceId.get(element.sourceRef.sourceId)?.includes(sourceId));
+        const bounds = inverse ? [...collectSourceWorldBounds(elements, inverse).values()] : [];
+        const scopeBounds = bounds.length > 0 ? worldBounds(
+          pt(Math.min(...bounds.map(value => value.minX))), pt(Math.min(...bounds.map(value => value.minY))),
+          pt(Math.max(...bounds.map(value => value.maxX))), pt(Math.max(...bounds.map(value => value.maxY)))
+        ) : null;
+        const frame = scopeBounds && parent ? resolveResizeFrameInFrame(sourceId, scopeBounds, parent, svgResult.viewBox) : null;
         frames.set(sourceId, frame);
         continue;
       }
@@ -505,7 +517,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       frames.set(sourceId, frame);
     }
     return frames;
-  }, [resizeFrameSourceIds, scopeOverlay.boundsByScopeId, scopeResizeSourceIds, snapshot.editHandles, snapshot.parseResult, snapshot.scene, svgResult]);
+  }, [args.textEngine, resizeFrameSourceIds, scopeOverlay.ancestorScopeIdsBySourceId, scopeResizeSourceIds, snapshot.editHandles, snapshot.parseResult, snapshot.semanticResult, snapshot.source, snapshot.scene, svgResult]);
 
   const selectionBoxes = useMemo<SelectionBoxDisplay[]>(() => {
     const textOnlyNodeSelectionSourceIds = new Set<string>();

@@ -702,7 +702,7 @@ describe("applyEditAction – moveElement", () => {
     expectPatchesReconstructSource(source, result);
   });
 
-  it("falls back to absolute scope shifts for nonnumeric scale prefixes", () => {
+  it("preserves an ignored nonnumeric scale while moving in the evaluated frame", () => {
     const scaleSource = String.raw`\begin{tikzpicture}
   \begin{scope}[scale=\s, shift={(2pt,3pt)}]
     \draw (0,0) -- (1,0);
@@ -717,9 +717,7 @@ describe("applyEditAction – moveElement", () => {
     expect(scale.kind).toBe("success");
     if (scale.kind !== "success") return;
     expect(scale.newSource).toContain("scale=\\s");
-    expect(scale.newSource).not.toContain("shift={");
-    expect(scale.newSource).toContain("xshift=2pt");
-    expect(scale.newSource).toContain("yshift=-3pt");
+    expect(scale.newSource).toContain("shift=(6pt,-3pt)");
     expectPatchesReconstructSource(scaleSource, scale);
 
     const xscaleSource = String.raw`\begin{tikzpicture}
@@ -736,9 +734,7 @@ describe("applyEditAction – moveElement", () => {
     expect(xscale.kind).toBe("success");
     if (xscale.kind !== "success") return;
     expect(xscale.newSource).toContain("xscale=\\sx");
-    expect(xscale.newSource).not.toContain("shift={");
-    expect(xscale.newSource).toContain("xshift=2pt");
-    expect(xscale.newSource).toContain("yshift=-3pt");
+    expect(xscale.newSource).toContain("shift=(6pt,-3pt)");
     expectPatchesReconstructSource(xscaleSource, xscale);
 
     const yscaleSource = String.raw`\begin{tikzpicture}
@@ -882,7 +878,7 @@ describe("applyEditAction – moveElement", () => {
     }
   });
 
-  it("falls back to xshift and yshift when a scope shift prefix is not invertible", () => {
+  it("rejects world movement when a scope shift prefix is not invertible", () => {
     const source = String.raw`\begin{tikzpicture}
   \begin{scope}[scale=0, shift=(2pt,3pt)]
     \draw (0,0) -- (1,0);
@@ -895,16 +891,11 @@ describe("applyEditAction – moveElement", () => {
       delta: wp(4, 6)
     });
 
-    expect(result.kind).toBe("success");
-    if (result.kind !== "success") return;
-    expect(result.newSource).toContain("scale=0");
-    expect(result.newSource).not.toContain("shift=(");
-    expect(result.newSource).toContain("xshift=2pt");
-    expect(result.newSource).toContain("yshift=9pt");
-    expectPatchesReconstructSource(source, result);
+    expect(result.kind).toBe("unsupported");
+    if (result.kind === "unsupported") expect(result.reason).toContain("authored coordinate frame");
   });
 
-  it("falls back to xshift and yshift when scope transform prefixes are not invertible", () => {
+  it("rejects world movement when scope transform prefixes are not invertible", () => {
     const source = String.raw`\begin{tikzpicture}
   \begin{scope}[scale=0, xshift=2pt]
     \draw (0,0) -- (1,0);
@@ -917,11 +908,8 @@ describe("applyEditAction – moveElement", () => {
       delta: wp(4, 6)
     });
 
-    expect(result.kind).toBe("success");
-    if (result.kind !== "success") return;
-    expect(result.newSource).toContain("xshift=6pt");
-    expect(result.newSource).toContain("yshift=6pt");
-    expectPatchesReconstructSource(source, result);
+    expect(result.kind).toBe("unsupported");
+    if (result.kind === "unsupported") expect(result.reason).toContain("authored coordinate frame");
   });
 
   it("moves scopes without options by inserting xshift and yshift", () => {

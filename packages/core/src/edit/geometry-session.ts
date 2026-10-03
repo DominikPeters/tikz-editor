@@ -1,4 +1,6 @@
 import type { ParseTikzResult } from "../parser/index.js";
+import type { OptionEntry } from "../options/types.js";
+import type { FrameTransform } from "../coords/transforms.js";
 import type { EvaluateOptions, SceneElement } from "../semantic/types.js";
 import {
   createSemanticEvaluationRun,
@@ -9,6 +11,7 @@ import {
 import { restoreSemanticContext, snapshotSemanticContext } from "../semantic/context.js";
 import { collectSourceWorldBounds } from "./snapping/geometry.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
+import { createStatementFrameResolver, type StatementFrameResolver } from "./parent-frame.js";
 
 export type EditGeometrySnapshot = {
   source: string;
@@ -21,6 +24,8 @@ export type EditGeometrySession = EditGeometrySnapshot & {
   boundsBySource: ReturnType<typeof collectSourceWorldBounds>;
   prepare: (sourceId: string) => void;
   measure: (source: string, sourceId: string) => SceneElement[];
+  parentFrame: (sourceId: string) => FrameTransform | undefined;
+  optionFrame: (sourceId: string, entries?: readonly OptionEntry[], includeScopeFinalOptions?: boolean) => FrameTransform | undefined;
 };
 
 /**
@@ -36,6 +41,7 @@ export function createEditGeometrySession(
 ): EditGeometrySession {
   let boundsBySource: EditGeometrySession["boundsBySource"] | undefined;
   const evaluators = new Map<number, (source: string) => SceneElement[]>();
+  const frames = new Map<number, StatementFrameResolver>();
   const statementIndex = (sourceId: string): number | undefined => {
     const direct = snapshot.semantic.sourceStatementFirstIndexBySourceId[sourceId];
     if (direct != null) return direct;
@@ -57,6 +63,7 @@ export function createEditGeometrySession(
     const restoreIndex = checkpoints ? Math.max(-1, ...[...checkpoints.keys()].filter(i => i <= index)) : -1;
     if (restoreIndex >= 0) restoreSemanticContext(baseline.context, checkpoints!.get(restoreIndex)!, { editHandleSource: snapshot.semantic.editHandles });
     for (let i = Math.max(0, restoreIndex); i < index; i++) evaluateSemanticStatementByIndex(baseline, i);
+    frames.set(index, createStatementFrameResolver(baseline.context, statement));
     const checkpoint = snapshotSemanticContext(baseline.context, { editHandlesMode: "length" });
     const prefixHandles = baseline.context.editHandles.slice();
     const sourceSpan = baseline.sourceStatementSpanById.get(statement.id) ?? statement.span;
@@ -94,6 +101,18 @@ export function createEditGeometrySession(
     ...snapshot,
     get boundsBySource() { return boundsBySource ??= collectSourceWorldBounds(snapshot.semantic.scene.elements); },
     prepare,
+    parentFrame(sourceId) {
+      const index = statementIndex(sourceId);
+      if (index == null) return;
+      prepare(sourceId);
+      return frames.get(index)?.parent;
+    },
+    optionFrame(sourceId, entries, includeScopeFinalOptions) {
+      const index = statementIndex(sourceId);
+      if (index == null) return;
+      prepare(sourceId);
+      return frames.get(index)?.options(entries, includeScopeFinalOptions);
+    },
     measure(source, sourceId) {
       if (source === snapshot.source) return snapshot.semantic.scene.elements;
       prepare(sourceId);
