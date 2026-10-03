@@ -9,6 +9,7 @@ import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 
 export type UseCanvasViewportEffectsArgs = {
   canvasContextKey?: string;
+  viewportStateReadyRef?: MutableRefObject<boolean>;
   dragRef: MutableRefObject<DragState | null>;
   pendingTouchViewportRef: MutableRefObject<PendingTouchViewport | null>;
   setDragState: ValueSetter<DragState | null>;
@@ -49,6 +50,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
     setFitToContentModeActive
   } = args;
   const dispatchTransformRef = useRef(dispatchCanvasTransform);
+  const previousViewBoxContextRef = useRef(args.canvasContextKey);
   useLayoutEffect(() => { dispatchTransformRef.current = dispatchCanvasTransform; });
   const [interactionViewport, setInteractionViewport] = useState<HTMLDivElement | null>(null);
   // A stable ref can point at a replaced DOM node; inspect it after every commit.
@@ -113,6 +115,11 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
   }, [setViewportSize, interactionViewport]);
 
   useLayoutEffect(() => {
+    if (previousViewBoxContextRef.current !== args.canvasContextKey || args.viewportStateReadyRef?.current === false) {
+      previousViewBoxContextRef.current = args.canvasContextKey;
+      previousViewBoxRef.current = null;
+    }
+    if (args.viewportStateReadyRef?.current === false) return;
     if (!svgResult) {
       previousViewBoxRef.current = null;
       return;
@@ -137,7 +144,7 @@ export function useCanvasViewportEffects(args: UseCanvasViewportEffectsArgs) {
       ((previous.y + previous.height) - (svgResult.viewBox.y + svgResult.viewBox.height)) * scale;
 
     dispatchCanvasTransform({ translateX, translateY, scale });
-  }, [canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, svgResult]);
+  }, [args.canvasContextKey, args.viewportStateReadyRef, canvasTransformRef, dispatchCanvasTransform, previousViewBoxRef, svgResult]);
 
   useEffect(() => {
     const viewport = interactionViewport;

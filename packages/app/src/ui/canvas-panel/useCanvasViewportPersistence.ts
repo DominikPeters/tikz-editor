@@ -27,6 +27,7 @@ export type UseCanvasViewportPersistenceArgs = {
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   activeDocumentId: string;
   activeRootId: string | null;
+  snapshotActiveRootId: string | null;
   tabOrder: readonly string[];
   canvasTransform: CanvasTransform;
   fitToContentModeActive: boolean;
@@ -56,6 +57,7 @@ export function useCanvasViewportPersistence({
   dispatchCanvasTransform,
   activeDocumentId,
   activeRootId,
+  snapshotActiveRootId,
   tabOrder,
   canvasTransform,
   fitToContentModeActive,
@@ -75,11 +77,17 @@ export function useCanvasViewportPersistence({
   lastEditChangeToken,
   MIN_SCALE,
   MAX_SCALE
-}: UseCanvasViewportPersistenceArgs): { maxZoomScale: number } {
+}: UseCanvasViewportPersistenceArgs): { maxZoomScale: number; viewportStateReadyRef: MutableRefObject<boolean> } {
   const viewportStateByFigureKeyRef = useRef(new Map<string, FigureViewportState>());
-  const visitedFigureKeysRef = useRef(new Set<string>());
   const previousFigureViewportKeyRef = useRef<string | null>(null);
   const pendingFirstVisitAutoFitKeyRef = useRef<string | null>(null);
+  const ownedFigureViewportKeyRef = useRef<string | null>(null);
+  const awaitingSnapshotKeyRef = useRef<string | null>(null);
+  const awaitingSnapshotTransformRef = useRef<CanvasTransform | null>(null);
+  const pendingViewportCommitRef = useRef<FigureViewportState | null>(null);
+  const pendingCommitRenderTransformRef = useRef<CanvasTransform | null>(null);
+  const viewportStateReadyRef = useRef(false);
+  const snapshotMatchesActive = snapshotActiveRootId === activeRootId && snapshotSource === source;
 
   const fitToContentScale = useMemo(
     () => computeFitToContentScale(
@@ -99,6 +107,7 @@ export function useCanvasViewportPersistence({
   const maxZoomScale = Math.max(MAX_SCALE, fitToContentScale == null ? MAX_SCALE : fitToContentScale * 2);
 
   const fitToContent = useCallback((): boolean => {
+    if (!snapshotMatchesActive) return false;
     const fitViewBox = baseSvgResult?.viewBox ?? svgResult?.viewBox;
     const renderViewBox = svgResult?.viewBox ?? fitViewBox;
     if (!fitViewBox || !renderViewBox || !viewportRef.current) return false;
@@ -116,9 +125,11 @@ export function useCanvasViewportPersistence({
     const translateX = fitLeft - (fitViewBox.x - renderViewBox.x) * scale;
     const translateY = fitTop - (fitViewBox.y - renderViewBox.y) * scale;
 
-    dispatchCanvasTransform({ translateX, translateY, scale });
+    const next = { translateX, translateY, scale };
+    dispatchCanvasTransform(next);
+    canvasTransformRef.current = next;
     return true;
-  }, [baseSvgResult, dispatchCanvasTransform, MAX_SCALE, MIN_SCALE, svgResult, viewportRef]);
+  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, MAX_SCALE, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
     () => rootKey(activeDocumentId, activeRootId),
@@ -134,7 +145,6 @@ export function useCanvasViewportPersistence({
         },
         fitToContentModeActive: fitToContentActive
       });
-      visitedFigureKeysRef.current.add(key);
     },
     []
   );
@@ -145,7 +155,6 @@ export function useCanvasViewportPersistence({
       const documentId = documentIdFromRootKey(key);
       if (!openDocuments.has(documentId)) {
         viewportStateByFigureKeyRef.current.delete(key);
-        visitedFigureKeysRef.current.delete(key);
         if (pendingFirstVisitAutoFitKeyRef.current === key) {
           pendingFirstVisitAutoFitKeyRef.current = null;
         }
@@ -154,70 +163,104 @@ export function useCanvasViewportPersistence({
   }, [tabOrder]);
 
   useLayoutEffect(() => {
-    const pendingAutoFit = pendingFirstVisitAutoFitKeyRef.current === activeFigureViewportKey;
-    if (previousFigureViewportKeyRef.current === activeFigureViewportKey && !pendingAutoFit) {
-      return;
-    }
-
     const previousKey = previousFigureViewportKeyRef.current;
-    if (previousKey && previousKey !== activeFigureViewportKey) {
-      const previousTransform = canvasTransformRef.current;
-      saveFigureViewportState(previousKey, previousTransform, fitToContentModeActiveRef.current);
+    if (previousKey !== activeFigureViewportKey) {
+      if (previousKey && ownedFigureViewportKeyRef.current === previousKey && pendingViewportCommitRef.current === null) {
+        saveFigureViewportState(previousKey, canvasTransformRef.current, fitToContentModeActiveRef.current);
+      }
+      previousFigureViewportKeyRef.current = activeFigureViewportKey;
+      ownedFigureViewportKeyRef.current = null;
+      awaitingSnapshotKeyRef.current = activeFigureViewportKey;
+      awaitingSnapshotTransformRef.current = canvasTransformRef.current;
+      pendingViewportCommitRef.current = null;
+      viewportStateReadyRef.current = false;
+      const savedState = viewportStateByFigureKeyRef.current.get(activeFigureViewportKey);
+      pendingFirstVisitAutoFitKeyRef.current = savedState ? null : activeFigureViewportKey;
+      const nextFitMode = savedState?.fitToContentModeActive ?? true;
+      if (fitToContentModeActiveRef.current !== nextFitMode) setFitToContentModeActive(nextFitMode);
+      fitToContentModeActiveRef.current = nextFitMode;
     }
 
-    const savedState = viewportStateByFigureKeyRef.current.get(activeFigureViewportKey);
-    if (savedState) {
+    // A manual gesture while waiting takes ownership. The later SVG must not
+    // revive either the first-visit fit or a previously saved transform.
+    const manualTakeoverWhileWaiting = awaitingSnapshotKeyRef.current === activeFigureViewportKey &&
+      !fitToContentModeActiveRef.current &&
+      (pendingFirstVisitAutoFitKeyRef.current === activeFigureViewportKey ||
+        (awaitingSnapshotTransformRef.current !== null && !sameTransform(canvasTransformRef.current, awaitingSnapshotTransformRef.current)));
+    if (manualTakeoverWhileWaiting) {
       pendingFirstVisitAutoFitKeyRef.current = null;
-      if (fitToContentModeActiveRef.current !== savedState.fitToContentModeActive) {
-        setFitToContentModeActive(savedState.fitToContentModeActive);
-      }
-      dispatchCanvasTransform(savedState.transform);
-      previousFigureViewportKeyRef.current = activeFigureViewportKey;
-      return;
+      awaitingSnapshotKeyRef.current = null;
+      pendingViewportCommitRef.current = null;
+      ownedFigureViewportKeyRef.current = activeFigureViewportKey;
+      saveFigureViewportState(activeFigureViewportKey, canvasTransformRef.current, false);
     }
 
-    const hasVisited = visitedFigureKeysRef.current.has(activeFigureViewportKey);
-    if (!hasVisited || pendingAutoFit) {
-      visitedFigureKeysRef.current.add(activeFigureViewportKey);
-      if (!fitToContentModeActiveRef.current) {
-        setFitToContentModeActive(true);
+    if (awaitingSnapshotKeyRef.current === activeFigureViewportKey) {
+      if (!snapshotMatchesActive) {
+        viewportStateReadyRef.current = false;
+        return;
       }
-      const didFit = fitToContent();
-      previousFigureViewportKeyRef.current = activeFigureViewportKey;
-      if (didFit) {
-        pendingFirstVisitAutoFitKeyRef.current = null;
+      const savedState = viewportStateByFigureKeyRef.current.get(activeFigureViewportKey);
+      if (savedState) {
+        if (fitToContentModeActiveRef.current !== savedState.fitToContentModeActive) setFitToContentModeActive(savedState.fitToContentModeActive);
+        fitToContentModeActiveRef.current = savedState.fitToContentModeActive;
+        dispatchCanvasTransform(savedState.transform);
+        canvasTransformRef.current = savedState.transform;
+        pendingViewportCommitRef.current = savedState;
+        pendingCommitRenderTransformRef.current = canvasTransform;
       } else {
-        pendingFirstVisitAutoFitKeyRef.current = activeFigureViewportKey;
+        if (!fitToContent()) {
+          viewportStateReadyRef.current = false;
+          return;
+        }
+        pendingViewportCommitRef.current = { transform: canvasTransformRef.current, fitToContentModeActive: true };
+        pendingCommitRenderTransformRef.current = canvasTransform;
       }
-      return;
+      pendingFirstVisitAutoFitKeyRef.current = null;
+      awaitingSnapshotKeyRef.current = null;
+      ownedFigureViewportKeyRef.current = activeFigureViewportKey;
     }
 
-    pendingFirstVisitAutoFitKeyRef.current = null;
-    previousFigureViewportKeyRef.current = activeFigureViewportKey;
+    const pending = pendingViewportCommitRef.current;
+    if (pending) {
+      const matches = sameTransform(canvasTransform, pending.transform) && fitToContentModeActive === pending.fitToContentModeActive;
+      const manualTakeover = !fitToContentModeActiveRef.current &&
+        (pending.fitToContentModeActive || canvasTransform !== pendingCommitRenderTransformRef.current);
+      if (!matches && !manualTakeover) {
+        viewportStateReadyRef.current = false;
+        return;
+      }
+      pendingViewportCommitRef.current = null;
+    }
+    viewportStateReadyRef.current = ownedFigureViewportKeyRef.current === activeFigureViewportKey && snapshotActiveRootId === activeRootId;
   }, [
     activeFigureViewportKey,
+    activeRootId,
+    canvasTransform,
     canvasTransformRef,
     dispatchCanvasTransform,
     fitToContent,
     fitToContentModeActiveRef,
+    fitToContentModeActive,
     saveFigureViewportState,
-    setFitToContentModeActive
+    setFitToContentModeActive,
+    snapshotActiveRootId,
+    snapshotMatchesActive,
+    viewportSize.height,
+    viewportSize.width
   ]);
 
   useEffect(() => {
-    if (previousFigureViewportKeyRef.current !== activeFigureViewportKey) {
+    if (!viewportStateReadyRef.current || ownedFigureViewportKeyRef.current !== activeFigureViewportKey) {
       return;
     }
-    if (!visitedFigureKeysRef.current.has(activeFigureViewportKey)) {
-      return;
-    }
-    if (pendingFirstVisitAutoFitKeyRef.current === activeFigureViewportKey) {
-      return;
-    }
-    saveFigureViewportState(activeFigureViewportKey, canvasTransform, fitToContentModeActive);
-  }, [activeFigureViewportKey, canvasTransform, fitToContentModeActive, saveFigureViewportState]);
+    // Layout effects may already have assigned a restored transform/fit mode.
+    // Never save the old render's props over that newly owned state.
+    saveFigureViewportState(activeFigureViewportKey, canvasTransformRef.current, fitToContentModeActiveRef.current);
+  }, [activeFigureViewportKey, canvasTransform, canvasTransformRef, fitToContentModeActive, fitToContentModeActiveRef, saveFigureViewportState]);
 
   const handledFitRequestRef = useRef(0);
+  const queuedFitRequestRef = useRef<{ token: number; key: string } | null>(null);
   useEffect(() => {
     if (fitToContentRequestToken <= 0) {
       return;
@@ -225,14 +268,25 @@ export function useCanvasViewportPersistence({
     if (fitToContentRequestToken === handledFitRequestRef.current) {
       return;
     }
-    handledFitRequestRef.current = fitToContentRequestToken;
+    if (queuedFitRequestRef.current?.token !== fitToContentRequestToken) queuedFitRequestRef.current = { token: fitToContentRequestToken, key: activeFigureViewportKey };
+    if (queuedFitRequestRef.current.key !== activeFigureViewportKey) {
+      handledFitRequestRef.current = fitToContentRequestToken;
+      queuedFitRequestRef.current = null;
+      return;
+    }
+    if (!snapshotMatchesActive || !viewportStateReadyRef.current) return;
     if (!fitToContentModeActiveRef.current) {
       setFitToContentModeActive(true);
     }
-    fitToContent();
-  }, [fitToContent, fitToContentModeActiveRef, fitToContentRequestToken, setFitToContentModeActive]);
+    if (fitToContent()) {
+      pendingViewportCommitRef.current = null;
+      handledFitRequestRef.current = fitToContentRequestToken;
+      queuedFitRequestRef.current = null;
+    }
+  }, [activeFigureViewportKey, fitToContent, fitToContentModeActiveRef, fitToContentRequestToken, setFitToContentModeActive, snapshotMatchesActive, viewportSize.height, viewportSize.width]);
 
   const handledZoomRequestRef = useRef(0);
+  const queuedZoomRequestRef = useRef<{ token: number; key: string } | null>(null);
   useEffect(() => {
     if (zoomRequestToken <= 0) {
       return;
@@ -240,14 +294,25 @@ export function useCanvasViewportPersistence({
     if (zoomRequestToken === handledZoomRequestRef.current) {
       return;
     }
-    handledZoomRequestRef.current = zoomRequestToken;
+    if (queuedZoomRequestRef.current?.token !== zoomRequestToken) queuedZoomRequestRef.current = { token: zoomRequestToken, key: activeFigureViewportKey };
+    if (queuedZoomRequestRef.current.key !== activeFigureViewportKey) {
+      handledZoomRequestRef.current = zoomRequestToken;
+      queuedZoomRequestRef.current = null;
+      return;
+    }
     if (!zoomRequestDirection || !svgResult || !viewportRef.current) {
       return;
     }
+    if (snapshotMatchesActive && !viewportStateReadyRef.current) return;
+    const viewportWidth = viewportRef.current.clientWidth;
+    const viewportHeight = viewportRef.current.clientHeight;
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+    handledZoomRequestRef.current = zoomRequestToken;
+    queuedZoomRequestRef.current = null;
 
     const currentTransform = canvasTransformRef.current;
-    const centerX = viewportRef.current.clientWidth / 2;
-    const centerY = viewportRef.current.clientHeight / 2;
+    const centerX = viewportWidth / 2;
+    const centerY = viewportHeight / 2;
     const zoomFactor = zoomRequestDirection === "in" ? 1.15 : 1 / 1.15;
     const nextScale = clamp(currentTransform.scale * zoomFactor, MIN_SCALE, maxZoomScale);
     if (Math.abs(nextScale - currentTransform.scale) < 1e-9) {
@@ -265,8 +330,10 @@ export function useCanvasViewportPersistence({
     if (fitToContentModeActiveRef.current) {
       setFitToContentModeActive(false);
     }
+    pendingViewportCommitRef.current = null;
     dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
   }, [
+    activeFigureViewportKey,
     canvasTransformRef,
     dispatchCanvasTransform,
     fitToContentModeActiveRef,
@@ -275,11 +342,15 @@ export function useCanvasViewportPersistence({
     setFitToContentModeActive,
     svgResult,
     viewportRef,
+    viewportSize.height,
+    viewportSize.width,
     zoomRequestDirection,
-    zoomRequestToken
+    zoomRequestToken,
+    snapshotMatchesActive
   ]);
 
   const handledZoomScaleRequestRef = useRef(0);
+  const queuedZoomScaleRequestRef = useRef<{ token: number; key: string } | null>(null);
   useEffect(() => {
     if (zoomScaleRequestToken <= 0) {
       return;
@@ -287,10 +358,21 @@ export function useCanvasViewportPersistence({
     if (zoomScaleRequestToken === handledZoomScaleRequestRef.current) {
       return;
     }
-    handledZoomScaleRequestRef.current = zoomScaleRequestToken;
+    if (queuedZoomScaleRequestRef.current?.token !== zoomScaleRequestToken) queuedZoomScaleRequestRef.current = { token: zoomScaleRequestToken, key: activeFigureViewportKey };
+    if (queuedZoomScaleRequestRef.current.key !== activeFigureViewportKey) {
+      handledZoomScaleRequestRef.current = zoomScaleRequestToken;
+      queuedZoomScaleRequestRef.current = null;
+      return;
+    }
     if (!svgResult || !viewportRef.current || zoomScaleRequestValue == null) {
       return;
     }
+    if (snapshotMatchesActive && !viewportStateReadyRef.current) return;
+    const viewportWidth = viewportRef.current.clientWidth;
+    const viewportHeight = viewportRef.current.clientHeight;
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+    handledZoomScaleRequestRef.current = zoomScaleRequestToken;
+    queuedZoomScaleRequestRef.current = null;
 
     const currentTransform = canvasTransformRef.current;
     const nextScale = clamp(zoomScaleRequestValue, MIN_SCALE, maxZoomScale);
@@ -298,8 +380,8 @@ export function useCanvasViewportPersistence({
       return;
     }
 
-    const centerX = viewportRef.current.clientWidth / 2;
-    const centerY = viewportRef.current.clientHeight / 2;
+    const centerX = viewportWidth / 2;
+    const centerY = viewportHeight / 2;
     const svgPoint = viewportToSvgPoint(
       viewportPoint(px(centerX), px(centerY)),
       currentTransform,
@@ -311,8 +393,10 @@ export function useCanvasViewportPersistence({
     if (fitToContentModeActiveRef.current) {
       setFitToContentModeActive(false);
     }
+    pendingViewportCommitRef.current = null;
     dispatchCanvasTransform({ translateX, translateY, scale: nextScale });
   }, [
+    activeFigureViewportKey,
     canvasTransformRef,
     dispatchCanvasTransform,
     fitToContentModeActiveRef,
@@ -321,8 +405,11 @@ export function useCanvasViewportPersistence({
     setFitToContentModeActive,
     svgResult,
     viewportRef,
+    viewportSize.height,
+    viewportSize.width,
     zoomScaleRequestToken,
-    zoomScaleRequestValue
+    zoomScaleRequestValue,
+    snapshotMatchesActive
   ]);
 
   useEffect(() => {
@@ -332,6 +419,7 @@ export function useCanvasViewportPersistence({
     if (!fitToContentModeActiveRef.current) {
       return;
     }
+    if (!viewportStateReadyRef.current) return;
     if (!svgResult) {
       return;
     }
@@ -359,7 +447,13 @@ export function useCanvasViewportPersistence({
     viewportSize.width
   ]);
 
-  return { maxZoomScale };
+  return { maxZoomScale, viewportStateReadyRef };
+}
+
+function sameTransform(left: CanvasTransform, right: CanvasTransform): boolean {
+  return Math.abs(left.translateX - right.translateX) < 1e-9 &&
+    Math.abs(left.translateY - right.translateY) < 1e-9 &&
+    Math.abs(left.scale - right.scale) < 1e-9;
 }
 
 function computeFitToContentScale(

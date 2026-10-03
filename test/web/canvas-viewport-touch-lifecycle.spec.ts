@@ -10,14 +10,14 @@ import type { CanvasSnapshot } from "../../packages/app/src/ui/canvas-panel/type
 let root: Root;
 let viewport: HTMLDivElement;
 let api: { transform: CanvasTransform; fit: boolean; setManual: (t: CanvasTransform) => void;
-  setInput: React.Dispatch<React.SetStateAction<{ rootId: string; svg: CanvasSnapshot["svg"] }>>; replaceSurface: (next: HTMLDivElement) => void };
+  setInput: React.Dispatch<React.SetStateAction<{ rootId: string; snapshotRootId: string; svg: CanvasSnapshot["svg"] }>>; replaceSurface: (next: HTMLDivElement) => void };
 const firstSvg = { viewBox: { x: -14, y: -14, width: 28, height: 28 } } as CanvasSnapshot["svg"];
 const secondSvg = { viewBox: { x: -228, y: -143, width: 456, height: 286 } } as CanvasSnapshot["svg"];
 const noop = () => {};
 const tabOrder = ["doc"];
 
 function Harness() {
-  const [input, setInput] = useState({ rootId: "figure:0", svg: firstSvg });
+  const [input, setInput] = useState({ rootId: "figure:0", snapshotRootId: "figure:0", svg: firstSvg });
   const [transform, setTransform] = useState({ translateX: 0, translateY: 0, scale: 1 });
   const [fit, setFit] = useState(true);
   const transformRef = useRef(transform), fitRef = useRef(fit), svgRef = useRef(input.svg);
@@ -29,13 +29,14 @@ function Harness() {
   }, [transform.scale, transform.translateX, transform.translateY]);
   const setFitMode = useCallback((next: boolean) => { fitRef.current = next; setFit(next); }, []);
   useLayoutEffect(() => { transformRef.current = transform; fitRef.current = fit; svgRef.current = input.svg; });
-  useCanvasViewportPersistence({ baseSvgResult: input.svg, svgResult: input.svg, viewportSize: { width: 800, height: 600 },
+  const { viewportStateReadyRef } = useCanvasViewportPersistence({ baseSvgResult: input.svg, svgResult: input.svg, viewportSize: { width: 800, height: 600 },
     dispatch: noop, dispatchCanvasTransform: dispatchTransform, activeDocumentId: "doc", activeRootId: input.rootId, tabOrder,
+    snapshotActiveRootId: input.snapshotRootId,
     canvasTransform: transform, fitToContentModeActive: fit, fitToContentModeActiveRef: fitRef, setFitToContentModeActive: setFitMode,
     viewportRef, canvasTransformRef: transformRef, fitToContentRequestToken: 0, zoomRequestToken: 0, zoomRequestDirection: null,
     zoomScaleRequestToken: 0, zoomScaleRequestValue: null, activeCanvasDragKind: null, activeSourceScrubSourceId: null,
     snapshotSource: "same-source", source: "same-source", lastEditChangeToken: 0, MIN_SCALE: .001, MAX_SCALE: 4 });
-  useCanvasViewportEffects({ canvasContextKey: input.rootId, dragRef, pendingTouchViewportRef: pendingTouchRef, setDragState: noop, setToolDraft: noop,
+  useCanvasViewportEffects({ canvasContextKey: input.rootId, viewportStateReadyRef, dragRef, pendingTouchViewportRef: pendingTouchRef, setDragState: noop, setToolDraft: noop,
     setToolCursorWorld: noop, viewportRef, setViewportSize: noop, canvasTransformRef: transformRef, svgResult: input.svg,
     svgResultRef: svgRef, fitToContentModeActiveRef: fitRef, previousViewBoxRef,
     dispatchCanvasTransform: dispatchTransform, zoomSpeed: .001, MIN_SCALE: .001, MAX_SCALE: 4, setFitToContentModeActive: setFitMode });
@@ -59,24 +60,24 @@ it("preserves each figure's manual scale through asynchronous root/SVG switches"
   const second = { translateX: 25, translateY: 48, scale: .82 };
   await act(async () => api.setManual(first));
   await act(async () => api.setInput(input => ({ ...input, rootId: "figure:1" })));
-  await act(async () => api.setInput(input => ({ ...input, svg: secondSvg })));
+  await act(async () => api.setInput(input => ({ ...input, snapshotRootId: "figure:1", svg: secondSvg })));
   await act(async () => api.setManual(second));
   await act(async () => api.setInput(input => ({ ...input, rootId: "figure:0" })));
-  await act(async () => api.setInput(input => ({ ...input, svg: firstSvg })));
+  await act(async () => api.setInput(input => ({ ...input, snapshotRootId: "figure:0", svg: firstSvg })));
   expect(api.transform.scale).toBe(first.scale);
   await act(async () => api.setInput(input => ({ ...input, rootId: "figure:1" })));
-  await act(async () => api.setInput(input => ({ ...input, svg: secondSvg })));
+  await act(async () => api.setInput(input => ({ ...input, snapshotRootId: "figure:1", svg: secondSvg })));
   expect(api.transform.scale).toBe(second.scale);
 });
 
 it("fits a newly seen figure and keeps a manual viewport after later content geometry changes", async () => {
   expect(api.fit).toBe(true);
   expect(api.transform.scale).toBe(4); // Small initial picture reaches the configured maximum.
-  await act(async () => api.setInput({ rootId: "figure:1", svg: secondSvg }));
+  await act(async () => api.setInput({ rootId: "figure:1", snapshotRootId: "figure:1", svg: secondSvg }));
   expect(api.fit).toBe(true);
   expect(api.transform.scale).toBeCloseTo(Math.min((800 - 88) / 456, (600 - 88) / 286));
   await act(async () => api.setManual({ translateX: 10, translateY: 20, scale: 1 }));
-  await act(async () => api.setInput({ rootId: "figure:1", svg: firstSvg }));
+  await act(async () => api.setInput({ rootId: "figure:1", snapshotRootId: "figure:1", svg: firstSvg }));
   expect(api.fit).toBe(false);
   expect(api.transform).toEqual({ translateX: 224, translateY: 149, scale: 1 });
 });

@@ -149,6 +149,7 @@ import { useCanvasTextEditSession } from "./useCanvasTextEditSession";
 import { useCanvasToolInteractions } from "./useCanvasToolInteractions";
 import { useCanvasViewportEffects } from "./useCanvasViewportEffects";
 import { useCanvasViewportPersistence } from "./useCanvasViewportPersistence";
+import { expandSvgViewBox } from "./viewport-view-box";
 import { useBucketFillPreview,type BucketPreviewSession } from "./useBucketFillPreview";
 import type { ClientPoint,SvgBounds,ViewportPoint,WorldPoint } from "../coords/types";
 import { getDockLayoutHandle } from "../DockLayout";
@@ -295,7 +296,6 @@ function intervalsOverlap(a0: number, a1: number, b0: number, b1: number): boole
   return leftMin < rightMax && rightMin < leftMax;
 }
 
-const DOCUMENT_BOUNDS_OFF_MIN_PADDING_WORLD = 200;
 function viewportPointFromClient(clientPoint: ClientPoint, viewport: HTMLDivElement | null): ViewportPoint {
   const rect = viewport?.getBoundingClientRect();
   return viewportPoint(
@@ -315,22 +315,6 @@ function resolveFallbackTextLayoutKind(text: string, hasFixedWidth: boolean | un
     return "wrapped";
   }
   return "single-line";
-}
-
-function expandSvgViewBox(
-  viewBox: SvgViewBox,
-  viewportSize: { width: number; height: number },
-  scale: number
-): SvgViewBox {
-  const safeScale = Math.max(scale, 1e-3);
-  const viewportWorldExtent = Math.max(viewportSize.width, viewportSize.height) / safeScale;
-  const padding = Math.max(DOCUMENT_BOUNDS_OFF_MIN_PADDING_WORLD, viewportWorldExtent * 2);
-  return {
-    x: viewBox.x - padding,
-    y: viewBox.y - padding,
-    width: viewBox.width + padding * 2,
-    height: viewBox.height + padding * 2
-  };
 }
 
 function mergeBoundsList(boundsList: readonly SvgBounds[]): SvgBounds | null {
@@ -1715,7 +1699,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     canvasTransform
   });
 
-  const { maxZoomScale } = useCanvasViewportPersistence({
+  const { maxZoomScale, viewportStateReadyRef } = useCanvasViewportPersistence({
     baseSvgResult,
     svgResult,
     viewportSize,
@@ -1723,6 +1707,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatchCanvasTransform,
     activeDocumentId,
     activeRootId,
+    snapshotActiveRootId: snapshot.activeRootId,
     tabOrder,
     canvasTransform,
     fitToContentModeActive,
@@ -2989,6 +2974,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   useCanvasViewportEffects({
     canvasContextKey: rootKey(activeDocumentId, activeRootId),
+    viewportStateReadyRef,
     dragRef,
     pendingTouchViewportRef,
     setDragState,
