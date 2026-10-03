@@ -22,6 +22,15 @@ const runOracleIntegration = process.env.BEAMER_ORACLE_TESTS === "1" &&
   spawnSync("lualatex", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("Beamer frame oracle", () => {
+  it("seeds figure/table numbering from actual authored TeX counters", () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}Later.\end{frame}\end{document}`;
+    const document = scanBeamerDocument(source);
+    const nav = String.raw`\headcommand{\gdef\inserttotalframenumber{1}}`;
+    const context = parseBeamerDeckCounters("TIKZ_BEAMER_CONTEXT B 0 0 1 3 2\nTIKZ_BEAMER_CONTEXT E 0 1 2 4 2", nav, 1);
+    expect(context.frames[0]).toMatchObject({ beforeFigureNumber: 3, beforeTableNumber: 2 });
+    const probe = buildBeamerFrameProbeSource(source, document, 0, [], context);
+    expect(probe.source).toContain(String.raw`\setcounter{figure}{3}\setcounter{table}{2}`);
+  });
   it("seeds an isolated probe from real full-deck frame counters and navigation", () => {
     const source = String.raw`\documentclass{beamer}\begin{document}
 \begin{frame}[allowframebreaks]{First}A.\newpage B.\end{frame}

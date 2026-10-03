@@ -390,6 +390,7 @@ ${beamerProbeInstrumentation()}
 \\begin{document}
 \\setcounter{framenumber}{${deckContext?.frames[frameIndex]?.beforeFrameNumber ?? frameIndex}}
 ${deckContext ? `\\setcounter{page}{${deckContext.frames[frameIndex].firstPage}}` : ""}
+${deckContext?.frames[frameIndex].beforeFigureNumber !== undefined ? `\\setcounter{figure}{${deckContext.frames[frameIndex].beforeFigureNumber}}\\setcounter{table}{${deckContext.frames[frameIndex].beforeTableNumber}}` : ""}
 \\def\\inserttotalframenumber{${deckContext?.totalFrames ?? document.frames.length}}
 ${navigationState}
 ${theoremCounterState}

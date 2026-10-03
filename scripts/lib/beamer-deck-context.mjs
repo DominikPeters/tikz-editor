@@ -9,7 +9,7 @@ import { texOracleEnv } from "./tex-oracle.mjs";
 export function instrumentBeamerDeckCounters(source, document) {
   let result = "";
   let cursor = 0;
-  const mark = (phase, index) => `\n\\typeout{TIKZ_BEAMER_CONTEXT ${phase} ${index} \\arabic{framenumber} \\arabic{page}}\n`;
+  const mark = (phase, index) => `\n\\typeout{TIKZ_BEAMER_CONTEXT ${phase} ${index} \\arabic{framenumber} \\arabic{page} \\arabic{figure} \\arabic{table}}\n`;
   for (const [index, frame] of document.frames.entries()) {
     if (!frame.endSpan) throw new Error(`Full-deck counter context requires complete frame ${index + 1}.`);
     result += source.slice(cursor, frame.span.from) + mark("B", index) + source.slice(frame.span.from, frame.span.to) + mark("E", index);
@@ -20,18 +20,21 @@ export function instrumentBeamerDeckCounters(source, document) {
 
 export function parseBeamerDeckCounters(log, navSource, frameCount) {
   const entries = new Map();
-  for (const match of log.matchAll(/TIKZ_BEAMER_CONTEXT ([BE]) (\d+) (\d+) (\d+)/gu)) {
+  for (const match of log.matchAll(/TIKZ_BEAMER_CONTEXT ([BE]) (\d+) (\d+) (\d+)(?: (\d+) (\d+))?/gu)) {
     const index = Number(match[2]);
     const frame = entries.get(index) ?? {};
     if (match[1] === "B") { frame.beforeFrameNumber = Number(match[3]); frame.firstPage = Number(match[4]); }
     else { frame.afterFrameNumber = Number(match[3]); frame.lastPage = Number(match[4]) - 1; }
+    if (match[1] === "B" && match[5] !== undefined) {
+      frame.beforeFigureNumber = Number(match[5]); frame.beforeTableNumber = Number(match[6]);
+    }
     entries.set(index, frame);
   }
   const total = /\\gdef\s*\\inserttotalframenumber\s*\{(\d+)\}/u.exec(navSource);
   if (!total) throw new Error("Full-deck .nav does not contain an actual total frame number.");
   const frames = Array.from({ length: frameCount }, (_, index) => {
     const frame = entries.get(index);
-    if (!frame || !Object.values(frame).every(Number.isInteger) || Object.keys(frame).length !== 4) throw new Error(`Full-deck counter context missing authored frame ${index + 1}.`);
+    if (!frame || !Object.values(frame).every(Number.isInteger) || ![4,6].includes(Object.keys(frame).length)) throw new Error(`Full-deck counter context missing authored frame ${index + 1}.`);
     return frame;
   });
   return { totalFrames: Number(total[1]), frames, navSource };
@@ -41,7 +44,7 @@ export function parseBeamerDeckCounters(log, navSource, frameCount) {
 export function collectBeamerDeckContext({ source, document, inputPath, sourceDir = dirname(inputPath), texRoot, cacheDir }) {
   const engine = execFileSync("lualatex", ["--version"], { encoding: "utf8" });
   const beamerClass = execFileSync("kpsewhich", ["beamer.cls"], { encoding: "utf8" }).trim();
-  const digest = createHash("sha256").update(JSON.stringify({ version: 1, source, sourceDir, texRoot, engine, beamerClassSha256: fileSha256(beamerClass) })).digest("hex");
+  const digest = createHash("sha256").update(JSON.stringify({ version: 2, source, sourceDir, texRoot, engine, beamerClassSha256: fileSha256(beamerClass) })).digest("hex");
   const directory = join(cacheDir, digest);
   const contextPath = join(directory, "context.json");
   if (existsSync(contextPath)) {

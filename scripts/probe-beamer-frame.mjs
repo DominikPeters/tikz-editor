@@ -142,7 +142,7 @@ async function loadBeamerScanner() {
     "index.js"
   );
   try {
-    return await import(entry);
+    return { ...await import(entry), ...await import(join(repoRoot, "packages/core/dist/beamer/syntax.js")) };
   } catch {
     throw new Error(
       "Built core Beamer scanner not found. Run `npm run -w @tikz-editor/core build` first."
@@ -257,6 +257,8 @@ async function main() {
   const {
     resolveBeamerTheoremCounterSeed,
     scanBeamerDocument,
+    beamerSyntaxContext,
+    beamerControlSequencesIn,
   } = await loadBeamerScanner();
   const document = scanBeamerDocument(source);
   const frameIndex = options.frameNumber - 1;
@@ -265,7 +267,10 @@ async function main() {
   // present. Obtain counters and navigation from an actual full TeX run.
   // The recorder-backed cache keeps this one full-deck compilation shared
   // by subsequent isolated probes without using native layout estimates.
-  const deckContext = document.frames.some(frame => frame.options?.allowFrameBreaks != null) ? collectBeamerDeckContext({
+  const previousCaptions = selectedFrame && beamerControlSequencesIn(beamerSyntaxContext(source), {
+    from: document.preamble.span.to, to: selectedFrame.span.from,
+  }).some(control => control.name === "caption");
+  const deckContext = previousCaptions || document.frames.some(frame => frame.options?.allowFrameBreaks != null) ? collectBeamerDeckContext({
     source, document, inputPath: options.inputPath, sourceDir: options.sourceDir ?? dirname(options.inputPath),
     texRoot: options.texRoot, cacheDir: join(repoRoot, "artifacts", "beamer-full-deck-context"),
   }) : null;
