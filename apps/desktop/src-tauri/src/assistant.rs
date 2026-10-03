@@ -1,12 +1,10 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -576,9 +574,9 @@ impl AssistantState {
         document_id: String,
         source: String,
         thread_id: Option<String>,
-        workspace_path: Option<String>,
-        figure_path: Option<String>,
-        preview_path: Option<String>,
+        _workspace_path: Option<String>,
+        _figure_path: Option<String>,
+        _preview_path: Option<String>,
     ) -> Result<AssistantThreadSummary, String> {
         self.ensure_process()?;
 
@@ -593,14 +591,13 @@ impl AssistantState {
             return Ok(summary_from_session(&existing));
         }
 
-        let workspace =
-            resolve_workspace(&self.inner.app, &document_id, workspace_path.as_deref())?;
-        let figure = figure_path
-            .map(PathBuf::from)
-            .unwrap_or_else(|| workspace.join("figure.tex"));
-        let preview = preview_path
-            .map(PathBuf::from)
-            .unwrap_or_else(|| workspace.join("current.png"));
+        // Persisted paths may refer to the old shared-prefix cache or another
+        // document. Only backend-derived paths establish document ownership.
+        let AssistantWorkspace {
+            directory: workspace,
+            figure,
+            preview,
+        } = resolve_workspace(&self.inner.app, &document_id)?;
 
         fs::create_dir_all(&workspace).map_err(|error| error.to_string())?;
         fs::write(&figure, &source).map_err(|error| error.to_string())?;
@@ -1657,22 +1654,36 @@ fn summary_from_session(session: &DocumentAssistantSession) -> AssistantThreadSu
     }
 }
 
-fn resolve_workspace(
-    app: &AppHandle,
-    document_id: &str,
-    provided: Option<&str>,
-) -> Result<PathBuf, String> {
-    if let Some(path) = provided {
-        return Ok(PathBuf::from(path));
-    }
-    let workspace_name = short_workspace_name(document_id);
-    let base = app
+#[derive(Debug, PartialEq, Eq)]
+struct AssistantWorkspace {
+    directory: PathBuf,
+    figure: PathBuf,
+    preview: PathBuf,
+}
+
+fn resolve_workspace(app: &AppHandle, document_id: &str) -> Result<AssistantWorkspace, String> {
+    let cache_dir = app
         .path()
         .app_cache_dir()
-        .map_err(|error| error.to_string())?
-        .join("codex-assistant")
-        .join(workspace_name);
-    Ok(base)
+        .map_err(|error| error.to_string())?;
+    Ok(document_workspace_paths(&cache_dir, document_id))
+}
+
+fn document_workspace_paths(cache_dir: &Path, document_id: &str) -> AssistantWorkspace {
+    let mut directory = cache_dir.join("codex-assistant").join("documents-v2");
+    let encoded = document_workspace_name(document_id);
+    // Hex is ASCII and case-independent on disk. Chunk long IDs to keep every
+    // component below filesystem limits; the terminal directory prevents one
+    // document ID from owning a prefix of another document's workspace.
+    for component in encoded.as_bytes().chunks(200) {
+        directory.push(std::str::from_utf8(component).expect("hex workspace name is ASCII"));
+    }
+    directory.push("workspace");
+    AssistantWorkspace {
+        figure: directory.join("figure.tex"),
+        preview: directory.join("current.png"),
+        directory,
+    }
 }
 
 fn write_base64_file(path: &Path, base64_contents: &str) -> Result<(), String> {
@@ -1695,39 +1706,36 @@ fn build_turn_input(
     figure_context: Option<&str>,
     diagnostics_text: Option<&str>,
 ) -> Vec<Value> {
-    let mut input = if is_first_turn {
-        let source_section = if let Some(ctx) = figure_context {
-            ctx.to_string()
-        } else {
-            format!("Current figure source:\n```tex\n{source}\n```")
-        };
-
-        let diagnostics_section = match diagnostics_text {
-            Some(text) if !text.is_empty() => format!("\n\nCurrent diagnostics:\n{text}"),
-            _ => String::new(),
-        };
-
-        vec![json!({
-          "type": "text",
-          "text": format!(
+    let source_section = match figure_context.filter(|text| !text.trim().is_empty()) {
+        Some(context) => context.to_string(),
+        None => format!("Current figure source:\n```tex\n{source}\n```"),
+    };
+    let diagnostics_section = diagnostics_text
+        .filter(|text| !text.trim().is_empty())
+        .unwrap_or("No diagnostics reported.");
+    let intro = if is_first_turn {
+        format!(
             "You are assisting a user inside a WYSIWYG TikZ editor. The user edits the figure visually and sees the current TikZ source directly in the interface.\n\
-        Apply requested changes to `{figure_path}` as needed, but do not mention local filenames or paths in your user-facing response.\n\
+        Do not mention local filenames or paths in your user-facing response.\n\
         After making edits, call the `get_latest_preview_png` tool to verify the rendered output before finalizing your response.\n\
         The preview tool supports `overlay_code` (temporary TikZ code for guides/prototyping, injected before \\end{{tikzpicture}} without modifying the file), `show_grid` (coordinate grid with numbered ticks), and `zoom_region` (zoom into TikZ coordinates).\n\
         You can call `get_diagnostics` to check for parse errors, `get_element_list` for a compact element inventory, `get_node_anchors` for resolved node positions, and `get_bounds` for the scene bounding box.\n\
         The editor uses its own TikZ renderer which supports most common features but not every TikZ package or advanced construct. The rendering is accurate — trust what the preview shows. If something doesn't render, try simpler TikZ constructs.\n\
         The user sees source changes live, so keep your response brief: list what you changed and why, don't repeat the code.\n\n\
-        The image attached below is the current rendered preview of the figure.\n\n\
-        {source_section}{diagnostics_section}\n\n\
-        User request: {prompt}"
-          )
-        })]
+        The image attached below is the current rendered preview of the figure.\n\n"
+        )
     } else {
-        vec![json!({
-          "type": "text",
-          "text": prompt
-        })]
+        String::new()
     };
+    let mut input = vec![json!({
+        "type": "text",
+        "text": format!(
+            "{intro}Current editable file: `{figure_path}`. Apply requested changes to this file; use this current path even if an earlier turn referred to a different path.\n\n\
+             {source_section}\n\n\
+             Current diagnostics:\n{diagnostics_section}\n\n\
+             User request: {prompt}"
+        )
+    })];
     for pasted_image_path in pasted_image_paths {
         if Path::new(pasted_image_path).exists() {
             input.push(json!({
@@ -1813,24 +1821,15 @@ fn sanitized_file_stem(file_name: &str) -> String {
     }
 }
 
-fn short_workspace_name(document_id: &str) -> String {
-    let compact = document_id
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .collect::<String>()
-        .to_lowercase();
-    if compact.len() >= 7 {
-        return compact.chars().take(7).collect();
+fn document_workspace_name(document_id: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(4 + document_id.len() * 2);
+    encoded.push_str("doc-");
+    for byte in document_id.as_bytes() {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 15) as usize] as char);
     }
-
-    let mut hasher = DefaultHasher::new();
-    document_id.hash(&mut hasher);
-    let hash_hex = format!("{:016x}", hasher.finish());
-    format!("{compact}{hash_hex}")
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .take(7)
-        .collect()
+    encoded
 }
 
 fn merge_json(existing: Value, incoming: Value) -> Value {
@@ -1851,8 +1850,9 @@ fn merge_json(existing: Value, incoming: Value) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::build_turn_input;
+    use super::{build_turn_input, document_workspace_name, document_workspace_paths};
     use serde_json::Value;
+    use std::collections::HashSet;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1872,6 +1872,108 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("tikz-editor-assistant-test-{millis}-{id}"));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
+    }
+
+    struct TempDir(PathBuf);
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn turn_text(input: &[Value]) -> &str {
+        input[0]["text"].as_str().expect("text input")
+    }
+
+    #[test]
+    fn document_ids_preserve_prefix_punctuation_case_and_utf8_ownership() {
+        let ids = [
+            "1234567a-0000-4000-8000-000000000001",
+            "1234567b-0000-4000-8000-000000000002",
+            "Document-A",
+            "document-a",
+            "document/a",
+            "document_a",
+            "document.a",
+            "documenta",
+            "doc-1760000000000-1",
+            "doc-1760000000000-2",
+            "",
+            "..",
+            "猫",
+            "猫🙂",
+        ];
+        let mut names = HashSet::new();
+        let mut paths = HashSet::new();
+        for id in ids {
+            let name = document_workspace_name(id);
+            assert!(name[4..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()));
+            assert!(names.insert(name), "document ID alias: {id}");
+            let owned = document_workspace_paths(PathBuf::from("cache").as_path(), id);
+            assert_eq!(owned.figure, owned.directory.join("figure.tex"));
+            assert_eq!(owned.preview, owned.directory.join("current.png"));
+            assert!(paths.insert(owned.directory), "workspace alias: {id}");
+        }
+        assert_eq!(document_workspace_name("A/a-猫"), "doc-412f612de78cab");
+    }
+
+    #[test]
+    fn long_document_ids_have_bounded_components_and_disjoint_terminal_workspaces() {
+        let short = "a".repeat(98);
+        let long = format!("{short}b{}", "c".repeat(100));
+        let short_paths = document_workspace_paths(PathBuf::from("cache").as_path(), &short);
+        let long_paths = document_workspace_paths(PathBuf::from("cache").as_path(), &long);
+        assert!(!long_paths.directory.starts_with(&short_paths.directory));
+        assert_ne!(short_paths.figure, long_paths.figure);
+        for component in long_paths.directory.components() {
+            assert!(component.as_os_str().to_string_lossy().len() <= 200);
+        }
+    }
+
+    #[test]
+    fn source_and_preview_files_are_independent_and_restart_paths_are_stable() {
+        let root = TempDir(make_temp_dir());
+        let first = document_workspace_paths(&root.0, "1234567a");
+        let second = document_workspace_paths(&root.0, "1234567b");
+        fs::create_dir_all(&first.directory).expect("first workspace");
+        fs::create_dir_all(&second.directory).expect("second workspace");
+        fs::write(&first.figure, "first source").expect("first source");
+        fs::write(&first.preview, b"first preview").expect("first preview");
+        fs::write(&second.figure, "second source").expect("second source");
+        fs::write(&second.preview, b"second preview").expect("second preview");
+
+        assert_eq!(fs::read_to_string(&first.figure).unwrap(), "first source");
+        assert_eq!(fs::read(&first.preview).unwrap(), b"first preview");
+        assert_eq!(document_workspace_paths(&root.0, "1234567a"), first);
+        assert_eq!(document_workspace_paths(&root.0, "1234567b"), second);
+    }
+
+    #[test]
+    fn new_workspace_writes_leave_legacy_shared_files_untouched() {
+        let root = TempDir(make_temp_dir());
+        let legacy = root.0.join("codex-assistant").join("1234567");
+        fs::create_dir_all(&legacy).expect("legacy workspace");
+        fs::write(legacy.join("figure.tex"), "legacy recovery source").unwrap();
+        fs::write(legacy.join("current.png"), b"legacy preview").unwrap();
+        let owned = document_workspace_paths(&root.0, "1234567a");
+        fs::create_dir_all(&owned.directory).expect("owned workspace");
+        fs::write(&owned.figure, "current document source").unwrap();
+        fs::write(&owned.preview, b"current document preview").unwrap();
+
+        assert_eq!(
+            fs::read_to_string(legacy.join("figure.tex")).unwrap(),
+            "legacy recovery source"
+        );
+        assert_eq!(
+            fs::read(legacy.join("current.png")).unwrap(),
+            b"legacy preview"
+        );
+        assert!(owned
+            .directory
+            .starts_with(root.0.join("codex-assistant/documents-v2")));
     }
 
     #[test]
@@ -1905,6 +2007,10 @@ mod tests {
             .unwrap_or_default()
             .to_string();
         assert!(first_text.contains("User request: make line thicker"));
+        assert!(first_text.contains("WYSIWYG TikZ editor"));
+        assert!(first_text.contains("Current editable file: `figure.tex`"));
+        assert!(first_text.contains("\\draw (0,0)--(1,1);"));
+        assert!(first_text.contains("Current diagnostics:\nNo diagnostics reported."));
         assert_eq!(
             item_path(&input[1]),
             Some(pasted_a.to_string_lossy().to_string())
@@ -1922,7 +2028,7 @@ mod tests {
     }
 
     #[test]
-    fn build_turn_input_follow_up_uses_plain_prompt_text() {
+    fn build_turn_input_follow_up_refreshes_source_and_diagnostics_with_images() {
         let dir = make_temp_dir();
         let pasted = dir.join("pasted.png");
         let preview = dir.join("preview.png");
@@ -1937,7 +2043,7 @@ mod tests {
             "\\draw (0,0)--(1,1);",
             false,
             None,
-            None,
+            Some("warning: new source issue"),
         );
 
         let first_text = input
@@ -1946,7 +2052,11 @@ mod tests {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
-        assert_eq!(first_text, "nudge the label");
+        assert!(first_text.contains("User request: nudge the label"));
+        assert!(first_text.contains("Current editable file: `figure.tex`"));
+        assert!(first_text.contains("\\draw (0,0)--(1,1);"));
+        assert!(first_text.contains("Current diagnostics:\nwarning: new source issue"));
+        assert!(!first_text.contains("WYSIWYG TikZ editor"));
         assert_eq!(
             item_path(&input[1]),
             Some(pasted.to_string_lossy().to_string())
@@ -1957,5 +2067,48 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn every_turn_refreshes_active_figure_context_and_file_path() {
+        for first_turn in [true, false] {
+            let input = build_turn_input(
+                "/current-owned-workspace/figure.tex",
+                "/missing-preview.png",
+                &[],
+                "make it red",
+                "full document omitted when an active excerpt is provided",
+                first_turn,
+                Some("Currently editing figure 2; only modify the active figure.\n2: \\draw[blue] (0,0)--(1,1);"),
+                Some("error (line 2): fresh figure diagnostics"),
+            );
+            let text = turn_text(&input);
+            assert!(text.contains("figure 2; only modify the active figure"));
+            assert!(text.contains("2: \\draw[blue] (0,0)--(1,1);"));
+            assert!(text.contains("/current-owned-workspace/figure.tex"));
+            assert!(text.contains("fresh figure diagnostics"));
+            assert!(text.contains("User request: make it red"));
+            assert!(!text.contains("full document omitted"));
+        }
+    }
+
+    #[test]
+    fn restored_turn_falls_back_to_current_source_and_clears_previous_diagnostics() {
+        let input = build_turn_input(
+            "/migrated-workspace/figure.tex",
+            "/missing-preview.png",
+            &["/missing-pasted.png".to_string()],
+            "continue",
+            "new current source",
+            false,
+            Some(" \n "),
+            Some(" \n "),
+        );
+        let text = turn_text(&input);
+        assert!(text.contains("/migrated-workspace/figure.tex"));
+        assert!(text.contains("Current figure source:\n```tex\nnew current source\n```"));
+        assert!(text.contains("Current diagnostics:\nNo diagnostics reported."));
+        assert!(!text.contains("WYSIWYG TikZ editor"));
+        assert_eq!(input.len(), 1);
     }
 }

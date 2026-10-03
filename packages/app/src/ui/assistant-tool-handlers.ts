@@ -56,11 +56,11 @@ export function buildFigureContext(
     .split("\n")
     .map((line, i) => `${linesBeforeFigure + i}: ${line}`)
     .join("\n");
-  // Build a listing of all figures with their indices and line ranges
+  // Parser inventory ranges are already one-based, like the numbered excerpt.
   const figureListing = figures
     .map((f, i) => {
       const marker = i === activeIndex ? " (active)" : "";
-      return `  Figure ${i + 1}: lines ${f.startLine + 1}–${f.endLine + 1}${marker}`;
+      return `  Figure ${i + 1}: lines ${f.startLine}–${f.endLine}${marker}`;
     })
     .join("\n");
 
