@@ -7,10 +7,13 @@ import {
   differentialSupportFingerprint,
   generateTexFuzzCase,
   parseTexFuzzBundle,
+  replayTexFuzzCase,
   serializeTexFuzzBundle,
   shrinkTexFuzzCase,
   texFuzzShrinkCandidates,
   texFuzzRegistryDrift,
+  TEX_FUZZ_GENERATOR_VERSION,
+  type TexFuzzNode,
 } from "@tikz-editor/tex-fuzz";
 import {
   calibrateBatchedTexSupportOracle,
@@ -18,7 +21,16 @@ import {
   runBatchedTexSupportOracle,
 } from "../scripts/lib/tex-fuzz-oracle.mjs";
 
+// Run with TEX_FUZZ_ORACLE_TESTS=1 to enable installed-LuaLaTeX checks,
+// including graphicx transforms through the support oracle's default preamble.
 const runOracleIntegration = process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex");
+const transformCases = [
+  [{ kind: "transform-box", command: "rotatebox", angle: -45 }, String.raw`\rotatebox{-45}{\textbf{Alpha}}`],
+  [{ kind: "transform-box", command: "scalebox", scale: 1.5, verticalScale: 0.75 }, String.raw`\scalebox{1.5}[0.75]{\textbf{Alpha}}`],
+  [{ kind: "transform-box", command: "resizebox", width: { amount: 24, unit: "pt" }, height: "!" }, String.raw`\resizebox{24pt}{!}{\textbf{Alpha}}`],
+  [{ kind: "transform-box", command: "resizebox", width: "!", height: { amount: 12, unit: "pt" }, totalHeight: true }, String.raw`\resizebox*{!}{12pt}{\textbf{Alpha}}`],
+  [{ kind: "transform-box", command: "reflectbox" }, String.raw`\reflectbox{\textbf{Alpha}}`],
+] as const;
 
 describe("adversarial TeX fuzz kernel vertical slice", () => {
   it("has no drift against the production TeX registries", () => {
@@ -48,6 +60,10 @@ describe("adversarial TeX fuzz kernel vertical slice", () => {
       observation: { fingerprint: differentialSupportFingerprint(caseData) },
     };
     expect(parseTexFuzzBundle(serializeTexFuzzBundle(bundle))).toEqual(bundle);
+    expect(caseData.generatorVersion).toBe(TEX_FUZZ_GENERATOR_VERSION);
+    const legacyCase = { ...caseData, generatorVersion: "shared-adversarial-v1" };
+    const legacyBundle = { ...bundle, case: legacyCase };
+    expect(replayTexFuzzCase(parseTexFuzzBundle(serializeTexFuzzBundle(legacyBundle)).case)).toEqual(legacyCase);
   });
 
   it("prints, attributes, replays, and shrinks valid tabular cells", () => {
@@ -71,6 +87,28 @@ describe("adversarial TeX fuzz kernel vertical slice", () => {
     expect(candidates.length).toBeGreaterThan(0);
     for (const candidate of candidates) {
       expect(candidate.source.length).toBeLessThan(caseData.source.length);
+      expect(checkTexFuzzHardInvariants(candidate)).toEqual([]);
+    }
+  });
+
+  it.each(transformCases)("prints, attributes, replays, and shrinks transform %j", (parameters, source) => {
+    const caseData = caseFromTexFuzzAst([{ ...parameters,
+      children: [{ kind: "font", command: "textbf", children: [{ kind: "text", value: "Alpha" }] }],
+    }]);
+    expect(caseData.source).toBe(source);
+    expect(caseData.features).toContain(`box.transform.${parameters.command}`);
+    const child = caseData.sourceMap.find((span) => span.path === "root/0/children/0/children/0");
+    expect(caseData.source.slice(child!.start, child!.end)).toBe("Alpha");
+    expect(classifyTexFuzzNativeSupport(caseData)).toEqual({ supported: true, reason: "fully-supported" });
+    expect(checkTexFuzzHardInvariants(caseData)).toEqual([]);
+    const bundle = { case: caseData, observation: { fingerprint: differentialSupportFingerprint(caseData) } };
+    expect(parseTexFuzzBundle(serializeTexFuzzBundle(bundle))).toEqual(bundle);
+    const candidates = texFuzzShrinkCandidates(caseData);
+    expect(candidates.length).toBeGreaterThan(0);
+    expect(candidates.some((candidate) => candidate.features.includes(`box.transform.${parameters.command}`))).toBe(true);
+    for (const candidate of candidates) {
+      expect(candidate.source.length).toBeLessThan(caseData.source.length);
+      expect(classifyTexFuzzNativeSupport(candidate).supported).toBe(true);
       expect(checkTexFuzzHardInvariants(candidate)).toEqual([]);
     }
   });
@@ -138,5 +176,22 @@ describe("adversarial TeX fuzz kernel vertical slice", () => {
     const source = caseFromTexFuzzAst([table!]).source;
     const result = runBatchedTexSupportOracle([{ id: "tabular", source }]);
     expect(result.observations.map((item) => [item.id, item.supported])).toEqual([["tabular", true]]);
+  }, 30_000);
+
+  it.runIf(runOracleIntegration)("compiles every generated graphicx transform with the default LuaLaTeX preamble", () => {
+    const transforms = new Map<string, TexFuzzNode>();
+    const visit = (nodes: readonly TexFuzzNode[]): void => {
+      for (const node of nodes) {
+        if (node.kind === "transform-box") transforms.set(node.command, node);
+        if ("children" in node) visit(node.children);
+        if (node.kind === "tabular") node.cells.forEach(visit);
+      }
+    };
+    for (let seed = 0; seed < 25; seed += 1) visit(generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 }).ast);
+    expect([...transforms.keys()].sort()).toEqual(["reflectbox", "resizebox", "rotatebox", "scalebox"]);
+    const cases = [...transforms.entries()].map(([id, node]) => ({ id, source: caseFromTexFuzzAst([node]).source }));
+    const result = runBatchedTexSupportOracle(cases);
+    expect(result.observations.map((item) => [item.id, item.supported])).toEqual(cases.map(({ id }) => [id, true]));
+    expect(result.observations.every((item) => Number.isFinite(item.widthSp) && Number.isFinite(item.heightSp) && Number.isFinite(item.depthSp))).toBe(true);
   }, 30_000);
 });

@@ -10,6 +10,7 @@ import { texOracleEnv } from "./tex-oracle.mjs";
 const execFileAsync = promisify(execFile);
 export const TEX_FUZZ_ORACLE_RUNNER_VERSION = "batched-support-v2";
 const DEFAULT_PREAMBLE = String.raw`\usepackage{xcolor}
+\usepackage{graphicx}
 \usepackage{amsmath,amssymb}`;
 
 /** @typedef {{ readonly id: string, readonly token: string, readonly source: string }} NormalizedOracleCase */

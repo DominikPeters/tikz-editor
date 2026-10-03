@@ -38,6 +38,7 @@ const ENVIRONMENTS = [
   "quote", "quotation", "center", "flushleft", "flushright", "itemize", "enumerate", "description",
 ] as const;
 const VERTICAL_GLUE_COMMANDS = ["smallskip", "medskip", "bigskip", "vfill", "vspace", "vskip"] as const;
+const TRANSFORM_BOX_COMMANDS = ["rotatebox", "scalebox", "resizebox", "reflectbox"] as const;
 const MATH_NODE_KINDS = ["atom", "group", "sequence", "fraction", "radical", "script", "accent", "alphabet", "line", "left-right", "operator", "stackrel", "xarrow", "matrix", "text"] as const;
 const MATH_FRACTION_COMMANDS = ["frac", "dfrac", "tfrac", "binom"] as const;
 const MATH_ACCENT_COMMANDS = ["hat", "bar", "tilde", "vec", "dot", "ddot", "widehat", "widetilde"] as const;
@@ -113,6 +114,10 @@ const GENERATED_FEATURE_DEFINITIONS: readonly (readonly [TexFuzzFeatureId, TexFu
   ...SIMPLE_TEX_DIMENSION_BOX_COMMAND_NAMES.map((command) => {
     const id = `box.dimension.${command}` as const;
     return [id, definition(id, ["inline-kind:dimension-box", `dimension-box-command:${command}`], [`dimension-box:${command}`], "text", "box")] as const;
+  }),
+  ...TRANSFORM_BOX_COMMANDS.map((command) => {
+    const id = `box.transform.${command}` as const;
+    return [id, definition(id, ["inline-kind:transform-box"], [`transform-box:${command}`], "text", "box")] as const;
   }),
   ...SIMPLE_TEX_DISPLAY_MATH_DELIMITERS.map((delimiter) => {
     const id = `math.display.${delimiter}` as const;

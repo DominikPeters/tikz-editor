@@ -116,6 +116,7 @@ function semanticProseLeaves(caseData: TexFuzzCase): readonly SemanticProseLeaf[
         case "color":
         case "box":
         case "raisebox":
+        case "transform-box":
         case "document-box":
         case "environment":
           visit(node.children, `${path}/children`, false);
@@ -320,6 +321,7 @@ function visibleContentObligations(caseData: TexFuzzCase): readonly ContentOblig
         case "color":
         case "box":
         case "raisebox":
+        case "transform-box":
         case "document-box":
         case "environment":
           visit(node.children, `${path}/children`, false);

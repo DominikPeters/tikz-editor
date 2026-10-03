@@ -58,6 +58,7 @@ describe("TeX fuzz semantic coverage", () => {
     expect(accounting.generated).toContain("font-command:textbf");
     expect(accounting.generated).toContain("font-command:texttt");
     expect(accounting.generated).toContain("inline-kind:tabular");
+    expect(accounting.generated).toContain("inline-kind:transform-box");
     expect(accounting.generated).toContain("control-kind:environment-boundary");
     expect(accounting.generated).toContain("display-delimiter:flalign");
     expect(accounting.generated).toContain("display-delimiter:flalign-star");
@@ -91,6 +92,23 @@ describe("TeX fuzz semantic coverage", () => {
     expect(coverage.nodeKindCounts.tabular).toBeGreaterThan(0);
     expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
     expect(coverage.featureCounts["box.tabular"]).toBe(tables.length);
+  });
+
+  it("generates all bounded graphicx transforms and records their content", () => {
+    const cases = Array.from({ length: 25 }, (_, seed) =>
+      generateTexFuzzCase(seed, { profile: "aggressive", depth: 5, size: 8 })
+    );
+    const transforms = cases.filter((caseData) => caseData.features.some((feature) => feature.startsWith("box.transform.")));
+    const coverage = measureTexFuzzCoverage(transforms);
+    expect(coverage.nodeKindCounts["transform-box"]).toBeGreaterThan(0);
+    expect(coverage.nodeKindCounts.text).toBeGreaterThan(0);
+    for (const command of ["rotatebox", "scalebox", "resizebox", "reflectbox"] as const) {
+      const feature = `box.transform.${command}` as const;
+      const reached = transforms.filter((caseData) => caseData.features.includes(feature));
+      expect(reached.length, command).toBeGreaterThan(0);
+      expect(reached.every((caseData) => caseData.source.includes(`\\${command}`))).toBe(true);
+      expect(coverage.featureCounts[feature]).toBe(reached.length);
+    }
   });
 
   it("counts feature combinations, generic node depth, boundaries, and Unicode", () => {

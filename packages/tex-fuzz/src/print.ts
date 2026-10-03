@@ -19,6 +19,11 @@ function printDimension(dimension: TexFuzzDimension): string {
   return `${dimension.amount}${dimension.unit}`;
 }
 
+function printTransformFactor(value: number): string {
+  if (!Number.isFinite(value)) throw new RangeError(`Cannot print non-finite TeX transform factor ${value}.`);
+  return String(value);
+}
+
 function displayMathDelimiters(delimiter: TexFuzzDisplayMathDelimiter): readonly [string, string] {
   if (delimiter === "bracket") return ["\\[", "\\]"];
   if (delimiter === "double-dollar") return ["$$", "$$"];
@@ -238,6 +243,21 @@ function printNodes(
       }
       case "dimension-box":
         output.source += `\\${node.command}{`;
+        printNested(node.children);
+        output.source += "}";
+        break;
+      case "transform-box":
+        output.source += `\\${node.command}`;
+        if (node.command === "rotatebox") {
+          output.source += `{${printTransformFactor(node.angle)}}`;
+        } else if (node.command === "scalebox") {
+          output.source += `{${printTransformFactor(node.scale)}}`;
+          if (node.verticalScale !== undefined) output.source += `[${printTransformFactor(node.verticalScale)}]`;
+        } else if (node.command === "resizebox") {
+          if (node.width === "!" && node.height === "!") throw new Error("Cannot print a resizebox without an explicit dimension.");
+          output.source += `${node.totalHeight ? "*" : ""}{${node.width === "!" ? "!" : printDimension(node.width)}}{${node.height === "!" ? "!" : printDimension(node.height)}}`;
+        }
+        output.source += "{";
         printNested(node.children);
         output.source += "}";
         break;

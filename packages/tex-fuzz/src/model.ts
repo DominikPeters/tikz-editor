@@ -1,7 +1,7 @@
 import type { SimpleTexDisplayMathDelimiter } from "@tikz-editor/core/text/tex/index.js";
 
 export const TEX_FUZZ_SCHEMA_VERSION = 1 as const;
-export const TEX_FUZZ_GENERATOR_VERSION = "shared-adversarial-v1";
+export const TEX_FUZZ_GENERATOR_VERSION = "shared-adversarial-v2";
 
 export type TexFuzzFeatureId =
   | "text.literal"
@@ -29,6 +29,7 @@ export type TexFuzzFeatureId =
   | "text.line-break"
   | `box.text.${TexFuzzTextBoxCommand}`
   | `box.dimension.${TexFuzzDimensionBoxCommand}`
+  | `box.transform.${TexFuzzTransformBoxCommand}`
   | "box.raisebox"
   | "box.rule"
   | "box.tabular"
@@ -110,6 +111,7 @@ export type TexFuzzTextBoxCommand =
 export type TexFuzzNaturalTextBoxCommand = "underline" | "mbox" | "fbox" | "llap" | "rlap";
 
 export type TexFuzzDimensionBoxCommand = "hphantom" | "vphantom" | "phantom" | "smash";
+export type TexFuzzTransformBoxCommand = "rotatebox" | "scalebox" | "resizebox" | "reflectbox";
 
 export type TexFuzzDisplayMathDelimiter = SimpleTexDisplayMathDelimiter;
 
@@ -241,6 +243,32 @@ export type TexFuzzNode =
       readonly lift: TexFuzzDimension;
       readonly height?: TexFuzzDimension;
       readonly depth?: TexFuzzDimension;
+      readonly children: readonly TexFuzzNode[];
+    }
+  | {
+      readonly kind: "transform-box";
+      readonly command: "rotatebox";
+      readonly angle: number;
+      readonly children: readonly TexFuzzNode[];
+    }
+  | {
+      readonly kind: "transform-box";
+      readonly command: "scalebox";
+      readonly scale: number;
+      readonly verticalScale?: number;
+      readonly children: readonly TexFuzzNode[];
+    }
+  | {
+      readonly kind: "transform-box";
+      readonly command: "resizebox";
+      readonly width: TexFuzzDimension | "!";
+      readonly height: TexFuzzDimension | "!";
+      readonly totalHeight?: boolean;
+      readonly children: readonly TexFuzzNode[];
+    }
+  | {
+      readonly kind: "transform-box";
+      readonly command: "reflectbox";
       readonly children: readonly TexFuzzNode[];
     }
   | {

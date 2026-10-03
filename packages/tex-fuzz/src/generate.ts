@@ -11,6 +11,7 @@ import {
   type TexFuzzFontDeclaration,
   type TexFuzzNode,
   type TexFuzzSizeDeclaration,
+  type TexFuzzTransformBoxCommand,
 } from "./model.js";
 import { generateTexFuzzMathNode, texFuzzMathFeatureIds } from "./generate-math.js";
 import { printTexFuzzAst } from "./print.js";
@@ -27,6 +28,7 @@ const FONT_COMMANDS = ["textnormal", "textit", "textbf", "textmd", "textsl", "te
 const FONT_DECLARATIONS = ["normalfont", "bfseries", "mdseries", "rmfamily", "sffamily", "ttfamily", "itshape", "slshape", "upshape", "scshape", "it", "bf", "rm", "sf", "sl", "sc", "tt", "em"] as const satisfies readonly TexFuzzFontDeclaration[];
 const SIZE_DECLARATIONS = ["tiny", "scriptsize", "footnotesize", "small", "normalsize", "large", "Large", "LARGE", "huge", "Huge"] as const satisfies readonly TexFuzzSizeDeclaration[];
 const DIMENSION_BOX_COMMANDS = ["hphantom", "vphantom", "phantom", "smash"] as const satisfies readonly TexFuzzDimensionBoxCommand[];
+const TRANSFORM_BOX_COMMANDS = ["rotatebox", "scalebox", "resizebox", "reflectbox"] as const satisfies readonly TexFuzzTransformBoxCommand[];
 const COLORS = ["red", "blue", "teal"] as const;
 const MAX_DESCENDANTS_PER_ROOT = 12;
 
@@ -71,6 +73,34 @@ function weightedFeature<T extends string>(
   return pickWeightedTexFuzzValue(random, path, choices
     .map(({ value, feature }) => ({ value, weight: featureWeight(context, feature) }))
     .filter(({ weight }) => weight > 0));
+}
+
+function transformBoxNode(random: TexFuzzRandom, path: string, context: GenerationContext): TexFuzzNode {
+  const command = weightedFeature(random, `${path}/command`, context,
+    TRANSFORM_BOX_COMMANDS.map((value) => ({ value, feature: `box.transform.${value}` as const })));
+  // Keep the first transform family nonsingular and small. Its body still
+  // exercises transformed font runs and can be nested by surrounding boxes.
+  const text = { kind: "text", value: random.pick(`${path}/text`, ["Alpha", "Beta", "Depth"] as const) } satisfies TexFuzzNode;
+  const children: readonly TexFuzzNode[] = [random.boolean(`${path}/styled`)
+    ? { kind: "font", command: random.pick(`${path}/font`, ["textbf", "textit"] as const), children: [text] }
+    : text];
+  switch (command) {
+    case "rotatebox": return { kind: "transform-box", command,
+      angle: random.pick(`${path}/angle`, [-45, -15, 0, 30, 90, 180] as const), children };
+    case "scalebox": return { kind: "transform-box", command,
+      scale: random.pick(`${path}/scale`, [0.5, 0.75, 1.25, 1.5, 2] as const),
+      verticalScale: random.boolean(`${path}/vertical-scale-present`)
+        ? random.pick(`${path}/vertical-scale`, [0.75, 1, 1.5] as const) : undefined,
+      children };
+    case "resizebox": {
+      const mode = random.pick(`${path}/resize-mode`, ["width", "height", "both"] as const);
+      return { kind: "transform-box", command,
+        width: mode === "height" ? "!" : { amount: random.pick(`${path}/width`, [12, 24, 40] as const), unit: "pt" },
+        height: mode === "width" ? "!" : { amount: random.pick(`${path}/height`, [6, 12, 18] as const), unit: "pt" },
+        totalHeight: random.boolean(`${path}/total-height`), children };
+    }
+    case "reflectbox": return { kind: "transform-box", command, children };
+  }
 }
 
 function enterNode(context: GenerationContext): boolean {
@@ -158,6 +188,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
     { value: "colorbox", weight: featureWeight(context, "box.text.colorbox") },
     { value: "fcolorbox", weight: featureWeight(context, "box.text.fcolorbox") },
     { value: "dimension-box", weight: featureWeightSum(context, DIMENSION_BOX_COMMANDS.map((command) => `box.dimension.${command}` as const)) },
+    { value: "transform-box", weight: featureWeightSum(context, TRANSFORM_BOX_COMMANDS.map((command) => `box.transform.${command}` as const)) },
     { value: "raisebox", weight: featureWeight(context, "box.raisebox") },
     { value: "rule", weight: featureWeight(context, "box.rule") },
     { value: "tabular", weight: featureWeight(context, "box.tabular") },
@@ -230,6 +261,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
       const command = weightedFeature(random, `${path}/dimension-box`, context, DIMENSION_BOX_COMMANDS.map((value) => ({ value, feature: `box.dimension.${value}` as const })));
       return { kind: "dimension-box", command, children: inlineChildren(random, `${path}/dimension-box-body`, depth, context) };
     }
+    case "transform-box": return transformBoxNode(random, `${path}/transform-box`, context);
     case "raisebox":
       return {
         kind: "raisebox",
@@ -369,6 +401,7 @@ function nodeFeatures(node: TexFuzzNode, features: Set<TexFuzzFeatureId>): void 
       if (node.command === "fbox") features.add("box.fbox");
       break;
     case "dimension-box": features.add(`box.dimension.${node.command}`); break;
+    case "transform-box": features.add(`box.transform.${node.command}`); break;
     case "raisebox": features.add("box.raisebox"); break;
     case "rule": features.add("box.rule"); break;
     case "tabular":

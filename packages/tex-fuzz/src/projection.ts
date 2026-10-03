@@ -26,6 +26,7 @@ function visibleWords(node: TexFuzzNode): string[] {
     case "color":
     case "box":
     case "dimension-box":
+    case "transform-box":
     case "raisebox":
     case "environment":
     case "document-box": return node.children.flatMap(visibleWords);
