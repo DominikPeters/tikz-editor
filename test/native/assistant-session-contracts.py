@@ -23,6 +23,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, sync::{Arc, Mutex, mpsc}};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+#[derive(Clone, Default)] struct ProcessHandle { pending: Arc<()> }
 use base64::Engine;
 use serde_json::{Value, json};
 const ASSISTANT_EVENT_NAME: &str = "assistant";
@@ -39,7 +41,7 @@ impl AppHandle {
 struct AssistantStateInner {
     app: AppHandle, documents: Mutex<HashMap<String, DocumentAssistantSession>>,
     session_generations: Mutex<HashMap<String, u64>>, initializing: Mutex<()>,
-    requests: Mutex<Vec<(String, Value)>>, errors: Mutex<Vec<Value>>, approval_policy: Mutex<String>,
+    next_server_request_id: AtomicU64, requests: Mutex<Vec<(String, Value)>>, errors: Mutex<Vec<Value>>, approval_policy: Mutex<String>,
     pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
 }
 #[derive(Clone)] struct AssistantState { inner: Arc<AssistantStateInner> }
@@ -47,7 +49,7 @@ impl AssistantState {
     fn fixture(root: &Path) -> Self { Self { inner: Arc::new(AssistantStateInner {
         app: AppHandle { root: root.into(), events: Arc::new(Mutex::new(Vec::new())) },
         documents: Mutex::new(HashMap::new()), session_generations: Mutex::new(HashMap::new()), initializing: Mutex::new(()),
-        requests: Mutex::new(Vec::new()), errors: Mutex::new(Vec::new()), approval_policy: Mutex::new("never".into()), pause: Mutex::new(None),
+        next_server_request_id: AtomicU64::new(1), requests: Mutex::new(Vec::new()), errors: Mutex::new(Vec::new()), approval_policy: Mutex::new("never".into()), pause: Mutex::new(None),
     }) } }
     fn ensure_process(&self) -> Result<(), String> { Ok(()) }
     fn request(&self, method: &str, params: Value) -> Result<Value, String> {
@@ -57,15 +59,16 @@ impl AssistantState {
         }
         Ok(if method == "turn/start" { json!({"turn": {"id": format!("turn-{id}")}}) } else { json!({"thread": {"id": format!("thread-{id}")}}) })
     }
-    fn send_server_request_error(&self, id: Value, _: i64, _: &str) -> Result<(), String> { self.inner.errors.lock().unwrap().push(id); Ok(()) }
-    fn send_server_request_response(&self, _: Value, _: Value) -> Result<(), String> { Ok(()) }
+    fn is_current_process(&self, _: &ProcessHandle) -> bool { true }
+    fn send_server_request_error(&self, _: &ProcessHandle, id: Value, _: i64, _: &str) -> Result<(), String> { self.inner.errors.lock().unwrap().push(id); Ok(()) }
+    fn send_server_request_response(&self, _: &ProcessHandle, _: Value, _: Value) -> Result<(), String> { Ok(()) }
 '''
 rust += between("    pub fn reset_document_thread(", "    pub fn warm_up(")
 rust += between("    pub fn sync_source(", "    fn send_server_request_response(")
 rust += between("    fn poll_figure_files(", "    fn ensure_process(")
 rust += between("    fn handle_server_request(", "fn normalize_approval_policy_value(")
 rust += between("#[derive(Clone)]\nenum PendingServerRequestKind", "#[derive(Serialize)]\npub struct AssistantThreadSummary")
-rust += between("fn normalize_approval_policy_value(", "fn spawn_command_event_reader(")
+rust += between("fn normalize_approval_policy_value(", "fn spawn_server_message_worker(")
 rust += between("fn summary_from_session(", "#[cfg(test)]")
 rust += r'''
 fn ensure(state: &AssistantState, generation: u64) -> AssistantThreadSummary {
@@ -85,15 +88,15 @@ fn main() {
     { let requests = state.inner.requests.lock().unwrap();
       assert!(requests[1].1["input"][0]["text"].as_str().unwrap().contains("WYSIWYG TikZ editor"));
       assert!(!requests[2].1["input"][0]["text"].as_str().unwrap().contains("WYSIWYG TikZ editor")); }
-    state.handle_server_request(json!({"id":"pending", "method":"item/tool/call", "params":{"threadId":first.thread_id,"tool":"preview"}}));
-    state.handle_notification(json!({"method":"item/started", "params":{"threadId":first.thread_id,"item":{"id":"old-item"}}}));
+    state.handle_server_request(json!({"id":"pending", "method":"item/tool/call", "params":{"threadId":first.thread_id,"tool":"preview"}}), &ProcessHandle::default());
+    state.handle_notification(json!({"method":"item/started", "params":{"threadId":first.thread_id,"item":{"id":"old-item"}}}), &ProcessHandle::default());
     state.reset_document_thread("doc".into(), 1).unwrap();
     assert!(state.load_thread_state("doc".into(), 1).unwrap().is_none());
     assert_eq!(*state.inner.errors.lock().unwrap(), vec![json!("pending")]);
     let second = ensure(&state, 1);
     state.reset_document_thread("doc".into(), 1).unwrap(); // Delayed duplicate reset cannot remove the new session.
     assert_eq!(ensure(&state, 1).thread_id, second.thread_id);
-    assert!(!state.register_server_request("doc",0,"late-request".into(),PendingServerRequest { id:json!("late-request"),kind:PendingServerRequestKind::DynamicToolCall }));
+    assert!(!state.register_server_request("doc",0,"late-request".into(),PendingServerRequest { id:json!("late-request"),kind:PendingServerRequestKind::DynamicToolCall,process:ProcessHandle::default() }));
     assert!(state.inner.errors.lock().unwrap().contains(&json!("late-request")));
     assert_ne!(first.thread_id, second.thread_id);
     assert_ne!(first.figure_path, second.figure_path);
@@ -106,7 +109,7 @@ fn main() {
     assert!(!Path::new(&second.preview_path).exists());
     let before = state.inner.app.events.lock().unwrap().len();
     for method in ["item/started", "turn/started", "error"] {
-      state.handle_notification(json!({"method":method,"params":{"threadId":first.thread_id,"item":{"id":"late"},"turn":{"id":"late-turn"}}}));
+      state.handle_notification(json!({"method":method,"params":{"threadId":first.thread_id,"item":{"id":"late"},"turn":{"id":"late-turn"}}}), &ProcessHandle::default());
     }
     state.emit_event(AssistantEventPayload { kind:"source-updated".into(),data:json!({"documentId":"doc","sessionGeneration":0,"source":"retired"}) }).unwrap();
     fs::write(&first.figure_path, "old thread write").unwrap();

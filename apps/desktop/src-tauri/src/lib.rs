@@ -2740,19 +2740,33 @@ fn desktop_show_context_menu(
     window.popup_menu(&menu).map_err(|error| error.to_string())
 }
 
-#[tauri::command]
-#[allow(non_snake_case)]
-fn desktop_assistant_reset_document_thread(
-    documentId: String,
-    sessionGeneration: u64,
-    assistant: tauri::State<'_, AssistantState>,
-) -> Result<(), String> {
-    assistant.reset_document_thread(documentId, sessionGeneration)
+// App-server requests and initialization use blocking channels and subprocess IO.
+// Keep those waits on the blocking pool, including when multiple IPC calls overlap.
+async fn run_assistant_command<T: Send + 'static>(
+    assistant: AssistantState,
+    command: impl FnOnce(AssistantState) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(move || command(assistant))
+        .await
+        .map_err(|error| format!("Assistant command worker failed: {error}"))?
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_ensure_document_thread(
+async fn desktop_assistant_reset_document_thread(
+    documentId: String,
+    sessionGeneration: u64,
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.reset_document_thread(documentId, sessionGeneration)
+    })
+    .await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+async fn desktop_assistant_ensure_document_thread(
     documentId: String,
     sessionGeneration: Option<u64>,
     source: String,
@@ -2762,20 +2776,23 @@ fn desktop_assistant_ensure_document_thread(
     previewPath: Option<String>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<AssistantThreadSummary, String> {
-    assistant.ensure_document_thread(
-        documentId,
-        sessionGeneration.unwrap_or(0),
-        source,
-        threadId,
-        workspacePath,
-        figurePath,
-        previewPath,
-    )
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.ensure_document_thread(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            source,
+            threadId,
+            workspacePath,
+            figurePath,
+            previewPath,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_start_turn(
+async fn desktop_assistant_start_turn(
     documentId: String,
     sessionGeneration: Option<u64>,
     prompt: String,
@@ -2791,162 +2808,211 @@ fn desktop_assistant_start_turn(
     diagnosticsText: Option<String>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    let turn_id = assistant.start_turn(
-        documentId,
-        sessionGeneration.unwrap_or(0),
-        prompt,
-        source,
-        pngBase64,
-        pastedImages,
-        threadId,
-        workspacePath,
-        figurePath,
-        previewPath,
-        model,
-        figureContext,
-        diagnosticsText,
-    )?;
-    Ok(serde_json::json!({ "turnId": turn_id }))
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        let turn_id = assistant.start_turn(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            prompt,
+            source,
+            pngBase64,
+            pastedImages,
+            threadId,
+            workspacePath,
+            figurePath,
+            previewPath,
+            model,
+            figureContext,
+            diagnosticsText,
+        )?;
+        Ok(serde_json::json!({ "turnId": turn_id }))
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_interrupt_turn(
+async fn desktop_assistant_interrupt_turn(
     documentId: String,
     sessionGeneration: Option<u64>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.interrupt_turn(documentId, sessionGeneration.unwrap_or(0))
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.interrupt_turn(documentId, sessionGeneration.unwrap_or(0))
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_steer_turn(
+async fn desktop_assistant_steer_turn(
     documentId: String,
     sessionGeneration: Option<u64>,
     prompt: String,
     pastedImages: Option<Vec<assistant::AssistantPastedImageInput>>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    let turn_id = assistant.steer_turn(
-        documentId,
-        sessionGeneration.unwrap_or(0),
-        prompt,
-        pastedImages,
-    )?;
-    Ok(serde_json::json!({ "turnId": turn_id }))
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        let turn_id = assistant.steer_turn(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            prompt,
+            pastedImages,
+        )?;
+        Ok(serde_json::json!({ "turnId": turn_id }))
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_sync_source(
+async fn desktop_assistant_sync_source(
     documentId: String,
     sessionGeneration: Option<u64>,
     source: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.sync_source(documentId, sessionGeneration.unwrap_or(0), source)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.sync_source(documentId, sessionGeneration.unwrap_or(0), source)
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_respond_to_approval(
+async fn desktop_assistant_respond_to_approval(
     documentId: String,
     sessionGeneration: Option<u64>,
     requestId: String,
     decision: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.respond_to_approval(
-        documentId,
-        sessionGeneration.unwrap_or(0),
-        requestId,
-        decision,
-    )
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.respond_to_approval(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            requestId,
+            decision,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_respond_to_dynamic_tool_call(
+async fn desktop_assistant_respond_to_dynamic_tool_call(
     documentId: String,
     sessionGeneration: Option<u64>,
     requestId: String,
     result: Value,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.respond_to_dynamic_tool_call(
-        documentId,
-        sessionGeneration.unwrap_or(0),
-        requestId,
-        result,
-    )
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.respond_to_dynamic_tool_call(
+            documentId,
+            sessionGeneration.unwrap_or(0),
+            requestId,
+            result,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_load_thread_state(
+async fn desktop_assistant_load_thread_state(
     documentId: String,
     sessionGeneration: Option<u64>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<Option<AssistantThreadStatePayload>, String> {
-    assistant.load_thread_state(documentId, sessionGeneration.unwrap_or(0))
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.load_thread_state(documentId, sessionGeneration.unwrap_or(0))
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_warm_up(assistant: tauri::State<'_, AssistantState>) -> Result<(), String> {
-    assistant.warm_up()
+async fn desktop_assistant_warm_up(
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.warm_up()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_list_models(
+async fn desktop_assistant_list_models(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<Vec<AssistantModelOption>, String> {
-    assistant.list_models()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.list_models()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_read_account_snapshot(
+async fn desktop_assistant_read_account_snapshot(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<AssistantAccountSnapshot, String> {
-    assistant.read_account_snapshot()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.read_account_snapshot()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_read_account(
+async fn desktop_assistant_read_account(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    assistant.read_account()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.read_account()
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_read_rate_limits(
+async fn desktop_assistant_read_rate_limits(
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    assistant.read_rate_limits()
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.read_rate_limits()
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_login_start(
+async fn desktop_assistant_login_start(
     loginType: String,
     apiKey: Option<String>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    assistant.login_start(&loginType, apiKey.as_deref())
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.login_start(&loginType, apiKey.as_deref())
+    })
+    .await
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-fn desktop_assistant_login_cancel(
+async fn desktop_assistant_login_cancel(
     loginId: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.login_cancel(&loginId)
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.login_cancel(&loginId)
+    })
+    .await
 }
 
 #[tauri::command]
-fn desktop_assistant_logout(assistant: tauri::State<'_, AssistantState>) -> Result<(), String> {
-    assistant.logout()
+async fn desktop_assistant_logout(
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    run_assistant_command(assistant.inner().clone(), move |assistant| {
+        assistant.logout()
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

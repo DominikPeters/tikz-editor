@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -236,6 +236,8 @@ pub struct AssistantState {
 struct AssistantStateInner {
     app: AppHandle,
     process: Mutex<Option<ProcessHandle>>,
+    process_initializing: Mutex<()>,
+    next_server_request_id: AtomicU64,
     documents: Mutex<HashMap<String, DocumentAssistantSession>>,
     session_generations: Mutex<HashMap<String, u64>>,
     initializing: Mutex<()>,
@@ -243,10 +245,26 @@ struct AssistantStateInner {
     watcher_started: Mutex<bool>,
 }
 
+#[derive(Clone)]
 struct ProcessHandle {
-    child: Arc<Mutex<CommandChild>>,
-    pending: Arc<Mutex<HashMap<String, Sender<Value>>>>,
+    child: Arc<Mutex<Option<CommandChild>>>,
+    pending: PendingRequests,
     next_request_id: Arc<AtomicU64>,
+}
+
+type PendingRequests = Arc<Mutex<HashMap<String, Sender<Result<Value, String>>>>>;
+
+struct PendingRequest {
+    key: String,
+    pending: PendingRequests,
+}
+
+impl Drop for PendingRequest {
+    fn drop(&mut self) {
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.remove(&self.key);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -261,6 +279,7 @@ enum PendingServerRequestKind {
 struct PendingServerRequest {
     id: Value,
     kind: PendingServerRequestKind,
+    process: ProcessHandle,
 }
 
 #[derive(Clone)]
@@ -340,6 +359,8 @@ impl AssistantState {
             inner: Arc::new(AssistantStateInner {
                 app,
                 process: Mutex::new(None),
+                process_initializing: Mutex::new(()),
+                next_server_request_id: AtomicU64::new(1),
                 documents: Mutex::new(HashMap::new()),
                 session_generations: Mutex::new(HashMap::new()),
                 initializing: Mutex::new(()),
@@ -411,15 +432,21 @@ impl AssistantState {
         }
     }
 
-    fn ensure_process(&self) -> Result<(), String> {
-        if self
+    fn ensure_process(&self) -> Result<ProcessHandle, String> {
+        let _initializing = self
+            .inner
+            .process_initializing
+            .lock()
+            .map_err(|_| "process initialization unavailable".to_string())?;
+        if let Some(process) = self
             .inner
             .process
             .lock()
             .map_err(|_| "process lock unavailable".to_string())?
-            .is_some()
+            .as_ref()
+            .cloned()
         {
-            return Ok(());
+            return Ok(process);
         }
 
         let launch = resolve_codex_launch(&self.inner.app).ok_or_else(|| {
@@ -450,14 +477,12 @@ impl AssistantState {
             .spawn()
             .map_err(|error| format!("Failed to start `codex app-server`: {error}"))?;
 
-        let pending = Arc::new(Mutex::new(HashMap::<String, Sender<Value>>::new()));
+        let pending: PendingRequests = Arc::new(Mutex::new(HashMap::new()));
         let next_request_id = Arc::new(AtomicU64::new(1));
         let state = self.clone();
-        spawn_command_event_reader(state.clone(), receiver, pending.clone());
-
         let process = ProcessHandle {
-            child: Arc::new(Mutex::new(child)),
-            pending,
+            child: Arc::new(Mutex::new(Some(child))),
+            pending: pending.clone(),
             next_request_id,
         };
         {
@@ -466,33 +491,64 @@ impl AssistantState {
                 .process
                 .lock()
                 .map_err(|_| "process lock unavailable".to_string())?;
-            *process_slot = Some(process);
+            *process_slot = Some(process.clone());
         }
+        // Publish before reading termination events so a fast process death
+        // cannot leave a dead handle installed after cleanup has already run.
+        spawn_command_event_reader(state, receiver, process.clone());
 
         let app_version = self.inner.app.package_info().version.to_string();
-        let initialize_result = self.request(
-            "initialize",
-            json!({
-              "clientInfo": {
-                "name": "tikz_editor_desktop",
-                "title": "TikZ Editor Desktop",
-                "version": app_version
-              },
-              "capabilities": {
-                "experimentalApi": true
-              }
-            }),
-        )?;
-        if initialize_result.get("error").is_some() {
-            return Err("Failed to initialize Codex App Server.".to_string());
+        let initialized = self
+            .request_in_process(
+                &process,
+                "initialize",
+                json!({
+                  "clientInfo": {
+                    "name": "tikz_editor_desktop",
+                    "title": "TikZ Editor Desktop",
+                    "version": app_version
+                  },
+                  "capabilities": {
+                    "experimentalApi": true
+                  }
+                }),
+                Duration::from_secs(120),
+            )
+            .and_then(|result| {
+                if result.get("error").is_some() {
+                    return Err("Failed to initialize Codex App Server.".to_string());
+                }
+                Self::write_json_line_to_child(
+                    &process.child,
+                    &json!({"method": "initialized", "params": {}}),
+                )
+            });
+        if let Err(error) = initialized {
+            self.end_process(&pending, &error);
+            return Err(error);
         }
-        self.notify("initialized", json!({}))?;
-        self.configure_approval_policy();
-        Ok(())
+        self.configure_approval_policy(&process);
+        if self
+            .inner
+            .process
+            .lock()
+            .map_err(|_| "process lock unavailable".to_string())?
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(&current.pending, &pending))
+        {
+            Ok(process)
+        } else {
+            Err("Codex app-server stopped during initialization".to_string())
+        }
     }
 
-    fn configure_approval_policy(&self) {
-        if let Ok(result) = self.request("configRequirements/read", json!({})) {
+    fn configure_approval_policy(&self, process: &ProcessHandle) {
+        if let Ok(result) = self.request_in_process(
+            process,
+            "configRequirements/read",
+            json!({}),
+            Duration::from_secs(120),
+        ) {
             let allowed = result
                 .get("requirements")
                 .and_then(|value| value.get("allowedApprovalPolicies"))
@@ -522,40 +578,50 @@ impl AssistantState {
     }
 
     fn request(&self, method: &str, params: Value) -> Result<Value, String> {
-        self.ensure_process()?;
-        let (id, pending) = {
-            let process_guard = self
-                .inner
-                .process
-                .lock()
-                .map_err(|_| "process lock unavailable".to_string())?;
-            let process = process_guard
-                .as_ref()
-                .ok_or_else(|| "Codex app-server is unavailable".to_string())?;
-            (
-                process.next_request_id.fetch_add(1, Ordering::Relaxed),
-                process.pending.clone(),
-            )
-        };
+        let process = self.ensure_process()?;
+        self.request_in_process(&process, method, params, Duration::from_secs(120))
+    }
+
+    fn request_in_process(
+        &self,
+        process: &ProcessHandle,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, String> {
+        let (id, pending, child) = (
+            process.next_request_id.fetch_add(1, Ordering::Relaxed),
+            process.pending.clone(),
+            process.child.clone(),
+        );
 
         let (sender, receiver) = mpsc::channel();
         pending
             .lock()
             .map_err(|_| "pending lock unavailable".to_string())?
             .insert(id.to_string(), sender);
+        let _pending_request = PendingRequest {
+            key: id.to_string(),
+            pending,
+        };
 
         let payload = json!({
           "id": id,
           "method": method,
           "params": params
         });
-        self.write_json_line(&payload)?;
+        Self::write_json_line_to_child(&child, &payload)?;
 
         let response = receiver
-            .recv_timeout(Duration::from_secs(120))
-            .map_err(|_| {
-                format!("Timed out waiting for `{method}` response from Codex App Server")
-            })?;
+            .recv_timeout(timeout)
+            .map_err(|error| match error {
+                RecvTimeoutError::Timeout => {
+                    format!("Timed out waiting for `{method}` response from Codex App Server")
+                }
+                RecvTimeoutError::Disconnected => {
+                    "Codex app-server disconnected before responding".to_string()
+                }
+            })??;
 
         if let Some(error) = response.get("error") {
             return Err(error
@@ -568,13 +634,30 @@ impl AssistantState {
         Ok(response.get("result").cloned().unwrap_or(Value::Null))
     }
 
-    fn notify(&self, method: &str, params: Value) -> Result<(), String> {
-        self.ensure_process()?;
-        let payload = json!({
-          "method": method,
-          "params": params
+    fn end_process(&self, pending: &PendingRequests, reason: &str) {
+        // An old reader must never retire a replacement process.
+        let retired = self.inner.process.lock().ok().and_then(|mut slot| {
+            if slot
+                .as_ref()
+                .is_some_and(|process| Arc::ptr_eq(&process.pending, pending))
+            {
+                slot.take()
+            } else {
+                None
+            }
         });
-        self.write_json_line(&payload)
+        if let Ok(mut requests) = pending.lock() {
+            for sender in requests.drain().map(|(_, sender)| sender) {
+                let _ = sender.send(Err(reason.to_string()));
+            }
+        }
+        if let Some(process) = retired {
+            if let Ok(mut child) = process.child.lock() {
+                if let Some(child) = child.take() {
+                    let _ = child.kill();
+                }
+            }
+        }
     }
 
     // A null thread identity is a retry/resume input, never a lifecycle reset.
@@ -615,6 +698,7 @@ impl AssistantState {
         if let Some(session) = retired {
             for request in session.pending_server_requests.into_values() {
                 let _ = self.send_server_request_error(
+                    &request.process,
                     request.id,
                     -32602,
                     "Assistant chat was replaced.",
@@ -933,7 +1017,7 @@ impl AssistantState {
     }
 
     pub fn warm_up(&self) -> Result<(), String> {
-        self.ensure_process()
+        self.ensure_process().map(|_| ())
     }
 
     pub fn list_models(&self) -> Result<Vec<AssistantModelOption>, String> {
@@ -1129,16 +1213,22 @@ impl AssistantState {
             .get(&request_id)
             .cloned()
             .ok_or_else(|| "Unknown approval request".to_string())?;
+        drop(docs);
 
         match pending_request.kind {
             PendingServerRequestKind::CommandApproval
             | PendingServerRequestKind::FileChangeApproval => self.send_server_request_response(
+                &pending_request.process,
                 pending_request.id,
                 json!({ "decision": normalize_approval_decision_value(&decision) }),
             ),
             PendingServerRequestKind::ToolRequestUserInput => {
                 // Until a dedicated question UI exists, return empty answers to unblock the turn.
-                self.send_server_request_response(pending_request.id, json!({ "answers": {} }))
+                self.send_server_request_response(
+                    &pending_request.process,
+                    pending_request.id,
+                    json!({ "answers": {} }),
+                )
             }
             PendingServerRequestKind::DynamicToolCall => {
                 Err("Request is not an approval request".to_string())
@@ -1167,16 +1257,21 @@ impl AssistantState {
             .get(&request_id)
             .cloned()
             .ok_or_else(|| "Unknown dynamic tool request".to_string())?;
+        let preview_path = session.preview_path.clone();
+        drop(docs);
         if !matches!(
             pending_request.kind,
             PendingServerRequestKind::DynamicToolCall
         ) {
             return Err("Request is not a dynamic tool call".to_string());
         }
-        if let Some(image_data) = extract_dynamic_tool_image_base64(&result) {
-            write_base64_file(&session.preview_path, &image_data)?;
+        if !self.is_current_process(&pending_request.process) {
+            return Err("Codex app-server request belongs to a stopped process".to_string());
         }
-        self.send_server_request_response(pending_request.id, result)
+        if let Some(image_data) = extract_dynamic_tool_image_base64(&result) {
+            write_base64_file(&preview_path, &image_data)?;
+        }
+        self.send_server_request_response(&pending_request.process, pending_request.id, result)
     }
 
     pub fn load_thread_state(
@@ -1204,16 +1299,22 @@ impl AssistantState {
         }))
     }
 
-    fn send_server_request_response(&self, request_id: Value, result: Value) -> Result<(), String> {
+    fn send_server_request_response(
+        &self,
+        process: &ProcessHandle,
+        request_id: Value,
+        result: Value,
+    ) -> Result<(), String> {
         let payload = json!({
           "id": request_id,
           "result": result
         });
-        self.write_json_line(&payload)
+        self.write_server_reply(process, &payload)
     }
 
     fn send_server_request_error(
         &self,
+        process: &ProcessHandle,
         request_id: Value,
         code: i64,
         message: &str,
@@ -1225,53 +1326,62 @@ impl AssistantState {
             "message": message
           }
         });
-        self.write_json_line(&payload)
+        self.write_server_reply(process, &payload)
     }
 
-    fn write_json_line(&self, payload: &Value) -> Result<(), String> {
-        self.ensure_process()?;
-        let child = {
-            let process_guard = self
-                .inner
-                .process
-                .lock()
-                .map_err(|_| "process lock unavailable".to_string())?;
-            process_guard
-                .as_ref()
-                .ok_or_else(|| "Codex app-server is unavailable".to_string())?
-                .child
-                .clone()
-        };
+    fn is_current_process(&self, process: &ProcessHandle) -> bool {
+        self.inner.process.lock().ok().is_some_and(|slot| {
+            slot.as_ref()
+                .is_some_and(|current| Arc::ptr_eq(&current.pending, &process.pending))
+        })
+    }
+
+    fn write_server_reply(&self, process: &ProcessHandle, payload: &Value) -> Result<(), String> {
+        // Reader and delayed GUI replies belong to the requesting process. Never
+        // initialize a server here or resolve a replacement after its exit.
+        if !self.is_current_process(process) {
+            return Err("Codex app-server request belongs to a stopped process".to_string());
+        }
+        Self::write_json_line_to_child(&process.child, payload)
+    }
+
+    fn write_json_line_to_child(
+        child: &Arc<Mutex<Option<CommandChild>>>,
+        payload: &Value,
+    ) -> Result<(), String> {
         let line = serde_json::to_string(payload).map_err(|error| error.to_string())?;
-        let mut child = child
+        let mut guard = child
             .lock()
             .map_err(|_| "child lock unavailable".to_string())?;
+        let child = guard
+            .as_mut()
+            .ok_or_else(|| "Codex app-server is unavailable".to_string())?;
         child
             .write(line.as_bytes())
             .map_err(|error| error.to_string())?;
         child.write(b"\n").map_err(|error| error.to_string())
     }
 
-    fn handle_response(
-        &self,
-        message: Value,
-        pending: &Arc<Mutex<HashMap<String, Sender<Value>>>>,
-    ) {
+    fn handle_response(&self, message: Value, pending: &PendingRequests) {
         let Some(id) = message.get("id").and_then(request_id_to_key) else {
             return;
         };
         let maybe_sender = pending.lock().ok().and_then(|mut map| map.remove(&id));
         if let Some(sender) = maybe_sender {
-            let _ = sender.send(message);
+            let _ = sender.send(Ok(message));
         }
     }
 
-    fn handle_server_request(&self, message: Value) {
+    fn handle_server_request(&self, message: Value, process: &ProcessHandle) {
+        if !self.is_current_process(process) {
+            return;
+        }
         let Some(id) = message.get("id").cloned() else {
             return;
         };
-        let Some(id_key) = request_id_to_key(&id) else {
+        let Some(_) = request_id_to_key(&id) else {
             let _ = self.send_server_request_error(
+                process,
                 id,
                 -32600,
                 "Server request id must be string or number.",
@@ -1284,12 +1394,22 @@ impl AssistantState {
         let params = message.get("params").cloned().unwrap_or(Value::Null);
         let Some((document_id, session_generation)) = self.document_id_from_params(&params) else {
             let _ = self.send_server_request_error(
+                process,
                 id,
                 -32602,
                 "Missing or unknown thread context for server request.",
             );
             return;
         };
+        // The server may reuse raw IDs after restart. Opaque GUI request keys
+        // stay unique across processes so a delayed answer cannot resolve a new
+        // process's request with the same raw ID.
+        let id_key = format!(
+            "server-{}",
+            self.inner
+                .next_server_request_id
+                .fetch_add(1, Ordering::Relaxed)
+        );
 
         match method {
             "item/tool/call" => {
@@ -1300,6 +1420,7 @@ impl AssistantState {
                     PendingServerRequest {
                         id: id.clone(),
                         kind: PendingServerRequestKind::DynamicToolCall,
+                        process: process.clone(),
                     },
                 ) {
                     return;
@@ -1324,6 +1445,7 @@ impl AssistantState {
                     PendingServerRequest {
                         id: id.clone(),
                         kind: PendingServerRequestKind::CommandApproval,
+                        process: process.clone(),
                     },
                 ) {
                     return;
@@ -1355,6 +1477,7 @@ impl AssistantState {
                     PendingServerRequest {
                         id: id.clone(),
                         kind: PendingServerRequestKind::FileChangeApproval,
+                        process: process.clone(),
                     },
                 ) {
                     return;
@@ -1384,6 +1507,7 @@ impl AssistantState {
                     PendingServerRequest {
                         id: id.clone(),
                         kind: PendingServerRequestKind::ToolRequestUserInput,
+                        process: process.clone(),
                     },
                 ) {
                     return;
@@ -1413,6 +1537,7 @@ impl AssistantState {
                     }),
                 });
                 let _ = self.send_server_request_error(
+                    process,
                     id,
                     -32601,
                     &format!("Unsupported server request method `{method}`"),
@@ -1428,23 +1553,35 @@ impl AssistantState {
         key: String,
         request: PendingServerRequest,
     ) -> bool {
-        if let Ok(mut docs) = self.inner.documents.lock() {
-            if let Some(session) = docs
-                .get_mut(document_id)
-                .filter(|session| session.session_generation == generation)
-            {
-                session.pending_server_requests.insert(key, request);
-                return true;
+        if self.is_current_process(&request.process) {
+            if let Ok(mut docs) = self.inner.documents.lock() {
+                if let Some(session) = docs
+                    .get_mut(document_id)
+                    .filter(|session| session.session_generation == generation)
+                {
+                    session.pending_server_requests.insert(key, request);
+                    return true;
+                }
             }
         }
-        let _ = self.send_server_request_error(request.id, -32602, "Assistant chat was replaced.");
+        let _ = self.send_server_request_error(
+            &request.process,
+            request.id,
+            -32602,
+            "Assistant chat was replaced.",
+        );
         false
     }
 
-    fn handle_notification(&self, message: Value) {
+    fn handle_notification(&self, message: Value, process: &ProcessHandle) {
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             return;
         };
+        // A retired server can still resolve its own old GUI approval. All
+        // other stale notifications must leave the replacement session alone.
+        if method != "serverRequest/resolved" && !self.is_current_process(process) {
+            return;
+        }
         let params = message.get("params").cloned().unwrap_or(Value::Null);
         let document_id = self.document_id_from_params(&params);
 
@@ -1556,18 +1693,27 @@ impl AssistantState {
             }
             "serverRequest/resolved" => {
                 if let Some((document_id, session_generation)) = document_id {
-                    let request_id = params
-                        .get("requestId")
-                        .and_then(request_id_to_key)
-                        .unwrap_or_default();
-                    if let Ok(mut docs) = self.inner.documents.lock() {
-                        if let Some(session) = docs
+                    let Some(protocol_id) = params.get("requestId") else {
+                        return;
+                    };
+                    let request_id = self.inner.documents.lock().ok().and_then(|mut docs| {
+                        let session = docs
                             .get_mut(&document_id)
-                            .filter(|session| session.session_generation == session_generation)
-                        {
-                            session.pending_server_requests.remove(&request_id);
-                        }
-                    }
+                            .filter(|session| session.session_generation == session_generation)?;
+                        let key = session
+                            .pending_server_requests
+                            .iter()
+                            .find(|(_, request)| {
+                                request.id == *protocol_id
+                                    && Arc::ptr_eq(&request.process.pending, &process.pending)
+                            })
+                            .map(|(key, _)| key.clone())?;
+                        session.pending_server_requests.remove(&key);
+                        Some(key)
+                    });
+                    let Some(request_id) = request_id else {
+                        return;
+                    };
                     let _ = self.emit_event(AssistantEventPayload {
                         kind: "approval-cleared".to_string(),
                         data: json!({
@@ -1738,12 +1884,30 @@ fn extract_dynamic_tool_image_base64(result: &Value) -> Option<String> {
     None
 }
 
+fn spawn_server_message_worker(state: AssistantState, process: ProcessHandle) -> Sender<Value> {
+    let (sender, receiver) = mpsc::channel::<Value>();
+    // Keep requests and their resolution notifications in protocol order while
+    // blocking writes/document work leave the reader free to consume RPC replies.
+    tauri::async_runtime::spawn_blocking(move || {
+        for message in receiver {
+            if message.get("id").is_some() {
+                state.handle_server_request(message, &process);
+            } else {
+                state.handle_notification(message, &process);
+            }
+        }
+    });
+    sender
+}
+
 fn spawn_command_event_reader(
     state: AssistantState,
     mut receiver: tauri::async_runtime::Receiver<CommandEvent>,
-    pending: Arc<Mutex<HashMap<String, Sender<Value>>>>,
+    process: ProcessHandle,
 ) {
     tauri::async_runtime::spawn(async move {
+        let pending = &process.pending;
+        let server_messages = spawn_server_message_worker(state.clone(), process.clone());
         let mut stdout_buffer: Vec<u8> = Vec::new();
         while let Some(event) = receiver.recv().await {
             match event {
@@ -1769,10 +1933,8 @@ fn spawn_command_event_reader(
                             });
                             continue;
                         };
-                        if message.get("method").is_some() && message.get("id").is_some() {
-                            state.handle_server_request(message);
-                        } else if message.get("method").is_some() {
-                            state.handle_notification(message);
+                        if message.get("method").is_some() {
+                            let _ = server_messages.send(message);
                         } else if message.get("id").is_some() {
                             state.handle_response(message, &pending);
                         }
@@ -1787,12 +1949,21 @@ fn spawn_command_event_reader(
                     }
                 }
                 CommandEvent::Error(error) => {
+                    state.end_process(&pending, &format!("Codex app-server error: {error}"));
                     let _ = state.emit_event(AssistantEventPayload {
                         kind: "error".to_string(),
                         data: json!({ "message": format!("Codex app-server error: {error}") }),
                     });
+                    break;
                 }
                 CommandEvent::Terminated(payload) => {
+                    state.end_process(
+                        &pending,
+                        &format!(
+                            "Codex app-server terminated (code: {:?}, signal: {:?}).",
+                            payload.code, payload.signal
+                        ),
+                    );
                     if !stdout_buffer.iter().all(u8::is_ascii_whitespace) {
                         let buffered = String::from_utf8_lossy(&stdout_buffer);
                         let _ = state.emit_event(AssistantEventPayload {
@@ -1806,10 +1977,15 @@ fn spawn_command_event_reader(
                           "message": format!("Codex app-server terminated (code: {:?}, signal: {:?}).", payload.code, payload.signal)
                         }),
                     });
+                    break;
                 }
                 _ => {}
             }
         }
+        state.end_process(
+            &pending,
+            "Codex app-server event channel closed before responding",
+        );
     });
 }
 
