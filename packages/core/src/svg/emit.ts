@@ -11,6 +11,7 @@ import { pt } from "../coords/scalars.js";
 import { svgBounds, svgPoint } from "../coords/points.js";
 import type { SvgBounds, SvgPoint, WorldPoint } from "../coords/points.js";
 import type { SvgTransform, WorldTransform } from "../coords/transforms.js";
+import { worldToSvgTransform } from "../coords/transforms.js";
 import {
   worldToSvgPoint as convertWorldToSvgPoint,
   mapWorldTransformToSvgTransform as convertWorldToSvgTransform,
@@ -22,7 +23,6 @@ import {
 } from "../semantic/types.js";
 import { renderPathWithArrows } from "./arrows/render.js";
 import {
-  computeSvgEllipseBounds,
   computeSvgPathBounds,
   transformSvgBounds,
 } from "./geometry.js";
@@ -81,7 +81,10 @@ type PatternRenderableStyle = Pick<
 
 type PatternRenderContext = {
   globalYPhase: number;
+  inverseGeometryTransform: SvgTransform | null;
 };
+
+type PatternTransform = { markup: string; matrix: SvgTransform };
 
 type ShadingTransform = {
   centerX: number;
@@ -89,6 +92,7 @@ type ShadingTransform = {
   scaleX: number;
   scaleY: number;
   rotation: number;
+  basis?: SvgTransform;
 };
 
 type SvgModelReuseContext = {
@@ -106,7 +110,8 @@ type AppendSvgPart = (
 type ResolveFillPaint = (
   style: ShadowRenderableStyle,
   sourceId: string,
-  bounds: SvgBounds | null
+  bounds: SvgBounds | null,
+  geometryTransform: SvgTransform | null
 ) => string | null;
 
 type StyledSvgShape =
@@ -292,14 +297,15 @@ export function emitSvgModel(
   const resolveShadingFill = (
     style: ShadowRenderableStyle,
     sourceId: string,
-    bounds: SvgBounds | null
+    bounds: SvgBounds | null,
+    geometryTransform: SvgTransform | null
   ): string | null => {
     if (!style.shadeEnabled) {
       return null;
     }
 
     const shadingTransform = bounds
-      ? computeShadingTransform(bounds, style.shadingAngle)
+      ? computeShadingTransform(bounds, style.shadingAngle, geometryTransform)
       : null;
     if (!shadingTransform) {
       return null;
@@ -373,7 +379,10 @@ export function emitSvgModel(
 
   const patternGlobalYPhase = viewBox.y * 2 + viewBox.height;
 
-  const resolvePatternFill = (style: PatternRenderableStyle): string | null => {
+  const resolvePatternFill = (
+    style: PatternRenderableStyle,
+    geometryTransform: SvgTransform | null
+  ): string | null => {
     if (!style.fillPattern || !style.fill || style.fill === "none") {
       return null;
     }
@@ -383,16 +392,23 @@ export function emitSvgModel(
       pattern.kind === "legacy" && pattern.inherentlyColored
         ? null
         : style.patternColor;
+    const inverseGeometryTransform = geometryTransform && !isIdentitySvgTransform(geometryTransform)
+      ? invertSvgTransform(geometryTransform)
+      : null;
     const signature = JSON.stringify({
       pattern,
       patternColor: effectivePatternColor,
+      geometryFrame: inverseGeometryTransform
+        ? formatMatrix(inverseGeometryTransform)
+        : null,
     });
     const id = ensurePatternDefinition(signature, (patternId) =>
       renderPatternDefinition(
         patternId,
         pattern,
         effectivePatternColor,
-        patternGlobalYPhase
+        patternGlobalYPhase,
+        inverseGeometryTransform
       )
     );
     return `url(#${id})`;
@@ -401,10 +417,12 @@ export function emitSvgModel(
   const resolveFillPaint = (
     style: ShadowRenderableStyle,
     sourceId: string,
-    bounds: SvgBounds | null
+    bounds: SvgBounds | null,
+    geometryTransform: SvgTransform | null
   ): string | null => {
     return (
-      resolveShadingFill(style, sourceId, bounds) ?? resolvePatternFill(style)
+      resolveShadingFill(style, sourceId, bounds, geometryTransform) ??
+      resolvePatternFill(style, geometryTransform)
     );
   };
 
@@ -419,16 +437,21 @@ export function emitSvgModel(
     const needsShadowDefs = element.style.shadowLayers.length > 0;
     const needsShadingDefs = element.style.shadeEnabled;
     const needsPatternDefs = hasActivePatternFill(element.style);
-    if (!needsShadowDefs && !needsShadingDefs) {
-      if (needsPatternDefs) {
-        resolvePatternFill(element.style);
-      }
+    if (!needsShadowDefs && !needsShadingDefs && !needsPatternDefs) {
       return undefined;
     }
-    let elementBounds: SvgBounds | null;
     const svgElementTransform = element.transform
       ? worldTransformToSvgTransform(element.transform, viewBox)
       : null;
+    if (!needsShadowDefs && !needsShadingDefs) {
+      const paintTransform = element.kind === "Ellipse"
+        ? ellipsePaintTransform(svgElementTransform, element.rotation ?? 0, toSvgPoint(element.center, viewBox))
+        : svgElementTransform;
+      resolvePatternFill(element.style, paintTransform);
+      return undefined;
+    }
+    let elementBounds: SvgBounds | null;
+    let paintTransform = svgElementTransform;
     let preparedGeometry: PreparedElementGeometry;
     if (element.kind === "Path") {
       if (!hasDrawablePathCommands(element.commands)) {
@@ -458,15 +481,7 @@ export function emitSvgModel(
       };
     } else if (element.kind === "Circle") {
       const center = toSvgPoint(element.center, viewBox);
-      elementBounds = svgBounds(
-        pt(center.x - element.radius),
-        pt(center.y - element.radius),
-        pt(center.x + element.radius),
-        pt(center.y + element.radius)
-      );
-      if (svgElementTransform) {
-        elementBounds = transformSvgBounds(elementBounds, svgElementTransform);
-      }
+      elementBounds = computeEllipsePaintBounds(center, element.radius, element.radius, paintTransform);
       preparedGeometry = {
         kind: "Circle",
         center,
@@ -475,16 +490,8 @@ export function emitSvgModel(
       };
     } else if (element.kind === "Ellipse") {
       const center = toSvgPoint(element.center, viewBox);
-      elementBounds = computeSvgEllipseBounds(
-        center.x,
-        center.y,
-        element.rx,
-        element.ry,
-        element.rotation ?? 0
-      );
-      if (svgElementTransform) {
-        elementBounds = transformSvgBounds(elementBounds, svgElementTransform);
-      }
+      paintTransform = ellipsePaintTransform(svgElementTransform, element.rotation ?? 0, center);
+      elementBounds = computeEllipsePaintBounds(center, element.rx, element.ry, paintTransform);
       preparedGeometry = {
         kind: "Ellipse",
         center,
@@ -503,9 +510,9 @@ export function emitSvgModel(
       if (layer.fade === "circle-fuzzy-edge-15") {
         ensureCircularShadowMaskDefinition();
       }
-      resolveFillPaint(layerStyle, element.sourceRef.sourceId, elementBounds);
+      resolveFillPaint(layerStyle, element.sourceRef.sourceId, elementBounds, paintTransform);
     }
-    resolveFillPaint(element.style, element.sourceRef.sourceId, elementBounds);
+    resolveFillPaint(element.style, element.sourceRef.sourceId, elementBounds, paintTransform);
     return preparedGeometry;
   };
 
@@ -568,6 +575,8 @@ export function emitSvgModel(
             baseStyle: element.style,
             resolveFillPaint,
             ensureCircularShadowMaskDefinition,
+            geometryTransform: svgElementTransform,
+            transforms: svgElementTransform ? [formatMatrix(svgElementTransform)] : [],
           });
 
           appendStyledShapeParts({
@@ -579,6 +588,7 @@ export function emitSvgModel(
             style: element.style,
             bounds: pathBounds,
             resolveFillPaint,
+            geometryTransform: svgElementTransform,
             transforms: svgElementTransform
               ? [formatMatrix(svgElementTransform)]
               : [],
@@ -628,17 +638,7 @@ export function emitSvgModel(
           : null);
       const transformedCircleBounds =
         preparedCircle?.bounds ??
-        (() => {
-          const circleBounds: SvgBounds = svgBounds(
-            pt(center.x - element.radius),
-            pt(center.y - element.radius),
-            pt(center.x + element.radius),
-            pt(center.y + element.radius)
-          );
-          return svgElementTransform
-            ? transformSvgBounds(circleBounds, svgElementTransform)
-            : circleBounds;
-        })();
+        computeEllipsePaintBounds(center, element.radius, element.radius, svgElementTransform);
       emitShadowShapeParts({
         appendPart,
         sourceId: element.sourceRef.sourceId,
@@ -655,6 +655,8 @@ export function emitSvgModel(
         baseStyle: element.style,
         resolveFillPaint,
         ensureCircularShadowMaskDefinition,
+        geometryTransform: svgElementTransform,
+        transforms: svgElementTransform ? [formatMatrix(svgElementTransform)] : [],
       });
       appendStyledShapeParts({
         appendPart,
@@ -670,6 +672,7 @@ export function emitSvgModel(
         style: element.style,
         bounds: transformedCircleBounds,
         resolveFillPaint,
+        geometryTransform: svgElementTransform,
         transforms: svgElementTransform
           ? [formatMatrix(svgElementTransform)]
           : [],
@@ -689,23 +692,18 @@ export function emitSvgModel(
           : null);
       const transformedEllipseBounds =
         preparedEllipse?.bounds ??
-        (() => {
-          const ellipseBounds = computeSvgEllipseBounds(
-            center.x,
-            center.y,
-            element.rx,
-            element.ry,
-            element.rotation ?? 0
-          );
-          return svgElementTransform
-            ? transformSvgBounds(ellipseBounds, svgElementTransform)
-            : ellipseBounds;
-        })();
+        computeEllipsePaintBounds(center, element.rx, element.ry,
+          ellipsePaintTransform(svgElementTransform, element.rotation ?? 0, center));
       const ellipseRotationTransforms = ellipseTransformAttributes(
         element.rotation ?? 0,
         center.x,
         center.y
       );
+      const shapeTransforms = [
+        ...(svgElementTransform ? [formatMatrix(svgElementTransform)] : []),
+        ...ellipseRotationTransforms,
+      ];
+      const geometryTransform = ellipsePaintTransform(svgElementTransform, element.rotation ?? 0, center);
       emitShadowShapeParts({
         appendPart,
         sourceId: element.sourceRef.sourceId,
@@ -723,7 +721,8 @@ export function emitSvgModel(
         baseStyle: element.style,
         resolveFillPaint,
         ensureCircularShadowMaskDefinition,
-        transforms: ellipseRotationTransforms,
+        transforms: shapeTransforms,
+        geometryTransform,
       });
       appendStyledShapeParts({
         appendPart,
@@ -740,10 +739,8 @@ export function emitSvgModel(
         style: element.style,
         bounds: transformedEllipseBounds,
         resolveFillPaint,
-        transforms: [
-          ...(svgElementTransform ? [formatMatrix(svgElementTransform)] : []),
-          ...ellipseRotationTransforms,
-        ],
+        geometryTransform,
+        transforms: shapeTransforms,
       });
       continue;
     }
@@ -957,6 +954,7 @@ function appendStyledShapeParts(args: {
   style: ShadowRenderableStyle;
   bounds: SvgBounds | null;
   resolveFillPaint: ResolveFillPaint;
+  geometryTransform: SvgTransform | null;
   transforms?: readonly string[];
 }): void {
   const markups = renderStyledShapeMarkups(args);
@@ -986,6 +984,7 @@ function renderStyledShapeMarkups(args: {
   style: ShadowRenderableStyle;
   bounds: SvgBounds | null;
   resolveFillPaint: ResolveFillPaint;
+  geometryTransform: SvgTransform | null;
   transforms?: readonly string[];
 }): string[] {
   const transforms = args.transforms ?? [];
@@ -993,7 +992,8 @@ function renderStyledShapeMarkups(args: {
     const outerFill = args.resolveFillPaint(
       args.style,
       args.sourceId,
-      args.bounds
+      args.bounds,
+      args.geometryTransform
     );
     const outerAttrs = styleAttributes(args.style, false, {
       lineWidth: doubleOuterLineWidth(args.style),
@@ -1015,7 +1015,8 @@ function renderStyledShapeMarkups(args: {
   const resolvedFill = args.resolveFillPaint(
     args.style,
     args.sourceId,
-    args.bounds
+    args.bounds,
+    args.geometryTransform
   );
   const attrs = styleAttributes(args.style, false, {
     fill: resolvedFill ?? undefined,
@@ -1063,6 +1064,72 @@ function ellipseTransformAttributes(
     : [];
 }
 
+function multiplySvgTransforms(left: SvgTransform, right: SvgTransform): SvgTransform {
+  return worldToSvgTransform(
+    left.a * right.a + left.c * right.b,
+    left.b * right.a + left.d * right.b,
+    left.a * right.c + left.c * right.d,
+    left.b * right.c + left.d * right.d,
+    left.a * right.e + left.c * right.f + left.e,
+    left.b * right.e + left.d * right.f + left.f
+  );
+}
+
+function invertSvgTransform(transform: SvgTransform): SvgTransform | null {
+  const determinant = transform.a * transform.d - transform.b * transform.c;
+  if (determinant === 0 || !Number.isFinite(determinant)) {
+    return null;
+  }
+  const inverse = worldToSvgTransform(
+    transform.d / determinant, -transform.b / determinant,
+    -transform.c / determinant, transform.a / determinant,
+    (transform.c * transform.f - transform.d * transform.e) / determinant,
+    (transform.b * transform.e - transform.a * transform.f) / determinant
+  );
+  return Object.values(inverse).every(Number.isFinite) ? inverse : null;
+}
+
+function isIdentitySvgTransform(transform: SvgTransform): boolean {
+  return transform.a === 1 && transform.b === 0 && transform.c === 0 &&
+    transform.d === 1 && transform.e === 0 && transform.f === 0;
+}
+
+function ellipsePaintTransform(
+  transform: SvgTransform | null,
+  rotation: number,
+  center: SvgPoint
+): SvgTransform | null {
+  if (Math.abs(rotation) <= 1e-6) {
+    return transform;
+  }
+  const theta = -rotation * Math.PI / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  const rotated = worldToSvgTransform(cos, sin, -sin, cos,
+    center.x - cos * center.x + sin * center.y,
+    center.y - sin * center.x - cos * center.y);
+  return transform ? multiplySvgTransforms(transform, rotated) : rotated;
+}
+
+function computeEllipsePaintBounds(
+  center: SvgPoint,
+  rx: number,
+  ry: number,
+  transform: SvgTransform | null
+): SvgBounds {
+  const matrix = transform ?? worldToSvgTransform(1, 0, 0, 1, 0, 0);
+  const cx = matrix.a * center.x + matrix.c * center.y + matrix.e;
+  const cy = matrix.b * center.x + matrix.d * center.y + matrix.f;
+  const axisX = [Math.abs(matrix.a * rx), Math.abs(matrix.b * rx)];
+  const axisY = [Math.abs(matrix.c * ry), Math.abs(matrix.d * ry)];
+  // pgfpathellipse constructs four cubic arcs; pgf@lt@curveto records their
+  // control points as path bounds, which pgfshadepath uses for its fitting.
+  const kappa = 0.55228475;
+  const extentX = Math.max(axisX[0] + kappa * axisY[0], kappa * axisX[0] + axisY[0]);
+  const extentY = Math.max(axisX[1] + kappa * axisY[1], kappa * axisX[1] + axisY[1]);
+  return svgBounds(pt(cx - extentX), pt(cy - extentY), pt(cx + extentX), pt(cy + extentY));
+}
+
 function emitShadowShapeParts(args: {
   appendPart: AppendSvgPart;
   sourceId: string;
@@ -1074,6 +1141,7 @@ function emitShadowShapeParts(args: {
   baseStyle: ResolvedStyle;
   resolveFillPaint: ResolveFillPaint;
   ensureCircularShadowMaskDefinition: () => string;
+  geometryTransform: SvgTransform | null;
   transforms?: readonly string[];
 }): void {
   for (let index = 0; index < args.shadowLayers.length; index += 1) {
@@ -1093,6 +1161,7 @@ function emitShadowShapeParts(args: {
       style: layerStyle,
       bounds: args.bounds,
       resolveFillPaint: args.resolveFillPaint,
+      geometryTransform: args.geometryTransform,
       transforms: args.transforms,
     });
 
@@ -1232,7 +1301,8 @@ function normalizeShadingName(raw: string): string {
 
 function computeShadingTransform(
   bounds: SvgBounds,
-  angle: number
+  angle: number,
+  geometryTransform: SvgTransform | null
 ): ShadingTransform | null {
   const width = bounds.maxX - bounds.minX;
   const height = bounds.maxY - bounds.minY;
@@ -1262,13 +1332,41 @@ function computeShadingTransform(
     return null;
   }
 
-  return {
+  const transform: ShadingTransform = {
     centerX: (bounds.minX + bounds.maxX) / 2,
     centerY: (bounds.minY + bounds.maxY) / 2,
     scaleX,
     scaleY,
     // Scene coordinates are mirrored into SVG space, so shading rotations must be mirrored too.
     rotation: -resolvedAngle,
+  };
+  if (!geometryTransform || isIdentitySvgTransform(geometryTransform)) {
+    return transform;
+  }
+  const inverse = invertSvgTransform(geometryTransform);
+  if (!inverse) {
+    return null;
+  }
+  // PGF shades the picture-space path bounds. SVG also transforms user-space
+  // paints with the shape, so express that fitted paint in the shape's frame.
+  const cos = Math.cos(-theta);
+  const sin = Math.sin(-theta);
+  const a = inverse.a * cos + inverse.c * sin;
+  const b = inverse.b * cos + inverse.d * sin;
+  const c = -inverse.a * sin + inverse.c * cos;
+  const d = -inverse.b * sin + inverse.d * cos;
+  const xLength = Math.hypot(a, b);
+  const yLength = Math.hypot(c, d);
+  if (!Number.isFinite(xLength) || !Number.isFinite(yLength) || xLength === 0 || yLength === 0) {
+    return null;
+  }
+  return {
+    centerX: inverse.a * transform.centerX + inverse.c * transform.centerY + inverse.e,
+    centerY: inverse.b * transform.centerX + inverse.d * transform.centerY + inverse.f,
+    scaleX: scaleX * xLength,
+    scaleY: scaleY * yLength,
+    rotation: 0,
+    basis: worldToSvgTransform(a / xLength, b / xLength, c / yLength, d / yLength, 0, 0),
   };
 }
 
@@ -1279,13 +1377,14 @@ function signatureShadingTransform(transform: ShadingTransform): string {
     fmt(transform.scaleX),
     fmt(transform.scaleY),
     fmt(transform.rotation),
+    ...(transform.basis ? [formatMatrix(transform.basis)] : []),
   ].join(",");
 }
 
 function shadingTransformAttribute(transform: ShadingTransform): string {
   return (
     `translate(${fmt(transform.centerX)} ${fmt(transform.centerY)}) ` +
-    `rotate(${fmt(transform.rotation)}) scale(${fmt(transform.scaleX)} ${fmt(
+    `${transform.basis ? formatMatrix(transform.basis) : `rotate(${fmt(transform.rotation)})`} scale(${fmt(transform.scaleX)} ${fmt(
       transform.scaleY
     )})`
   );
@@ -1361,9 +1460,10 @@ function renderPatternDefinition(
   id: string,
   pattern: ResolvedPattern,
   patternColor: string | null,
-  globalYPhase: number
+  globalYPhase: number,
+  inverseGeometryTransform: SvgTransform | null
 ): string {
-  const context: PatternRenderContext = { globalYPhase };
+  const context: PatternRenderContext = { globalYPhase, inverseGeometryTransform };
   if (pattern.kind === "legacy") {
     return renderLegacyPatternDefinition(id, pattern, patternColor, context);
   }
@@ -1775,7 +1875,7 @@ function renderPatternElement(
   width: number,
   height: number,
   body: string,
-  patternTransform?: string | null
+  patternTransform?: PatternTransform | null
 ): string {
   const transformParts: string[] = [];
   const effectiveGlobalPhase = context.globalYPhase - y;
@@ -1783,8 +1883,18 @@ function renderPatternElement(
     // Keep pattern coordinates in the same affine y frame as toSvgPoint: y_svg = C - y.
     transformParts.push(`translate(0 ${fmt(effectiveGlobalPhase)})`);
   }
-  if (patternTransform && patternTransform.trim().length > 0) {
-    transformParts.push(patternTransform.trim());
+  if (patternTransform) {
+    transformParts.push(patternTransform.markup);
+  }
+  if (context.inverseGeometryTransform) {
+    // The declared PGF tile is fixed in picture coordinates, independently of
+    // the node's affine geometry. Counter-transform before phase/angle/shift.
+    let matrix = multiplySvgTransforms(context.inverseGeometryTransform,
+      worldToSvgTransform(1, 0, 0, 1, 0, effectiveGlobalPhase));
+    if (patternTransform) {
+      matrix = multiplySvgTransforms(matrix, patternTransform.matrix);
+    }
+    transformParts.splice(0, transformParts.length, formatMatrix(matrix));
   }
   const transformAttr =
     transformParts.length > 0
@@ -1809,7 +1919,7 @@ function buildPatternTransform(
   xshift: number,
   yshift: number,
   angle: number
-): string | null {
+): PatternTransform | null {
   const transforms: string[] = [];
   if (Math.abs(xshift) > 1e-6 || Math.abs(yshift) > 1e-6) {
     transforms.push(`translate(${fmt(xshift)} ${fmt(-yshift)})`);
@@ -1817,7 +1927,11 @@ function buildPatternTransform(
   if (Math.abs(angle) > 1e-6) {
     transforms.push(`rotate(${fmt(-angle)})`);
   }
-  return transforms.length > 0 ? transforms.join(" ") : null;
+  const theta = -angle * Math.PI / 180;
+  return transforms.length > 0 ? {
+    markup: transforms.join(" "),
+    matrix: worldToSvgTransform(Math.cos(theta), Math.sin(theta), -Math.sin(theta), Math.cos(theta), xshift, -yshift),
+  } : null;
 }
 
 function buildStarPath(radius: number, points: number): string {
