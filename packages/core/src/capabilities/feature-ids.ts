@@ -99,6 +99,7 @@ export const FEATURE_IDS = [
   "beamer_frame_flow", // Source-backed headings, class sizes, columns and vertical block/list composition.
   "beamer_theme_colors", // Ordered preamble color roles and aliases.
   "beamer_tcolorbox", // Ordinary unbroken standard-skin package boxes.
+  "beamer_slide_manager", // Authored frame insertion, dependency-aware reorder with concrete effect checks, duplication, clipboard paste and deletion.
   "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.
   "beamer_builds", // Overlay inventory, canvas rule creation/removal, numeric timing, and boundary edits.
   "beamer_source_placeholders", // Bounded opaque content in frame, column, block and theorem flow.

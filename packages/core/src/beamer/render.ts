@@ -14,6 +14,7 @@ import {
   remapTexVListLayoutSourceMap,
   remapSimpleTexListStructureSourceMap,
 } from "../text/tex/source-map-report.js";
+import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import type { Span } from "../ast/types.js";
 import { projectBeamerCaptions } from "./captions.js";
 import { pt, svgPoint, svgRect, type SvgPoint, type SvgRect } from "../coords/index.js";
@@ -271,7 +272,7 @@ type BeamerRenderContext = {
   readonly syntax: TexSyntaxIndex;
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
-  readonly macroBindings: ReadonlyMap<string, MacroBinding>;
+  readonly macroBindingsForFrame: (frame: BeamerFrameModel) => ReadonlyMap<string, MacroBinding>;
   readonly references: BeamerReferenceIndex;
   readonly overlaysByFrameId: ReadonlyMap<string, BeamerOverlayModel>;
   readonly page: BeamerPageGeometry;
@@ -293,21 +294,31 @@ function createBeamerRenderContext(
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
+  const frameMacroBindings = new Map<string, ReadonlyMap<string, MacroBinding>>();
   const overlaysByFrameId = new Map(document.frames.map((frame) => {
     const overlays = scanBeamerFrameOverlays(source, frame, syntaxContext.syntax);
     return [frame.id, frame.options?.allowFrameBreaks == null ? overlays : { ...overlays, stepCount: 1 }] as const;
   }));
-  const macroBindings = collectMacroBindings(document.preamble.macroDefinitions);
-  // The table frontend evaluates this kernel register and its local
-  // assignments. Expanding it as a user macro would rewrite the target
-  // of a later \renewcommand{\arraystretch}{...} into its numeric value.
-  macroBindings.delete("\\arraystretch");
   return {
     source,
     syntax: syntaxContext.syntax,
     document,
     theme,
-    macroBindings,
+    macroBindingsForFrame: frame => {
+      let bindings = frameMacroBindings.get(frame.id);
+      if (!bindings) {
+        // Resolve the context at this frame, while the document scope is open.
+        // Definitions in earlier closed frames/groups must not leak into it.
+        const collected = collectMacroBindings(collectContextDefinitions(source.slice(0, frame.span.from)));
+        // The table frontend evaluates this kernel register and its local
+        // assignments. Expanding it as a user macro would rewrite the target
+        // of a later \renewcommand{\arraystretch}{...} into its numeric value.
+        collected.delete("\\arraystretch");
+        bindings = collected;
+        frameMacroBindings.set(frame.id, bindings);
+      }
+      return bindings;
+    },
     references: buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId),
     overlaysByFrameId,
     page: resolveBeamerPageGeometry(document, theme),
@@ -516,7 +527,8 @@ async function renderBeamerFrameStep(params: {
   work?: BeamerRenderWork;
 }): Promise<RenderBeamerFrameResult> {
   const { context, frame, frameIndex, bodyIr, step } = params;
-  const { source, document, theme, macroBindings, page } = context;
+  const { source, document, theme, page } = context;
+  const macroBindings = context.macroBindingsForFrame(frame);
   const allowFrameBreaks = frame.options?.allowFrameBreaks;
   const shrink = resolveBeamerFrameShrink(frame);
   const continuationIndex = params.continuation ?? 1;

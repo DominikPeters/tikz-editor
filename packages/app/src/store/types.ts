@@ -1,7 +1,7 @@
 import type { EditingIdentityState, IdentityMove } from "../editing-identities";
 import type { SessionSnapshot } from "../compute";
 import type { EditAction, EditActionResult } from "@tikz-editor/core/edit/actions";
-import type { DeckEditAction } from "@tikz-editor/core/beamer/index";
+import type { BeamerSlideEdit, DeckEditAction } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import type { NodeShapePresetId } from "@tikz-editor/core/edit/inspector";
 import type {
@@ -73,7 +73,16 @@ export type CanvasTransform = {
   scale: number;
 };
 
+export type DeckSlideSelection = { source: string; frameIds: string[]; anchorId: string | null };
+export type DeckSlideNavigation = {
+  selection: DeckSlideSelection;
+  activeRootId: string | null;
+  steps: Record<string, number>;
+};
+
 export type HistoryEntry = {
+  deckSlidesBefore?: DeckSlideNavigation;
+  deckSlidesAfter?: DeckSlideNavigation;
   identityRootsBefore?: Record<string, EditingIdentityState>;
   identityRootsAfter?: Record<string, EditingIdentityState>;
   identitiesBefore?: EditingIdentityState;
@@ -123,6 +132,7 @@ export type FileRevision = {
 export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-needed" | "error";
 
 export type DocumentSession = {
+  deckSlideSelection?: DeckSlideSelection;
   /** Session-only identities for every figure visited in this document. */
   editingIdentityRoots?: Record<string, EditingIdentityState>;
   editingIdentities?: EditingIdentityState;
@@ -250,6 +260,7 @@ export type WorkspaceEphemeralState = {
   /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
   deckObjectSelection: DeckObjectSelection | null;
   deckBuildSelection: DeckBuildSelection | null;
+  sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -349,6 +360,7 @@ export type EditorState = {
   /** Selected deck object (Stage 3 object layer), scoped to one rendered frame. */
   deckObjectSelection: DeckObjectSelection | null;
   deckBuildSelection: DeckBuildSelection | null;
+  sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -433,6 +445,21 @@ export type EditorAction =
       canvasTextEditMask?: { elementId: string; span: { from: number; to: number } };
     }
   | {
+      type: "EDIT_DECK_SLIDES";
+      documentId: string;
+      baseRevision: number;
+      edit: BeamerSlideEdit;
+      allowWarnings?: boolean;
+    }
+  | {
+      type: "SELECT_DECK_SLIDES";
+      documentId: string;
+      baseRevision: number;
+      frameIds: string[];
+      anchorId: string | null;
+      activeFrameId?: string;
+    }
+  | {
       type: "APPLY_SOURCE_PATCHES";
       documentId?: string;
       baseRevision: number;
@@ -513,6 +540,7 @@ export type EditorAction =
   | { type: "SET_CREATION_FILL_COLOR"; value: string }
   | { type: "SET_ACTIVE_INSPECTOR_EDIT"; documentId: string | null }
   | { type: "SET_ACTIVE_SOURCE_SCRUB"; sourceId: string | null }
+  | { type: "REVEAL_SOURCE"; documentId: string; sourceRevision: number; span: { from: number; to: number } }
   | { type: "SET_DECK_BUILD_SELECTION"; selection: DeckBuildSelection | null }
   | { type: "SET_DECK_STEP"; rootId: string; step: number }
   | { type: "SET_DECK_OBJECT_SELECTION"; frameId: string; objectId: string | null }

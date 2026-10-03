@@ -848,6 +848,62 @@ biggest determinant of coverage. Strategy:
 - Undo/redo, multi-root navigation, and source panel sync all reuse the
   existing machinery — these must not fork for deck mode.
 
+### Slide clipboard and drag feedback
+
+The focused Slides panel handles Cmd/Ctrl+C and Cmd/Ctrl+V, plus Copy/Paste in
+its context menu. The clipboard holds ordinary LaTeX frame fragments, preserving
+comments and source order. Paste inserts after the final selected frame (or into
+an empty deck), selects the inserted group, and records one undo entry. Colliding
+literal labels and references within the copied group are renamed together.
+Complete frame fragments can also be pasted from a source editor; full documents
+and unrelated outside commands are rejected. Macro uses keep the destination's
+context. Native clipboard actions use the existing platform bridge and clipboard
+events; browser shortcuts use clipboard events. Async reads are discarded if the
+document, revision or selection changes before they finish.
+
+Dragging multiple slides uses a thumbnail stack marked with the selected count.
+The drag preview is removed on drop, cancellation, source change or unmount.
+Source dimming retains the source text associated with its frame ranges, so a
+coalesced CodeMirror update cannot shift already-updated ranges a second time.
+
+### Slide move analysis
+
+Drag and Alt+arrow reordering use the same analysis before changing source.
+
+- Matching TeX group and conditional branch identities are required. Incomplete
+  boundaries and moves that split enclosing constructs are blocked.
+- Macro uses are compared by declaration identity before and after the move,
+  including transitive references, captured `\let` aliases, and unmoved slides.
+  A missing known provider blocks the move; a changed provider requires review.
+- Private, zero-argument literal definitions can move with their consumers,
+  including pure transitive definitions and aliases. The analysis requires a
+  single declaration, matching scope, no outside references, and no unknown
+  document commands that could hide consumers. Exact source and comments travel
+  with the definition. Shared definitions stay in place.
+- Warnings require an identified operation: global definitions, conditional
+  definitions, counter updates, or settings/assignments that persist into other
+  slides. Ordinary local definitions and formatting travel with their frame.
+- Understood macro calls are inspected at their actual bindings, including
+  captured aliases, substituted arguments, and defaults that are actually used.
+  Stored bodies and unused arguments are not executed. A warning names the
+  operation and shows the invocation and definitions through which it runs.
+  Literal numeric `\foreach` variables are local to their loop.
+- Unknown commands, package environments, computed names, and cyclic or opaque
+  expansions do not warn just because their effects are unknown. Expansion is
+  bounded, and generated bindings that cannot be resolved stay quiet. This is
+  an intentional best-effort check, not a proof that a move is safe in all TeX.
+  An unknown `\if...` name needs a matching branch delimiter before it is treated
+  as a boundary; known primitives and `\newif` declarations are still checked.
+- The stricter proof used for automatic definition relocation remains separate:
+  unknown code can hide consumers, so it prevents relocation without creating
+  an effect warning. A move that would then lose a known provider is still blocked.
+- The existing modal presents the reason and source excerpts. Each excerpt opens
+  and selects its exact range in Source. Only reviewable moves offer “Move anyway”.
+  The request expires when the document or source revision changes. The reducer
+  rechecks the move, so a confirmation cannot override a structural failure.
+- A move and any carried definitions are one undo transaction. Section membership
+  and ordinary slide numbering changes are expected consequences of reordering.
+
 ### Implemented links and manual references
 
 The native Beamer renderer supports `\hyperlink{target}{text}`,
@@ -1064,7 +1120,9 @@ mapped macro-expansion contract. Parsed `\def`, `\let`, `\newcommand`,
 `\providecommand`, `\DeclareRobustCommand`, and `\DeclareMathOperator`
 definitions compile into the same `MacroBinding` representation used by TikZ
 and are expanded before paragraph/math layout while retaining use-site source
-mapping. This is a document-level facility, not a list of presentation- or
+mapping. The shared context collector resolves definitions visible at each frame's
+start, including declarations between slides. Closed frame/group definitions stay
+local; bindings are cached per frame for repeated overlay renders. This is a document-level facility, not a list of presentation- or
 fixture-specific aliases. It makes the frame-3 `array` and its `\R`, `\act`,
 and `\Lagr` commands render through the native math engine.
 
@@ -1471,15 +1529,34 @@ Node-backed corpus helpers through the core package root.
 
 *Remaining:* typing still invalidates the whole prepared session per
 keystroke and needs `TreeFragment`-backed incremental CST parsing plus
-frame-level IR reuse across revisions. The navigator is
-still the original horizontal `FigureNavigator`, not the planned flexible
-root navigator with section headers, grid/vertical modes, fallback cards,
-and drag sorting. Inline and nested block-body source cards, chrome-level
+frame-level IR reuse across revisions. Inline and nested block-body source cards, chrome-level
 diagnostic badges, deck-aware inspector panes, and a dedicated
 open→no-op→byte-identical Beamer round-trip test also remain.
 
 Exit: any corpus deck opens in the app; the sorter shows render order and
 fallback cards; existing TikZ editing remains unaffected.
+
+*Implemented 2026-10-02:* `RootNavigator` now serves both Figures and Slides
+through the existing dock panel and thumbnail worker. It adapts to a short
+horizontal strip, a narrow vertical list, or a wide grid. Slides show the
+final overlay with a step count, while the canvas retains its viewed step.
+Source section/subsection headings collapse their descendants. The Slides
+panel remains available for zero or one frame.
+
+Click opens a slide; Shift selects a range; Cmd/Ctrl toggles selection.
+Selected slides move together in source order by dragging, with an insertion
+marker on either side of a frame or section heading. Alt+arrow moves the
+selection from the keyboard. New slide inserts an empty frame after the
+selection; Duplicate and Delete are available in the context menu and via
+Cmd/Ctrl+D and Delete. Undo/redo restores the active frame, selection, and
+viewed overlay steps. Each operation is one source transaction.
+
+Frame source, including directly attached comment lines, travels intact;
+section commands and unrelated inter-frame code remain in place. Copies get
+fresh literal labels and update links within the copied group. Incomplete
+frames and frames owned by TeX groups or enclosing environments remain
+source-editable. Whole-section moves, arbitrary generated frames, and
+renaming computed label expressions are outside this manager's scope.
 
 ### Phase B3: Editing
 

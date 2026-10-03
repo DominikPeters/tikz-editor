@@ -152,6 +152,25 @@ describe("useFigureThumbnails", () => {
     expect(latest.get("figure:0")).toContain("%3Csvg%3Enew%3C%2Fsvg%3E");
   });
 
+  it("restarts a canceled thumbnail when visibility changes without a source edit", async () => {
+    const pending = createDeferred<any>();
+    vi.mocked(requestThumbnail).mockReturnValueOnce(pending.promise).mockImplementation(async request => ({
+      type: "result", ok: true, requestId: request.requestId, groupId: request.groupId,
+      figureId: request.figureId, figureSignature: request.figureSignature, svg: "<svg>fresh</svg>"
+    }));
+    const figures = [{ id: "figure:0", span: { from: 0, to: 1 } }];
+    let latest: ReadonlyMap<string, string> = new Map();
+    const props = { source: "x", figures, onUpdate: (value: ReadonlyMap<string, string>) => { latest = value; } };
+    await act(async () => { root.render(createElement(Harness, { ...props, priorityFigureIds: [] })); });
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(createElement(Harness, { ...props, priorityFigureIds: ["figure:0"] })); });
+    await waitForCondition(() => latest.has("figure:0"));
+    expect(latest.get("figure:0")).toContain("fresh");
+    pending.resolve({ ok: true, svg: "<svg>stale</svg>" });
+    await act(flushMicrotasks);
+    expect(latest.get("figure:0")).toContain("fresh");
+  });
+
   it("keeps last thumbnail visible while next render is pending", async () => {
     const pendingFirst = createDeferred<any>();
     const pendingSecond = createDeferred<any>();

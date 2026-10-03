@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { clamp } from "@tikz-editor/core/utils/math";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore } from "../../settings/useSettingsStore";
@@ -125,7 +125,8 @@ function buildHighlightExtension(dark: boolean) {
 
 const setHighlight = StateEffect.define<[number, number] | null>();
 const setDiagnostics = StateEffect.define<DiagnosticInput[]>();
-const setFigureOverlay = StateEffect.define<DecorationSet>();
+type FigureOverlayRequest = { source: string; figures: readonly FigureOverlayFigure[]; activeRootId: string | null };
+export const setFigureOverlay = StateEffect.define<FigureOverlayRequest>();
 const sourcePanelExternalSyncAnnotation = Annotation.define<{ nextSource: string; sourceRevision: number }>();
 
 type PendingExternalSourceSync = {
@@ -260,20 +261,23 @@ const diagnosticsField = StateField.define<{ list: Diagnostic[]; decorations: De
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations)
 });
 
-const figureOverlayField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
+export const figureOverlayField = StateField.define<{
+  request: FigureOverlayRequest | null;
+  decorations: DecorationSet;
+}>({
+  create: () => ({ request: null, decorations: Decoration.none }),
   update(value, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setFigureOverlay)) {
-        return effect.value;
-      }
+    const request = tr.effects.find(effect => effect.is(setFigureOverlay))?.value;
+    const next = request ?? value.request;
+    if (next && (request || tr.docChanged) && tr.state.doc.toString() === next.source) {
+      return { request: next, decorations: buildFigureOverlayDecorations({ ...next, docLength: tr.state.doc.length }) };
     }
-    if (tr.docChanged) {
-      return value.map(tr.changes);
-    }
-    return value;
+    // A new range can arrive before the coalesced source sync. Keep it pending
+    // until the matching document arrives, rather than mapping it a second time.
+    if (request) return { request, decorations: Decoration.none };
+    return tr.docChanged ? { ...value, decorations: value.decorations.map(tr.changes) } : value;
   },
-  provide: (f) => EditorView.decorations.from(f)
+  provide: field => EditorView.decorations.from(field, value => value.decorations)
 });
 
 function findExternalSourceSyncAnnotation(
@@ -450,11 +454,16 @@ function useExternalSourceSync(
   lastEditPatches: readonly SourceSyncPatch[] | null,
   lastEditPatchBaseRevision: number | null,
   coalesceToAnimationFrame: boolean,
-  throttleMs = 0
+  throttleMs = 0,
+  onSourceSynced?: () => void
 ) {
   const rafIdRef = useRef<number | null>(null);
   const throttleIdRef = useRef<number | null>(null);
   const pendingSyncRef = useRef<PendingExternalSourceSync | null>(null);
+  const onSourceSyncedRef = useRef(onSourceSynced);
+  useLayoutEffect(() => {
+    onSourceSyncedRef.current = onSourceSynced;
+  }, [onSourceSynced]);
 
   useEffect(() => {
     return () => {
@@ -491,6 +500,7 @@ function useExternalSourceSync(
       }
       pendingSyncRef.current = null;
       plugin.syncExternalSource(source, sourceRevision, lastEditPatches, null, false);
+      onSourceSyncedRef.current?.();
       return;
     }
 
@@ -531,6 +541,7 @@ function useExternalSourceSync(
         pending.patchChain,
         pending.coalescedToAnimationFrame
       );
+      onSourceSyncedRef.current?.();
     };
     if (throttleMs > 0) {
       if (throttleIdRef.current != null) {
@@ -772,6 +783,7 @@ export function SourcePanel() {
     activeDocumentId,
     deckObjectSelection,
     deckBuildSelection,
+    sourceReveal,
     showSourcePanel,
     lastEditPatches,
     lastEditPatchBaseRevision,
@@ -790,6 +802,7 @@ export function SourcePanel() {
     activeDocumentId: s.activeDocumentId,
     deckObjectSelection: s.deckObjectSelection,
     deckBuildSelection: s.deckBuildSelection,
+    sourceReveal: s.sourceReveal,
     showSourcePanel: s.showSourcePanel,
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
@@ -1119,6 +1132,20 @@ export function SourcePanel() {
     if (selected.revealSource) view.focus();
   }, [activeDocumentId, activeRootId, deckBuildSelection, showSourcePanel, sourceRevision]);
 
+  const lastSourceReveal = useRef<typeof sourceReveal>(null);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !showSourcePanel || !sourceReveal || lastSourceReveal.current === sourceReveal ||
+      sourceReveal.documentId !== activeDocumentId || sourceReveal.sourceRevision !== sourceRevision) return;
+    lastSourceReveal.current = sourceReveal;
+    ignoreNextSelectionSyncRef.current = true;
+    dispatchSelectionWithStableHorizontalScroll(view, {
+      selection: { anchor: sourceReveal.span.from, head: sourceReveal.span.to },
+      annotations: [Transaction.addToHistory.of(false)], scrollIntoView: true,
+    });
+    view.focus();
+  }, [sourceReveal, activeDocumentId, sourceRevision, showSourcePanel]);
+
   const revealedPlaceholderSelectionRef = useRef<typeof deckObjectSelection>(null);
   useEffect(() => {
     const view = viewRef.current;
@@ -1210,34 +1237,13 @@ export function SourcePanel() {
     });
   }, [selectedElementIds]);
 
-  // ── Sync store source → CodeMirror (for WYSIWYG changes) ───────────────────
-  useExternalSourceSync(
-    viewRef,
-    source,
-    sourceRevision,
-    lastEditPatches,
-    lastEditPatchBaseRevision,
-    activeCanvasDragKind != null || lastEditPatches != null,
-    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0
-  );
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    const decorations = buildFigureOverlayDecorations({
-      docLength: view.state.doc.length,
-      figures,
-      activeRootId
-    });
-    view.dispatch({ effects: setFigureOverlay.of(decorations) });
-  }, [activeRootId, figureOverlaySignature, figures]);
-
   const prevActiveFigureIdRef = useRef(activeRootId);
-  useEffect(() => {
+  const syncActiveFigureSelection = useCallback(() => {
     const view = viewRef.current;
-    if (!view) {
+    // A slide edit changes source and root selection before the new render
+    // snapshot and the coalesced CodeMirror update arrive. Do not consume the
+    // root change using positions from either older document.
+    if (!view || snapshot.source !== source || view.state.doc.toString() !== source) {
       return;
     }
     const activeFigure = figures.find((figure) => figure.id === activeRootId);
@@ -1271,7 +1277,29 @@ export function SourcePanel() {
     view.dispatch({
       effects: EditorView.scrollIntoView(anchor, { y: "start", yMargin: 8 })
     });
-  }, [activeRootId, figures]);
+  }, [activeRootId, figures, snapshot.source, source]);
+
+  // ── Sync store source → CodeMirror (for WYSIWYG changes) ───────────────────
+  useExternalSourceSync(
+    viewRef,
+    source,
+    sourceRevision,
+    lastEditPatches,
+    lastEditPatchBaseRevision,
+    activeCanvasDragKind != null || lastEditPatches != null,
+    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0,
+    syncActiveFigureSelection
+  );
+
+  useEffect(syncActiveFigureSelection, [syncActiveFigureSelection]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) {
+      return;
+    }
+    view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
+  }, [activeRootId, figureOverlaySignature, figures, snapshot.source]);
 
   useEffect(() => {
     if (!activeColorPicker) {

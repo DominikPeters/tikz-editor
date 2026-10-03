@@ -273,7 +273,11 @@ export function App() {
   })));
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
-  const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), [menuTarget]);
+  const navigatorMenuLabel = useEditorStore(s => s.documentKind === "beamer" ? "Slides Panel" : "Figures Panel");
+  const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget).map(section => ({
+    ...section, items: section.items.map(item => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL
+      ? { ...item, label: navigatorMenuLabel } : item),
+  })), [menuTarget, navigatorMenuLabel]);
   const [showOpenExampleModal, setShowOpenExampleModal] = useState(false);
   const [showOpenFromArxivModal, setShowOpenFromArxivModal] = useState(false);
   const [openFromArxivSession, setOpenFromArxivSession] = useState<ArxivPaperSession>({

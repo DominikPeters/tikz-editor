@@ -26,5 +26,5 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
 export const parserFeatureRegistry = featuresSupportedBy("parser");
 export const semanticFeatureRegistry = featuresSupportedBy("semantic");
 export const svgFeatureRegistry = featuresSupportedBy("svg");
-// Includes source-based Beamer overlay edits and direct column/image/spacing resizing; these do not add a TikZ SVG feature.
+// Includes source-based Beamer slide management and clipboard edits with dependency and concrete macro effect analysis (unknown uses stay quiet), overlay edits and direct column/image/spacing resizing; these do not add a TikZ SVG feature.
 export const editFeatureRegistry = featuresSupportedBy("edit");

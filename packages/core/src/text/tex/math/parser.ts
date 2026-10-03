@@ -107,6 +107,23 @@ interface ParseTexMathAlignedBodyOptions extends ParseTexMathOptions {
   readonly allowIntertext?: boolean;
 }
 
+/** Stock commands that only typeset math. Arguments and user redefinitions must
+ * still be checked by callers doing source-effect analysis. */
+export function isTexMathTypesettingCommand(command: string): boolean {
+  return namedSymbolCommand(command) !== null || alphabetCommandName(command) !== null ||
+    accentCommandName(command) !== null || lineCommandName(command) !== null ||
+    braceCommandName(command) !== null || stackingCommandName(command) !== null ||
+    ellipsisCommandName(command) !== null || verticalDotsCommandName(command) !== null ||
+    bigDelimiterCommand(command) !== null || operatorCommandName(command) !== null ||
+    namedOperatorCommandName(command) !== null || amsNamedOperatorDeclaration(command) !== null ||
+    varLimitCommandName(command) !== null || extensibleArrowCommandName(command) !== null ||
+    spacingCommandName(command) !== null || phantomCommandName(command) !== null ||
+    atomClassCommandName(command) !== null || operatorLimitsCommandName(command) !== null ||
+    fractionCommandStyle(command) !== null || binomialCommandStyle(command) !== null ||
+    modularArithmeticCommandName(command) !== null || mathtoolsColonRelationCommandName(command) !== null ||
+    ["sqrt", "left", "right", "middle", "operatorname", "not", "text"].includes(commandName(command));
+}
+
 export function parseTexMath(
   source: string,
   options: ParseTexMathOptions = {}
