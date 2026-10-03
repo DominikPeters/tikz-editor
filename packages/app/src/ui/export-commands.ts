@@ -7,6 +7,7 @@ import {
 import { serializeSvgModelAsync, type EmitSvgResult } from "@tikz-editor/core/svg/index";
 import { getActiveEditorPlatform } from "../platform/current";
 import { publishUiError } from "./ui-notifications";
+import { prepareSvgForPdf } from "./pdf-svg-preparation";
 
 const DEFAULT_PNG_EXPORT_DPI = 144;
 const MIN_PNG_EXPORT_DPI = 36;
@@ -212,6 +213,12 @@ export async function exportPdfDownload(
 
     svgElement.setAttribute("width", `${svgResult.viewBox.width}`);
     svgElement.setAttribute("height", `${svgResult.viewBox.height}`);
+
+    try {
+      await prepareSvgForPdf(svgElement);
+    } catch (error) {
+      return reportExportFailure(error instanceof Error ? error.message : "Failed to prepare SVG effects for PDF export.", error);
+    }
 
     const artifact = createPdfExportArtifact({ fileName: options.fileName });
     const exportPdf = await loadPdfExporter();
