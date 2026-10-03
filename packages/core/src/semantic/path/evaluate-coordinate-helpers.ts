@@ -1,6 +1,8 @@
-import { frameLocalPoint, worldPoint, worldVector } from "../../coords/points.js";
+import { frameLocalPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import { frameTransform } from "../../coords/transforms.js";
+import type { FrameTransform } from "../../coords/transforms.js";
+import { worldToFrameLocal, worldVectorToFrameLocal, applyFrameTransform } from "../../coords/frame.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import type { CoordinateForm, CoordinateItem } from "../../ast/types.js";
 import { parseLength, parseQuantityExpression } from "../coords/parse-length.js";
@@ -13,7 +15,7 @@ function wv(x: number, y: number): WorldVector {
   return worldVector(pt(x), pt(y));
 }
 
-function inferSegmentEndHeadingDegrees(segment: PlacementSegment | null): number {
+function inferSegmentEndHeadingDegrees(segment: PlacementSegment | null, frame: FrameTransform): number {
   if (!segment) {
     return 0;
   }
@@ -22,20 +24,49 @@ function inferSegmentEndHeadingDegrees(segment: PlacementSegment | null): number
   if (segment.kind === "line") {
     direction = wv(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
   } else if (segment.kind === "hv") {
-    direction = wv(segment.to.x - segment.bend.x, segment.to.y - segment.bend.y);
+    // TikZ's final orthogonal leg is defined before applying the frame.
+    const displacement = worldVectorToFrameLocal(wv(segment.to.x - segment.from.x, segment.to.y - segment.from.y), frame);
+    if (!displacement) return 0;
+    const finalComponent = segment.operator === "-|" ? displacement.y : displacement.x;
+    if (Math.abs(finalComponent) <= 1e-9) return 0;
+    return segment.operator === "-|"
+      ? Math.atan2(displacement.y, 0) * 180 / Math.PI
+      : Math.atan2(0, displacement.x) * 180 / Math.PI;
   } else if (segment.kind === "cubic") {
     direction = wv(segment.to.x - segment.c2.x, segment.to.y - segment.c2.y);
     if (Math.hypot(direction.x, direction.y) <= 1e-9) {
       direction = wv(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
     }
   } else if (segment.kind === "arc") {
-    direction = wv(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
+    if (segment.turnLookupControl) {
+      const endpointLocal = worldToFrameLocal(segment.to, frame);
+      if (!endpointLocal) return 0;
+      // PGF's tangent lookup reads the soft path's WORLD second-last control
+      // while `turn` subtracts TikZ's LOCAL last point after resetting the
+      // matrix. Preserve this established transformed/translated arc behavior.
+      const dx = endpointLocal.x - segment.turnLookupControl.x;
+      const dy = endpointLocal.y - segment.turnLookupControl.y;
+      const length = Math.hypot(dx, dy);
+      return !Number.isFinite(length) || length <= 1e-9 ? 0 : Math.atan2(dy, dx) * 180 / Math.PI;
+    }
+    // Synthetic placement segments predate lookup metadata. Their parameters
+    // describe the local directed derivative, never the start-to-end chord.
+    const radians = segment.params.endAngle * Math.PI / 180;
+    const sign = segment.params.endAngle >= segment.params.startAngle ? 1 : -1;
+    const dx = -segment.params.rx * Math.sin(radians) * sign;
+    const dy = segment.params.ry * Math.cos(radians) * sign;
+    return Math.hypot(dx, dy) <= 1e-9 ? 0 : Math.atan2(dy, dx) * 180 / Math.PI;
   }
 
   if (!direction || Math.hypot(direction.x, direction.y) <= 1e-9) {
     return 0;
   }
-  return (Math.atan2(direction.y, direction.x) * 180) / Math.PI;
+  // Placement endpoints/control points are already in world coordinates.
+  // TikZ resets the coordinate-options matrix before composing `turn`, so
+  // recover its entering direction in the authored frame first.
+  const localDirection = worldVectorToFrameLocal(direction, frame);
+  if (!localDirection || Math.hypot(localDirection.x, localDirection.y) <= 1e-9) return 0;
+  return (Math.atan2(localDirection.y, localDirection.x) * 180) / Math.PI;
 }
 
 export function evaluateTurnCoordinate(
@@ -86,20 +117,32 @@ export function evaluateTurnCoordinate(
     };
   }
 
-  const heading = inferSegmentEndHeadingDegrees(lastPlacementSegment);
-  const absoluteAngle = heading + angleQuantity.value;
-  const radians = (absoluteAngle * Math.PI) / 180;
+  const activeFrame = frameTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
+  const heading = inferSegmentEndHeadingDegrees(lastPlacementSegment, activeFrame);
+  const headingRadians = (heading * Math.PI) / 180;
+  const cos = Math.cos(headingRadians);
+  const sin = Math.sin(headingRadians);
+  const turnFrame = frameTransform(
+    transform.a * cos + transform.c * sin,
+    transform.b * cos + transform.d * sin,
+    transform.c * cos - transform.a * sin,
+    transform.d * cos - transform.b * sin,
+    currentPoint.x,
+    currentPoint.y
+  );
+  const radians = (angleQuantity.value * Math.PI) / 180;
   const localVector = frameLocalPoint(
     pt(radius * Math.cos(radians)),
     pt(radius * Math.sin(radians))
   );
-  const delta = applyMatrixToVector(transform, localVector);
 
   return {
     kind: "transformed",
-    world: worldPoint(pt(currentPoint.x + delta.x), pt(currentPoint.y + delta.y)),
+    world: applyFrameTransform(turnFrame, localVector),
     local: localVector,
-    frame: frameTransform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f),
+    frame: turnFrame,
+    origin: "turn",
+    relativeBase: currentPoint,
     coordinateForm: polarForm,
     relativePrefix: item.relativePrefix,
     diagnostics: [],

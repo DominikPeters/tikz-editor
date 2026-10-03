@@ -1467,7 +1467,7 @@ describe("semantic turn-coordinate helpers", () => {
 
     expect(evaluateTurnCoordinate(coordinate({}), p(0, 0), identity, hv)?.world?.y).toBeGreaterThan(0);
     expect(evaluateTurnCoordinate(coordinate({}), p(0, 0), identity, cubicFallback)?.world?.x).toBeGreaterThan(0);
-    expect(evaluateTurnCoordinate(coordinate({}), p(0, 0), identity, arc)?.world?.x).toBeGreaterThan(0);
+    expect(evaluateTurnCoordinate(coordinate({}), p(0, 0), identity, arc)?.world?.x).toBeLessThan(0);
     expect(evaluateTurnCoordinate(coordinate({}), p(0, 0), identity, degenerate)?.world?.x).toBeGreaterThan(0);
   });
 

@@ -10,7 +10,14 @@ export type PlacementSegment =
   | { kind: "line"; from: WorldPoint; to: WorldPoint }
   | { kind: "hv"; operator: "-|" | "|-"; from: WorldPoint; bend: WorldPoint; to: WorldPoint }
   | { kind: "cubic"; from: WorldPoint; c1: WorldPoint; c2: WorldPoint; to: WorldPoint }
-  | { kind: "arc"; from: WorldPoint; to: WorldPoint; params: ArcParameters };
+  | {
+      kind: "arc";
+      from: WorldPoint;
+      to: WorldPoint;
+      params: ArcParameters;
+      /** Final PGF cubic control in world space, used only by TikZ `turn` lookup. */
+      turnLookupControl?: WorldPoint;
+    };
 
 export type PicEvaluationResult = {
   behindElements: SceneElement[];

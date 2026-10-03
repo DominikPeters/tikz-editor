@@ -23,7 +23,9 @@ export type EvaluatedCoordinate = {
   world: WorldPoint | null;
   local?: FrameLocalPoint;
   frame?: FrameTransform;
-  origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor";
+  origin?: "named" | "calc" | "perpendicular" | "intersection" | "numeric-anchor" | "turn";
+  /** Turn coordinates depend on the current logical point even without +/++. */
+  relativeBase?: WorldPoint;
   coordinateForm: CoordinateForm;
   relativePrefix?: "+" | "++";
   diagnostics: string[];

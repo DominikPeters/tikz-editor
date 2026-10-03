@@ -56,7 +56,7 @@ export function createEditHandle(
       return null;
     }
     if (rewriteMode === "delta") {
-      const relativeBase = context.currentPoint;
+      const relativeBase = evaluated.relativeBase ?? context.currentPoint;
       if (!relativeBase) {
         return null;
       }
@@ -93,6 +93,7 @@ export function createEditHandle(
 }
 
 function determineRewriteMode(evaluated: EvaluatedCoordinate): "direct" | "delta" | "unsupported" {
+  if (evaluated.origin === "turn") return "delta";
   if (evaluated.relativePrefix) return "delta";
   if (evaluated.kind === "transformed" && evaluated.coordinateForm === "explicit") return "direct";
   const form = evaluated.coordinateForm;

@@ -151,9 +151,33 @@ export function appendArcCommand(
       kind: "arc",
       from,
       to: geometry.endpoint,
-      params
+      params,
+      turnLookupControl: arcTurnLookupControl(geometry.endpoint, params, transform)
     }
   };
+}
+
+/** Mirror pgfpatharc's last cubic piece without changing SVG arc emission. */
+function arcTurnLookupControl(
+  endpoint: WorldPoint,
+  params: ArcParameters,
+  transform: { a: number; b: number; c: number; d: number }
+): WorldPoint {
+  const sweep = params.endAngle - params.startAngle;
+  const span = Math.abs(sweep);
+  if (!Number.isFinite(span)) return endpoint;
+  // PGF takes 90-degree steps above 115 degrees, then a 60-degree step
+  // if 90 < remaining <= 115. Arithmetic keeps large finite sweeps bounded.
+  let finalSpan = span - Math.max(0, Math.ceil((span - 115) / 90)) * 90;
+  if (finalSpan > 90) finalSpan -= 60;
+  const factor = finalSpan === 90 ? 0.55228475 : 1.333333333 * Math.tan(toRadians(finalSpan) / 4);
+  const radians = toRadians(params.endAngle);
+  const sign = sweep >= 0 ? 1 : -1;
+  const offset = applyMatrixToVector(transform, {
+    x: pt(-params.rx * Math.sin(radians) * sign * factor),
+    y: pt(params.ry * Math.cos(radians) * sign * factor)
+  });
+  return wp(endpoint.x - offset.x, endpoint.y - offset.y);
 }
 
 function computeArcGeometry(
