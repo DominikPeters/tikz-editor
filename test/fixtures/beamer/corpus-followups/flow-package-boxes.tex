@@ -1,0 +1,26 @@
+\documentclass{beamer}
+\usepackage{tcolorbox}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+
+% A basic package box: no skins, custom macros, or library extensions.
+\begin{frame}{Checks}
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!75!black,title=Check]
+\begin{itemize}
+\item First condition
+\item Second condition
+\end{itemize}
+\end{tcolorbox}
+\end{frame}
+
+% Control: identical supported content inside a stock Beamer block.
+\begin{frame}{Checks}
+\begin{block}{Check}
+\begin{itemize}
+\item First condition
+\item Second condition
+\end{itemize}
+\end{block}
+\end{frame}
+
+\end{document}

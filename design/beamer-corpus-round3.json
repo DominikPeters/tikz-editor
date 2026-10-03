@@ -1,0 +1,905 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-10-03T17:07:08.490Z",
+  "purpose": "Additional real-corpus failures reduced to common-feature exact comparison targets; production renderer unchanged.",
+  "sampling": {
+    "frames": 33,
+    "repositories": 7,
+    "nativeRasterImages": 37,
+    "referenceRasterImages": 38,
+    "missingPrivateReferences": 2,
+    "nativeExceptionAttempts": 2,
+    "imagePathsChecked": 75,
+    "priorReviewedIdentitiesExcluded": 52,
+    "overlapWithPriorReviews": 0,
+    "areaAssignments": 34,
+    "jointlyReviewedDistinctFrames": 1,
+    "corpusPassRateMeasured": false
+  },
+  "inventory": {
+    "entryPoints": 211,
+    "frames": 3936,
+    "distinctSourceForms": 3681,
+    "completeDistinctSourceForms": 3666,
+    "excludedReviewed": 52,
+    "selected": 64
+  },
+  "areaReports": [
+    "design/beamer-corpus-round3-tables.json",
+    "design/beamer-corpus-round3-text.json",
+    "design/beamer-corpus-round3-flow.json",
+    "design/beamer-corpus-round3-root.json"
+  ],
+  "reviewed": [
+    {
+      "repository": "montreso/asd-lectures",
+      "path": "19-approx.tex",
+      "frame": 9,
+      "commit": "164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/montreso/asd-lectures/blob/164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b/19-approx.tex"
+    },
+    {
+      "repository": "montreso/asd-lectures",
+      "path": "13-pd3.tex",
+      "frame": 10,
+      "commit": "164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/montreso/asd-lectures/blob/164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b/13-pd3.tex"
+    },
+    {
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "5_aproksymacja.tex",
+      "frame": 35,
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/5_aproksymacja.tex"
+    },
+    {
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "16_fourier.tex",
+      "frame": 10,
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/16_fourier.tex"
+    },
+    {
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+      "frame": 44,
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture01/dl4nlp2023-lecture01.tex"
+    },
+    {
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+      "frame": 46,
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture01/dl4nlp2023-lecture01.tex"
+    },
+    {
+      "repository": "leeper/lectures",
+      "path": "2018-08-01-JSM/slides.tex",
+      "frame": 23,
+      "commit": "0b3f2a338d39fb1e3e4191e6959c42e6b15b0568",
+      "license": "CC-BY-SA-3.0",
+      "sourceUrl": "https://github.com/leeper/lectures/blob/0b3f2a338d39fb1e3e4191e6959c42e6b15b0568/2018-08-01-JSM/slides.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 23,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 39,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex"
+    },
+    {
+      "repository": "Naereen/slides",
+      "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+      "frame": 12,
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex"
+    },
+    {
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "12_iteracyjne.tex",
+      "frame": 27,
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/12_iteracyjne.tex"
+    },
+    {
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "12_iteracyjne.tex",
+      "frame": 39,
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/12_iteracyjne.tex"
+    },
+    {
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture03/dl4nlp2023-lecture03.tex",
+      "frame": 32,
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture03/dl4nlp2023-lecture03.tex"
+    },
+    {
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture05/dl4nlp2023-lecture05.tex",
+      "frame": 24,
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture05/dl4nlp2023-lecture05.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/frequency_control/main.tex",
+      "frame": 27,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/frequency_control/main.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/TransfomerAndPF/main.tex",
+      "frame": 14,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/TransfomerAndPF/main.tex"
+    },
+    {
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex",
+      "frame": 5,
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/23_rozwiazywanie_rownan_rozniczkowych_czastkowych.tex"
+    },
+    {
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "path": "5_aproksymacja.tex",
+      "frame": 16,
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/5_aproksymacja.tex"
+    },
+    {
+      "repository": "montreso/asd-lectures",
+      "path": "00-introcorso.tex",
+      "frame": 32,
+      "commit": "164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/montreso/asd-lectures/blob/164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b/00-introcorso.tex"
+    },
+    {
+      "repository": "Naereen/slides",
+      "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+      "frame": 6,
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex"
+    },
+    {
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+      "frame": 13,
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture01/dl4nlp2023-lecture01.tex"
+    },
+    {
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "path": "latex/lecture03/dl4nlp2023-lecture03.tex",
+      "frame": 39,
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture03/dl4nlp2023-lecture03.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 33,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/SSSA/main.tex",
+      "frame": 11,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/SSSA/main.tex"
+    },
+    {
+      "repository": "Naereen/slides",
+      "path": "2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides.tex",
+      "frame": 3,
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2017_12__Presentation_Inria_Lille_SequeL_Seminar/slides.tex"
+    },
+    {
+      "repository": "Naereen/slides",
+      "path": "2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex",
+      "frame": 11,
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex"
+    },
+    {
+      "repository": "Naereen/slides",
+      "path": "2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex",
+      "frame": 14,
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2019_06__About_Bernoulli_GLRTest__Seminar_at_PANAMA_IRISA_Rennes/slides.tex"
+    },
+    {
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "path": "Lectures/SSSA/main.tex",
+      "frame": 4,
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/SSSA/main.tex"
+    },
+    {
+      "repository": "Naereen/slides",
+      "path": "2019_05__Audition_AGPR__ENS_de_Rennes/slides.tex",
+      "frame": 28,
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2019_05__Audition_AGPR__ENS_de_Rennes/slides.tex"
+    },
+    {
+      "repository": "MarcToussaint/AI-lectures",
+      "path": "ArtificialIntelligence/25-firstOrderLogic.tex",
+      "frame": 1,
+      "commit": "a35e565832bbe7ac9b73404636de5c56047f4aaf",
+      "license": null,
+      "sourceUrl": "https://github.com/MarcToussaint/AI-lectures/blob/a35e565832bbe7ac9b73404636de5c56047f4aaf/ArtificialIntelligence/25-firstOrderLogic.tex"
+    },
+    {
+      "repository": "MarcToussaint/AI-lectures",
+      "path": "ArtificialIntelligence/25-firstOrderLogic.tex",
+      "frame": 2,
+      "commit": "a35e565832bbe7ac9b73404636de5c56047f4aaf",
+      "license": null,
+      "sourceUrl": "https://github.com/MarcToussaint/AI-lectures/blob/a35e565832bbe7ac9b73404636de5c56047f4aaf/ArtificialIntelligence/25-firstOrderLogic.tex"
+    },
+    {
+      "repository": "leeper/lectures",
+      "path": "2018-03-01-Presentations/slides.tex",
+      "frame": 1,
+      "commit": "0b3f2a338d39fb1e3e4191e6959c42e6b15b0568",
+      "license": "CC-BY-SA-3.0",
+      "sourceUrl": "https://github.com/leeper/lectures/blob/0b3f2a338d39fb1e3e4191e6959c42e6b15b0568/2018-03-01-Presentations/slides.tex"
+    },
+    {
+      "repository": "leeper/lectures",
+      "path": "2019-05-09-LSE-VAM/slides.tex",
+      "frame": 5,
+      "commit": "0b3f2a338d39fb1e3e4191e6959c42e6b15b0568",
+      "license": "CC-BY-SA-3.0",
+      "sourceUrl": "https://github.com/leeper/lectures/blob/0b3f2a338d39fb1e3e4191e6959c42e6b15b0568/2019-05-09-LSE-VAM/slides.tex"
+    }
+  ],
+  "fixtureSuite": {
+    "manifest": "test/fixtures/beamer/corpus-followups/cases.json",
+    "command": "npm run compare:beamer-followups",
+    "gallery": "artifacts/beamer-followup-conformance/index.html",
+    "cases": 34,
+    "snapshots": 38,
+    "passed": 11,
+    "mismatches": 23,
+    "invalidOracles": 0,
+    "exceptions": 0,
+    "knownBugBaselines": false,
+    "tolerancesChanged": false,
+    "results": [
+      {
+        "id": "tables-tab-indentation",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=2 (expected 0)"
+        ]
+      },
+      {
+        "id": "tables-space-indentation-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "tables-command-columns-totalwidth",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=3 (expected 0)"
+        ]
+      },
+      {
+        "id": "tables-totalwidth-columns-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "tables-default-columns-width",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDxPt=17.073317 (maximum 0.02)"
+        ]
+      },
+      {
+        "id": "tables-def-arraystretch",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: maxAbsoluteGlyphDxPt=130.118864 (maximum 0.02)",
+          "State 1: maxAbsoluteGlyphDyPt=18.359864 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "tables-renewcommand-arraystretch-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "tables-caption-star",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-url-breakpoints",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=2 (expected 0)",
+          "State 1: unmatchedOracleTextLines=2 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-short-url-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-list-register-prefix",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=2 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=37.919938 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "text-list-register-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-explicit-empty-title",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=11.605169 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "text-absent-title-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-bm-vector",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=2 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-boldsymbol-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: fontMatch=false",
+          "State 1: maxAbsoluteGlyphDxPt=0.47112 (maximum 0.02)"
+        ]
+      },
+      {
+        "id": "text-declared-operator-controls",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "text-small-display-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=0.959934 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "text-math-percent",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=2 (expected 0)",
+          "State 1: unmatchedOracleTextLines=3 (expected 0)"
+        ]
+      },
+      {
+        "id": "text-percent-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "flow-shrink-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "flow-shrink-explicit",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=91.392348 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-subtitle-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "flow-subtitle-command",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=7.200057 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-subtitle-header",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=7.200057 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-title-uncover",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 2: unmatchedNativeTextLines=1 (expected 0)",
+          "State 2: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-title-only",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 2: unmatchedNativeTextLines=1 (expected 0)",
+          "State 2: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-invisible-default",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)",
+          "State 2: unmatchedNativeTextLines=1 (expected 0)",
+          "State 2: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-environment-overlay-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=3 (expected 0)",
+          "State 1: maxAbsoluteGlyphDyPt=2.399943 (maximum 0.01)",
+          "State 2: maxAbsoluteGlyphDyPt=2.399943 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "flow-basic-tcolorbox",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=5 (expected 0)"
+        ]
+      },
+      {
+        "id": "flow-stock-block-control",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDyPt=2.399947 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "root-font-14pt",
+        "status": "mismatch",
+        "failures": [
+          "State 1: fontMatch=false",
+          "State 1: maxAbsoluteGlyphDxPt=19.885288 (maximum 0.02)",
+          "State 1: maxAbsoluteGlyphDyPt=8.107933 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "root-font-11pt-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "root-normal-text-background",
+        "status": "mismatch",
+        "failures": [
+          "State 1: Block paint canvas: RGB delta 26 exceeds 2"
+        ]
+      }
+    ]
+  },
+  "todos": [
+    {
+      "id": "source-tabs",
+      "title": "Accept literal source tabs as TeX whitespace",
+      "fixtureIds": [
+        "tables-tab-indentation",
+        "tables-space-indentation-control"
+      ],
+      "expected": "Treat horizontal tabs as TeX source whitespace while retaining source spans. The tab and space frames should have identical painted table glyphs and rules.",
+      "evidenceReport": "design/beamer-corpus-round3-tables.json",
+      "evidence": [
+        "t3-03",
+        "t3-04",
+        "t3-06"
+      ],
+      "primarySource": "latex.ltx TeX tokenization/ordinary category-10 whitespace; source IR already accepts the tabs."
+    },
+    {
+      "id": "column-command",
+      "title": "Support command-form column boundaries",
+      "fixtureIds": [
+        "tables-command-columns-totalwidth",
+        "tables-totalwidth-columns-control"
+      ],
+      "expected": "Accept command-form column with ordinary optional alignment/overlay and width arguments, using the same flow as the environment form. The explicit-totalwidth pair removes the independent default-width geometry issue.",
+      "evidenceReport": "design/beamer-corpus-round3-tables.json",
+      "evidence": [
+        "t3-02"
+      ],
+      "primarySource": "beamerbaseframecomponents.sty253-280 defines column dispatch to beamer@columncom and beamer@columnenv."
+    },
+    {
+      "id": "default-columns-width",
+      "title": "Match default columns outer width and all hfill positions",
+      "fixtureIds": [
+        "tables-default-columns-width",
+        "tables-totalwidth-columns-control"
+      ],
+      "expected": "Resolve default columns entry/exit width and all hfill positions; retain explicit totalwidth behavior. With the current two .4textwidth columns the left/right painted content is misplaced by about 17.073/17.071pt.",
+      "evidenceReport": "design/beamer-corpus-round3-tables.json",
+      "evidence": [
+        "t3-02"
+      ],
+      "primarySource": "beamerbaseframecomponents.sty207-235 defines the default paper-width inner hbox; totalwidth key overrides entry/exit code."
+    },
+    {
+      "id": "def-arraystretch",
+      "title": "Honor standard arraystretch definitions",
+      "fixtureIds": [
+        "tables-def-arraystretch",
+        "tables-renewcommand-arraystretch-control"
+      ],
+      "expected": "Recognize a supported local numeric arraystretch definition with TeX scoping, without painting the declaration. Both forms should have identical row struts/spacing.",
+      "evidenceReport": "design/beamer-corpus-round3-tables.json",
+      "evidence": [
+        "t3-07"
+      ],
+      "primarySource": "latex.ltx14943-14944 multiplies row strut dimensions by arraystretch; latex.ltx15087 defines arraystretch itself using def."
+    },
+    {
+      "id": "caption-star",
+      "title": "Honor caption-package starred captions",
+      "fixtureIds": [
+        "tables-caption-star"
+      ],
+      "expected": "When the caption package is present, caption-star must paint unlabelled caption text and preserve its counter semantics; maintain ordinary stock Beamer caption behavior.",
+      "evidenceReport": "design/beamer-corpus-round3-tables.json",
+      "evidence": [
+        "t3-09"
+      ],
+      "primarySource": "caption.sty203-236 caption@star/ifcaption@star; caption3.sty caption@@make label handling."
+    },
+    {
+      "id": "TXT01",
+      "title": "Use the standard URL line-break opportunities",
+      "fixtureIds": [
+        "text-url-breakpoints"
+      ],
+      "expected": "Break URLs at the standard permitted punctuation and underscore boundaries while retaining their typewriter glyphs and link target.",
+      "evidenceReport": "design/beamer-corpus-round3-text.json",
+      "evidence": [
+        "text-08"
+      ],
+      "primarySource": "url.sty32-38 UrlBreaks/UrlBigBreaks/UrlNoBreaks; url.sty143-146 math-class breakpoint construction."
+    },
+    {
+      "id": "TXT02",
+      "title": "Apply list registers before the first item",
+      "fixtureIds": [
+        "text-list-register-prefix"
+      ],
+      "expected": "Apply itemsep, parskip and parsep in the list's scope before its first item, producing glue rather than printable command text.",
+      "evidenceReport": "design/beamer-corpus-round3-text.json",
+      "evidence": [
+        "text-09",
+        "text-11"
+      ],
+      "primarySource": "LaTeX setlength and list registers; size11.clo list profile assignments. Montreso's BIL and Pandoc tightlist both use these standard interfaces."
+    },
+    {
+      "id": "TXT03",
+      "title": "Suppress an explicitly empty frame title",
+      "fixtureIds": [
+        "text-explicit-empty-title"
+      ],
+      "expected": "An empty title argument and an absent title should both produce a void frametitle box, retaining the theme headline and footline.",
+      "evidenceReport": "design/beamer-corpus-round3-text.json",
+      "evidence": [
+        "text-00"
+      ],
+      "primarySource": "beamerbaseframe.sty121-129 checks beamer@frametitle against @empty and clears beamer@frametitlebox."
+    },
+    {
+      "id": "TXT04",
+      "title": "Render the common bm bold-math command",
+      "fixtureIds": [
+        "text-bm-vector"
+      ],
+      "expected": "A bm vector and matrix should remain math with bold symbol styling, preserving subscript structure. Do not limit support to an author-specific macro alias.",
+      "evidenceReport": "design/beamer-corpus-round3-text.json",
+      "evidence": [
+        "text-03"
+      ],
+      "primarySource": "The standard tools/bm.sty package interface; boldsymbol and mathbf provide the nearby supported control."
+    },
+    {
+      "id": "TXT05",
+      "title": "Render escaped percent in math",
+      "fixtureIds": [
+        "text-math-percent"
+      ],
+      "expected": "Escaped percent must remain a percent glyph inside title, inline and displayed math, with ordinary text percent behavior preserved.",
+      "evidenceReport": "design/beamer-corpus-round3-text.json",
+      "evidence": [
+        "tables-review/t3-10"
+      ],
+      "primarySource": "Standard LaTeX escaped-percent command in math and text; the reduction is accepted by the unmodified TeX engine."
+    },
+    {
+      "id": "frame-shrink",
+      "title": "Apply frame shrink and cramped list flow",
+      "fixtureIds": [
+        "flow-shrink-explicit",
+        "flow-shrink-control"
+      ],
+      "expected": "Apply the Beamer shrink factor and cramped list glue, scaling the complete frame body and choosing a further reduction when needed to fit.",
+      "evidenceReport": "design/beamer-corpus-round3-flow.json",
+      "evidence": [
+        "flow-00"
+      ],
+      "primarySource": "beamerbaseframesize.sty23-41 (shrink key),156-180 (shrinkframebox)."
+    },
+    {
+      "id": "frame-subtitle",
+      "title": "Paint command and header frame subtitles",
+      "fixtureIds": [
+        "flow-subtitle-command",
+        "flow-subtitle-header",
+        "flow-subtitle-control"
+      ],
+      "expected": "Paint the ordinary frame subtitle with its stock font/color/spacing and include its height in the title/body geometry.",
+      "evidenceReport": "design/beamer-corpus-round3-flow.json",
+      "evidence": [
+        "flow-02"
+      ],
+      "primarySource": "beamerbaselocalstructure.sty frametitle/framesubtitle definitions; beamerouterthemedefault.sty frametitle template."
+    },
+    {
+      "id": "frame-title-overlays",
+      "title": "Project overlay commands in frame titles",
+      "fixtureIds": [
+        "flow-title-uncover",
+        "flow-title-only"
+      ],
+      "expected": "Evaluate stock only/uncover overlay commands inside ordinary frame titles for each page, preserving their respective space reservation semantics.",
+      "evidenceReport": "design/beamer-corpus-round3-flow.json",
+      "evidence": [
+        "flow-05",
+        "flow-09"
+      ],
+      "primarySource": "beamerbaseoverlay.sty only/uncover definitions and beamerbaseframe.sty frame-title preparation."
+    },
+    {
+      "id": "invisible-default",
+      "title": "Handle invisible without an explicit overlay",
+      "fixtureIds": [
+        "flow-invisible-default",
+        "flow-environment-overlay-control"
+      ],
+      "expected": "Project implicit invisible content with correct retained geometry and list-label visibility, without painting source. Preserve the passing stock block environment overlay behavior.",
+      "evidenceReport": "design/beamer-corpus-round3-flow.json",
+      "evidence": [
+        "flow-05"
+      ],
+      "primarySource": "beamerbaseoverlay.sty590-592 declares invisible with default overlay syntax, selecting reallyinvisible/fakeinvisible."
+    },
+    {
+      "id": "basic-tcolorbox",
+      "title": "Support basic titled tcolorbox content",
+      "fixtureIds": [
+        "flow-basic-tcolorbox",
+        "flow-stock-block-control"
+      ],
+      "expected": "Support the basic package environment, box dimensions/padding, title and body colors/border, and ordinary supported body content. Start with this bounded package scope before advanced skins.",
+      "evidenceReport": "design/beamer-corpus-round3-flow.json",
+      "evidence": [
+        "flow-03",
+        "flow-04",
+        "flow-08"
+      ],
+      "primarySource": "tcolorbox.sty basic environment/options and tcbdrawing.code.tex drawing backend."
+    },
+    {
+      "id": "class-font-14pt",
+      "title": "Honor Beamer class font-size ladders",
+      "fixtureIds": [
+        "root-font-14pt",
+        "root-font-11pt-control"
+      ],
+      "expected": "Honor the documented Beamer 14pt class size and associated size ladder.",
+      "evidenceReport": "design/beamer-corpus-round3-root.json",
+      "evidence": [
+        "r3-root-02"
+      ],
+      "primarySource": "/usr/local/texlive/2025/texmf-dist/tex/latex/beamer/beamerbasefont.sty"
+    },
+    {
+      "id": "normal-text-background-inheritance",
+      "title": "Inherit normal-text background on the default canvas",
+      "fixtureIds": [
+        "root-normal-text-background"
+      ],
+      "expected": "Default background canvas inherits the normal text background.",
+      "evidenceReport": "design/beamer-corpus-round3-root.json",
+      "evidence": [
+        "r3-root-02"
+      ],
+      "primarySource": "/usr/local/texlive/2025/texmf-dist/tex/latex/beamer/beamercolorthemedefault.sty"
+    },
+    {
+      "id": "stock-block-list-boundary-glue",
+      "title": "Retain opening and closing list glue in stock blocks",
+      "fixtureIds": [
+        "flow-stock-block-control",
+        "flow-environment-overlay-control"
+      ],
+      "expected": "Retain the 3pt opening and closing list topsep found in the TeX vlist. Missing 6pt total extent shifts centered titles/prose +2.4pt and list rows -0.6pt.",
+      "evidenceReport": "artifacts/beamer-corpus-renderer/manual-review-round3/flow-review/controls-diagnosis.json"
+    },
+    {
+      "id": "beamer-boldsymbol-font-profile",
+      "title": "Apply active Beamer math fonts to boldsymbol",
+      "fixtureIds": [
+        "text-boldsymbol-control"
+      ],
+      "expected": "Default Beamer boldsymbol x uses Latin Modern Sans bold oblique, not generic serif bold italic. Match font selection and advances before centering.",
+      "evidenceReport": "artifacts/beamer-corpus-renderer/manual-review-round3/text-review/strict-control-diagnosis.json"
+    },
+    {
+      "id": "scoped-small-display-extent",
+      "title": "Preserve vertical extent of a scoped-size display",
+      "fixtureIds": [
+        "text-small-display-control"
+      ],
+      "expected": "Derive the initial frame baseline from the leading display active scoped baseline when no ordinary paragraph precedes it. A 12pt display currently falls back to ambient13.6pt; the 1.6pt extra glue becomes +.959934pt after frame centering.",
+      "evidenceReport": "artifacts/beamer-corpus-renderer/manual-review-round3/text-review/strict-control-diagnosis.json"
+    }
+  ],
+  "deferred": [
+    {
+      "title": "Physics derivative and absolute-value commands",
+      "evidence": [
+        "text-02",
+        "text-03"
+      ],
+      "reductions": [
+        "minimal/physics-dv",
+        "minimal/physics-abs"
+      ],
+      "observation": "Independent dv and abs formulas compile in the actual physics package but paint raw source. Treat this as established-package support work, independently of ordinary align/frac or custom author macros.",
+      "area": "text"
+    },
+    {
+      "title": "Declared operator bodies containing a nested built-in operator",
+      "evidence": [
+        "text-03"
+      ],
+      "reductions": [
+        "minimal/operator-nested-name",
+        "minimal/operator-soft-kern-control"
+      ],
+      "controls": [
+        "minimal/operator-thin-space",
+        "minimal/operator-negative-space",
+        "minimal/operatorname-thin-space"
+      ],
+      "observation": "A nested max command inside the declared operator body fails. Positive and negative thin spaces with literal operator letters pass, so this is not classified as a general spacing or DeclareMathOperator-star failure.",
+      "area": "text"
+    },
+    {
+      "id": "algorithmic-package",
+      "corpusFrames": [
+        "flow-01"
+      ],
+      "reason": "This is a standard algpseudocode environment, not an author hack. Track as unsupported-environment recognition/package implementation work separately from the five current geometry/visibility groups.",
+      "area": "flow"
+    },
+    {
+      "id": "original-paragraph-path-exception",
+      "corpusFrames": [
+        "flow-05"
+      ],
+      "reason": "Keep the source and error evidence. A stock invisible-list reduction does not reproduce the crash, so no crash fixture claim is made.",
+      "area": "flow"
+    },
+    {
+      "id": "small-display-environments",
+      "corpusFrames": [
+        "flow-06"
+      ],
+      "reason": "Independent stock small+display and small+align controls pass. Math command lowering, not the font environment alone, explains the observed literals; delegated to the math/text review.",
+      "area": "flow"
+    },
+    {
+      "id": "pre-item-list-registers",
+      "corpusFrames": [
+        "flow-07"
+      ],
+      "reason": "Expanded tightlist/list declarations paint literally. Text agent owns the generic pre-item declaration reduction.",
+      "area": "flow"
+    },
+    {
+      "id": "overlayarea-squeeze",
+      "corpusFrames": [],
+      "reason": "No actual overlayarea or squeeze-option occurrence was found in this corpus search; no invented source provenance.",
+      "area": "flow"
+    },
+    {
+      "id": "document-body-scoped-background",
+      "corpusFrames": [
+        "r3-root-03"
+      ],
+      "reason": "A confirmed visual gap with context-restored author reference, but the strict single-frame oracle currently omits the enclosing group. Preserve generic document-body settings in the oracle before promoting an exact fixture.",
+      "area": "root"
+    }
+  ],
+  "limitations": [
+    "Purposive source/feature diversity across seven collections is not a corpus pass rate or population-wide package frequency estimate.",
+    "Corpus rasters retain original author context where available. Three font-adapted XeLaTeX probes and documented generated flags/context restoration are explicitly marked.",
+    "Two private-input author references remain unavailable; they are not renderer failures. One source frame throws on two native states; no stock reproduction was confirmed.",
+    "Thirty-four original minimal fixtures avoid private assets and author-specific macros. All strict reference counts and text witnesses validate.",
+    "Exact glyph/rule contracts and sampled flat fills do not prove all PDF/SVG paint equivalence. Keep the raster comparisons, especially for shrink, clipping, opacity and transforms."
+  ]
+}

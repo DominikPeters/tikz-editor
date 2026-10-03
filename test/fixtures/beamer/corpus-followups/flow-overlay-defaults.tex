@@ -1,0 +1,27 @@
+\documentclass{beamer}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+
+% Omitting the overlay specification is valid Beamer syntax. The first
+% enumerate item, including its label, stays invisible on both overlays.
+\begin{frame}{Outline}
+\begin{enumerate}
+\item \invisible{Introduction}
+\item Second topic
+\end{enumerate}
+\pause
+Later reference.
+\end{frame}
+
+% Control: a supported overlay specification on a stock block environment.
+\begin{frame}{Hypotheses}
+Always visible.
+\begin{block}<2->{Later block}
+\begin{itemize}
+\item First condition
+\item Second condition
+\end{itemize}
+\end{block}
+\end{frame}
+
+\end{document}

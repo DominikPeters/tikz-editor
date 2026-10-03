@@ -52,6 +52,10 @@ repositories, rather than only evenly spaced frames:
 node scripts/shortlist-beamer-corpus.mjs --count 48 --max-per-repository 10
 node scripts/shortlist-beamer-corpus.mjs --count 48 --max-per-repository 10 \
   --render-selected --out artifacts/beamer-corpus-renderer/shortlist-rendered
+node scripts/shortlist-beamer-corpus.mjs --count 64 --max-per-repository 10 \
+  --exclude-reviewed artifacts/beamer-corpus-renderer/manual-review/cases.json \
+  --exclude-reviewed artifacts/beamer-corpus-renderer/manual-review-round2/selected.json \
+  --out artifacts/beamer-corpus-renderer/manual-review-round3/shortlist
 ```
 
 This uses the same conservative input expansion and the core syntax inventory.
@@ -60,6 +64,11 @@ feature use. It groups constructs into 22 families with Beamer/package provenanc
 deduplicates identical frame source per repository, and caps selection per deck
 and repository (`--max-per-deck 4`, `--max-per-repository 8` by default). Selection
 prefers previously unseen repository/family combinations and compact sources.
+Repeatable `--exclude-reviewed` inputs are JSON arrays with `repository`, `path`
+and one-based `frame` identities. Exclusions affect candidate selection, while
+usage frequencies continue to describe the complete discovered corpus. Frame
+sizing classification reads parsed option keys; a title containing “shrink”
+does not count as use of the `shrink` option.
 
 `shortlist.json` records every discovered source form, family frequencies,
 discovery/input diagnostics, selected cases and a renderer fingerprint.
@@ -72,7 +81,9 @@ one author accounts for their observed use.
 `--render-selected` renders the first and last native state and writes SVGs plus
 `render-review-signals.json`. Signals include text-engine literal fallback reasons
 and source spans, unsupported flow items, asset resolution failures, suspected
-missing graphics and body fallbacks omitted from top-level diagnostics. These
+missing graphics and body fallbacks omitted from top-level diagnostics. Explicit
+SVG literal markers also catch display-math fallbacks that never enter paragraph
+literal reports or top-level diagnostics. These
 are triage flags, not passes/failures: a hidden overlay can correctly paint no
 image, while a block can silently lose its entire body without any such flag.
 Keep some clean controls in manual samples. This command does not compile TeX or
@@ -86,6 +97,34 @@ The durable candidate list is `design/beamer-corpus-todos.json`. It distinguishe
 built-in behavior, defined package interfaces, generic macro expansion and
 evaluation work. Its author-defined examples are evidence for general mechanisms,
 not a list of macro names to hardcode.
+
+Round 3 adds 33 previously unreviewed source frames from seven collections:
+`artifacts/beamer-corpus-renderer/manual-review-round3/index.html` retains source,
+37 native rasters and 38 reference rasters. Two private-input reference failures
+and two native exception attempts remain explicit. The durable findings and
+reference adaptations are in `design/beamer-corpus-round3.md` and its linked JSON.
+
+Run the original minimal follow-up cases with the existing exact comparison gates:
+
+```sh
+npm run compare:beamer-followups
+npm run compare:beamer-followups -- --cases tables-tab-indentation,text-bm-vector
+```
+
+Fixtures live in `test/fixtures/beamer/corpus-followups/`; the rendered gallery is
+`artifacts/beamer-followup-conformance/index.html`. The initial run has 34 cases
+and 38 snapshots: 11 cases pass and 23 expose mismatches, with no invalid oracles
+or comparison exceptions. Four intended controls reveal three additional geometry
+or math-font gaps. Failures exit nonzero and remain targets to fix; they are not
+accepted baselines. These numbers describe this selected fixture suite, not a
+corpus pass rate.
+
+Optional fixture `paintProbes` sample known empty points in SVG page coordinates
+against TeX PDF paint. They catch an incorrect canvas even when every measured
+glyph and rule matches. Required probes cannot pass a structural-only run without
+raster measurements. Flat-fill RGB tolerance stays at 2; the existing exact glyph
+and rule tolerances are unchanged. Raster previews remain necessary for paint
+behavior outside these structural and sampled-fill contracts.
 
 ## Interpreting results
 

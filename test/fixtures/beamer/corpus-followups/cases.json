@@ -1,0 +1,465 @@
+{
+  "formatVersion": 1,
+  "title": "Beamer corpus follow-up reproductions",
+  "description": "Original minimal cases from round 3 manual review, with passing controls. Failures retain the existing exact TeX comparison contract; no known-bug baselines or relaxed tolerances.",
+  "fidelity": [
+    {
+      "id": "tables-tab-indentation",
+      "file": "tables-whitespace.tex",
+      "frame": 1,
+      "family": "tables-whitespace",
+      "pages": 1,
+      "oracleText": [
+        "Values",
+        "Alpha",
+        "Beta",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-space-indentation-control",
+      "file": "tables-whitespace.tex",
+      "frame": 2,
+      "family": "tables-whitespace",
+      "pages": 1,
+      "oracleText": [
+        "Values",
+        "Alpha",
+        "Beta",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-command-columns-totalwidth",
+      "file": "tables-columns.tex",
+      "frame": 1,
+      "family": "columns",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Anordinarysecondcolumn"
+      ]
+    },
+    {
+      "id": "tables-totalwidth-columns-control",
+      "file": "tables-columns.tex",
+      "frame": 2,
+      "family": "columns",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Anordinarysecondcolumn"
+      ]
+    },
+    {
+      "id": "tables-default-columns-width",
+      "file": "tables-columns.tex",
+      "frame": 3,
+      "family": "columns",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Anordinarysecondcolumn"
+      ]
+    },
+    {
+      "id": "tables-def-arraystretch",
+      "file": "tables-register-def.tex",
+      "frame": 1,
+      "family": "tables-registers",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-renewcommand-arraystretch-control",
+      "file": "tables-register-def.tex",
+      "frame": 2,
+      "family": "tables-registers",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-caption-star",
+      "file": "tables-caption-star.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Anordinaryunnumberedplot"
+      ]
+    },
+    {
+      "id": "text-url-breakpoints",
+      "file": "text-url-breakpoints.tex",
+      "frame": 1,
+      "family": "url",
+      "todos": [
+        "TXT01"
+      ],
+      "evidence": [
+        "text-08"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "More"
+      ]
+    },
+    {
+      "id": "text-short-url-control",
+      "file": "text-url-breakpoints.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "More"
+      ]
+    },
+    {
+      "id": "text-list-register-prefix",
+      "file": "text-list-register-prefix.tex",
+      "frame": 1,
+      "family": "list-registers",
+      "todos": [
+        "TXT02"
+      ],
+      "evidence": [
+        "text-09",
+        "text-11"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "text-list-register-control",
+      "file": "text-list-register-prefix.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "text-explicit-empty-title",
+      "file": "text-empty-frame-title.tex",
+      "frame": 1,
+      "family": "frame-title",
+      "todos": [
+        "TXT03"
+      ],
+      "evidence": [
+        "text-00"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-absent-title-control",
+      "file": "text-empty-frame-title.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-bm-vector",
+      "file": "text-bold-math.tex",
+      "frame": 1,
+      "family": "math-package",
+      "todos": [
+        "TXT04"
+      ],
+      "evidence": [
+        "text-03"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-boldsymbol-control",
+      "file": "text-bold-math.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-declared-operator-controls",
+      "file": "text-bold-math.tex",
+      "frame": 3,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-small-display-control",
+      "file": "text-bold-math.tex",
+      "frame": 4,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-math-percent",
+      "file": "text-math-percent.tex",
+      "frame": 1,
+      "family": "math-symbols",
+      "todos": [
+        "TXT05"
+      ],
+      "evidence": [
+        "tables-review/t3-10"
+      ],
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "text-percent-control",
+      "file": "text-math-percent.tex",
+      "frame": 2,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "flow-shrink-control",
+      "file": "flow-frame-options.tex",
+      "frame": 1,
+      "family": "frame-sizing",
+      "pages": 1,
+      "oracleText": [
+        "Roadmap",
+        "First",
+        "Second",
+        "Third",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "flow-shrink-explicit",
+      "file": "flow-frame-options.tex",
+      "frame": 2,
+      "family": "frame-sizing",
+      "pages": 1,
+      "oracleText": [
+        "Roadmap",
+        "First",
+        "Second",
+        "Third",
+        "Fourth"
+      ]
+    },
+    {
+      "id": "flow-subtitle-control",
+      "file": "flow-titles.tex",
+      "frame": 1,
+      "family": "frame-titles",
+      "pages": 1,
+      "oracleText": [
+        "Grid",
+        "short"
+      ]
+    },
+    {
+      "id": "flow-subtitle-command",
+      "file": "flow-titles.tex",
+      "frame": 2,
+      "family": "frame-titles",
+      "pages": 1,
+      "oracleText": [
+        "Grid",
+        "Connections",
+        "growth",
+        "short"
+      ]
+    },
+    {
+      "id": "flow-subtitle-header",
+      "file": "flow-titles.tex",
+      "frame": 3,
+      "family": "frame-titles",
+      "pages": 1,
+      "oracleText": [
+        "Grid",
+        "Connections",
+        "growth",
+        "short"
+      ]
+    },
+    {
+      "id": "flow-title-uncover",
+      "file": "flow-titles.tex",
+      "frame": 4,
+      "family": "frame-title-overlays",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Outline",
+          "Fixed"
+        ],
+        [
+          "Outline",
+          "reference",
+          "Second"
+        ]
+      ]
+    },
+    {
+      "id": "flow-title-only",
+      "file": "flow-titles.tex",
+      "frame": 5,
+      "family": "frame-title-overlays",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Research",
+          "Fixed"
+        ],
+        [
+          "Research",
+          "institute",
+          "Second"
+        ]
+      ]
+    },
+    {
+      "id": "flow-invisible-default",
+      "file": "flow-overlay-defaults.tex",
+      "frame": 1,
+      "family": "overlay-defaults",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Outline",
+          "Second"
+        ],
+        [
+          "Outline",
+          "Second",
+          "Later"
+        ]
+      ]
+    },
+    {
+      "id": "flow-environment-overlay-control",
+      "file": "flow-overlay-defaults.tex",
+      "frame": 2,
+      "family": "environment-overlays",
+      "pages": 2,
+      "oracleTextByPage": [
+        [
+          "Hypotheses",
+          "Always"
+        ],
+        [
+          "Hypotheses",
+          "Always",
+          "Later",
+          "First",
+          "Second"
+        ]
+      ]
+    },
+    {
+      "id": "flow-basic-tcolorbox",
+      "file": "flow-package-boxes.tex",
+      "frame": 1,
+      "family": "package-boxes",
+      "pages": 1,
+      "oracleText": [
+        "Checks",
+        "Check",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "flow-stock-block-control",
+      "file": "flow-package-boxes.tex",
+      "frame": 2,
+      "family": "package-boxes",
+      "pages": 1,
+      "oracleText": [
+        "Checks",
+        "Check",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "root-font-14pt",
+      "file": "root-font-14pt.tex",
+      "frame": 1,
+      "family": "class-font-size",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "root-font-11pt-control",
+      "file": "root-font-11pt-control.tex",
+      "frame": 1,
+      "family": "control",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "id": "root-normal-text-background",
+      "file": "root-normal-text-background.tex",
+      "frame": 1,
+      "family": "color-inheritance",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ],
+      "paintProbes": [
+        {
+          "id": "canvas",
+          "x": 2,
+          "y": 100
+        }
+      ]
+    }
+  ],
+  "recognition": []
+}

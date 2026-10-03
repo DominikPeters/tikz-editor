@@ -1,0 +1,905 @@
+{
+  "formatVersion": 1,
+  "title": "Round 3 manual Beamer tables, graphics and caption review",
+  "generatedAt": "2026-10-03T16:43:45.628Z",
+  "rendererFingerprint": "a9d884ddef821eec64195b5b39ae1a4faa775b1dc295174582c2334ce05c83c8",
+  "method": "Fresh downloaded-source frame, native SVG/rsvg raster and isolated author-engine PDF/pdftoppm raster. Manual source+image review followed by original minimal reductions using default Beamer. Strict witnesses are new LuaLaTeX comparisons using the current built renderer; no renderer edits or rebuilds.",
+  "counts": {
+    "newCorpusFrames": 10,
+    "repositories": 6,
+    "nativeCorpusSvgStates": 10,
+    "compiledCorpusReferencePages": 10,
+    "initialReferenceFailures": 1,
+    "resolvedReferenceFailures": 1,
+    "remainingReferenceFailures": 0,
+    "derivedFixtureFrames": 8,
+    "strongCommonFeatureGaps": 5,
+    "strictFailingDerivedFrames": 5,
+    "strictPassingControlFrames": 3,
+    "strictReferencePages": 8,
+    "strictFixtureFiles": 4
+  },
+  "limitations": [
+    "Isolated author frames preserve their preambles but may omit earlier document-body settings, bibliography/toc runs and surrounding-frame counter history.",
+    "Full corpus visual differences include diagnosed font substitution and unregistered themes; the default-theme reductions isolate the selected mechanisms.",
+    "Glyph/rule/flat-fill structural gates are precise geometry checks, not whole-image pixel equivalence.",
+    "Introduction frame23 was independently reviewed for subtitle omission by another agent and counts only once in any combined distinct-frame total.",
+    "EPS corpus resolver support and mdframed wrappers remain recorded observations; no author-name-specific renderer case was added."
+  ],
+  "reviewed": [
+    {
+      "id": "t3-01",
+      "repository": "montreso/asd-lectures",
+      "commit": "164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b",
+      "license": "CC-BY-SA-4.0",
+      "path": "19-approx.tex",
+      "frame": 9,
+      "title": "Complessità -- Riassunto",
+      "sourceSpan": {
+        "from": 16492,
+        "to": 16845
+      },
+      "sourceSha256": "64d0d450d53ef71ba1771c088aa00aadf7d71ab4edd7936d89f5f748fb831fce",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-01",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-01/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-01/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-01/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-01/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-01/pair-1.png",
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 28,
+        "images": 0
+      },
+      "observation": "Table text and math remain visible, but expanded custom mybox environment commands are painted literally and the rounded mdframed borders disappear. Native Sans differs from the author serif font theme.",
+      "disposition": "No author-specific fixture: mybox is a custom wrapper over mdframed. A future generic mdframed package case could cover the underlying package.",
+      "sourceUrl": "https://github.com/montreso/asd-lectures/blob/164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b/19-approx.tex"
+    },
+    {
+      "id": "t3-02",
+      "repository": "montreso/asd-lectures",
+      "commit": "164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b",
+      "license": "CC-BY-SA-4.0",
+      "path": "13-pd3.tex",
+      "frame": 10,
+      "title": "Esempio 1",
+      "sourceSpan": {
+        "from": 16807,
+        "to": 17179
+      },
+      "sourceSha256": "31df0352092ad989c670e9fe1d262a4ff034e68b57d91283e2146b1b81d629df",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-02",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-02/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-02/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-02/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-02/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-02/pair-1.png",
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 0,
+        "images": 0
+      },
+      "observation": "Native slide is blank below the title. TeX paints a ruled table in the narrow left column and a PDF graphic in the right column. Native reports empty columns; command-form column boundaries are not collected.",
+      "findingIds": [
+        "column-command",
+        "default-columns-width"
+      ],
+      "sourceUrl": "https://github.com/montreso/asd-lectures/blob/164a6216fe16e5d4cc4fd018d0bee6ea9a0d9c0b/13-pd3.tex"
+    },
+    {
+      "id": "t3-03",
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "path": "5_aproksymacja.tex",
+      "frame": 35,
+      "title": "",
+      "sourceSpan": {
+        "from": 20298,
+        "to": 20687
+      },
+      "sourceSha256": "aa07f0e6d36fbe3594c825b9cfb9d3e16afe4bc6db542076656af4bbe7f8369a",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-03",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-03/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-03/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-03/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-03/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-03/pair-1.png",
+      "reference": {
+        "engine": "lualatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 1,
+        "literalSegments": 0,
+        "images": 0
+      },
+      "observation": "Native replaces the entire proof, table and following image with one unsupported-content box. TeX paints all three. Replacing only tabs with spaces removes the fallback and restores text plus image.",
+      "findingIds": [
+        "source-tabs"
+      ],
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/5_aproksymacja.tex"
+    },
+    {
+      "id": "t3-04",
+      "repository": "AGH-MOwNiT-2017/lectures",
+      "commit": "0dbc5e4df150194729ccb93d2059c041bd45dc77",
+      "license": "MIT",
+      "path": "16_fourier.tex",
+      "frame": 10,
+      "title": "Symetrie funkcji i jej transformaty II",
+      "sourceSpan": {
+        "from": 15346,
+        "to": 15847
+      },
+      "sourceSha256": "d385a00a07551f23b402d75fd7f7eace33869a148f4c82e7ae480814fa6407fc",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-04",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-04/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-04/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-04/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-04/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-04/pair-1.png",
+      "reference": {
+        "engine": "lualatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 1,
+        "literalSegments": 0,
+        "images": 0
+      },
+      "observation": "Native replaces the centered math table with unsupported content. TeX paints the ruled two-column table. Replacing only tabs with spaces restores the table.",
+      "findingIds": [
+        "source-tabs"
+      ],
+      "sourceUrl": "https://github.com/AGH-MOwNiT-2017/lectures/blob/0dbc5e4df150194729ccb93d2059c041bd45dc77/16_fourier.tex"
+    },
+    {
+      "id": "t3-05",
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+      "frame": 44,
+      "title": "Confusion matrix (binary case)",
+      "sourceSpan": {
+        "from": 25238,
+        "to": 25690
+      },
+      "sourceSha256": "4c4aac87fac574d23669931996fad6a01328ea694bb3f7a8310376d63cce3c47",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-05",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-05/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-05/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-05/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-05/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-05/pair-1.png",
+      "reference": {
+        "engine": "lualatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 0,
+        "images": 0
+      },
+      "observation": "The space-indented confusion table is present natively, including its vertical separator and booktabs rule. The author theme has different fonts, fills and spacing (Metropolis/Fira Sans substitution is diagnosed).",
+      "disposition": "Useful nearby control for the tab-indented version of the same ordinary table; no theme-specific fixture.",
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture01/dl4nlp2023-lecture01.tex"
+    },
+    {
+      "id": "t3-06",
+      "repository": "dl4nlp-tuda/deep-learning-for-nlp-lectures",
+      "commit": "5a60cd2392b29f12094fc1b5db53289da785164f",
+      "license": "CC-BY-SA-4.0",
+      "path": "latex/lecture01/dl4nlp2023-lecture01.tex",
+      "frame": 46,
+      "title": "Precision, recall, F-1 score",
+      "sourceSpan": {
+        "from": 26370,
+        "to": 26827
+      },
+      "sourceSha256": "4c4aac87fac574d23669931996fad6a01328ea694bb3f7a8310376d63cce3c47",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-06",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-06/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-06/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-06/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-06/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-06/pair-1.png",
+      "reference": {
+        "engine": "lualatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 1,
+        "literalSegments": 0,
+        "images": 0
+      },
+      "observation": "The tab-indented confusion table falls back inside its block while sibling prose is visible. The author PDF has the full table. Replacing only tabs with spaces restores the table.",
+      "findingIds": [
+        "source-tabs"
+      ],
+      "sourceUrl": "https://github.com/dl4nlp-tuda/deep-learning-for-nlp-lectures/blob/5a60cd2392b29f12094fc1b5db53289da785164f/latex/lecture01/dl4nlp2023-lecture01.tex"
+    },
+    {
+      "id": "t3-07",
+      "repository": "leeper/lectures",
+      "commit": "0b3f2a338d39fb1e3e4191e6959c42e6b15b0568",
+      "license": "CC-BY-SA-3.0",
+      "path": "2018-08-01-JSM/slides.tex",
+      "frame": 23,
+      "title": "",
+      "sourceSpan": {
+        "from": 20585,
+        "to": 21138
+      },
+      "sourceSha256": "3156ffa7769ae82c21ce7cfe16623416e60429c837224dcb9ac791dd52b66b54",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-07",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-07/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-07/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-07/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-07/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-07/pair-1.png",
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 2,
+        "images": 0
+      },
+      "observation": "Native prints def/arraystretch as source, so the table shares that line and its rows are compressed. TeX executes the assignment and increases row spacing. Body font/theme differences also exist.",
+      "findingIds": [
+        "def-arraystretch"
+      ],
+      "sourceUrl": "https://github.com/leeper/lectures/blob/0b3f2a338d39fb1e3e4191e6959c42e6b15b0568/2018-08-01-JSM/slides.tex"
+    },
+    {
+      "id": "t3-08",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 23,
+      "title": "Structural Indicators: Connections (Synergrid data )",
+      "sourceSpan": {
+        "from": 18028,
+        "to": 18719
+      },
+      "sourceSha256": "88396c9a8f2a0c2bbe3da0d9f53bb4fe086cf3a552be6ea2eef458ed16896bdb",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-08",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-08/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-08/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-08/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-08/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-08/pair-1.png",
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 0,
+        "images": 0
+      },
+      "observation": "The complete booktabs table remains visible with bold/italic cells and addlinespace. Native omits the frame subtitle; author trigon theme differs. The subtitle observation is shared with the footnotes agent.",
+      "disposition": "No additional table fixture; missing built-in framesubtitle is covered by the other agent.",
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex"
+    },
+    {
+      "id": "t3-09",
+      "repository": "bcornelusse/ELEC0447-analysis-power-systems",
+      "commit": "7f4f8cc826da77f1465a538ca81aeb11be042122",
+      "license": null,
+      "path": "Lectures/Introduction/main.tex",
+      "frame": 39,
+      "title": "Wind generation potential",
+      "sourceSpan": {
+        "from": 25958,
+        "to": 26180
+      },
+      "sourceSha256": "88396c9a8f2a0c2bbe3da0d9f53bb4fe086cf3a552be6ea2eef458ed16896bdb",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-09",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-09/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-09/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-09/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-09/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-09/pair-1.png",
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 0,
+        "images": 1
+      },
+      "observation": "The raster graphic is present in both versions. Native adds a blue Figure label before caption-star text; TeX caption package paints only the caption text.",
+      "findingIds": [
+        "caption-star"
+      ],
+      "sourceUrl": "https://github.com/bcornelusse/ELEC0447-analysis-power-systems/blob/7f4f8cc826da77f1465a538ca81aeb11be042122/Lectures/Introduction/main.tex"
+    },
+    {
+      "id": "t3-10",
+      "repository": "Naereen/slides",
+      "commit": "81ade12afe94aa3b3f263dfe4392888814c042ac",
+      "license": "MIT",
+      "path": "2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex",
+      "frame": 12,
+      "title": "\\(10\\%\\) of dynamic devices",
+      "sourceSpan": {
+        "from": 19080,
+        "to": 19308
+      },
+      "sourceSha256": "8a1be9150cf1fbd35c8ea98984f83af8b123be2fbd15aede6ceaf575c578f1e7",
+      "excludedPreviouslyReviewed": false,
+      "artifactDirectory": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10",
+      "sourceFrame": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10/source-frame.tex",
+      "nativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10/native-1.svg",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10/reference-1.png",
+      "sideBySideRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/t3-10/pair-1.png",
+      "reference": {
+        "engine": "pdflatex",
+        "status": "compiled",
+        "pageCount": 1,
+        "initialFailure": "pdftex.def could not find crowncom/10intelligent-eps-converted-to.pdf under no-shell-escape. Converted the source EPS with epstopdf into this output directory, preserving source and rerendered fresh.",
+        "assetPreparation": "output-only EPS-to-PDF conversion"
+      },
+      "native": {
+        "steps": [
+          1
+        ],
+        "unsupportedItems": 0,
+        "literalSegments": 6,
+        "images": 0
+      },
+      "observation": "Native paints a missing-picture placeholder for the EPS and math-percent literals in the caption/title. TeX paints the chart and ordinary percent math. Counter/font/theme differences are affected by isolating the author source.",
+      "disposition": "EPS is reported unsupported by the corpus graphics resolver rather than an unexplained renderer failure. Math-percent issue was sent to the math agent; neither duplicates the fixtures owned here.",
+      "sourceUrl": "https://github.com/Naereen/slides/blob/81ade12afe94aa3b3f263dfe4392888814c042ac/2017_11__Presentation_Supelec_SCEE_Seminar/slides.tex"
+    }
+  ],
+  "findings": [
+    {
+      "id": "source-tabs",
+      "fixtureIds": [
+        "tables-tab-indentation",
+        "tables-space-indentation-control"
+      ],
+      "corpusFrames": [
+        "t3-03",
+        "t3-04",
+        "t3-06"
+      ],
+      "mechanism": "The TeX/table scanners accept whitespace and produce the same supported tabular IR. A raw-source preflight in analyzeSimpleTexParagraph rejects U+0009 as an OT1 text character, so tab indentation forces source fallback before layout.",
+      "expected": "Treat horizontal tabs as TeX source whitespace while retaining source spans. The tab and space frames should have identical painted table glyphs and rules.",
+      "primarySource": "latex.ltx TeX tokenization/ordinary category-10 whitespace; source IR already accepts the tabs.",
+      "witness": "Space control has zero unmatched lines; tab case has two unmatched oracle table lines."
+    },
+    {
+      "id": "column-command",
+      "fixtureIds": [
+        "tables-command-columns-totalwidth",
+        "tables-totalwidth-columns-control"
+      ],
+      "corpusFrames": [
+        "t3-02"
+      ],
+      "mechanism": "parseColumns in beamer/content.ts only collects begin/end column environments. The built-in command-form column opens a minipage until the next column command or columns end and is therefore not recognized.",
+      "expected": "Accept command-form column with ordinary optional alignment/overlay and width arguments, using the same flow as the environment form. The explicit-totalwidth pair removes the independent default-width geometry issue.",
+      "primarySource": "beamerbaseframecomponents.sty253-280 defines column dispatch to beamer@columncom and beamer@columnenv.",
+      "witness": "Command-form case has three unmatched oracle text lines; the environment-form explicit-totalwidth control has none and max glyph dx .002455pt."
+    },
+    {
+      "id": "default-columns-width",
+      "fixtureIds": [
+        "tables-default-columns-width",
+        "tables-totalwidth-columns-control"
+      ],
+      "corpusFrames": [
+        "t3-02"
+      ],
+      "mechanism": "Default columns use a paper-width inner hbox, negative text margins and leading/trailing hfill. Native layout distributes all remaining text width only between columns and ignores that default geometry.",
+      "expected": "Resolve default columns entry/exit width and all hfill positions; retain explicit totalwidth behavior. With the current two .4textwidth columns the left/right painted content is misplaced by about 17.073/17.071pt.",
+      "primarySource": "beamerbaseframecomponents.sty207-235 defines the default paper-width inner hbox; totalwidth key overrides entry/exit code.",
+      "witness": "All three text lines/fonts/glyphs match, but default width has max glyph dx17.073317pt and max dy .000093pt; explicit-totalwidth control passes."
+    },
+    {
+      "id": "def-arraystretch",
+      "fixtureIds": [
+        "tables-def-arraystretch",
+        "tables-renewcommand-arraystretch-control"
+      ],
+      "corpusFrames": [
+        "t3-07"
+      ],
+      "mechanism": "The table register frontend handles setlength and renewcommand for arraystretch but not the common plain def assignment. The declaration remains literal material and the table retains stretch1.",
+      "expected": "Recognize a supported local numeric arraystretch definition with TeX scoping, without painting the declaration. Both forms should have identical row struts/spacing.",
+      "primarySource": "latex.ltx14943-14944 multiplies row strut dimensions by arraystretch; latex.ltx15087 defines arraystretch itself using def.",
+      "witness": "Def case has one extra native line and max glyph dx130.118864pt/dy18.359864pt; renewcommand control passes with max dx .000016pt/dy .000091pt.",
+      "existingCoverageDifference": "tables/assignments.tex and assignment-preamble.tex cover setlength execution-time units; tables/tables.tex,preamble.tex,array.tex use renewcommand. None cover def syntax."
+    },
+    {
+      "id": "caption-star",
+      "fixtureIds": [
+        "tables-caption-star"
+      ],
+      "corpusFrames": [
+        "t3-09"
+      ],
+      "mechanism": "Beamer caption lowering treats the caption-package starred form as an ordinary caption and inserts the Figure label. The caption package explicitly selects star behavior and suppresses numbered label/anchor work.",
+      "expected": "When the caption package is present, caption-star must paint unlabelled caption text and preserve its counter semantics; maintain ordinary stock Beamer caption behavior.",
+      "primarySource": "caption.sty203-236 caption@star/ifcaption@star; caption3.sty caption@@make label handling.",
+      "witness": "Rule rectangles match within .000091pt, but native and oracle caption text lines differ because native adds Figure."
+    }
+  ],
+  "manifestEntries": [
+    {
+      "id": "tables-tab-indentation",
+      "file": "tables-whitespace.tex",
+      "frame": 1,
+      "family": "tables-whitespace",
+      "pages": 1,
+      "oracleText": [
+        "Values",
+        "Alpha",
+        "Beta",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-space-indentation-control",
+      "file": "tables-whitespace.tex",
+      "frame": 2,
+      "family": "tables-whitespace",
+      "pages": 1,
+      "oracleText": [
+        "Values",
+        "Alpha",
+        "Beta",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-command-columns-totalwidth",
+      "file": "tables-columns.tex",
+      "frame": 1,
+      "family": "columns",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Anordinarysecondcolumn"
+      ]
+    },
+    {
+      "id": "tables-totalwidth-columns-control",
+      "file": "tables-columns.tex",
+      "frame": 2,
+      "family": "columns",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Anordinarysecondcolumn"
+      ]
+    },
+    {
+      "id": "tables-default-columns-width",
+      "file": "tables-columns.tex",
+      "frame": 3,
+      "family": "columns",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Anordinarysecondcolumn"
+      ]
+    },
+    {
+      "id": "tables-def-arraystretch",
+      "file": "tables-register-def.tex",
+      "frame": 1,
+      "family": "tables-registers",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-renewcommand-arraystretch-control",
+      "file": "tables-register-def.tex",
+      "frame": 2,
+      "family": "tables-registers",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Beta",
+        "Gamma",
+        "345"
+      ]
+    },
+    {
+      "id": "tables-caption-star",
+      "file": "tables-caption-star.tex",
+      "frame": 1,
+      "family": "captions",
+      "pages": 1,
+      "oracleText": [
+        "Anordinaryunnumberedplot"
+      ]
+    }
+  ],
+  "strictWitnesses": [
+    {
+      "fixtureId": "tables-tab-indentation",
+      "artifactId": "tables-tab-indentation",
+      "referencePageCount": 1,
+      "strictPass": false,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 1,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 2,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 6,
+        "maxAbsoluteGlyphDxPt": 0.000012,
+        "maxAbsoluteGlyphDyPt": 0.000088,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-tab-indentation/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-tab-indentation/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-tab-indentation/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-tab-indentation/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-tab-indentation/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-tab-indentation/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-tab-indentation/oracle.png"
+    },
+    {
+      "fixtureId": "tables-space-indentation-control",
+      "artifactId": "tables-space-indentation-control",
+      "referencePageCount": 1,
+      "strictPass": true,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 3,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 20,
+        "maxAbsoluteGlyphDxPt": 0.000029,
+        "maxAbsoluteGlyphDyPt": 0.000088,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-space-indentation-control/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-space-indentation-control/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-space-indentation-control/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-space-indentation-control/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-space-indentation-control/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-space-indentation-control/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-space-indentation-control/oracle.png"
+    },
+    {
+      "fixtureId": "tables-command-columns-totalwidth",
+      "artifactId": "tables-command-columns-totalwidth",
+      "referencePageCount": 1,
+      "strictPass": false,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 0,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 3,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 0,
+        "maxAbsoluteGlyphDxPt": 0,
+        "maxAbsoluteGlyphDyPt": 0,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-command-columns-totalwidth/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-command-columns-totalwidth/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-command-columns-totalwidth/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-command-columns-totalwidth/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-command-columns-totalwidth/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-command-columns-totalwidth/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-command-columns-totalwidth/oracle.png"
+    },
+    {
+      "fixtureId": "tables-totalwidth-columns-control",
+      "artifactId": "tables-totalwidth-columns-control",
+      "referencePageCount": 1,
+      "strictPass": true,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 3,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 37,
+        "maxAbsoluteGlyphDxPt": 0.002455,
+        "maxAbsoluteGlyphDyPt": 0.000093,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-totalwidth-columns-control/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-totalwidth-columns-control/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-totalwidth-columns-control/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-totalwidth-columns-control/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-totalwidth-columns-control/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-totalwidth-columns-control/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-totalwidth-columns-control/oracle.png"
+    },
+    {
+      "fixtureId": "tables-default-columns-width",
+      "artifactId": "tables-environment-columns-control",
+      "referencePageCount": 1,
+      "strictPass": false,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 3,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 37,
+        "maxAbsoluteGlyphDxPt": 17.073317,
+        "maxAbsoluteGlyphDyPt": 0.000093,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-default-columns-width/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-environment-columns-control/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-environment-columns-control/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-environment-columns-control/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-default-columns-width/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-default-columns-width/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-default-columns-width/oracle.png"
+    },
+    {
+      "fixtureId": "tables-def-arraystretch",
+      "artifactId": "tables-def-arraystretch",
+      "referencePageCount": 1,
+      "strictPass": false,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 3,
+        "unmatchedNativeTextLines": 1,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 20,
+        "maxAbsoluteGlyphDxPt": 130.118864,
+        "maxAbsoluteGlyphDyPt": 18.359864,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-def-arraystretch/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-def-arraystretch/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-def-arraystretch/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-def-arraystretch/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-def-arraystretch/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-def-arraystretch/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-def-arraystretch/oracle.png"
+    },
+    {
+      "fixtureId": "tables-renewcommand-arraystretch-control",
+      "artifactId": "tables-renewcommand-arraystretch-control",
+      "referencePageCount": 1,
+      "strictPass": true,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000014,
+        "matchedTextLines": 3,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 20,
+        "maxAbsoluteGlyphDxPt": 0.000016,
+        "maxAbsoluteGlyphDyPt": 0.000091,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-renewcommand-arraystretch-control/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-renewcommand-arraystretch-control/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-renewcommand-arraystretch-control/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-renewcommand-arraystretch-control/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-renewcommand-arraystretch-control/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-renewcommand-arraystretch-control/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-renewcommand-arraystretch-control/oracle.png"
+    },
+    {
+      "fixtureId": "tables-caption-star",
+      "artifactId": "tables-caption-star",
+      "referencePageCount": 1,
+      "strictPass": false,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000091,
+        "matchedTextLines": 0,
+        "unmatchedNativeTextLines": 1,
+        "unmatchedOracleTextLines": 1,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 0,
+        "maxAbsoluteGlyphDxPt": 0,
+        "maxAbsoluteGlyphDyPt": 0,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "report": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-caption-star/report.json",
+      "nativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-caption-star/native-1.png",
+      "texRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/tables-caption-star/reference-1.png",
+      "originalReductionReport": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/reductions/strict/tables-caption-star/report.json",
+      "trackedNativeSvg": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-caption-star/renderer.svg",
+      "trackedNativeRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-caption-star/renderer.png",
+      "trackedTexRaster": "artifacts/beamer-corpus-renderer/manual-review-round3/tables-review/tracked-strict/tables-caption-star/oracle.png"
+    }
+  ],
+  "initialStrictSuite": {
+    "completedAt": "2026-10-03T17:07:08.485Z",
+    "rendererFingerprint": "a9d884ddef821eec64195b5b39ae1a4faa775b1dc295174582c2334ce05c83c8",
+    "cases": 8,
+    "snapshots": 8,
+    "passed": 3,
+    "mismatches": 5,
+    "invalidOracles": 0,
+    "exceptions": 0,
+    "results": [
+      {
+        "id": "tables-tab-indentation",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=2 (expected 0)"
+        ]
+      },
+      {
+        "id": "tables-space-indentation-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "tables-command-columns-totalwidth",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedOracleTextLines=3 (expected 0)"
+        ]
+      },
+      {
+        "id": "tables-totalwidth-columns-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "tables-default-columns-width",
+        "status": "mismatch",
+        "failures": [
+          "State 1: maxAbsoluteGlyphDxPt=17.073317 (maximum 0.02)"
+        ]
+      },
+      {
+        "id": "tables-def-arraystretch",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: maxAbsoluteGlyphDxPt=130.118864 (maximum 0.02)",
+          "State 1: maxAbsoluteGlyphDyPt=18.359864 (maximum 0.01)"
+        ]
+      },
+      {
+        "id": "tables-renewcommand-arraystretch-control",
+        "status": "passed",
+        "failures": []
+      },
+      {
+        "id": "tables-caption-star",
+        "status": "mismatch",
+        "failures": [
+          "State 1: unmatchedNativeTextLines=1 (expected 0)",
+          "State 1: unmatchedOracleTextLines=1 (expected 0)"
+        ]
+      }
+    ]
+  }
+}
