@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { scanBeamerDocument } from "../packages/core/src/index.js";
 import {
+  beamerPageTraceLuaSource,
+  beamerProbeInstrumentation,
   buildBeamerFrameProbeSource,
   buildBeamerNavigationSeed,
   parseBeamerPageTraceTsv,
@@ -10,6 +16,9 @@ import {
   parsePdfInfo,
   summarizeMutoolStructuredText,
 } from "../scripts/lib/beamer-frame-oracle.mjs";
+
+const runOracleIntegration = process.env.BEAMER_ORACLE_TESTS === "1" &&
+  spawnSync("lualatex", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("Beamer frame oracle", () => {
   it("builds a single-frame probe while retaining the source preamble", () => {
@@ -197,6 +206,65 @@ KERN\t1\troot.4\ty\t0\t589824\t-32768\t-32768\t0\t0\t0\t0\t1
       }],
     }]);
   });
+
+  it.runIf(runOracleIntegration)("traces the painted extents of cline, trimmed cmidrules, and vertical rule leaders", () => {
+    const directory = mkdtempSync(join(tmpdir(), "beamer-rule-leader-oracle-"));
+    try {
+      const source = readFileSync(new URL("./fixtures/beamer/oracle-rule-leaders.tex", import.meta.url), "utf8");
+      writeFileSync(join(directory, "probe.tex"), source.replace(
+        String.raw`\begin{document}`,
+        `${beamerProbeInstrumentation()}\n${String.raw`\begin{document}`}`
+      ));
+      writeFileSync(join(directory, "beamer-page-trace.lua"), beamerPageTraceLuaSource());
+      execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "--no-shell-escape", `--output-directory=${directory}`, "probe.tex"], {
+        cwd: directory,
+        env: {
+          ...process.env,
+          TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
+          TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+          TIKZ_BEAMER_TRACE_DIR: directory,
+        },
+        stdio: "ignore",
+        timeout: 30_000,
+      });
+      const trace = parseBeamerPageTraceTsv(readFileSync(join(directory, "beamer-page-trace.tsv"), "utf8"));
+      type Dimension = { readonly texPt: number };
+      type Glyph = { readonly code: number; readonly x: Dimension; readonly y: Dimension };
+      type Rule = { readonly path: string; readonly x: Dimension; readonly y: Dimension; readonly width: Dimension; readonly height: Dimension };
+      const page = (index: number) => ({
+        glyphs: trace.pages[index].glyphs as readonly Glyph[],
+        leaders: (trace.pages[index].rules as readonly Rule[]).filter(rule => rule.path.endsWith(".leader")),
+      });
+      expect(trace.pages).toHaveLength(3);
+
+      const ordinary = page(0);
+      const ordinaryA = ordinary.glyphs.find(glyph => glyph.code === 65)!;
+      expect(ordinary.leaders).toHaveLength(1);
+      expect(ordinary.leaders[0].x.texPt).toBeCloseTo(ordinaryA.x.texPt, 4);
+      expect(ordinary.leaders[0].y.texPt - ordinaryA.y.texPt).toBeCloseTo(4.08003, 4);
+      expect(ordinary.leaders[0].width.texPt).toBe(30);
+      expect(ordinary.leaders[0].height.texPt).toBeCloseTo(0.4, 4);
+
+      const booktabs = page(1);
+      const booktabsA = booktabs.glyphs.find(glyph => glyph.code === 65)!;
+      const booktabsB = booktabs.glyphs.find(glyph => glyph.code === 66)!;
+      expect(booktabs.leaders).toHaveLength(2);
+      expect(booktabs.leaders[0].x.texPt - booktabsA.x.texPt).toBe(2);
+      expect(booktabs.leaders[0].width.texPt).toBe(25);
+      expect(booktabs.leaders[1].x.texPt - booktabsB.x.texPt).toBeCloseTo(5.475, 4);
+      expect(booktabs.leaders[1].width.texPt).toBeCloseTo(19.05, 4);
+      expect(booktabs.leaders[0].y.texPt - booktabsA.y.texPt).toBeCloseTo(4.08003 + 1.94469, 4);
+      expect(booktabs.leaders[0].height.texPt).toBeCloseTo(0.32848, 4);
+      expect(booktabs.leaders[0].y.texPt).toBe(booktabs.leaders[1].y.texPt);
+
+      const vertical = page(2);
+      expect(vertical.leaders).toHaveLength(1);
+      expect(vertical.leaders[0].width.texPt).toBe(2);
+      expect(vertical.leaders[0].height.texPt).toBe(20);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it("parses PDF page geometry and Beamer class provenance", () => {
     expect(

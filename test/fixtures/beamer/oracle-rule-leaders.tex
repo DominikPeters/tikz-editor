@@ -1,0 +1,27 @@
+% Instrumented by beamer-frame-oracle.spec.ts. Fixed cell widths let the test
+% verify the painted leader extents independently of native table layout.
+\documentclass[aspectratio=169]{beamer}
+\usepackage{booktabs}
+\setbeamertemplate{navigation symbols}{}
+
+\begin{document}
+\begin{frame}{Partial ordinary rule}
+  \begin{tabular}{@{}p{30pt}@{}p{30pt}@{}}
+    A & B\\
+    \cline{1-1}
+    C & D
+  \end{tabular}
+\end{frame}
+
+\begin{frame}{Partial booktabs rules}
+  \begin{tabular}{@{}p{30pt}@{}p{30pt}@{}}
+    A & B\\
+    \cmidrule(l{2pt}r{3pt}){1-1}\cmidrule(lr){2-2}
+    C & D
+  \end{tabular}
+\end{frame}
+
+\begin{frame}{Vertical rule leader}
+  \vbox to20pt{\leaders\vrule width2pt\vfill}
+\end{frame}
+\end{document}

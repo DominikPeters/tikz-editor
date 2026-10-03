@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 4;
+export const BEAMER_FRAME_ORACLE_VERSION = 5;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -128,6 +128,22 @@ local function write_rule(path, x, y, width, height, depth)
   }, "\t"), "\n")
 end
 
+-- TeX draws a rule leader continuously across the effective glue extent.
+-- Partial table rules (\cline and \cmidrule) use these nodes, not standalone
+-- rules. Box leaders have different repetition semantics and stay separate.
+local function write_rule_leader(value, parent, path, x, y, effective, axis)
+  local leader = value.leader
+  if not leader or leader.id ~= rule_id or effective <= 0 then return end
+  if axis == "x" then
+    local height = resolved(leader.height, parent and parent.height)
+    local depth = resolved(leader.depth, parent and parent.depth)
+    write_rule(path .. ".leader", x, y - height, effective, height, depth)
+  else
+    local width = resolved(leader.width, parent and parent.width)
+    write_rule(path .. ".leader", x, y, width, effective, 0)
+  end
+end
+
 local function write_glyph(path, value, x, baseline)
   local x_offset = value.xoffset or 0
   local y_offset = value.yoffset or 0
@@ -181,6 +197,7 @@ walk_hlist = function(list, parent, origin_x, baseline, path)
     elseif value.id == glue_id then
       local effective = glue_width(value, parent)
       write_spacing("GLUE", current_path, "x", x, baseline, value, effective)
+      write_rule_leader(value, parent, current_path, x, baseline, effective, "x")
       x = x + effective
     elseif value.id == kern_id then
       local effective = value.kern or value.width or 0
@@ -221,6 +238,7 @@ walk_vlist = function(list, parent, origin_x, origin_y, path)
     if value.id == glue_id then
       local effective = glue_width(value, parent)
       write_spacing("GLUE", current_path, "y", origin_x, y, value, effective)
+      write_rule_leader(value, parent, current_path, origin_x, y, effective, "y")
       y = y + effective
     elseif value.id == kern_id then
       local effective = value.kern or value.width or 0
