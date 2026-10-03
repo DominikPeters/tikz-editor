@@ -172,7 +172,6 @@ function renderMathGlyphPath(
   const y = translateTexHBoxY(originY, item.y);
   return [
     `<path data-tex-font="${escapeXmlAttribute(font.id)}"`,
-    ` data-tex-font-at-pt="${formatSvgNumber(font.atPt)}"`,
     ` data-tex-glyph="${item.code}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
     ` data-source-end="${item.sourceSpan.end}"`,
@@ -180,7 +179,8 @@ function renderMathGlyphPath(
       ? ` fill="${escapeXmlAttribute(item.color)}" stroke="none"`
       : "",
     ` d="${d}"`,
-    ` transform="translate(${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)} ${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}) scale(${formatSvgNumber(scale)})" />`,
+    ` transform="translate(${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)} ${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}) scale(${formatSvgNumber(scale)})"`,
+    ` data-tex-font-at-pt="${formatSvgNumber(font.atPt)}" />`,
   ].join("");
 }
 
