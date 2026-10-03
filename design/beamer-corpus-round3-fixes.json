@@ -1,0 +1,141 @@
+{
+  "formatVersion": 1,
+  "rendererCommit": "3d06b4d9",
+  "fixCommits": [
+    "0365e04c",
+    "1aef879f",
+    "f6b0b7c2",
+    "7a5998d1",
+    "6e12eb58",
+    "3d06b4d9"
+  ],
+  "scope": "Selected minimal reproductions and common-feature fidelity suites; not a downloaded-corpus pass rate.",
+  "initialFollowupBaseline": {
+    "cases": 34,
+    "snapshots": 38,
+    "passed": 11,
+    "mismatched": 23
+  },
+  "current": {
+    "passedCases": 138,
+    "failedCases": 0,
+    "texSnapshots": 163,
+    "recognitionChecks": 6
+  },
+  "strictLimits": {
+    "glyphDxPt": 0.02,
+    "glyphDyPt": 0.01,
+    "ruleEdgeDeltaPt": 0.01,
+    "rgbChannelDelta": 2,
+    "fontCodeAndPaintAxes": "exact",
+    "pinnedShrinkGlyphAndRuleDeltaPt": 0.001
+  },
+  "checks": {
+    "fullTests": {
+      "command": "npm test -- --maxWorkers=4",
+      "filesPassed": 401,
+      "testsPassed": 6091,
+      "testsSkipped": 12,
+      "failed": 0
+    },
+    "typecheck": "passed",
+    "productionLint": "passed",
+    "coreBuild": "passed"
+  },
+  "gallerySuites": [
+    {
+      "gallery": "artifacts/beamer-followup-conformance/index.html",
+      "manifest": "test/fixtures/beamer/corpus-followups/cases.json",
+      "generatedAt": "2026-10-03T19:19:25.877Z",
+      "passedCases": 34,
+      "failedCases": 0,
+      "fidelityCases": 34,
+      "recognitionCases": 0,
+      "snapshots": 38,
+      "maxGlyphDxPt": 0.002455,
+      "maxGlyphDyPt": 0.000109,
+      "maxRuleEdgeDeltaPt": 0.000165
+    },
+    {
+      "gallery": "artifacts/beamer-priority-conformance/index.html",
+      "manifest": "test/fixtures/beamer/corpus-priorities/cases.json",
+      "generatedAt": "2026-10-03T19:19:25.944Z",
+      "passedCases": 26,
+      "failedCases": 0,
+      "fidelityCases": 20,
+      "recognitionCases": 6,
+      "snapshots": 28,
+      "maxGlyphDxPt": 0.003526,
+      "maxGlyphDyPt": 0.001416,
+      "maxRuleEdgeDeltaPt": 0.007003
+    },
+    {
+      "gallery": "artifacts/beamer-table-conformance/index.html",
+      "manifest": "test/fixtures/beamer/tables/cases.json",
+      "generatedAt": "2026-10-03T19:19:25.888Z",
+      "passedCases": 34,
+      "failedCases": 0,
+      "fidelityCases": 34,
+      "recognitionCases": 0,
+      "snapshots": 34,
+      "maxGlyphDxPt": 0.000499,
+      "maxGlyphDyPt": 0.000112,
+      "maxRuleEdgeDeltaPt": 0.000242
+    },
+    {
+      "gallery": "artifacts/beamer-transform-conformance/index.html",
+      "manifest": "test/fixtures/beamer/transforms/cases.json",
+      "generatedAt": "2026-10-03T19:22:22.683Z",
+      "passedCases": 14,
+      "failedCases": 0,
+      "fidelityCases": 14,
+      "recognitionCases": 0,
+      "snapshots": 14,
+      "maxGlyphDxPt": 0.001808,
+      "maxGlyphDyPt": 0.002019,
+      "maxRuleEdgeDeltaPt": 0.000108
+    },
+    {
+      "gallery": "artifacts/beamer-caption-conformance/index.html",
+      "manifest": "test/fixtures/beamer/captions-fidelity/cases.json",
+      "generatedAt": "2026-10-03T19:19:26.003Z",
+      "passedCases": 13,
+      "failedCases": 0,
+      "fidelityCases": 13,
+      "recognitionCases": 0,
+      "snapshots": 13,
+      "maxGlyphDxPt": 0.000175,
+      "maxGlyphDyPt": 0.002266,
+      "maxRuleEdgeDeltaPt": 0.005186
+    },
+    {
+      "gallery": "artifacts/beamer-continuation-conformance/index.html",
+      "manifest": "test/fixtures/beamer/continuations-fidelity/cases.json",
+      "generatedAt": "2026-10-03T19:23:16.452Z",
+      "passedCases": 17,
+      "failedCases": 0,
+      "fidelityCases": 17,
+      "recognitionCases": 0,
+      "snapshots": 36,
+      "maxGlyphDxPt": 0.001497,
+      "maxGlyphDyPt": 0.001388,
+      "maxRuleEdgeDeltaPt": 0.005502
+    }
+  ],
+  "manualRasterChecks": [
+    "flow-shrink-explicit",
+    "flow-invisible-default",
+    "flow-basic-tcolorbox",
+    "package-numbered-long-math",
+    "root-normal-text-background",
+    "text-bm-vector",
+    "root-font-14pt"
+  ],
+  "newPrimaryCoverage": {
+    "stockFlowPages": 6,
+    "tcolorboxPages": 5,
+    "shrinkPages": 3,
+    "colorDeclarationCases": 10,
+    "listNavigationPaintCases": 8
+  }
+}

@@ -4,20 +4,22 @@ Manual review of 33 new source frames from seven downloaded collections produced
 34 original minimal comparison cases. The first strict run has **23 mismatches
 and 11 passes across 38 snapshots**, with **no invalid fixture oracles or runner
 exceptions**. This is a selected reproduction suite, not a corpus pass rate.
-The production renderer was not changed during this review.
+The production renderer was not changed during the initial review. Subsequent
+fixes now make **34/34 cases pass across all 38 snapshots**, with the original
+strict tolerances unchanged. This remains a selected reproduction suite.
 
 - [Minimal comparison gallery](../artifacts/beamer-followup-conformance/index.html)
 - [Corpus source and raster gallery](../artifacts/beamer-corpus-renderer/manual-review-round3/index.html)
 - [Structured findings, provenance and initial results](beamer-corpus-round3.json)
+- [Current fix validation](beamer-corpus-round3-fixes.json)
 - [Fixture manifest](../test/fixtures/beamer/corpus-followups/cases.json)
 
 Run all cases with `npm run compare:beamer-followups`, or select IDs with
 `npm run compare:beamer-followups -- --cases tables-tab-indentation,text-bm-vector`.
-The runner exits nonzero on these current defects. It retains the existing exact
-glyph, font, transform and rule checks; no current mismatches are accepted as
-goldens. Required empty-area color probes also compare actual PDF/SVG paint.
+The runner exits nonzero on any mismatch. It retains the existing exact
+glyph, font, transform and rule checks; mismatches are not accepted as goldens. Required empty-area color probes also compare actual PDF/SVG paint.
 
-## Proposed fix order
+## Original fix order
 
 The ordering favors common syntax that loses content, then layout/font fidelity.
 Every target uses stock Beamer, ordinary LaTeX, or a defined common package
@@ -108,3 +110,57 @@ Detailed evidence is split into [tables](beamer-corpus-round3-tables.json),
 and [font/background](beamer-corpus-round3-root.json) reports. Their result counts
 record the initial baseline, so later fixes should regenerate the gallery rather
 than treating those counts as permanent expected outcomes.
+
+
+## Renderer fixes and regression coverage
+
+The fixes cover command/environment columns and stock column glue, scoped
+leading displays, whitespace and list-register declarations, URL line breaking,
+frame titles/subtitles and their overlays, class font-size ladders, real bold
+math fonts and escaped math percent. Stock blocks now retain the correct list
+boundary spacing. Basic standard-skin `tcolorbox` boxes share the paragraph,
+list and minipage layout pipeline, with source-owned text and bounded cards for
+unsupported skins or nested package boxes.
+
+Caption regressions now cover `caption`/`subcaption` package-enabled captions,
+unnumbered `caption*`, wrapping, class-specific fonts, struts and bottom minipage
+depth. Isolated reference frames seed figure/table counters from an actual
+full-deck TeX run. Generic fixes preserve Beamer's `emph` semantics and keep
+custom enumerate labels from advancing the generated counter while retaining
+ordinal editing topology.
+
+Shrink expands body widths before layout, uses Beamer's scaled-point reciprocal
+and overflow arithmetic, cramps live item separation, and applies one body
+transform to paint, traces, source hit bounds, caret stops and selections.
+Titles and chrome retain their own coordinates. Three pinned primary cases
+cover explicit/default shrink, wrapping, math/rotation and `squeeze`; their
+coordinate and rule limits are 0.001pt. Five pinned box pages, class/heading/flow
+pages, ten color-declaration cases and eight list/navigation paint cases extend
+coverage beyond the corpus reductions.
+
+Manual raster checks caught black enumeration labels and unwanted navigation
+icons despite passing glyph geometry. Label color-role inheritance and authored
+empty/default navigation templates now match TeX, with source-backed paint
+regressions. Fresh side-by-side inspection also checked boxes, wrapped captions,
+shrink, invisible list material, colored canvas, bold math and enlarged headings.
+
+The frame oracle now records PGF PDF matrices and retains both actual off-page
+paint and declared hidden layout origins. It emits equivalent string-backed PDF
+literals to work around a LuaTeX getter defect; a primary-PDF comparison confirms
+identical raster pixels. Hidden-layout evidence only matches declared covered
+native material. Visible glyph origins, underlying fonts and composed axes
+remain gated, as do rule edges and required color probes.
+
+The six gallery runners cover follow-ups, original priorities, tables,
+transforms, captions and continuations. Their artifacts are regenerated from
+the current renderer; the JSON findings above retain the initial review baseline.
+Package-specific physics macros, `mdframed`, body-local theme declarations and
+advanced box skins remain later support targets; the newly supported boundaries
+are documented in the capability matrix.
+
+Validation at renderer commit `3d06b4d9`: all **138 gallery cases pass**,
+including **163 TeX snapshots and six unsupported-code recognition checks**.
+The full regression suite passes **6,091 tests in 401 files**, with 12
+tests skipped, using four workers. Typecheck, production lint and the core
+build pass. Renderer changes landed in six commits, with their identities and
+per-suite maximum deltas retained in the validation report.
