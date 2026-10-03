@@ -8,7 +8,7 @@ import {
   type OptionMutation
 } from "../option-mutations.js";
 import { TREE_CHILD_LAYOUT_WRITABLE_KEYS } from "../tree-editing.js";
-import { resolvePropertyTarget } from "../property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "../property-target.js";
 import type { PropertyTarget, PropertyTargetOptionsFormat } from "../property-target.js";
 import { replaceSpan } from "../patch.js";
 import type { Span } from "../../ast/types.js";
@@ -616,16 +616,6 @@ function withChangedSourceIdsForTarget(
     ...result,
     changedSourceIds: changedSourceIdsForPropertyTarget(target)
   };
-}
-
-function changedSourceIdsForPropertyTarget(target: PropertyTarget): string[] {
-  const sourceId =
-    target.ownerSourceId ??
-    target.matrixSourceId ??
-    target.treeRootSourceId ??
-    target.id;
-  const normalized = sourceId.trim();
-  return normalized.length > 0 ? [normalized] : [];
 }
 
 function createOptionMutationsFromSetProperty(

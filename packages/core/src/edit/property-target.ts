@@ -124,6 +124,15 @@ export type PropertyTargetResolution =
   | { kind: "found"; target: PropertyTarget }
   | { kind: "not-found"; reason: string };
 
+/** Incremental parsing reparses statements, while selection may identify a child target. */
+export function changedSourceIdsForPropertyTarget(
+  target: Pick<PropertyTarget, "id" | "ownerSourceId" | "matrixSourceId" | "treeRootSourceId">
+): string[] {
+  const sourceId = target.ownerSourceId ?? target.matrixSourceId ?? target.treeRootSourceId ?? target.id;
+  const normalized = sourceId.trim();
+  return normalized.length > 0 ? [normalized] : [];
+}
+
 export function resolvePropertyTarget(source: string, elementId: string, parseOptions: EditParseOptions = {}): PropertyTargetResolution {
   incrementProfilingCounter("resolvePropertyTargetCalls");
   if (

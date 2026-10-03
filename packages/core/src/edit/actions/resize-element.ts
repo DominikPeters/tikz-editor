@@ -21,7 +21,7 @@ import type { FrameTransform } from "../../coords/transforms.js";
 import { frameTransform, worldTransform } from "../../coords/transforms.js";
 import type { CoordinateItem, NodeItem, PathItem, PathOptionItem, Statement, Span } from "../../ast/types.js";
 import type { PropertyTarget } from "../property-target.js";
-import { resolvePropertyTarget } from "../property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "../property-target.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { parseCircleRadiusFromCoordinateRaw, parseEllipseRadiiFromCoordinateRaw } from "../../semantic/path/parsers.js";
 import { parseLength } from "../../semantic/coords/parse-length.js";
@@ -222,6 +222,7 @@ export function applyResizeElementAction(
     resolved.target,
     parseOptions
   );
+  const changedSourceIds = changedSourceIdsForPropertyTarget(resizeTarget);
   const isDiamondNodeShape = isDiamondNodeShapeInPathStatement(parsed.figure.body, elementId);
   const currentBounds = action.referenceBounds ?? resolveNodeResizeBounds(semantic.scene.elements, elementId);
   if (!currentBounds) {
@@ -269,7 +270,7 @@ export function applyResizeElementAction(
   const baselineSize = resolveNodeResizeLocalSize(semantic.scene.elements, elementId)!;
   if (geometry && (!affectsWidth || Math.abs(requestedWidth - baselineSize.width) < 1e-6) &&
       (!affectsHeight || Math.abs(requestedHeight - baselineSize.height) < 1e-6)) {
-    return { kind: "success", newSource: source, patches: [], changedSourceIds: [elementId] };
+    return { kind: "success", newSource: source, patches: [], changedSourceIds };
   }
   const intrinsicWorldWidth = floorBounds.maxX - floorBounds.minX;
   const intrinsicLocal = resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId)!;
@@ -313,7 +314,7 @@ export function applyResizeElementAction(
         kind: "success",
         newSource: rewritten.source,
         patches: [rewritten.patch],
-        changedSourceIds: [elementId]
+        changedSourceIds
       };
     }
   }
@@ -352,23 +353,23 @@ export function applyResizeElementAction(
         kind: "success",
         newSource: source,
         patches: [],
-        changedSourceIds: [elementId]
+        changedSourceIds
       };
     }
-    return restoreResizeBaselineOnNoop({ kind: "unsupported", reason: "Resize would not change node constraints." }, geometry, elementId);
+    return restoreResizeBaselineOnNoop({ kind: "unsupported", reason: "Resize would not change node constraints." }, geometry, elementId, changedSourceIds);
   }
 
   return {
     kind: "success",
     newSource: rewritten.source,
     patches: [rewritten.patch],
-    changedSourceIds: [elementId]
+    changedSourceIds
   };
 }
 
-function restoreResizeBaselineOnNoop(result: EditActionResultLike, geometry: EditGeometrySession | undefined, elementId: string): EditActionResultLike {
+function restoreResizeBaselineOnNoop(result: EditActionResultLike, geometry: EditGeometrySession | undefined, elementId: string, changedSourceIds = [elementId]): EditActionResultLike {
   return geometry && result.kind === "unsupported" && result.reason === "Resize would not change node constraints."
-    ? { kind: "success", newSource: geometry.source, patches: [], changedSourceIds: [elementId] }
+    ? { kind: "success", newSource: geometry.source, patches: [], changedSourceIds }
     : result;
 }
 

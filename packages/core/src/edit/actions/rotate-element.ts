@@ -22,7 +22,7 @@ import {
   applyOptionMutationsToTarget,
   type OptionMutation
 } from "../option-mutations.js";
-import { resolvePropertyTarget } from "../property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "../property-target.js";
 import type { SourcePatch } from "../types.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import {
@@ -115,7 +115,7 @@ function applyPropertyRotate(
     kind: "success",
     newSource: applied.source,
     patches: [applied.patch],
-    changedSourceIds: [action.elementId]
+    changedSourceIds: changedSourceIdsForPropertyTarget(resolvedTarget.target)
   };
 }
 
@@ -224,7 +224,7 @@ function applyCenterPivotRotate(
     kind: "success",
     newSource: nextSource,
     patches,
-    changedSourceIds: [action.elementId]
+    changedSourceIds: changedSourceIdsForPropertyTarget(resolvedTarget.target)
   };
 }
 

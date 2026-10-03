@@ -18,7 +18,7 @@ import {
   type AnchorReference,
   type ElementTemplate
 } from "./element-templates.js";
-import { resolvePropertyTarget } from "./property-target.js";
+import { changedSourceIdsForPropertyTarget, resolvePropertyTarget } from "./property-target.js";
 import type { AlignMode, DistributeAxis } from "./arrange.js";
 import {
   applyTextReplacements,
@@ -938,7 +938,7 @@ function resolveNodeTextTargetForElementId(
   source: string,
   elementId: string,
   parseOptions: EditParseOptions
-): { textSpan: Span; sourceId: string } | null {
+): { textSpan: Span; changedSourceIds: string[] } | null {
   const normalizedId = elementId.trim();
   if (normalizedId.length === 0) {
     return null;
@@ -950,7 +950,7 @@ function resolveNodeTextTargetForElementId(
     if (target.textSpan) {
       return {
         textSpan: target.textSpan,
-        sourceId: target.ownerSourceId ?? target.matrixSourceId ?? target.treeRootSourceId ?? target.id
+        changedSourceIds: changedSourceIdsForPropertyTarget(target)
       };
     }
   }
@@ -960,7 +960,7 @@ function resolveNodeTextTargetForElementId(
   if (statementRef?.statement.kind === "Path" && statementRef.statement.command === "node") {
     const nodeItem = statementRef.statement.items.find((item) => item.kind === "Node");
     if (nodeItem?.kind === "Node") {
-      return { textSpan: nodeItem.textSpan, sourceId: statementRef.statement.id };
+      return { textSpan: nodeItem.textSpan, changedSourceIds: changedSourceIdsForPropertyTarget({ id: statementRef.statement.id }) };
     }
   }
 
@@ -980,12 +980,12 @@ function resolveNodeTextTargetForElementId(
     if (statement.command === "node" && statement.id === normalizedId) {
       const nodeItem = statement.items.find((item) => item.kind === "Node");
       if (nodeItem?.kind === "Node") {
-        return { textSpan: nodeItem.textSpan, sourceId: statement.id };
+        return { textSpan: nodeItem.textSpan, changedSourceIds: changedSourceIdsForPropertyTarget({ id: statement.id }) };
       }
     }
     for (const item of statement.items) {
       if (item.kind === "Node" && item.id === normalizedId) {
-        return { textSpan: item.textSpan, sourceId: statement.id };
+        return { textSpan: item.textSpan, changedSourceIds: changedSourceIdsForPropertyTarget({ id: statement.id }) };
       }
     }
   }
@@ -1160,7 +1160,7 @@ function applyUpdateNodeText(
         replacement: action.text
       }
     ],
-    changedSourceIds: [target.sourceId.trim()]
+    changedSourceIds: target.changedSourceIds
   };
 }
 
