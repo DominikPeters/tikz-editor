@@ -94,6 +94,26 @@ describe("export commands", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:tikz-export");
   });
 
+  it.each(["create", "click", "remove"] as const)("releases browser download resources when %s fails", async (phase) => {
+    setActiveEditorPlatform({ ...previousPlatform, files: undefined });
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const failure = () => { throw new Error("download failed"); };
+    const anchor = { href: "", download: "", style: { display: "" },
+      click: vi.fn(phase === "click" ? failure : () => undefined),
+      remove: vi.fn(phase === "remove" ? failure : () => undefined) };
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL: () => "blob:failed-export", revokeObjectURL });
+    vi.stubGlobal("document", {
+      body: { appendChild: vi.fn() },
+      createElement: phase === "create" ? failure : () => anchor
+    });
+
+    await expect(downloadSvgMarkup('<svg xmlns="http://www.w3.org/2000/svg"/>')).resolves.toBe(false);
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:failed-export");
+    expect(anchor.remove).toHaveBeenCalledTimes(phase === "create" ? 0 : 1);
+    expect(getUiNotificationSnapshot()).toMatchObject({ kind: "error", message: "Failed to export SVG." });
+  });
+
   it("routes pdf export through the platform file api before browser download", async () => {
     const rendered = renderTikzToSvg(SOURCE);
     const exportFile = vi.fn(async (..._args: [BlobPart[], { fileName: string; mimeType: string }]) => true);
@@ -115,7 +135,10 @@ describe("export commands", () => {
         return {
           documentElement: {
             nodeName: "svg",
-            setAttribute: vi.fn()
+            setAttribute: vi.fn(),
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            matches: () => false
           }
         };
       }

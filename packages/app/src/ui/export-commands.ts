@@ -75,21 +75,7 @@ export async function exportStandaloneLatexDownload(
       return reportExportFailure("Standalone LaTeX export requires an active document.");
     }
 
-    const blob = new Blob([artifact.text], { type: artifact.mimeType });
-    const objectUrl = URL.createObjectURL(blob);
-
-    try {
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = artifact.fileName;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return true;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
+    return downloadBrowserBlob(new Blob([artifact.text], { type: artifact.mimeType }), artifact.fileName);
   } catch (error) {
     return reportExportFailure("Failed to export standalone LaTeX file.", error);
   }
@@ -176,19 +162,7 @@ export async function exportPngDownload(
         { fileName: result.artifact.fileName, mimeType: result.artifact.mimeType }
       );
     }
-    const objectUrl = URL.createObjectURL(result.blob);
-    try {
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = result.artifact.fileName;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return true;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
+    return downloadBrowserBlob(result.blob, result.artifact.fileName);
   } catch (error) {
     return reportExportFailure("Failed to export PNG.", error);
   }
@@ -237,19 +211,7 @@ export async function exportPdfDownload(
       return reportExportFailure("PDF export requires an active document.");
     }
 
-    const objectUrl = URL.createObjectURL(blob);
-    try {
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = artifact.fileName;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return true;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
+    return downloadBrowserBlob(blob, artifact.fileName);
   } catch (error) {
     return reportExportFailure("Failed to export PDF.", error);
   }
@@ -318,23 +280,29 @@ export async function downloadSvgMarkup(
       return reportExportFailure("SVG export requires an active document.");
     }
 
-    const blob = new Blob([artifact.text], { type: artifact.mimeType });
-    const objectUrl = URL.createObjectURL(blob);
+    return downloadBrowserBlob(new Blob([artifact.text], { type: artifact.mimeType }), artifact.fileName);
+  } catch (error) {
+    return reportExportFailure("Failed to export SVG.", error);
+  }
+}
 
+function downloadBrowserBlob(blob: Blob, fileName: string): true {
+  const objectUrl = URL.createObjectURL(blob);
+  let anchor: HTMLAnchorElement | null = null;
+  try {
+    anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = fileName;
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    return true;
+  } finally {
     try {
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = artifact.fileName;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return true;
+      anchor?.remove();
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
-  } catch (error) {
-    return reportExportFailure("Failed to export SVG.", error);
   }
 }
 
