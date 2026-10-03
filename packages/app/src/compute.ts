@@ -229,7 +229,8 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
           revision,
           requestKind,
           computeStartedAt,
-          rootRef
+          rootRef,
+          work
         );
         if (nested) {
           return nested;
@@ -237,7 +238,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
         // The addressed picture no longer exists (edited away): fall back
         // to the deck so the app can recover to the owning frame.
       }
-      return await computeDeckSnapshot(request, revision, requestKind, computeStartedAt);
+      return await computeDeckSnapshot(request, revision, requestKind, computeStartedAt, work);
     }
     const trigger = request.trigger ?? "other";
     const changedSourceIds = normalizeChangedSourceIds(request.changedSourceIds ?? []);
@@ -545,7 +546,8 @@ async function computeDeckSnapshot(
   request: ComputeRequest,
   revision: number,
   requestKind: "render" | "prewarm",
-  computeStartedAt: number
+  computeStartedAt: number,
+  work?: CooperativeWorkOptions
 ): Promise<ComputeResponse> {
   if (requestKind === "prewarm") {
     // Deck mode has no drag-prewarm path; hover prewarming is a tikz
@@ -561,11 +563,13 @@ async function computeDeckSnapshot(
     source: request.source,
     documentFileRef: request.documentFileRef ?? null
   });
+  work?.signal?.throwIfAborted();
   const graphicsResolver = graphicsContext.resolver;
   const structuralMask = request.textEditMaskSpan ?? null;
   const structuralMaskKey = structuralMask
     ? `${structuralMask.from}:${structuralMask.to}`
     : "";
+  let session: DeckComputeSession;
   if (
     deckComputeSession?.source !== request.source ||
     deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey ||
@@ -587,7 +591,7 @@ async function computeDeckSnapshot(
         ? request.patches ?? undefined
         : undefined
     });
-    deckComputeSession = {
+    session = {
       source: request.source,
       sourceRevision: request.sourceRevision ?? null,
       resolverCacheKey: graphicsResolver.cacheKey,
@@ -602,8 +606,11 @@ async function computeDeckSnapshot(
       })),
       renderedPages: new Map()
     };
+  } else {
+    // A suspended render owns its page writes. Aborted or older requests must
+    // not replace the newest completed deck baseline, even for the same source.
+    session = { ...deckComputeSession, renderedPages: new Map(deckComputeSession.renderedPages) };
   }
-  const session = deckComputeSession;
   const frameIndex = resolveDeckFrameIndex(session.frames, request.activeRootId);
   let activeFrame: DeckActiveFrame | null = null;
   if (frameIndex != null) {
@@ -617,8 +624,10 @@ async function computeDeckSnapshot(
       const result = await session.prepared.renderFrame({
         frameIndex,
         step,
-        graphicsResolver
+        graphicsResolver,
+        cooperative: work
       });
+      work?.signal?.throwIfAborted();
       activeFrame = {
         frameId: result.frame.id,
         frameIndex,
@@ -632,6 +641,8 @@ async function computeDeckSnapshot(
       session.renderedPages.set(pageKey, activeFrame);
     }
   }
+  work?.signal?.throwIfAborted();
+  if (revision === revisionCounter) deckComputeSession = session;
 
   const snapshot: SessionSnapshot = {
     source: request.source,
@@ -713,7 +724,8 @@ async function computeNestedTikzSnapshot(
   revision: number,
   requestKind: "render" | "prewarm",
   computeStartedAt: number,
-  ref: Extract<DocumentRootRef, { kind: "beamer-frame-tikz" }>
+  ref: Extract<DocumentRootRef, { kind: "beamer-frame-tikz" }>,
+  work?: CooperativeWorkOptions
 ): Promise<ComputeResponse | null> {
   if (requestKind === "prewarm") {
     return {
@@ -742,12 +754,14 @@ async function computeNestedTikzSnapshot(
   const textEngine = await createTexNodeTextEngine({
     mathFontProfile: createBeamerTexMathFontProfile(theme.fonts["normal-text"])
   });
+  work?.signal?.throwIfAborted();
   const masked = maskSourceOutsideSpan(request.source, picture.span);
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
     evaluate: { graphicsResolver: graphicsContext.resolver },
     svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
-    textEngine
+    textEngine,
+    cooperative: work
   });
   const snapshot: SessionSnapshot = {
     source: request.source,

@@ -17,6 +17,7 @@ import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
 import type { SvgRect } from "../coords/index.js";
 import type { SourcePatch } from "../edit/types.js";
 import type { Tree } from "@lezer/common";
+import type { CooperativeWorkOptions } from "../semantic/cooperative-work.js";
 
 export type BeamerDelimitedSourceValue = {
   /** Span including the delimiters. */
@@ -451,6 +452,8 @@ export type RenderBeamerFrameResult = {
 };
 
 export type RenderBeamerFrameOptions = {
+  /** Yield between body/column units and during embedded TikZ evaluation. */
+  cooperative?: CooperativeWorkOptions;
   /** Zero-based frame index. */
   frameIndex?: number;
   /** One-based overlay step. */
@@ -460,6 +463,8 @@ export type RenderBeamerFrameOptions = {
 };
 
 export type RenderBeamerFramePagesOptions = {
+  /** Applies to every overlay page, including its embedded TikZ evaluation. */
+  cooperative?: CooperativeWorkOptions;
   /** Zero-based frame index. */
   frameIndex?: number;
   /** Resolves document-local graphics for every overlay page. */

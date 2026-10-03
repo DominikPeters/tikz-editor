@@ -21,6 +21,7 @@ import {
   type MacroBinding,
 } from "../macros/index.js";
 import { renderTikzToSvgAsync } from "../render/index.js";
+import { BeamerRenderWork, runBeamerRenderOperation } from "./cooperative-render-work.js";
 import { formatSvgNumber as fmt } from "../svg/format.js";
 import {
   createSvgModelBuilder,
@@ -355,6 +356,7 @@ export function prepareBeamerDocument(
       return context.overlaysByFrameId.get(requireFrame(frameIndex).id)!.stepCount;
     },
     async renderFrame(options = {}) {
+      options.cooperative?.signal?.throwIfAborted();
       const frameIndex = options.frameIndex ?? 0;
       const frame = requireFrame(frameIndex);
       const bodyIr = frameBodyIr(frameIndex);
@@ -367,15 +369,19 @@ export function prepareBeamerDocument(
         bodyIr,
         step,
         graphicsResolver: options.graphicsResolver,
+        work: options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined,
       });
     },
     async renderFramePages(options = {}) {
+      options.cooperative?.signal?.throwIfAborted();
       const frameIndex = options.frameIndex ?? 0;
       const frame = requireFrame(frameIndex);
       const bodyIr = frameBodyIr(frameIndex);
       const stepCount = bodyIr.overlays.stepCount;
       const pages: RenderBeamerFrameResult[] = [];
+      const work = options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined;
       for (let step = 1; step <= stepCount; step += 1) {
+        if (work) await work.checkpoint();
         pages.push(
           await renderBeamerFrameStep({
             context,
@@ -384,6 +390,7 @@ export function prepareBeamerDocument(
             bodyIr,
             step,
             graphicsResolver: options.graphicsResolver,
+            work,
           })
         );
       }
@@ -419,6 +426,7 @@ async function renderBeamerFrameStep(params: {
   bodyIr: BeamerFrameBodyIr;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  work?: BeamerRenderWork;
 }): Promise<RenderBeamerFrameResult> {
   const { context, frame, frameIndex, bodyIr, step } = params;
   const { source, document, theme, macroBindings, page } = context;
@@ -502,6 +510,7 @@ async function renderBeamerFrameStep(params: {
     overlays: bodyIr.overlays,
     step,
     graphicsResolver: params.graphicsResolver,
+    work: params.work,
   });
   if (preparedFrameFlow.length > 0) {
     const rigidPositioned = positionPreparedFrameFlow(
@@ -522,6 +531,7 @@ async function renderBeamerFrameStep(params: {
     const frameBlockTop =
       availableContentBounds.y + verticalPacking.topOffset;
     for (const placement of positioned.items) {
+      if (params.work) await params.work.checkpoint();
       if (
         placement.item.visibility === "hidden" &&
         placement.item.kind !== "block"
@@ -549,7 +559,7 @@ async function renderBeamerFrameStep(params: {
           theme,
         });
       } else if (placement.item.kind === "columns") {
-        emitPreparedColumns({
+        await emitPreparedColumns({
           prepared: placement.item,
           referenceY: frameBlockTop + placement.referenceY,
           spacing,
@@ -559,6 +569,7 @@ async function renderBeamerFrameStep(params: {
           embeddedTikz,
           modelBuilder,
           theme,
+          work: params.work,
         });
       } else if (placement.item.kind === "tikzpicture") {
         const tikz = placement.item.tikz;
@@ -696,6 +707,7 @@ async function renderBeamerFrameStep(params: {
     ),
   };
 
+  params.work?.options.signal?.throwIfAborted();
   return {
     document,
     frame,
@@ -945,11 +957,13 @@ async function prepareFrameFlow(params: {
   overlays: BeamerOverlayModel;
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
+  work?: BeamerRenderWork;
 }): Promise<PreparedFrameFlowItem[]> {
   const result: PreparedFrameFlowItem[] = [];
   const bodyFont = params.theme.fonts["normal-text"];
   const listProfile = beamerListLayoutProfile(params.theme);
   for (const node of params.children) {
+    if (params.work) await params.work.checkpoint();
     const visibility = resolveBeamerOverlaySpanVisibility(
       params.overlays,
       node.span,
@@ -962,7 +976,7 @@ async function prepareFrameFlow(params: {
       result.push({
         kind: "title-page",
         visibility,
-        titlePage: prepareTitlePage({
+        titlePage: runBeamerRenderOperation(params.work, () => prepareTitlePage({
           node,
           width: params.textWidth,
           theme: params.theme,
@@ -971,12 +985,12 @@ async function prepareFrameFlow(params: {
           references: params.references,
           graphicsResolver: params.graphicsResolver,
           paperWidth: params.paperWidth,
-        }),
+        })),
       });
       continue;
     }
     if (node.kind === "paragraph") {
-      const paragraph = prepareFrameParagraph({
+      const paragraph = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
         source: params.source,
         node,
         textWidth: params.textWidth,
@@ -989,7 +1003,7 @@ async function prepareFrameFlow(params: {
         graphicsResolver: params.graphicsResolver,
         colorResolver: beamerAlertColorResolver(params.theme),
         paperWidth: params.paperWidth,
-      });
+      }));
       if (paragraph) {
         result.push(paragraph);
       } else if (hasProjectedContent(params.source, node.span, params.overlays, params.step, params.references)) {
@@ -1032,24 +1046,24 @@ async function prepareFrameFlow(params: {
         });
         continue;
       }
-      const columns = await Promise.all(
-        node.columns.map((column) =>
-          prepareColumnContent({
-            source: params.source,
-            column,
-            textWidth: params.textWidth,
-            diagnostics: params.diagnostics,
-            theme: params.theme,
-            macroBindings: params.macroBindings,
-            references: params.references,
-            leftSidebarWidth: params.leftSidebarWidth,
-            overlays: params.overlays,
-            step: params.step,
-            graphicsResolver: params.graphicsResolver,
-            paperWidth: params.paperWidth,
-          })
-        )
-      );
+      // Retain the existing asynchronous column schedule, including warnings
+      // produced before an earlier column's embedded picture completes. Each
+      // column shares the frame budget and checks the same cancellation signal.
+      const columns = await Promise.all(node.columns.map(column => prepareColumnContent({
+        source: params.source,
+        column,
+        textWidth: params.textWidth,
+        diagnostics: params.diagnostics,
+        theme: params.theme,
+        macroBindings: params.macroBindings,
+        references: params.references,
+        leftSidebarWidth: params.leftSidebarWidth,
+        overlays: params.overlays,
+        step: params.step,
+        graphicsResolver: params.graphicsResolver,
+        paperWidth: params.paperWidth,
+        work: params.work,
+      })));
       result.push({
         kind: "columns",
         visibility,
@@ -1071,6 +1085,7 @@ async function prepareFrameFlow(params: {
         diagnostics: params.diagnostics,
         visibility,
         graphicsResolver: params.graphicsResolver,
+        work: params.work,
       });
       if (tikz) {
         const surroundingGlue = node.horizontalAlignment === "center"
@@ -1101,7 +1116,7 @@ async function prepareFrameFlow(params: {
       continue;
     }
     if (node.kind === "block" || node.kind === "theorem") {
-      const block = prepareBlock({
+      const block = runBeamerRenderOperation(params.work, () => prepareBlock({
         source: params.source,
         node,
         width: params.textWidth,
@@ -1113,7 +1128,7 @@ async function prepareFrameFlow(params: {
         step: params.step,
         graphicsResolver: params.graphicsResolver,
         paperWidth: params.paperWidth,
-      });
+      }));
       if (block) {
         result.push({
           kind: "block",
@@ -1154,6 +1169,7 @@ async function prepareFrameFlow(params: {
     graphicsResolver: params.graphicsResolver,
     colorResolver: beamerAlertColorResolver(params.theme),
     paperWidth: params.paperWidth,
+    work: params.work,
   });
 }
 
@@ -1370,7 +1386,7 @@ function prepareFrameParagraph(params: {
   };
 }
 
-function shrinkFrameParagraphGlueToAvailableHeight(
+async function shrinkFrameParagraphGlueToAvailableHeight(
   flow: readonly PreparedFrameFlowItem[],
   params: {
     source: string;
@@ -1385,10 +1401,12 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     graphicsResolver?: DocumentGraphicsResolver;
     colorResolver?: NodeTextColorResolver;
     paperWidth: number;
+    work?: BeamerRenderWork;
   }
-): PreparedFrameFlowItem[] {
+): Promise<PreparedFrameFlowItem[]> {
   const fitted = [...flow];
   for (let index = 0; index < fitted.length; index += 1) {
+    if (params.work) await params.work.checkpoint();
     const item = fitted[index];
     const next = fitted[index + 1];
     if (item?.kind !== "paragraph" || next?.kind !== "tikzpicture") {
@@ -1425,15 +1443,16 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     paragraphMaximumShrink: number;
   }> = [];
   for (let index = 0; index < fitted.length; index += 1) {
+    if (params.work) await params.work.checkpoint();
     const item = fitted[index];
     if (item?.kind !== "paragraph") {
       continue;
     }
-    const rawFullyShrunk = prepareFrameParagraph({
+    const rawFullyShrunk = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
       ...params,
       node: item.node,
       targetHeight: 0,
-    });
+    }));
     if (!rawFullyShrunk) {
       continue;
     }
@@ -1470,14 +1489,15 @@ function shrinkFrameParagraphGlueToAvailableHeight(
     ? Math.min(overflow / totalShrink, 1)
     : 0;
   for (const candidate of shrinkable) {
+    if (params.work) await params.work.checkpoint();
     const targetHeight =
       candidate.item.paragraph.height -
       candidate.paragraphMaximumShrink * ratio;
-    const rawRelaid = prepareFrameParagraph({
+    const rawRelaid = runBeamerRenderOperation(params.work, () => prepareFrameParagraph({
       ...params,
       node: candidate.item.node,
       targetHeight,
-    });
+    }));
     if (!rawRelaid) {
       continue;
     }
@@ -2375,7 +2395,7 @@ function emitFrameParagraph(params: {
   });
 }
 
-function emitPreparedColumns(params: {
+async function emitPreparedColumns(params: {
   prepared: Extract<PreparedFrameFlowItem, { kind: "columns" }>;
   referenceY: number;
   spacing: BeamerSpacingLayout[];
@@ -2385,7 +2405,8 @@ function emitPreparedColumns(params: {
   embeddedTikz: BeamerEmbeddedTikzLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   theme: ResolvedBeamerTheme;
-}): void {
+  work?: BeamerRenderWork;
+}): Promise<void> {
   const prepared = params.prepared.columns;
   const columnTops = prepared.map(
     (column) => params.referenceY - column.box.referenceFromContentTop
@@ -2420,6 +2441,7 @@ function emitPreparedColumns(params: {
       flowIndex += 1
     ) {
       const flowItem = preparedColumn.flow[flowIndex];
+      if (params.work) await params.work.checkpoint();
       if (
         flowItem.visibility === "hidden" &&
         flowItem.kind !== "block"
@@ -2584,6 +2606,7 @@ async function prepareColumnContent(params: {
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
+  work?: BeamerRenderWork;
 }): Promise<PreparedColumnContent> {
   const {
     source,
@@ -2601,6 +2624,7 @@ async function prepareColumnContent(params: {
   let previousDepth: number | undefined;
 
   for (const node of column.children) {
+    if (params.work) await params.work.checkpoint();
     const prepared = await prepareColumnFlowNode({
       source,
       node,
@@ -2618,6 +2642,7 @@ async function prepareColumnContent(params: {
       step: params.step,
       graphicsResolver: params.graphicsResolver,
       paperWidth: params.paperWidth,
+      work: params.work,
     });
     if (prepared) {
       flow.push(prepared);
@@ -2677,6 +2702,7 @@ async function prepareColumnFlowNode(params: {
   step: number;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
+  work?: BeamerRenderWork;
 }): Promise<PreparedColumnFlowItem | null> {
   const {
     source,
@@ -2712,7 +2738,7 @@ async function prepareColumnFlowNode(params: {
     };
   }
   if (node.kind === "block" || node.kind === "theorem") {
-    const block = prepareBlock({
+    const block = runBeamerRenderOperation(params.work, () => prepareBlock({
       source,
       node,
       width,
@@ -2724,7 +2750,7 @@ async function prepareColumnFlowNode(params: {
       step,
       graphicsResolver,
       paperWidth,
-    });
+    }));
     return block
       ? { kind: "block", visibility, block, height: block.naturalHeight }
       : null;
@@ -2737,7 +2763,7 @@ async function prepareColumnFlowNode(params: {
       overlays,
       step
     );
-    const paragraph = layoutParagraph({
+    const paragraph = runBeamerRenderOperation(params.work, () => layoutParagraph({
       mapped: projection.mapped,
       sourceSpan: node.span,
       paragraphId: node.id,
@@ -2754,7 +2780,7 @@ async function prepareColumnFlowNode(params: {
       hiddenListItemIndices: projection.hiddenListItemIndices,
       graphicsResolver,
       paperWidth,
-    });
+    }));
     if (!paragraph) {
       if (!hasProjectedContent(source, node.span, overlays, step, references)) {
         return null;
@@ -2816,6 +2842,7 @@ async function prepareColumnFlowNode(params: {
     diagnostics,
     visibility,
     graphicsResolver,
+    work: params.work,
   });
 }
 
@@ -2829,6 +2856,7 @@ async function prepareEmbeddedTikz(params: {
   diagnostics: Diagnostic[];
   visibility: BeamerOverlayVisibility;
   graphicsResolver?: DocumentGraphicsResolver;
+  work?: BeamerRenderWork;
 }): Promise<Extract<PreparedColumnFlowItem, {
   kind: "tikzpicture";
 }> | null> {
@@ -2844,6 +2872,7 @@ async function prepareEmbeddedTikz(params: {
     {
       textEngine,
       graphicsResolver: params.graphicsResolver,
+      cooperative: params.work?.options,
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
       // is useful for an isolated SVG, but it is not part of that box.
