@@ -2265,21 +2265,7 @@ describe("TeX math parser", () => {
       return;
     }
     expect(atom.nucleus.rows).toHaveLength(2);
-    expect(atom.nucleus.rows[0]).toMatchObject({
-      labels: [
-        {
-          text: "eq:a",
-          sourceSpan: {
-            start: source.indexOf(String.raw`\label`),
-            end: source.indexOf(String.raw`\\c`),
-          },
-          textSourceSpan: {
-            start: source.indexOf("{eq:a}") + 1,
-            end: source.indexOf("{eq:a}") + 5,
-          },
-        },
-      ],
-    });
+    expect(atom.nucleus.rows[0]?.labels).toBeUndefined();
     expect(atom.nucleus.rows[0]?.cells.map((cell) => cell.list.items.length)).toEqual([1, 2]);
     expect(atom.nucleus.rows[1]).toMatchObject({
       suppressTag: true,
@@ -2367,6 +2353,18 @@ describe("TeX math parser", () => {
         explicit: true,
       },
     ]);
+  });
+
+  it("keeps labels before split and between atoms invisible without truncating math", () => {
+    const split = parseTexMathDisplayBody(String.raw`\label{eq:split}\begin{split}a&=b\\c&=d\end{split}`);
+    expect(split.diagnostics).toEqual([]);
+    expect(split.list.items).toHaveLength(1);
+    expect(atomAt(split, 0).nucleus.kind).toBe("aligned");
+    expect(split.list.displayLabels).toBeUndefined();
+    const ordinary = parseTexMathDisplayBody(String.raw`x+\label{eq:middle}y\label{eq:end}`);
+    expect(ordinary.diagnostics).toEqual([]);
+    expect(ordinary.list.items).toHaveLength(3);
+    expect(ordinary.list.displayLabels).toBeUndefined();
   });
 
   it("records explicit tags in lowered display bodies", () => {

@@ -287,6 +287,14 @@ class TexMathParser {
       if (isMathRowBreakToken(token) && options.stopAtRowBreak) {
         break;
       }
+      if (token.kind === "command" && commandName(token.text) === "label") {
+        // A LaTeX label records a reference; it never terminates the math
+        // body or supplies visible tag text. It may precede a split/aligned
+        // environment, or appear between ordinary math atoms.
+        const command = this.advance();
+        this.parseRequiredTextGroup(command.sourceSpan, "\\label key");
+        continue;
+      }
       if (token.kind === "command" && options.stopAtAlignmentMetadata && alignmentMetadataCommand(token.text)) {
         break;
       }
@@ -2943,7 +2951,7 @@ class TexMathParser {
         );
         continue;
       }
-      if (content && !content.unsupported) {
+      if (metadata === "tag" && content && !content.unsupported) {
         labels.push({
           text: content.text,
           sourceSpan: spanUnion(command.sourceSpan, content.sourceSpan),

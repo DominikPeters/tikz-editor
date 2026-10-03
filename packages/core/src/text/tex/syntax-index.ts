@@ -220,7 +220,7 @@ export function buildTexSyntaxIndex(
         whitespaceEndByStart.set(node.from, node.to);
       } else if (node.name === "Text") {
         textEndByStart.set(node.from, node.to);
-      } else if (node.name === "Group") {
+      } else if (node.name === "Group" || node.name === "MathGroup") {
         addArgument(
           source,
           node,
