@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   clickTextHitRegionByTargetId,
-  dragHitRegionByTargetIdAndMode,
   gotoApp,
   readSelectedSourceIds,
   readStoreSource,
@@ -44,6 +43,13 @@ async function readTextareaSelectedText(page: Page): Promise<string> {
     const end = textareaElement.selectionEnd ?? start;
     return textareaElement.value.slice(start, end);
   });
+}
+
+async function nodeMoveStartPoint(page: Page, targetId: string): Promise<{ x: number; y: number }> {
+  const outer = await page.locator(`[data-hit-region-target-id='${targetId}']:not([data-hit-region-interaction-mode='text'])`).first().boundingBox();
+  const text = await page.locator(`[data-hit-region-target-id='${targetId}'][data-hit-region-interaction-mode='text']`).first().boundingBox();
+  if (!outer || !text || outer.y >= text.y) throw new Error("Missing node padding for movement.");
+  return { x: outer.x + outer.width / 2, y: (outer.y + text.y) / 2 };
 }
 
 async function readCanvasCaretCenter(page: Page): Promise<{ x: number; y: number }> {
@@ -1441,7 +1447,7 @@ test("filled nodes still enter text edit mode from the text region and remain dr
   await expect.poll(async () => await readStoreSource(page)).toContain("{Hello World}");
 });
 
-test("path-attached node text can still be edited on click and dragged along its edge", async ({ page }) => {
+test("path-attached node text edits on click and its padding drags along the edge", async ({ page }) => {
   await gotoApp(page);
   const initialSource = String.raw`\begin{tikzpicture}
   \draw[->] (0,0) -- node[above] {ok} (3,0);
@@ -1463,7 +1469,11 @@ test("path-attached node text can still be edited on click and dragged along its
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("canvas-text-edit-popup")).toHaveCount(0);
 
-  await dragHitRegionByTargetIdAndMode(page, labelTargetId, "text", -100, 0);
+  const start = await nodeMoveStartPoint(page, labelTargetId);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x - 100, start.y, { steps: 12 });
+  await page.mouse.up();
 
   await expect(page.getByTestId("canvas-text-edit-popup")).toHaveCount(0);
   await expect.poll(async () => await readSelectedSourceIds(page)).toEqual([labelTargetId]);
@@ -1489,16 +1499,7 @@ test("path-attached node drag rewrites source before mouseup", async ({ page }) 
     throw new Error("Missing path-attached node text hit-region target id.");
   }
 
-  const textRegion = page.locator(
-    `[data-hit-region-target-id='${labelTargetId}'][data-hit-region-interaction-mode='text']`
-  ).first();
-  const initialBox = await textRegion.boundingBox();
-  if (!initialBox) {
-    throw new Error("Missing path-attached node drag bounds.");
-  }
-
-  const startX = initialBox.x + initialBox.width / 2;
-  const startY = initialBox.y + initialBox.height / 2;
+  const { x: startX, y: startY } = await nodeMoveStartPoint(page, labelTargetId);
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(startX - 100, startY, { steps: 12 });
@@ -1509,6 +1510,31 @@ test("path-attached node drag rewrites source before mouseup", async ({ page }) 
   await page.mouse.up();
   await expect.poll(async () => await readSelectedSourceIds(page)).toEqual([labelTargetId]);
 });
+
+for (const alreadyEditing of [false, true]) {
+  test(`multiline edge-label dragging selects text ${alreadyEditing ? "during editing" : "on first interaction"}`, async ({ page }) => {
+    await gotoApp(page);
+    const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- node[above,align=center] {First\\Second} (3,0);
+\end{tikzpicture}`;
+    await setSource(page, source);
+    const textRegion = page.locator('[data-hit-region-interaction-mode="text"]').first();
+    const targetId = await textRegion.getAttribute("data-hit-region-target-id");
+    if (!targetId) throw new Error("Missing edge-label text target.");
+    await expect(textRegion).toHaveCSS("cursor", "text");
+    if (alreadyEditing) await clickTextHitRegionByTargetId(page, targetId);
+    const box = await textRegion.boundingBox();
+    if (!box) throw new Error("Missing multiline edge-label bounds.");
+    await page.mouse.move(box.x + 0.5, box.y + box.height * 0.25);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 0.5, box.y + box.height * 0.75, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.getByTestId("canvas-text-edit-textarea")).toHaveValue(String.raw`First\\Second`);
+    await expect.poll(() => readTextareaSelectedText(page)).toBe(String.raw`First\\Second`);
+    await expect.poll(() => page.getByTestId("canvas-text-selection-rect").count()).toBeGreaterThan(1);
+    expect(await readStoreSource(page)).toBe(source);
+  });
+}
 
 test("clicking rendered wrapped text updates the textarea selection", async ({ page }) => {
   await gotoApp(page);
@@ -2142,6 +2168,49 @@ test("unbalanced braces while editing do not reshape the rest of the picture", a
   await page.keyboard.type("bold}");
   await expect.poll(async () => await readStoreSource(page)).toContain(String.raw`{hello \textbf{bold}};`);
   await expect.poll(readSettledSceneSourceIds).toEqual(["path:0", "path:1", "path:2"]);
+});
+
+test("unclosed braces in matrix cell text preserve neighboring cells while editing", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+  \matrix[matrix of nodes] {A & B \\ C & D \\};
+  \node at (4,0) {Later};
+\end{tikzpicture}`);
+
+  const targetId = "node:0:0:matrix-cell:1:1";
+  await clickTextHitRegionByTargetId(page, targetId);
+  await page.locator(`[data-hit-region-target-id='${targetId}'][data-hit-region-interaction-mode='text']`).first().dblclick();
+  await clickTextHitRegionByTargetId(page, targetId);
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toHaveValue("A");
+  await setTextareaSelection(page, 0, 1);
+  await page.keyboard.type(String.raw`\textbf{`);
+  await expect(textarea).toHaveValue(String.raw`\textbf{`);
+
+  const readSettledText = () => page.evaluate(() => {
+    const api = (globalThis as unknown as { __TIKZ_EDITOR_APP_TEST_API__?: {
+      getSource: () => string;
+      getSnapshotSource: () => string;
+      getSceneTextDebug: () => Array<{ sourceId: string; text: string }>;
+    } }).__TIKZ_EDITOR_APP_TEST_API__;
+    if (!api || api.getSnapshotSource() !== api.getSource()) return null;
+    return api.getSceneTextDebug().map(({ sourceId, text }) => ({ sourceId, text }));
+  });
+  const neighbors = [
+    { sourceId: "node:0:0:matrix-cell:1:2", text: "B" },
+    { sourceId: "node:0:0:matrix-cell:2:1", text: "C" },
+    { sourceId: "node:0:0:matrix-cell:2:2", text: "D" },
+    { sourceId: "path:1", text: "Later" }
+  ];
+  await expect.poll(readSettledText).toEqual([{ sourceId: targetId, text: String.raw`\textbf{` }, ...neighbors]);
+  await expect(textarea).toBeFocused();
+
+  await page.keyboard.type("bold}");
+  await expect.poll(readSettledText).toEqual([{ sourceId: targetId, text: String.raw`\textbf{bold}` }, ...neighbors]);
+  await page.keyboard.press("Escape");
+  await expect.poll(readSettledText).toEqual([{ sourceId: targetId, text: String.raw`\textbf{bold}` }, ...neighbors]);
+  await clickTextHitRegionByTargetId(page, "node:0:0:matrix-cell:1:2");
+  await expect(textarea).toHaveValue("B");
 });
 
 test("trailing backslash writes through and stays in sync across backspace", async ({ page }) => {

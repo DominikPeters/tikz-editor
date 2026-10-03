@@ -903,7 +903,8 @@ function resolveMatrixCellTargetInStatements(
     ref.node.textSpan,
     matrixMode,
     parsedId.row,
-    parsedId.column
+    parsedId.column,
+    ref.node.structuralText
   );
   if (!resolvedCell) {
     return null;

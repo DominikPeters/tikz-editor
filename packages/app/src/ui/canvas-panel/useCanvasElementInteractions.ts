@@ -128,16 +128,6 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     moved: boolean;
     dragStarted: boolean;
   } | null>(null);
-  const pendingTextInteractionRef = useRef<{
-    pointerId: number;
-    startClient: ClientPoint;
-    targetId: string;
-    textTarget: EditableTextTarget;
-    dragIds: string[];
-    wasSelectedOnWorldPointerDown: boolean;
-    moved: boolean;
-    dragStarted: boolean;
-  } | null>(null);
 
   const startElementDrag = useCallback(
     (
@@ -303,86 +293,15 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       setSnapLines([]);
     }
 
-    function onTextWorldPointerMove(event: PointerEvent) {
-      const pending = pendingTextInteractionRef.current;
-      if (pending?.pointerId !== event.pointerId || pending.dragStarted) {
-        return;
-      }
-      const clientPoint = clientPointFromEvent(event);
-      const dx = clientPoint.x - pending.startClient.x;
-      const dy = clientPoint.y - pending.startClient.y;
-      if ((dx * dx) + (dy * dy) <= 16) {
-        return;
-      }
-      pending.moved = true;
-      if (!svgResult) {
-        return;
-      }
-      const world = clientToWorldPoint(clientPoint, interactionSvgRef.current, svgResult.viewBox);
-      if (!world) {
-        return;
-      }
-      if (!pending.wasSelectedOnWorldPointerDown) {
-        dispatch({ type: "SELECT", id: pending.targetId, additive: false });
-        dispatch({
-          type: "SET_FOCUSED_SCOPE",
-          scopeId: resolveFocusedScopeIdForSelection(pending.targetId, scopeOverlay)
-        });
-      }
-      closeTextEditingSession();
-      startElementDrag(event.pointerId, world, pending.dragIds);
-      pending.dragStarted = true;
-    }
-
-    function onTextWorldPointerUp(event: PointerEvent) {
-      const pending = pendingTextInteractionRef.current;
-      if (pending?.pointerId !== event.pointerId) {
-        return;
-      }
-      pendingTextInteractionRef.current = null;
-      if (pending.moved) {
-        return;
-      }
-      dispatch({ type: "SELECT", id: pending.targetId, additive: false });
-      dispatch({
-        type: "SET_FOCUSED_SCOPE",
-        scopeId: resolveFocusedScopeIdForSelection(pending.targetId, scopeOverlay)
-      });
-      beginCanvasTextInteraction(
-        {
-          shiftKey: false,
-          ctrlKey: false,
-          metaKey: false,
-          button: 0,
-          detail: 1,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          pointerId: event.pointerId,
-          currentTarget: {
-            setPointerCapture() {
-              // No-op for deferred text activation outside the original React event.
-            }
-          }
-        } as unknown as ReactPointerEvent<SVGElement>,
-        pending.textTarget
-      );
-    }
-
     window.addEventListener("pointermove", onWorldPointerMove);
     window.addEventListener("pointerup", onWorldPointerUp);
     window.addEventListener("pointercancel", onWorldPointerUp);
-    window.addEventListener("pointermove", onTextWorldPointerMove);
-    window.addEventListener("pointerup", onTextWorldPointerUp);
-    window.addEventListener("pointercancel", onTextWorldPointerUp);
     return () => {
       window.removeEventListener("pointermove", onWorldPointerMove);
       window.removeEventListener("pointerup", onWorldPointerUp);
       window.removeEventListener("pointercancel", onWorldPointerUp);
-      window.removeEventListener("pointermove", onTextWorldPointerMove);
-      window.removeEventListener("pointerup", onTextWorldPointerUp);
-      window.removeEventListener("pointercancel", onTextWorldPointerUp);
     };
-  }, [beginCanvasTextInteraction, closeTextEditingSession, dispatch, interactionSvgRef, scopeOverlay, selectedElementIds, setSnapLines, startElementDrag, svgResult]);
+  }, [dispatch, interactionSvgRef, scopeOverlay, selectedElementIds, setSnapLines, startElementDrag, svgResult]);
 
   const onElementPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => {
@@ -477,36 +396,12 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
 
       const textTarget = resolvedTargetId === targetId ? resolveEditableTextTarget(targetId, region) : null;
       if (!additiveSelection && textTarget) {
-        const draggedIds = alreadySelected && selectedElementIds.size > 0 ? [...selectedElementIds] : [resolvedTargetId];
-        const supportsDeferredTextDrag = snapshot.editHandles.some(
-          (handle: EditHandle) =>
-            handle.sourceRef.sourceId === resolvedTargetId &&
-            handle.kind === "node-position" &&
-            (handle.pathAttachmentContext != null || handle.rewriteMode === "calc")
-        );
-        if (
-          supportsDeferredTextDrag &&
-          event.pointerType !== "touch" &&
-          draggedIds.every((id) => draggableSourceIds.has(id))
-        ) {
-          pendingTextInteractionRef.current = {
-            pointerId: event.pointerId,
-            startClient: clientPoint,
-            targetId: resolvedTargetId,
-            textTarget,
-            dragIds: draggedIds,
-            wasSelectedOnWorldPointerDown: alreadySelected,
-            moved: false,
-            dragStarted: false
-          };
-        } else {
-          dispatch({ type: "SELECT", id: targetId, additive: false });
-          dispatch({
-            type: "SET_FOCUSED_SCOPE",
-            scopeId: resolveFocusedScopeIdForSelection(targetId, scopeOverlay)
-          });
-          beginCanvasTextInteraction(event, textTarget);
-        }
+        dispatch({ type: "SELECT", id: targetId, additive: false });
+        dispatch({
+          type: "SET_FOCUSED_SCOPE",
+          scopeId: resolveFocusedScopeIdForSelection(targetId, scopeOverlay)
+        });
+        beginCanvasTextInteraction(event, textTarget);
         return;
       }
 
@@ -600,7 +495,6 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       closeTextEditingSession,
       startElementDrag,
       scopeOverlay,
-      snapshot.editHandles,
       svgResult,
       toolMode,
       viewportRef

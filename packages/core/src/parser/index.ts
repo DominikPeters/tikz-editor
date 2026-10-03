@@ -76,6 +76,15 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
   });
   const diagnostics = [...mapped.diagnostics];
 
+  if (structurallyMaskedInput !== input) {
+    for (const node of collectNodeItems(mapped.figure.body)) {
+      const structuralText = structurallyMaskedInput.slice(node.textSpan.from, node.textSpan.to);
+      if (structuralText !== node.text) {
+        node.structuralText = structuralText;
+      }
+    }
+  }
+
   const nodeTextValidator = opts.nodeTextValidator;
   if (nodeTextValidator) {
     const allNodes = collectNodeItems(mapped.figure.body);

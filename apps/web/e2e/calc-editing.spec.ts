@@ -57,7 +57,7 @@ for (const [literal, expected] of [[".33", "0.63"], ["-.11", "0.19"], ["1e-3", "
   });
 }
 
-test("dragging bare calc text keeps its reference and supports undo and text editing", async ({ page }) => {
+test("bare calc text selects text and dragging its padding keeps the reference and supports undo", async ({ page }) => {
   const source = String.raw`\begin{tikzpicture}
 \coordinate (C) at (0.85,5.30);
 \node[anchor=south west,font=\scriptsize] at ($(C)+(.33,.11)$) {\(\mathcal F_c,\ \mathbf C_p\)};
@@ -67,7 +67,19 @@ test("dragging bare calc text keeps its reference and supports undo and text edi
   const text = page.locator("[data-hit-region-target-id='path:1'][data-hit-region-interaction-mode='text']").first();
   const box = await text.boundingBox();
   if (!box) throw new Error("Missing calc label hit region");
-  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(box.x + 1, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const textarea = page.getByTestId("canvas-text-edit-textarea");
+  await expect(textarea).toHaveValue(String.raw`\(\mathcal F_c,\ \mathbf C_p\)`);
+  await expect.poll(() => textarea.evaluate((element: HTMLTextAreaElement) => element.selectionEnd - element.selectionStart)).toBeGreaterThan(0);
+  expect(await readSource(page)).toBe(source);
+  await page.keyboard.press("Escape");
+
+  const moveBox = await page.locator("[data-hit-region-target-id='path:1'][data-hit-region-interaction-mode='move']").first().boundingBox();
+  if (!moveBox) throw new Error("Missing calc label movement region");
+  const start = { x: moveBox.x + moveBox.width / 2, y: (moveBox.y + box.y) / 2 };
   await page.mouse.move(start.x,start.y);
   await page.mouse.down();
   await page.mouse.move(start.x + 35,start.y - 20,{ steps: 5 });
