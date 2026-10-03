@@ -1,3 +1,4 @@
+import { readTexControlSequence, skipTexComment, skipTexVerbatim } from "@tikz-editor/core/parser/tex-lexical";
 import type { ArxivSourceFile, ArxivSourcePayload } from "./platform/types.js";
 
 export type ArxivTikzCandidate = {
@@ -19,10 +20,46 @@ export type ArxivPaperSession = {
 
 type TokenMatch = {
   index: number;
-  text: string;
+  to: number;
+  kind: "begin" | "end";
 };
 
-const TIKZPICTURE_TOKEN_RE = /\\(?:begin|end)\s*\{\s*tikzpicture\s*\}/g;
+// Import accepts whitespace around the environment name and retains an outer
+// nested picture as one candidate. Core figure recovery has a different policy.
+const TIKZPICTURE_ARGUMENT_RE = /\s*\{\s*tikzpicture\s*\}/y;
+
+function collectTikzPictureTokens(source: string): TokenMatch[] {
+  const matches: TokenMatch[] = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const char = source.charAt(cursor);
+    if (char === "%") {
+      cursor = skipTexComment(source, cursor);
+      continue;
+    }
+    if (char !== "\\") {
+      cursor += 1;
+      continue;
+    }
+    const command = readTexControlSequence(source, cursor)!;
+    const verbatimEnd = skipTexVerbatim(source, command, true);
+    if (verbatimEnd !== null) {
+      cursor = verbatimEnd;
+      continue;
+    }
+    if (command.raw === "\\begin" || command.raw === "\\end") {
+      TIKZPICTURE_ARGUMENT_RE.lastIndex = command.to;
+      const argument = TIKZPICTURE_ARGUMENT_RE.exec(source);
+      if (argument) {
+        cursor = TIKZPICTURE_ARGUMENT_RE.lastIndex;
+        matches.push({ index: command.from, to: cursor, kind: command.raw === "\\begin" ? "begin" : "end" });
+        continue;
+      }
+    }
+    cursor = command.to;
+  }
+  return matches;
+}
 
 function isTexLikeFile(file: ArxivSourceFile): boolean {
   return /\.(?:tex|tikz|ltx)$/iu.test(file.path);
@@ -31,30 +68,21 @@ function isTexLikeFile(file: ArxivSourceFile): boolean {
 function countLinesBefore(source: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index; i += 1) {
-    if (source.charCodeAt(i) === 10) {
+    const char = source.charCodeAt(i);
+    if (char === 13) {
+      line += 1;
+      if (i + 1 < index && source.charCodeAt(i + 1) === 10) i += 1;
+    } else if (char === 10) {
       line += 1;
     }
   }
   return line;
 }
 
-function countLinesIn(source: string): number {
-  if (source.length === 0) {
-    return 1;
-  }
-  let lines = 1;
-  for (let i = 0; i < source.length; i += 1) {
-    if (source.charCodeAt(i) === 10) {
-      lines += 1;
-    }
-  }
-  return lines;
-}
-
 function summarizeCandidate(source: string): string {
   const body = source
     .replace(/\\(?:begin|end)\s*\{\s*tikzpicture\s*\}/gu, "")
-    .split("\n")
+    .split(/\r\n?|\n/u)
     .map((line) => line.trim())
     .find((line) => line.length > 0 && !line.startsWith("%"));
   if (!body) {
@@ -66,7 +94,7 @@ function summarizeCandidate(source: string): string {
 function blankSourceRange(source: string, from: number, to: number): string {
   return source
     .slice(from, to)
-    .replace(/[^\n]/gu, " ");
+    .replace(/[^\r\n]/gu, (match) => " ".repeat(match.length));
 }
 
 function buildContextualSource(fileSource: string, startIndex: number, endIndex: number, priorSpans: ReadonlyArray<{ from: number; to: number }>): string {
@@ -86,15 +114,12 @@ function buildContextualSource(fileSource: string, startIndex: number, endIndex:
 }
 
 function collectTikzPictureCandidates(file: ArxivSourceFile, arxivId: string): ArxivTikzCandidate[] {
-  const matches: TokenMatch[] = [];
-  for (const match of file.source.matchAll(TIKZPICTURE_TOKEN_RE)) {
-    matches.push({ index: match.index, text: match[0] });
-  }
+  const matches = collectTikzPictureTokens(file.source);
   const out: ArxivTikzCandidate[] = [];
   const stack: TokenMatch[] = [];
   const closedSpans: Array<{ from: number; to: number }> = [];
   for (const match of matches) {
-    if (/\\begin/u.test(match.text)) {
+    if (match.kind === "begin") {
       stack.push(match);
       continue;
     }
@@ -102,7 +127,7 @@ function collectTikzPictureCandidates(file: ArxivSourceFile, arxivId: string): A
     if (!start || stack.length > 0) {
       continue;
     }
-    const end = match.index + match.text.length;
+    const end = match.to;
     const source = file.source.slice(start.index, end).trim();
     const contextualSource = buildContextualSource(file.source, start.index, end, closedSpans);
     closedSpans.push({ from: start.index, to: end });
@@ -110,7 +135,7 @@ function collectTikzPictureCandidates(file: ArxivSourceFile, arxivId: string): A
       continue;
     }
     const lineStart = countLinesBefore(file.source, start.index);
-    const lineEnd = lineStart + countLinesIn(source) - 1;
+    const lineEnd = countLinesBefore(file.source, end);
     const index = out.length + 1;
     out.push({
       id: `${file.path}:${lineStart}:${index}`,
