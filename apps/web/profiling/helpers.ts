@@ -53,7 +53,7 @@ export function resolvePaperTarget(targetLines: string | readonly string[]): Pap
   const activeParse = parseTikz(source, {
     recover: true,
     includeContextDefinitions: true,
-    activeRootId: figure.id
+    activeFigureId: figure.id
   });
   const targetStatement = findStatementContainingOffset(activeParse.figure.body, targetOffset);
   if (!targetStatement || targetStatement.kind !== "Path") {
@@ -129,10 +129,10 @@ export async function resolveVisibleSamplePointForSelector(
   selector: string
 ): Promise<{ x: number; y: number }> {
   return await page.evaluate((rawSelector) => {
-    const elements = [...document.querySelectorAll(rawSelector)];
+    const elements = Array.from(document.querySelectorAll(rawSelector));
     for (const element of elements) {
-      const rect = (element as Element).getBoundingClientRect();
-      const style = window.getComputedStyle(element as Element);
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
       const visible =
         (rect.width > 0 || rect.height > 0) &&
         style.visibility !== "hidden" &&
