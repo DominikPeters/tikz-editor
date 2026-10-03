@@ -254,7 +254,8 @@ function substituteSingleMappedPass(
   return concatMappedText(parts);
 }
 
-function parseMacroInvocationArgs(
+/** Read one invocation without expanding arguments or evaluating conditionals. */
+export function parseMacroInvocationArgs(
   input: string,
   startIndex: number,
   count: number,
@@ -430,7 +431,8 @@ function readBracketContent(input: string, startIndex: number): ParsedMacroArgum
   return null;
 }
 
-function applyMacroArguments(template: string, args: string[]): string {
+/** Substitute parameter tokens, leaving further expansion to the caller. */
+export function applyMacroArguments(template: string, args: string[]): string {
   let output = "";
   for (let index = 0; index < template.length; index += 1) {
     const char = template[index] ?? "";

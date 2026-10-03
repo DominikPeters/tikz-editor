@@ -237,3 +237,30 @@ test("reorders KKT slides 2 and 3 without a warning and restores their source on
   await expect.poll(() => readStoreSource(page)).toBe(moved);
   await expect(review(page)).toHaveCount(0);
 });
+
+
+test("keeps unknown uses quiet and explains a known operation through a macro", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  const source = String.raw`\documentclass{beamer}
+\newcommand{\custom}{\packageCommand}
+\begin{document}
+\begin{frame}{First}\custom\end{frame}
+\begin{frame}{Second}Text\end{frame}
+\end{document}`;
+  await setSource(page, source);
+  await card(page, "First").click(); await page.keyboard.press("Alt+ArrowDown");
+  await expect.poll(() => readStoreSource(page)).not.toBe(source);
+  await expect(review(page)).toHaveCount(0);
+  await card(page, "First").focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(source);
+
+  const mutation = source.replace("\\packageCommand", "\\setcounter{equation}{4}");
+  await setSource(page, mutation);
+  await card(page, "First").click(); await page.keyboard.press("Alt+ArrowDown");
+  await expect(review(page)).toContainText("This macro executes \\setcounter, which changes a counter.");
+  await expect(review(page).locator("code")).toHaveText(["\\custom", String.raw`\newcommand{\custom}{\setcounter{equation}{4}}`]);
+  expect(await readStoreSource(page)).toBe(mutation);
+  await review(page).getByRole("button", { name: "Show source: Definition, line 2", exact: true }).click();
+  await expect(page.locator(".cm-content")).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(String.raw`\newcommand{\custom}{\setcounter{equation}{4}}`);
+});

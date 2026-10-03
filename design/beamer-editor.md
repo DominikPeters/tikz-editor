@@ -804,15 +804,23 @@ Drag and Alt+arrow reordering use the same analysis before changing source.
   single declaration, matching scope, no outside references, and no unknown
   document commands that could hide consumers. Exact source and comments travel
   with the definition. Shared definitions stay in place.
-- Math symbols use the math parser's command classifications. Formatting macros
-  are checked recursively at their actual bindings, including parameters,
-  optional defaults, and aliases. Literal numeric `\foreach` variables are local
-  to their loop; commands in the loop body are still checked. Safe expansion and
-  permission to relocate a declaration are separate checks.
-- Unknown commands, explicit state changes, and conditional definitions require
-  review when crossed. Parsing a macro is not evidence that expanding it has no
-  side effects. Arbitrary TeX expansion, package effects, and computed names are
-  outside the proof supported here.
+- Warnings require an identified operation: global definitions, conditional
+  definitions, counter updates, or settings/assignments that persist into other
+  slides. Ordinary local definitions and formatting travel with their frame.
+- Understood macro calls are inspected at their actual bindings, including
+  captured aliases, substituted arguments, and defaults that are actually used.
+  Stored bodies and unused arguments are not executed. A warning names the
+  operation and shows the invocation and definitions through which it runs.
+  Literal numeric `\foreach` variables are local to their loop.
+- Unknown commands, package environments, computed names, and cyclic or opaque
+  expansions do not warn just because their effects are unknown. Expansion is
+  bounded, and generated bindings that cannot be resolved stay quiet. This is
+  an intentional best-effort check, not a proof that a move is safe in all TeX.
+  An unknown `\if...` name needs a matching branch delimiter before it is treated
+  as a boundary; known primitives and `\newif` declarations are still checked.
+- The stricter proof used for automatic definition relocation remains separate:
+  unknown code can hide consumers, so it prevents relocation without creating
+  an effect warning. A move that would then lose a known provider is still blocked.
 - The existing modal presents the reason and source excerpts. Each excerpt opens
   and selects its exact range in Source. Only reviewable moves offer “Move anyway”.
   The request expires when the document or source revision changes. The reducer

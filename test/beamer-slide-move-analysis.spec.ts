@@ -84,7 +84,7 @@ describe("slide move safety", () => {
     expect(analysis.issues.filter(issue => issue.message.includes("different definition"))).toHaveLength(1);
     expect(analysis.issues[0].message).toContain("\\unit");
   });
-  it.each(["\\setcounter{equation}{4}", "\\setbeamertemplate{footline}{Custom}", "\\input{macros}", "\\mystery", "\\gdef\\external{changed}"])("reviews state changes and unknown code: %s", command => {
+  it.each(["\\setcounter{equation}{4}", "\\setbeamertemplate{footline}{Custom}", "\\gdef\\external{changed}"])("reviews identified state changes: %s", command => {
     const source = deck(frame("A") + command + "\n" + frame("B"));
     expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
     expect(editBeamerSlides(source, later)).toBeNull();
@@ -150,9 +150,9 @@ it("reviews conditional definitions whose consumers are outside the branch", () 
   expect(analyzeBeamerSlideMove(source, earlier).status).toBe("review");
   expect(editBeamerSlides(source, earlier)).toBeNull();
 });
-it("reviews package environments with unknown effects", () => {
+it("does not warn merely because a package environment is unknown", () => {
   const source = deck(frame("A", "\\begin{custom}Content\\end{custom}") + frame("B"));
-  expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
 });
 it("does not carry a definition past an outside use that was previously unresolved", () => {
   const source = deck(frame("A", "\\unit") + "\\def\\unit{ms}\n" + frame("B", "\\unit"));
@@ -160,7 +160,7 @@ it("does not carry a definition past an outside use that was previously unresolv
   expect(analysis.status).toBe("blocked");
   expect(analysis.dependencies).toEqual([]);
 });
-it.each(["\\color{red}", "\\bfseries", "\\small", "\\textwidth=3cm", "\\label{outside}"])("reviews document-level formatting and state: %s", command => {
+it.each(["\\color{red}", "\\bfseries", "\\small", "\\textwidth=3cm"])("reviews document-level formatting and state: %s", command => {
   const source = deck(frame("A") + command + "\n" + frame("B"));
   expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
 });
@@ -203,12 +203,9 @@ describe("formatting macro effects", () => {
   it.each([
     String.raw`\newcommand{\R}{\global\def\x{1}}`,
     String.raw`\newcommand{\R}{\setcounter{equation}{4}}`,
-    String.raw`\newcommand{\R}{\csname change\endcsname}`,
-    String.raw`\newcommand{\R}{\unknown}`,
-    String.raw`\newcommand{\R}{\R}`,
     String.raw`\newcommand{\R}{\mathbb{R}}\renewcommand{\mathbb}[1]{\global\def\x{#1}}`,
     String.raw`\newcommand{\R}[1][\setcounter{equation}{4}]{#1}`,
-  ])("still reviews actual, dynamic, cyclic, and default-argument effects: %s", definitions => {
+  ])("reviews concrete effects in macro bodies and default arguments: %s", definitions => {
     const source = deck(frame("A", "\\R") + frame("B"), definitions);
     expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
     expect(editBeamerSlides(source, later)).toBeNull();
@@ -230,16 +227,121 @@ describe("formatting macro effects", () => {
   it("keeps foreach variables scoped and still inspects loop effects", () => {
     const loop = String.raw`\foreach \x/\y in {1/2,3/4}{\draw (\x,\y) circle (2pt);}`;
     expect(analyzeBeamerSlideMove(deck(frame("A", loop) + frame("B")), later).status).toBe("safe");
-    for (const body of [loop + "\\x", loop.replace("\\draw", "\\global\\def\\z{1}\\draw"), loop.replace("\\draw", "\\def\\x{\\setcounter{equation}{4}}\\x\\draw")]) {
+    expect(analyzeBeamerSlideMove(deck(frame("A", loop + "\\x") + frame("B")), later).status).toBe("safe");
+    for (const body of [loop.replace("\\draw", "\\global\\def\\z{1}\\draw"), loop.replace("\\draw", "\\def\\x{\\setcounter{equation}{4}}\\x\\draw")]) {
       expect(analyzeBeamerSlideMove(deck(frame("A", body) + frame("B")), later).status).toBe("review");
     }
   });
 });
-it.each(["constructor", "toString"])("does not mistake object properties for stock math commands: %s", name => {
+it.each(["constructor", "toString"])("keeps unknown object-property names quiet: %s", name => {
   const source = deck(frame("A", `\\${name}`) + frame("B"));
-  expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
 });
 it("checks an overridden foreach rather than assuming it binds iteration variables", () => {
-  const source = deck(frame("A", String.raw`\foreach \x in {1,2}{\draw (\x,0) circle (1pt);}`) + frame("B"), String.raw`\renewcommand{\foreach}{Plain text}`);
+  const source = deck(frame("A", String.raw`\foreach \x in {1,2}{\draw (\x,0) circle (1pt);}`) + frame("B"), String.raw`\renewcommand{\foreach}{\setcounter{equation}{4}}`);
   expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
+});
+
+
+describe("warnings based on identified operations", () => {
+  it.each([
+    String.raw`\ifstrequal{a}{b}{yes}{no}`, String.raw`\mystery`, String.raw`\input{macros}`, String.raw`\csname custom\endcsname`,
+    String.raw`\mystery{\setcounter{equation}{4}}`, String.raw`\label{outside}`,
+  ])("does not warn about unknown behavior or ordinary uses: %s", command => {
+    for (const source of [deck(frame("A", command) + frame("B")), deck(frame("A") + command + "\n" + frame("B"))]) {
+      expect(analyzeBeamerSlideMove(source, later)).toMatchObject({ status: "safe", issues: [] });
+      expect(editBeamerSlides(source, later)).not.toBeNull();
+    }
+  });
+  it.each([
+    String.raw`\newcommand{\R}{\unknown}`,
+    String.raw`\newcommand{\R}{\csname change\endcsname}`,
+    String.raw`\newcommand{\R}{\R}`,
+    String.raw`\newcommand{\R}{\other}\newcommand{\other}{\R}`,
+  ])("does not treat opaque or cyclic expansions as evidence of mutation: %s", definitions => {
+    expect(analyzeBeamerSlideMove(deck(frame("A", "\\R") + frame("B"), definitions), later).status).toBe("safe");
+  });
+  it("explains a nested effect with the invocation and its actual definitions", () => {
+    const outer = String.raw`\newcommand{\reset}{\resetInner}`;
+    const inner = String.raw`\newcommand{\resetInner}{\setcounter{equation}{4}}`;
+    const source = deck(frame("A", "\\reset") + frame("B"), outer + inner);
+    const analysis = analyzeBeamerSlideMove(source, later);
+    expect(analysis.status).toBe("review");
+    expect(analysis.issues).toHaveLength(1);
+    expect(analysis.issues[0].message).toBe("This macro executes \\setcounter, which changes a counter.");
+    expect(analysis.issues[0].excerpts.map(item => item.text)).toEqual(["\\reset", outer, inner]);
+    for (const part of analysis.issues[0].excerpts) expect(source.slice(part.span.from, part.span.to)).toBe(part.text);
+  });
+  it("traces let aliases to built-in operations", () => {
+    const declaration = String.raw`\let\reset\setcounter`;
+    const source = deck(frame("A", String.raw`\reset{equation}{4}`) + frame("B"), declaration);
+    expect(analyzeBeamerSlideMove(source, later).issues).toMatchObject([{
+      message: "This move crosses \\setcounter, which changes a counter.",
+      excerpts: [{ text: String.raw`\reset{equation}{4}` }, { text: declaration }],
+    }]);
+  });
+  it("checks only the arguments and defaults used by a known macro", () => {
+    const definitions = String.raw`\newcommand{\ignore}[1]{Text}
+\newcommand{\optional}[1][\setcounter{equation}{4}]{#1}
+\newcommand{\unusedDefault}[1][\setcounter{equation}{4}]{Text}`;
+    for (const content of [String.raw`\ignore{\setcounter{equation}{4}}`, String.raw`\optional[Text]`, String.raw`\unusedDefault`]) {
+      expect(analyzeBeamerSlideMove(deck(frame("A", content) + frame("B"), definitions), later).status).toBe("safe");
+    }
+    expect(analyzeBeamerSlideMove(deck(frame("A", "\\optional") + frame("B"), definitions), later).status).toBe("review");
+  });
+  it("honors harmless redefinitions of built-in operations", () => {
+    const source = deck(frame("A", String.raw`\setcounter{equation}{4}`) + frame("B"), String.raw`\renewcommand{\setcounter}[2]{Text}`);
+    expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+  });
+  it("does not execute definitions stored in an unused macro", () => {
+    const source = deck(frame("A", String.raw`\newcommand{\unused}{\gdef\x{1}\setcounter{equation}{4}}`) + frame("B"));
+    expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+  });
+  it("distinguishes local assignments from persistent ones", () => {
+    for (const command of [String.raw`\color{red}`, String.raw`\textwidth=3cm`, String.raw`\setlength{\textwidth}{3cm}`, String.raw`\setbeamertemplate{footline}{Custom}`]) {
+      expect(analyzeBeamerSlideMove(deck(frame("A", command) + frame("B")), later).status).toBe("safe");
+      expect(analyzeBeamerSlideMove(deck(frame("A") + command + "\n" + frame("B")), later).status).toBe("review");
+    }
+    expect(analyzeBeamerSlideMove(deck(frame("A", String.raw`\global\textwidth=3cm`) + frame("B")), later).status).toBe("review");
+  });
+  it("includes the global prefix in the operation excerpt", () => {
+    const operation = String.raw`\global\def\x{1}`;
+    const result = analyzeBeamerSlideMove(deck(frame("A", operation) + frame("B")), later);
+    expect(result.issues).toMatchObject([{ message: "This move crosses \\def, which defines a macro globally.", excerpts: [{ text: operation }] }]);
+  });
+  it("does not report concrete operations outside the moved interval", () => {
+    const source = deck(frame("A", String.raw`\setcounter{equation}{4}`) + frame("B") + frame("C"));
+    expect(analyzeBeamerSlideMove(source, move(["frame:1"], { kind: "end" })).status).toBe("safe");
+  });
+});
+
+it("allows let aliases to literal character tokens", () => {
+  const source = deck(frame("A", "\\letter") + frame("B"), String.raw`\let\letter=a`);
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+});
+
+it("traces aliases to global definition operations", () => {
+  const source = deck(frame("A", String.raw`\assign\x{1}`) + frame("B"), String.raw`\let\assign\gdef`);
+  expect(analyzeBeamerSlideMove(source, later).issues[0].message).toContain("\\gdef, which defines a macro globally");
+});
+it("does not execute arguments of a cyclic expansion", () => {
+  const source = deck(frame("A", String.raw`\cycle{\setcounter{equation}{4}}`) + frame("B"), String.raw`\newcommand{\cycle}[1]{\cycle{#1}}`);
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+});
+
+it("skips comments when reading arguments, including commented delimiters", () => {
+  const source = deck(frame("A", String.raw`\ignore% }
+{\setcounter{equation}{4}}`) + frame("B"), String.raw`\newcommand{\ignore}[1]{Text}`);
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+});
+it("does not ascribe effects to a generated binding by using its shadowed outer definition", () => {
+  const source = deck(frame("A", "\\local") + frame("B"), String.raw`\def\reset{\setcounter{equation}{4}}
+\newcommand{\local}{\def\reset{Text}\reset}`);
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+});
+
+it("recognizes loop bindings inside a macro expansion instead of invoking an outer macro", () => {
+  const source = deck(frame("A", "\\plot") + frame("B"), String.raw`\def\x{\setcounter{equation}{4}}
+\newcommand{\plot}{\foreach \x in {1,2}{\draw (\x,0) circle (1pt);}}`);
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
 });
