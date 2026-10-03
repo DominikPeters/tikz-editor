@@ -1011,13 +1011,13 @@ function collectSvgReuseAffectedSourceIds(
     query: { changedSourceIds: readonly string[] }
   ) => { affectedSourceIds: string[]; reachedOpaque: boolean }
 ): string[] | null {
-  const matrixDescendantSourceIds = collectMatrixDescendantSourceIdsForChangedSources(
+  const generatedDescendantSourceIds = collectGeneratedDescendantSourceIdsForChangedSources(
     semanticResult.scene.elements,
     changedSourceIds
   );
   const changedSourceIdsForInvalidation =
-    matrixDescendantSourceIds.length > 0
-      ? [...new Set([...changedSourceIds, ...matrixDescendantSourceIds])]
+    generatedDescendantSourceIds.length > 0
+      ? [...new Set([...changedSourceIds, ...generatedDescendantSourceIds])]
       : changedSourceIds;
   const invalidation = collectGeometryInvalidation(semanticResult.dependencies, {
     changedSourceIds: changedSourceIdsForInvalidation
@@ -1027,14 +1027,18 @@ function collectSvgReuseAffectedSourceIds(
   }
   const dependencyAffectedSourceIds = mergeSourceIds(
     invalidation.affectedSourceIds,
-    matrixDescendantSourceIds
+    generatedDescendantSourceIds
   );
   if (!dependencyAffectedSourceIds || dependencyAffectedSourceIds.length === 0) {
     return null;
   }
 
   const scopeDescendantSourceIds = collectNestedScopeSourceIds(parseResult.figure.body, changedSourceIds);
-  return mergeSourceIds(dependencyAffectedSourceIds, scopeDescendantSourceIds);
+  const affectedStatementSourceIds = mergeSourceIds(dependencyAffectedSourceIds, scopeDescendantSourceIds) ?? dependencyAffectedSourceIds;
+  return mergeSourceIds(affectedStatementSourceIds, collectGeneratedDescendantSourceIdsForChangedSources(
+    semanticResult.scene.elements,
+    affectedStatementSourceIds
+  ));
 }
 
 function collectNestedScopeSourceIds(
@@ -1081,7 +1085,7 @@ function collectNestedScopeSourceIds(
   return [...nestedSourceIds].sort();
 }
 
-function collectMatrixDescendantSourceIdsForChangedSources(
+function collectGeneratedDescendantSourceIdsForChangedSources(
   elements: readonly EvaluateTikzResult["scene"]["elements"][number][],
   changedSourceIds: readonly string[]
 ): string[] {
@@ -1091,6 +1095,13 @@ function collectMatrixDescendantSourceIdsForChangedSources(
   const changed = new Set(changedSourceIds);
   const descendants = new Set<string>();
   for (const element of elements) {
+    // Generated tree paths have their own source IDs but are recomputed with
+    // the authored root statement, including nested children and adornments.
+    const treeChild = element.treeChild;
+    if (treeChild && changed.has(treeChild.treeRootSourceId)) {
+      descendants.add(element.sourceRef.sourceId);
+      descendants.add(treeChild.childSourceId);
+    }
     const matrixSourceId = element.matrixCell?.matrixSourceId?.trim();
     if (!matrixSourceId || !changed.has(matrixSourceId)) {
       continue;
