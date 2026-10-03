@@ -208,8 +208,8 @@ describe("list material before the first \\item", () => {
     `My list:\n\\begin{enumerate}\n${body}\n\\end{enumerate} `;
 
   it("keeps every half-typed \\item prefix out of whole-node fallback", () => {
-    // "\\" alone scans as a control space, so it has no visible material;
-    // the rest must surface as literal runs.
+    // "\\" alone scans as a control space, and "\\it" is a valid legacy
+    // font declaration. Other unfinished spellings retain visible source.
     for (const midEdit of ["\\", "\\i", "\\it", "\\ite", "stray text"]) {
       const analysis = analyzeSimpleTexParagraph(enumerateWith(midEdit), 100);
       expect(analysis.fallbackReason, `body: ${midEdit}`).toBeNull();
@@ -218,7 +218,7 @@ describe("list material before the first \\item", () => {
   });
 
   it("renders pre-item material as literal runs instead of degrading the node", () => {
-    for (const midEdit of ["\\i", "\\it", "\\ite", "stray text"]) {
+    for (const midEdit of ["\\i", "\\ite", "stray text"]) {
       const analysis = analyzeSimpleTexParagraph(enumerateWith(midEdit), 100);
       const preItemBlock = analysis.ir?.blocks.find((block) =>
         block.nodes.some((node) => node.kind === "literal")
@@ -245,6 +245,58 @@ describe("list material before the first \\item", () => {
     expect(analysis.fallbackReason).toBeNull();
     const literals = analysis.ir?.blocks.flatMap((block) => literalNodes(block.nodes)) ?? [];
     expect(literals).toHaveLength(0);
+  });
+
+  it("recognizes a valid legacy font declaration before the first item", () => {
+    // article.cls declares \it as \normalfont\itshape; it creates no prose
+    // before the item and must retain the authored declaration source.
+    const source = enumerateWith(String.raw`\it\item first\item second`) + " after";
+    const analysis = analyzeSimpleTexParagraph(source, 100);
+    const declarationStart = source.indexOf(String.raw`\it\item`);
+    expect(analysis.fallbackReason).toBeNull();
+    expect(analysis.ir?.nodes).toContainEqual(expect.objectContaining({
+      kind: "font-declaration", command: "it", text: String.raw`\it`,
+      sourceStart: declarationStart, sourceEnd: declarationStart + 3,
+    }));
+    expect(analysis.ir?.blocks.flatMap(block => literalNodes(block.nodes))).toEqual([]);
+    expect(analysis.ir?.blocks.some(block => block.text === "first" && block.listContext?.showLabel)).toBe(true);
+    const layout = layoutSimpleTexParagraph(source, { width: 200, alignment: "ragged-right" });
+    expect(layout.supported).toBe(true);
+    const segments = layout.report?.lines.flatMap(line => line.segments) ?? [];
+    expect(segments.filter(segment => segment.text === "first" || segment.text === "second").map(segment => segment.fontId))
+      .toEqual(["lmroman10-italic", "lmroman10-italic"]);
+    expect(segments.find(segment => segment.text === "after")?.fontId).toBe("lmroman10-regular");
+    expect(segments.find(segment => segment.text === "first")).toMatchObject({
+      sourceStartRaw: source.indexOf("first"), sourceEndRaw: source.indexOf("first") + 5,
+    });
+    expect(segments.filter(segment => segment.text === "1." || segment.text === "2.").map(segment => segment.fontId))
+      .toEqual(["lmroman10-italic", "lmroman10-italic"]);
+    expect(analysis.ir?.blocks.every(block => block.nodes.every(node =>
+      node.sourceStart >= block.sourceStart && node.sourceEnd <= block.sourceEnd
+    ))).toBe(true);
+  });
+
+  it("keeps later item and paragraph declarations active until the list ends", () => {
+    const source = String.raw`\begin{enumerate}\it\item first\par second\item\normalfont third\par fourth\item fifth\end{enumerate} after`;
+    const layout = layoutSimpleTexParagraph(source, { width: 200, alignment: "ragged-right" });
+    expect(layout.supported).toBe(true);
+    const segments = layout.report?.lines.flatMap(line => line.segments) ?? [];
+    for (const text of ["first", "second"]) expect(segments.find(segment => segment.text === text)?.fontId).toBe("lmroman10-italic");
+    for (const text of ["third", "fourth", "fifth", "after"]) expect(segments.find(segment => segment.text === text)?.fontId).toBe("lmroman10-regular");
+    const control = layoutSimpleTexParagraph(String.raw`\begin{itemize}\it\item a\par\upshape\item b\end{itemize}`, { width: 200 });
+    const controlSegments = control.report?.lines.flatMap(line => line.segments) ?? [];
+    expect(controlSegments.find(segment => segment.text === "a")?.fontId).toBe("lmroman10-italic");
+    expect(controlSegments.find(segment => segment.text === "b")?.fontId).toBe("lmroman10-regular");
+  });
+
+  it("restores nested and grouped font scopes without changing inherited point size", () => {
+    const source = String.raw`\fontsize{7pt}{8pt}\selectfont\begin{enumerate}\it\item first {\bfseries bold} italic\begin{itemize}\upshape\item inner\end{itemize}\item outer\end{enumerate} after`;
+    const layout = layoutSimpleTexParagraph(source, { width: 200, alignment: "ragged-right" });
+    expect(layout.supported).toBe(true);
+    const segments = layout.report?.lines.flatMap(line => line.segments) ?? [];
+    for (const text of ["first", "italic", "outer"]) expect(segments.find(segment => segment.text === text)).toMatchObject({ fontId: "lmroman7-italic", fontAtPt: 7 });
+    expect(segments.find(segment => segment.text === "bold")).toMatchObject({ fontId: "lmroman10-bolditalic", fontAtPt: 7 });
+    for (const text of ["inner", "after"]) expect(segments.find(segment => segment.text === text)).toMatchObject({ fontId: "lmroman7-regular", fontAtPt: 7 });
   });
 
   it("keeps an empty list body supported", () => {

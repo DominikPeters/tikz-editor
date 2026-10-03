@@ -29,7 +29,7 @@ export function texLayoutItemsForParagraphPlan(
     params.metricProvider,
     plan.spaceGlueProfile,
     params.mathBoxProvider,
-    params.textFontProfile?.defaultFontState,
+    plan.inheritedFontState ? { ...params.textFontProfile?.defaultFontState, ...plan.inheritedFontState } : params.textFontProfile?.defaultFontState,
     params.textFontProfile,
     params.graphicsResolver,
     params.dimensionContext,

@@ -1,5 +1,6 @@
 import type { KnuthPlassLayoutMode } from "../../knuth-plass/index.js";
 import type { ResolvedTexFont, TexMetricProvider } from "../fonts/types.js";
+import { defaultTexTextFontProfile } from "../fonts/text-profile.js";
 import { simpleTexInlineNodesToLayoutItems } from "../layout-inline-items.js";
 import type {
   TexLayoutInlineItem,
@@ -23,6 +24,7 @@ import type {
 import {
   splitSimpleTexParagraphSegments,
   type SimpleTexParagraphSegment,
+  type SimpleTexFontState,
   type TexAlignmentProfile,
   type TexParagraphAlignment,
   type TexSpaceGlueProfile,
@@ -54,6 +56,7 @@ export interface TexLayoutParagraphPreparation {
 }
 
 export interface TexLayoutParagraphPlan {
+  readonly inheritedFontState?: Pick<SimpleTexFontState, "family" | "series" | "shape">;
   readonly fontSizePt?: TexLength;
   readonly blockIndex: number;
   readonly vlistPath: readonly number[];
@@ -111,9 +114,10 @@ export function prepareTexLayoutParagraphsFromVList(
 
   for (const entry of paragraphEntries) {
     const paragraph = entry.item.paragraph;
-    const paragraphFont = paragraph.fontSizePt != null
-      ? { ...params.font, atPt: paragraph.fontSizePt }
-      : params.font;
+    const textFontProfile = params.options.textFontProfile ?? defaultTexTextFontProfile;
+    const paragraphFont = paragraph.inheritedFontState
+      ? textFontProfile.resolveTextFont({ ...textFontProfile.defaultFontState, ...paragraph.inheritedFontState }, paragraph.fontSizePt ?? params.font.atPt, params.metricProvider)
+      : paragraph.fontSizePt != null ? { ...params.font, atPt: paragraph.fontSizePt } : params.font;
     const scopeContext = texParagraphScopeContext(entry.ancestors);
     const suppressAncestorBreakMargins =
       paragraph.ignoreAncestorBreakMargins === true ||
@@ -207,6 +211,7 @@ export function prepareTexLayoutParagraphsFromVList(
         trailingNode.sourceEnd <= firstAdjustment.sourceSpan.start;
       paragraphPlans.push({
         fontSizePt: paragraph.fontSizePt,
+        ...(paragraph.inheritedFontState ? { inheritedFontState: paragraph.inheritedFontState } : {}),
         blockIndex,
         vlistPath: entry.path,
         segmentIndex,

@@ -61,12 +61,13 @@ describe("native TeX text styling", () => {
     expect(layout.supported).toBe(true);
     const segments = layout.report?.lines.flatMap((line) => line.segments) ?? [];
     expect(segments.find((segment) => segment.text === "red")?.color).toBe("#ff0000");
+    // LaTeX's size10.clo selects \@xivpt = 14.4pt for \Large.
     expect(segments.find((segment) => segment.text === "large")?.fontAtPt)
-      .toBeCloseTo(9.96264 * 1.44, 5);
+      .toBeCloseTo(14.4, 5);
 
     const svg = renderTexParagraphDebugSvgBody({ text: source, width: 300 });
     expect(svg).toContain('<g fill="#ff0000">');
-    expect(svg).toContain("scale(1.43462)");
+    expect(svg).toContain("scale(1.44)");
 
     const mathSvg = renderTexParagraphDebugSvgBody({
       text: String.raw`\textcolor{blue}{$x$}`,

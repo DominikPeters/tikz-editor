@@ -596,6 +596,8 @@ export interface SimpleTexTokenLiteralInfo {
 }
 
 export interface SimpleTexParagraphBlock {
+  /** List-scoped declarations inherited before this source-owned paragraph. */
+  readonly inheritedFontState?: Pick<SimpleTexFontState, "family" | "series" | "shape">;
   readonly text: string;
   readonly sourceStart: number;
   readonly sourceEnd: number;
@@ -767,6 +769,7 @@ export interface SimpleTexParagraphSegment {
 }
 
 export interface SimpleTexSegmentInput {
+  readonly inheritedFontState?: Pick<SimpleTexFontState, "family" | "series" | "shape">;
   readonly text: string;
   readonly sourceSpan: {
     readonly start: number;
@@ -4326,6 +4329,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     readonly scopeRole: Extract<SimpleTexScopePathRole, { readonly kind: "list" }>;
     readonly fontSizePt: TexLength;
     spacing?: SimpleTexListContext["spacing"];
+    fontState?: SimpleTexFontState;
   }
   interface ActiveSimpleTexEnvironment {
     readonly name: SimpleTexEnvironmentName;
@@ -4501,6 +4505,15 @@ function buildSimpleTexParagraphBlocksFromNodes(
         simpleTexInlineNodesForRange(sourceNodes, start, end),
         pendingParagraphVerticalAdjustments
       );
+      const activeList = listStack.at(-1);
+      const inheritedFontState = activeList?.fontState;
+      if (activeList) {
+        for (const node of nodes) {
+          if (node.kind === "font-declaration") {
+            activeList.fontState = simpleTexFontStateForDeclaration(activeList.fontState ?? defaultSimpleTexFontState, node.command);
+          }
+        }
+      }
       // Declarations in vertical mode select registers without creating an
       // empty prose paragraph (notably assignments before the first item).
       if (nodes.every(node => ["space", "comment", "style-declaration", "font-declaration"].includes(node.kind)) && !(allowEmptyListItem && pendingListShowLabel)) return;
@@ -4528,6 +4541,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
         sourceStart: start,
         sourceEnd: end,
         nodes,
+        ...(listContext && inheritedFontState ? { inheritedFontState: {
+          family: inheritedFontState.family, series: inheritedFontState.series, shape: inheritedFontState.shape,
+        } } : {}),
         ...(options?.fontSizePt !== undefined || sizeHistory.some(entry => entry.from > sourceOffset && entry.from <= start)
           ? { fontSizePt: sizeAt(start).sizePt } : {}),
         ...(sizeAt(end).baselineSkip !== undefined ? { baselineSkip: sizeAt(end).baselineSkip } : {}),
@@ -4644,6 +4660,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       totalLeftMarginEm: scopeRole.totalLeftMarginEm,
       scopeRole,
       fontSizePt: sizeAt(sourceStart).sizePt,
+      fontState: listStack.at(-1)?.fontState,
     });
     return scopeRole;
   };
