@@ -15,7 +15,8 @@ export type BeamerSlideEdit =
   | { kind: "move"; frameIds: readonly string[]; destination: BeamerSlideDestination }
   | { kind: "duplicate"; frameIds: readonly string[] }
   | { kind: "delete"; frameIds: readonly string[] }
-  | { kind: "insert"; destination: BeamerSlideDestination };
+  | { kind: "insert"; destination: BeamerSlideDestination }
+  | { kind: "paste"; source: string; destination: BeamerSlideDestination };
 export type BeamerSlideEditResult = {
   source: string;
   patches: SourcePatch[];
@@ -53,17 +54,18 @@ function labelSpans(document: BeamerDocumentModel): NamedSpan[] {
   return result;
 }
 
-function duplicateReplacements(document: BeamerDocumentModel, frames: readonly BeamerFrameModel[]): Replacement[] | null {
+function duplicateReplacements(document: BeamerDocumentModel, frames: readonly BeamerFrameModel[], reserved?: ReadonlySet<string>): Replacement[] | null {
   const { source } = document;
   const syntax = createBeamerSyntaxContext(source).syntax;
   const labels = labelSpans(document);
   const inside = (span: Span) => frames.some(frame => frame.span.from <= span.from && span.to <= frame.span.to);
-  const occupied = new Set(labels.map(label => label.name));
+  const occupied = new Set([...labels.map(label => label.name), ...(reserved ?? [])]);
   const renamed = new Map<string, string>();
   const replacements: Replacement[] = [];
   for (const label of labels.filter(label => inside(label.span))) {
     // Computed label names cannot be renamed by a literal source edit.
     if (!label.name || /[\\{}%]/u.test(label.name)) return null;
+    if (reserved && !reserved.has(label.name)) continue;
     const key = `${label.kind}:${label.name}`;
     let fresh = renamed.get(key);
     if (!fresh) {
@@ -95,16 +97,43 @@ function duplicateReplacements(document: BeamerDocumentModel, frames: readonly B
   return replacements;
 }
 
+/** Copy authored frames as ordinary LaTeX, preserving their attached comments. */
+export function copyBeamerSlides(source: string, frameIds: readonly string[]): string | null {
+  const document = scanBeamerDocument(source), wanted = new Set(frameIds);
+  const frames = document.frames.filter(frame => wanted.has(frame.id));
+  if (!frames.length || frames.length !== wanted.size || frames.some(frame => !beamerSlideIsEditable(source, frame))) return null;
+  return frames.map(frame => {
+    const span = beamerSlideSourceSpan(source, frame), text = source.slice(span.from, span.to);
+    return text + (text.endsWith("\n") ? "" : "\n");
+  }).join("");
+}
+
+function clipboardDocument(source: string): BeamerDocumentModel | null {
+  const prefix = "\\documentclass{beamer}\n\\begin{document}\n";
+  const document = scanBeamerDocument(prefix + source + "\n\\end{document}");
+  if (!document.frames.length || document.frames.some(frame => !beamerSlideIsEditable(document.source, frame) ||
+    frame.span.from < prefix.length || frame.span.to > prefix.length + source.length)) return null;
+  // A slide paste accepts complete frame fragments, not an entire document or
+  // unrelated commands whose scope would change when inserted at the destination.
+  let remainder = source;
+  for (const frame of [...document.frames].reverse()) remainder = remainder.slice(0, frame.span.from - prefix.length) + remainder.slice(frame.span.to - prefix.length);
+  if (remainder.replace(/%[^\n]*/gu, "").trim()) return null;
+  return document;
+}
+
 export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options: { allowWarnings?: boolean } = {}): BeamerSlideEditResult | null {
   const document = scanBeamerDocument(source);
   if (!document.documentSpan) return null;
-  const wanted = new Set(edit.kind === "insert" ? [] : edit.frameIds);
-  const frames = document.frames.filter(frame => wanted.has(frame.id));
-  if (edit.kind !== "insert" && (!frames.length || frames.length !== wanted.size || frames.some(frame => !beamerSlideIsEditable(source, frame)))) return null;
+  const pasted = edit.kind === "paste" ? clipboardDocument(edit.source) : null;
+  if (edit.kind === "paste" && !pasted) return null;
+  const origin = pasted ?? document;
+  const wanted = new Set(edit.kind === "insert" ? [] : edit.kind === "paste" ? origin.frames.map(frame => frame.id) : edit.frameIds);
+  const frames = origin.frames.filter(frame => wanted.has(frame.id));
+  if (edit.kind !== "insert" && (!frames.length || frames.length !== wanted.size || frames.some(frame => !beamerSlideIsEditable(origin.source, frame)))) return null;
   if (edit.kind === "move" && frames.length === 1 && "frameId" in edit.destination && edit.destination.frameId === frames[0].id) return null;
   const analysis = edit.kind === "move" ? analyzeBeamerSlideMove(source, edit) : null;
   if (analysis && (analysis.status === "blocked" || (analysis.status === "review" && !options.allowWarnings))) return null;
-  const spans = frames.map(frame => beamerSlideSourceSpan(source, frame));
+  const spans = frames.map(frame => beamerSlideSourceSpan(origin.source, frame));
   const dependencies = analysis?.dependencies ?? [];
   let at = edit.kind === "delete" ? null : beamerSlideInsertionPoint(document, edit.kind === "duplicate"
     ? { kind: "after", frameId: frames.at(-1)!.id } : edit.destination);
@@ -114,7 +143,8 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
     const containing = removals.find(span => span.from <= at! && at! < span.to);
     if (containing) at = containing.from;
   }
-  const rename = edit.kind === "duplicate" ? duplicateReplacements(document, frames) : [];
+  const rename = edit.kind === "duplicate" ? duplicateReplacements(document, frames) : edit.kind === "paste"
+    ? duplicateReplacements(origin, frames, new Set(labelSpans(document).map(label => label.name))) : [];
   if (!rename) return null;
   let payload = "";
   const inserted: { oldId: string | null; offset: number }[] = [];
@@ -130,11 +160,11 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
           payload += text + (text.endsWith("\n") ? "" : "\n");
         }
         const span = spans[i];
-        let text = source.slice(span.from, span.to);
+        let text = origin.source.slice(span.from, span.to);
         for (const replacement of rename.filter(item => span.from <= item.span.from && item.span.to <= span.to).sort((a, b) => b.span.from - a.span.from)) {
           text = text.slice(0, replacement.span.from - span.from) + replacement.text + text.slice(replacement.span.to - span.from);
         }
-        inserted.push({ oldId: frame.id, offset: payload.length + frame.span.from - span.from });
+        inserted.push({ oldId: edit.kind === "paste" ? null : frame.id, offset: payload.length + frame.span.from - span.from });
         payload += text + (text.endsWith("\n") ? "" : "\n");
       });
     }
@@ -156,7 +186,7 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
   const next = [...edits].reverse().reduce((text, item) => text.slice(0, item.span.from) + item.text + text.slice(item.span.to), source);
   if (next === source) return null;
   const updated = scanBeamerDocument(next);
-  if (updated.frames.length !== document.frames.length + (edit.kind === "insert" ? 1 : edit.kind === "duplicate" ? frames.length : edit.kind === "delete" ? -frames.length : 0)) return null;
+  if (updated.frames.length !== document.frames.length + (edit.kind === "insert" ? 1 : (edit.kind === "duplicate" || edit.kind === "paste") ? frames.length : edit.kind === "delete" ? -frames.length : 0)) return null;
   const byStart = new Map(updated.frames.map(frame => [frame.span.from, frame.id]));
   const frameIds: Record<string, string> = {};
   for (const frame of document.frames) {

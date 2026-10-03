@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { editBeamerSlides, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
+import { copyBeamerSlides, editBeamerSlides, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
 import { applySourcePatches } from "../packages/core/src/edit/source-patches.js";
 const frame = (title: string, body = title, options = "") => `\\begin{frame}${options}{${title}}\n${body}\n\\end{frame}\n`;
 const deck = (body: string) => `\\documentclass{beamer}\n\\begin{document}\n${body}\\end{document}\n`;
@@ -106,5 +106,39 @@ real \ref{real}
     const source = deck(frame("A", String.raw`\label{\prefix:thing}`));
     expect(editBeamerSlides(source, { kind: "duplicate", frameIds: ["frame:0"] })).toBeNull();
     expect(editBeamerSlides(source, { kind: "move", frameIds: ["frame:8"], destination: { kind: "end" } })).toBeNull();
+  });
+});
+
+
+describe("slide clipboard source operations", () => {
+  it("copies a noncontiguous selection in source order with comments", () => {
+    const source = deck("% A note\n" + frame("A") + frame("B") + frame("C"));
+    expect(copyBeamerSlides(source, ["frame:2", "frame:0"])).toBe("% A note\n" + frame("A") + frame("C"));
+    expect(copyBeamerSlides(source, ["frame:99"])).toBeNull();
+  });
+  it("pastes after a destination, preserves existing identities, and selects the new frames", () => {
+    const source = deck(frame("A") + frame("B"));
+    const copied = "% copied\n" + frame("C") + frame("D");
+    const result = edit(source, { kind: "paste", source: copied, destination: { kind: "after", frameId: "frame:0" } });
+    expect(result.source).toBe(deck(frame("A") + copied + frame("B")));
+    expect(result.frameIds).toEqual({ "frame:0": "frame:0", "frame:1": "frame:3" });
+    expect(result.selectedFrameIds).toEqual(["frame:1", "frame:2"]);
+  });
+  it("renames colliding labels and internal references together while retaining free labels", () => {
+    const source = deck(frame("A", String.raw`\label{taken}`));
+    const payload = frame("B", String.raw`\label{free}`, "[label=taken]") + frame("C", String.raw`\hyperlink{taken}{Back}\ref{free}`);
+    const result = edit(source, { kind: "paste", source: payload, destination: { kind: "end" } });
+    expect(result.source).toContain("[label=taken-copy]");
+    expect(result.source).toContain(String.raw`\hyperlink{taken-copy}{Back}\ref{free}`);
+    expect(result.source).toContain(String.raw`\label{free}`);
+    const repeated = edit(result.source, { kind: "paste", source: payload, destination: { kind: "end" } });
+    expect(repeated.source).toContain("[label=taken-copy-2]");
+    expect(repeated.source).toContain(String.raw`\ref{free-copy}`);
+  });
+  it("pastes into an empty deck", () => {
+    expect(edit(deck(""), { kind: "paste", source: frame("A"), destination: { kind: "end" } }).selectedFrameIds).toEqual(["frame:0"]);
+  });
+  it.each(["Not a slide", "\\begin{frame}Incomplete", deck(frame("A")), "\\def\\x{1}\n" + frame("A"), "{" + frame("A") + "}"])("rejects non-frame or incomplete clipboard text: %s", payload => {
+    expect(editBeamerSlides(deck(frame("A")), { kind: "paste", source: payload, destination: { kind: "end" } })).toBeNull();
   });
 });

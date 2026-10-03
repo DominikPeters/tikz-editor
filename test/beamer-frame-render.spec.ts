@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { renderBeamerFrame, prepareBeamerDocument } from "../packages/core/src/beamer/index.js";
 import type { DocumentGraphicsResolver } from "../packages/core/src/graphics/index.js";
 
 const FIXTURE_PATH = new URL(
@@ -900,5 +900,37 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
         diagnostic.message.includes("alert")
       )
     ).toEqual([]);
+  });
+});
+
+
+describe("frame macro contexts", () => {
+  const text = (result: Awaited<ReturnType<typeof renderBeamerFrame>>) => result.layout.paragraphs
+    .flatMap(paragraph => paragraph.report.lines.map(line => line.segments.map(segment => segment.text ?? "").join(""))).join("\n");
+  it("uses between-frame redefinitions in each slide, including out-of-order renders", async () => {
+    const source = String.raw`\documentclass{beamer}
+\newcommand{\unit}{ms}
+\begin{document}
+\begin{frame}{Latency}Response time: 12\unit\end{frame}
+\renewcommand{\unit}{s}
+\begin{frame}{Results}Summary: 15\unit.\only<2>{Later.}\end{frame}
+\end{document}`;
+    const document = prepareBeamerDocument(source);
+    expect(text(await document.renderFrame({ frameIndex: 1 }))).toContain("15s");
+    expect(text(await document.renderFrame({ frameIndex: 0 }))).toContain("12ms");
+    expect(text(await document.renderFrame({ frameIndex: 1, step: 2 }))).toContain("15s");
+  });
+  it("keeps earlier frame/group definitions local and captures aliases at declaration time", async () => {
+    const source = String.raw`\documentclass{beamer}
+\newcommand{\unit}{ms}
+\begin{document}
+\begin{frame}{A}\renewcommand{\unit}{bad}A\end{frame}
+{\renewcommand{\unit}{alsoBad}}
+\let\oldunit\unit
+\renewcommand{\unit}{s}
+\begin{frame}{B}15\unit, 12\oldunit\end{frame}
+\end{document}`;
+    const rendered = text(await renderBeamerFrame(source, { frameIndex: 1 }));
+    expect(rendered).toContain("15s, 12ms");
   });
 });

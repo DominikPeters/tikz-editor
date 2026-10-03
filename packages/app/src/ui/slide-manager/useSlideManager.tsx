@@ -1,6 +1,6 @@
 import { Actions } from "flexlayout-react";
 import { useCallback, useEffect, useMemo, useState, type RefObject, type MouseEvent } from "react";
-import { analyzeBeamerSlideMove, beamerSlideIsEditable, editBeamerSlides, type BeamerSlideMoveAnalysis, type BeamerDocumentModel, type BeamerSlideDestination, type BeamerSlideEdit } from "@tikz-editor/core/beamer/index";
+import { analyzeBeamerSlideMove, copyBeamerSlides, beamerSlideIsEditable, editBeamerSlides, type BeamerSlideMoveAnalysis, type BeamerDocumentModel, type BeamerSlideDestination, type BeamerSlideEdit } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { APP_MENU_COMMAND_IDS as IDS, type AppMenuItem } from "../../app-menu";
 import { CANVAS_CONTEXT_MENU_DEFINITION } from "../../context-menu";
@@ -65,9 +65,45 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
     const destination: BeamerSlideDestination = last ? { kind: "after", frameId: last.id } : { kind: "end" };
     edit({ kind: "insert", destination });
   };
+  const copyText = (chosen = ids) => enabled ? copyBeamerSlides(doc.source, chosen) : null;
+  const copy = async (chosen = ids) => {
+    const text = copyText(chosen);
+    if (text == null) return;
+    try {
+      const clipboard = getActiveEditorPlatform().clipboard;
+      if (clipboard?.writeText) await clipboard.writeText(text);
+      else await navigator.clipboard.writeText(text);
+    } catch {
+      window.alert("Could not copy the slides to the clipboard. Try Cmd/Ctrl+C while the Slides panel is focused.");
+    }
+  };
+  const pasteText = (source: string, chosen = ids) => {
+    if (!enabled) return;
+    const last = model?.frames.filter(frame => chosen.includes(frame.id)).at(-1);
+    const destination: BeamerSlideDestination = last ? { kind: "after", frameId: last.id } : { kind: "end" };
+    edit({ kind: "paste", source, destination });
+  };
+  const paste = async (chosen = ids) => {
+    if (!enabled) return;
+    const state = useEditorStore.getState();
+    const selectionBefore = state.documents[documentId]?.deckSlideSelection;
+    const rootBefore = state.activeRootId;
+    try {
+      const clipboard = getActiveEditorPlatform().clipboard;
+      const text = clipboard?.readText ? await clipboard.readText() : await navigator.clipboard.readText();
+      const current = useEditorStore.getState();
+      // Do not apply an asynchronous clipboard read to a changed document or selection.
+      if (current.activeDocumentId !== documentId || current.sourceRevision !== doc.sourceRevision ||
+        current.activeRootId !== rootBefore || current.documents[documentId]?.deckSlideSelection !== selectionBefore) return;
+      pasteText(text, chosen);
+    } catch {
+      window.alert("Could not read slides from the clipboard. Try Cmd/Ctrl+V while the Slides panel is focused.");
+    }
+  };
   const contextMenu = (event: MouseEvent, frameId: string) => {
     if (!model) return;
     event.preventDefault(); event.stopPropagation();
+    (event.currentTarget as HTMLElement).focus();
     const chosen = ids.includes(frameId) ? ids : [frameId];
     if (!ids.includes(frameId)) select(frameId);
     const valid = () => {
@@ -76,6 +112,8 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
     };
     const available = enabled && chosen.every(id => editable.includes(id));
     const bindings = Object.fromEntries<CommandBinding>(Object.values(IDS).map(id => [id, { enabled: false, run: () => {} }])) as CommandBindings;
+    bindings[IDS.COPY] = { enabled: available, run: () => { if (valid()) void copy(chosen); } };
+    bindings[IDS.PASTE] = { enabled, run: () => { if (valid()) void paste(chosen); } };
     bindings[IDS.DUPLICATE] = { enabled: available && editBeamerSlides(doc.source, { kind: "duplicate", frameIds: chosen }) != null,
       run: () => { if (valid()) edit({ kind: "duplicate", frameIds: chosen }); } };
     bindings[IDS.DELETE] = { enabled: available, run: () => { if (valid()) edit({ kind: "delete", frameIds: chosen }); } };
@@ -90,7 +128,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
       setMenu({ revision: doc.sourceRevision, documentId, anchor: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) }, bindings });
     }
   };
-  return { ids, anchorId, select, edit, insert, enabled, editable, movable, canEditSelection, canMoveSelection, contextMenu,
+  return { ids, anchorId, select, edit, insert, copy, copyText, paste, pasteText, enabled, editable, movable, canEditSelection, canMoveSelection, contextMenu,
     selectAll: () => { dispatch({ type: "SELECT_DECK_SLIDES", documentId, baseRevision: doc.sourceRevision,
       frameIds: model?.frames.map(frame => frame.id) ?? [], anchorId }); },
     review: currentReview ? <SlideMoveReview analysis={currentReview.analysis} onClose={() => { setPending(null); }}
@@ -110,6 +148,9 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
         onCommandRun={(id, origin) => { if (menu.bindings[id].enabled) void menu.bindings[id].run(origin); }} /> : null };
 }
 const MENU_ITEMS: readonly AppMenuItem[] = [
+  { kind: "command", commandId: IDS.COPY, label: "Copy slides" },
+  { kind: "command", commandId: IDS.PASTE, label: "Paste slides" },
+  { kind: "separator" },
   { kind: "command", commandId: IDS.DUPLICATE, label: "Duplicate slides" },
   { kind: "command", commandId: IDS.DELETE, label: "Delete slides" },
   { kind: "separator" },

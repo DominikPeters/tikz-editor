@@ -1073,7 +1073,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const kind = action.edit.kind;
       const entry: HistoryEntry = {
         kind: kind === "move" ? "reorder" : kind === "delete" ? "delete" : "add-element",
-        label: kind === "move" ? "Move slides" : kind === "duplicate" ? "Duplicate slides" : kind === "delete" ? "Delete slides" : "New slide",
+        label: kind === "move" ? "Move slides" : kind === "duplicate" ? "Duplicate slides" : kind === "paste" ? "Paste slides" : kind === "delete" ? "Delete slides" : "New slide",
         sourceBefore: doc.source, sourceAfter: result.source, forward: result.patches,
         deckSlidesBefore: before, deckSlidesAfter: after,
       };

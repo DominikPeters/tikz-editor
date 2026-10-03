@@ -264,3 +264,103 @@ test("keeps unknown uses quiet and explains a known operation through a macro", 
   await expect(page.locator(".cm-content")).toBeFocused();
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toBe(String.raw`\newcommand{\custom}{\setcounter{equation}{4}}`);
 });
+
+
+const UNITS_SOURCE = String.raw`\documentclass{beamer}
+\newcommand{\unit}{ms}
+\begin{document}
+\begin{frame}{Latency}
+Response time: 12\unit
+\end{frame}
+\renewcommand{\unit}{s}
+\begin{frame}{Results}
+Summary: 15\unit
+\end{frame}
+\end{document}`;
+
+test("renders between-slide macro changes in the canvas and thumbnails", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18); await setSource(page, UNITS_SOURCE);
+  await card(page, "Results").click();
+  const canvasText = () => page.getByTestId("canvas-svg-layer").evaluate(layer =>
+    Array.from(layer.querySelectorAll("[data-tex-glyph]"), glyph => String.fromCodePoint(Number(glyph.getAttribute("data-tex-glyph")))).join(""));
+  await expect.poll(canvasText).toContain("15s");
+  const thumbnailText = () => card(page, "Results").locator("img").evaluate(image => {
+    const src = (image as HTMLImageElement).src;
+    const svg = new DOMParser().parseFromString(decodeURIComponent(src.slice(src.indexOf(",") + 1)), "image/svg+xml");
+    return Array.from(svg.querySelectorAll("[data-tex-glyph]"), glyph => String.fromCodePoint(Number(glyph.getAttribute("data-tex-glyph")))).join("");
+  });
+  await expect.poll(thumbnailText).toContain("15s");
+  await setSource(page, UNITS_SOURCE.replace("{s}", "{seconds}"));
+  await expect.poll(thumbnailText).toContain("15seconds");
+  await card(page, "Latency").click();
+  await expect.poll(canvasText).toContain("12ms");
+});
+
+test("keeps source dimming aligned with the active slide after reorder and undo", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  const source = UNITS_SOURCE.replace("Summary: 15\\unit", "Summary.");
+  await setSource(page, source);
+  await page.evaluate(() => (window as unknown as { __TIKZ_EDITOR_APP_TEST_API__: { runCommand: (id: string) => boolean } }).__TIKZ_EDITOR_APP_TEST_API__.runCommand("view.toggle-source-panel"));
+  await expect(page.locator(".cm-content")).toBeVisible();
+  await card(page, "Results").click(); await page.keyboard.press("Alt+ArrowUp");
+  await expect.poll(() => readStoreSource(page)).not.toBe(source);
+  const dimmed = (text: string) => page.locator(".cm-line").filter({ hasText: text }).evaluate(line => {
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    const values: boolean[] = [];
+    while (walker.nextNode()) if (walker.currentNode.textContent?.trim()) values.push(!!walker.currentNode.parentElement?.closest(".cm-figure-dimmed"));
+    return values;
+  });
+  await expect.poll(async () => (await dimmed("Response time:")).every(Boolean)).toBe(true);
+  await expect.poll(async () => (await dimmed("Summary.")).some(Boolean)).toBe(false);
+  await card(page, "Results").focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(source);
+  await expect.poll(async () => (await dimmed("Response time:")).every(Boolean)).toBe(true);
+  await expect.poll(async () => (await dimmed("Summary.")).some(Boolean)).toBe(false);
+});
+
+test("copies and pastes selected slides through clipboard events and undoes once", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  await card(page, "A").click(); await card(page, "B").click({ modifiers: ["Shift"] });
+  const text = await card(page, "B").evaluate(button => {
+    const data = new DataTransfer();
+    button.dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: data }));
+    return data.getData("text/plain");
+  });
+  expect(text).toContain("% Keep with A");
+  expect(text).toContain(String.raw`\begin{frame}{B}`);
+  expect(text).not.toContain(String.raw`\begin{frame}{C}`);
+  await card(page, "D").click();
+  await card(page, "D").evaluate((button, text) => {
+    const data = new DataTransfer(); data.setData("text/plain", text);
+    button.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data }));
+  }, text);
+  await expect(nav(page).locator("[data-slide-id]")).toHaveCount(6);
+  await expect(selected(page)).toHaveCount(2);
+  const pasted = await readStoreSource(page);
+  expect(pasted).toContain("[label=a-copy]");
+  expect(pasted).toContain(String.raw`\hyperlink{a-copy}{Back}`);
+  await selected(page).first().focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
+  await expect(selected(page)).toHaveAttribute("aria-label", "4. D");
+});
+
+test("uses a counted stack as the multi-slide drag image and removes it on cancellation", async ({ page }) => {
+  await gotoApp(page); await dock(page, 18);
+  await expect.poll(() => card(page, "A").locator("img").evaluate(image => (image as HTMLImageElement).complete)).toBe(true);
+  await card(page, "A").click(); await card(page, "B").click({ modifiers: ["Shift"] });
+  const transfer = await page.evaluateHandle(() => {
+    const transfer = new DataTransfer();
+    Object.defineProperty(transfer, "setDragImage", { value: (element: HTMLElement) => { element.dataset.usedAsDragImage = "true"; } });
+    return transfer;
+  });
+  await card(page, "A").dispatchEvent("dragstart", { dataTransfer: transfer });
+  const ghost = page.getByTestId("slide-drag-preview");
+  await expect(ghost).toHaveText("2 slides");
+  await expect(ghost).toHaveAttribute("data-used-as-drag-image", "true");
+  await ghost.evaluate(element => { element.style.left = "20px"; element.style.top = "20px"; element.style.zIndex = "9999"; });
+  await page.screenshot({ path: "/tmp/slide-drag-preview.png", clip: { x: 16, y: 16, width: 174, height: 122 } });
+  await card(page, "A").dispatchEvent("dragend", { dataTransfer: transfer });
+  await expect(ghost).toHaveCount(0);
+  expect(await readStoreSource(page)).toBe(SOURCE);
+  await transfer.dispose();
+});

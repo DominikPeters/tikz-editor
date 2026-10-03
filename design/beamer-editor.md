@@ -790,6 +790,24 @@ biggest determinant of coverage. Strategy:
 - Undo/redo, multi-root navigation, and source panel sync all reuse the
   existing machinery — these must not fork for deck mode.
 
+### Slide clipboard and drag feedback
+
+The focused Slides panel handles Cmd/Ctrl+C and Cmd/Ctrl+V, plus Copy/Paste in
+its context menu. The clipboard holds ordinary LaTeX frame fragments, preserving
+comments and source order. Paste inserts after the final selected frame (or into
+an empty deck), selects the inserted group, and records one undo entry. Colliding
+literal labels and references within the copied group are renamed together.
+Complete frame fragments can also be pasted from a source editor; full documents
+and unrelated outside commands are rejected. Macro uses keep the destination's
+context. Native clipboard actions use the existing platform bridge and clipboard
+events; browser shortcuts use clipboard events. Async reads are discarded if the
+document, revision or selection changes before they finish.
+
+Dragging multiple slides uses a thumbnail stack marked with the selected count.
+The drag preview is removed on drop, cancellation, source change or unmount.
+Source dimming retains the source text associated with its frame ranges, so a
+coalesced CodeMirror update cannot shift already-updated ranges a second time.
+
 ### Slide move analysis
 
 Drag and Alt+arrow reordering use the same analysis before changing source.
@@ -1044,7 +1062,9 @@ mapped macro-expansion contract. Parsed `\def`, `\let`, `\newcommand`,
 `\providecommand`, `\DeclareRobustCommand`, and `\DeclareMathOperator`
 definitions compile into the same `MacroBinding` representation used by TikZ
 and are expanded before paragraph/math layout while retaining use-site source
-mapping. This is a document-level facility, not a list of presentation- or
+mapping. The shared context collector resolves definitions visible at each frame's
+start, including declarations between slides. Closed frame/group definitions stay
+local; bindings are cached per frame for repeated overlay renders. This is a document-level facility, not a list of presentation- or
 fixture-specific aliases. It makes the frame-3 `array` and its `\R`, `\act`,
 and `\Lagr` commands render through the native math engine.
 

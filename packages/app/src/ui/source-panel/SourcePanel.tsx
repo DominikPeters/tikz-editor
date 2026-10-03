@@ -125,7 +125,8 @@ function buildHighlightExtension(dark: boolean) {
 
 const setHighlight = StateEffect.define<[number, number] | null>();
 const setDiagnostics = StateEffect.define<DiagnosticInput[]>();
-const setFigureOverlay = StateEffect.define<DecorationSet>();
+type FigureOverlayRequest = { source: string; figures: readonly FigureOverlayFigure[]; activeRootId: string | null };
+export const setFigureOverlay = StateEffect.define<FigureOverlayRequest>();
 const sourcePanelExternalSyncAnnotation = Annotation.define<{ nextSource: string; sourceRevision: number }>();
 
 type PendingExternalSourceSync = {
@@ -260,20 +261,23 @@ const diagnosticsField = StateField.define<{ list: Diagnostic[]; decorations: De
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations)
 });
 
-const figureOverlayField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
+export const figureOverlayField = StateField.define<{
+  request: FigureOverlayRequest | null;
+  decorations: DecorationSet;
+}>({
+  create: () => ({ request: null, decorations: Decoration.none }),
   update(value, tr) {
-    for (const effect of tr.effects) {
-      if (effect.is(setFigureOverlay)) {
-        return effect.value;
-      }
+    const request = tr.effects.find(effect => effect.is(setFigureOverlay))?.value;
+    const next = request ?? value.request;
+    if (next && (request || tr.docChanged) && tr.state.doc.toString() === next.source) {
+      return { request: next, decorations: buildFigureOverlayDecorations({ ...next, docLength: tr.state.doc.length }) };
     }
-    if (tr.docChanged) {
-      return value.map(tr.changes);
-    }
-    return value;
+    // A new range can arrive before the coalesced source sync. Keep it pending
+    // until the matching document arrives, rather than mapping it a second time.
+    if (request) return { request, decorations: Decoration.none };
+    return tr.docChanged ? { ...value, decorations: value.decorations.map(tr.changes) } : value;
   },
-  provide: (f) => EditorView.decorations.from(f)
+  provide: field => EditorView.decorations.from(field, value => value.decorations)
 });
 
 function findExternalSourceSyncAnnotation(
@@ -1242,13 +1246,8 @@ export function SourcePanel() {
     if (!view) {
       return;
     }
-    const decorations = buildFigureOverlayDecorations({
-      docLength: view.state.doc.length,
-      figures,
-      activeRootId
-    });
-    view.dispatch({ effects: setFigureOverlay.of(decorations) });
-  }, [activeRootId, figureOverlaySignature, figures]);
+    view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
+  }, [activeRootId, figureOverlaySignature, figures, snapshot.source]);
 
   const prevActiveFigureIdRef = useRef(activeRootId);
   useEffect(() => {

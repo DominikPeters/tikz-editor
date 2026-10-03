@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEven
 import { scanBeamerDocument, type BeamerSlideDestination } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
+import { getActiveEditorPlatform } from "../platform/current";
 import { useEditorStore } from "../store/store";
 import { useFigureThumbnails } from "./useFigureThumbnails";
 import { useSlideManager } from "./slide-manager/useSlideManager";
@@ -29,6 +30,7 @@ export function RootNavigator() {
   const panelRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const dragPreview = useRef<HTMLElement | null>(null);
   const drag = useRef<{ documentId: string; revision: number; ids: string[]; token: string } | null>(null);
   const lastNavigation = useRef("");
   const lastNavigationDocument = useRef<string | null>(null);
@@ -80,6 +82,8 @@ export function RootNavigator() {
   }, [documentId]);
   useEffect(() => {
     drag.current = null; setDragging(false); setDrop(null);
+    dragPreview.current?.remove(); dragPreview.current = null;
+    return () => { dragPreview.current?.remove(); dragPreview.current = null; };
   }, [documentId, revision]);
   useEffect(() => {
     const panel = panelRef.current;
@@ -144,7 +148,7 @@ export function RootNavigator() {
     documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
     priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4), refreshDelayMs: 350,
   });
-  const clearDrag = () => { drag.current = null; setDragging(false); setDrop(null); };
+  const clearDrag = () => { dragPreview.current?.remove(); dragPreview.current = null; drag.current = null; setDragging(false); setDrop(null); };
   const toggleSection = (id: string) => {
     const next = new Set(collapsed); if (next.has(id)) next.delete(id); else next.add(id);
     collapsedByDocument.set(documentId, next); setCollapsed(next);
@@ -190,6 +194,17 @@ export function RootNavigator() {
     const key = event.key.toLowerCase();
     const handled = () => { event.preventDefault(); event.stopPropagation(); };
     if (key === "escape") { handled(); clearDrag(); return; }
+    if (deckMode && command && !event.altKey && !event.shiftKey && (key === "c" || key === "v")) {
+      event.stopPropagation();
+      const clipboard = getActiveEditorPlatform().clipboard;
+      // Browser copy/paste events carry DataTransfer data without an async
+      // permission prompt. Native keyboard actions can use the platform bridge.
+      if (key === "c" ? clipboard?.writeText : clipboard?.readText) {
+        event.preventDefault();
+        if (key === "c") void manager.copy(); else void manager.paste();
+      }
+      return;
+    }
     if (deckMode && command && key === "a") { handled(); manager.selectAll(); return; }
     if (deckMode && command && key === "d") { handled(); if (manager.canEditSelection) manager.edit({ kind: "duplicate", frameIds: manager.ids }); return; }
     if (deckMode && (key === "delete" || key === "backspace")) { handled(); if (manager.canEditSelection) manager.edit({ kind: "delete", frameIds: manager.ids }); return; }
@@ -235,6 +250,17 @@ export function RootNavigator() {
 
   return <div ref={panelRef} className={css.panel} data-testid="figure-navigator" data-slide-manager={deckMode || undefined}
     data-layout={layout} data-dragging={dragging || undefined} onKeyDown={onKeyDown} tabIndex={-1}
+    onCopy={event => {
+      if (!deckMode || (event.target as Element).closest('[role="dialog"], [role="menu"]')) return;
+      event.preventDefault(); event.stopPropagation();
+      const text = manager.copyText();
+      if (text != null) event.clipboardData.setData("text/plain", text);
+    }}
+    onPaste={event => {
+      if (!deckMode || (event.target as Element).closest('[role="dialog"], [role="menu"]')) return;
+      event.preventDefault(); event.stopPropagation();
+      manager.pasteText(event.clipboardData.getData("text/plain"));
+    }}
     onPointerDownCapture={() => { ownsFocus.current = true; }}
     onFocusCapture={event => {
       ownsFocus.current = true;
@@ -279,6 +305,22 @@ export function RootNavigator() {
                   const token = `${documentId}:${revision}:${root.id}`;
                   drag.current = { documentId, revision, ids, token }; setDragging(true);
                   event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(DRAG_TYPE, token);
+                  if (ids.length > 1) {
+                    dragPreview.current?.remove();
+                    const ghost = document.createElement("div");
+                    ghost.className = css.dragPreview; ghost.setAttribute("aria-hidden", "true");
+                    ghost.dataset.testid = "slide-drag-preview";
+                    const image = event.currentTarget.querySelector("img")?.cloneNode(true);
+                    if (image) ghost.appendChild(image);
+                    else {
+                      const title = document.createElement("div");
+                      title.className = css.dragTitle; title.textContent = root.label; ghost.appendChild(title);
+                    }
+                    const count = document.createElement("span");
+                    count.textContent = `${ids.length} slides`; ghost.appendChild(count);
+                    panelRef.current?.appendChild(ghost); dragPreview.current = ghost;
+                    event.dataTransfer.setDragImage(ghost, 24, 24);
+                  }
                 }} onDragEnd={clearDrag}>
                 <div className={css.preview}>{thumbnail ? <img src={thumbnail} alt="" draggable={false} /> : <span>Rendering…</span>}
                   {root.stepCount != null && root.stepCount > 1 ? <span className={css.stepBadge} data-testid="navigator-step-badge" title={`${root.stepCount} overlay steps`}>{root.stepCount}</span> : null}

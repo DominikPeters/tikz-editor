@@ -98,3 +98,20 @@ describe("slide move review transactions", () => {
     expect(editorReducer(state, { ...action, span: { from: 10, to: 100000 } })).toBe(state);
   });
 });
+
+
+it("pastes multiple slides as one undo transaction with restored selection", () => {
+  let state = setup();
+  const before = state;
+  state = editorReducer(state, { type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision,
+    edit: { kind: "paste", source: "\\begin{frame}{D}D\\end{frame}\n\\begin{frame}{E}E\\end{frame}", destination: { kind: "after", frameId: "frame:0" } } });
+  expect(state.history).toHaveLength(1);
+  expect(state.history[0].label).toBe("Paste slides");
+  expect(state.documents[state.activeDocumentId].deckSlideSelection?.frameIds).toEqual(["frame:1", "frame:2"]);
+  const pasted = state.source;
+  state = editorReducer(state, { type: "UNDO" });
+  expect(state.source).toBe(before.source);
+  expect(state.activeRootId).toBe(before.activeRootId);
+  state = editorReducer(state, { type: "REDO" });
+  expect(state.source).toBe(pasted);
+});

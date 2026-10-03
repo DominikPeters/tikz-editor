@@ -11,6 +11,7 @@ import {
   remapTexVListLayoutSourceMap,
   remapSimpleTexListStructureSourceMap,
 } from "../text/tex/source-map-report.js";
+import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import type { Span } from "../ast/types.js";
 import { pt, svgPoint, svgRect, type SvgPoint, type SvgRect } from "../coords/index.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -231,7 +232,7 @@ type BeamerRenderContext = {
   readonly syntax: TexSyntaxIndex;
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
-  readonly macroBindings: ReadonlyMap<string, MacroBinding>;
+  readonly macroBindingsForFrame: (frame: BeamerFrameModel) => ReadonlyMap<string, MacroBinding>;
   readonly references: BeamerReferenceIndex;
   readonly overlaysByFrameId: ReadonlyMap<string, BeamerOverlayModel>;
   readonly page: BeamerPageGeometry;
@@ -253,6 +254,7 @@ function createBeamerRenderContext(
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
+  const frameMacroBindings = new Map<string, ReadonlyMap<string, MacroBinding>>();
   const overlaysByFrameId = new Map(document.frames.map((frame) => [
     frame.id, scanBeamerFrameOverlays(source, frame, syntaxContext.syntax),
   ]));
@@ -261,7 +263,16 @@ function createBeamerRenderContext(
     syntax: syntaxContext.syntax,
     document,
     theme,
-    macroBindings: collectMacroBindings(document.preamble.macroDefinitions),
+    macroBindingsForFrame: frame => {
+      let bindings = frameMacroBindings.get(frame.id);
+      if (!bindings) {
+        // Resolve the context at this frame, while the document scope is open.
+        // Definitions in earlier closed frames/groups must not leak into it.
+        bindings = collectMacroBindings(collectContextDefinitions(source.slice(0, frame.span.from)));
+        frameMacroBindings.set(frame.id, bindings);
+      }
+      return bindings;
+    },
     references: buildBeamerReferenceIndex(document, syntaxContext.syntax, overlaysByFrameId),
     overlaysByFrameId,
     page: resolveBeamerPageGeometry(document, theme),
@@ -421,7 +432,8 @@ async function renderBeamerFrameStep(params: {
   graphicsResolver?: DocumentGraphicsResolver;
 }): Promise<RenderBeamerFrameResult> {
   const { context, frame, frameIndex, bodyIr, step } = params;
-  const { source, document, theme, macroBindings, page } = context;
+  const { source, document, theme, page } = context;
+  const macroBindings = context.macroBindingsForFrame(frame);
   const stepCount = bodyIr.overlays.stepCount;
   const navigation = createBeamerFrameNavigationSnapshot(
     document,
