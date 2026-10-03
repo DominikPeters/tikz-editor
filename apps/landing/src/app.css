@@ -1253,6 +1253,45 @@ select {
   color: var(--landing-teal);
 }
 
+.landingCodeSigningPolicy {
+  padding: clamp(22px, 3vw, 34px) 0;
+  border-top: 1px solid var(--landing-line);
+  background: var(--landing-bg);
+  scroll-margin-top: calc(var(--landing-header-height) + 18px);
+}
+
+.landingCodeSigningPolicyInner {
+  width: min(720px, calc(100vw - 32px));
+  margin: 0 auto;
+}
+
+.landingCodeSigningPolicy h2 {
+  margin: 0 0 10px;
+  color: var(--landing-ink);
+  font-size: 1.1rem;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.landingCodeSigningPolicy p {
+  margin: 0;
+  color: var(--landing-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.landingCodeSigningPolicy p + p {
+  margin-top: 10px;
+}
+
+.landingCodeSigningPolicy a {
+  color: var(--landing-blue);
+}
+
+.landingCodeSigningPolicy a:hover {
+  color: var(--landing-teal);
+}
+
 @media (max-width: 1180px) {
   .landingToolCatalogInner {
     width: min(780px, calc(100vw - 32px));
