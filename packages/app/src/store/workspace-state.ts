@@ -9,7 +9,7 @@ import type {
   WorkspacePersistedState
 } from "./types";
 import { makeEmptySnapshot } from "../compute";
-import { detectDocumentKind, type DocumentKind } from "@tikz-editor/core/document/kind";
+import { detectDocumentKind, documentKindDependencySource, type DocumentKind } from "@tikz-editor/core/document/kind";
 
 export const DEFAULT_SOURCE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;
@@ -208,14 +208,15 @@ function normalizeWorkspaceActiveDocument(workspace: WorkspacePersistedState): W
 
 /**
  * Mode follows the file: the document kind is derived from the source on
- * every projection, memoized on the source string so repeated projections
- * of an unchanged document are free.
+ * every projection. Complete leading literal declarations depend on their
+ * lexical prefix; complex preambles retain the exact-source fallback.
  */
 let documentKindCache: { source: string; kind: DocumentKind } | null = null;
 
 export function documentKindForSource(source: string): DocumentKind {
-  if (documentKindCache?.source !== source) {
-    documentKindCache = { source, kind: detectDocumentKind(source) };
+  const dependencySource = documentKindDependencySource(source);
+  if (documentKindCache?.source !== dependencySource) {
+    documentKindCache = { source: dependencySource, kind: detectDocumentKind(dependencySource) };
   }
   return documentKindCache.kind;
 }
