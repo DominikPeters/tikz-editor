@@ -99,6 +99,10 @@ describe("Beamer theme resolution", () => {
       fg: "#000000",
       bg: "#d6d6f0",
     });
+    expect(resolveBeamerThemeColor(theme, "block title example")).toEqual({ fg: "#ffffff", bg: "#006000" });
+    expect(resolveBeamerThemeColor(theme, "block body example")).toEqual({ fg: "#000000", bg: "#e6efe6" });
+    expect(resolveBeamerThemeColor(theme, "block title alerted")).toEqual({ fg: "#ffffff", bg: "#bf0000" });
+    expect(resolveBeamerThemeColor(theme, "block body alerted")).toEqual({ fg: "#000000", bg: "#f9e6e6" });
     expect(resolveBeamerThemeColor(theme, "title in head/foot")).toEqual({
       fg: "#000000",
       bg: "#cccced",

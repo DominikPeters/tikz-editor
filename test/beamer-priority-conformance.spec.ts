@@ -4,6 +4,7 @@ import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace, type BeamerStructuralComparison } from "../scripts/lib/beamer-frame-compare.mjs";
 import { priorityFidelityFailures, priorityOracleFailures, unsupportedCodeFailures, type PriorityFixture } from "../scripts/lib/beamer-priority-contracts.mjs";
+import { paintContractFailures } from "../scripts/lib/beamer-paint-compare.mjs";
 
 const root = new URL("./fixtures/beamer/corpus-priorities/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("cases.json", root), "utf8")) as {
@@ -48,6 +49,13 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(priorityFidelityFailures(comparison({ ...perfectSummary(), unmatchedOracleTextLines: 2 }), { pages: 1 })).toContainEqual(expect.stringContaining("unmatchedOracleTextLines=2"));
     expect(priorityFidelityFailures(comparison(), { pages: 1, images: 1 }, 0)).toContain("SVG images=0, expected 1");
     expect(priorityOracleFailures({ pdf: { pageCount: 1 }, pageTrace: { pages: [tracedPage("Title only")] } }, { pages: 1, oracleText: ["Alpha"] })).toContain("oracle is missing witness Alpha");
+  });
+
+  it("rejects incorrect block fills independently of matching glyph geometry", () => {
+    const paint = { tolerance: 2, samples: [{ id: "example:block-body", maxChannelDelta: 31 }] };
+    expect(priorityFidelityFailures({ ...comparison(), paint }, { pages: 1 })).toContainEqual(expect.stringContaining("Block paint example:block-body"));
+    expect(paintContractFailures({ ...paint, samples: [{ id: "body", maxChannelDelta: NaN }] })).toHaveLength(1);
+    expect(paintContractFailures({ ...paint, samples: [{ id: "body", maxChannelDelta: 2 }] })).toEqual([]);
   });
 
   it("withholds glyph comparisons when states or continuation pages have no correspondence", () => {

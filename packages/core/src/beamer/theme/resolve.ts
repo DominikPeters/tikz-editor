@@ -1018,8 +1018,16 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
   }],
   ["orchid", (state, use) => {
     markApplied(state, "color-theme", "orchid", use);
-    state.colors["block title"] = { fg: "#ffffff", bg: "#262686" };
-    state.colors["block body"] = { fg: "#000000", bg: "#e9e9f3" };
+    const canvas = rgbChannelsFromHex(resolveMutableThemeColor(state, "normal text").bg ?? WHITE);
+    for (const [suffix, role, fallback] of [
+      ["", "structure", "#3333b3"],
+      [" alerted", "alerted text", "#ff0000"],
+      [" example", "example text", "#008000"],
+    ] as const) {
+      const titleRgb = mixRgbChannels(mutableThemeForegroundRgb(state, role, fallback), BLACK_RGB, 75);
+      state.colors[`block title${suffix}`] = { fg: WHITE, bg: rgbChannelsToHex(titleRgb) };
+      state.colors[`block body${suffix}`] = { parent: "normal text", bg: xcolorMixRgb(titleRgb, canvas, 10) };
+    }
   }],
   ["seahorse", (state, use) => {
     markApplied(state, "color-theme", "seahorse", use);

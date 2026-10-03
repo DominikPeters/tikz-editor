@@ -1,4 +1,5 @@
 import { structuralContractFailures } from "../compare-beamer-frame.mjs";
+import { paintContractFailures } from "./beamer-paint-compare.mjs";
 
 /** The same exact contract as the single-frame comparator, never a baseline of known bugs. */
 export function priorityFidelityFailures(report, fixture, imageCount = 0) {
@@ -7,6 +8,7 @@ export function priorityFidelityFailures(report, fixture, imageCount = 0) {
   if (report.input.overlayStepCount !== fixture.pages) failures.push(`native pages/states=${report.input.overlayStepCount}, fixture expects ${fixture.pages}`);
   if (report.structural) failures.push(...structuralContractFailures(report.structural.summary));
   else failures.push("No valid page correspondence; exact glyph comparison withheld.");
+  failures.push(...paintContractFailures(report.paint));
   if (fixture.images != null && imageCount !== fixture.images) failures.push(`SVG images=${imageCount}, expected ${fixture.images}`);
   return failures;
 }

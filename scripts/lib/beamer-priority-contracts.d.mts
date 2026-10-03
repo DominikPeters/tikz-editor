@@ -15,6 +15,7 @@ export function priorityFidelityFailures(report: {
   readonly input: { readonly overlayStepCount: number };
   readonly oracle: { readonly page: { readonly pageCount: number } };
   readonly structural: { readonly summary: BeamerStructuralComparison["summary"] } | null;
+  readonly paint?: import("./beamer-paint-compare.mjs").BeamerPaintComparison | null;
 }, fixture: Pick<PriorityFixture, "pages" | "images">, imageCount?: number): string[];
 export function priorityOracleFailures(oracle: {
   readonly pdf: { readonly pageCount: number };

@@ -10,6 +10,7 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 import { ensureDistBuildFresh } from "./ensure-dist-build.mjs";
+import { compareBlockPaint, paintContractFailures } from "./lib/beamer-paint-compare.mjs";
 import {
   buildNativeBeamerPageTrace,
   compareBeamerPageTraces,
@@ -497,6 +498,8 @@ export async function compareBeamerFrame(options, runtime = {}) {
       selectedTrace: oracleReport.tex.selectedPage,
     },
     structural: structuralComparison,
+    paint: options.structuralOnly ? null : compareBlockPaint(render, nativePageTrace, oraclePageTrace,
+      join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight),
     raster: options.structuralOnly ? null : {
       width: options.width,
       height: rasterHeight,
@@ -535,7 +538,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
     `[beamer-frame-compare] structural ${JSON.stringify(structuralComparison.summary)}`
   );
   if (options.assertStructural) {
-    const failures = structuralContractFailures(structuralComparison.summary);
+    const failures = [...structuralContractFailures(structuralComparison.summary), ...paintContractFailures(report.paint)];
     if (failures.length > 0) {
       throw new Error(
         `Structural fidelity contract failed: ${failures.join(", ")}`
