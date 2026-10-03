@@ -7,7 +7,8 @@ import {
   prepareDocumentGraphicsResolver,
 } from "../packages/app/src/image-asset-cache.js";
 import { setPdfAssetRasterizerForTests, type PdfAssetRasterizer } from "../packages/app/src/pdf-asset-rasterizer.js";
-import { setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
+import { createActiveDocumentAssetWatchOwner } from "../packages/app/src/ui/useActiveDocumentAssetWatches";
+import { getActiveEditorPlatform, setActiveEditorPlatform } from "../packages/app/src/platform/current.js";
 import type { EditorPlatform } from "../packages/app/src/platform/types.js";
 import type { DocumentFileRef } from "../packages/app/src/store/types.js";
 import { createDocumentGraphicsResolverFromPreviewBundle } from "../packages/core/src/graphics/index.js";
@@ -90,6 +91,8 @@ describe("image asset cache", () => {
     });
     invalidateImageAssetPath("/tmp/tikz/fig.svg");
 
+    const owner = createActiveDocumentAssetWatchOwner(getActiveEditorPlatform().files!);
+    owner.update({ source: String.raw`\node {\includegraphics{fig}};`, documentFileRef });
     const resolver = await prepareDocumentGraphicsResolver({
       source: String.raw`\node {\includegraphics{fig}};`,
       documentFileRef,
@@ -122,6 +125,7 @@ describe("image asset cache", () => {
       naturalHeightPt: 5,
       dataBase64: svgBase64,
     });
+    owner.dispose();
   });
 
   it("reuses native image assets across trim and clip variants", async () => {

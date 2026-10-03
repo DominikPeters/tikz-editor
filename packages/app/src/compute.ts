@@ -154,6 +154,10 @@ let resolvedTextEngine: NodeTextEngine | null = null;
 function resolveSvgPadding(parse: ParseTikzResult): number {
   return resolveFigureBoundsFromFigure(parse.figure).mode === "fixed" ? 0 : 18;
 }
+
+function computeSvgOptions(parse: ParseTikzResult, viewBox: SvgViewBox | null | undefined): EmitSvgOptions {
+  return { padding: resolveSvgPadding(parse), textSourceCoordinates: "layout", viewBox: viewBox ?? undefined };
+}
 type ComputeCache = {
   documentId?: string;
   semantic: IncrementalSemanticSession;
@@ -161,6 +165,7 @@ type ComputeCache = {
   svg: SvgRenderModel | null;
   text: TextLayoutContext | null;
   warmSource: string | null;
+  graphicsResolverCacheKey: string | null;
 };
 let committedCache: ComputeCache | null = null;
 
@@ -197,7 +202,8 @@ export async function computeSnapshot(request: ComputeRequest, work?: Cooperativ
     parse: previous?.parse.fork() ?? createIncrementalParseSession(),
     svg: previous?.svg ?? null,
     text: previous?.text ?? null,
-    warmSource: previous?.warmSource ?? null
+    warmSource: previous?.warmSource ?? null,
+    graphicsResolverCacheKey: previous?.graphicsResolverCacheKey ?? null
   };
   work?.signal?.throwIfAborted();
   const result = await computeSnapshotWithCache(request, revision, cache, work);
@@ -338,6 +344,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       documentFileRef: request.documentFileRef ?? null
     });
     const graphicsResolver = graphicsContext.resolver;
+    cache.graphicsResolverCacheKey = graphicsResolver.cacheKey;
     phases.imageAssets = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
     const textEditMaskSpan = request.textEditMaskSpan ?? null;
@@ -359,7 +366,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
           options,
           hints: { trigger: "other" }
         }).semantic,
-      svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse), textSourceCoordinates: "layout" }),
+      svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
       textEngine
     });
     phases.render = performance.now() - phaseStartedAt;
@@ -418,6 +425,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     cache.warmSource = null;
     cache.svg = null;
     cache.text = null;
+    cache.graphicsResolverCacheKey = null;
     const snapshot: SessionSnapshot = {
       source: request.source,
       revision,
@@ -738,7 +746,7 @@ async function computeNestedTikzSnapshot(
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
     evaluate: { graphicsResolver: graphicsContext.resolver },
-    svgOptionsFromParse: (parse) => ({ padding: resolveSvgPadding(parse), textSourceCoordinates: "layout" }),
+    svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
     textEngine
   });
   const snapshot: SessionSnapshot = {
@@ -803,7 +811,6 @@ async function computeSnapshotIncremental(
   let phaseStartedAt = performance.now();
   const maybeTextEngine = getTextEngine();
   const textEngine = maybeTextEngine instanceof Promise ? await maybeTextEngine : maybeTextEngine;
-  const textScope = textEngine.createRenderScope?.(cache.text);
   phases.textEngine = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
   const graphicsContext = await prepareDocumentGraphicsContext({
@@ -811,6 +818,13 @@ async function computeSnapshotIncremental(
     documentFileRef
   });
   const graphicsResolver = graphicsContext.resolver;
+  if (cache.graphicsResolverCacheKey !== graphicsResolver.cacheKey) {
+    cache.semantic.reset();
+    cache.svg = null;
+    cache.text = null;
+  }
+  cache.graphicsResolverCacheKey = graphicsResolver.cacheKey;
+  const textScope = textEngine.createRenderScope?.(cache.text);
   phases.imageAssets = performance.now() - phaseStartedAt;
   phaseStartedAt = performance.now();
   work?.signal?.throwIfAborted();
@@ -835,7 +849,6 @@ async function computeSnapshotIncremental(
   }
   phases.parse = performance.now() - phaseStartedAt;
   const parseResult = parseIncremental.parse;
-  const svgPadding = resolveSvgPadding(parseResult);
   phaseStartedAt = performance.now();
   const session = cache.semantic;
   const evaluate = (input: Parameters<IncrementalSemanticSession["evaluate"]>[0]) => work
@@ -873,10 +886,8 @@ async function computeSnapshotIncremental(
 
   phaseStartedAt = performance.now();
   let svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
-    padding: svgPadding,
-    textSourceCoordinates: "layout",
+    ...computeSvgOptions(parseResult, renderViewBox),
     textEngine,
-    viewBox: renderViewBox ?? undefined,
     reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
   }));
   phases.emitSvg = performance.now() - phaseStartedAt;
@@ -914,10 +925,8 @@ async function computeSnapshotIncremental(
     phases.geometryInvalidationAfterTextFlush = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
     svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
-      padding: svgPadding,
-      textSourceCoordinates: "layout",
+      ...computeSvgOptions(parseResult, renderViewBox),
       textEngine,
-      viewBox: renderViewBox ?? undefined,
       reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
     }));
     phases.emitSvgAfterTextFlush = performance.now() - phaseStartedAt;

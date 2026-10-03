@@ -41,6 +41,10 @@ const SUPPORTED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".svg", ".pdf"] as const;
 const TEX_PT_PER_BP = 72.27 / 72;
 const MAX_PREVIEW_BUNDLES = 8;
 const pathCache = new Map<string, PathCacheEntry>();
+const pendingPathReads = new Map<string, {
+  readonly token: symbol;
+  readonly promise: Promise<PathCacheEntry>;
+}>();
 const previewBundles = new Map<string, DocumentGraphicsPreviewBundle>();
 let cacheGeneration = 0;
 
@@ -58,7 +62,6 @@ export async function prepareDocumentGraphicsContext(params: {
   const baseDirectory = documentDirectory(params.documentFileRef);
   const includeCandidates = collectIncludeGraphicsCandidates(params.source);
   const entries = new Map<string, PreparedAssetEntry>();
-  const watchedPaths = new Set<string>();
 
   for (const include of includeCandidates) {
     const requestKey = includeGraphicsRequestKey({
@@ -75,9 +78,6 @@ export async function prepareDocumentGraphicsContext(params: {
       baseDirectory,
       readLocalAsset,
     });
-    for (const watchedPath of resolution.watchedPaths ?? []) {
-      watchedPaths.add(watchedPath);
-    }
     entries.set(requestKey, {
       filename: include.filename,
       options: include.options,
@@ -120,8 +120,20 @@ export async function prepareDocumentGraphicsContext(params: {
   };
   rememberPreviewBundle(previewBundle);
 
-  await syncLocalAssetWatches([...watchedPaths].sort());
   return { resolver, previewBundle };
+}
+
+/** Active editor subscriptions are independent of asynchronous preview preparation. */
+export function documentGraphicsWatchPaths(params: {
+  readonly source: string;
+  readonly documentFileRef?: DocumentFileRef | null;
+}): string[] {
+  const baseDirectory = documentDirectory(params.documentFileRef);
+  const paths = collectIncludeGraphicsCandidates(params.source).flatMap((include) => {
+    const descriptor = includeGraphicsPathDescriptor(include.filename, baseDirectory);
+    return descriptor?.kind === "unsupported" ? [descriptor.path] : descriptor?.candidates ?? [];
+  });
+  return [...new Set(paths)].sort();
 }
 
 export async function prepareDocumentGraphicsResolver(params: {
@@ -144,29 +156,19 @@ export function getDocumentGraphicsPreviewBundle(
 
 export function invalidateImageAssetPath(path: string): void {
   const comparablePath = comparableLocalPath(path);
-  let changed = false;
   for (const [key, entry] of pathCache) {
     if (comparableLocalPath(entry.path) === comparablePath) {
       pathCache.delete(key);
-      changed = true;
       continue;
     }
     if (entry.watchedPaths.some((watchedPath) => comparableLocalPath(watchedPath) === comparablePath)) {
       pathCache.delete(key);
-      changed = true;
     }
   }
-  if (changed) {
-    cacheGeneration += 1;
-  }
-}
-
-async function syncLocalAssetWatches(paths: readonly string[]): Promise<void> {
-  const sync = getActiveEditorPlatform().files?.syncLocalAssetWatches;
-  if (typeof sync !== "function") {
-    return;
-  }
-  await sync(paths);
+  // A pending native read has not revealed its canonical path yet (symlinks
+  // may differ from the requested spelling). Retire all pending tokens.
+  pendingPathReads.clear();
+  cacheGeneration += 1;
 }
 
 async function resolveIncludeGraphicsAsset(params: {
@@ -215,9 +217,29 @@ async function resolveIncludeGraphicsAsset(params: {
       continue;
     }
 
-    const read = await params.readLocalAsset(candidate);
-    const entry = await pathCacheEntryFromRead(candidate, descriptor.candidates, read, params.options);
-    pathCache.set(cacheKey, entry);
+    let pending = pendingPathReads.get(cacheKey);
+    if (!pending) {
+      const readLocalAsset = params.readLocalAsset;
+      const token = Symbol("asset read generation");
+      const ownedRead = {
+        token,
+        promise: (async () => {
+          const read = await readLocalAsset(candidate);
+          const entry = await pathCacheEntryFromRead(candidate, descriptor.candidates, read, params.options);
+          // Invalidation retires this token, including during PDF rasterization.
+          if (pendingPathReads.get(cacheKey)?.token === token) pathCache.set(cacheKey, entry);
+          return entry;
+        })()
+      };
+      pendingPathReads.set(cacheKey, ownedRead);
+      pending = ownedRead;
+    }
+    let entry: PathCacheEntry;
+    try {
+      entry = await pending.promise;
+    } finally {
+      if (pendingPathReads.get(cacheKey) === pending) pendingPathReads.delete(cacheKey);
+    }
     if (entry.resolution.status === "resolved") {
       return entry.resolution;
     }

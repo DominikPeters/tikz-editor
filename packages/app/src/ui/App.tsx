@@ -12,6 +12,7 @@ import { rootKey } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
+import { useActiveDocumentAssetWatches } from "./useActiveDocumentAssetWatches";
 import { applyEditAction } from "@tikz-editor/core/edit/actions";
 import { getRepeatSelectionEligibility } from "@tikz-editor/core/edit/actions/repeat";
 import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
@@ -662,6 +663,8 @@ export function App() {
       }
     };
   }, [applyLinkedReadDecision]);
+
+  useActiveDocumentAssetWatches({ files: platform.files, source, documentFileRef: activeDocumentFileRef });
 
   useEffect(() => {
     const bind = getActiveEditorPlatform().files?.bindLocalAssetChange;
