@@ -287,6 +287,12 @@ export function makeInitialState(seed?: WorkspaceSeed): EditorState {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   const previousWorkspace = workspaceStateFromEditorState(state);
   const previousUi = uiStateFromEditorState(state);
+  if (action.type.startsWith("ASSISTANT_") && action.type !== "ASSISTANT_NEW_CHAT") {
+    const assistantAction = action as Extract<EditorAction, { type: `ASSISTANT_${string}` }>;
+    const documentId = assistantAction.documentId ?? state.activeDocumentId;
+    const generation = "sessionGeneration" in assistantAction ? assistantAction.sessionGeneration ?? 0 : 0;
+    if (readDocument(state.documents, documentId)?.assistantSessionGeneration !== generation) return state;
+  }
   let workspace = previousWorkspace;
   let ui = previousUi;
   const activeId = state.activeDocumentId;
@@ -636,6 +642,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const documentId = activeDocumentIdFromAction(state, action.documentId);
       workspace = updateDocument(workspace, documentId, (doc) => ({
         ...doc,
+        assistantSessionGeneration: doc.assistantSessionGeneration + 1,
         assistantThreadId: null,
         assistantWorkspacePath: null,
         assistantFigurePath: null,

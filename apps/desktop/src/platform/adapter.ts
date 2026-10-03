@@ -570,6 +570,9 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       },
       ensureDocumentThread: async (params) => await getBridge().assistantEnsureDocumentThread?.(params)
         ?? Promise.reject(new Error("Assistant bridge unavailable.")),
+      resetDocumentThread: async (params) => {
+        await getBridge().assistantResetDocumentThread?.(params);
+      },
       startTurn: async (params) => await getBridge().assistantStartTurn?.(params)
         ?? Promise.reject(new Error("Assistant bridge unavailable.")),
       steerTurn: async (params) => await getBridge().assistantSteerTurn?.(params)
@@ -583,6 +586,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       respondToApproval: async (params) => {
         await getBridge().assistantRespondToApproval?.(params as {
           documentId: string;
+          sessionGeneration?: number;
           requestId: string;
           decision: "accept" | "acceptForSession" | "decline" | "cancel";
         });

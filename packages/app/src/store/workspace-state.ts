@@ -37,6 +37,7 @@ export type WorkspaceSeedDocument = {
   diskRevision?: FileRevision | null;
   lastKnownDiskSource?: string | null;
   externalChangeStatus?: ExternalChangeStatus;
+  assistantSessionGeneration?: number;
   assistantThreadId?: string | null;
   assistantWorkspacePath?: string | null;
   assistantFigurePath?: string | null;
@@ -83,6 +84,7 @@ export function createDocumentSession(params: {
   diskRevision?: FileRevision | null;
   lastKnownDiskSource?: string | null;
   externalChangeStatus?: ExternalChangeStatus;
+  assistantSessionGeneration?: number;
   assistantThreadId?: string | null;
   assistantWorkspacePath?: string | null;
   assistantFigurePath?: string | null;
@@ -116,6 +118,7 @@ export function createDocumentSession(params: {
     diskRevision: params.diskRevision ?? null,
     lastKnownDiskSource: params.lastKnownDiskSource ?? null,
     externalChangeStatus: params.externalChangeStatus ?? "none",
+    assistantSessionGeneration: params.assistantSessionGeneration ?? 0,
     assistantThreadId: params.assistantThreadId ?? null,
     assistantWorkspacePath: params.assistantWorkspacePath ?? null,
     assistantFigurePath: params.assistantFigurePath ?? null,
@@ -156,6 +159,7 @@ export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePer
       diskRevision: raw.diskRevision ?? null,
       lastKnownDiskSource: raw.lastKnownDiskSource ?? null,
       externalChangeStatus: raw.externalChangeStatus ?? "none",
+      assistantSessionGeneration: raw.assistantSessionGeneration ?? 0,
       assistantThreadId: raw.assistantThreadId ?? null,
       assistantWorkspacePath: raw.assistantWorkspacePath ?? null,
       assistantFigurePath: raw.assistantFigurePath ?? null,

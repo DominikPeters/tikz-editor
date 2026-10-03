@@ -160,6 +160,7 @@ export type DocumentSession = {
   diskRevision: FileRevision | null;
   lastKnownDiskSource: string | null;
   externalChangeStatus: ExternalChangeStatus;
+  assistantSessionGeneration: number;
   assistantThreadId: string | null;
   assistantWorkspacePath: string | null;
   assistantFigurePath: string | null;
@@ -466,29 +467,29 @@ export type EditorAction =
   | { type: "SET_RIGHT_SIDEBAR_TAB"; tab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
   | {
       type: "ASSISTANT_THREAD_READY";
-      documentId?: string;
+      documentId?: string; sessionGeneration?: number;
       threadId: string;
       workspacePath: string;
       figurePath: string;
       previewPath: string;
     }
-  | { type: "ASSISTANT_THREAD_LOADED"; documentId?: string; state: AssistantThreadState }
+  | { type: "ASSISTANT_THREAD_LOADED"; documentId?: string; sessionGeneration?: number; state: AssistantThreadState }
   | { type: "ASSISTANT_NEW_CHAT"; documentId?: string }
-  | { type: "ASSISTANT_TURN_STATUS"; documentId?: string; status: AssistantTurnStatus; turnId?: string | null; error?: string | null }
-  | { type: "ASSISTANT_ITEM_STARTED"; documentId?: string; item: AssistantItem }
-  | { type: "ASSISTANT_ITEM_UPDATED"; documentId?: string; item: AssistantItem }
-  | { type: "ASSISTANT_ITEM_COMPLETED"; documentId?: string; item: AssistantItem }
-  | { type: "ASSISTANT_ITEM_DELTA"; documentId?: string; itemId: string; deltaType: string; delta: string }
-  | { type: "ASSISTANT_APPROVAL_REQUESTED"; documentId?: string; approval: AssistantPendingApproval }
-  | { type: "ASSISTANT_APPROVAL_CLEARED"; documentId?: string; requestId: string }
+  | { type: "ASSISTANT_TURN_STATUS"; documentId?: string; sessionGeneration?: number; status: AssistantTurnStatus; turnId?: string | null; error?: string | null }
+  | { type: "ASSISTANT_ITEM_STARTED"; documentId?: string; sessionGeneration?: number; item: AssistantItem }
+  | { type: "ASSISTANT_ITEM_UPDATED"; documentId?: string; sessionGeneration?: number; item: AssistantItem }
+  | { type: "ASSISTANT_ITEM_COMPLETED"; documentId?: string; sessionGeneration?: number; item: AssistantItem }
+  | { type: "ASSISTANT_ITEM_DELTA"; documentId?: string; sessionGeneration?: number; itemId: string; deltaType: string; delta: string }
+  | { type: "ASSISTANT_APPROVAL_REQUESTED"; documentId?: string; sessionGeneration?: number; approval: AssistantPendingApproval }
+  | { type: "ASSISTANT_APPROVAL_CLEARED"; documentId?: string; sessionGeneration?: number; requestId: string }
   | {
       type: "ASSISTANT_SOURCE_UPDATED";
-      documentId?: string;
+      documentId?: string; sessionGeneration?: number;
       source: string;
       revisionToken: string;
       historyMergeKey?: string;
     }
-  | { type: "ASSISTANT_SET_ERROR"; documentId?: string; message: string | null }
+  | { type: "ASSISTANT_SET_ERROR"; documentId?: string; sessionGeneration?: number; message: string | null }
   // History
   | { type: "UNDO" }
   | { type: "REDO" }

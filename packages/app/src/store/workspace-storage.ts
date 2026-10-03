@@ -33,6 +33,7 @@ type PersistedWorkspace = {
     diskRevision?: FileRevision | null;
     lastKnownDiskSource?: string | null;
     externalChangeStatus?: ExternalChangeStatus;
+    assistantSessionGeneration?: number;
     assistantThreadId?: string | null;
     assistantWorkspacePath?: string | null;
     assistantFigurePath?: string | null;
@@ -136,6 +137,7 @@ function migrateWorkspace(parsed: Partial<PersistedWorkspace>): WorkspaceSeed | 
           diskRevision: normalizeFileRevision(doc.diskRevision),
           lastKnownDiskSource: typeof doc.lastKnownDiskSource === "string" ? doc.lastKnownDiskSource : null,
           externalChangeStatus: normalizeExternalChangeStatus(doc.externalChangeStatus),
+          assistantSessionGeneration: typeof doc.assistantSessionGeneration === "number" && Number.isSafeInteger(doc.assistantSessionGeneration) && doc.assistantSessionGeneration >= 0 ? doc.assistantSessionGeneration : 0,
           assistantThreadId: typeof doc.assistantThreadId === "string" ? doc.assistantThreadId : null,
           assistantWorkspacePath: typeof doc.assistantWorkspacePath === "string" ? doc.assistantWorkspacePath : null,
           assistantFigurePath: typeof doc.assistantFigurePath === "string" ? doc.assistantFigurePath : null,
@@ -177,6 +179,7 @@ export function saveWorkspace(state: {
     diskRevision?: FileRevision | null;
     lastKnownDiskSource?: string | null;
     externalChangeStatus?: ExternalChangeStatus;
+    assistantSessionGeneration?: number;
     assistantThreadId: string | null;
     assistantWorkspacePath: string | null;
     assistantFigurePath: string | null;
@@ -205,6 +208,7 @@ export function saveWorkspace(state: {
         diskRevision: doc.diskRevision ?? null,
         lastKnownDiskSource: doc.lastKnownDiskSource ?? null,
         externalChangeStatus: doc.externalChangeStatus ?? "none",
+        assistantSessionGeneration: doc.assistantSessionGeneration ?? 0,
         assistantThreadId: doc.assistantThreadId,
         assistantWorkspacePath: doc.assistantWorkspacePath,
         assistantFigurePath: doc.assistantFigurePath,

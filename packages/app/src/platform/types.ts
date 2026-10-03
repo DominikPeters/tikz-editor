@@ -233,7 +233,7 @@ export type AssistantDynamicToolResult = {
   contentItems?: unknown[];
 };
 
-export type AssistantEvent =
+export type AssistantEvent = { sessionGeneration?: number } & (
   | { type: "thread-ready"; documentId: string; thread: AssistantThreadSummary }
   | { type: "thread-state"; documentId: string; state: AssistantThreadState }
   | { type: "turn-status"; documentId: string; turnId?: string; status: AssistantTurnStatus; error?: string | null }
@@ -248,7 +248,7 @@ export type AssistantEvent =
   | { type: "login-completed"; loginId: string | null; success: boolean; error?: string | null }
   | { type: "rate-limits-updated"; rateLimits: unknown }
   | { type: "dynamic-tool-call"; documentId: string; requestId: string; itemId?: string; tool: string; arguments?: unknown }
-  | { type: "error"; documentId?: string; message: string };
+  | { type: "error"; documentId?: string; message: string });
 
 export type CodexStatus = {
   installed: boolean;
@@ -280,14 +280,17 @@ export type AssistantApi = {
   installCodex?: (method: "npm" | "brew" | "wsl") => Promise<string>;
   ensureDocumentThread?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     source: string;
     threadId?: string | null;
     workspacePath?: string | null;
     figurePath?: string | null;
     previewPath?: string | null;
   }) => Promise<AssistantThreadSummary>;
+  resetDocumentThread?: (params: { documentId: string; sessionGeneration: number }) => Promise<void>;
   startTurn?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     prompt: string;
     source: string;
     pngBase64?: string | null;
@@ -302,14 +305,15 @@ export type AssistantApi = {
   }) => Promise<{ turnId: string | null }>;
   steerTurn?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     prompt: string;
     pastedImages?: AssistantPastedImage[];
   }) => Promise<{ turnId: string | null }>;
-  interruptTurn?: (params: { documentId: string }) => Promise<void>;
-  syncSource?: (params: { documentId: string; source: string }) => Promise<void>;
-  respondToApproval?: (params: { documentId: string; requestId: string; decision: string }) => Promise<void>;
-  respondToDynamicToolCall?: (params: { documentId: string; requestId: string; result: AssistantDynamicToolResult }) => Promise<void>;
-  loadThreadState?: (params: { documentId: string }) => Promise<AssistantThreadState | null>;
+  interruptTurn?: (params: { sessionGeneration?: number; documentId: string }) => Promise<void>;
+  syncSource?: (params: { sessionGeneration?: number; documentId: string; source: string }) => Promise<void>;
+  respondToApproval?: (params: { sessionGeneration?: number; documentId: string; requestId: string; decision: string }) => Promise<void>;
+  respondToDynamicToolCall?: (params: { sessionGeneration?: number; documentId: string; requestId: string; result: AssistantDynamicToolResult }) => Promise<void>;
+  loadThreadState?: (params: { sessionGeneration?: number; documentId: string }) => Promise<AssistantThreadState | null>;
   warmUp?: () => Promise<void>;
   listModels?: () => Promise<AssistantModelOption[]>;
   readAccountSnapshot?: () => Promise<AssistantAccountSnapshot | null>;

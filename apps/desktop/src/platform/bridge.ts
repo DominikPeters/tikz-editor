@@ -131,14 +131,17 @@ export type DesktopBridge = {
   relaunch?: () => Promise<void>;
   assistantEnsureDocumentThread?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     source: string;
     threadId?: string | null;
     workspacePath?: string | null;
     figurePath?: string | null;
     previewPath?: string | null;
   }) => Promise<AssistantThreadSummary>;
+  assistantResetDocumentThread?: (params: { documentId: string; sessionGeneration: number }) => Promise<void>;
   assistantStartTurn?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     prompt: string;
     source: string;
     pngBase64?: string | null;
@@ -153,22 +156,25 @@ export type DesktopBridge = {
   }) => Promise<{ turnId: string | null }>;
   assistantSteerTurn?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     prompt: string;
     pastedImages?: Array<{ base64: string; mimeType: string; fileName: string }>;
   }) => Promise<{ turnId: string | null }>;
-  assistantInterruptTurn?: (params: { documentId: string }) => Promise<void>;
-  assistantSyncSource?: (params: { documentId: string; source: string }) => Promise<void>;
+  assistantInterruptTurn?: (params: { sessionGeneration?: number; documentId: string }) => Promise<void>;
+  assistantSyncSource?: (params: { sessionGeneration?: number; documentId: string; source: string }) => Promise<void>;
   assistantRespondToApproval?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     requestId: string;
     decision: "accept" | "acceptForSession" | "decline" | "cancel";
   }) => Promise<void>;
   assistantRespondToDynamicToolCall?: (params: {
     documentId: string;
+    sessionGeneration?: number;
     requestId: string;
     result: AssistantDynamicToolResult;
   }) => Promise<void>;
-  assistantLoadThreadState?: (params: { documentId: string }) => Promise<AssistantThreadState | null>;
+  assistantLoadThreadState?: (params: { sessionGeneration?: number; documentId: string }) => Promise<AssistantThreadState | null>;
   assistantWarmUp?: () => Promise<void>;
   assistantListModels?: () => Promise<AssistantModelOption[]>;
   assistantReadAccountSnapshot?: () => Promise<AssistantAccountSnapshot | null>;
@@ -360,6 +366,9 @@ export function createDefaultBridge(): DesktopBridge {
       "desktop_assistant_ensure_document_thread",
       params
     ),
+    assistantResetDocumentThread: async (params) => {
+      await invoke("desktop_assistant_reset_document_thread", params);
+    },
     assistantStartTurn: async (params) => await invoke<{ turnId: string | null }>(
       "desktop_assistant_start_turn",
       params
@@ -368,21 +377,21 @@ export function createDefaultBridge(): DesktopBridge {
       "desktop_assistant_steer_turn",
       params
     ),
-    assistantInterruptTurn: async ({ documentId }) => {
-      await invoke("desktop_assistant_interrupt_turn", { documentId });
+    assistantInterruptTurn: async (params) => {
+      await invoke("desktop_assistant_interrupt_turn", params);
     },
-    assistantSyncSource: async ({ documentId, source }) => {
-      await invoke("desktop_assistant_sync_source", { documentId, source });
+    assistantSyncSource: async (params) => {
+      await invoke("desktop_assistant_sync_source", params);
     },
-    assistantRespondToApproval: async ({ documentId, requestId, decision }) => {
-      await invoke("desktop_assistant_respond_to_approval", { documentId, requestId, decision });
+    assistantRespondToApproval: async (params) => {
+      await invoke("desktop_assistant_respond_to_approval", params);
     },
-    assistantRespondToDynamicToolCall: async ({ documentId, requestId, result }) => {
-      await invoke("desktop_assistant_respond_to_dynamic_tool_call", { documentId, requestId, result });
+    assistantRespondToDynamicToolCall: async (params) => {
+      await invoke("desktop_assistant_respond_to_dynamic_tool_call", params);
     },
-    assistantLoadThreadState: async ({ documentId }) => await invoke<AssistantThreadState | null>(
+    assistantLoadThreadState: async (params) => await invoke<AssistantThreadState | null>(
       "desktop_assistant_load_thread_state",
-      { documentId }
+      params
     ),
     assistantWarmUp: async () => {
       await invoke("desktop_assistant_warm_up");

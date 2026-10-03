@@ -957,10 +957,12 @@ export function App() {
       const args = (event.arguments ?? {}) as Record<string, unknown>;
 
       const respond = async (success: boolean, text: string, imageUrl?: string) => {
+        if (useEditorStore.getState().documents[event.documentId]?.assistantSessionGeneration !== (event.sessionGeneration ?? 0)) return;
         const contentItems: unknown[] = [{ type: "inputText", text }];
         if (imageUrl) contentItems.push({ type: "inputImage", imageUrl });
         await assistantApi.respondToDynamicToolCall?.({
           documentId: event.documentId,
+          sessionGeneration: event.sessionGeneration ?? 0,
           requestId: event.requestId,
           result: { success, contentItems }
         });
@@ -1100,11 +1102,12 @@ export function App() {
     }
 
     const unbind = bindAssistantEvents((event) => {
+      if ("documentId" in event && event.documentId && useEditorStore.getState().documents[event.documentId]?.assistantSessionGeneration !== (event.sessionGeneration ?? 0)) return;
       switch (event.type) {
         case "thread-ready":
           dispatch({
             type: "ASSISTANT_THREAD_READY",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             threadId: event.thread.threadId,
             workspacePath: event.thread.workspacePath,
             figurePath: event.thread.figurePath,
@@ -1116,45 +1119,45 @@ export function App() {
         case "rate-limits-updated":
           break;
         case "thread-state":
-          dispatch({ type: "ASSISTANT_THREAD_LOADED", documentId: event.documentId, state: event.state });
+          dispatch({ type: "ASSISTANT_THREAD_LOADED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, state: event.state });
           break;
         case "turn-status":
           dispatch({
             type: "ASSISTANT_TURN_STATUS",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             status: event.status,
             turnId: event.turnId ?? null,
             error: event.error ?? null
           });
           break;
         case "item-started":
-          dispatch({ type: "ASSISTANT_ITEM_STARTED", documentId: event.documentId, item: event.item });
+          dispatch({ type: "ASSISTANT_ITEM_STARTED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, item: event.item });
           break;
         case "item-updated":
-          dispatch({ type: "ASSISTANT_ITEM_UPDATED", documentId: event.documentId, item: event.item });
+          dispatch({ type: "ASSISTANT_ITEM_UPDATED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, item: event.item });
           break;
         case "item-completed":
-          dispatch({ type: "ASSISTANT_ITEM_COMPLETED", documentId: event.documentId, item: event.item });
+          dispatch({ type: "ASSISTANT_ITEM_COMPLETED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, item: event.item });
           break;
         case "item-delta":
           dispatch({
             type: "ASSISTANT_ITEM_DELTA",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             itemId: event.itemId,
             deltaType: event.deltaType,
             delta: event.delta
           });
           break;
         case "approval-requested":
-          dispatch({ type: "ASSISTANT_APPROVAL_REQUESTED", documentId: event.documentId, approval: event.approval });
+          dispatch({ type: "ASSISTANT_APPROVAL_REQUESTED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, approval: event.approval });
           break;
         case "approval-cleared":
-          dispatch({ type: "ASSISTANT_APPROVAL_CLEARED", documentId: event.documentId, requestId: event.requestId });
+          dispatch({ type: "ASSISTANT_APPROVAL_CLEARED", documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0, requestId: event.requestId });
           break;
         case "source-updated":
           dispatch({
             type: "ASSISTANT_SOURCE_UPDATED",
-            documentId: event.documentId,
+            documentId: event.documentId, sessionGeneration: event.sessionGeneration ?? 0,
             source: event.source,
             revisionToken: event.revisionToken,
             historyMergeKey: `assistant-turn:${event.documentId}`
@@ -1164,7 +1167,7 @@ export function App() {
           void respondToDynamicTool(event);
           break;
         case "error":
-          dispatch({ type: "ASSISTANT_SET_ERROR", documentId: event.documentId, message: event.message });
+          dispatch({ type: "ASSISTANT_SET_ERROR", documentId: event.documentId, sessionGeneration: event.documentId ? event.sessionGeneration ?? 0 : useEditorStore.getState().documents[activeDocumentIdRef.current]?.assistantSessionGeneration, message: event.message });
           break;
       }
     });
@@ -1191,6 +1194,8 @@ export function App() {
   ): Promise<void> => {
     const documentId = activeDocumentIdRef.current;
     const currentDocument = useEditorStore.getState().documents[documentId];
+    const sessionGeneration = currentDocument?.assistantSessionGeneration ?? 0;
+    const ownsSession = () => useEditorStore.getState().documents[documentId]?.assistantSessionGeneration === sessionGeneration;
     const currentSource = currentDocument?.source ?? sourceRef.current;
     const currentSnapshot = currentDocument?.snapshot ?? snapshotRef.current;
     const { buildFigureContext: buildFigCtx, buildDiagnosticsText: buildDiag } = await import("./assistant-tool-handlers");
@@ -1203,6 +1208,7 @@ export function App() {
         fileName: attachment.fileName
       }))
     );
+    if (!ownsSession()) return;
     const optimisticImageContent = pastedImages.map((image) => ({
       type: "image" as const,
       url: `data:${image.mimeType};base64,${image.base64}`
@@ -1211,11 +1217,12 @@ export function App() {
     const isSteeringActiveTurn =
       currentDocument?.assistantTurnStatus === "starting" || currentDocument?.assistantTurnStatus === "inProgress";
     if (!isSteeringActiveTurn) {
-      dispatch({ type: "ASSISTANT_TURN_STATUS", documentId, status: "starting", turnId: null });
+      dispatch({ type: "ASSISTANT_TURN_STATUS", documentId, sessionGeneration, status: "starting", turnId: null });
     }
     dispatch({
       type: "ASSISTANT_ITEM_STARTED",
       documentId,
+      sessionGeneration,
       item: {
         type: "userMessage",
         id: `optimistic-user-message:${documentId}:${Date.now()}`,
@@ -1230,6 +1237,7 @@ export function App() {
       if (isSteeringActiveTurn) {
         await assistant?.steerTurn?.({
           documentId,
+          sessionGeneration,
           prompt,
           pastedImages: pastedImages.length > 0 ? pastedImages : undefined
         });
@@ -1237,16 +1245,19 @@ export function App() {
       }
       const thread = await assistant?.ensureDocumentThread?.({
         documentId,
+        sessionGeneration,
         source: currentSource,
         threadId: currentDocument?.assistantThreadId ?? null,
         workspacePath: currentDocument?.assistantWorkspacePath ?? null,
         figurePath: currentDocument?.assistantFigurePath ?? null,
         previewPath: currentDocument?.assistantPreviewPath ?? null
       });
+      if (!ownsSession()) return;
       if (thread) {
         dispatch({
           type: "ASSISTANT_THREAD_READY",
           documentId,
+          sessionGeneration,
           threadId: thread.threadId,
           workspacePath: thread.workspacePath,
           figurePath: thread.figurePath,
@@ -1254,8 +1265,10 @@ export function App() {
         });
       }
       const pngBase64 = await buildCurrentPreviewBase64(currentSource, currentSnapshot);
+      if (!ownsSession()) return;
       await assistant?.startTurn?.({
         documentId,
+        sessionGeneration,
         prompt,
         source: currentSource,
         pngBase64,
@@ -1269,10 +1282,12 @@ export function App() {
         diagnosticsText
       });
     } catch (error) {
+      if (!ownsSession()) return;
       if (!isSteeringActiveTurn) {
         dispatch({
           type: "ASSISTANT_TURN_STATUS",
           documentId,
+          sessionGeneration,
           status: "failed",
           turnId: null,
           error: error instanceof Error ? error.message : String(error)
@@ -1281,6 +1296,7 @@ export function App() {
       dispatch({
         type: "ASSISTANT_SET_ERROR",
         documentId,
+        sessionGeneration,
         message: error instanceof Error ? error.message : String(error)
       });
     }
@@ -1288,19 +1304,26 @@ export function App() {
 
   const handleInterruptAssistantTurn = useCallback(async (): Promise<void> => {
     const documentId = activeDocumentIdRef.current;
+    const sessionGeneration = useEditorStore.getState().documents[documentId]?.assistantSessionGeneration ?? 0;
     try {
-      await getActiveEditorPlatform().assistant?.interruptTurn?.({ documentId });
+      await getActiveEditorPlatform().assistant?.interruptTurn?.({ documentId, sessionGeneration });
     } catch (error) {
       dispatch({
         type: "ASSISTANT_SET_ERROR",
         documentId,
+        sessionGeneration,
         message: error instanceof Error ? error.message : String(error)
       });
     }
   }, [dispatch]);
 
   const handleAssistantNewChat = useCallback((): void => {
-    dispatch({ type: "ASSISTANT_NEW_CHAT", documentId: activeDocumentIdRef.current });
+    const documentId = activeDocumentIdRef.current;
+    dispatch({ type: "ASSISTANT_NEW_CHAT", documentId });
+    const sessionGeneration = useEditorStore.getState().documents[documentId]?.assistantSessionGeneration ?? 0;
+    void getActiveEditorPlatform().assistant?.resetDocumentThread?.({ documentId, sessionGeneration }).catch((error: unknown) => {
+      dispatch({ type: "ASSISTANT_SET_ERROR", documentId, sessionGeneration, message: error instanceof Error ? error.message : String(error) });
+    });
   }, [dispatch]);
 
   useEffect(() => {

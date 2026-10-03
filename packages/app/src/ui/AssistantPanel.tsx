@@ -434,6 +434,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   ): Promise<void> {
     await getActiveEditorPlatform().assistant?.respondToApproval?.({
       documentId: activeDocumentId,
+      sessionGeneration: useEditorStore.getState().documents[activeDocumentId]?.assistantSessionGeneration,
       requestId,
       decision
     });

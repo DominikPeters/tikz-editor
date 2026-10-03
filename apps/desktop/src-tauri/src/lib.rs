@@ -13,7 +13,7 @@ use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher}
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -239,8 +239,15 @@ struct PendingOpenRequestsState {
 
 #[derive(Default)]
 struct LinkedFileWatchState {
-    watcher: Mutex<Option<RecommendedWatcher>>,
-    watched_paths: Arc<Mutex<HashSet<PathBuf>>>,
+    registration: Arc<Mutex<LinkedFileWatchRegistration>>,
+}
+
+#[derive(Default)]
+struct LinkedFileWatchRegistration {
+    watcher: Option<RecommendedWatcher>,
+    // Authored paths identify documents; resolved paths identify filesystem events.
+    paths: HashMap<PathBuf, PathBuf>,
+    directories: HashSet<PathBuf>,
 }
 
 #[derive(Default)]
@@ -924,6 +931,102 @@ fn changed_watched_paths_for_event(
         }
     }
     out
+}
+
+fn linked_watch_identity(path: &Path) -> PathBuf {
+    // Missing aliases still need the canonical identity of their existing prefix.
+    path.ancestors()
+        .find_map(|ancestor| {
+            ancestor.canonicalize().ok().map(|resolved| {
+                resolved.join(
+                    path.strip_prefix(ancestor)
+                        .unwrap_or_else(|_| Path::new("")),
+                )
+            })
+        })
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+fn changed_linked_paths_for_event(
+    event_paths: &[PathBuf],
+    registrations: &mut HashMap<PathBuf, PathBuf>,
+) -> Vec<PathBuf> {
+    let events = event_paths
+        .iter()
+        .map(|path| linked_watch_identity(path))
+        .collect::<Vec<_>>();
+    let mut changed = Vec::new();
+    for (authored, identity) in registrations {
+        let previous = identity.clone();
+        if let Ok(resolved) = authored.canonicalize() {
+            *identity = resolved;
+        }
+        let alias = linked_watch_identity(authored);
+        if event_paths.iter().any(|event| authored.starts_with(event))
+            || events.iter().any(|event| {
+                [previous.as_path(), identity.as_path(), alias.as_path()]
+                    .iter()
+                    .any(|path| {
+                        path.starts_with(event)
+                            || (path.parent().is_some() && event.parent() == path.parent())
+                    })
+            })
+        {
+            changed.push(authored.clone());
+        }
+    }
+    changed
+}
+
+fn linked_watch_directories(registrations: &HashMap<PathBuf, PathBuf>) -> HashSet<PathBuf> {
+    let mut directories = HashSet::new();
+    for (authored, identity) in registrations {
+        for parent in [
+            authored.parent().map(linked_watch_identity),
+            identity.parent().map(Path::to_path_buf),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if parent.is_dir() {
+                directories.insert(parent);
+            }
+        }
+        // Missing lexical ancestors still need their containing directory watched:
+        // an alias may be removed before its replacement is created.
+        for ancestor in authored.ancestors() {
+            if fs::symlink_metadata(ancestor)
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(true)
+            {
+                if let Some(parent) = ancestor.parent() {
+                    let parent = linked_watch_identity(parent);
+                    if parent.is_dir() {
+                        directories.insert(parent);
+                    }
+                }
+            }
+        }
+    }
+    directories
+}
+
+fn refresh_linked_watch_directories(
+    registration: &mut LinkedFileWatchRegistration,
+) -> Result<(), String> {
+    let desired = linked_watch_directories(&registration.paths);
+    if let Some(watcher) = registration.watcher.as_mut() {
+        for dir in desired.difference(&registration.directories) {
+            watcher
+                .watch(dir, RecursiveMode::NonRecursive)
+                .map_err(|error| error.to_string())?;
+        }
+        for dir in registration.directories.difference(&desired) {
+            let _ = watcher.unwatch(dir);
+        }
+    }
+    registration.directories = desired;
+    Ok(())
 }
 
 fn emit_linked_file_changed(app: &AppHandle, path: &Path) {
@@ -2205,71 +2308,70 @@ fn desktop_write_linked_text(
 #[tauri::command]
 fn desktop_sync_linked_file_watches(paths: Vec<String>, app: AppHandle) -> Result<(), String> {
     let state = app.state::<LinkedFileWatchState>();
-    let watched_paths: HashSet<PathBuf> = paths
+    let paths = paths
         .into_iter()
-        .map(|path| path.trim().to_string())
-        .filter(|path| !path.is_empty())
+        .filter(|path| !path.trim().is_empty())
         .map(PathBuf::from)
-        .map(normalize_watch_path)
-        .collect();
-
-    {
-        let mut watched = state
-            .watched_paths
-            .lock()
-            .map_err(|_| "linked file watch state unavailable".to_string())?;
-        *watched = watched_paths.clone();
-    }
-
-    let mut parent_dirs = HashSet::<PathBuf>::new();
-    for path in &watched_paths {
-        if let Some(parent) = path.parent() {
-            parent_dirs.insert(parent.to_path_buf());
-        }
-    }
-
-    if parent_dirs.is_empty() {
-        let mut watcher_slot = state
-            .watcher
-            .lock()
-            .map_err(|_| "linked file watcher unavailable".to_string())?;
-        *watcher_slot = None;
-        return Ok(());
-    }
-
-    let app_for_callback = app.clone();
-    let watched_for_callback = Arc::clone(&state.watched_paths);
-    let mut watcher = RecommendedWatcher::new(
-        move |result: notify::Result<notify::Event>| {
-            let Ok(event) = result else {
-                return;
-            };
-            if event.paths.is_empty() {
-                return;
-            }
-            let watched_snapshot = match watched_for_callback.lock() {
-                Ok(watched) => watched.clone(),
-                Err(_) => return,
-            };
-            for path in changed_watched_paths_for_event(&event.paths, &watched_snapshot) {
-                emit_linked_file_changed(&app_for_callback, &path);
-            }
-        },
-        NotifyConfig::default(),
-    )
-    .map_err(|error| error.to_string())?;
-
-    for dir in parent_dirs {
-        watcher
-            .watch(&dir, RecursiveMode::NonRecursive)
-            .map_err(|error| error.to_string())?;
-    }
-
-    let mut watcher_slot = state
-        .watcher
+        .map(|path| {
+            let identity = linked_watch_identity(&path);
+            (path, identity)
+        })
+        .collect::<HashMap<_, _>>();
+    let mut current = state
+        .registration
         .lock()
-        .map_err(|_| "linked file watcher unavailable".to_string())?;
-    *watcher_slot = Some(watcher);
+        .map_err(|_| "linked file watch state unavailable".to_string())?;
+    let watcher = if paths.is_empty() {
+        None
+    } else {
+        let (events, received) = std::sync::mpsc::channel::<Vec<PathBuf>>();
+        let registration_for_events = Arc::clone(&state.registration);
+        let app_for_events = app.clone();
+        // notify's macOS watcher stops/joins its callback thread when paths change.
+        // Reconcile on an owner thread; the callback must never wait on its lock.
+        std::thread::spawn(move || {
+            for event_paths in received {
+                let changed = {
+                    let Ok(mut registration) = registration_for_events.lock() else {
+                        return;
+                    };
+                    let changed =
+                        changed_linked_paths_for_event(&event_paths, &mut registration.paths);
+                    let _ = refresh_linked_watch_directories(&mut registration);
+                    changed
+                };
+                for path in changed {
+                    emit_linked_file_changed(&app_for_events, &path);
+                }
+            }
+        });
+        Some(
+            RecommendedWatcher::new(
+                move |result: notify::Result<notify::Event>| {
+                    if let Ok(event) = result {
+                        if !event.paths.is_empty() {
+                            let _ = events.send(event.paths);
+                        }
+                    }
+                },
+                NotifyConfig::default(),
+            )
+            .map_err(|error| error.to_string())?,
+        )
+    };
+    let mut registration = LinkedFileWatchRegistration {
+        watcher,
+        paths,
+        directories: HashSet::new(),
+    };
+    if let Err(error) = refresh_linked_watch_directories(&mut registration) {
+        drop(current);
+        drop(registration);
+        return Err(error);
+    }
+    let retired = std::mem::replace(&mut *current, registration);
+    drop(current);
+    drop(retired);
     Ok(())
 }
 
@@ -2634,8 +2736,19 @@ fn desktop_show_context_menu(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+fn desktop_assistant_reset_document_thread(
+    documentId: String,
+    sessionGeneration: u64,
+    assistant: tauri::State<'_, AssistantState>,
+) -> Result<(), String> {
+    assistant.reset_document_thread(documentId, sessionGeneration)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 fn desktop_assistant_ensure_document_thread(
     documentId: String,
+    sessionGeneration: Option<u64>,
     source: String,
     threadId: Option<String>,
     workspacePath: Option<String>,
@@ -2645,6 +2758,7 @@ fn desktop_assistant_ensure_document_thread(
 ) -> Result<AssistantThreadSummary, String> {
     assistant.ensure_document_thread(
         documentId,
+        sessionGeneration.unwrap_or(0),
         source,
         threadId,
         workspacePath,
@@ -2657,6 +2771,7 @@ fn desktop_assistant_ensure_document_thread(
 #[allow(non_snake_case)]
 fn desktop_assistant_start_turn(
     documentId: String,
+    sessionGeneration: Option<u64>,
     prompt: String,
     source: String,
     pngBase64: Option<String>,
@@ -2672,6 +2787,7 @@ fn desktop_assistant_start_turn(
 ) -> Result<serde_json::Value, String> {
     let turn_id = assistant.start_turn(
         documentId,
+        sessionGeneration.unwrap_or(0),
         prompt,
         source,
         pngBase64,
@@ -2691,20 +2807,27 @@ fn desktop_assistant_start_turn(
 #[allow(non_snake_case)]
 fn desktop_assistant_interrupt_turn(
     documentId: String,
+    sessionGeneration: Option<u64>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.interrupt_turn(documentId)
+    assistant.interrupt_turn(documentId, sessionGeneration.unwrap_or(0))
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 fn desktop_assistant_steer_turn(
     documentId: String,
+    sessionGeneration: Option<u64>,
     prompt: String,
     pastedImages: Option<Vec<assistant::AssistantPastedImageInput>>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<serde_json::Value, String> {
-    let turn_id = assistant.steer_turn(documentId, prompt, pastedImages)?;
+    let turn_id = assistant.steer_turn(
+        documentId,
+        sessionGeneration.unwrap_or(0),
+        prompt,
+        pastedImages,
+    )?;
     Ok(serde_json::json!({ "turnId": turn_id }))
 }
 
@@ -2712,41 +2835,55 @@ fn desktop_assistant_steer_turn(
 #[allow(non_snake_case)]
 fn desktop_assistant_sync_source(
     documentId: String,
+    sessionGeneration: Option<u64>,
     source: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.sync_source(documentId, source)
+    assistant.sync_source(documentId, sessionGeneration.unwrap_or(0), source)
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 fn desktop_assistant_respond_to_approval(
     documentId: String,
+    sessionGeneration: Option<u64>,
     requestId: String,
     decision: String,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.respond_to_approval(documentId, requestId, decision)
+    assistant.respond_to_approval(
+        documentId,
+        sessionGeneration.unwrap_or(0),
+        requestId,
+        decision,
+    )
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 fn desktop_assistant_respond_to_dynamic_tool_call(
     documentId: String,
+    sessionGeneration: Option<u64>,
     requestId: String,
     result: Value,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<(), String> {
-    assistant.respond_to_dynamic_tool_call(documentId, requestId, result)
+    assistant.respond_to_dynamic_tool_call(
+        documentId,
+        sessionGeneration.unwrap_or(0),
+        requestId,
+        result,
+    )
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
 fn desktop_assistant_load_thread_state(
     documentId: String,
+    sessionGeneration: Option<u64>,
     assistant: tauri::State<'_, AssistantState>,
 ) -> Result<Option<AssistantThreadStatePayload>, String> {
-    assistant.load_thread_state(documentId)
+    assistant.load_thread_state(documentId, sessionGeneration.unwrap_or(0))
 }
 
 #[tauri::command]
@@ -2875,6 +3012,7 @@ pub fn run() {
             desktop_read_custom_clipboard_bytes,
             desktop_write_clipboard_bundle,
             desktop_show_context_menu,
+            desktop_assistant_reset_document_thread,
             desktop_assistant_ensure_document_thread,
             desktop_assistant_start_turn,
             desktop_assistant_interrupt_turn,
@@ -2979,6 +3117,163 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn linked_alias_events_keep_authored_paths_and_refresh_retargeted_directories() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let aliases = temp.path().join("aliases");
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        for dir in [&aliases, &first, &second] {
+            std::fs::create_dir(dir).unwrap();
+        }
+        let original = first.join("figure.tex");
+        let replacement = second.join("figure.tex");
+        let alias = aliases.join("Figure.tex");
+        let another = aliases.join("figure-alias.tex");
+        std::fs::write(&original, "original").unwrap();
+        std::fs::write(&replacement, "replacement").unwrap();
+        symlink(&original, &alias).unwrap();
+        symlink(&original, &another).unwrap();
+        let mut registrations = std::collections::HashMap::from([
+            (alias.clone(), super::linked_watch_identity(&alias)),
+            (another.clone(), super::linked_watch_identity(&another)),
+        ]);
+        let changed = super::changed_linked_paths_for_event(
+            &[original.canonicalize().unwrap()],
+            &mut registrations,
+        );
+        assert_eq!(
+            changed
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>(),
+            [alias.clone(), another.clone()].into_iter().collect()
+        );
+        std::fs::remove_file(&alias).unwrap();
+        let mut watch = super::LinkedFileWatchRegistration {
+            paths: registrations,
+            ..Default::default()
+        };
+        super::changed_linked_paths_for_event(&[alias.clone()], &mut watch.paths);
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&aliases.canonicalize().unwrap()));
+        let mut registrations = watch.paths;
+        symlink(&replacement, &alias).unwrap();
+        let changed = super::changed_linked_paths_for_event(&[alias.clone()], &mut registrations);
+        assert!(changed.contains(&alias));
+        assert_eq!(registrations[&alias], replacement.canonicalize().unwrap());
+        let directories = super::linked_watch_directories(&registrations);
+        assert!(directories.contains(&aliases.canonicalize().unwrap()));
+        assert!(directories.contains(&second.canonicalize().unwrap()));
+        assert!(
+            super::changed_linked_paths_for_event(&[replacement], &mut registrations)
+                .contains(&alias)
+        );
+        std::fs::remove_file(&original).unwrap();
+        assert!(
+            super::changed_linked_paths_for_event(&[original], &mut registrations)
+                .contains(&another)
+        );
+        std::fs::rename(&alias, aliases.join("renamed.tex")).unwrap();
+        assert!(
+            super::changed_linked_paths_for_event(&[alias.clone()], &mut registrations)
+                .contains(&alias)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_linked_alias_keeps_recreation_parent_through_missing_intervals() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        for directory in [&first, &second] {
+            std::fs::create_dir(directory).unwrap();
+            std::fs::write(directory.join("figure.tex"), "source").unwrap();
+        }
+        let directory_alias = temp.path().join("linked");
+        symlink(&first, &directory_alias).unwrap();
+        let authored = directory_alias.join("figure.tex");
+        let registrations = std::collections::HashMap::from([(
+            authored.clone(),
+            super::linked_watch_identity(&authored),
+        )]);
+        let recreation_parent = temp.path().canonicalize().unwrap();
+        let mut watch = super::LinkedFileWatchRegistration {
+            paths: registrations,
+            ..Default::default()
+        };
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&recreation_parent));
+        std::fs::remove_file(&directory_alias).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[directory_alias.clone()], &mut watch.paths),
+            vec![authored.clone()]
+        );
+        assert_eq!(
+            super::changed_linked_paths_for_event(
+                &[recreation_parent.join("linked")],
+                &mut watch.paths
+            ),
+            vec![authored.clone()]
+        );
+        // Reconcile before recreation, exactly as the asynchronous event owner does.
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&recreation_parent));
+        symlink(&second, &directory_alias).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[directory_alias.clone()], &mut watch.paths),
+            vec![authored.clone()]
+        );
+        assert_eq!(
+            watch.paths[&authored],
+            second.join("figure.tex").canonicalize().unwrap()
+        );
+        assert_eq!(
+            super::changed_linked_paths_for_event(
+                &[second.canonicalize().unwrap()],
+                &mut watch.paths
+            ),
+            vec![authored.clone()]
+        );
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&second.canonicalize().unwrap()));
+        assert!(!watch.directories.contains(&first.canonicalize().unwrap()));
+        std::fs::rename(&directory_alias, temp.path().join("renamed")).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[directory_alias], &mut watch.paths),
+            vec![authored]
+        );
+        super::refresh_linked_watch_directories(&mut watch).unwrap();
+        assert!(watch.directories.contains(&recreation_parent));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn missing_linked_alias_acquires_target_identity_when_created() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let alias = temp.path().join("Missing.tex");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&target_dir).unwrap();
+        let target = target_dir.join("figure.tex");
+        let mut registrations = std::collections::HashMap::from([(
+            alias.clone(),
+            super::linked_watch_identity(&alias),
+        )]);
+        std::fs::write(&target, "created").unwrap();
+        symlink(&target, &alias).unwrap();
+        assert_eq!(
+            super::changed_linked_paths_for_event(&[alias.clone()], &mut registrations),
+            vec![alias.clone()]
+        );
+        assert_eq!(registrations[&alias], target.canonicalize().unwrap());
+        assert!(super::linked_watch_directories(&registrations)
+            .contains(&target_dir.canonicalize().unwrap()));
+    }
+
     use super::{
         changed_watched_paths_for_event, collect_associated_file_paths,
         collect_associated_file_paths_from_urls, embed_local_svg_image_refs,

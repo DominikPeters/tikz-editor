@@ -237,6 +237,8 @@ struct AssistantStateInner {
     app: AppHandle,
     process: Mutex<Option<ProcessHandle>>,
     documents: Mutex<HashMap<String, DocumentAssistantSession>>,
+    session_generations: Mutex<HashMap<String, u64>>,
+    initializing: Mutex<()>,
     approval_policy: Mutex<String>,
     watcher_started: Mutex<bool>,
 }
@@ -264,6 +266,7 @@ struct PendingServerRequest {
 #[derive(Clone)]
 struct DocumentAssistantSession {
     document_id: String,
+    session_generation: u64,
     thread_id: String,
     workspace_path: PathBuf,
     figure_path: PathBuf,
@@ -338,6 +341,8 @@ impl AssistantState {
                 app,
                 process: Mutex::new(None),
                 documents: Mutex::new(HashMap::new()),
+                session_generations: Mutex::new(HashMap::new()),
+                initializing: Mutex::new(()),
                 approval_policy: Mutex::new("on-request".to_string()),
                 watcher_started: Mutex::new(false),
             }),
@@ -385,7 +390,9 @@ impl AssistantState {
             let Some(current) = docs.get_mut(&session.document_id) else {
                 continue;
             };
-            if source == current.last_seen_figure_source {
+            if current.session_generation != session.session_generation
+                || source == current.last_seen_figure_source
+            {
                 continue;
             }
             current.last_seen_figure_source = source.clone();
@@ -396,6 +403,7 @@ impl AssistantState {
                 kind: "source-updated".to_string(),
                 data: json!({
                   "documentId": session.document_id,
+                  "sessionGeneration": session.session_generation,
                   "source": source,
                   "revisionToken": revision
                 }),
@@ -569,17 +577,80 @@ impl AssistantState {
         self.write_json_line(&payload)
     }
 
+    // A null thread identity is a retry/resume input, never a lifecycle reset.
+    pub fn reset_document_thread(
+        &self,
+        document_id: String,
+        generation: u64,
+    ) -> Result<(), String> {
+        self.activate_session_generation(&document_id, generation)
+    }
+
+    fn activate_session_generation(
+        &self,
+        document_id: &str,
+        generation: u64,
+    ) -> Result<(), String> {
+        let mut generations = self
+            .inner
+            .session_generations
+            .lock()
+            .map_err(|_| "session generations unavailable".to_string())?;
+        let previous = generations.get(document_id).copied();
+        if previous.is_some_and(|current| current > generation) {
+            return Err("Assistant chat was replaced".to_string());
+        }
+        if previous == Some(generation) {
+            return Ok(());
+        }
+        let mut docs = self
+            .inner
+            .documents
+            .lock()
+            .map_err(|_| "documents lock unavailable".to_string())?;
+        generations.insert(document_id.to_string(), generation);
+        let retired = docs.remove(document_id);
+        drop(docs);
+        drop(generations);
+        if let Some(session) = retired {
+            for request in session.pending_server_requests.into_values() {
+                let _ = self.send_server_request_error(
+                    request.id,
+                    -32602,
+                    "Assistant chat was replaced.",
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub fn ensure_document_thread(
         &self,
         document_id: String,
+        session_generation: u64,
         source: String,
         thread_id: Option<String>,
         _workspace_path: Option<String>,
         _figure_path: Option<String>,
         _preview_path: Option<String>,
     ) -> Result<AssistantThreadSummary, String> {
+        // Serialize creations/retries without blocking an explicit reset.
+        let _initializing = self
+            .inner
+            .initializing
+            .lock()
+            .map_err(|_| "assistant initialization unavailable".to_string())?;
+        self.activate_session_generation(&document_id, session_generation)?;
         self.ensure_process()?;
 
+        let generations = self
+            .inner
+            .session_generations
+            .lock()
+            .map_err(|_| "session generations unavailable".to_string())?;
+        if generations.get(&document_id) != Some(&session_generation) {
+            return Err("Assistant chat was replaced".to_string());
+        }
         if let Some(existing) = self
             .inner
             .documents
@@ -591,14 +662,25 @@ impl AssistantState {
             return Ok(summary_from_session(&existing));
         }
 
+        drop(generations);
+
         // Persisted paths may refer to the old shared-prefix cache or another
         // document. Only backend-derived paths establish document ownership.
         let AssistantWorkspace {
-            directory: workspace,
-            figure,
-            preview,
+            directory: mut workspace,
+            mut figure,
+            mut preview,
         } = resolve_workspace(&self.inner.app, &document_id)?;
 
+        // Old Codex turns may still write their cwd after a reset. Keep each
+        // lifecycle's figure and preview separate, retaining generation-zero paths.
+        if session_generation > 0 {
+            workspace = workspace
+                .join("sessions")
+                .join(session_generation.to_string());
+            figure = workspace.join("figure.tex");
+            preview = workspace.join("preview.png");
+        }
         fs::create_dir_all(&workspace).map_err(|error| error.to_string())?;
         fs::write(&figure, &source).map_err(|error| error.to_string())?;
 
@@ -729,6 +811,7 @@ impl AssistantState {
 
         let session = DocumentAssistantSession {
             document_id: document_id.clone(),
+            session_generation,
             thread_id: thread_id.clone(),
             workspace_path: workspace.clone(),
             figure_path: figure.clone(),
@@ -740,6 +823,14 @@ impl AssistantState {
             last_seen_figure_source: source,
             revision_counter: 0,
         };
+        let generations = self
+            .inner
+            .session_generations
+            .lock()
+            .map_err(|_| "session generations unavailable".to_string())?;
+        if generations.get(&document_id) != Some(&session_generation) {
+            return Err("Assistant chat was replaced".to_string());
+        }
         self.inner
             .documents
             .lock()
@@ -751,6 +842,7 @@ impl AssistantState {
     pub fn start_turn(
         &self,
         document_id: String,
+        session_generation: u64,
         prompt: String,
         source: String,
         png_base64: Option<String>,
@@ -765,13 +857,14 @@ impl AssistantState {
     ) -> Result<Option<String>, String> {
         let summary = self.ensure_document_thread(
             document_id.clone(),
+            session_generation,
             source.clone(),
             thread_id,
             workspace_path,
             figure_path,
             preview_path,
         )?;
-        self.sync_source(document_id.clone(), source.clone())?;
+        self.sync_source(document_id.clone(), session_generation, source.clone())?;
         if let Some(base64_png) = png_base64 {
             write_base64_file(Path::new(&summary.preview_path), &base64_png)?;
         }
@@ -788,6 +881,7 @@ impl AssistantState {
                 .map_err(|_| "documents lock unavailable".to_string())?;
             let session = docs
                 .get(&document_id)
+                .filter(|session| session.session_generation == session_generation)
                 .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
             !session.has_sent_initial_context
         };
@@ -830,6 +924,7 @@ impl AssistantState {
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
             .get_mut(&document_id)
+            .filter(|session| session.session_generation == session_generation)
         {
             session.current_turn_id = turn_id.clone();
             session.has_sent_initial_context = true;
@@ -919,13 +1014,18 @@ impl AssistantState {
         Ok(())
     }
 
-    pub fn interrupt_turn(&self, document_id: String) -> Result<(), String> {
+    pub fn interrupt_turn(
+        &self,
+        document_id: String,
+        session_generation: u64,
+    ) -> Result<(), String> {
         let session = self
             .inner
             .documents
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
             .get(&document_id)
+            .filter(|session| session.session_generation == session_generation)
             .cloned()
             .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
         if let Some(turn_id) = session.current_turn_id {
@@ -940,6 +1040,7 @@ impl AssistantState {
     pub fn steer_turn(
         &self,
         document_id: String,
+        session_generation: u64,
         prompt: String,
         pasted_images: Option<Vec<AssistantPastedImageInput>>,
     ) -> Result<Option<String>, String> {
@@ -949,6 +1050,7 @@ impl AssistantState {
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?
             .get(&document_id)
+            .filter(|session| session.session_generation == session_generation)
             .cloned()
             .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
         let turn_id = session
@@ -985,7 +1087,12 @@ impl AssistantState {
             .map(str::to_string))
     }
 
-    pub fn sync_source(&self, document_id: String, source: String) -> Result<(), String> {
+    pub fn sync_source(
+        &self,
+        document_id: String,
+        session_generation: u64,
+        source: String,
+    ) -> Result<(), String> {
         let mut docs = self
             .inner
             .documents
@@ -993,6 +1100,7 @@ impl AssistantState {
             .map_err(|_| "documents lock unavailable".to_string())?;
         let session = docs
             .get_mut(&document_id)
+            .filter(|session| session.session_generation == session_generation)
             .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
         fs::create_dir_all(&session.workspace_path).map_err(|error| error.to_string())?;
         fs::write(&session.figure_path, &source).map_err(|error| error.to_string())?;
@@ -1003,24 +1111,24 @@ impl AssistantState {
     pub fn respond_to_approval(
         &self,
         document_id: String,
+        session_generation: u64,
         request_id: String,
         decision: String,
     ) -> Result<(), String> {
-        let pending_request = {
-            let docs = self
-                .inner
-                .documents
-                .lock()
-                .map_err(|_| "documents lock unavailable".to_string())?;
-            let session = docs
-                .get(&document_id)
-                .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
-            session
-                .pending_server_requests
-                .get(&request_id)
-                .cloned()
-                .ok_or_else(|| "Unknown approval request".to_string())?
-        };
+        let docs = self
+            .inner
+            .documents
+            .lock()
+            .map_err(|_| "documents lock unavailable".to_string())?;
+        let session = docs
+            .get(&document_id)
+            .filter(|session| session.session_generation == session_generation)
+            .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
+        let pending_request = session
+            .pending_server_requests
+            .get(&request_id)
+            .cloned()
+            .ok_or_else(|| "Unknown approval request".to_string())?;
 
         match pending_request.kind {
             PendingServerRequestKind::CommandApproval
@@ -1041,43 +1149,32 @@ impl AssistantState {
     pub fn respond_to_dynamic_tool_call(
         &self,
         document_id: String,
+        session_generation: u64,
         request_id: String,
         result: Value,
     ) -> Result<(), String> {
-        if let Some(image_data) = extract_dynamic_tool_image_base64(&result) {
-            let preview_path = {
-                let docs = self
-                    .inner
-                    .documents
-                    .lock()
-                    .map_err(|_| "documents lock unavailable".to_string())?;
-                docs.get(&document_id)
-                    .map(|session| session.preview_path.clone())
-                    .ok_or_else(|| "Assistant thread not initialized for document".to_string())?
-            };
-            write_base64_file(&preview_path, &image_data)?;
-        }
-
-        let pending_request = {
-            let docs = self
-                .inner
-                .documents
-                .lock()
-                .map_err(|_| "documents lock unavailable".to_string())?;
-            let session = docs
-                .get(&document_id)
-                .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
-            session
-                .pending_server_requests
-                .get(&request_id)
-                .cloned()
-                .ok_or_else(|| "Unknown dynamic tool request".to_string())?
-        };
+        let docs = self
+            .inner
+            .documents
+            .lock()
+            .map_err(|_| "documents lock unavailable".to_string())?;
+        let session = docs
+            .get(&document_id)
+            .filter(|session| session.session_generation == session_generation)
+            .ok_or_else(|| "Assistant thread not initialized for document".to_string())?;
+        let pending_request = session
+            .pending_server_requests
+            .get(&request_id)
+            .cloned()
+            .ok_or_else(|| "Unknown dynamic tool request".to_string())?;
         if !matches!(
             pending_request.kind,
             PendingServerRequestKind::DynamicToolCall
         ) {
             return Err("Request is not a dynamic tool call".to_string());
+        }
+        if let Some(image_data) = extract_dynamic_tool_image_base64(&result) {
+            write_base64_file(&session.preview_path, &image_data)?;
         }
         self.send_server_request_response(pending_request.id, result)
     }
@@ -1085,13 +1182,17 @@ impl AssistantState {
     pub fn load_thread_state(
         &self,
         document_id: String,
+        session_generation: u64,
     ) -> Result<Option<AssistantThreadStatePayload>, String> {
         let docs = self
             .inner
             .documents
             .lock()
             .map_err(|_| "documents lock unavailable".to_string())?;
-        let Some(session) = docs.get(&document_id) else {
+        let Some(session) = docs
+            .get(&document_id)
+            .filter(|session| session.session_generation == session_generation)
+        else {
             return Ok(None);
         };
         Ok(Some(AssistantThreadStatePayload {
@@ -1181,11 +1282,7 @@ impl AssistantState {
             return;
         };
         let params = message.get("params").cloned().unwrap_or(Value::Null);
-        let Some(document_id) = self.document_id_from_params(&params) else {
-            let _ = self.emit_event(AssistantEventPayload {
-        kind: "error".to_string(),
-        data: json!({ "message": format!("Unhandled app-server request `{method}` without thread context.") }),
-      });
+        let Some((document_id, session_generation)) = self.document_id_from_params(&params) else {
             let _ = self.send_server_request_error(
                 id,
                 -32602,
@@ -1196,21 +1293,22 @@ impl AssistantState {
 
         match method {
             "item/tool/call" => {
-                if let Ok(mut docs) = self.inner.documents.lock() {
-                    if let Some(session) = docs.get_mut(&document_id) {
-                        session.pending_server_requests.insert(
-                            id_key.clone(),
-                            PendingServerRequest {
-                                id: id.clone(),
-                                kind: PendingServerRequestKind::DynamicToolCall,
-                            },
-                        );
-                    }
+                if !self.register_server_request(
+                    &document_id,
+                    session_generation,
+                    id_key.clone(),
+                    PendingServerRequest {
+                        id: id.clone(),
+                        kind: PendingServerRequestKind::DynamicToolCall,
+                    },
+                ) {
+                    return;
                 }
                 let _ = self.emit_event(AssistantEventPayload {
                     kind: "dynamic-tool-call".to_string(),
                     data: json!({
                       "documentId": document_id,
+                      "sessionGeneration": session_generation,
                       "requestId": id_key,
                       "itemId": params.get("itemId").and_then(Value::as_str),
                       "tool": params.get("tool").and_then(Value::as_str).unwrap_or("dynamic-tool"),
@@ -1219,21 +1317,22 @@ impl AssistantState {
                 });
             }
             "item/commandExecution/requestApproval" => {
-                if let Ok(mut docs) = self.inner.documents.lock() {
-                    if let Some(session) = docs.get_mut(&document_id) {
-                        session.pending_server_requests.insert(
-                            id_key.clone(),
-                            PendingServerRequest {
-                                id: id.clone(),
-                                kind: PendingServerRequestKind::CommandApproval,
-                            },
-                        );
-                    }
+                if !self.register_server_request(
+                    &document_id,
+                    session_generation,
+                    id_key.clone(),
+                    PendingServerRequest {
+                        id: id.clone(),
+                        kind: PendingServerRequestKind::CommandApproval,
+                    },
+                ) {
+                    return;
                 }
                 let _ = self.emit_event(AssistantEventPayload {
           kind: "approval-requested".to_string(),
           data: json!({
             "documentId": document_id,
+                      "sessionGeneration": session_generation,
             "approval": {
               "kind": "command",
               "requestId": id_key,
@@ -1249,21 +1348,22 @@ impl AssistantState {
         });
             }
             "item/fileChange/requestApproval" => {
-                if let Ok(mut docs) = self.inner.documents.lock() {
-                    if let Some(session) = docs.get_mut(&document_id) {
-                        session.pending_server_requests.insert(
-                            id_key.clone(),
-                            PendingServerRequest {
-                                id: id.clone(),
-                                kind: PendingServerRequestKind::FileChangeApproval,
-                            },
-                        );
-                    }
+                if !self.register_server_request(
+                    &document_id,
+                    session_generation,
+                    id_key.clone(),
+                    PendingServerRequest {
+                        id: id.clone(),
+                        kind: PendingServerRequestKind::FileChangeApproval,
+                    },
+                ) {
+                    return;
                 }
                 let _ = self.emit_event(AssistantEventPayload {
           kind: "approval-requested".to_string(),
           data: json!({
             "documentId": document_id,
+                      "sessionGeneration": session_generation,
             "approval": {
               "kind": "fileChange",
               "requestId": id_key,
@@ -1277,21 +1377,22 @@ impl AssistantState {
         });
             }
             "item/tool/requestUserInput" | "tool/requestUserInput" => {
-                if let Ok(mut docs) = self.inner.documents.lock() {
-                    if let Some(session) = docs.get_mut(&document_id) {
-                        session.pending_server_requests.insert(
-                            id_key.clone(),
-                            PendingServerRequest {
-                                id: id.clone(),
-                                kind: PendingServerRequestKind::ToolRequestUserInput,
-                            },
-                        );
-                    }
+                if !self.register_server_request(
+                    &document_id,
+                    session_generation,
+                    id_key.clone(),
+                    PendingServerRequest {
+                        id: id.clone(),
+                        kind: PendingServerRequestKind::ToolRequestUserInput,
+                    },
+                ) {
+                    return;
                 }
                 let _ = self.emit_event(AssistantEventPayload {
           kind: "approval-requested".to_string(),
           data: json!({
             "documentId": document_id,
+                      "sessionGeneration": session_generation,
             "approval": {
               "kind": "toolInput",
               "requestId": id_key,
@@ -1307,6 +1408,7 @@ impl AssistantState {
                     kind: "error".to_string(),
                     data: json!({
                       "documentId": document_id,
+                      "sessionGeneration": session_generation,
                       "message": format!("Unhandled app-server request `{method}`.")
                     }),
                 });
@@ -1319,6 +1421,26 @@ impl AssistantState {
         }
     }
 
+    fn register_server_request(
+        &self,
+        document_id: &str,
+        generation: u64,
+        key: String,
+        request: PendingServerRequest,
+    ) -> bool {
+        if let Ok(mut docs) = self.inner.documents.lock() {
+            if let Some(session) = docs
+                .get_mut(document_id)
+                .filter(|session| session.session_generation == generation)
+            {
+                session.pending_server_requests.insert(key, request);
+                return true;
+            }
+        }
+        let _ = self.send_server_request_error(request.id, -32602, "Assistant chat was replaced.");
+        false
+    }
+
     fn handle_notification(&self, message: Value) {
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             return;
@@ -1328,29 +1450,33 @@ impl AssistantState {
 
         match method {
             "turn/started" => {
-                if let Some(document_id) = document_id {
+                if let Some((document_id, session_generation)) = document_id {
                     let turn_id = params
                         .get("turn")
                         .and_then(|value| value.get("id"))
                         .and_then(Value::as_str)
                         .map(str::to_string);
                     if let Ok(mut docs) = self.inner.documents.lock() {
-                        if let Some(session) = docs.get_mut(&document_id) {
+                        if let Some(session) = docs
+                            .get_mut(&document_id)
+                            .filter(|session| session.session_generation == session_generation)
+                        {
                             session.current_turn_id = turn_id.clone();
                         }
                     }
                     let _ = self.emit_event(AssistantEventPayload {
                         kind: "turn-status".to_string(),
                         data: json!({
-                          "documentId": document_id,
-                          "turnId": turn_id,
-                          "status": "inProgress"
-                        }),
+                            "documentId": document_id,
+                        "sessionGeneration": session_generation,
+                            "turnId": turn_id,
+                            "status": "inProgress"
+                          }),
                     });
                 }
             }
             "turn/completed" => {
-                if let Some(document_id) = document_id {
+                if let Some((document_id, session_generation)) = document_id {
                     let turn = params.get("turn").cloned().unwrap_or(Value::Null);
                     let status = turn
                         .get("status")
@@ -1363,25 +1489,29 @@ impl AssistantState {
                         })
                         .unwrap_or(Value::Null);
                     if let Ok(mut docs) = self.inner.documents.lock() {
-                        if let Some(session) = docs.get_mut(&document_id) {
+                        if let Some(session) = docs
+                            .get_mut(&document_id)
+                            .filter(|session| session.session_generation == session_generation)
+                        {
                             session.current_turn_id = None;
                         }
                     }
                     let _ = self.emit_event(AssistantEventPayload {
                         kind: "turn-status".to_string(),
                         data: json!({
-                          "documentId": document_id,
-                          "status": status,
-                          "turnId": turn.get("id").cloned().unwrap_or(Value::Null),
-                          "error": error
-                        }),
+                            "documentId": document_id,
+                        "sessionGeneration": session_generation,
+                            "status": status,
+                            "turnId": turn.get("id").cloned().unwrap_or(Value::Null),
+                            "error": error
+                          }),
                     });
                 }
             }
             "item/started" | "item/completed" => {
-                if let Some(document_id) = document_id {
+                if let Some((document_id, session_generation)) = document_id {
                     let item = params.get("item").cloned().unwrap_or(Value::Null);
-                    self.upsert_item(&document_id, &item);
+                    self.upsert_item(&document_id, session_generation, &item);
                     let _ = self.emit_event(AssistantEventPayload {
                         kind: if method == "item/started" {
                             "item-started".to_string()
@@ -1389,9 +1519,10 @@ impl AssistantState {
                             "item-completed".to_string()
                         },
                         data: json!({
-                          "documentId": document_id,
-                          "item": item
-                        }),
+                            "documentId": document_id,
+                        "sessionGeneration": session_generation,
+                            "item": item
+                          }),
                     });
                 }
             }
@@ -1400,7 +1531,7 @@ impl AssistantState {
             | "item/reasoning/summaryTextDelta"
             | "item/reasoning/textDelta"
             | "item/commandExecution/outputDelta" => {
-                if let Some(document_id) = document_id {
+                if let Some((document_id, session_generation)) = document_id {
                     let item_id = params
                         .get("itemId")
                         .and_then(Value::as_str)
@@ -1414,39 +1545,54 @@ impl AssistantState {
                     let _ = self.emit_event(AssistantEventPayload {
                         kind: "item-delta".to_string(),
                         data: json!({
-                          "documentId": document_id,
-                          "itemId": item_id,
-                          "deltaType": method,
-                          "delta": delta
-                        }),
+                            "documentId": document_id,
+                        "sessionGeneration": session_generation,
+                            "itemId": item_id,
+                            "deltaType": method,
+                            "delta": delta
+                          }),
                     });
                 }
             }
             "serverRequest/resolved" => {
-                if let Some(document_id) = document_id {
+                if let Some((document_id, session_generation)) = document_id {
                     let request_id = params
                         .get("requestId")
                         .and_then(request_id_to_key)
                         .unwrap_or_default();
                     if let Ok(mut docs) = self.inner.documents.lock() {
-                        if let Some(session) = docs.get_mut(&document_id) {
+                        if let Some(session) = docs
+                            .get_mut(&document_id)
+                            .filter(|session| session.session_generation == session_generation)
+                        {
                             session.pending_server_requests.remove(&request_id);
                         }
                     }
                     let _ = self.emit_event(AssistantEventPayload {
                         kind: "approval-cleared".to_string(),
                         data: json!({
-                          "documentId": document_id,
-                          "requestId": request_id
-                        }),
+                            "documentId": document_id,
+                        "sessionGeneration": session_generation,
+                            "requestId": request_id
+                          }),
                     });
                 }
             }
             "error" => {
+                if document_id.is_none()
+                    && (params.get("threadId").is_some() || params.get("thread").is_some())
+                {
+                    return;
+                }
+                let (document_id, session_generation) = match document_id {
+                    Some((id, generation)) => (Some(id), Some(generation)),
+                    None => (None, None),
+                };
                 let _ = self.emit_event(AssistantEventPayload {
                     kind: "error".to_string(),
                     data: json!({
                       "documentId": document_id,
+                      "sessionGeneration": session_generation,
                       "message": params
                         .get("error")
                         .and_then(|value| value.get("message"))
@@ -1477,12 +1623,15 @@ impl AssistantState {
         }
     }
 
-    fn upsert_item(&self, document_id: &str, item: &Value) {
+    fn upsert_item(&self, document_id: &str, session_generation: u64, item: &Value) {
         let Some(item_id) = item.get("id").and_then(Value::as_str) else {
             return;
         };
         if let Ok(mut docs) = self.inner.documents.lock() {
-            if let Some(session) = docs.get_mut(document_id) {
+            if let Some(session) = docs
+                .get_mut(document_id)
+                .filter(|session| session.session_generation == session_generation)
+            {
                 if let Some(index) = session.items.iter().position(|existing| {
                     existing.get("id").and_then(Value::as_str) == Some(item_id)
                 }) {
@@ -1494,7 +1643,7 @@ impl AssistantState {
         }
     }
 
-    fn document_id_from_params(&self, params: &Value) -> Option<String> {
+    fn document_id_from_params(&self, params: &Value) -> Option<(String, u64)> {
         let thread_id = params
             .get("threadId")
             .or_else(|| params.get("thread").and_then(|value| value.get("id")))
@@ -1502,10 +1651,29 @@ impl AssistantState {
         let docs = self.inner.documents.lock().ok()?;
         docs.iter()
             .find(|(_, session)| session.thread_id == thread_id)
-            .map(|(document_id, _)| document_id.clone())
+            .map(|(document_id, session)| (document_id.clone(), session.session_generation))
     }
 
     fn emit_event(&self, payload: AssistantEventPayload) -> Result<(), String> {
+        // Keep the ownership check and publication ordered with a reset.
+        let docs = self
+            .inner
+            .documents
+            .lock()
+            .map_err(|_| "documents lock unavailable".to_string())?;
+        if let Some(document_id) = payload.data.get("documentId").and_then(Value::as_str) {
+            let generation = payload
+                .data
+                .get("sessionGeneration")
+                .and_then(Value::as_u64);
+            if docs
+                .get(document_id)
+                .map(|session| session.session_generation)
+                != generation
+            {
+                return Ok(());
+            }
+        }
         self.inner
             .app
             .emit(ASSISTANT_EVENT_NAME, payload)
