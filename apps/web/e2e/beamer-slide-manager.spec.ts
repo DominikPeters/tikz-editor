@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { gotoApp, readStoreSource, resetStorageBeforeNavigation, setSource } from "./helpers";
 
@@ -217,4 +218,22 @@ test("carries a private macro through keyboard reordering without a dialog and u
   expect(moved.indexOf("{Results}")).toBeLessThan(moved.indexOf("{Overview}"));
   await card(page, "Results").focus(); await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => readStoreSource(page)).toBe(source);
+});
+
+
+test("reorders KKT slides 2 and 3 without a warning and restores their source on undo", async ({ page }) => {
+  const source = readFileSync(new URL("../../../test/fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url), "utf8");
+  await gotoApp(page); await dock(page, 18); await setSource(page, source);
+  const from = card(page, "Why KKT conditions matter"), to = card(page, "Problem form and notation");
+  await from.click();
+  await dragTo(page, from, to, "after");
+  await expect.poll(() => readStoreSource(page)).not.toBe(source);
+  await expect(review(page)).toHaveCount(0);
+  const moved = await readStoreSource(page);
+  expect(moved.indexOf("\\begin{frame}{Problem form and notation}")).toBeLessThan(moved.indexOf("\\begin{frame}{Why KKT conditions matter}"));
+  await from.focus(); await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readStoreSource(page)).toBe(source);
+  await from.focus(); await page.keyboard.press("Alt+ArrowDown");
+  await expect.poll(() => readStoreSource(page)).toBe(moved);
+  await expect(review(page)).toHaveCount(0);
 });

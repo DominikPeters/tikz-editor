@@ -1,4 +1,6 @@
 import type { Span } from "../ast/types.js";
+import { isTexMathTypesettingCommand } from "../text/tex/math/parser.js";
+import { parseForeachHeaderRaw } from "../foreach/header.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import { matchTexSyntaxEnvironments, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import { scanBeamerDocument } from "./scan.js";
@@ -19,7 +21,7 @@ export type BeamerSlideMoveAnalysis = {
 };
 type Definition = {
   name: string; span: Span; command: string; body: string; references: string[];
-  literal: boolean; alias: boolean;
+  literal: boolean; alias: boolean; wellFormed: boolean;
 };
 type Scope = { id: number; span: Span; kind: "group" | "conditional"; opening: Span };
 const inside = (outer: Span, inner: Span) => outer.from <= inner.from && inner.to <= outer.to;
@@ -52,6 +54,20 @@ const LOCAL_COMMANDS = new Set((
   "textwidth linewidth columnwidth textheight paperwidth paperheight baselineskip relax " +
   "begingroup endgroup bgroup egroup else or fi newif"
 ).split(" "));
+
+// A smaller set than LOCAL_COMMANDS: macro expansion must not hide structural
+// commands, assignments or environments. Every argument token is checked too.
+const FORMATTING_COMMANDS = new Set((
+  "textbf textit texttt textrm textsf textsc textsl textnormal emph texorpdfstring " +
+  "bfseries mdseries itshape upshape rmfamily sffamily ttfamily normalfont " +
+  "tiny scriptsize footnotesize small normalsize large Large LARGE huge Huge " +
+  "centering raggedright raggedleft par newline linebreak hfill vfill hspace vspace smallskip medskip bigskip " +
+  "color textcolor colorbox fcolorbox rule strut ensuremath LaTeX TeX " +
+  "textwidth linewidth columnwidth textheight paperwidth paperheight baselineskip relax"
+).split(" "));
+const FORMATTING_SYMBOLS = new Set(["\\", "{", "}", "$", "%", "&", "#", "_", " ", ",", ":", ";", "!", "/", "|", "(", ")", "[", "]", "=", "'", '"', "~", "`", "^", ">"]);
+const stockFormattingCommand = (name: string) => FORMATTING_COMMANDS.has(name) || FORMATTING_SYMBOLS.has(name) || isTexMathTypesettingCommand(name);
+const stockLocalCommand = (name: string) => LOCAL_COMMANDS.has(name) || stockFormattingCommand(name);
 
 /** Read definitions through the shared macro parser; keep unsupported bodies opaque. */
 function definitions(syntax: TexSyntaxIndex): { definitions: Definition[]; stored: Span[] } {
@@ -93,13 +109,34 @@ function definitions(syntax: TexSyntaxIndex): { definitions: Definition[]; store
     if (parsed.kind !== "MacroDefinition" && parsed.kind !== "MacroAlias" && parsed.kind !== "MacroCommandDefinition") continue;
     const body = parsed.kind === "MacroDefinition" ? parsed.valueRaw : parsed.kind === "MacroAlias" ? parsed.targetRaw : parsed.bodyRaw;
     const bodySyntax = createBeamerSyntaxContext(body).syntax;
+    const defaultSyntax = parsed.kind === "MacroCommandDefinition" && parsed.optionalDefaultRaw != null
+      ? createBeamerSyntaxContext(parsed.optionalDefaultRaw).syntax : null;
     result.push({ name: parsed.nameRaw.replace(/^\\/u, ""), span, command: control.name, body,
       alias: parsed.kind === "MacroAlias",
-      references: bodySyntax.controls.map(item => item.name),
+      references: [...bodySyntax.controls, ...(defaultSyntax?.controls ?? [])].map(item => item.name),
+      wellFormed: bodySyntax.errors.length === 0 && (!defaultSyntax || defaultSyntax.errors.length === 0),
       literal: !/[#$&^_~]/u.test(body) && bodySyntax.errors.length === 0 &&
         (parsed.kind !== "MacroCommandDefinition" || (parsed.arity === 0 && !parsed.optionalDefaultRaw)) });
   }
   return { definitions: result, stored };
+}
+
+/** Literal foreach values are local bindings, not calls to document macros. */
+function literalForeachBindings(syntax: TexSyntaxIndex, stored: Span[]): { span: Span; names: string[] }[] {
+  const loops: { span: Span; names: string[] }[] = [];
+  for (const control of syntax.controls) {
+    if (control.name !== "foreach" || stored.some(span => inside(span, control.span))) continue;
+    const list = syntax.groups.find(group => group.span.from >= control.span.to);
+    if (!list?.complete) continue;
+    const header = parseForeachHeaderRaw(syntax.source.slice(control.span.to, list.span.from));
+    if (!header.isValid || header.optionsRaw || header.listRaw ||
+      !/^\\[a-zA-Z@]+(?:\s*\/\s*\\[a-zA-Z@]+)*$/u.test(header.variablesRaw) ||
+      !/^[0-9eE.,/+\-\s]+$/u.test(syntax.source.slice(list.contentSpan.from, list.contentSpan.to))) continue;
+    const body = syntax.argumentAfter(list.span.to, "required", syntax.source.length);
+    if (!body?.complete) continue;
+    loops.push({ span: { from: control.span.to, to: body.span.to }, names: header.variablesRaw.split("/").map(name => name.trim().slice(1)) });
+  }
+  return loops;
 }
 
 /** Scope identities, including primitive groups and individual conditional branches. */
@@ -204,13 +241,21 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
     for (const def of candidates) if (def.command !== "providecommand" || !current) current = def;
     return current;
   };
+  const loops = defs.some(def => def.name === "foreach") ? [] : literalForeachBindings(syntax, stored).reverse();
+  const loopVariable = (name: string, at: number, after = false): boolean => {
+    const loop = loops.find(loop => contains(loop.span, at) && loop.names.includes(name));
+    if (!loop) return false;
+    const provider = binding(name, at, after);
+    // An explicit definition inside the loop can override an iteration variable.
+    return !provider || provider.span.from < loop.span.from;
+  };
   const knownNames = new Set(defs.map(def => def.name));
   const usages = syntax.controls.filter(control => !stored.some(span => inside(span, control.span)) && knownNames.has(control.name));
   type Use = { name: string; at: number; span: Span; before?: Definition; after?: Definition };
   const resolveUses = (): Use[] => {
     const result: Use[] = [];
     const walk = (name: string, position: number, span: Span, seen: Set<string>, beforeAt = position, afterAt = position) => {
-      if (seen.has(name)) return;
+      if (seen.has(name) || (loopVariable(name, beforeAt) && loopVariable(name, afterAt, true))) return;
       const before = binding(name, beforeAt, false), after = binding(name, afterAt, true);
       result.push({ name, at: position, span, before, after });
       const next = new Set([...seen, name]);
@@ -224,12 +269,31 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
     for (const def of defs.filter(item => item.alias)) for (const name of def.references) walk(name, def.span.from, def.span, new Set());
     return result;
   };
-  const pure = (def: Definition, seen = new Set<Definition>()): boolean => {
-    if (!def.literal || seen.has(def) || LOCAL_COMMANDS.has(def.name) || CONDITIONALS.has(def.name) || STORED_COMMANDS.has(def.name)) return false;
+  const canRelocate = (def: Definition, seen = new Set<Definition>()): boolean => {
+    if (!def.literal || seen.has(def) || stockLocalCommand(def.name) || CONDITIONALS.has(def.name) || STORED_COMMANDS.has(def.name)) return false;
     const next = new Set([...seen, def]);
     return def.references.every(name => {
       const candidates = defs.filter(item => item.name === name);
-      return candidates.length === 1 && pure(candidates[0], next);
+      return candidates.length === 1 && canRelocate(candidates[0], next);
+    });
+  };
+  // Safety of expanding a macro is distinct from permission to relocate its
+  // declaration. Formatting wrappers (including parameters/defaults) are local;
+  // declarations still use the narrower literal-only relocation proof above.
+  const hasLocalEffects = (def: Definition, at: number, after: boolean, seen = new Set<Definition>()): boolean => {
+    if (!def.wellFormed || seen.has(def)) return false;
+    const next = new Set([...seen, def]);
+    return def.references.every(name => {
+      const position = def.alias ? def.span.from : at;
+      if (loopVariable(name, position, after)) return true;
+      const provider = binding(name, position, after);
+      if (provider) return hasLocalEffects(provider, at, after, next);
+      const candidates = defs.filter(candidate => candidate.name === name);
+      if (candidates.some(candidate => path(candidate.span.from, "conditional").length > 0)) return false;
+      // Missing literal dependencies are handled by the binding comparison and
+      // may be carried with their consumers. They cannot conceal side effects.
+      if (candidates.length && candidates.every(candidate => canRelocate(candidate))) return true;
+      return stockFormattingCommand(name);
     });
   };
   const unknowns = syntax.controls.filter(control => {
@@ -238,18 +302,24 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
     if (storedSpan) {
       if (storedSpan.from !== control.span.from) return false;
       const declaration = definitionAt.get(control.span.from);
-      return !declaration || LOCAL_COMMANDS.has(declaration.name) || CONDITIONALS.has(declaration.name) ||
+      return !declaration || stockLocalCommand(declaration.name) || CONDITIONALS.has(declaration.name) ||
         path(control.span.from, "conditional").length > 0;
     }
+    if (loopVariable(control.name, control.span.from) && loopVariable(control.name, control.span.from, true)) return false;
     if (environment?.kind === "begin" && !LOCAL_ENVIRONMENTS.has(environment.name)) return true;
     // Formatting outside a frame persists into following frames; the same
     // command inside a frame is local. Section titles are ordinary consumers.
     if (!document.frames.some(frame => inside(frame.span, control.span)) &&
       !document.sections.some(section => inside(section.span, control.span)) &&
       !STRUCTURAL_COMMANDS.has(control.name) && !CONDITIONALS.has(control.name)) return true;
-    if (knownNames.has(control.name)) return !defs.filter(def => def.name === control.name).every(def => pure(def)) ||
-      (!binding(control.name, control.span.from, false) && defs.some(def => def.name === control.name && path(def.span.from, "conditional").length > 0));
-    return control.kind !== "symbol" && !LOCAL_COMMANDS.has(control.name) && !CONDITIONALS.has(control.name);
+    if (knownNames.has(control.name)) {
+      const before = binding(control.name, control.span.from, false), after = binding(control.name, control.span.from, true);
+      if ((before && !hasLocalEffects(before, control.span.from, false)) ||
+        (after && !hasLocalEffects(after, control.span.from, true))) return true;
+      if (!before && defs.some(def => def.name === control.name && path(def.span.from, "conditional").length > 0)) return true;
+      return !before && !after && !stockFormattingCommand(control.name);
+    }
+    return control.kind !== "symbol" && !stockLocalCommand(control.name) && !CONDITIONALS.has(control.name);
   }).filter(control => control.span.from >= document.documentBodySpan.from);
   // Unknown commands can hide uses of private definitions. Do not relocate their
   // providers on the assumption that every consumer was visible to this scan.
@@ -262,7 +332,7 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
         const owners = consumers.map(item => movedFrame(item.at) ?? frames.find(frame => dependencies.some(dependency => dependency.frameId === frame.id && contains(dependency.span, item.at))));
         if (owners.some(owner => !owner) || !owners.length || movedFrame(def.span.from) || dependencies.some(item => inside(item.span, def.span)) ||
           defs.some(other => other.references.includes(def.name) && !movedFrame(other.span.from) && !dependencies.some(item => inside(item.span, other.span))) ||
-          !pure(def) || defs.filter(item => item.name === def.name).length !== 1 || def.span.from < document.documentBodySpan.from ||
+          !canRelocate(def) || defs.filter(item => item.name === def.name).length !== 1 || def.span.from < document.documentBodySpan.from ||
           !sameScope(def.span.from, destination) || !sameScope(def.span.from, owners[0]!.span.from)) continue;
         // Carry exact declaration lines and attached comments, only when they do
         // not include another declaration/frame. Shared aliases count as consumers.

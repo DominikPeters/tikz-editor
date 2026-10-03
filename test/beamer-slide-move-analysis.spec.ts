@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { analyzeBeamerSlideMove, editBeamerSlides, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
 import { applySourcePatches } from "../packages/core/src/edit/source-patches.js";
@@ -168,4 +169,77 @@ it("does not warn when an unchanged slide group is dropped back in place", () =>
   const unchanged = move(["frame:0", "frame:1"], { kind: "end" });
   expect(analyzeBeamerSlideMove(source, unchanged).status).toBe("safe");
   expect(editBeamerSlides(source, unchanged)).toBeNull();
+});
+
+describe("formatting macro effects", () => {
+  it("allows the reported KKT slide 2 → 3 move without moving preamble macros", () => {
+    const source = readFileSync(new URL("./fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url), "utf8");
+    const action = move(["frame:1"], { kind: "after", frameId: "frame:2" });
+    expect(analyzeBeamerSlideMove(source, action)).toEqual({ status: "safe", issues: [], dependencies: [] });
+    const result = editBeamerSlides(source, action)!;
+    expect(result).not.toBeNull();
+    expect(scanBeamerDocument(result.source).frames[2].title?.value).toBe("Why KKT conditions matter");
+    expect(result.source.slice(0, result.source.indexOf("\\begin{document}"))).toBe(source.slice(0, source.indexOf("\\begin{document}")));
+  });
+  it("allows every adjacent move in the KKT fixture, including math symbols and loop variables", () => {
+    const source = readFileSync(new URL("./fixtures/beamer/kkt_theorem_beamer.tex", import.meta.url), "utf8");
+    const frames = scanBeamerDocument(source).frames;
+    for (let i = 0; i < frames.length - 1; i++) {
+      for (const action of [move([frames[i].id], { kind: "after", frameId: frames[i + 1].id }), move([frames[i + 1].id], { kind: "before", frameId: frames[i].id })]) {
+        expect(analyzeBeamerSlideMove(source, action), `Adjacent slides ${i + 1} and ${i + 2}`).toMatchObject({ status: "safe", issues: [] });
+      }
+    }
+  });
+  it("understands nested formatting, parameters, defaults, math scripts, and aliases", () => {
+    const definitions = String.raw`\newcommand{\R}{\mathbb{R}}
+\newcommand{\inner}[2]{\left\langle #1,#2\right\rangle}
+\newcommand{\norm}[2][2]{\left\lVert#2\right\rVert_{#1}}
+\newcommand{\vectorR}{\R^n}
+\let\spaceR\vectorR
+\newcommand{\bold}[1]{\textbf{#1}}`;
+    const source = deck(frame("A", String.raw`\bold{Space} $\spaceR,\inner{x}{y},\norm{x}, x^\star \succeq y,\min f(x)$`) + frame("B"), definitions);
+    expect(analyzeBeamerSlideMove(source, later).status).toBe("safe");
+  });
+  it.each([
+    String.raw`\newcommand{\R}{\global\def\x{1}}`,
+    String.raw`\newcommand{\R}{\setcounter{equation}{4}}`,
+    String.raw`\newcommand{\R}{\csname change\endcsname}`,
+    String.raw`\newcommand{\R}{\unknown}`,
+    String.raw`\newcommand{\R}{\R}`,
+    String.raw`\newcommand{\R}{\mathbb{R}}\renewcommand{\mathbb}[1]{\global\def\x{#1}}`,
+    String.raw`\newcommand{\R}[1][\setcounter{equation}{4}]{#1}`,
+  ])("still reviews actual, dynamic, cyclic, and default-argument effects: %s", definitions => {
+    const source = deck(frame("A", "\\R") + frame("B"), definitions);
+    expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
+    expect(editBeamerSlides(source, later)).toBeNull();
+  });
+  it("checks arguments passed to a formatting macro for effects", () => {
+    const source = deck(frame("A", String.raw`\bold{\setcounter{equation}{4}}`) + frame("B"), String.raw`\newcommand{\bold}[1]{\textbf{#1}}`);
+    expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
+  });
+  it("follows the binding at use time, including a redefined stock math command", () => {
+    const source = deck(frame("A", "\\R") + String.raw`\renewcommand{\mathbb}[1]{\mathbf{#1}}` + "\n" + frame("B"), String.raw`\newcommand{\R}{\mathbb{R}}`);
+    const analysis = analyzeBeamerSlideMove(source, later);
+    expect(analysis.status).toBe("review");
+    expect(analysis.issues.some(issue => issue.message.includes("different definition of \\mathbb"))).toBe(true);
+  });
+  it("does not confuse safe macro expansion with permission to move a shared provider", () => {
+    const source = deck(frame("A") + String.raw`\newcommand{\R}{\mathbb{R}}` + "\n" + frame("B", "\\R") + frame("C", "\\R"));
+    expect(analyzeBeamerSlideMove(source, earlier)).toMatchObject({ status: "blocked", dependencies: [] });
+  });
+  it("keeps foreach variables scoped and still inspects loop effects", () => {
+    const loop = String.raw`\foreach \x/\y in {1/2,3/4}{\draw (\x,\y) circle (2pt);}`;
+    expect(analyzeBeamerSlideMove(deck(frame("A", loop) + frame("B")), later).status).toBe("safe");
+    for (const body of [loop + "\\x", loop.replace("\\draw", "\\global\\def\\z{1}\\draw"), loop.replace("\\draw", "\\def\\x{\\setcounter{equation}{4}}\\x\\draw")]) {
+      expect(analyzeBeamerSlideMove(deck(frame("A", body) + frame("B")), later).status).toBe("review");
+    }
+  });
+});
+it.each(["constructor", "toString"])("does not mistake object properties for stock math commands: %s", name => {
+  const source = deck(frame("A", `\\${name}`) + frame("B"));
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
+});
+it("checks an overridden foreach rather than assuming it binds iteration variables", () => {
+  const source = deck(frame("A", String.raw`\foreach \x in {1,2}{\draw (\x,0) circle (1pt);}`) + frame("B"), String.raw`\renewcommand{\foreach}{Plain text}`);
+  expect(analyzeBeamerSlideMove(source, later).status).toBe("review");
 });

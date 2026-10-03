@@ -255,7 +255,8 @@ const amsSymbolDeclarations = {
 
 export function texMathSymbolDeclaration(command: string): TexMathSymbolDeclaration | null {
   const name = command.startsWith("\\") ? command.slice(1) : command;
-  return (amsSymbolDeclarations as Record<string, TexMathSymbolDeclaration>)[name] ?? null;
+  return Object.hasOwn(amsSymbolDeclarations, name)
+    ? (amsSymbolDeclarations as Record<string, TexMathSymbolDeclaration>)[name] : null;
 }
 
 export function texMathSymbolCommandNames(options: {

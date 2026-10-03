@@ -804,6 +804,11 @@ Drag and Alt+arrow reordering use the same analysis before changing source.
   single declaration, matching scope, no outside references, and no unknown
   document commands that could hide consumers. Exact source and comments travel
   with the definition. Shared definitions stay in place.
+- Math symbols use the math parser's command classifications. Formatting macros
+  are checked recursively at their actual bindings, including parameters,
+  optional defaults, and aliases. Literal numeric `\foreach` variables are local
+  to their loop; commands in the loop body are still checked. Safe expansion and
+  permission to relocate a declaration are separate checks.
 - Unknown commands, explicit state changes, and conditional definitions require
   review when crossed. Parsing a macro is not evidence that expanding it has no
   side effects. Arbitrary TeX expansion, package effects, and computed names are
