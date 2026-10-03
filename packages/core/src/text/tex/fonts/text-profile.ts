@@ -179,7 +179,7 @@ export function luaLatexDefaultFontIdForState(
       return "lmsans10-bold";
     }
     // Optical-size intervals from LaTeX's tulmss.fd.
-    const size = atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt >= 11 ? 12 : 10;
+    const size = atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15.5 ? 12 : 17;
     const shape = state.shape === "italic" || state.shape === "slanted" ? "oblique" : "regular";
     return `lmsans${size}-${shape}`;
   }

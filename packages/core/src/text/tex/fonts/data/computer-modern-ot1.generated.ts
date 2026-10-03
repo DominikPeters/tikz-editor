@@ -193526,5 +193526,7545 @@ export const COMPUTER_MODERN_OT1_FONTS: GeneratedTexFontTable = {
       "8226": "M3.86 -2.43C3.86 -3.18 3.24 -3.73 2.58 -3.73C1.85 -3.73 1.28 -3.16 1.28 -2.43C1.28 -1.74 1.87 -1.15 2.56 -1.15C3.31 -1.15 3.86 -1.77 3.86 -2.43Z",
       "8230": "M1.42 -0.56C1.42 -0.89 1.15 -1.13 0.86 -1.13C0.54 -1.13 0.29 -0.88 0.29 -0.56C0.29 -0.26 0.55 0 0.85 0C1.18 0 1.42 -0.27 1.42 -0.56ZM3.14 -0.56C3.14 -0.89 2.87 -1.13 2.58 -1.13C2.26 -1.13 2.01 -0.88 2.01 -0.56C2.01 -0.26 2.27 0 2.57 0C2.9 0 3.14 -0.27 3.14 -0.56ZM4.85 -0.56C4.85 -0.89 4.58 -1.13 4.29 -1.13C3.97 -1.13 3.72 -0.88 3.72 -0.56C3.72 -0.26 3.98 0 4.28 0C4.61 0 4.85 -0.27 4.85 -0.56Z"
     }
+  },
+  "lmsans17-regular": {
+    "family": "lmsans17-regular",
+    "codingScheme": "Unicode OpenType",
+    "checksum": "",
+    "designSize": 10,
+    "source": {
+      "kind": "opentype",
+      "name": "lmsans17-regular.otf"
+    },
+    "fontdimen": {
+      "slant": 0,
+      "space": 0.313,
+      "stretch": 0.1565,
+      "shrink": 0.104333,
+      "xheight": 0.431,
+      "quad": 1,
+      "extraspace": 0.104333
+    },
+    "chars": {
+      "32": {
+        "code": 32,
+        "width": 0.313,
+        "height": 0,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "33": {
+        "code": 33,
+        "width": 0.3,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "34": {
+        "code": 34,
+        "width": 0.413,
+        "height": 0.71,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "35": {
+        "code": 35,
+        "width": 0.784,
+        "height": 0.694,
+        "depth": 0.195,
+        "italicCorrection": 0
+      },
+      "36": {
+        "code": 36,
+        "width": 0.47,
+        "height": 0.749,
+        "depth": 0.055,
+        "italicCorrection": 0
+      },
+      "37": {
+        "code": 37,
+        "width": 0.784,
+        "height": 0.749,
+        "depth": 0.055,
+        "italicCorrection": 0
+      },
+      "38": {
+        "code": 38,
+        "width": 0.712,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "39": {
+        "code": 39,
+        "width": 0.261,
+        "height": 0.71,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "40": {
+        "code": 40,
+        "width": 0.366,
+        "height": 0.749,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "41": {
+        "code": 41,
+        "width": 0.366,
+        "height": 0.749,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "42": {
+        "code": 42,
+        "width": 0.47,
+        "height": 0.749,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "43": {
+        "code": 43,
+        "width": 0.731,
+        "height": 0.563,
+        "depth": 0.064,
+        "italicCorrection": 0
+      },
+      "44": {
+        "code": 44,
+        "width": 0.261,
+        "height": 0.08,
+        "depth": 0.125,
+        "italicCorrection": 0
+      },
+      "45": {
+        "code": 45,
+        "width": 0.313,
+        "height": 0.244,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "46": {
+        "code": 46,
+        "width": 0.261,
+        "height": 0.08,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "47": {
+        "code": 47,
+        "width": 0.47,
+        "height": 0.749,
+        "depth": 0.249,
+        "italicCorrection": 0
+      },
+      "48": {
+        "code": 48,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "49": {
+        "code": 49,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "50": {
+        "code": 50,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "51": {
+        "code": 51,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "52": {
+        "code": 52,
+        "width": 0.47,
+        "height": 0.656,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "53": {
+        "code": 53,
+        "width": 0.47,
+        "height": 0.656,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "54": {
+        "code": 54,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "55": {
+        "code": 55,
+        "width": 0.47,
+        "height": 0.656,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "56": {
+        "code": 56,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "57": {
+        "code": 57,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "58": {
+        "code": 58,
+        "width": 0.261,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "59": {
+        "code": 59,
+        "width": 0.261,
+        "height": 0.43,
+        "depth": 0.125,
+        "italicCorrection": 0
+      },
+      "60": {
+        "code": 60,
+        "width": 0.762,
+        "height": 0.527,
+        "depth": 0.028,
+        "italicCorrection": 0
+      },
+      "61": {
+        "code": 61,
+        "width": 0.731,
+        "height": 0.356,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "62": {
+        "code": 62,
+        "width": 0.762,
+        "height": 0.527,
+        "depth": 0.028,
+        "italicCorrection": 0
+      },
+      "63": {
+        "code": 63,
+        "width": 0.444,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64": {
+        "code": 64,
+        "width": 0.627,
+        "height": 0.702,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "65": {
+        "code": 65,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "66": {
+        "code": 66,
+        "width": 0.626,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "67": {
+        "code": 67,
+        "width": 0.601,
+        "height": 0.695,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "68": {
+        "code": 68,
+        "width": 0.678,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "69": {
+        "code": 69,
+        "width": 0.561,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "70": {
+        "code": 70,
+        "width": 0.535,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "71": {
+        "code": 71,
+        "width": 0.627,
+        "height": 0.695,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "72": {
+        "code": 72,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "73": {
+        "code": 73,
+        "width": 0.259,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "74": {
+        "code": 74,
+        "width": 0.443,
+        "height": 0.694,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "75": {
+        "code": 75,
+        "width": 0.651,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "76": {
+        "code": 76,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "77": {
+        "code": 77,
+        "width": 0.82,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "78": {
+        "code": 78,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "79": {
+        "code": 79,
+        "width": 0.693,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "80": {
+        "code": 80,
+        "width": 0.6,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "81": {
+        "code": 81,
+        "width": 0.693,
+        "height": 0.71,
+        "depth": 0.125,
+        "italicCorrection": 0
+      },
+      "82": {
+        "code": 82,
+        "width": 0.606,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "83": {
+        "code": 83,
+        "width": 0.522,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "84": {
+        "code": 84,
+        "width": 0.641,
+        "height": 0.691,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "85": {
+        "code": 85,
+        "width": 0.644,
+        "height": 0.694,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "86": {
+        "code": 86,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "87": {
+        "code": 87,
+        "width": 0.886,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "88": {
+        "code": 88,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "89": {
+        "code": 89,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "90": {
+        "code": 90,
+        "width": 0.575,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "91": {
+        "code": 91,
+        "width": 0.273,
+        "height": 0.749,
+        "depth": 0.249,
+        "italicCorrection": 0
+      },
+      "92": {
+        "code": 92,
+        "width": 0.5,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "93": {
+        "code": 93,
+        "width": 0.273,
+        "height": 0.749,
+        "depth": 0.249,
+        "italicCorrection": 0
+      },
+      "94": {
+        "code": 94,
+        "width": 0.556,
+        "height": 0.744,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "95": {
+        "code": 95,
+        "width": 0.625,
+        "height": 0,
+        "depth": 0.163,
+        "italicCorrection": 0
+      },
+      "96": {
+        "code": 96,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "97": {
+        "code": 97,
+        "width": 0.451,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "98": {
+        "code": 98,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "99": {
+        "code": 99,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "100": {
+        "code": 100,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "101": {
+        "code": 101,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "102": {
+        "code": 102,
+        "width": 0.287,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "103": {
+        "code": 103,
+        "width": 0.47,
+        "height": 0.438,
+        "depth": 0.204,
+        "italicCorrection": 0
+      },
+      "104": {
+        "code": 104,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "105": {
+        "code": 105,
+        "width": 0.223,
+        "height": 0.648,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "106": {
+        "code": 106,
+        "width": 0.249,
+        "height": 0.648,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "107": {
+        "code": 107,
+        "width": 0.458,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "108": {
+        "code": 108,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "109": {
+        "code": 109,
+        "width": 0.745,
+        "height": 0.438,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "110": {
+        "code": 110,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "111": {
+        "code": 111,
+        "width": 0.47,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "112": {
+        "code": 112,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.195,
+        "italicCorrection": 0
+      },
+      "113": {
+        "code": 113,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.195,
+        "italicCorrection": 0
+      },
+      "114": {
+        "code": 114,
+        "width": 0.32,
+        "height": 0.438,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "115": {
+        "code": 115,
+        "width": 0.36,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "116": {
+        "code": 116,
+        "width": 0.34,
+        "height": 0.553,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "117": {
+        "code": 117,
+        "width": 0.484,
+        "height": 0.43,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "118": {
+        "code": 118,
+        "width": 0.432,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "119": {
+        "code": 119,
+        "width": 0.641,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "120": {
+        "code": 120,
+        "width": 0.432,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "121": {
+        "code": 121,
+        "width": 0.432,
+        "height": 0.43,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "122": {
+        "code": 122,
+        "width": 0.408,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "123": {
+        "code": 123,
+        "width": 0.5,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "124": {
+        "code": 124,
+        "width": 0.278,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "125": {
+        "code": 125,
+        "width": 0.5,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "126": {
+        "code": 126,
+        "width": 0.556,
+        "height": 0.307,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "192": {
+        "code": 192,
+        "width": 0.625,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "193": {
+        "code": 193,
+        "width": 0.625,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "194": {
+        "code": 194,
+        "width": 0.625,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "195": {
+        "code": 195,
+        "width": 0.625,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "196": {
+        "code": 196,
+        "width": 0.625,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "197": {
+        "code": 197,
+        "width": 0.625,
+        "height": 0.87,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "198": {
+        "code": 198,
+        "width": 0.809,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "199": {
+        "code": 199,
+        "width": 0.601,
+        "height": 0.71,
+        "depth": 0.202,
+        "italicCorrection": 0
+      },
+      "200": {
+        "code": 200,
+        "width": 0.561,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "201": {
+        "code": 201,
+        "width": 0.561,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "202": {
+        "code": 202,
+        "width": 0.561,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "203": {
+        "code": 203,
+        "width": 0.561,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "204": {
+        "code": 204,
+        "width": 0.259,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "205": {
+        "code": 205,
+        "width": 0.259,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "206": {
+        "code": 206,
+        "width": 0.259,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "207": {
+        "code": 207,
+        "width": 0.259,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "208": {
+        "code": 208,
+        "width": 0.678,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "209": {
+        "code": 209,
+        "width": 0.663,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "210": {
+        "code": 210,
+        "width": 0.693,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "211": {
+        "code": 211,
+        "width": 0.693,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "212": {
+        "code": 212,
+        "width": 0.693,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "213": {
+        "code": 213,
+        "width": 0.693,
+        "height": 0.847,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "214": {
+        "code": 214,
+        "width": 0.693,
+        "height": 0.805,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "215": {
+        "code": 215,
+        "width": 0.731,
+        "height": 0.484,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "216": {
+        "code": 216,
+        "width": 0.731,
+        "height": 0.758,
+        "depth": 0.064,
+        "italicCorrection": 0
+      },
+      "217": {
+        "code": 217,
+        "width": 0.644,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "218": {
+        "code": 218,
+        "width": 0.644,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "219": {
+        "code": 219,
+        "width": 0.644,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "220": {
+        "code": 220,
+        "width": 0.644,
+        "height": 0.805,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "221": {
+        "code": 221,
+        "width": 0.625,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "222": {
+        "code": 222,
+        "width": 0.547,
+        "height": 0.683,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "223": {
+        "code": 223,
+        "width": 0.451,
+        "height": 0.702,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "224": {
+        "code": 224,
+        "width": 0.451,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "225": {
+        "code": 225,
+        "width": 0.451,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "226": {
+        "code": 226,
+        "width": 0.451,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "227": {
+        "code": 227,
+        "width": 0.451,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "228": {
+        "code": 228,
+        "width": 0.451,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "229": {
+        "code": 229,
+        "width": 0.451,
+        "height": 0.683,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "230": {
+        "code": 230,
+        "width": 0.679,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "231": {
+        "code": 231,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.202,
+        "italicCorrection": 0
+      },
+      "232": {
+        "code": 232,
+        "width": 0.418,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "233": {
+        "code": 233,
+        "width": 0.418,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "234": {
+        "code": 234,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "235": {
+        "code": 235,
+        "width": 0.418,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "236": {
+        "code": 236,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "237": {
+        "code": 237,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "238": {
+        "code": 238,
+        "width": 0.223,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "239": {
+        "code": 239,
+        "width": 0.223,
+        "height": 0.644,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "240": {
+        "code": 240,
+        "width": 0.47,
+        "height": 0.715,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "241": {
+        "code": 241,
+        "width": 0.484,
+        "height": 0.665,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "242": {
+        "code": 242,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "243": {
+        "code": 243,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "244": {
+        "code": 244,
+        "width": 0.47,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "245": {
+        "code": 245,
+        "width": 0.47,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "246": {
+        "code": 246,
+        "width": 0.47,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "247": {
+        "code": 247,
+        "width": 0.731,
+        "height": 0.412,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "248": {
+        "code": 248,
+        "width": 0.47,
+        "height": 0.543,
+        "depth": 0.112,
+        "italicCorrection": 0
+      },
+      "249": {
+        "code": 249,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "250": {
+        "code": 250,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "251": {
+        "code": 251,
+        "width": 0.484,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "252": {
+        "code": 252,
+        "width": 0.484,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "253": {
+        "code": 253,
+        "width": 0.432,
+        "height": 0.694,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "254": {
+        "code": 254,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.195,
+        "italicCorrection": 0
+      },
+      "255": {
+        "code": 255,
+        "width": 0.432,
+        "height": 0.644,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "256": {
+        "code": 256,
+        "width": 0.625,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "257": {
+        "code": 257,
+        "width": 0.451,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "258": {
+        "code": 258,
+        "width": 0.625,
+        "height": 0.933,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "259": {
+        "code": 259,
+        "width": 0.451,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "260": {
+        "code": 260,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "261": {
+        "code": 261,
+        "width": 0.451,
+        "height": 0.442,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "262": {
+        "code": 262,
+        "width": 0.601,
+        "height": 0.862,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "263": {
+        "code": 263,
+        "width": 0.418,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "264": {
+        "code": 264,
+        "width": 0.601,
+        "height": 0.864,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "265": {
+        "code": 265,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "266": {
+        "code": 266,
+        "width": 0.601,
+        "height": 0.814,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "267": {
+        "code": 267,
+        "width": 0.418,
+        "height": 0.648,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "268": {
+        "code": 268,
+        "width": 0.601,
+        "height": 0.864,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "269": {
+        "code": 269,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "270": {
+        "code": 270,
+        "width": 0.678,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "271": {
+        "code": 271,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "272": {
+        "code": 272,
+        "width": 0.678,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "273": {
+        "code": 273,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "274": {
+        "code": 274,
+        "width": 0.561,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "275": {
+        "code": 275,
+        "width": 0.418,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "276": {
+        "code": 276,
+        "width": 0.561,
+        "height": 0.933,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "277": {
+        "code": 277,
+        "width": 0.418,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "278": {
+        "code": 278,
+        "width": 0.561,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "279": {
+        "code": 279,
+        "width": 0.418,
+        "height": 0.648,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "280": {
+        "code": 280,
+        "width": 0.561,
+        "height": 0.692,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "281": {
+        "code": 281,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "282": {
+        "code": 282,
+        "width": 0.561,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "283": {
+        "code": 283,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "284": {
+        "code": 284,
+        "width": 0.627,
+        "height": 0.864,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "285": {
+        "code": 285,
+        "width": 0.47,
+        "height": 0.692,
+        "depth": 0.204,
+        "italicCorrection": 0
+      },
+      "286": {
+        "code": 286,
+        "width": 0.627,
+        "height": 0.933,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "287": {
+        "code": 287,
+        "width": 0.47,
+        "height": 0.703,
+        "depth": 0.204,
+        "italicCorrection": 0
+      },
+      "288": {
+        "code": 288,
+        "width": 0.627,
+        "height": 0.814,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "289": {
+        "code": 289,
+        "width": 0.47,
+        "height": 0.648,
+        "depth": 0.204,
+        "italicCorrection": 0
+      },
+      "290": {
+        "code": 290,
+        "width": 0.627,
+        "height": 0.695,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "291": {
+        "code": 291,
+        "width": 0.47,
+        "height": 0.714,
+        "depth": 0.204,
+        "italicCorrection": 0
+      },
+      "292": {
+        "code": 292,
+        "width": 0.663,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "293": {
+        "code": 293,
+        "width": 0.484,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "294": {
+        "code": 294,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "295": {
+        "code": 295,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "296": {
+        "code": 296,
+        "width": 0.259,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "297": {
+        "code": 297,
+        "width": 0.223,
+        "height": 0.665,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "298": {
+        "code": 298,
+        "width": 0.259,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "299": {
+        "code": 299,
+        "width": 0.223,
+        "height": 0.638,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "300": {
+        "code": 300,
+        "width": 0.259,
+        "height": 0.933,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "301": {
+        "code": 301,
+        "width": 0.223,
+        "height": 0.703,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "302": {
+        "code": 302,
+        "width": 0.259,
+        "height": 0.694,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "303": {
+        "code": 303,
+        "width": 0.223,
+        "height": 0.658,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "304": {
+        "code": 304,
+        "width": 0.259,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "305": {
+        "code": 305,
+        "width": 0.223,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "306": {
+        "code": 306,
+        "width": 0.676,
+        "height": 0.694,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "307": {
+        "code": 307,
+        "width": 0.449,
+        "height": 0.648,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "308": {
+        "code": 308,
+        "width": 0.443,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "309": {
+        "code": 309,
+        "width": 0.249,
+        "height": 0.692,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "310": {
+        "code": 310,
+        "width": 0.651,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "311": {
+        "code": 311,
+        "width": 0.458,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "313": {
+        "code": 313,
+        "width": 0.509,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "314": {
+        "code": 314,
+        "width": 0.223,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "315": {
+        "code": 315,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "316": {
+        "code": 316,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "317": {
+        "code": 317,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "318": {
+        "code": 318,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "319": {
+        "code": 319,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "320": {
+        "code": 320,
+        "width": 0.283,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "321": {
+        "code": 321,
+        "width": 0.587,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "322": {
+        "code": 322,
+        "width": 0.303,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "323": {
+        "code": 323,
+        "width": 0.663,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "324": {
+        "code": 324,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "325": {
+        "code": 325,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "326": {
+        "code": 326,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "327": {
+        "code": 327,
+        "width": 0.663,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "328": {
+        "code": 328,
+        "width": 0.484,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "330": {
+        "code": 330,
+        "width": 0.663,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "331": {
+        "code": 331,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.205,
+        "italicCorrection": 0
+      },
+      "332": {
+        "code": 332,
+        "width": 0.693,
+        "height": 0.814,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "333": {
+        "code": 333,
+        "width": 0.47,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "334": {
+        "code": 334,
+        "width": 0.693,
+        "height": 0.933,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "335": {
+        "code": 335,
+        "width": 0.47,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "336": {
+        "code": 336,
+        "width": 0.693,
+        "height": 0.916,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "337": {
+        "code": 337,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "338": {
+        "code": 338,
+        "width": 0.913,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "339": {
+        "code": 339,
+        "width": 0.731,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "340": {
+        "code": 340,
+        "width": 0.606,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "341": {
+        "code": 341,
+        "width": 0.32,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "342": {
+        "code": 342,
+        "width": 0.606,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "343": {
+        "code": 343,
+        "width": 0.32,
+        "height": 0.438,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "344": {
+        "code": 344,
+        "width": 0.606,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "345": {
+        "code": 345,
+        "width": 0.32,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "346": {
+        "code": 346,
+        "width": 0.522,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "347": {
+        "code": 347,
+        "width": 0.36,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "348": {
+        "code": 348,
+        "width": 0.522,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "349": {
+        "code": 349,
+        "width": 0.36,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "350": {
+        "code": 350,
+        "width": 0.522,
+        "height": 0.71,
+        "depth": 0.202,
+        "italicCorrection": 0
+      },
+      "351": {
+        "code": 351,
+        "width": 0.36,
+        "height": 0.442,
+        "depth": 0.202,
+        "italicCorrection": 0
+      },
+      "352": {
+        "code": 352,
+        "width": 0.522,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "353": {
+        "code": 353,
+        "width": 0.36,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "354": {
+        "code": 354,
+        "width": 0.641,
+        "height": 0.691,
+        "depth": 0.186,
+        "italicCorrection": 0
+      },
+      "355": {
+        "code": 355,
+        "width": 0.34,
+        "height": 0.553,
+        "depth": 0.186,
+        "italicCorrection": 0
+      },
+      "356": {
+        "code": 356,
+        "width": 0.641,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "357": {
+        "code": 357,
+        "width": 0.34,
+        "height": 0.649,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "360": {
+        "code": 360,
+        "width": 0.644,
+        "height": 0.847,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "361": {
+        "code": 361,
+        "width": 0.484,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "362": {
+        "code": 362,
+        "width": 0.644,
+        "height": 0.814,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "363": {
+        "code": 363,
+        "width": 0.484,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "364": {
+        "code": 364,
+        "width": 0.644,
+        "height": 0.933,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "365": {
+        "code": 365,
+        "width": 0.484,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "366": {
+        "code": 366,
+        "width": 0.644,
+        "height": 0.87,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "367": {
+        "code": 367,
+        "width": 0.484,
+        "height": 0.683,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "368": {
+        "code": 368,
+        "width": 0.644,
+        "height": 0.916,
+        "depth": 0.016,
+        "italicCorrection": 0
+      },
+      "369": {
+        "code": 369,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "370": {
+        "code": 370,
+        "width": 0.644,
+        "height": 0.694,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "371": {
+        "code": 371,
+        "width": 0.484,
+        "height": 0.43,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "372": {
+        "code": 372,
+        "width": 0.886,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "373": {
+        "code": 373,
+        "width": 0.641,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "374": {
+        "code": 374,
+        "width": 0.625,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "375": {
+        "code": 375,
+        "width": 0.432,
+        "height": 0.692,
+        "depth": 0.203,
+        "italicCorrection": 0
+      },
+      "376": {
+        "code": 376,
+        "width": 0.625,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "377": {
+        "code": 377,
+        "width": 0.575,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "378": {
+        "code": 378,
+        "width": 0.408,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "379": {
+        "code": 379,
+        "width": 0.575,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "380": {
+        "code": 380,
+        "width": 0.408,
+        "height": 0.648,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "381": {
+        "code": 381,
+        "width": 0.575,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "382": {
+        "code": 382,
+        "width": 0.408,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "383": {
+        "code": 383,
+        "width": 0.267,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "7868": {
+        "code": 7868,
+        "width": 0.561,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "7869": {
+        "code": 7869,
+        "width": 0.418,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0
+      },
+      "8211": {
+        "code": 8211,
+        "width": 0.47,
+        "height": 0.296,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8212": {
+        "code": 8212,
+        "width": 0.94,
+        "height": 0.296,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8216": {
+        "code": 8216,
+        "width": 0.261,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8217": {
+        "code": 8217,
+        "width": 0.261,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8220": {
+        "code": 8220,
+        "width": 0.444,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8221": {
+        "code": 8221,
+        "width": 0.444,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8226": {
+        "code": 8226,
+        "width": 0.731,
+        "height": 0.396,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8230": {
+        "code": 8230,
+        "width": 0.592,
+        "height": 0.08,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64256": {
+        "code": 64256,
+        "width": 0.549,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64257": {
+        "code": 64257,
+        "width": 0.503,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64258": {
+        "code": 64258,
+        "width": 0.503,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64259": {
+        "code": 64259,
+        "width": 0.764,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64260": {
+        "code": 64260,
+        "width": 0.764,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0
+      }
+    },
+    "ligKerns": [
+      [
+        "lig",
+        102,
+        102,
+        64256
+      ],
+      [
+        "lig",
+        102,
+        105,
+        64257
+      ],
+      [
+        "lig",
+        102,
+        108,
+        64258
+      ],
+      [
+        "lig",
+        64256,
+        105,
+        64259
+      ],
+      [
+        "lig",
+        64256,
+        108,
+        64260
+      ],
+      [
+        "kern",
+        34,
+        34,
+        0.052
+      ],
+      [
+        "kern",
+        34,
+        39,
+        0.052
+      ],
+      [
+        "kern",
+        34,
+        46,
+        -0.131
+      ],
+      [
+        "kern",
+        39,
+        33,
+        0.052
+      ],
+      [
+        "kern",
+        39,
+        34,
+        0.052
+      ],
+      [
+        "kern",
+        39,
+        46,
+        -0.131
+      ],
+      [
+        "kern",
+        39,
+        63,
+        0.052
+      ],
+      [
+        "kern",
+        46,
+        34,
+        -0.131
+      ],
+      [
+        "kern",
+        46,
+        39,
+        -0.131
+      ],
+      [
+        "kern",
+        46,
+        96,
+        -0.131
+      ],
+      [
+        "kern",
+        65,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        84,
+        -0.078
+      ],
+      [
+        "kern",
+        65,
+        85,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        86,
+        -0.103999
+      ],
+      [
+        "kern",
+        65,
+        87,
+        -0.103999
+      ],
+      [
+        "kern",
+        65,
+        89,
+        -0.078
+      ],
+      [
+        "kern",
+        65,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        113,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        116,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        65,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        86,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        87,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        88,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        89,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        70,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        103,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        109,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        110,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        112,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        115,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        122,
+        -0.025999
+      ],
+      [
+        "kern",
+        73,
+        73,
+        0.025999
+      ],
+      [
+        "kern",
+        75,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        76,
+        84,
+        -0.078
+      ],
+      [
+        "kern",
+        76,
+        86,
+        -0.103999
+      ],
+      [
+        "kern",
+        76,
+        87,
+        -0.103999
+      ],
+      [
+        "kern",
+        76,
+        89,
+        -0.078
+      ],
+      [
+        "kern",
+        79,
+        65,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        86,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        87,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        88,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        89,
+        -0.025999
+      ],
+      [
+        "kern",
+        80,
+        44,
+        -0.078
+      ],
+      [
+        "kern",
+        80,
+        46,
+        -0.078
+      ],
+      [
+        "kern",
+        80,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        80,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        80,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        80,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        82,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        84,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        97,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        99,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        100,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        101,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        103,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        110,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        111,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        112,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        114,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        115,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        117,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        118,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        119,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        120,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        121,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        122,
+        -0.078
+      ],
+      [
+        "kern",
+        86,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        86,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        103,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        109,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        110,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        112,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        115,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        122,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        87,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        103,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        109,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        110,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        112,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        115,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        122,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        89,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        97,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        99,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        100,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        101,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        103,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        110,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        111,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        112,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        114,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        115,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        117,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        118,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        119,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        120,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        122,
+        -0.078
+      ],
+      [
+        "kern",
+        96,
+        33,
+        0.052
+      ],
+      [
+        "kern",
+        96,
+        46,
+        -0.131
+      ],
+      [
+        "kern",
+        96,
+        63,
+        0.052
+      ],
+      [
+        "kern",
+        97,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        97,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        97,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        99,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        100,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        101,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        111,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        113,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        120,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        101,
+        86,
+        -0.078
+      ],
+      [
+        "kern",
+        102,
+        33,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        34,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        39,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        41,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        63,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        93,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        96,
+        0.078
+      ],
+      [
+        "kern",
+        103,
+        106,
+        0.078
+      ],
+      [
+        "kern",
+        107,
+        86,
+        -0.078
+      ],
+      [
+        "kern",
+        107,
+        87,
+        -0.078
+      ],
+      [
+        "kern",
+        107,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        107,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        107,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        99,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        100,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        101,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        111,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        113,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        120,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        99,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        100,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        101,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        111,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        113,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        120,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        116,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        116,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        117,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        121,
+        44,
+        -0.078
+      ],
+      [
+        "kern",
+        121,
+        46,
+        -0.078
+      ],
+      [
+        "kern",
+        121,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        121,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        121,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        64256,
+        33,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        34,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        39,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        41,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        63,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        93,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        96,
+        0.078
+      ]
+    ],
+    "glyphs": {
+      "33": "M1.9 -6.94H1.1L1.18 -1.69H1.82ZM1.9 0V-0.8H1.1V0Z",
+      "34": "M1.69 -4.26V-7.1H0.93V-4.26ZM3.21 -4.26V-7.1H2.45V-4.26Z",
+      "35": "M7.31 -1.61C7.31 -1.78 7.16 -1.78 7.01 -1.78H5.01L5.35 -3.21H7.01C7.16 -3.21 7.31 -3.21 7.31 -3.38C7.31 -3.56 7.14 -3.56 6.97 -3.56H5.45L6.22 -6.58C6.25 -6.68 6.26 -6.73 6.26 -6.76C6.26 -6.86 6.18 -6.94 6.08 -6.94C5.94 -6.94 5.91 -6.8 5.89 -6.72L5.09 -3.56H3.28L4.05 -6.58C4.08 -6.68 4.09 -6.73 4.09 -6.76C4.09 -6.86 4.01 -6.94 3.91 -6.94C3.77 -6.94 3.74 -6.8 3.72 -6.72L2.92 -3.56H0.86C0.69 -3.56 0.52 -3.56 0.52 -3.38C0.52 -3.21 0.67 -3.21 0.82 -3.21H2.82L2.48 -1.78H0.82C0.67 -1.78 0.52 -1.78 0.52 -1.61C0.52 -1.43 0.69 -1.43 0.86 -1.43H2.38L1.61 1.59C1.58 1.69 1.57 1.74 1.57 1.77C1.57 1.87 1.65 1.95 1.75 1.95C1.89 1.95 1.92 1.81 1.94 1.73L2.74 -1.43H4.55L3.78 1.59C3.75 1.69 3.74 1.74 3.74 1.77C3.74 1.87 3.82 1.95 3.92 1.95C4.06 1.95 4.09 1.81 4.11 1.73L4.91 -1.43H6.97C7.14 -1.43 7.31 -1.43 7.31 -1.61ZM4.99 -3.21 4.65 -1.78H2.84L3.18 -3.21Z",
+      "36": "M4.17 -1.95C4.17 -2.75 3.73 -3.73 2.64 -3.96V-6.37C3.19 -6.32 3.59 -6.07 3.89 -5.81L4 -6.43C4 -6.47 3.48 -6.94 2.64 -7.01V-7.49H2.06V-7C1.12 -6.83 0.52 -6.01 0.52 -5.13C0.52 -4.71 0.69 -3.58 2.06 -3.25V-0.58C1.49 -0.64 0.95 -0.88 0.54 -1.28L0.42 -0.61C0.81 -0.3 1.33 -0.01 2.06 0.07V0.55H2.64V0.05C3.64 -0.15 4.17 -1.07 4.17 -1.95ZM2.06 -4.12C1.53 -4.27 1.23 -4.74 1.23 -5.23C1.23 -5.67 1.49 -6.18 2.06 -6.34ZM3.46 -1.85C3.46 -1.4 3.24 -0.8 2.64 -0.61V-3.09C3.24 -2.9 3.46 -2.3 3.46 -1.85Z",
+      "37": "M3.13 -5.48C3.13 -6.64 2.51 -7.49 1.83 -7.49C1.16 -7.49 0.52 -6.66 0.52 -5.48C0.52 -4.3 1.16 -3.47 1.83 -3.47C2.52 -3.47 3.13 -4.32 3.13 -5.48ZM6.19 -7.31C6.19 -7.42 6.1 -7.49 6.02 -7.49C5.91 -7.49 5.86 -7.41 5.81 -7.31L1.72 0.21C1.7 0.25 1.66 0.31 1.66 0.37C1.66 0.48 1.75 0.55 1.84 0.55C1.93 0.55 1.95 0.51 2.03 0.37L6.13 -7.15C6.19 -7.25 6.19 -7.31 6.19 -7.31ZM7.31 -1.46C7.31 -2.62 6.69 -3.47 6.01 -3.47C5.34 -3.47 4.7 -2.64 4.7 -1.46C4.7 -0.28 5.34 0.55 6.01 0.55C6.7 0.55 7.31 -0.3 7.31 -1.46ZM2.4 -5.48C2.4 -4.81 2.2 -4.08 1.83 -4.08C1.62 -4.08 1.28 -4.27 1.28 -5.48C1.28 -6.68 1.62 -6.88 1.83 -6.88C2.2 -6.88 2.4 -6.15 2.4 -5.48ZM6.58 -1.46C6.58 -0.79 6.38 -0.06 6.01 -0.06C5.8 -0.06 5.46 -0.25 5.46 -1.46C5.46 -2.66 5.8 -2.86 6.01 -2.86C6.38 -2.86 6.58 -2.13 6.58 -1.46Z",
+      "38": "M6.59 0.01V-0.65C6.09 -0.5 5.67 -0.48 5.52 -0.48C5.31 -0.48 5.03 -0.5 4.57 -0.84C4.63 -0.89 5.76 -1.86 6.26 -3.77L5.64 -3.95C5.14 -2.15 4.25 -1.4 4.11 -1.28C3.92 -1.49 3.18 -2.36 2.65 -3.42C2.65 -3.42 3.2 -3.92 3.5 -4.29C3.83 -4.68 4.12 -5.1 4.12 -5.57C4.12 -6.32 3.62 -7.1 2.84 -7.1C1.98 -7.1 1.5 -6.17 1.5 -5.15C1.5 -4.55 1.62 -4.03 1.81 -3.47C1.67 -3.35 1.17 -2.89 0.95 -2.67C0.8 -2.53 0.39 -2.15 0.39 -1.47C0.39 -0.62 1.09 0.16 2.12 0.16C2.81 0.16 3.48 -0.07 3.99 -0.4C4.56 0.05 5.07 0.16 5.5 0.16C5.64 0.16 6.06 0.15 6.59 0.01ZM3.39 -5.58C3.39 -5 2.83 -4.45 2.41 -4.04C2.22 -4.59 2.16 -5.15 2.16 -5.49C2.16 -6.25 2.55 -6.49 2.83 -6.49C3.35 -6.49 3.39 -5.73 3.39 -5.58ZM3.5 -0.85C3.08 -0.62 2.61 -0.48 2.13 -0.48C1.44 -0.48 1.15 -1.09 1.15 -1.53C1.15 -2.01 1.4 -2.26 1.5 -2.35C1.68 -2.54 1.87 -2.71 2.07 -2.88C2.3 -2.41 2.83 -1.6 3.5 -0.85Z",
+      "39": "M1.69 -4.26V-7.1H0.93V-4.26Z",
+      "40": "M3.13 2.5C1.9 1.22 1.5 -0.57 1.5 -2.49C1.5 -4.4 1.88 -6.2 3.13 -7.49H2.52C1.98 -6.94 0.74 -5.66 0.74 -2.5C0.74 0.67 1.98 1.94 2.52 2.5Z",
+      "41": "M2.91 -2.49C2.91 -5.66 1.67 -6.93 1.13 -7.49H0.52C1.75 -6.21 2.15 -4.42 2.15 -2.5C2.15 -0.59 1.77 1.21 0.52 2.5H1.13C1.67 1.95 2.91 0.67 2.91 -2.49Z",
+      "42": "M4.1 -4.45C4.1 -4.64 3.96 -4.72 3.88 -4.76L2.81 -5.34L3.89 -5.92C4.01 -5.99 4.1 -6.09 4.1 -6.23C4.1 -6.43 3.92 -6.58 3.76 -6.58C3.67 -6.58 3.6 -6.54 3.52 -6.48L2.6 -5.8L2.68 -7.15C2.68 -7.38 2.51 -7.49 2.34 -7.49C2.2 -7.49 2.01 -7.39 2.01 -7.15L2.09 -5.8L1.17 -6.47C1.05 -6.56 1.02 -6.58 0.93 -6.58C0.77 -6.58 0.59 -6.43 0.59 -6.23C0.59 -6.04 0.73 -5.96 0.81 -5.92L1.88 -5.34L0.8 -4.76C0.68 -4.69 0.59 -4.59 0.59 -4.45C0.59 -4.25 0.77 -4.1 0.93 -4.1C1.02 -4.1 1.09 -4.14 1.17 -4.2L2.09 -4.88L2.01 -3.53C2.01 -3.3 2.18 -3.19 2.35 -3.19C2.49 -3.19 2.68 -3.29 2.68 -3.53L2.67 -3.62L2.6 -4.88L3.52 -4.21C3.64 -4.12 3.67 -4.1 3.76 -4.1C3.92 -4.1 4.1 -4.25 4.1 -4.45Z",
+      "43": "M6.78 -2.49C6.78 -2.67 6.62 -2.67 6.47 -2.67H3.83V-5.32C3.83 -5.46 3.83 -5.63 3.66 -5.63C3.48 -5.63 3.48 -5.47 3.48 -5.32V-2.67H0.83C0.69 -2.67 0.52 -2.67 0.52 -2.5C0.52 -2.32 0.68 -2.32 0.83 -2.32H3.48V0.33C3.48 0.47 3.48 0.64 3.65 0.64C3.83 0.64 3.83 0.48 3.83 0.33V-2.32H6.47C6.61 -2.32 6.78 -2.32 6.78 -2.49Z",
+      "44": "M1.7 -0.01V-0.8H0.9V0H1.15L0.89 1.25H1.29Z",
+      "45": "M2.6 -1.86V-2.44H0.1V-1.86Z",
+      "46": "M1.7 0V-0.8H0.9V0Z",
+      "47": "M4.17 -7.31C4.17 -7.43 4.08 -7.49 4 -7.49C3.88 -7.49 3.84 -7.41 3.8 -7.29L0.57 2.14C0.52 2.27 0.52 2.31 0.52 2.31C0.52 2.43 0.61 2.49 0.69 2.49C0.81 2.49 0.85 2.41 0.89 2.29L4.12 -7.14C4.17 -7.27 4.17 -7.31 4.17 -7.31Z",
+      "48": "M4.31 -3.27C4.31 -3.84 4.3 -4.9 3.89 -5.72C3.48 -6.51 2.82 -6.72 2.35 -6.72C1.67 -6.72 1.09 -6.32 0.79 -5.68C0.47 -5.01 0.38 -4.32 0.38 -3.27C0.38 -2.55 0.41 -1.67 0.77 -0.9C1.18 -0.05 1.87 0.16 2.34 0.16C2.96 0.16 3.56 -0.17 3.9 -0.86C4.25 -1.58 4.31 -2.37 4.31 -3.27ZM3.55 -3.38C3.55 -2.45 3.55 -0.45 2.34 -0.45C1.58 -0.45 1.35 -1.32 1.28 -1.61C1.16 -2.11 1.14 -2.59 1.14 -3.38C1.14 -4 1.14 -4.7 1.33 -5.25C1.56 -5.89 1.96 -6.11 2.34 -6.11C3.08 -6.11 3.32 -5.37 3.4 -5.11C3.55 -4.58 3.55 -3.96 3.55 -3.38Z",
+      "49": "M4.02 0V-0.58H2.84V-6.72H2.65C2.11 -6.16 1.48 -6.08 0.84 -6.06V-5.48C1.13 -5.49 1.6 -5.51 2.07 -5.72V-0.58H0.89V0Z",
+      "50": "M4.22 0V-0.68H2.52C2.4 -0.68 2.28 -0.67 2.16 -0.67H1.16V-0.68L2.58 -2.12C2.86 -2.41 3.28 -2.76 3.57 -3.11C3.85 -3.45 4.22 -3.93 4.22 -4.63C4.22 -5.73 3.48 -6.72 2.22 -6.72C1.23 -6.72 0.66 -6.1 0.39 -5.13L0.78 -4.59C1 -5.5 1.31 -6.08 2.09 -6.08C2.95 -6.08 3.43 -5.38 3.43 -4.61C3.43 -3.69 2.73 -2.98 2.2 -2.45L0.47 -0.64V0Z",
+      "51": "M4.3 -1.84C4.3 -2.63 3.75 -3.29 3 -3.54C3.6 -3.87 4.04 -4.49 4.04 -5.21C4.04 -6.05 3.27 -6.72 2.33 -6.72C1.47 -6.72 0.8 -6.19 0.52 -5.62C0.59 -5.52 0.77 -5.23 0.86 -5.08C1.08 -5.67 1.65 -6.11 2.32 -6.11C2.88 -6.11 3.25 -5.74 3.25 -5.21C3.25 -4.66 2.9 -4.06 2.31 -3.92C2.27 -3.92 1.65 -3.86 1.57 -3.85V-3.24H2.25C3.19 -3.24 3.46 -2.42 3.46 -1.85C3.46 -1.07 3.02 -0.46 2.3 -0.46C1.74 -0.46 0.95 -0.74 0.5 -1.48C0.43 -1.13 0.43 -1.11 0.39 -0.87C0.86 -0.18 1.62 0.16 2.32 0.16C3.46 0.16 4.3 -0.79 4.3 -1.84Z",
+      "52": "M4.43 -1.71V-2.32H3.52V-6.56H2.64L0.26 -2.32V-1.71H2.73V0H3.52V-1.71ZM2.76 -2.32H1.03C1.61 -3.34 2.75 -5.4 2.76 -6.1Z",
+      "53": "M4.22 -2.03C4.22 -3.26 3.41 -4.21 2.44 -4.21C2.09 -4.21 1.75 -4.09 1.46 -3.85V-5.92H3.91V-6.56H0.73V-2.87H1.4C1.58 -3.29 1.95 -3.6 2.43 -3.6C2.88 -3.6 3.38 -3.2 3.38 -2.05C3.38 -0.82 2.67 -0.46 2.15 -0.46C1.51 -0.46 0.92 -0.85 0.66 -1.39L0.34 -0.83C0.8 -0.12 1.55 0.16 2.15 0.16C3.31 0.16 4.22 -0.83 4.22 -2.03Z",
+      "54": "M4.3 -2.22C4.3 -3.46 3.69 -4.56 2.78 -4.56C2.12 -4.56 1.55 -4.21 1.2 -3.77C1.3 -5.18 1.96 -6.11 2.91 -6.11C3.17 -6.11 3.51 -6.07 3.9 -5.9V-6.52C3.48 -6.69 3.18 -6.72 2.9 -6.72C1.6 -6.72 0.39 -5.36 0.39 -3.21C0.39 -0.46 1.54 0.16 2.36 0.16C2.81 0.16 3.26 0.02 3.69 -0.48C4.13 -1.01 4.3 -1.45 4.3 -2.22ZM3.51 -2.22C3.51 -1.83 3.51 -1.44 3.28 -1.04C3.09 -0.73 2.84 -0.46 2.36 -0.46C1.41 -0.46 1.25 -1.79 1.21 -2.19C1.21 -2.27 1.21 -2.32 1.22 -2.47C1.22 -3.25 1.67 -3.95 2.4 -3.95C2.87 -3.95 3.11 -3.7 3.29 -3.39C3.5 -3 3.51 -2.63 3.51 -2.22Z",
+      "55": "M4.3 -5.91V-6.56H0.39V-5.88H2.17C2.29 -5.88 2.41 -5.89 2.53 -5.89H3.68C2.25 -4.22 1.43 -2.11 1.43 0.08H2.23C2.23 -2.04 2.93 -4.19 4.3 -5.91Z",
+      "56": "M4.3 -1.84C4.3 -2.5 3.91 -3.2 3.02 -3.55C3.78 -3.8 4.17 -4.4 4.17 -4.99C4.17 -5.92 3.37 -6.72 2.35 -6.72C1.29 -6.72 0.52 -5.89 0.52 -4.99C0.52 -4.41 0.9 -3.81 1.67 -3.55C0.69 -3.17 0.39 -2.41 0.39 -1.84C0.39 -0.74 1.28 0.16 2.34 0.16C3.44 0.16 4.3 -0.76 4.3 -1.84ZM3.46 -4.98C3.46 -4.26 2.98 -3.85 2.35 -3.85C1.68 -3.85 1.23 -4.3 1.23 -4.98C1.23 -5.67 1.68 -6.11 2.35 -6.11C2.97 -6.11 3.46 -5.71 3.46 -4.98ZM3.52 -1.85C3.52 -0.81 2.86 -0.46 2.35 -0.46C1.78 -0.46 1.17 -0.85 1.17 -1.85C1.17 -2.88 1.85 -3.24 2.34 -3.24C2.88 -3.24 3.52 -2.86 3.52 -1.85Z",
+      "57": "M4.3 -3.35C4.3 -6.25 3.05 -6.72 2.38 -6.72C1.71 -6.72 1.28 -6.42 0.91 -5.94C0.47 -5.39 0.39 -4.9 0.39 -4.33C0.39 -3.65 0.51 -3.23 0.79 -2.75C1.17 -2.13 1.52 -2 1.91 -2C2.5 -2 3.09 -2.29 3.49 -2.79C3.42 -1.44 2.81 -0.46 1.93 -0.46C1.57 -0.46 1.28 -0.57 0.99 -0.84L0.68 -0.31C0.96 -0.07 1.32 0.16 1.93 0.16C3.14 0.16 4.3 -1.18 4.3 -3.35ZM3.47 -4.11C3.47 -3.27 2.99 -2.61 2.29 -2.61C1.83 -2.61 1.59 -2.85 1.41 -3.16C1.19 -3.55 1.18 -3.93 1.18 -4.33C1.18 -4.72 1.18 -5.15 1.46 -5.58C1.67 -5.89 1.93 -6.11 2.38 -6.11C3.3 -6.11 3.45 -4.76 3.46 -4.35C3.47 -4.28 3.47 -4.15 3.47 -4.11Z",
+      "58": "M1.7 -3.5V-4.3H0.9V-3.5ZM1.7 0V-0.8H0.9V0Z",
+      "59": "M1.7 -3.5V-4.3H0.9V-3.5ZM1.7 -0.01V-0.8H0.9V0H1.15L0.89 1.25H1.29Z",
+      "60": "M6.79 0.09C6.79 0.03 6.77 -0.04 6.59 -0.12L1.44 -2.49L6.59 -4.87C6.77 -4.95 6.79 -5.02 6.79 -5.08C6.79 -5.19 6.71 -5.27 6.6 -5.27C6.6 -5.27 6.57 -5.26 6.43 -5.2L1.02 -2.71C0.84 -2.63 0.82 -2.56 0.82 -2.5C0.82 -2.43 0.83 -2.37 1.02 -2.28L6.43 0.21C6.56 0.27 6.6 0.28 6.6 0.28C6.71 0.28 6.79 0.2 6.79 0.09Z",
+      "61": "M6.78 -3.38C6.78 -3.56 6.61 -3.56 6.44 -3.56H0.86C0.69 -3.56 0.52 -3.56 0.52 -3.38C0.52 -3.21 0.67 -3.21 0.82 -3.21H6.48C6.63 -3.21 6.78 -3.21 6.78 -3.38ZM6.78 -1.61C6.78 -1.78 6.63 -1.78 6.48 -1.78H0.82C0.67 -1.78 0.52 -1.78 0.52 -1.61C0.52 -1.43 0.69 -1.43 0.86 -1.43H6.44C6.61 -1.43 6.78 -1.43 6.78 -1.61Z",
+      "62": "M6.79 -2.5C6.79 -2.56 6.77 -2.63 6.59 -2.71L1.18 -5.2C1.05 -5.26 1.01 -5.27 1.01 -5.27C0.89 -5.27 0.82 -5.17 0.82 -5.09C0.82 -4.97 0.9 -4.93 1.03 -4.87L6.17 -2.5L1.02 -0.12C0.82 -0.03 0.82 0.04 0.82 0.1C0.82 0.18 0.89 0.28 1.01 0.28C1.01 0.28 1.04 0.27 1.18 0.21L6.59 -2.28C6.78 -2.37 6.79 -2.43 6.79 -2.5Z",
+      "63": "M3.91 -5.46C3.91 -6.31 3.38 -7.02 2.1 -7.02C1.55 -7.02 1.02 -6.86 0.52 -6.49L0.74 -5.87C1.22 -6.31 1.71 -6.41 2.1 -6.41C2.62 -6.41 3.15 -6.28 3.15 -5.48C3.15 -5.02 2.95 -4.83 2.86 -4.74C1.9 -3.83 1.76 -2.82 1.76 -2.21V-1.69H2.4V-2.17C2.4 -3.25 3.03 -3.96 3.39 -4.27C3.57 -4.43 3.91 -4.75 3.91 -5.46ZM2.48 0V-0.8H1.68V0Z",
+      "64": "M5.73 -0.87H5.26C5.11 -0.87 5.09 -0.87 4.99 -0.82C4.57 -0.63 4.13 -0.53 3.67 -0.53C2.33 -0.53 1.28 -1.85 1.28 -3.47C1.28 -5.2 2.43 -6.41 3.63 -6.41C4.01 -6.41 4.48 -6.21 4.73 -5.5C4.49 -5.64 4.24 -5.72 3.98 -5.72C3.06 -5.72 2.23 -4.77 2.23 -3.47C2.23 -2.17 3.07 -1.22 3.98 -1.22C4.58 -1.22 5.73 -1.75 5.73 -3.63C5.73 -4.46 5.73 -7.02 3.63 -7.02C2.02 -7.02 0.52 -5.53 0.52 -3.47C0.52 -1.45 1.97 0.08 3.65 0.08C4.73 0.08 5.46 -0.54 5.73 -0.87ZM4.97 -3.47C4.97 -2.53 4.51 -1.83 3.98 -1.83C3.45 -1.83 2.99 -2.53 2.99 -3.47C2.99 -4.41 3.45 -5.11 3.98 -5.11C4.51 -5.11 4.97 -4.41 4.97 -3.47Z",
+      "65": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65Z",
+      "66": "M5.73 -1.88C5.73 -2.64 5.08 -3.41 3.91 -3.63C5.21 -4.01 5.47 -4.77 5.47 -5.2C5.47 -6.1 4.49 -6.94 3.12 -6.94H0.89V0H3.38C4.74 0 5.73 -0.9 5.73 -1.88ZM4.69 -5.19C4.69 -4.59 4.05 -3.91 2.76 -3.91H1.7V-6.38H2.85C3.88 -6.38 4.69 -5.85 4.69 -5.19ZM4.94 -1.89C4.94 -1.21 4.21 -0.56 3.1 -0.56H1.7V-3.3H3.03C4.11 -3.3 4.94 -2.63 4.94 -1.89Z",
+      "67": "M5.47 -0.47 5.41 -1.15C5.14 -0.96 4.88 -0.77 4.56 -0.67C4.25 -0.57 3.93 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.44 -2.71 1.44 -3.43C1.44 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.9 -6.31 4.18 -6.28 4.45 -6.19C4.73 -6.11 4.98 -5.96 5.23 -5.81L5.37 -6.61C5.09 -6.72 4.8 -6.81 4.5 -6.87C4.21 -6.93 3.91 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C3.94 0.08 4.27 0.07 4.59 -0.02C4.91 -0.12 5.19 -0.29 5.47 -0.47Z",
+      "68": "M6.25 -3.41C6.25 -5.34 4.99 -6.94 3.35 -6.94H0.89V0H3.35C4.99 0 6.25 -1.54 6.25 -3.41ZM5.43 -3.41C5.43 -1.74 4.48 -0.56 3.13 -0.56H1.71V-6.38H3.13C4.47 -6.38 5.43 -5.15 5.43 -3.41Z",
+      "69": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0Z",
+      "70": "M4.95 -6.27V-6.92H0.88V0H1.72V-3.16H4.56V-3.77H1.72V-6.28H2.94C3.06 -6.28 3.18 -6.27 3.3 -6.27Z",
+      "71": "M5.58 -0.41V-2.91H3.61V-2.29H4.82V-0.75C4.43 -0.62 4.02 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.45 -2.71 1.45 -3.43C1.45 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.93 -6.31 4.24 -6.27 4.54 -6.16C4.84 -6.05 5.11 -5.87 5.36 -5.67L5.5 -6.47C5.21 -6.63 4.91 -6.76 4.59 -6.84C4.26 -6.92 3.94 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C4.29 0.08 4.96 -0.08 5.58 -0.41Z",
+      "72": "M5.74 0V-6.94H4.9V-3.91H1.72V-6.94H0.88V0H1.72V-3.3H4.9V0Z",
+      "73": "M1.71 0V-6.94H0.87V0Z",
+      "74": "M3.65 -1.49V-6.94H2.83V-1.52C2.83 -1.04 2.63 -0.45 1.73 -0.45C1.22 -0.45 0.79 -0.69 0.52 -0.99L0.39 -0.26C1.01 0.07 1.58 0.16 2 0.16C2.97 0.16 3.65 -0.4 3.65 -1.49Z",
+      "75": "M6.11 0 3.49 -4.19 5.98 -6.94H5.02L1.72 -3.31V-6.94H0.88V0H1.72V-2.25L2.93 -3.58L5.18 0Z",
+      "76": "M4.69 0V-0.65H2.61C2.49 -0.65 2.37 -0.64 2.25 -0.64H1.72V-6.94H0.88V0Z",
+      "77": "M7.29 0V-6.94H6.13L4.99 -3.73L4.51 -2.32C4.43 -2.06 4.16 -1.25 4.1 -0.93H4.09C4.06 -1.13 4 -1.34 3.84 -1.85L3.55 -2.74L2.07 -6.94H0.9V0H1.68V-6.13H1.69C1.69 -6.13 1.78 -5.68 2.39 -3.93L3.71 -0.16H4.45L5.64 -3.51L6.08 -4.82C6.18 -5.12 6.43 -5.86 6.49 -6.15H6.5V0Z",
+      "78": "M5.74 0V-6.94H4.96V-0.77L4.95 -0.76L4.43 -1.92L2.29 -6.57L2.11 -6.94H0.88V0H1.66V-6.17L1.67 -6.18L2.19 -5.02L4.33 -0.37L4.51 0Z",
+      "79": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59Z",
+      "80": "M5.47 -4.92C5.47 -6 4.53 -6.94 3.23 -6.94H0.89V0H1.73V-2.89H3.29C4.49 -2.89 5.47 -3.82 5.47 -4.92ZM4.68 -4.92C4.68 -4.24 4.21 -3.47 3.01 -3.47H1.71V-6.38H3.01C4.17 -6.38 4.68 -5.65 4.68 -4.92Z",
+      "81": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C3.81 0.16 4.11 0.08 4.32 0L5.16 1.25H6.14L5 -0.37C6.22 -1.36 6.4 -2.7 6.4 -3.46ZM5.58 -3.46C5.58 -2.82 5.48 -1.75 4.61 -0.93L3.89 -1.94H3.03L3.95 -0.55C3.81 -0.5 3.64 -0.47 3.46 -0.47C2.38 -0.47 1.34 -1.6 1.34 -3.46C1.34 -5.31 2.37 -6.47 3.46 -6.47C4.56 -6.47 5.58 -5.3 5.58 -3.46Z",
+      "82": "M5.79 0 3.94 -3.26 3.96 -3.27C5.52 -3.81 5.53 -4.89 5.53 -5.08C5.53 -6.03 4.57 -6.94 3.13 -6.94H0.89V0H1.71V-3.17H3.18L4.95 0ZM4.74 -5.08C4.74 -4.54 4.34 -3.78 3.02 -3.78H1.71V-6.38H3.02C4.29 -6.38 4.74 -5.66 4.74 -5.08Z",
+      "83": "M4.69 -1.91C4.69 -2.31 4.57 -2.82 4.15 -3.29C3.74 -3.74 3.38 -3.84 2.56 -4.06C2.09 -4.18 1.79 -4.26 1.54 -4.57C1.37 -4.79 1.28 -5 1.28 -5.27C1.28 -5.83 1.76 -6.44 2.64 -6.44C3.08 -6.44 3.65 -6.35 4.23 -5.81L4.37 -6.61C3.93 -6.87 3.45 -7.1 2.64 -7.1C1.35 -7.1 0.52 -6.15 0.52 -5.18C0.52 -4.8 0.63 -4.37 1.02 -3.93C1.41 -3.49 1.85 -3.37 2.41 -3.23C2.64 -3.17 3.03 -3.06 3.1 -3.03C3.66 -2.81 3.93 -2.3 3.93 -1.82C3.93 -1.19 3.44 -0.52 2.57 -0.52C2.27 -0.52 1.39 -0.57 0.56 -1.33L0.42 -0.54C1.24 0.06 2.13 0.16 2.58 0.16C3.81 0.16 4.69 -0.81 4.69 -1.91Z",
+      "84": "M6.06 -6.26V-6.91H0.34V-6.26H1.59C1.71 -6.26 1.83 -6.27 1.95 -6.27H2.78V0H3.62V-6.27H4.45C4.57 -6.27 4.69 -6.26 4.81 -6.26Z",
+      "85": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33Z",
+      "86": "M6.11 -6.94H5.33L3.6 -2.14C3.55 -2 3.24 -1.08 3.18 -0.76H3.17C3.09 -1.14 2.77 -2.03 2.6 -2.52L1.44 -5.77L1.01 -6.94H0.13L2.68 0H3.56Z",
+      "87": "M8.72 -6.94H7.96L7.12 -3.83L6.75 -2.33C6.57 -1.59 6.44 -1.07 6.42 -0.81H6.41C6.39 -1.08 6.26 -1.65 6.1 -2.29L5.71 -3.87L4.88 -6.94H4.04L3.25 -4.03L2.85 -2.44C2.55 -1.18 2.54 -1 2.52 -0.8H2.51C2.51 -0.86 2.47 -1.19 2.19 -2.36L1.76 -4.09L0.99 -6.94H0.13L2.03 0H2.86L3.65 -2.89L4.05 -4.48C4.32 -5.6 4.38 -5.88 4.4 -6.13H4.41C4.41 -6.09 4.5 -5.46 4.89 -4L5.95 0H6.82Z",
+      "88": "M6.11 0 3.46 -3.66 5.72 -6.94H4.8L3.05 -4.34L1.25 -6.94H0.26L2.64 -3.66L0.13 0H1.05L3.05 -3.05L5.12 0Z",
+      "89": "M6.21 -6.94H5.35L3.8 -4.52C3.68 -4.33 3.34 -3.81 3.18 -3.52L2.69 -4.31L1.01 -6.94H0.03L2.71 -2.78V0H3.53V-2.77Z",
+      "90": "M5.27 0V-0.66H4.38L1.88 -0.64H1.58L5.22 -6.53V-6.94H0.65V-6.31H2.52C2.64 -6.31 2.76 -6.32 2.88 -6.32H4.16L0.52 -0.43V0Z",
+      "91": "M2.52 2.49V1.88H1.66V-6.88H2.52V-7.49H0.93V2.49Z",
+      "92": "M4.43 2.3C4.43 2.3 4.43 2.25 4.38 2.12L0.98 -7.28C0.94 -7.39 0.9 -7.5 0.76 -7.5C0.65 -7.5 0.56 -7.41 0.56 -7.3C0.56 -7.3 0.56 -7.25 0.61 -7.12L4.01 2.28C4.05 2.39 4.09 2.5 4.23 2.5C4.34 2.5 4.43 2.41 4.43 2.3Z",
+      "93": "M1.79 2.49V-7.49H0.2V-6.88H1.06V1.88H0.2V2.49Z",
+      "94": "M5.61 -5.84 2.78 -7.44 -0.05 -5.84 0.06 -5.62 2.77 -6.85 5.49 -5.62Z",
+      "95": "M6.25 1.63V0.87H0V1.63Z",
+      "96": "M3.02 -5.18 1.78 -6.94H1.02L2.41 -5.18Z",
+      "97": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94Z",
+      "98": "M4.5 -2.16C4.5 -3.32 3.9 -4.38 3.01 -4.38C2.38 -4.38 1.82 -4.12 1.49 -3.85V-6.94H0.75V0H1.51V-0.45C1.89 -0.08 2.35 0.08 2.76 0.08C3.72 0.08 4.5 -0.89 4.5 -2.16ZM3.74 -2.16C3.74 -0.9 2.94 -0.53 2.39 -0.53C2.19 -0.53 1.98 -0.58 1.78 -0.75C1.51 -0.99 1.51 -1.14 1.51 -1.28V-3.26C1.73 -3.54 2.04 -3.77 2.48 -3.77C3.07 -3.77 3.74 -3.34 3.74 -2.16Z",
+      "99": "M3.91 -0.4 3.85 -1.06C3.42 -0.73 2.92 -0.55 2.38 -0.55C1.6 -0.55 1.09 -1.23 1.09 -2.16C1.09 -2.88 1.42 -3.79 2.42 -3.79C2.97 -3.79 3.28 -3.68 3.74 -3.37L3.85 -3.99C3.85 -4.06 3.39 -4.26 3.27 -4.3C2.94 -4.42 2.52 -4.42 2.41 -4.42C1.11 -4.42 0.33 -3.29 0.33 -2.15C0.33 -0.95 1.2 0.08 2.37 0.08C3.04 0.08 3.52 -0.14 3.91 -0.4Z",
+      "100": "M4.08 0V-6.94H3.34V-3.88C3.03 -4.14 2.52 -4.38 1.96 -4.38C1.05 -4.38 0.33 -3.39 0.33 -2.15C0.33 -0.91 1.04 0.08 1.93 0.08C2.62 0.08 3.08 -0.29 3.32 -0.5V0ZM3.32 -1.34C3.32 -1.2 3.32 -1.05 3.01 -0.78C2.81 -0.61 2.57 -0.53 2.34 -0.53C1.8 -0.53 1.09 -0.93 1.09 -2.14C1.09 -3.4 1.89 -3.77 2.44 -3.77C2.81 -3.77 3.11 -3.59 3.32 -3.29Z",
+      "101": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74Z",
+      "102": "M3.25 -6.28V-6.94C3.02 -6.99 2.74 -7.02 2.52 -7.02C1.59 -7.02 0.94 -6.26 0.94 -5.27V-4.3H0.25V-3.72H0.94V0H1.68V-3.72H2.69V-4.3H1.66V-5.58C1.66 -6.29 2.2 -6.41 2.51 -6.41C2.61 -6.41 2.89 -6.41 3.25 -6.28Z",
+      "103": "M4.56 -3.76 4.45 -4.38C3.88 -4.37 3.39 -4.26 2.99 -4.07C2.66 -4.33 2.32 -4.38 2.09 -4.38C1.22 -4.38 0.56 -3.66 0.56 -2.82C0.56 -2.28 0.86 -1.87 0.88 -1.85C0.7 -1.6 0.6 -1.33 0.6 -1.03C0.6 -0.68 0.74 -0.43 0.85 -0.29C0.33 0.03 0.26 0.52 0.26 0.71C0.26 1.44 1.17 2.04 2.34 2.04C3.52 2.04 4.43 1.44 4.43 0.7C4.43 -0.68 2.9 -0.69 2.48 -0.69H1.67C1.52 -0.69 1.12 -0.69 1.12 -1.2C1.12 -1.4 1.22 -1.54 1.22 -1.54C1.37 -1.43 1.68 -1.26 2.09 -1.26C2.92 -1.26 3.61 -1.96 3.61 -2.82C3.61 -3.3 3.39 -3.65 3.3 -3.77H3.33C3.36 -3.77 3.78 -3.8 3.93 -3.8C4.25 -3.8 4.28 -3.79 4.56 -3.76ZM2.9 -2.82C2.9 -1.95 2.35 -1.81 2.09 -1.81C1.75 -1.81 1.27 -2.02 1.27 -2.82C1.27 -3.69 1.82 -3.83 2.08 -3.83C2.42 -3.83 2.9 -3.62 2.9 -2.82ZM3.72 0.72C3.72 1.15 3.1 1.49 2.35 1.49C1.59 1.49 0.97 1.16 0.97 0.71C0.97 0.66 0.97 0.04 1.66 0.04H2.47C2.71 0.04 3.72 0.04 3.72 0.72Z",
+      "104": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.18 -4.38 1.77 -4.07 1.48 -3.73V-6.94H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0Z",
+      "105": "M1.48 0V-4.3H0.74V0ZM1.54 -5.64V-6.48H0.7V-5.64Z",
+      "106": "M1.74 0.6V-4.3H1V0.69C1 1.29 0.58 1.39 0.31 1.39C0.04 1.39 -0.19 1.29 -0.38 1.08L-0.58 1.69C-0.26 1.89 0.13 2.03 0.55 2.03C1.18 2.03 1.74 1.49 1.74 0.6ZM1.74 -5.64V-6.48H0.9V-5.64Z",
+      "107": "M4.41 0 2.65 -2.65 4.2 -4.3H3.24L1.49 -2.44V-6.94H0.75V0H1.48V-1.4L2.15 -2.11L3.56 0Z",
+      "108": "M1.48 0V-6.94H0.74V0Z",
+      "109": "M6.7 0V-2.92C6.7 -3.59 6.53 -4.38 5.41 -4.38C4.66 -4.38 4.21 -3.91 4.01 -3.62C3.83 -4.15 3.41 -4.38 2.81 -4.38C2.13 -4.38 1.7 -3.99 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.01 1.72 -3.77 2.43 -3.77C3.34 -3.77 3.34 -3.13 3.34 -2.84V0H4.1V-2.42C4.1 -3.01 4.32 -3.77 5.03 -3.77C5.94 -3.77 5.94 -3.13 5.94 -2.84V0Z",
+      "110": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.17 -4.38 1.75 -4.05 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0Z",
+      "111": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22Z",
+      "112": "M4.5 -2.16C4.5 -3.34 3.9 -4.38 3.04 -4.38C2.54 -4.38 1.94 -4.2 1.49 -3.84V-4.3H0.75V1.95H1.51V-0.45C1.84 -0.13 2.29 0.08 2.77 0.08C3.7 0.08 4.5 -0.88 4.5 -2.16ZM3.74 -2.16C3.74 -1.17 3.06 -0.53 2.39 -0.53C2.19 -0.53 1.98 -0.58 1.78 -0.75C1.51 -0.99 1.51 -1.14 1.51 -1.28V-3.25C1.59 -3.37 1.93 -3.75 2.48 -3.75C3.18 -3.75 3.74 -3.03 3.74 -2.16Z",
+      "113": "M4.08 1.95V-4.38H3.34V-3.77C3.3 -3.82 2.84 -4.38 2.06 -4.38C1.15 -4.38 0.33 -3.45 0.33 -2.14C0.33 -0.93 1.02 0.08 1.92 0.08C2.34 0.08 2.87 -0.07 3.32 -0.5V1.95ZM3.34 -1.37C3.34 -1.24 3.34 -1.06 3.03 -0.8C2.95 -0.73 2.73 -0.53 2.35 -0.53C1.64 -0.53 1.09 -1.27 1.09 -2.14C1.09 -3.11 1.76 -3.75 2.44 -3.75C3.01 -3.75 3.34 -3.19 3.34 -2.77Z",
+      "114": "M3.06 -3.72V-4.38C2.42 -4.37 1.82 -4.05 1.46 -3.53V-4.33H0.75V0H1.49V-2.13C1.49 -3.07 2.18 -3.7 3.06 -3.72Z",
+      "115": "M3.38 -1.24C3.38 -1.73 3.1 -2.06 2.91 -2.21C2.58 -2.47 2.46 -2.5 1.64 -2.67C1.5 -2.69 1.01 -2.8 1.01 -3.25C1.01 -3.82 1.64 -3.82 1.78 -3.82C2.43 -3.82 2.83 -3.62 3.1 -3.47L3.22 -4.12C2.63 -4.4 2.17 -4.42 1.87 -4.42C1.16 -4.42 0.31 -4.17 0.31 -3.16C0.31 -2.15 1.41 -1.93 1.71 -1.87C2.17 -1.78 2.68 -1.68 2.68 -1.18C2.68 -0.55 1.96 -0.55 1.83 -0.55C1.43 -0.55 0.88 -0.66 0.38 -1.02L0.26 -0.35C0.83 -0.02 1.38 0.08 1.84 0.08C3.07 0.08 3.38 -0.67 3.38 -1.24Z",
+      "116": "M3.13 -0.29 2.97 -0.88C2.73 -0.67 2.44 -0.55 2.13 -0.55C1.69 -0.55 1.67 -1.11 1.67 -1.36V-3.72H2.97V-4.3H1.67V-5.53H0.96V-4.3H0.17V-3.72H0.94V-1.19C0.94 -0.62 1.07 0.08 1.73 0.08C2.23 0.08 2.69 -0.06 3.13 -0.29Z",
+      "117": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0Z",
+      "118": "M4.18 -4.3H3.4L2.73 -2.43C2.52 -1.82 2.22 -0.98 2.17 -0.55H2.16C2.14 -0.73 2.06 -0.99 2.01 -1.17L1.81 -1.83L0.93 -4.3H0.13L1.71 0H2.6Z",
+      "119": "M6.27 -4.3H5.51L4.98 -2.5C4.87 -2.12 4.56 -1.07 4.52 -0.58H4.51C4.49 -0.88 4.32 -1.6 4.04 -2.55L3.53 -4.3H2.84L2.34 -2.59C2.09 -1.72 1.9 -0.98 1.88 -0.58H1.87C1.83 -1.17 1.42 -2.55 1.36 -2.77L0.91 -4.3H0.13L1.43 0H2.19C2.71 -1.72 3.11 -3.05 3.14 -3.72C3.16 -3.39 3.33 -2.68 3.43 -2.33L4.09 0H4.97Z",
+      "120": "M4.31 0 2.48 -2.22 4.15 -4.3H3.28L2.13 -2.79L0.94 -4.3H0.05L1.78 -2.22L0 0H0.88L2.13 -1.76L3.43 0Z",
+      "121": "M4.18 -4.3H3.4C2.55 -2.01 2.26 -1.08 2.24 -0.58H2.23C2.2 -1.07 1.76 -2.27 1.41 -3.13L0.94 -4.3H0.13L1.9 0C1.79 0.3 1.63 0.75 1.58 0.85C1.36 1.41 1.21 1.41 1.05 1.41C1.01 1.41 0.69 1.4 0.33 1.29L0.39 1.95C0.64 2 0.89 2.03 1.07 2.03C1.32 2.03 1.82 2.03 2.28 0.8Z",
+      "122": "M3.78 0V-0.62H2.42C2.3 -0.62 2.18 -0.61 2.06 -0.61H1.29L3.75 -3.91V-4.3H0.39V-3.7H1.67C1.79 -3.7 1.91 -3.71 2.03 -3.71H2.73L0.26 -0.41V0Z",
+      "123": "M4.27 2.39C4.27 2.29 4.21 2.29 4.11 2.28C3.32 2.23 2.95 1.78 2.86 1.42C2.83 1.31 2.83 1.29 2.83 0.94V-0.56C2.83 -0.86 2.83 -1.37 2.81 -1.47C2.68 -2.13 2.04 -2.39 1.65 -2.5C2.83 -2.84 2.83 -3.55 2.83 -3.83V-5.63C2.83 -6.35 2.83 -6.57 3.07 -6.82C3.25 -7 3.48 -7.24 4.18 -7.28C4.23 -7.29 4.27 -7.33 4.27 -7.39C4.27 -7.5 4.19 -7.5 4.07 -7.5C3.07 -7.5 2.18 -6.99 2.16 -6.27V-4.44C2.16 -3.5 2.16 -3.34 1.9 -3.06C1.76 -2.92 1.49 -2.65 0.86 -2.61C0.79 -2.61 0.72 -2.6 0.72 -2.5C0.72 -2.4 0.78 -2.4 0.88 -2.39C1.31 -2.36 2.16 -2.15 2.16 -1.15V0.83C2.16 1.41 2.16 1.75 2.68 2.12C3.11 2.42 3.76 2.5 4.07 2.5C4.19 2.5 4.27 2.5 4.27 2.39Z",
+      "124": "M1.59 2.17V-7.17C1.59 -7.31 1.59 -7.5 1.39 -7.5C1.19 -7.5 1.19 -7.31 1.19 -7.17V2.17C1.19 2.31 1.19 2.5 1.39 2.5C1.59 2.5 1.59 2.31 1.59 2.17Z",
+      "125": "M4.27 -2.5C4.27 -2.6 4.21 -2.6 4.11 -2.61C3.68 -2.64 2.83 -2.85 2.83 -3.85V-5.83C2.83 -6.41 2.83 -6.75 2.31 -7.12C1.88 -7.41 1.24 -7.5 0.92 -7.5C0.82 -7.5 0.72 -7.5 0.72 -7.39C0.72 -7.29 0.78 -7.29 0.88 -7.28C1.67 -7.23 2.04 -6.78 2.13 -6.42C2.16 -6.31 2.16 -6.29 2.16 -5.94V-4.44C2.16 -4.14 2.16 -3.63 2.18 -3.53C2.31 -2.87 2.95 -2.61 3.34 -2.5C2.16 -2.16 2.16 -1.45 2.16 -1.17V0.63C2.16 1.35 2.16 1.57 1.92 1.82C1.74 2 1.51 2.24 0.81 2.28C0.76 2.29 0.72 2.33 0.72 2.39C0.72 2.5 0.82 2.5 0.92 2.5C1.92 2.5 2.81 1.99 2.83 1.27V-0.56C2.83 -1.5 2.83 -1.66 3.09 -1.94C3.23 -2.08 3.5 -2.35 4.13 -2.39C4.2 -2.39 4.27 -2.4 4.27 -2.5Z",
+      "126": "M5.55 -2.9 5.41 -3.07C4.92 -2.66 4.39 -2.36 3.88 -2.36C3.48 -2.36 3.19 -2.53 2.84 -2.73C2.55 -2.9 2.24 -3.07 1.84 -3.07C1.59 -3.07 1.33 -2.99 1.11 -2.89C0.91 -2.79 0.71 -2.68 0.54 -2.54L0 -2.1L0.14 -1.93C0.63 -2.34 1.16 -2.64 1.67 -2.64C2.07 -2.64 2.36 -2.47 2.71 -2.27C3 -2.1 3.31 -1.93 3.71 -1.93C3.96 -1.93 4.22 -2.01 4.44 -2.11C4.64 -2.21 4.84 -2.32 5.01 -2.46Z",
+      "192": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM4.07 -7.4 2.32 -8.62H1.21L3.18 -7.4Z",
+      "193": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM5.03 -8.62H3.92L2.17 -7.4H3.06Z",
+      "194": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM4.68 -7.3 3.42 -8.64H2.82L1.56 -7.3H2.15L3.12 -8.27L4.09 -7.3Z",
+      "195": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM4.69 -8.47H4.08C4.08 -8.23 4.02 -7.91 3.74 -7.91C3.59 -7.91 3.41 -7.99 3.21 -8.14C2.94 -8.33 2.75 -8.47 2.48 -8.47C2.07 -8.47 1.58 -8.09 1.56 -7.3H2.17C2.17 -7.54 2.23 -7.86 2.51 -7.86C2.66 -7.86 2.84 -7.78 3.04 -7.63C3.31 -7.44 3.5 -7.3 3.77 -7.3C4.18 -7.3 4.67 -7.68 4.69 -8.47Z",
+      "196": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM2.68 -7.3V-8.05H1.92V-7.3ZM4.32 -7.3V-8.05H3.56V-7.3Z",
+      "197": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM3.59 -7.82C3.59 -7.51 3.34 -7.43 3.12 -7.43C2.92 -7.43 2.65 -7.5 2.65 -7.82C2.65 -8.13 2.9 -8.21 3.12 -8.21C3.32 -8.21 3.59 -8.14 3.59 -7.82ZM4.17 -7.82C4.17 -8.28 3.72 -8.7 3.12 -8.7C2.52 -8.7 2.07 -8.28 2.07 -7.82C2.07 -7.36 2.52 -6.94 3.12 -6.94C3.72 -6.94 4.17 -7.36 4.17 -7.82Z",
+      "198": "M7.69 0V-0.69L5.83 -0.68C5.07 -0.68 4.87 -0.68 4.76 -0.67V-3.3H7.3V-3.91H4.76V-6.3H5.77C5.89 -6.3 6.01 -6.29 6.13 -6.29H7.56V-6.94H2.91L0.26 0H1.02L1.87 -2.22H3.93V0ZM3.93 -2.78H2.09L3.43 -6.3H3.93Z",
+      "199": "M5.53 -0.4 5.5 -0.73C5.5 -0.82 5.47 -0.98 5.46 -1.08C4.86 -0.61 4.44 -0.48 3.73 -0.48C2.29 -0.48 1.46 -1.97 1.46 -3.47C1.46 -5.06 2.38 -6.46 3.7 -6.46C4.15 -6.46 4.67 -6.38 5.29 -5.95L5.43 -6.75C4.84 -6.99 4.32 -7.1 3.71 -7.1C1.9 -7.1 0.62 -5.4 0.62 -3.47C0.62 -1.56 1.87 0.16 3.72 0.16C4.52 0.16 4.89 0.02 5.53 -0.4ZM3.76 0.34H3.15L2.46 2.02H3.14Z",
+      "200": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM3.75 -7.4 2 -8.62H0.89L2.86 -7.4Z",
+      "201": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM4.71 -8.62H3.6L1.85 -7.4H2.74Z",
+      "202": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM4.36 -7.3 3.1 -8.64H2.5L1.24 -7.3H1.83L2.8 -8.27L3.77 -7.3Z",
+      "203": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM2.36 -7.3V-8.05H1.6V-7.3ZM4 -7.3V-8.05H3.24V-7.3Z",
+      "204": "M1.71 0V-6.94H0.87V0ZM1.71 -7.4 -0.04 -8.62H-1.15L0.82 -7.4Z",
+      "205": "M1.71 0V-6.94H0.87V0ZM3.73 -8.62H2.62L0.87 -7.4H1.76Z",
+      "206": "M1.71 0V-6.94H0.87V0ZM2.85 -7.3 1.59 -8.64H0.99L-0.27 -7.3H0.32L1.29 -8.27L2.26 -7.3Z",
+      "207": "M1.71 0V-6.94H0.87V0ZM0.85 -7.3V-8.05H0.09V-7.3ZM2.49 -7.3V-8.05H1.73V-7.3Z",
+      "208": "M6.25 -3.41C6.25 -5.34 4.99 -6.94 3.35 -6.94H0.89V-3.79H0.13V-3.15H0.89V0H3.35C4.99 0 6.25 -1.54 6.25 -3.41ZM5.43 -3.41C5.43 -1.74 4.48 -0.56 3.13 -0.56H1.71V-3.15H2.63V-3.79H1.71V-6.38H3.13C4.47 -6.38 5.43 -5.15 5.43 -3.41Z",
+      "209": "M5.74 0V-6.94H4.96V-0.77L4.95 -0.76L4.43 -1.92L2.29 -6.57L2.11 -6.94H0.88V0H1.66V-6.17L1.67 -6.18L2.19 -5.02L4.33 -0.37L4.51 0ZM4.88 -8.47H4.27C4.27 -8.23 4.21 -7.91 3.93 -7.91C3.78 -7.91 3.6 -7.99 3.4 -8.14C3.13 -8.33 2.94 -8.47 2.67 -8.47C2.26 -8.47 1.77 -8.09 1.75 -7.3H2.36C2.36 -7.54 2.42 -7.86 2.7 -7.86C2.85 -7.86 3.03 -7.78 3.23 -7.63C3.5 -7.44 3.69 -7.3 3.96 -7.3C4.37 -7.3 4.86 -7.68 4.88 -8.47Z",
+      "210": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM4.41 -7.4 2.66 -8.62H1.55L3.52 -7.4Z",
+      "211": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM5.37 -8.62H4.26L2.51 -7.4H3.4Z",
+      "212": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM5.02 -7.3 3.76 -8.64H3.16L1.9 -7.3H2.49L3.46 -8.27L4.43 -7.3Z",
+      "213": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM5.03 -8.47H4.42C4.42 -8.23 4.36 -7.91 4.08 -7.91C3.93 -7.91 3.75 -7.99 3.55 -8.14C3.28 -8.33 3.09 -8.47 2.82 -8.47C2.41 -8.47 1.92 -8.09 1.9 -7.3H2.51C2.51 -7.54 2.57 -7.86 2.85 -7.86C3 -7.86 3.18 -7.78 3.38 -7.63C3.65 -7.44 3.84 -7.3 4.11 -7.3C4.52 -7.3 5.01 -7.68 5.03 -8.47Z",
+      "214": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM3.02 -7.3V-8.05H2.26V-7.3ZM4.66 -7.3V-8.05H3.9V-7.3Z",
+      "215": "M5.87 -0.28C5.99 -0.41 5.88 -0.52 5.77 -0.62L3.9 -2.5L5.77 -4.37C5.87 -4.46 5.99 -4.58 5.87 -4.7C5.74 -4.83 5.63 -4.72 5.52 -4.61L3.65 -2.75L1.78 -4.62C1.68 -4.72 1.56 -4.84 1.44 -4.72C1.31 -4.59 1.43 -4.48 1.53 -4.37L3.41 -2.5L1.53 -0.62C1.43 -0.53 1.31 -0.41 1.43 -0.29C1.56 -0.16 1.67 -0.27 1.78 -0.38L3.65 -2.25L5.53 -0.38C5.63 -0.28 5.75 -0.16 5.87 -0.28Z",
+      "216": "M6.78 -3.46C6.78 -5.16 5.85 -6.06 5.54 -6.36L6.03 -7.28L5.47 -7.58L5.02 -6.73C4.74 -6.89 4.25 -7.1 3.65 -7.1C1.96 -7.1 0.52 -5.51 0.52 -3.46C0.52 -2.33 0.96 -1.27 1.76 -0.58L1.27 0.34L1.83 0.64L2.21 -0.08C2.27 -0.18 2.29 -0.19 2.29 -0.19C2.29 -0.19 2.32 -0.19 2.44 -0.13C2.86 0.08 3.29 0.16 3.65 0.16C5.32 0.16 6.78 -1.39 6.78 -3.46ZM4.72 -6.17 2.08 -1.2C1.41 -2.02 1.36 -3 1.36 -3.46C1.36 -5.41 2.49 -6.49 3.65 -6.49C4.1 -6.49 4.48 -6.32 4.72 -6.17ZM5.94 -3.46C5.94 -1.47 4.78 -0.45 3.65 -0.45C3.26 -0.45 2.91 -0.57 2.58 -0.77L5.21 -5.73C5.86 -4.96 5.94 -3.98 5.94 -3.46Z",
+      "217": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM4.17 -7.4 2.42 -8.62H1.31L3.28 -7.4Z",
+      "218": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM5.13 -8.62H4.02L2.27 -7.4H3.16Z",
+      "219": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM4.78 -7.3 3.52 -8.64H2.92L1.66 -7.3H2.25L3.22 -8.27L4.19 -7.3Z",
+      "220": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM2.78 -7.3V-8.05H2.02V-7.3ZM4.42 -7.3V-8.05H3.66V-7.3Z",
+      "221": "M6.21 -6.94H5.35L3.8 -4.52C3.68 -4.33 3.34 -3.81 3.18 -3.52L2.69 -4.31L1.01 -6.94H0.03L2.71 -2.78V0H3.53V-2.77ZM5.03 -8.62H3.92L2.17 -7.4H3.06Z",
+      "222": "M4.94 -3.67C4.94 -4.49 4.31 -5.56 2.88 -5.56H1.59V-6.83H0.99V0H1.59V-1.78H2.98C4.14 -1.78 4.94 -2.68 4.94 -3.67ZM4.31 -3.66C4.31 -3.01 3.74 -2.26 2.71 -2.26H1.59V-5.08H2.5C3.78 -5.08 4.31 -4.27 4.31 -3.66Z",
+      "223": "M4.24 -1.74C4.24 -3 3.47 -3.74 3.09 -3.99C3.78 -4.41 3.98 -5.05 3.98 -5.5C3.98 -6.34 3.26 -7.02 2.36 -7.02C1.6 -7.02 0.75 -6.48 0.75 -5.45V0H1.49V-5.43C1.49 -6.41 2.28 -6.41 2.36 -6.41C2.82 -6.41 3.23 -6.1 3.23 -5.5C3.23 -4.95 2.86 -4.32 2.01 -4.3V-3.69C2.95 -3.67 3.49 -2.74 3.49 -1.74C3.49 -0.94 3.07 -0.53 2.58 -0.53C2.55 -0.53 2.27 -0.53 1.98 -0.65L1.76 -0.07C1.83 -0.04 2.19 0.08 2.58 0.08C3.51 0.08 4.24 -0.71 4.24 -1.74Z",
+      "224": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM2.92 -5.18 1.68 -6.94H0.92L2.31 -5.18Z",
+      "225": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM3.58 -6.94H2.82L1.58 -5.18H2.19Z",
+      "226": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM3.8 -5.2 2.55 -6.92H1.95L0.7 -5.2H1.29L2.25 -6.43L3.21 -5.2Z",
+      "227": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM3.82 -6.65H3.21C3.21 -6.41 3.15 -6.09 2.87 -6.09C2.72 -6.09 2.54 -6.17 2.34 -6.32C2.07 -6.51 1.88 -6.65 1.61 -6.65C1.2 -6.65 0.71 -6.27 0.69 -5.48H1.3C1.3 -5.72 1.36 -6.04 1.64 -6.04C1.79 -6.04 1.97 -5.96 2.17 -5.81C2.44 -5.62 2.63 -5.48 2.9 -5.48C3.31 -5.48 3.8 -5.86 3.82 -6.65Z",
+      "228": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM1.93 -5.69V-6.44H1.17V-5.69ZM3.33 -5.69V-6.44H2.57V-5.69Z",
+      "229": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM2.72 -5.95C2.72 -5.64 2.47 -5.56 2.25 -5.56C2.05 -5.56 1.78 -5.63 1.78 -5.95C1.78 -6.26 2.03 -6.34 2.25 -6.34C2.45 -6.34 2.72 -6.27 2.72 -5.95ZM3.3 -5.95C3.3 -6.41 2.85 -6.83 2.25 -6.83C1.65 -6.83 1.2 -6.41 1.2 -5.95C1.2 -5.49 1.65 -5.07 2.25 -5.07C2.85 -5.07 3.3 -5.49 3.3 -5.95Z",
+      "230": "M6.52 -2.19C6.52 -2.52 6.52 -4.42 4.93 -4.42C4.49 -4.42 3.95 -4.22 3.53 -3.71C3.26 -4.12 2.83 -4.42 2.2 -4.42C1.84 -4.42 1.31 -4.37 0.72 -4.02L0.78 -3.36C1.15 -3.62 1.57 -3.83 2.19 -3.83C2.67 -3.83 3.01 -3.46 3.01 -2.82V-2.46C1.9 -2.46 0.42 -2.12 0.42 -1.16C0.42 -0.82 0.6 0.08 1.51 0.08C1.55 0.08 2.16 0.08 2.67 -0.08C2.9 -0.15 3.3 -0.28 3.56 -0.63C3.6 -0.58 4.15 0.08 5.08 0.08C5.54 0.08 6.04 -0.07 6.47 -0.41C6.47 -0.45 6.44 -0.68 6.44 -0.68C6.44 -0.68 6.41 -1.01 6.41 -1.05C5.96 -0.65 5.45 -0.53 5.09 -0.53C4.38 -0.53 3.78 -1.2 3.77 -2.19ZM5.85 -2.74H3.84C4.02 -3.42 4.49 -3.81 4.93 -3.81C5.31 -3.81 5.74 -3.54 5.85 -2.74ZM3.05 -1.25C3.05 -0.53 2.07 -0.53 1.98 -0.53C1.47 -0.53 1.15 -0.83 1.15 -1.17C1.15 -1.83 2.59 -1.9 3.02 -1.92L3.03 -1.75C3.05 -1.57 3.05 -1.42 3.05 -1.25Z",
+      "231": "M3.91 -0.4 3.85 -1.06C3.42 -0.73 2.92 -0.55 2.38 -0.55C1.6 -0.55 1.09 -1.23 1.09 -2.16C1.09 -2.88 1.42 -3.79 2.42 -3.79C2.97 -3.79 3.28 -3.68 3.74 -3.37L3.85 -3.99C3.85 -4.06 3.39 -4.26 3.27 -4.3C2.94 -4.42 2.52 -4.42 2.41 -4.42C1.11 -4.42 0.33 -3.29 0.33 -2.15C0.33 -0.95 1.2 0.08 2.37 0.08C3.04 0.08 3.52 -0.14 3.91 -0.4ZM2.75 0.34H2.14L1.45 2.02H2.13Z",
+      "232": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM2.76 -5.18 1.52 -6.94H0.76L2.15 -5.18Z",
+      "233": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM3.42 -6.94H2.66L1.42 -5.18H2.03Z",
+      "234": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM3.64 -5.2 2.39 -6.92H1.79L0.54 -5.2H1.13L2.09 -6.43L3.05 -5.2Z",
+      "235": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM1.77 -5.69V-6.44H1.01V-5.69ZM3.17 -5.69V-6.44H2.41V-5.69Z",
+      "236": "M1.48 0V-4.3H0.74V0ZM1.48 -5.18 0.24 -6.94H-0.52L0.87 -5.18Z",
+      "237": "M1.48 0V-4.3H0.74V0ZM2.74 -6.94H1.98L0.74 -5.18H1.35Z",
+      "238": "M1.48 0V-4.3H0.74V0ZM2.66 -5.2 1.41 -6.92H0.81L-0.44 -5.2H0.15L1.11 -6.43L2.07 -5.2Z",
+      "239": "M1.48 0V-4.3H0.74V0ZM0.79 -5.69V-6.44H0.03V-5.69ZM2.19 -5.69V-6.44H1.43V-5.69Z",
+      "240": "M4.3 -2.13C4.33 -3.68 3.71 -5.15 2.62 -6.16L3.38 -6.75L3.08 -7.14L2.24 -6.48C1.89 -6.75 1.5 -6.98 1.07 -7.15L0.8 -6.74C1.16 -6.58 1.5 -6.38 1.81 -6.15L1.06 -5.56L1.36 -5.17L2.2 -5.83C2.74 -5.35 3.17 -4.75 3.44 -4.06C3.05 -4.33 2.67 -4.42 2.35 -4.42C1.28 -4.42 0.39 -3.4 0.39 -2.14C0.39 -0.85 1.32 0.08 2.34 0.08C3.29 0.08 4.27 -0.74 4.3 -2.13ZM3.77 -2.18C3.77 -1.23 3.19 -0.44 2.35 -0.44C1.56 -0.44 0.92 -1.13 0.92 -2.23C0.92 -3.33 1.61 -3.92 2.34 -3.92C3.2 -3.92 3.77 -3.13 3.77 -2.18Z",
+      "241": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.17 -4.38 1.75 -4.05 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0ZM3.99 -6.65H3.38C3.38 -6.41 3.32 -6.09 3.04 -6.09C2.89 -6.09 2.71 -6.17 2.51 -6.32C2.24 -6.51 2.05 -6.65 1.78 -6.65C1.37 -6.65 0.88 -6.27 0.86 -5.48H1.47C1.47 -5.72 1.53 -6.04 1.81 -6.04C1.96 -6.04 2.14 -5.96 2.34 -5.81C2.61 -5.62 2.8 -5.48 3.07 -5.48C3.48 -5.48 3.97 -5.86 3.99 -6.65Z",
+      "242": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM3.02 -5.18 1.78 -6.94H1.02L2.41 -5.18Z",
+      "243": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM3.68 -6.94H2.92L1.68 -5.18H2.29Z",
+      "244": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM3.9 -5.2 2.65 -6.92H2.05L0.8 -5.2H1.39L2.35 -6.43L3.31 -5.2Z",
+      "245": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM3.92 -6.65H3.31C3.31 -6.41 3.25 -6.09 2.97 -6.09C2.82 -6.09 2.64 -6.17 2.44 -6.32C2.17 -6.51 1.98 -6.65 1.71 -6.65C1.3 -6.65 0.81 -6.27 0.79 -5.48H1.4C1.4 -5.72 1.46 -6.04 1.74 -6.04C1.89 -6.04 2.07 -5.96 2.27 -5.81C2.54 -5.62 2.73 -5.48 3 -5.48C3.41 -5.48 3.9 -5.86 3.92 -6.65Z",
+      "246": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM2.03 -5.69V-6.44H1.27V-5.69ZM3.43 -5.69V-6.44H2.67V-5.69Z",
+      "247": "M6.78 -2.5C6.78 -2.68 6.61 -2.68 6.44 -2.68H0.86C0.69 -2.68 0.52 -2.68 0.52 -2.5C0.52 -2.33 0.67 -2.33 0.82 -2.33H6.48C6.63 -2.33 6.78 -2.33 6.78 -2.5ZM4.05 -3.32V-4.12H3.25V-3.32ZM4.05 -0.9V-1.7H3.25V-0.9Z",
+      "248": "M4.42 -2.14C4.42 -2.83 4.13 -3.47 3.65 -3.92L4.31 -5.13L3.77 -5.43L3.14 -4.25C3.01 -4.31 2.7 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -1.41 0.6 -0.77 1.05 -0.41L0.38 0.82L0.92 1.12L1.57 -0.08C1.73 -0.01 2.01 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM2.84 -3.71 1.37 -1.01C1.07 -1.39 1.03 -1.85 1.03 -2.14C1.03 -3.28 1.68 -3.81 2.35 -3.81C2.52 -3.81 2.69 -3.78 2.84 -3.71ZM3.66 -2.14C3.66 -1.01 2.98 -0.53 2.34 -0.53C2.18 -0.53 2.02 -0.56 1.87 -0.62L3.32 -3.31C3.61 -2.93 3.66 -2.45 3.66 -2.14Z",
+      "249": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM3.09 -5.18 1.85 -6.94H1.09L2.48 -5.18Z",
+      "250": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM3.75 -6.94H2.99L1.75 -5.18H2.36Z",
+      "251": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM3.97 -5.2 2.72 -6.92H2.12L0.87 -5.2H1.46L2.42 -6.43L3.38 -5.2Z",
+      "252": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM2.1 -5.69V-6.44H1.34V-5.69ZM3.5 -5.69V-6.44H2.74V-5.69Z",
+      "253": "M4.18 -4.3H3.4C2.55 -2.01 2.26 -1.08 2.24 -0.58H2.23C2.2 -1.07 1.76 -2.27 1.41 -3.13L0.94 -4.3H0.13L1.9 0C1.79 0.3 1.63 0.75 1.58 0.85C1.36 1.41 1.21 1.41 1.05 1.41C1.01 1.41 0.69 1.4 0.33 1.29L0.39 1.95C0.64 2 0.89 2.03 1.07 2.03C1.32 2.03 1.82 2.03 2.28 0.8ZM3.49 -6.94H2.73L1.49 -5.18H2.1Z",
+      "254": "M4.5 -2.16C4.5 -3.34 3.9 -4.38 3.04 -4.38C2.54 -4.38 1.94 -4.2 1.49 -3.84V-6.94H0.75V1.95H1.51V-0.45C1.84 -0.13 2.29 0.08 2.77 0.08C3.7 0.08 4.5 -0.88 4.5 -2.16ZM3.74 -2.16C3.74 -1.17 3.06 -0.53 2.39 -0.53C2.19 -0.53 1.98 -0.58 1.78 -0.75C1.51 -0.99 1.51 -1.14 1.51 -1.28V-3.25C1.59 -3.37 1.93 -3.75 2.48 -3.75C3.18 -3.75 3.74 -3.03 3.74 -2.16Z",
+      "255": "M4.18 -4.3H3.4C2.55 -2.01 2.26 -1.08 2.24 -0.58H2.23C2.2 -1.07 1.76 -2.27 1.41 -3.13L0.94 -4.3H0.13L1.9 0C1.79 0.3 1.63 0.75 1.58 0.85C1.36 1.41 1.21 1.41 1.05 1.41C1.01 1.41 0.69 1.4 0.33 1.29L0.39 1.95C0.64 2 0.89 2.03 1.07 2.03C1.32 2.03 1.82 2.03 2.28 0.8ZM1.84 -5.69V-6.44H1.08V-5.69ZM3.24 -5.69V-6.44H2.48V-5.69Z",
+      "256": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM4.82 -7.5V-8.14H1.43V-7.5Z",
+      "257": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM3.95 -5.74V-6.38H0.56V-5.74Z",
+      "258": "M5.98 0 3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65ZM4.73 -9.33H4.12C4.1 -8.53 3.63 -8.06 3.13 -8.06C2.59 -8.06 2.15 -8.55 2.13 -9.33H1.52C1.55 -8.13 2.3 -7.4 3.12 -7.4C3.98 -7.4 4.7 -8.16 4.73 -9.33Z",
+      "259": "M3.86 0V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94ZM3.86 -7.03H3.25C3.23 -6.23 2.76 -5.76 2.26 -5.76C1.72 -5.76 1.28 -6.25 1.26 -7.03H0.65C0.68 -5.83 1.43 -5.1 2.25 -5.1C3.11 -5.1 3.83 -5.86 3.86 -7.03Z",
+      "260": "M6.21 1.87 6.07 1.28C5.85 1.37 5.62 1.43 5.4 1.42C5.12 1.4 4.88 1.34 4.87 1.04C4.86 0.6 5.29 0.26 5.75 0H5.98L3.55 -6.94H2.69L0.26 0H1.02L1.72 -2.02H4.4L5.11 0C4.61 0.28 4.21 0.76 4.24 1.27C4.25 1.7 4.56 2.12 5.23 2.12C5.56 2.12 5.81 2.06 6.21 1.87ZM4.21 -2.58H1.91C2.39 -3.98 2.99 -5.72 3.06 -6.17H3.07C3.14 -5.76 3.34 -5.16 3.51 -4.65Z",
+      "261": "M4.22 1.87 4.08 1.28C3.86 1.37 3.63 1.43 3.41 1.42C3.13 1.4 2.89 1.34 2.88 1.04C2.87 0.6 3.29 0.26 3.75 0H3.86V-2.83C3.86 -3.77 3.19 -4.42 2.29 -4.42C1.85 -4.42 1.37 -4.34 0.82 -4.02L0.88 -3.36C1.13 -3.54 1.56 -3.83 2.28 -3.83C2.79 -3.83 3.1 -3.44 3.1 -2.82V-2.44C1.5 -2.39 0.5 -1.93 0.5 -1.14C0.5 -0.73 0.75 0.08 1.58 0.08C1.73 0.08 2.54 0.06 3.12 -0.37V0C2.62 0.28 2.22 0.76 2.25 1.27C2.26 1.7 2.57 2.12 3.24 2.12C3.57 2.12 3.82 2.06 4.22 1.87ZM3.1 -1.32C3.1 -1.14 3.1 -0.9 2.8 -0.72C2.54 -0.55 2.21 -0.53 2.07 -0.53C1.57 -0.53 1.23 -0.81 1.23 -1.16C1.23 -1.86 2.79 -1.93 3.1 -1.94Z",
+      "262": "M5.47 -0.47 5.41 -1.15C5.14 -0.96 4.88 -0.77 4.56 -0.67C4.25 -0.57 3.93 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.44 -2.71 1.44 -3.43C1.44 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.9 -6.31 4.18 -6.28 4.45 -6.19C4.73 -6.11 4.98 -5.96 5.23 -5.81L5.37 -6.61C5.09 -6.72 4.8 -6.81 4.5 -6.87C4.21 -6.93 3.91 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C3.94 0.08 4.27 0.07 4.59 -0.02C4.91 -0.12 5.19 -0.29 5.47 -0.47ZM5.21 -8.62H4.1L2.35 -7.4H3.24Z",
+      "263": "M3.91 -0.4 3.85 -1.06C3.42 -0.73 2.92 -0.55 2.38 -0.55C1.6 -0.55 1.09 -1.23 1.09 -2.16C1.09 -2.88 1.42 -3.79 2.42 -3.79C2.97 -3.79 3.28 -3.68 3.74 -3.37L3.85 -3.99C3.85 -4.06 3.39 -4.26 3.27 -4.3C2.94 -4.42 2.52 -4.42 2.41 -4.42C1.11 -4.42 0.33 -3.29 0.33 -2.15C0.33 -0.95 1.2 0.08 2.37 0.08C3.04 0.08 3.52 -0.14 3.91 -0.4ZM3.63 -6.94H2.87L1.63 -5.18H2.24Z",
+      "264": "M5.47 -0.47 5.41 -1.15C5.14 -0.96 4.88 -0.77 4.56 -0.67C4.25 -0.57 3.93 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.44 -2.71 1.44 -3.43C1.44 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.9 -6.31 4.18 -6.28 4.45 -6.19C4.73 -6.11 4.98 -5.96 5.23 -5.81L5.37 -6.61C5.09 -6.72 4.8 -6.81 4.5 -6.87C4.21 -6.93 3.91 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C3.94 0.08 4.27 0.07 4.59 -0.02C4.91 -0.12 5.19 -0.29 5.47 -0.47ZM4.86 -7.3 3.6 -8.64H3L1.74 -7.3H2.33L3.3 -8.27L4.27 -7.3Z",
+      "265": "M3.91 -0.4 3.85 -1.06C3.42 -0.73 2.92 -0.55 2.38 -0.55C1.6 -0.55 1.09 -1.23 1.09 -2.16C1.09 -2.88 1.42 -3.79 2.42 -3.79C2.97 -3.79 3.28 -3.68 3.74 -3.37L3.85 -3.99C3.85 -4.06 3.39 -4.26 3.27 -4.3C2.94 -4.42 2.52 -4.42 2.41 -4.42C1.11 -4.42 0.33 -3.29 0.33 -2.15C0.33 -0.95 1.2 0.08 2.37 0.08C3.04 0.08 3.52 -0.14 3.91 -0.4ZM3.85 -5.2 2.6 -6.92H2L0.75 -5.2H1.34L2.3 -6.43L3.26 -5.2Z",
+      "266": "M5.47 -0.47 5.41 -1.15C5.14 -0.96 4.88 -0.77 4.56 -0.67C4.25 -0.57 3.93 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.44 -2.71 1.44 -3.43C1.44 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.9 -6.31 4.18 -6.28 4.45 -6.19C4.73 -6.11 4.98 -5.96 5.23 -5.81L5.37 -6.61C5.09 -6.72 4.8 -6.81 4.5 -6.87C4.21 -6.93 3.91 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C3.94 0.08 4.27 0.07 4.59 -0.02C4.91 -0.12 5.19 -0.29 5.47 -0.47ZM3.72 -7.3V-8.14H2.88V-7.3Z",
+      "267": "M3.91 -0.4 3.85 -1.06C3.42 -0.73 2.92 -0.55 2.38 -0.55C1.6 -0.55 1.09 -1.23 1.09 -2.16C1.09 -2.88 1.42 -3.79 2.42 -3.79C2.97 -3.79 3.28 -3.68 3.74 -3.37L3.85 -3.99C3.85 -4.06 3.39 -4.26 3.27 -4.3C2.94 -4.42 2.52 -4.42 2.41 -4.42C1.11 -4.42 0.33 -3.29 0.33 -2.15C0.33 -0.95 1.2 0.08 2.37 0.08C3.04 0.08 3.52 -0.14 3.91 -0.4ZM2.72 -5.64V-6.48H1.88V-5.64Z",
+      "268": "M5.47 -0.47 5.41 -1.15C5.14 -0.96 4.88 -0.77 4.56 -0.67C4.25 -0.57 3.93 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.44 -2.71 1.44 -3.43C1.44 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.9 -6.31 4.18 -6.28 4.45 -6.19C4.73 -6.11 4.98 -5.96 5.23 -5.81L5.37 -6.61C5.09 -6.72 4.8 -6.81 4.5 -6.87C4.21 -6.93 3.91 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C3.94 0.08 4.27 0.07 4.59 -0.02C4.91 -0.12 5.19 -0.29 5.47 -0.47ZM4.86 -8.64H4.27L3.3 -7.67L2.33 -8.64H1.74L3 -7.3H3.6Z",
+      "269": "M3.91 -0.4 3.85 -1.06C3.42 -0.73 2.92 -0.55 2.38 -0.55C1.6 -0.55 1.09 -1.23 1.09 -2.16C1.09 -2.88 1.42 -3.79 2.42 -3.79C2.97 -3.79 3.28 -3.68 3.74 -3.37L3.85 -3.99C3.85 -4.06 3.39 -4.26 3.27 -4.3C2.94 -4.42 2.52 -4.42 2.41 -4.42C1.11 -4.42 0.33 -3.29 0.33 -2.15C0.33 -0.95 1.2 0.08 2.37 0.08C3.04 0.08 3.52 -0.14 3.91 -0.4ZM3.85 -6.92H3.26L2.3 -5.69L1.34 -6.92H0.75L2 -5.2H2.6Z",
+      "270": "M6.25 -3.41C6.25 -5.34 4.99 -6.94 3.35 -6.94H0.89V0H3.35C4.99 0 6.25 -1.54 6.25 -3.41ZM5.43 -3.41C5.43 -1.74 4.48 -0.56 3.13 -0.56H1.71V-6.38H3.13C4.47 -6.38 5.43 -5.15 5.43 -3.41ZM3.98 -8.64H3.39L2.42 -7.67L1.45 -8.64H0.86L2.12 -7.3H2.72Z",
+      "271": "M4.08 0V-6.94H3.34V-3.88C3.03 -4.14 2.52 -4.38 1.96 -4.38C1.05 -4.38 0.33 -3.39 0.33 -2.15C0.33 -0.91 1.04 0.08 1.93 0.08C2.62 0.08 3.08 -0.29 3.32 -0.5V0ZM3.32 -1.34C3.32 -1.2 3.32 -1.05 3.01 -0.78C2.81 -0.61 2.57 -0.53 2.34 -0.53C1.8 -0.53 1.09 -0.93 1.09 -2.14C1.09 -3.4 1.89 -3.77 2.44 -3.77C2.81 -3.77 3.11 -3.59 3.32 -3.29ZM5.16 -6.23V-6.94H4.44V-6.22H4.66L4.43 -5.1H4.79Z",
+      "272": "M6.25 -3.41C6.25 -5.34 4.99 -6.94 3.35 -6.94H0.89V-3.79H0.13V-3.15H0.89V0H3.35C4.99 0 6.25 -1.54 6.25 -3.41ZM5.43 -3.41C5.43 -1.74 4.48 -0.56 3.13 -0.56H1.71V-3.15H2.63V-3.79H1.71V-6.38H3.13C4.47 -6.38 5.43 -5.15 5.43 -3.41Z",
+      "273": "M4.84 -5.3V-5.94H4.08V-6.94H3.34V-5.94H1.94V-5.3H3.34V-3.88C3.03 -4.14 2.52 -4.38 1.96 -4.38C1.05 -4.38 0.33 -3.39 0.33 -2.15C0.33 -0.91 1.04 0.08 1.93 0.08C2.62 0.08 3.08 -0.29 3.32 -0.5V0H4.08V-5.3ZM3.32 -1.34C3.32 -1.2 3.32 -1.05 3.01 -0.78C2.81 -0.61 2.57 -0.53 2.34 -0.53C1.8 -0.53 1.09 -0.93 1.09 -2.14C1.09 -3.4 1.89 -3.77 2.44 -3.77C2.81 -3.77 3.11 -3.59 3.32 -3.29Z",
+      "274": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM4.5 -7.5V-8.14H1.11V-7.5Z",
+      "275": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM3.79 -5.74V-6.38H0.4V-5.74Z",
+      "276": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM4.41 -9.33H3.8C3.78 -8.53 3.31 -8.06 2.81 -8.06C2.27 -8.06 1.83 -8.55 1.81 -9.33H1.2C1.23 -8.13 1.98 -7.4 2.8 -7.4C3.66 -7.4 4.38 -8.16 4.41 -9.33Z",
+      "277": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM3.7 -7.03H3.09C3.07 -6.23 2.6 -5.76 2.1 -5.76C1.56 -5.76 1.12 -6.25 1.1 -7.03H0.49C0.52 -5.83 1.27 -5.1 2.09 -5.1C2.95 -5.1 3.67 -5.86 3.7 -7.03Z",
+      "278": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM3.23 -7.3V-8.14H2.39V-7.3Z",
+      "279": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM2.51 -5.64V-6.48H1.67V-5.64Z",
+      "280": "M5.26 1.87 5.12 1.28C4.9 1.37 4.67 1.43 4.45 1.42C4.17 1.4 3.93 1.34 3.92 1.04C3.91 0.6 4.33 0.26 4.79 0H5.21V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0H4.16C3.66 0.28 3.26 0.76 3.29 1.27C3.3 1.7 3.61 2.12 4.28 2.12C4.61 2.12 4.86 2.06 5.26 1.87Z",
+      "281": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C1.91 0.38 1.56 0.8 1.59 1.27C1.6 1.7 1.91 2.12 2.58 2.12C2.91 2.12 3.16 2.06 3.56 1.87L3.42 1.28C3.2 1.37 2.97 1.43 2.75 1.42C2.47 1.4 2.23 1.34 2.22 1.04C2.21 0.6 2.64 0.22 3.1 -0.04C3.35 -0.12 3.61 -0.23 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74Z",
+      "282": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM4.36 -8.64H3.77L2.8 -7.67L1.83 -8.64H1.24L2.5 -7.3H3.1Z",
+      "283": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM3.64 -6.92H3.05L2.09 -5.69L1.13 -6.92H0.54L1.79 -5.2H2.39Z",
+      "284": "M5.58 -0.41V-2.91H3.61V-2.29H4.82V-0.75C4.43 -0.62 4.02 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.45 -2.71 1.45 -3.43C1.45 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.93 -6.31 4.24 -6.27 4.54 -6.16C4.84 -6.05 5.11 -5.87 5.36 -5.67L5.5 -6.47C5.21 -6.63 4.91 -6.76 4.59 -6.84C4.26 -6.92 3.94 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C4.29 0.08 4.96 -0.08 5.58 -0.41ZM4.69 -7.3 3.43 -8.64H2.83L1.57 -7.3H2.16L3.13 -8.27L4.1 -7.3Z",
+      "285": "M4.56 -3.76 4.45 -4.38C3.88 -4.37 3.39 -4.26 2.99 -4.07C2.66 -4.33 2.32 -4.38 2.09 -4.38C1.22 -4.38 0.56 -3.66 0.56 -2.82C0.56 -2.28 0.86 -1.87 0.88 -1.85C0.7 -1.6 0.6 -1.33 0.6 -1.03C0.6 -0.68 0.74 -0.43 0.85 -0.29C0.33 0.03 0.26 0.52 0.26 0.71C0.26 1.44 1.17 2.04 2.34 2.04C3.52 2.04 4.43 1.44 4.43 0.7C4.43 -0.68 2.9 -0.69 2.48 -0.69H1.67C1.52 -0.69 1.12 -0.69 1.12 -1.2C1.12 -1.4 1.22 -1.54 1.22 -1.54C1.37 -1.43 1.68 -1.26 2.09 -1.26C2.92 -1.26 3.61 -1.96 3.61 -2.82C3.61 -3.3 3.39 -3.65 3.3 -3.77H3.33C3.36 -3.77 3.78 -3.8 3.93 -3.8C4.25 -3.8 4.28 -3.79 4.56 -3.76ZM2.9 -2.82C2.9 -1.95 2.35 -1.81 2.09 -1.81C1.75 -1.81 1.27 -2.02 1.27 -2.82C1.27 -3.69 1.82 -3.83 2.08 -3.83C2.42 -3.83 2.9 -3.62 2.9 -2.82ZM3.72 0.72C3.72 1.15 3.1 1.49 2.35 1.49C1.59 1.49 0.97 1.16 0.97 0.71C0.97 0.66 0.97 0.04 1.66 0.04H2.47C2.71 0.04 3.72 0.04 3.72 0.72ZM3.57 -5.2 2.32 -6.92H1.72L0.47 -5.2H1.06L2.02 -6.43L2.98 -5.2Z",
+      "286": "M5.58 -0.41V-2.91H3.61V-2.29H4.82V-0.75C4.43 -0.62 4.02 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.45 -2.71 1.45 -3.43C1.45 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.93 -6.31 4.24 -6.27 4.54 -6.16C4.84 -6.05 5.11 -5.87 5.36 -5.67L5.5 -6.47C5.21 -6.63 4.91 -6.76 4.59 -6.84C4.26 -6.92 3.94 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C4.29 0.08 4.96 -0.08 5.58 -0.41ZM4.74 -9.33H4.13C4.11 -8.53 3.64 -8.06 3.14 -8.06C2.6 -8.06 2.16 -8.55 2.14 -9.33H1.53C1.56 -8.13 2.31 -7.4 3.13 -7.4C3.99 -7.4 4.71 -8.16 4.74 -9.33Z",
+      "287": "M4.56 -3.76 4.45 -4.38C3.88 -4.37 3.39 -4.26 2.99 -4.07C2.66 -4.33 2.32 -4.38 2.09 -4.38C1.22 -4.38 0.56 -3.66 0.56 -2.82C0.56 -2.28 0.86 -1.87 0.88 -1.85C0.7 -1.6 0.6 -1.33 0.6 -1.03C0.6 -0.68 0.74 -0.43 0.85 -0.29C0.33 0.03 0.26 0.52 0.26 0.71C0.26 1.44 1.17 2.04 2.34 2.04C3.52 2.04 4.43 1.44 4.43 0.7C4.43 -0.68 2.9 -0.69 2.48 -0.69H1.67C1.52 -0.69 1.12 -0.69 1.12 -1.2C1.12 -1.4 1.22 -1.54 1.22 -1.54C1.37 -1.43 1.68 -1.26 2.09 -1.26C2.92 -1.26 3.61 -1.96 3.61 -2.82C3.61 -3.3 3.39 -3.65 3.3 -3.77H3.33C3.36 -3.77 3.78 -3.8 3.93 -3.8C4.25 -3.8 4.28 -3.79 4.56 -3.76ZM2.9 -2.82C2.9 -1.95 2.35 -1.81 2.09 -1.81C1.75 -1.81 1.27 -2.02 1.27 -2.82C1.27 -3.69 1.82 -3.83 2.08 -3.83C2.42 -3.83 2.9 -3.62 2.9 -2.82ZM3.72 0.72C3.72 1.15 3.1 1.49 2.35 1.49C1.59 1.49 0.97 1.16 0.97 0.71C0.97 0.66 0.97 0.04 1.66 0.04H2.47C2.71 0.04 3.72 0.04 3.72 0.72ZM3.63 -7.03H3.02C3 -6.23 2.53 -5.76 2.03 -5.76C1.49 -5.76 1.05 -6.25 1.03 -7.03H0.42C0.45 -5.83 1.2 -5.1 2.02 -5.1C2.88 -5.1 3.6 -5.86 3.63 -7.03Z",
+      "288": "M5.58 -0.41V-2.91H3.61V-2.29H4.82V-0.75C4.43 -0.62 4.02 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.45 -2.71 1.45 -3.43C1.45 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.93 -6.31 4.24 -6.27 4.54 -6.16C4.84 -6.05 5.11 -5.87 5.36 -5.67L5.5 -6.47C5.21 -6.63 4.91 -6.76 4.59 -6.84C4.26 -6.92 3.94 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C4.29 0.08 4.96 -0.08 5.58 -0.41ZM3.56 -7.3V-8.14H2.72V-7.3Z",
+      "289": "M4.56 -3.76 4.45 -4.38C3.88 -4.37 3.39 -4.26 2.99 -4.07C2.66 -4.33 2.32 -4.38 2.09 -4.38C1.22 -4.38 0.56 -3.66 0.56 -2.82C0.56 -2.28 0.86 -1.87 0.88 -1.85C0.7 -1.6 0.6 -1.33 0.6 -1.03C0.6 -0.68 0.74 -0.43 0.85 -0.29C0.33 0.03 0.26 0.52 0.26 0.71C0.26 1.44 1.17 2.04 2.34 2.04C3.52 2.04 4.43 1.44 4.43 0.7C4.43 -0.68 2.9 -0.69 2.48 -0.69H1.67C1.52 -0.69 1.12 -0.69 1.12 -1.2C1.12 -1.4 1.22 -1.54 1.22 -1.54C1.37 -1.43 1.68 -1.26 2.09 -1.26C2.92 -1.26 3.61 -1.96 3.61 -2.82C3.61 -3.3 3.39 -3.65 3.3 -3.77H3.33C3.36 -3.77 3.78 -3.8 3.93 -3.8C4.25 -3.8 4.28 -3.79 4.56 -3.76ZM2.9 -2.82C2.9 -1.95 2.35 -1.81 2.09 -1.81C1.75 -1.81 1.27 -2.02 1.27 -2.82C1.27 -3.69 1.82 -3.83 2.08 -3.83C2.42 -3.83 2.9 -3.62 2.9 -2.82ZM3.72 0.72C3.72 1.15 3.1 1.49 2.35 1.49C1.59 1.49 0.97 1.16 0.97 0.71C0.97 0.66 0.97 0.04 1.66 0.04H2.47C2.71 0.04 3.72 0.04 3.72 0.72ZM2.44 -5.64V-6.48H1.6V-5.64Z",
+      "290": "M5.58 -0.41V-2.91H3.61V-2.29H4.82V-0.75C4.43 -0.62 4.02 -0.56 3.61 -0.56C3 -0.56 2.45 -0.91 2.09 -1.4C1.64 -1.99 1.45 -2.71 1.45 -3.43C1.45 -4.16 1.64 -4.89 2.09 -5.47C2.45 -5.95 3 -6.31 3.61 -6.31C3.93 -6.31 4.24 -6.27 4.54 -6.16C4.84 -6.05 5.11 -5.87 5.36 -5.67L5.5 -6.47C5.21 -6.63 4.91 -6.76 4.59 -6.84C4.26 -6.92 3.94 -6.95 3.61 -6.95C2.79 -6.95 2.03 -6.55 1.49 -5.92C0.9 -5.23 0.61 -4.34 0.61 -3.43C0.61 -2.53 0.9 -1.64 1.49 -0.95C2.03 -0.32 2.79 0.08 3.61 0.08C4.29 0.08 4.96 -0.08 5.58 -0.41ZM3.5 1.29V0.58H2.78V1.3H3L2.77 2.42H3.13Z",
+      "291": "M2.39 -7.14H2.03L1.66 -6.01V-5.3H2.38V-6.02H2.16ZM4.56 -3.76 4.45 -4.38C3.88 -4.37 3.39 -4.26 2.99 -4.07C2.66 -4.33 2.32 -4.38 2.09 -4.38C1.22 -4.38 0.56 -3.66 0.56 -2.82C0.56 -2.28 0.86 -1.87 0.88 -1.85C0.7 -1.6 0.6 -1.33 0.6 -1.03C0.6 -0.68 0.74 -0.43 0.85 -0.29C0.33 0.03 0.26 0.52 0.26 0.71C0.26 1.44 1.17 2.04 2.34 2.04C3.52 2.04 4.43 1.44 4.43 0.7C4.43 -0.68 2.9 -0.69 2.48 -0.69H1.67C1.52 -0.69 1.12 -0.69 1.12 -1.2C1.12 -1.4 1.22 -1.54 1.22 -1.54C1.37 -1.43 1.68 -1.26 2.09 -1.26C2.92 -1.26 3.61 -1.96 3.61 -2.82C3.61 -3.3 3.39 -3.65 3.3 -3.77H3.33C3.36 -3.77 3.78 -3.8 3.93 -3.8C4.25 -3.8 4.28 -3.79 4.56 -3.76ZM2.9 -2.82C2.9 -1.95 2.35 -1.81 2.09 -1.81C1.75 -1.81 1.27 -2.02 1.27 -2.82C1.27 -3.69 1.82 -3.83 2.08 -3.83C2.42 -3.83 2.9 -3.62 2.9 -2.82ZM3.72 0.72C3.72 1.15 3.1 1.49 2.35 1.49C1.59 1.49 0.97 1.16 0.97 0.71C0.97 0.66 0.97 0.04 1.66 0.04H2.47C2.71 0.04 3.72 0.04 3.72 0.72Z",
+      "292": "M5.74 0V-6.94H4.9V-3.91H1.72V-6.94H0.88V0H1.72V-3.3H4.9V0ZM4.87 -7.3 3.61 -8.64H3.01L1.75 -7.3H2.34L3.31 -8.27L4.28 -7.3Z",
+      "293": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.18 -4.38 1.77 -4.07 1.48 -3.73V-6.94H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0ZM3.98 -7.3 2.72 -8.64H2.12L0.86 -7.3H1.45L2.42 -8.27L3.39 -7.3Z",
+      "294": "M6.25 -4.89V-5.53H5.74V-6.94H4.9V-5.53H1.72V-6.94H0.88V-5.53H0.37V-4.89H0.88V0H1.72V-3.3H4.9V0H5.74V-4.89ZM4.9 -3.91H1.72V-4.89H4.9Z",
+      "295": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.18 -4.38 1.77 -4.07 1.48 -3.73V-5.3H2.42V-5.94H1.48V-6.94H0.74V-5.94H-0.02V-5.3H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0Z",
+      "296": "M1.71 0V-6.94H0.87V0ZM2.86 -8.47H2.25C2.25 -8.23 2.19 -7.91 1.91 -7.91C1.76 -7.91 1.58 -7.99 1.38 -8.14C1.11 -8.33 0.92 -8.47 0.65 -8.47C0.24 -8.47 -0.25 -8.09 -0.27 -7.3H0.34C0.34 -7.54 0.4 -7.86 0.68 -7.86C0.83 -7.86 1.01 -7.78 1.21 -7.63C1.48 -7.44 1.67 -7.3 1.94 -7.3C2.35 -7.3 2.84 -7.68 2.86 -8.47Z",
+      "297": "M1.48 0V-4.3H0.74V0ZM2.68 -6.65H2.07C2.07 -6.41 2.01 -6.09 1.73 -6.09C1.58 -6.09 1.4 -6.17 1.2 -6.32C0.93 -6.51 0.74 -6.65 0.47 -6.65C0.06 -6.65 -0.43 -6.27 -0.45 -5.48H0.16C0.16 -5.72 0.22 -6.04 0.5 -6.04C0.65 -6.04 0.83 -5.96 1.03 -5.81C1.3 -5.62 1.49 -5.48 1.76 -5.48C2.17 -5.48 2.66 -5.86 2.68 -6.65Z",
+      "298": "M1.71 0V-6.94H0.87V0ZM2.99 -7.5V-8.14H-0.4V-7.5Z",
+      "299": "M1.48 0V-4.3H0.74V0ZM2.81 -5.74V-6.38H-0.58V-5.74Z",
+      "300": "M1.71 0V-6.94H0.87V0ZM2.9 -9.33H2.29C2.27 -8.53 1.8 -8.06 1.3 -8.06C0.76 -8.06 0.32 -8.55 0.3 -9.33H-0.31C-0.28 -8.13 0.47 -7.4 1.29 -7.4C2.15 -7.4 2.87 -8.16 2.9 -9.33Z",
+      "301": "M1.48 0V-4.3H0.74V0ZM2.72 -7.03H2.11C2.09 -6.23 1.62 -5.76 1.12 -5.76C0.58 -5.76 0.14 -6.25 0.12 -7.03H-0.49C-0.46 -5.83 0.29 -5.1 1.11 -5.1C1.97 -5.1 2.69 -5.86 2.72 -7.03Z",
+      "302": "M2.18 1.87 2.04 1.28C1.82 1.37 1.59 1.43 1.37 1.42C1.09 1.4 0.85 1.34 0.84 1.04C0.83 0.6 1.25 0.26 1.71 0V-6.94H0.87V0H1.08C0.58 0.28 0.18 0.76 0.21 1.27C0.22 1.7 0.53 2.12 1.2 2.12C1.53 2.12 1.78 2.06 2.18 1.87Z",
+      "303": "M1.53 -5.74V-6.58H0.69V-5.74ZM1.95 1.87 1.81 1.28C1.59 1.37 1.36 1.43 1.14 1.42C0.86 1.4 0.62 1.34 0.61 1.04C0.6 0.6 1.02 0.26 1.48 0V-4.3H0.74V0H0.85C0.35 0.28 -0.05 0.76 -0.02 1.27C-0.01 1.7 0.3 2.12 0.97 2.12C1.3 2.12 1.55 2.06 1.95 1.87Z",
+      "304": "M1.71 0V-6.94H0.87V0ZM1.72 -7.3V-8.14H0.88V-7.3Z",
+      "305": "M1.48 0V-4.3H0.74V0Z",
+      "306": "M1.71 0V-6.94H0.87V0ZM5.98 -1.49V-6.94H5.16V-1.52C5.16 -1.04 4.96 -0.45 4.06 -0.45C3.55 -0.45 3.12 -0.69 2.85 -0.99L2.72 -0.26C3.34 0.07 3.91 0.16 4.33 0.16C5.3 0.16 5.98 -0.4 5.98 -1.49Z",
+      "307": "M1.53 -5.64V-6.48H0.69V-5.64ZM3.74 -5.64V-6.48H2.9V-5.64ZM1.48 0V-4.3H0.74V0ZM3.74 0.6V-4.3H3V0.69C3 1.3 2.54 1.39 2.28 1.39C2.06 1.39 1.8 1.32 1.57 1.08L1.42 1.69C1.74 1.89 2.13 2.03 2.55 2.03C3.18 2.03 3.74 1.49 3.74 0.6Z",
+      "308": "M3.65 -1.49V-6.94H2.83V-1.52C2.83 -1.04 2.63 -0.45 1.73 -0.45C1.22 -0.45 0.79 -0.69 0.52 -0.99L0.39 -0.26C1.01 0.07 1.58 0.16 2 0.16C2.97 0.16 3.65 -0.4 3.65 -1.49ZM4.8 -7.3 3.54 -8.64H2.94L1.68 -7.3H2.27L3.24 -8.27L4.21 -7.3Z",
+      "309": "M1.74 0.6V-4.3H1V0.69C1 1.29 0.58 1.39 0.31 1.39C0.04 1.39 -0.19 1.29 -0.38 1.08L-0.58 1.69C-0.26 1.89 0.13 2.03 0.55 2.03C1.18 2.03 1.74 1.49 1.74 0.6ZM2.87 -5.2 1.62 -6.92H1.02L-0.23 -5.2H0.36L1.32 -6.43L2.28 -5.2Z",
+      "310": "M6.11 0 3.49 -4.19 5.98 -6.94H5.02L1.72 -3.31V-6.94H0.88V0H1.72V-2.25L2.93 -3.58L5.18 0ZM3.62 1.29V0.58H2.9V1.3H3.12L2.89 2.42H3.25Z",
+      "311": "M4.41 0 2.65 -2.65 4.2 -4.3H3.24L1.49 -2.44V-6.94H0.75V0H1.48V-1.4L2.15 -2.11L3.56 0ZM2.66 1.29V0.58H1.94V1.3H2.16L1.93 2.42H2.29Z",
+      "313": "M4.69 0V-0.65H2.61C2.49 -0.65 2.37 -0.64 2.25 -0.64H1.72V-6.94H0.88V0ZM3.74 -8.62H2.63L0.88 -7.4H1.77Z",
+      "314": "M1.48 0V-6.94H0.74V0ZM3.6 -8.62H2.49L0.74 -7.4H1.63Z",
+      "315": "M4.69 0V-0.65H2.61C2.49 -0.65 2.37 -0.64 2.25 -0.64H1.72V-6.94H0.88V0ZM2.91 1.29V0.58H2.19V1.3H2.41L2.18 2.42H2.54Z",
+      "316": "M1.48 0V-6.94H0.74V0ZM1.48 1.29V0.58H0.76V1.3H0.98L0.75 2.42H1.11Z",
+      "317": "M4.69 0V-0.65H2.61C2.49 -0.65 2.37 -0.64 2.25 -0.64H1.72V-6.94H0.88V0ZM2.97 -6.23V-6.94H2.25V-6.22H2.47L2.24 -5.1H2.6Z",
+      "318": "M1.48 0V-6.94H0.74V0ZM2.56 -6.23V-6.94H1.84V-6.22H2.06L1.83 -5.1H2.19Z",
+      "319": "M4.69 0V-0.65H2.61C2.49 -0.65 2.37 -0.64 2.25 -0.64H1.72V-6.94H0.88V0ZM4.26 -3.21V-4.05H3.42V-3.21Z",
+      "320": "M1.48 0V-6.94H0.74V0ZM2.94 -3.21V-4.05H2.1V-3.21Z",
+      "321": "M5.45 0V-0.65H3.37C3.25 -0.65 3.13 -0.64 3.01 -0.64H2.48V-3.61L4.19 -5.03L3.81 -5.48L2.48 -4.37V-6.94H1.64V-3.65L0.61 -2.78L0.98 -2.35L1.64 -2.91V0Z",
+      "322": "M3.04 -4.48 2.64 -4.92 1.95 -4.3V-6.94H1.21V-3.7L0.23 -2.82L0.61 -2.37L1.21 -2.91V0H1.95V-3.53Z",
+      "323": "M5.74 0V-6.94H4.96V-0.77L4.95 -0.76L4.43 -1.92L2.29 -6.57L2.11 -6.94H0.88V0H1.66V-6.17L1.67 -6.18L2.19 -5.02L4.33 -0.37L4.51 0ZM5.22 -8.62H4.11L2.36 -7.4H3.25Z",
+      "324": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.17 -4.38 1.75 -4.05 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0ZM3.75 -6.94H2.99L1.75 -5.18H2.36Z",
+      "325": "M5.74 0V-6.94H4.96V-0.77L4.95 -0.76L4.43 -1.92L2.29 -6.57L2.11 -6.94H0.88V0H1.66V-6.17L1.67 -6.18L2.19 -5.02L4.33 -0.37L4.51 0ZM3.68 1.29V0.58H2.96V1.3H3.18L2.95 2.42H3.31Z",
+      "326": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.17 -4.38 1.75 -4.05 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0ZM2.79 1.29V0.58H2.07V1.3H2.29L2.06 2.42H2.42Z",
+      "327": "M5.74 0V-6.94H4.96V-0.77L4.95 -0.76L4.43 -1.92L2.29 -6.57L2.11 -6.94H0.88V0H1.66V-6.17L1.67 -6.18L2.19 -5.02L4.33 -0.37L4.51 0ZM4.87 -8.64H4.28L3.31 -7.67L2.34 -8.64H1.75L3.01 -7.3H3.61Z",
+      "328": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.17 -4.38 1.75 -4.05 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0ZM3.97 -6.92H3.38L2.42 -5.69L1.46 -6.92H0.87L2.12 -5.2H2.72Z",
+      "330": "M5.74 -3.47C5.74 -5.25 5.19 -7.1 3.65 -7.1C2.88 -7.1 2.21 -6.77 1.72 -6.25V-6.94H0.88V0H1.72V-4.6C1.9 -5.57 2.66 -6.34 3.65 -6.34C4.81 -6.34 4.9 -4.82 4.9 -3.47C4.9 -2.12 4.81 -0.6 3.65 -0.6V0.16C5.19 0.16 5.74 -1.7 5.74 -3.47Z",
+      "331": "M4.09 0V-2.92C4.09 -3.55 3.94 -4.38 2.81 -4.38C2.17 -4.38 1.75 -4.05 1.47 -3.71V-4.33H0.74V0H1.5V-2.42C1.5 -3.05 1.74 -3.77 2.42 -3.77C3.3 -3.77 3.33 -3.18 3.33 -2.84V0C3.33 0.67 3.23 1.41 2.66 1.41V2.05C3.59 2.05 4.09 1.03 4.09 0Z",
+      "332": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM5.16 -7.5V-8.14H1.77V-7.5Z",
+      "333": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM4.05 -5.74V-6.38H0.66V-5.74Z",
+      "334": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM5.07 -9.33H4.46C4.44 -8.53 3.97 -8.06 3.47 -8.06C2.93 -8.06 2.49 -8.55 2.47 -9.33H1.86C1.89 -8.13 2.64 -7.4 3.46 -7.4C4.32 -7.4 5.04 -8.16 5.07 -9.33Z",
+      "335": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM3.96 -7.03H3.35C3.33 -6.23 2.86 -5.76 2.36 -5.76C1.82 -5.76 1.38 -6.25 1.36 -7.03H0.75C0.78 -5.83 1.53 -5.1 2.35 -5.1C3.21 -5.1 3.93 -5.86 3.96 -7.03Z",
+      "336": "M6.4 -3.46C6.4 -5.54 5.03 -7.1 3.46 -7.1C1.89 -7.1 0.52 -5.53 0.52 -3.46C0.52 -1.37 1.91 0.16 3.46 0.16C5.01 0.16 6.4 -1.37 6.4 -3.46ZM5.56 -3.59C5.56 -1.69 4.55 -0.47 3.46 -0.47C2.36 -0.47 1.36 -1.7 1.36 -3.59C1.36 -5.43 2.42 -6.47 3.46 -6.47C4.5 -6.47 5.56 -5.43 5.56 -3.59ZM3.45 -9.16H2.69L2.1 -7.4H2.71ZM5.02 -9.16H4.26L3.67 -7.4H4.28Z",
+      "337": "M4.42 -2.14C4.42 -3.42 3.47 -4.42 2.35 -4.42C1.2 -4.42 0.27 -3.39 0.27 -2.14C0.27 -0.87 1.23 0.08 2.34 0.08C3.48 0.08 4.42 -0.9 4.42 -2.14ZM3.66 -2.22C3.66 -1.09 3.01 -0.54 2.34 -0.54C1.64 -0.54 1.03 -1.13 1.03 -2.22C1.03 -3.38 1.74 -3.8 2.34 -3.8C2.99 -3.8 3.66 -3.34 3.66 -2.22ZM2.34 -6.94H1.58L0.99 -5.18H1.6ZM3.91 -6.94H3.15L2.56 -5.18H3.17Z",
+      "338": "M8.73 0V-0.69L5.25 -0.67V-3.3H8.34V-3.91H5.25V-6.3L8.6 -6.29V-6.94H4.88C4.75 -6.94 4.58 -6.94 4.17 -7.01C3.68 -7.09 3.53 -7.1 3.38 -7.1C1.69 -7.1 0.25 -5.51 0.25 -3.46C0.25 -1.38 1.72 0.16 3.38 0.16C3.6 0.16 3.78 0.13 4.19 0.07C4.59 0 4.74 0 4.88 0ZM4.43 -3.48C4.43 -2.36 4.43 -1.64 4.39 -1.32C4.31 -0.8 4.2 -0.45 3.4 -0.45C2.08 -0.45 1.07 -1.89 1.07 -3.59C1.07 -5.26 2.14 -6.49 3.4 -6.49C4.19 -6.49 4.32 -6.15 4.39 -5.58C4.43 -5.26 4.43 -4.32 4.43 -3.48Z",
+      "339": "M7.04 -2.19C7.04 -2.52 7.04 -4.42 5.45 -4.42C5.01 -4.42 4.36 -4.22 3.9 -3.5C3.45 -4.17 2.81 -4.42 2.27 -4.42C1.2 -4.42 0.27 -3.44 0.27 -2.17C0.27 -0.89 1.21 0.08 2.27 0.08C2.72 0.08 3.41 -0.1 3.91 -0.86C4.43 -0.12 5.07 0.08 5.6 0.08C6.06 0.08 6.56 -0.07 6.99 -0.41C6.99 -0.45 6.96 -0.78 6.96 -0.78C6.96 -0.78 6.93 -1.01 6.93 -1.05C6.48 -0.65 5.97 -0.53 5.61 -0.53C4.9 -0.53 4.3 -1.2 4.29 -2.19ZM6.37 -2.74H4.36C4.54 -3.42 5.01 -3.81 5.45 -3.81C5.83 -3.81 6.26 -3.54 6.37 -2.74ZM3.53 -2.23C3.53 -1.03 2.88 -0.53 2.27 -0.53C1.66 -0.53 1 -1.04 1 -2.23C1 -3.35 1.67 -3.81 2.27 -3.81C2.89 -3.81 3.53 -3.34 3.53 -2.23Z",
+      "340": "M5.79 0 3.94 -3.26 3.96 -3.27C5.52 -3.81 5.53 -4.89 5.53 -5.08C5.53 -6.03 4.57 -6.94 3.13 -6.94H0.89V0H1.71V-3.17H3.18L4.95 0ZM4.74 -5.08C4.74 -4.54 4.34 -3.78 3.02 -3.78H1.71V-6.38H3.02C4.29 -6.38 4.74 -5.66 4.74 -5.08ZM4.94 -8.62H3.83L2.08 -7.4H2.97Z",
+      "341": "M3.06 -3.72V-4.38C2.42 -4.37 1.82 -4.05 1.46 -3.53V-4.33H0.75V0H1.49V-2.13C1.49 -3.07 2.18 -3.7 3.06 -3.72ZM2.75 -6.94H1.99L0.75 -5.18H1.36Z",
+      "342": "M5.79 0 3.94 -3.26 3.96 -3.27C5.52 -3.81 5.53 -4.89 5.53 -5.08C5.53 -6.03 4.57 -6.94 3.13 -6.94H0.89V0H1.71V-3.17H3.18L4.95 0ZM4.74 -5.08C4.74 -4.54 4.34 -3.78 3.02 -3.78H1.71V-6.38H3.02C4.29 -6.38 4.74 -5.66 4.74 -5.08ZM3.4 1.29V0.58H2.68V1.3H2.9L2.67 2.42H3.03Z",
+      "343": "M3.06 -3.72V-4.38C2.42 -4.37 1.82 -4.05 1.46 -3.53V-4.33H0.75V0H1.49V-2.13C1.49 -3.07 2.18 -3.7 3.06 -3.72ZM1.49 1.29V0.58H0.77V1.3H0.99L0.76 2.42H1.12Z",
+      "344": "M5.79 0 3.94 -3.26 3.96 -3.27C5.52 -3.81 5.53 -4.89 5.53 -5.08C5.53 -6.03 4.57 -6.94 3.13 -6.94H0.89V0H1.71V-3.17H3.18L4.95 0ZM4.74 -5.08C4.74 -4.54 4.34 -3.78 3.02 -3.78H1.71V-6.38H3.02C4.29 -6.38 4.74 -5.66 4.74 -5.08ZM4.59 -8.64H4L3.03 -7.67L2.06 -8.64H1.47L2.73 -7.3H3.33Z",
+      "345": "M3.06 -3.72V-4.38C2.42 -4.37 1.82 -4.05 1.46 -3.53V-4.33H0.75V0H1.49V-2.13C1.49 -3.07 2.18 -3.7 3.06 -3.72ZM3.15 -6.92H2.56L1.6 -5.69L0.64 -6.92H0.05L1.3 -5.2H1.9Z",
+      "346": "M4.69 -1.91C4.69 -2.31 4.57 -2.82 4.15 -3.29C3.74 -3.74 3.38 -3.84 2.56 -4.06C2.09 -4.18 1.79 -4.26 1.54 -4.57C1.37 -4.79 1.28 -5 1.28 -5.27C1.28 -5.83 1.76 -6.44 2.64 -6.44C3.08 -6.44 3.65 -6.35 4.23 -5.81L4.37 -6.61C3.93 -6.87 3.45 -7.1 2.64 -7.1C1.35 -7.1 0.52 -6.15 0.52 -5.18C0.52 -4.8 0.63 -4.37 1.02 -3.93C1.41 -3.49 1.85 -3.37 2.41 -3.23C2.64 -3.17 3.03 -3.06 3.1 -3.03C3.66 -2.81 3.93 -2.3 3.93 -1.82C3.93 -1.19 3.44 -0.52 2.57 -0.52C2.27 -0.52 1.39 -0.57 0.56 -1.33L0.42 -0.54C1.24 0.06 2.13 0.16 2.58 0.16C3.81 0.16 4.69 -0.81 4.69 -1.91ZM4.52 -8.62H3.41L1.66 -7.4H2.55Z",
+      "347": "M3.38 -1.24C3.38 -1.73 3.1 -2.06 2.91 -2.21C2.58 -2.47 2.46 -2.5 1.64 -2.67C1.5 -2.69 1.01 -2.8 1.01 -3.25C1.01 -3.82 1.64 -3.82 1.78 -3.82C2.43 -3.82 2.83 -3.62 3.1 -3.47L3.22 -4.12C2.63 -4.4 2.17 -4.42 1.87 -4.42C1.16 -4.42 0.31 -4.17 0.31 -3.16C0.31 -2.15 1.41 -1.93 1.71 -1.87C2.17 -1.78 2.68 -1.68 2.68 -1.18C2.68 -0.55 1.96 -0.55 1.83 -0.55C1.43 -0.55 0.88 -0.66 0.38 -1.02L0.26 -0.35C0.83 -0.02 1.38 0.08 1.84 0.08C3.07 0.08 3.38 -0.67 3.38 -1.24ZM3.13 -6.94H2.37L1.13 -5.18H1.74Z",
+      "348": "M4.69 -1.91C4.69 -2.31 4.57 -2.82 4.15 -3.29C3.74 -3.74 3.38 -3.84 2.56 -4.06C2.09 -4.18 1.79 -4.26 1.54 -4.57C1.37 -4.79 1.28 -5 1.28 -5.27C1.28 -5.83 1.76 -6.44 2.64 -6.44C3.08 -6.44 3.65 -6.35 4.23 -5.81L4.37 -6.61C3.93 -6.87 3.45 -7.1 2.64 -7.1C1.35 -7.1 0.52 -6.15 0.52 -5.18C0.52 -4.8 0.63 -4.37 1.02 -3.93C1.41 -3.49 1.85 -3.37 2.41 -3.23C2.64 -3.17 3.03 -3.06 3.1 -3.03C3.66 -2.81 3.93 -2.3 3.93 -1.82C3.93 -1.19 3.44 -0.52 2.57 -0.52C2.27 -0.52 1.39 -0.57 0.56 -1.33L0.42 -0.54C1.24 0.06 2.13 0.16 2.58 0.16C3.81 0.16 4.69 -0.81 4.69 -1.91ZM4.17 -7.3 2.91 -8.64H2.31L1.05 -7.3H1.64L2.61 -8.27L3.58 -7.3Z",
+      "349": "M3.38 -1.24C3.38 -1.73 3.1 -2.06 2.91 -2.21C2.58 -2.47 2.46 -2.5 1.64 -2.67C1.5 -2.69 1.01 -2.8 1.01 -3.25C1.01 -3.82 1.64 -3.82 1.78 -3.82C2.43 -3.82 2.83 -3.62 3.1 -3.47L3.22 -4.12C2.63 -4.4 2.17 -4.42 1.87 -4.42C1.16 -4.42 0.31 -4.17 0.31 -3.16C0.31 -2.15 1.41 -1.93 1.71 -1.87C2.17 -1.78 2.68 -1.68 2.68 -1.18C2.68 -0.55 1.96 -0.55 1.83 -0.55C1.43 -0.55 0.88 -0.66 0.38 -1.02L0.26 -0.35C0.83 -0.02 1.38 0.08 1.84 0.08C3.07 0.08 3.38 -0.67 3.38 -1.24ZM3.35 -5.2 2.1 -6.92H1.5L0.25 -5.2H0.84L1.8 -6.43L2.76 -5.2Z",
+      "350": "M4.69 -1.91C4.69 -2.31 4.57 -2.82 4.15 -3.29C3.74 -3.74 3.38 -3.84 2.56 -4.06C2.09 -4.18 1.79 -4.26 1.54 -4.57C1.37 -4.79 1.28 -5 1.28 -5.27C1.28 -5.83 1.76 -6.44 2.64 -6.44C3.08 -6.44 3.65 -6.35 4.23 -5.81L4.37 -6.61C3.93 -6.87 3.45 -7.1 2.64 -7.1C1.35 -7.1 0.52 -6.15 0.52 -5.18C0.52 -4.8 0.63 -4.37 1.02 -3.93C1.41 -3.49 1.85 -3.37 2.41 -3.23C2.64 -3.17 3.03 -3.06 3.1 -3.03C3.66 -2.81 3.93 -2.3 3.93 -1.82C3.93 -1.19 3.44 -0.52 2.57 -0.52C2.27 -0.52 1.39 -0.57 0.56 -1.33L0.42 -0.54C1.24 0.06 2.13 0.16 2.58 0.16C3.81 0.16 4.69 -0.81 4.69 -1.91ZM3.07 0.34H2.46L1.77 2.02H2.45Z",
+      "351": "M3.38 -1.24C3.38 -1.73 3.1 -2.06 2.91 -2.21C2.58 -2.47 2.46 -2.5 1.64 -2.67C1.5 -2.69 1.01 -2.8 1.01 -3.25C1.01 -3.82 1.64 -3.82 1.78 -3.82C2.43 -3.82 2.83 -3.62 3.1 -3.47L3.22 -4.12C2.63 -4.4 2.17 -4.42 1.87 -4.42C1.16 -4.42 0.31 -4.17 0.31 -3.16C0.31 -2.15 1.41 -1.93 1.71 -1.87C2.17 -1.78 2.68 -1.68 2.68 -1.18C2.68 -0.55 1.96 -0.55 1.83 -0.55C1.43 -0.55 0.88 -0.66 0.38 -1.02L0.26 -0.35C0.83 -0.02 1.38 0.08 1.84 0.08C3.07 0.08 3.38 -0.67 3.38 -1.24ZM2.26 0.34H1.65L0.96 2.02H1.64Z",
+      "352": "M4.69 -1.91C4.69 -2.31 4.57 -2.82 4.15 -3.29C3.74 -3.74 3.38 -3.84 2.56 -4.06C2.09 -4.18 1.79 -4.26 1.54 -4.57C1.37 -4.79 1.28 -5 1.28 -5.27C1.28 -5.83 1.76 -6.44 2.64 -6.44C3.08 -6.44 3.65 -6.35 4.23 -5.81L4.37 -6.61C3.93 -6.87 3.45 -7.1 2.64 -7.1C1.35 -7.1 0.52 -6.15 0.52 -5.18C0.52 -4.8 0.63 -4.37 1.02 -3.93C1.41 -3.49 1.85 -3.37 2.41 -3.23C2.64 -3.17 3.03 -3.06 3.1 -3.03C3.66 -2.81 3.93 -2.3 3.93 -1.82C3.93 -1.19 3.44 -0.52 2.57 -0.52C2.27 -0.52 1.39 -0.57 0.56 -1.33L0.42 -0.54C1.24 0.06 2.13 0.16 2.58 0.16C3.81 0.16 4.69 -0.81 4.69 -1.91ZM4.17 -8.64H3.58L2.61 -7.67L1.64 -8.64H1.05L2.31 -7.3H2.91Z",
+      "353": "M3.38 -1.24C3.38 -1.73 3.1 -2.06 2.91 -2.21C2.58 -2.47 2.46 -2.5 1.64 -2.67C1.5 -2.69 1.01 -2.8 1.01 -3.25C1.01 -3.82 1.64 -3.82 1.78 -3.82C2.43 -3.82 2.83 -3.62 3.1 -3.47L3.22 -4.12C2.63 -4.4 2.17 -4.42 1.87 -4.42C1.16 -4.42 0.31 -4.17 0.31 -3.16C0.31 -2.15 1.41 -1.93 1.71 -1.87C2.17 -1.78 2.68 -1.68 2.68 -1.18C2.68 -0.55 1.96 -0.55 1.83 -0.55C1.43 -0.55 0.88 -0.66 0.38 -1.02L0.26 -0.35C0.83 -0.02 1.38 0.08 1.84 0.08C3.07 0.08 3.38 -0.67 3.38 -1.24ZM3.35 -6.92H2.76L1.8 -5.69L0.84 -6.92H0.25L1.5 -5.2H2.1Z",
+      "354": "M6.06 -6.26V-6.91H0.34V-6.26H1.59C1.71 -6.26 1.83 -6.27 1.95 -6.27H2.78V0H3.62V-6.27H4.45C4.57 -6.27 4.69 -6.26 4.81 -6.26ZM3.51 0.18H2.9L2.21 1.86H2.89Z",
+      "355": "M3.13 -0.29 2.97 -0.88C2.73 -0.67 2.44 -0.55 2.13 -0.55C1.69 -0.55 1.67 -1.11 1.67 -1.36V-3.72H2.97V-4.3H1.67V-5.53H0.96V-4.3H0.17V-3.72H0.94V-1.19C0.94 -0.62 1.07 0.08 1.73 0.08C2.23 0.08 2.69 -0.06 3.13 -0.29ZM2.29 0.18H1.68L0.99 1.86H1.67Z",
+      "356": "M6.06 -6.26V-6.91H0.34V-6.26H1.59C1.71 -6.26 1.83 -6.27 1.95 -6.27H2.78V0H3.62V-6.27H4.45C4.57 -6.27 4.69 -6.26 4.81 -6.26ZM4.76 -8.64H4.17L3.2 -7.67L2.23 -8.64H1.64L2.9 -7.3H3.5Z",
+      "357": "M3.13 -0.29 2.97 -0.88C2.73 -0.67 2.44 -0.55 2.13 -0.55C1.69 -0.55 1.67 -1.11 1.67 -1.36V-3.72H2.97V-4.3H1.67V-5.53H0.96V-4.3H0.17V-3.72H0.94V-1.19C0.94 -0.62 1.07 0.08 1.73 0.08C2.23 0.08 2.69 -0.06 3.13 -0.29ZM2.75 -5.78V-6.49H2.03V-5.77H2.25L2.02 -4.65H2.38Z",
+      "360": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM4.79 -8.47H4.18C4.18 -8.23 4.12 -7.91 3.84 -7.91C3.69 -7.91 3.51 -7.99 3.31 -8.14C3.04 -8.33 2.85 -8.47 2.58 -8.47C2.17 -8.47 1.68 -8.09 1.66 -7.3H2.27C2.27 -7.54 2.33 -7.86 2.61 -7.86C2.76 -7.86 2.94 -7.78 3.14 -7.63C3.41 -7.44 3.6 -7.3 3.87 -7.3C4.28 -7.3 4.77 -7.68 4.79 -8.47Z",
+      "361": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM3.99 -6.65H3.38C3.38 -6.41 3.32 -6.09 3.04 -6.09C2.89 -6.09 2.71 -6.17 2.51 -6.32C2.24 -6.51 2.05 -6.65 1.78 -6.65C1.37 -6.65 0.88 -6.27 0.86 -5.48H1.47C1.47 -5.72 1.53 -6.04 1.81 -6.04C1.96 -6.04 2.14 -5.96 2.34 -5.81C2.61 -5.62 2.8 -5.48 3.07 -5.48C3.48 -5.48 3.97 -5.86 3.99 -6.65Z",
+      "362": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM4.92 -7.5V-8.14H1.53V-7.5Z",
+      "363": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM4.12 -5.74V-6.38H0.73V-5.74Z",
+      "364": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM4.83 -9.33H4.22C4.2 -8.53 3.73 -8.06 3.23 -8.06C2.69 -8.06 2.25 -8.55 2.23 -9.33H1.62C1.65 -8.13 2.4 -7.4 3.22 -7.4C4.08 -7.4 4.8 -8.16 4.83 -9.33Z",
+      "365": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM4.03 -7.03H3.42C3.4 -6.23 2.93 -5.76 2.43 -5.76C1.89 -5.76 1.45 -6.25 1.43 -7.03H0.82C0.85 -5.83 1.6 -5.1 2.42 -5.1C3.28 -5.1 4 -5.86 4.03 -7.03Z",
+      "366": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM3.69 -7.82C3.69 -7.51 3.44 -7.43 3.22 -7.43C3.02 -7.43 2.75 -7.5 2.75 -7.82C2.75 -8.13 3 -8.21 3.22 -8.21C3.42 -8.21 3.69 -8.14 3.69 -7.82ZM4.27 -7.82C4.27 -8.28 3.82 -8.7 3.22 -8.7C2.62 -8.7 2.17 -8.28 2.17 -7.82C2.17 -7.36 2.62 -6.94 3.22 -6.94C3.82 -6.94 4.27 -7.36 4.27 -7.82Z",
+      "367": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM2.89 -5.95C2.89 -5.64 2.64 -5.56 2.42 -5.56C2.22 -5.56 1.95 -5.63 1.95 -5.95C1.95 -6.26 2.2 -6.34 2.42 -6.34C2.62 -6.34 2.89 -6.27 2.89 -5.95ZM3.47 -5.95C3.47 -6.41 3.02 -6.83 2.42 -6.83C1.82 -6.83 1.37 -6.41 1.37 -5.95C1.37 -5.49 1.82 -5.07 2.42 -5.07C3.02 -5.07 3.47 -5.49 3.47 -5.95Z",
+      "368": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.89 1.99 0.16 3.23 0.16C4.47 0.16 5.55 -0.89 5.55 -2.33ZM3.21 -9.16H2.45L1.86 -7.4H2.47ZM4.78 -9.16H4.02L3.43 -7.4H4.04Z",
+      "369": "M4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0ZM2.41 -6.94H1.65L1.06 -5.18H1.67ZM3.98 -6.94H3.22L2.63 -5.18H3.24Z",
+      "370": "M5.55 -2.33V-6.94H4.79V-2.32C4.79 -0.99 3.98 -0.4 3.24 -0.4C2.48 -0.4 1.72 -1.02 1.72 -2.31V-6.94H0.88V-2.33C0.88 -0.95 1.89 0.07 3.07 0.15C2.68 0.44 2.41 0.84 2.43 1.27C2.44 1.7 2.75 2.12 3.42 2.12C3.75 2.12 4 2.06 4.4 1.87L4.26 1.28C4.04 1.37 3.81 1.43 3.59 1.42C3.31 1.4 3.07 1.34 3.06 1.04C3.06 0.65 3.39 0.34 3.79 0.09C4.78 -0.17 5.55 -1.11 5.55 -2.33Z",
+      "371": "M4.56 1.87 4.42 1.28C4.2 1.37 3.97 1.43 3.75 1.42C3.47 1.4 3.23 1.34 3.22 1.04C3.21 0.6 3.63 0.26 4.09 0V-4.3H3.33V-1.54C3.33 -0.8 2.79 -0.5 2.22 -0.5C1.56 -0.5 1.5 -0.72 1.5 -1.13V-4.3H0.74V-1.08C0.74 -0.3 1.01 0.08 1.7 0.08C2.04 0.08 2.81 0 3.35 -0.5V0H3.46C2.96 0.28 2.56 0.76 2.59 1.27C2.6 1.7 2.91 2.12 3.58 2.12C3.91 2.12 4.16 2.06 4.56 1.87Z",
+      "372": "M8.72 -6.94H7.96L7.12 -3.83L6.75 -2.33C6.57 -1.59 6.44 -1.07 6.42 -0.81H6.41C6.39 -1.08 6.26 -1.65 6.1 -2.29L5.71 -3.87L4.88 -6.94H4.04L3.25 -4.03L2.85 -2.44C2.55 -1.18 2.54 -1 2.52 -0.8H2.51C2.51 -0.86 2.47 -1.19 2.19 -2.36L1.76 -4.09L0.99 -6.94H0.13L2.03 0H2.86L3.65 -2.89L4.05 -4.48C4.32 -5.6 4.38 -5.88 4.4 -6.13H4.41C4.41 -6.09 4.5 -5.46 4.89 -4L5.95 0H6.82ZM5.99 -7.3 4.73 -8.64H4.13L2.87 -7.3H3.46L4.43 -8.27L5.4 -7.3Z",
+      "373": "M6.27 -4.3H5.51L4.98 -2.5C4.87 -2.12 4.56 -1.07 4.52 -0.58H4.51C4.49 -0.88 4.32 -1.6 4.04 -2.55L3.53 -4.3H2.84L2.34 -2.59C2.09 -1.72 1.9 -0.98 1.88 -0.58H1.87C1.83 -1.17 1.42 -2.55 1.36 -2.77L0.91 -4.3H0.13L1.43 0H2.19C2.71 -1.72 3.11 -3.05 3.14 -3.72C3.16 -3.39 3.33 -2.68 3.43 -2.33L4.09 0H4.97ZM4.75 -5.2 3.5 -6.92H2.9L1.65 -5.2H2.24L3.2 -6.43L4.16 -5.2Z",
+      "374": "M6.21 -6.94H5.35L3.8 -4.52C3.68 -4.33 3.34 -3.81 3.18 -3.52L2.69 -4.31L1.01 -6.94H0.03L2.71 -2.78V0H3.53V-2.77ZM4.68 -7.3 3.42 -8.64H2.82L1.56 -7.3H2.15L3.12 -8.27L4.09 -7.3Z",
+      "375": "M4.18 -4.3H3.4C2.55 -2.01 2.26 -1.08 2.24 -0.58H2.23C2.2 -1.07 1.76 -2.27 1.41 -3.13L0.94 -4.3H0.13L1.9 0C1.79 0.3 1.63 0.75 1.58 0.85C1.36 1.41 1.21 1.41 1.05 1.41C1.01 1.41 0.69 1.4 0.33 1.29L0.39 1.95C0.64 2 0.89 2.03 1.07 2.03C1.32 2.03 1.82 2.03 2.28 0.8ZM3.71 -5.2 2.46 -6.92H1.86L0.61 -5.2H1.2L2.16 -6.43L3.12 -5.2Z",
+      "376": "M6.21 -6.94H5.35L3.8 -4.52C3.68 -4.33 3.34 -3.81 3.18 -3.52L2.69 -4.31L1.01 -6.94H0.03L2.71 -2.78V0H3.53V-2.77ZM2.68 -7.3V-8.05H1.92V-7.3ZM4.32 -7.3V-8.05H3.56V-7.3Z",
+      "377": "M5.27 0V-0.66H4.38L1.88 -0.64H1.58L5.22 -6.53V-6.94H0.65V-6.31H2.52C2.64 -6.31 2.76 -6.32 2.88 -6.32H4.16L0.52 -0.43V0ZM4.78 -8.62H3.67L1.92 -7.4H2.81Z",
+      "378": "M3.78 0V-0.62H2.42C2.3 -0.62 2.18 -0.61 2.06 -0.61H1.29L3.75 -3.91V-4.3H0.39V-3.7H1.67C1.79 -3.7 1.91 -3.71 2.03 -3.71H2.73L0.26 -0.41V0ZM3.37 -6.94H2.61L1.37 -5.18H1.98Z",
+      "379": "M5.27 0V-0.66H4.38L1.88 -0.64H1.58L5.22 -6.53V-6.94H0.65V-6.31H2.52C2.64 -6.31 2.76 -6.32 2.88 -6.32H4.16L0.52 -0.43V0ZM3.3 -7.3V-8.14H2.46V-7.3Z",
+      "380": "M3.78 0V-0.62H2.42C2.3 -0.62 2.18 -0.61 2.06 -0.61H1.29L3.75 -3.91V-4.3H0.39V-3.7H1.67C1.79 -3.7 1.91 -3.71 2.03 -3.71H2.73L0.26 -0.41V0ZM2.47 -5.64V-6.48H1.63V-5.64Z",
+      "381": "M5.27 0V-0.66H4.38L1.88 -0.64H1.58L5.22 -6.53V-6.94H0.65V-6.31H2.52C2.64 -6.31 2.76 -6.32 2.88 -6.32H4.16L0.52 -0.43V0ZM4.43 -8.64H3.84L2.87 -7.67L1.9 -8.64H1.31L2.57 -7.3H3.17Z",
+      "382": "M3.78 0V-0.62H2.42C2.3 -0.62 2.18 -0.61 2.06 -0.61H1.29L3.75 -3.91V-4.3H0.39V-3.7H1.67C1.79 -3.7 1.91 -3.71 2.03 -3.71H2.73L0.26 -0.41V0ZM3.59 -6.92H3L2.04 -5.69L1.08 -6.92H0.49L1.74 -5.2H2.34Z",
+      "383": "M3.05 -6.28V-6.94C2.82 -6.99 2.54 -7.02 2.32 -7.02C1.39 -7.02 0.74 -6.26 0.74 -5.27V0H1.48V-5.58C1.48 -6.29 2 -6.41 2.31 -6.41C2.41 -6.41 2.69 -6.41 3.05 -6.28Z",
+      "7868": "M5.21 0V-0.69L3.06 -0.68L1.72 -0.67V-3.29H4.82V-3.9H1.72V-6.28H3.01C3.13 -6.28 3.25 -6.27 3.37 -6.27H5.08V-6.92H0.88V0ZM4.37 -8.47H3.76C3.76 -8.23 3.7 -7.91 3.42 -7.91C3.27 -7.91 3.09 -7.99 2.89 -8.14C2.62 -8.33 2.43 -8.47 2.16 -8.47C1.75 -8.47 1.26 -8.09 1.24 -7.3H1.85C1.85 -7.54 1.91 -7.86 2.19 -7.86C2.34 -7.86 2.52 -7.78 2.72 -7.63C2.99 -7.44 3.18 -7.3 3.45 -7.3C3.86 -7.3 4.35 -7.68 4.37 -8.47Z",
+      "7869": "M3.91 -2.19C3.91 -2.52 3.89 -3.16 3.57 -3.69C3.22 -4.26 2.65 -4.42 2.22 -4.42C1.18 -4.42 0.3 -3.44 0.3 -2.17C0.3 -0.93 1.21 0.08 2.36 0.08C2.81 0.08 3.36 -0.05 3.86 -0.41C3.86 -0.45 3.83 -0.68 3.83 -0.68C3.83 -0.68 3.8 -1.01 3.8 -1.05C3.32 -0.66 2.77 -0.53 2.37 -0.53C1.73 -0.53 1.04 -1.07 1.01 -2.19ZM3.25 -2.74H1.09C1.22 -3.29 1.66 -3.81 2.22 -3.81C2.37 -3.81 3.07 -3.79 3.25 -2.74ZM3.66 -6.65H3.05C3.05 -6.41 2.99 -6.09 2.71 -6.09C2.56 -6.09 2.38 -6.17 2.18 -6.32C1.91 -6.51 1.72 -6.65 1.45 -6.65C1.04 -6.65 0.55 -6.27 0.53 -5.48H1.14C1.14 -5.72 1.2 -6.04 1.48 -6.04C1.63 -6.04 1.81 -5.96 2.01 -5.81C2.28 -5.62 2.47 -5.48 2.74 -5.48C3.15 -5.48 3.64 -5.86 3.66 -6.65Z",
+      "8211": "M4.69 -2.35V-2.96H0V-2.35Z",
+      "8212": "M9.39 -2.35V-2.96H0V-2.35Z",
+      "8216": "M1.71 -6.94H1.31L0.9 -5.68V-4.89H1.7V-5.69H1.45Z",
+      "8217": "M1.7 -6.15V-6.94H0.9V-6.14H1.15L0.89 -4.89H1.29Z",
+      "8220": "M1.71 -6.94H1.31L0.9 -5.68V-4.89H1.7V-5.69H1.45ZM3.54 -6.94H3.14L2.73 -5.68V-4.89H3.53V-5.69H3.28Z",
+      "8221": "M1.71 -6.15V-6.94H0.91V-6.14H1.16L0.9 -4.89H1.3ZM3.54 -6.15V-6.94H2.74V-6.14H2.99L2.73 -4.89H3.13Z",
+      "8226": "M4.93 -1.42V-3.96H2.39V-1.42Z",
+      "8230": "M1.71 0V-0.8H0.91V0ZM3.36 0V-0.8H2.56V0ZM5.01 0V-0.8H4.21V0Z",
+      "64256": "M3.27 -6.28V-6.94C3.16 -6.96 2.86 -7.02 2.53 -7.02C1.61 -7.02 0.94 -6.27 0.94 -5.27V-4.3H0.25V-3.72H0.94V0H1.68V-3.72H2.71V-4.3H1.66V-5.58C1.66 -6.27 2.18 -6.41 2.52 -6.41C2.87 -6.41 3.16 -6.32 3.27 -6.28ZM5.87 -6.28V-6.94C5.76 -6.96 5.46 -7.02 5.13 -7.02C4.21 -7.02 3.54 -6.27 3.54 -5.27V0H4.28V-3.72H5.31V-4.3H4.26V-5.58C4.26 -6.27 4.78 -6.41 5.12 -6.41C5.47 -6.41 5.76 -6.32 5.87 -6.28Z",
+      "64257": "M4.3 -6.15V-6.95H3.5V-6.15ZM4.27 0V-4.3H3.53V0ZM2.77 -3.72V-4.3H1.66V-5.61C1.66 -6.14 1.9 -6.41 2.22 -6.41C2.41 -6.41 2.6 -6.36 2.77 -6.27V-6.94C2.69 -6.96 2.46 -7.02 2.22 -7.02C1.47 -7.02 0.94 -6.26 0.94 -5.29V-4.3H0.25V-3.72H0.94V0H1.68V-3.72Z",
+      "64258": "M2.77 -3.72V-4.3H1.66V-5.61C1.66 -6.14 1.9 -6.41 2.22 -6.41C2.49 -6.41 2.74 -6.3 2.77 -6.28V-6.94C2.69 -6.96 2.46 -7.02 2.22 -7.02C1.47 -7.02 0.94 -6.26 0.94 -5.29V-4.3H0.25V-3.72H0.94V0H1.68V-3.72ZM4.27 0V-6.94H3.53V0Z",
+      "64259": "M6.91 -6.15V-6.95H6.11V-6.15ZM6.88 0V-4.3H6.14V0ZM5.37 -3.72V-4.3H4.26V-5.61C4.26 -6.14 4.5 -6.41 4.82 -6.41C5.04 -6.41 5.25 -6.34 5.37 -6.27V-6.95C5.19 -7 5.11 -7.02 4.82 -7.02C4.07 -7.02 3.54 -6.26 3.54 -5.29V0H4.28V-3.72ZM3 -6.28V-6.94C2.74 -7.01 2.7 -7.02 2.36 -7.02C1.54 -7.02 0.94 -6.27 0.94 -5.28V-4.3H0.25V-3.72H0.94V0H1.68V-3.72H2.77V-4.3H1.66V-5.59C1.66 -6.26 2.07 -6.41 2.36 -6.41C2.53 -6.41 2.77 -6.38 3 -6.28Z",
+      "64260": "M3 -6.28V-6.94C2.74 -7.01 2.7 -7.02 2.36 -7.02C1.54 -7.02 0.94 -6.27 0.94 -5.28V-4.3H0.25V-3.72H0.94V0H1.68V-3.72H2.77V-4.3H1.66V-5.59C1.66 -6.26 2.07 -6.41 2.36 -6.41C2.53 -6.41 2.77 -6.38 3 -6.28ZM6.88 0V-6.94H6.14V0ZM5.37 -3.72V-4.3H4.26V-5.61C4.26 -6.14 4.5 -6.41 4.82 -6.41C5.09 -6.41 5.34 -6.3 5.37 -6.28V-6.94C5.29 -6.96 5.06 -7.02 4.82 -7.02C4.07 -7.02 3.54 -6.26 3.54 -5.29V0H4.28V-3.72Z"
+    }
+  },
+  "lmsans17-oblique": {
+    "family": "lmsans17-oblique",
+    "codingScheme": "Unicode OpenType",
+    "checksum": "",
+    "designSize": 10,
+    "source": {
+      "kind": "opentype",
+      "name": "lmsans17-oblique.otf"
+    },
+    "fontdimen": {
+      "slant": 0.021256,
+      "space": 0.313,
+      "stretch": 0.1565,
+      "shrink": 0.104333,
+      "xheight": 0.431,
+      "quad": 1,
+      "extraspace": 0.104333
+    },
+    "chars": {
+      "32": {
+        "code": 32,
+        "width": 0.313,
+        "height": 0,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "33": {
+        "code": 33,
+        "width": 0.3,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.058
+      },
+      "34": {
+        "code": 34,
+        "width": 0.413,
+        "height": 0.71,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "35": {
+        "code": 35,
+        "width": 0.784,
+        "height": 0.694,
+        "depth": 0.195,
+        "italicCorrection": 0.043
+      },
+      "36": {
+        "code": 36,
+        "width": 0.47,
+        "height": 0.749,
+        "depth": 0.055,
+        "italicCorrection": 0.088
+      },
+      "37": {
+        "code": 37,
+        "width": 0.784,
+        "height": 0.749,
+        "depth": 0.055,
+        "italicCorrection": 0.023
+      },
+      "38": {
+        "code": 38,
+        "width": 0.712,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0.014
+      },
+      "39": {
+        "code": 39,
+        "width": 0.261,
+        "height": 0.71,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "40": {
+        "code": 40,
+        "width": 0.366,
+        "height": 0.749,
+        "depth": 0.25,
+        "italicCorrection": 0.126
+      },
+      "41": {
+        "code": 41,
+        "width": 0.366,
+        "height": 0.749,
+        "depth": 0.25,
+        "italicCorrection": 0.065
+      },
+      "42": {
+        "code": 42,
+        "width": 0.47,
+        "height": 0.749,
+        "depth": 0,
+        "italicCorrection": 0.097
+      },
+      "43": {
+        "code": 43,
+        "width": 0.731,
+        "height": 0.563,
+        "depth": 0.064,
+        "italicCorrection": 0.024
+      },
+      "44": {
+        "code": 44,
+        "width": 0.261,
+        "height": 0.08,
+        "depth": 0.125,
+        "italicCorrection": 0
+      },
+      "45": {
+        "code": 45,
+        "width": 0.313,
+        "height": 0.244,
+        "depth": 0,
+        "italicCorrection": 0.019
+      },
+      "46": {
+        "code": 46,
+        "width": 0.261,
+        "height": 0.08,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "47": {
+        "code": 47,
+        "width": 0.47,
+        "height": 0.749,
+        "depth": 0.249,
+        "italicCorrection": 0.125
+      },
+      "48": {
+        "code": 48,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0.084
+      },
+      "49": {
+        "code": 49,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "50": {
+        "code": 50,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0,
+        "italicCorrection": 0.094
+      },
+      "51": {
+        "code": 51,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0.083
+      },
+      "52": {
+        "code": 52,
+        "width": 0.47,
+        "height": 0.656,
+        "depth": 0,
+        "italicCorrection": 0.042
+      },
+      "53": {
+        "code": 53,
+        "width": 0.47,
+        "height": 0.656,
+        "depth": 0.016,
+        "italicCorrection": 0.08
+      },
+      "54": {
+        "code": 54,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "55": {
+        "code": 55,
+        "width": 0.47,
+        "height": 0.656,
+        "depth": 0.008,
+        "italicCorrection": 0.119
+      },
+      "56": {
+        "code": 56,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0.093
+      },
+      "57": {
+        "code": 57,
+        "width": 0.47,
+        "height": 0.672,
+        "depth": 0.016,
+        "italicCorrection": 0.113
+      },
+      "58": {
+        "code": 58,
+        "width": 0.261,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0.02
+      },
+      "59": {
+        "code": 59,
+        "width": 0.261,
+        "height": 0.43,
+        "depth": 0.125,
+        "italicCorrection": 0.02
+      },
+      "60": {
+        "code": 60,
+        "width": 0.762,
+        "height": 0.527,
+        "depth": 0.028,
+        "italicCorrection": 0.047
+      },
+      "61": {
+        "code": 61,
+        "width": 0.731,
+        "height": 0.356,
+        "depth": 0,
+        "italicCorrection": 0.043
+      },
+      "62": {
+        "code": 62,
+        "width": 0.762,
+        "height": 0.527,
+        "depth": 0.028,
+        "italicCorrection": 0
+      },
+      "63": {
+        "code": 63,
+        "width": 0.444,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.101
+      },
+      "64": {
+        "code": 64,
+        "width": 0.627,
+        "height": 0.702,
+        "depth": 0.008,
+        "italicCorrection": 0.115
+      },
+      "65": {
+        "code": 65,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "66": {
+        "code": 66,
+        "width": 0.626,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.071
+      },
+      "67": {
+        "code": 67,
+        "width": 0.601,
+        "height": 0.695,
+        "depth": 0.008,
+        "italicCorrection": 0.096
+      },
+      "68": {
+        "code": 68,
+        "width": 0.678,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.081
+      },
+      "69": {
+        "code": 69,
+        "width": 0.561,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "70": {
+        "code": 70,
+        "width": 0.535,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.127
+      },
+      "71": {
+        "code": 71,
+        "width": 0.627,
+        "height": 0.695,
+        "depth": 0.008,
+        "italicCorrection": 0.081
+      },
+      "72": {
+        "code": 72,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "73": {
+        "code": 73,
+        "width": 0.259,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.08
+      },
+      "74": {
+        "code": 74,
+        "width": 0.443,
+        "height": 0.694,
+        "depth": 0.016,
+        "italicCorrection": 0.09
+      },
+      "75": {
+        "code": 75,
+        "width": 0.651,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "76": {
+        "code": 76,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "77": {
+        "code": 77,
+        "width": 0.82,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.077
+      },
+      "78": {
+        "code": 78,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "79": {
+        "code": 79,
+        "width": 0.693,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "80": {
+        "code": 80,
+        "width": 0.6,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.095
+      },
+      "81": {
+        "code": 81,
+        "width": 0.693,
+        "height": 0.71,
+        "depth": 0.125,
+        "italicCorrection": 0.085
+      },
+      "82": {
+        "code": 82,
+        "width": 0.606,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.095
+      },
+      "83": {
+        "code": 83,
+        "width": 0.522,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0.075
+      },
+      "84": {
+        "code": 84,
+        "width": 0.641,
+        "height": 0.691,
+        "depth": 0,
+        "italicCorrection": 0.132
+      },
+      "85": {
+        "code": 85,
+        "width": 0.644,
+        "height": 0.694,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "86": {
+        "code": 86,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.154
+      },
+      "87": {
+        "code": 87,
+        "width": 0.886,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.154
+      },
+      "88": {
+        "code": 88,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "89": {
+        "code": 89,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.164
+      },
+      "90": {
+        "code": 90,
+        "width": 0.575,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "91": {
+        "code": 91,
+        "width": 0.273,
+        "height": 0.749,
+        "depth": 0.249,
+        "italicCorrection": 0.158
+      },
+      "92": {
+        "code": 92,
+        "width": 0.5,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0
+      },
+      "93": {
+        "code": 93,
+        "width": 0.273,
+        "height": 0.749,
+        "depth": 0.249,
+        "italicCorrection": 0.085
+      },
+      "94": {
+        "code": 94,
+        "width": 0.556,
+        "height": 0.744,
+        "depth": 0,
+        "italicCorrection": 0.149
+      },
+      "95": {
+        "code": 95,
+        "width": 0.625,
+        "height": 0,
+        "depth": 0.163,
+        "italicCorrection": 0.002
+      },
+      "96": {
+        "code": 96,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "97": {
+        "code": 97,
+        "width": 0.451,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.035
+      },
+      "98": {
+        "code": 98,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.057
+      },
+      "99": {
+        "code": 99,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.073
+      },
+      "100": {
+        "code": 100,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.092
+      },
+      "101": {
+        "code": 101,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.058
+      },
+      "102": {
+        "code": 102,
+        "width": 0.287,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.206
+      },
+      "103": {
+        "code": 103,
+        "width": 0.47,
+        "height": 0.438,
+        "depth": 0.204,
+        "italicCorrection": 0.088
+      },
+      "104": {
+        "code": 104,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.023
+      },
+      "105": {
+        "code": 105,
+        "width": 0.223,
+        "height": 0.648,
+        "depth": 0,
+        "italicCorrection": 0.089
+      },
+      "106": {
+        "code": 106,
+        "width": 0.249,
+        "height": 0.648,
+        "depth": 0.203,
+        "italicCorrection": 0.083
+      },
+      "107": {
+        "code": 107,
+        "width": 0.458,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.073
+      },
+      "108": {
+        "code": 108,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.093
+      },
+      "109": {
+        "code": 109,
+        "width": 0.745,
+        "height": 0.438,
+        "depth": 0,
+        "italicCorrection": 0.021
+      },
+      "110": {
+        "code": 110,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0,
+        "italicCorrection": 0.023
+      },
+      "111": {
+        "code": 111,
+        "width": 0.47,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.065
+      },
+      "112": {
+        "code": 112,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.195,
+        "italicCorrection": 0.057
+      },
+      "113": {
+        "code": 113,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.195,
+        "italicCorrection": 0.037
+      },
+      "114": {
+        "code": 114,
+        "width": 0.32,
+        "height": 0.438,
+        "depth": 0,
+        "italicCorrection": 0.099
+      },
+      "115": {
+        "code": 115,
+        "width": 0.36,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.07
+      },
+      "116": {
+        "code": 116,
+        "width": 0.34,
+        "height": 0.553,
+        "depth": 0.008,
+        "italicCorrection": 0.068
+      },
+      "117": {
+        "code": 117,
+        "width": 0.484,
+        "height": 0.43,
+        "depth": 0.008,
+        "italicCorrection": 0.036
+      },
+      "118": {
+        "code": 118,
+        "width": 0.432,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0.097
+      },
+      "119": {
+        "code": 119,
+        "width": 0.641,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0.097
+      },
+      "120": {
+        "code": 120,
+        "width": 0.432,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0.094
+      },
+      "121": {
+        "code": 121,
+        "width": 0.432,
+        "height": 0.43,
+        "depth": 0.203,
+        "italicCorrection": 0.097
+      },
+      "122": {
+        "code": 122,
+        "width": 0.408,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0.078
+      },
+      "123": {
+        "code": 123,
+        "width": 0.5,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0.106
+      },
+      "124": {
+        "code": 124,
+        "width": 0.278,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0.06
+      },
+      "125": {
+        "code": 125,
+        "width": 0.5,
+        "height": 0.75,
+        "depth": 0.25,
+        "italicCorrection": 0.002
+      },
+      "126": {
+        "code": 126,
+        "width": 0.556,
+        "height": 0.307,
+        "depth": 0,
+        "italicCorrection": 0.081
+      },
+      "192": {
+        "code": 192,
+        "width": 0.625,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "193": {
+        "code": 193,
+        "width": 0.625,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.081
+      },
+      "194": {
+        "code": 194,
+        "width": 0.625,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.018
+      },
+      "195": {
+        "code": 195,
+        "width": 0.625,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0.044
+      },
+      "196": {
+        "code": 196,
+        "width": 0.625,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "197": {
+        "code": 197,
+        "width": 0.625,
+        "height": 0.87,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "198": {
+        "code": 198,
+        "width": 0.809,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "199": {
+        "code": 199,
+        "width": 0.601,
+        "height": 0.71,
+        "depth": 0.202,
+        "italicCorrection": 0.105
+      },
+      "200": {
+        "code": 200,
+        "width": 0.561,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "201": {
+        "code": 201,
+        "width": 0.561,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "202": {
+        "code": 202,
+        "width": 0.561,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "203": {
+        "code": 203,
+        "width": 0.561,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "204": {
+        "code": 204,
+        "width": 0.259,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.089
+      },
+      "205": {
+        "code": 205,
+        "width": 0.259,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.317
+      },
+      "206": {
+        "code": 206,
+        "width": 0.259,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.201
+      },
+      "207": {
+        "code": 207,
+        "width": 0.259,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0.181
+      },
+      "208": {
+        "code": 208,
+        "width": 0.678,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.081
+      },
+      "209": {
+        "code": 209,
+        "width": 0.663,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "210": {
+        "code": 210,
+        "width": 0.693,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "211": {
+        "code": 211,
+        "width": 0.693,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "212": {
+        "code": 212,
+        "width": 0.693,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "213": {
+        "code": 213,
+        "width": 0.693,
+        "height": 0.847,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "214": {
+        "code": 214,
+        "width": 0.693,
+        "height": 0.805,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "215": {
+        "code": 215,
+        "width": 0.731,
+        "height": 0.484,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "216": {
+        "code": 216,
+        "width": 0.731,
+        "height": 0.758,
+        "depth": 0.064,
+        "italicCorrection": 0.077
+      },
+      "217": {
+        "code": 217,
+        "width": 0.644,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "218": {
+        "code": 218,
+        "width": 0.644,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "219": {
+        "code": 219,
+        "width": 0.644,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "220": {
+        "code": 220,
+        "width": 0.644,
+        "height": 0.805,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "221": {
+        "code": 221,
+        "width": 0.625,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.164
+      },
+      "222": {
+        "code": 222,
+        "width": 0.547,
+        "height": 0.683,
+        "depth": 0,
+        "italicCorrection": 0.062
+      },
+      "223": {
+        "code": 223,
+        "width": 0.451,
+        "height": 0.702,
+        "depth": 0.008,
+        "italicCorrection": 0.102
+      },
+      "224": {
+        "code": 224,
+        "width": 0.451,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.035
+      },
+      "225": {
+        "code": 225,
+        "width": 0.451,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.075
+      },
+      "226": {
+        "code": 226,
+        "width": 0.451,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.06
+      },
+      "227": {
+        "code": 227,
+        "width": 0.451,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0.092
+      },
+      "228": {
+        "code": 228,
+        "width": 0.451,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0.039
+      },
+      "229": {
+        "code": 229,
+        "width": 0.451,
+        "height": 0.683,
+        "depth": 0.008,
+        "italicCorrection": 0.035
+      },
+      "230": {
+        "code": 230,
+        "width": 0.679,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.087
+      },
+      "231": {
+        "code": 231,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.202,
+        "italicCorrection": 0.073
+      },
+      "232": {
+        "code": 232,
+        "width": 0.418,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.058
+      },
+      "233": {
+        "code": 233,
+        "width": 0.418,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.092
+      },
+      "234": {
+        "code": 234,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.077
+      },
+      "235": {
+        "code": 235,
+        "width": 0.418,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0.058
+      },
+      "236": {
+        "code": 236,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.055
+      },
+      "237": {
+        "code": 237,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.219
+      },
+      "238": {
+        "code": 238,
+        "width": 0.223,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.174
+      },
+      "239": {
+        "code": 239,
+        "width": 0.223,
+        "height": 0.644,
+        "depth": 0,
+        "italicCorrection": 0.153
+      },
+      "240": {
+        "code": 240,
+        "width": 0.47,
+        "height": 0.715,
+        "depth": 0.008,
+        "italicCorrection": 0.061
+      },
+      "241": {
+        "code": 241,
+        "width": 0.484,
+        "height": 0.665,
+        "depth": 0,
+        "italicCorrection": 0.076
+      },
+      "242": {
+        "code": 242,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.065
+      },
+      "243": {
+        "code": 243,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.066
+      },
+      "244": {
+        "code": 244,
+        "width": 0.47,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.065
+      },
+      "245": {
+        "code": 245,
+        "width": 0.47,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0.083
+      },
+      "246": {
+        "code": 246,
+        "width": 0.47,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0.065
+      },
+      "247": {
+        "code": 247,
+        "width": 0.731,
+        "height": 0.412,
+        "depth": 0,
+        "italicCorrection": 0.024
+      },
+      "248": {
+        "code": 248,
+        "width": 0.47,
+        "height": 0.543,
+        "depth": 0.112,
+        "italicCorrection": 0.09
+      },
+      "249": {
+        "code": 249,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.036
+      },
+      "250": {
+        "code": 250,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.059
+      },
+      "251": {
+        "code": 251,
+        "width": 0.484,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.044
+      },
+      "252": {
+        "code": 252,
+        "width": 0.484,
+        "height": 0.644,
+        "depth": 0.008,
+        "italicCorrection": 0.036
+      },
+      "253": {
+        "code": 253,
+        "width": 0.432,
+        "height": 0.694,
+        "depth": 0.203,
+        "italicCorrection": 0.097
+      },
+      "254": {
+        "code": 254,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.195,
+        "italicCorrection": 0.057
+      },
+      "255": {
+        "code": 255,
+        "width": 0.432,
+        "height": 0.644,
+        "depth": 0.203,
+        "italicCorrection": 0.097
+      },
+      "256": {
+        "code": 256,
+        "width": 0.625,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0.05
+      },
+      "257": {
+        "code": 257,
+        "width": 0.451,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0.1
+      },
+      "258": {
+        "code": 258,
+        "width": 0.625,
+        "height": 0.933,
+        "depth": 0,
+        "italicCorrection": 0.066
+      },
+      "259": {
+        "code": 259,
+        "width": 0.451,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0.104
+      },
+      "260": {
+        "code": 260,
+        "width": 0.625,
+        "height": 0.694,
+        "depth": 0.212,
+        "italicCorrection": 0
+      },
+      "261": {
+        "code": 261,
+        "width": 0.451,
+        "height": 0.442,
+        "depth": 0.212,
+        "italicCorrection": 0.035
+      },
+      "262": {
+        "code": 262,
+        "width": 0.601,
+        "height": 0.862,
+        "depth": 0.008,
+        "italicCorrection": 0.123
+      },
+      "263": {
+        "code": 263,
+        "width": 0.418,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.113
+      },
+      "264": {
+        "code": 264,
+        "width": 0.601,
+        "height": 0.864,
+        "depth": 0.008,
+        "italicCorrection": 0.096
+      },
+      "265": {
+        "code": 265,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.098
+      },
+      "266": {
+        "code": 266,
+        "width": 0.601,
+        "height": 0.814,
+        "depth": 0.008,
+        "italicCorrection": 0.096
+      },
+      "267": {
+        "code": 267,
+        "width": 0.418,
+        "height": 0.648,
+        "depth": 0.008,
+        "italicCorrection": 0.073
+      },
+      "268": {
+        "code": 268,
+        "width": 0.601,
+        "height": 0.864,
+        "depth": 0.008,
+        "italicCorrection": 0.096
+      },
+      "269": {
+        "code": 269,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.134
+      },
+      "270": {
+        "code": 270,
+        "width": 0.678,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.081
+      },
+      "271": {
+        "code": 271,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.2
+      },
+      "272": {
+        "code": 272,
+        "width": 0.678,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.081
+      },
+      "273": {
+        "code": 273,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.146
+      },
+      "274": {
+        "code": 274,
+        "width": 0.561,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "275": {
+        "code": 275,
+        "width": 0.418,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0.117
+      },
+      "276": {
+        "code": 276,
+        "width": 0.561,
+        "height": 0.933,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "277": {
+        "code": 277,
+        "width": 0.418,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0.121
+      },
+      "278": {
+        "code": 278,
+        "width": 0.561,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "279": {
+        "code": 279,
+        "width": 0.418,
+        "height": 0.648,
+        "depth": 0.008,
+        "italicCorrection": 0.058
+      },
+      "280": {
+        "code": 280,
+        "width": 0.561,
+        "height": 0.692,
+        "depth": 0.212,
+        "italicCorrection": 0.114
+      },
+      "281": {
+        "code": 281,
+        "width": 0.418,
+        "height": 0.442,
+        "depth": 0.212,
+        "italicCorrection": 0.058
+      },
+      "282": {
+        "code": 282,
+        "width": 0.561,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "283": {
+        "code": 283,
+        "width": 0.418,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.113
+      },
+      "284": {
+        "code": 284,
+        "width": 0.627,
+        "height": 0.864,
+        "depth": 0.008,
+        "italicCorrection": 0.081
+      },
+      "285": {
+        "code": 285,
+        "width": 0.47,
+        "height": 0.692,
+        "depth": 0.204,
+        "italicCorrection": 0.088
+      },
+      "286": {
+        "code": 286,
+        "width": 0.627,
+        "height": 0.933,
+        "depth": 0.008,
+        "italicCorrection": 0.081
+      },
+      "287": {
+        "code": 287,
+        "width": 0.47,
+        "height": 0.703,
+        "depth": 0.204,
+        "italicCorrection": 0.088
+      },
+      "288": {
+        "code": 288,
+        "width": 0.627,
+        "height": 0.814,
+        "depth": 0.008,
+        "italicCorrection": 0.081
+      },
+      "289": {
+        "code": 289,
+        "width": 0.47,
+        "height": 0.648,
+        "depth": 0.204,
+        "italicCorrection": 0.088
+      },
+      "290": {
+        "code": 290,
+        "width": 0.627,
+        "height": 0.695,
+        "depth": 0.242,
+        "italicCorrection": 0.081
+      },
+      "291": {
+        "code": 291,
+        "width": 0.47,
+        "height": 0.714,
+        "depth": 0.204,
+        "italicCorrection": 0.088
+      },
+      "292": {
+        "code": 292,
+        "width": 0.663,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "293": {
+        "code": 293,
+        "width": 0.484,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.089
+      },
+      "294": {
+        "code": 294,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.1
+      },
+      "295": {
+        "code": 295,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.023
+      },
+      "296": {
+        "code": 296,
+        "width": 0.259,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0.227
+      },
+      "297": {
+        "code": 297,
+        "width": 0.223,
+        "height": 0.665,
+        "depth": 0,
+        "italicCorrection": 0.206
+      },
+      "298": {
+        "code": 298,
+        "width": 0.259,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0.233
+      },
+      "299": {
+        "code": 299,
+        "width": 0.223,
+        "height": 0.638,
+        "depth": 0,
+        "italicCorrection": 0.214
+      },
+      "300": {
+        "code": 300,
+        "width": 0.259,
+        "height": 0.933,
+        "depth": 0,
+        "italicCorrection": 0.249
+      },
+      "301": {
+        "code": 301,
+        "width": 0.223,
+        "height": 0.703,
+        "depth": 0,
+        "italicCorrection": 0.218
+      },
+      "302": {
+        "code": 302,
+        "width": 0.259,
+        "height": 0.694,
+        "depth": 0.212,
+        "italicCorrection": 0.08
+      },
+      "303": {
+        "code": 303,
+        "width": 0.223,
+        "height": 0.658,
+        "depth": 0.212,
+        "italicCorrection": 0.09
+      },
+      "304": {
+        "code": 304,
+        "width": 0.259,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0.106
+      },
+      "305": {
+        "code": 305,
+        "width": 0.223,
+        "height": 0.43,
+        "depth": 0,
+        "italicCorrection": 0.036
+      },
+      "306": {
+        "code": 306,
+        "width": 0.676,
+        "height": 0.694,
+        "depth": 0.016,
+        "italicCorrection": 0.09
+      },
+      "307": {
+        "code": 307,
+        "width": 0.449,
+        "height": 0.648,
+        "depth": 0.203,
+        "italicCorrection": 0.083
+      },
+      "308": {
+        "code": 308,
+        "width": 0.443,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0.212
+      },
+      "309": {
+        "code": 309,
+        "width": 0.249,
+        "height": 0.692,
+        "depth": 0.203,
+        "italicCorrection": 0.169
+      },
+      "310": {
+        "code": 310,
+        "width": 0.651,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0.115
+      },
+      "311": {
+        "code": 311,
+        "width": 0.458,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0.073
+      },
+      "313": {
+        "code": 313,
+        "width": 0.509,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.068
+      },
+      "314": {
+        "code": 314,
+        "width": 0.223,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.34
+      },
+      "315": {
+        "code": 315,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0
+      },
+      "316": {
+        "code": 316,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0.093
+      },
+      "317": {
+        "code": 317,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "318": {
+        "code": 318,
+        "width": 0.223,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.201
+      },
+      "319": {
+        "code": 319,
+        "width": 0.509,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.023
+      },
+      "320": {
+        "code": 320,
+        "width": 0.283,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.117
+      },
+      "321": {
+        "code": 321,
+        "width": 0.587,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "322": {
+        "code": 322,
+        "width": 0.303,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.116
+      },
+      "323": {
+        "code": 323,
+        "width": 0.663,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "324": {
+        "code": 324,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.059
+      },
+      "325": {
+        "code": 325,
+        "width": 0.663,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0.079
+      },
+      "326": {
+        "code": 326,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.242,
+        "italicCorrection": 0.023
+      },
+      "327": {
+        "code": 327,
+        "width": 0.663,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.079
+      },
+      "328": {
+        "code": 328,
+        "width": 0.484,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.08
+      },
+      "330": {
+        "code": 330,
+        "width": 0.663,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0.043
+      },
+      "331": {
+        "code": 331,
+        "width": 0.484,
+        "height": 0.438,
+        "depth": 0.205,
+        "italicCorrection": 0.023
+      },
+      "332": {
+        "code": 332,
+        "width": 0.693,
+        "height": 0.814,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "333": {
+        "code": 333,
+        "width": 0.47,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0.091
+      },
+      "334": {
+        "code": 334,
+        "width": 0.693,
+        "height": 0.933,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "335": {
+        "code": 335,
+        "width": 0.47,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0.095
+      },
+      "336": {
+        "code": 336,
+        "width": 0.693,
+        "height": 0.916,
+        "depth": 0.016,
+        "italicCorrection": 0.085
+      },
+      "337": {
+        "code": 337,
+        "width": 0.47,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.089
+      },
+      "338": {
+        "code": 338,
+        "width": 0.913,
+        "height": 0.71,
+        "depth": 0.016,
+        "italicCorrection": 0.115
+      },
+      "339": {
+        "code": 339,
+        "width": 0.731,
+        "height": 0.442,
+        "depth": 0.008,
+        "italicCorrection": 0.087
+      },
+      "340": {
+        "code": 340,
+        "width": 0.606,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.095
+      },
+      "341": {
+        "code": 341,
+        "width": 0.32,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.123
+      },
+      "342": {
+        "code": 342,
+        "width": 0.606,
+        "height": 0.694,
+        "depth": 0.242,
+        "italicCorrection": 0.095
+      },
+      "343": {
+        "code": 343,
+        "width": 0.32,
+        "height": 0.438,
+        "depth": 0.242,
+        "italicCorrection": 0.099
+      },
+      "344": {
+        "code": 344,
+        "width": 0.606,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.095
+      },
+      "345": {
+        "code": 345,
+        "width": 0.32,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.162
+      },
+      "346": {
+        "code": 346,
+        "width": 0.522,
+        "height": 0.862,
+        "depth": 0.016,
+        "italicCorrection": 0.133
+      },
+      "347": {
+        "code": 347,
+        "width": 0.36,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.121
+      },
+      "348": {
+        "code": 348,
+        "width": 0.522,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0.075
+      },
+      "349": {
+        "code": 349,
+        "width": 0.36,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.106
+      },
+      "350": {
+        "code": 350,
+        "width": 0.522,
+        "height": 0.71,
+        "depth": 0.202,
+        "italicCorrection": 0.075
+      },
+      "351": {
+        "code": 351,
+        "width": 0.36,
+        "height": 0.442,
+        "depth": 0.202,
+        "italicCorrection": 0.07
+      },
+      "352": {
+        "code": 352,
+        "width": 0.522,
+        "height": 0.864,
+        "depth": 0.016,
+        "italicCorrection": 0.099
+      },
+      "353": {
+        "code": 353,
+        "width": 0.36,
+        "height": 0.692,
+        "depth": 0.008,
+        "italicCorrection": 0.142
+      },
+      "354": {
+        "code": 354,
+        "width": 0.641,
+        "height": 0.691,
+        "depth": 0.186,
+        "italicCorrection": 0.132
+      },
+      "355": {
+        "code": 355,
+        "width": 0.34,
+        "height": 0.553,
+        "depth": 0.186,
+        "italicCorrection": 0.068
+      },
+      "356": {
+        "code": 356,
+        "width": 0.641,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.132
+      },
+      "357": {
+        "code": 357,
+        "width": 0.34,
+        "height": 0.649,
+        "depth": 0.008,
+        "italicCorrection": 0.093
+      },
+      "360": {
+        "code": 360,
+        "width": 0.644,
+        "height": 0.847,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "361": {
+        "code": 361,
+        "width": 0.484,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0.076
+      },
+      "362": {
+        "code": 362,
+        "width": 0.644,
+        "height": 0.814,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "363": {
+        "code": 363,
+        "width": 0.484,
+        "height": 0.638,
+        "depth": 0.008,
+        "italicCorrection": 0.084
+      },
+      "364": {
+        "code": 364,
+        "width": 0.644,
+        "height": 0.933,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "365": {
+        "code": 365,
+        "width": 0.484,
+        "height": 0.703,
+        "depth": 0.008,
+        "italicCorrection": 0.088
+      },
+      "366": {
+        "code": 366,
+        "width": 0.644,
+        "height": 0.87,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "367": {
+        "code": 367,
+        "width": 0.484,
+        "height": 0.683,
+        "depth": 0.008,
+        "italicCorrection": 0.036
+      },
+      "368": {
+        "code": 368,
+        "width": 0.644,
+        "height": 0.916,
+        "depth": 0.016,
+        "italicCorrection": 0.079
+      },
+      "369": {
+        "code": 369,
+        "width": 0.484,
+        "height": 0.694,
+        "depth": 0.008,
+        "italicCorrection": 0.082
+      },
+      "370": {
+        "code": 370,
+        "width": 0.644,
+        "height": 0.694,
+        "depth": 0.212,
+        "italicCorrection": 0.079
+      },
+      "371": {
+        "code": 371,
+        "width": 0.484,
+        "height": 0.43,
+        "depth": 0.212,
+        "italicCorrection": 0.036
+      },
+      "372": {
+        "code": 372,
+        "width": 0.886,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.154
+      },
+      "373": {
+        "code": 373,
+        "width": 0.641,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.097
+      },
+      "374": {
+        "code": 374,
+        "width": 0.625,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.164
+      },
+      "375": {
+        "code": 375,
+        "width": 0.432,
+        "height": 0.692,
+        "depth": 0.203,
+        "italicCorrection": 0.097
+      },
+      "376": {
+        "code": 376,
+        "width": 0.625,
+        "height": 0.805,
+        "depth": 0,
+        "italicCorrection": 0.164
+      },
+      "377": {
+        "code": 377,
+        "width": 0.575,
+        "height": 0.862,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "378": {
+        "code": 378,
+        "width": 0.408,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.097
+      },
+      "379": {
+        "code": 379,
+        "width": 0.575,
+        "height": 0.814,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "380": {
+        "code": 380,
+        "width": 0.408,
+        "height": 0.648,
+        "depth": 0,
+        "italicCorrection": 0.078
+      },
+      "381": {
+        "code": 381,
+        "width": 0.575,
+        "height": 0.864,
+        "depth": 0,
+        "italicCorrection": 0.115
+      },
+      "382": {
+        "code": 382,
+        "width": 0.408,
+        "height": 0.692,
+        "depth": 0,
+        "italicCorrection": 0.118
+      },
+      "383": {
+        "code": 383,
+        "width": 0.267,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.206
+      },
+      "7868": {
+        "code": 7868,
+        "width": 0.561,
+        "height": 0.847,
+        "depth": 0,
+        "italicCorrection": 0.114
+      },
+      "7869": {
+        "code": 7869,
+        "width": 0.418,
+        "height": 0.665,
+        "depth": 0.008,
+        "italicCorrection": 0.109
+      },
+      "8211": {
+        "code": 8211,
+        "width": 0.47,
+        "height": 0.296,
+        "depth": 0,
+        "italicCorrection": 0.082
+      },
+      "8212": {
+        "code": 8212,
+        "width": 0.94,
+        "height": 0.296,
+        "depth": 0,
+        "italicCorrection": 0.082
+      },
+      "8216": {
+        "code": 8216,
+        "width": 0.261,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.078
+      },
+      "8217": {
+        "code": 8217,
+        "width": 0.261,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.077
+      },
+      "8220": {
+        "code": 8220,
+        "width": 0.444,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.078
+      },
+      "8221": {
+        "code": 8221,
+        "width": 0.444,
+        "height": 0.694,
+        "depth": 0,
+        "italicCorrection": 0.078
+      },
+      "8226": {
+        "code": 8226,
+        "width": 0.731,
+        "height": 0.396,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "8230": {
+        "code": 8230,
+        "width": 0.592,
+        "height": 0.08,
+        "depth": 0,
+        "italicCorrection": 0
+      },
+      "64256": {
+        "code": 64256,
+        "width": 0.549,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.206
+      },
+      "64257": {
+        "code": 64257,
+        "width": 0.503,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.095
+      },
+      "64258": {
+        "code": 64258,
+        "width": 0.503,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.092
+      },
+      "64259": {
+        "code": 64259,
+        "width": 0.764,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.095
+      },
+      "64260": {
+        "code": 64260,
+        "width": 0.764,
+        "height": 0.702,
+        "depth": 0,
+        "italicCorrection": 0.092
+      }
+    },
+    "ligKerns": [
+      [
+        "lig",
+        102,
+        102,
+        64256
+      ],
+      [
+        "lig",
+        102,
+        105,
+        64257
+      ],
+      [
+        "lig",
+        102,
+        108,
+        64258
+      ],
+      [
+        "lig",
+        64256,
+        105,
+        64259
+      ],
+      [
+        "lig",
+        64256,
+        108,
+        64260
+      ],
+      [
+        "kern",
+        34,
+        34,
+        0.052
+      ],
+      [
+        "kern",
+        34,
+        39,
+        0.052
+      ],
+      [
+        "kern",
+        34,
+        46,
+        -0.131
+      ],
+      [
+        "kern",
+        39,
+        33,
+        0.052
+      ],
+      [
+        "kern",
+        39,
+        34,
+        0.052
+      ],
+      [
+        "kern",
+        39,
+        46,
+        -0.131
+      ],
+      [
+        "kern",
+        39,
+        63,
+        0.052
+      ],
+      [
+        "kern",
+        46,
+        34,
+        -0.131
+      ],
+      [
+        "kern",
+        46,
+        39,
+        -0.131
+      ],
+      [
+        "kern",
+        46,
+        96,
+        -0.131
+      ],
+      [
+        "kern",
+        65,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        84,
+        -0.078
+      ],
+      [
+        "kern",
+        65,
+        85,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        86,
+        -0.103999
+      ],
+      [
+        "kern",
+        65,
+        87,
+        -0.103999
+      ],
+      [
+        "kern",
+        65,
+        89,
+        -0.078
+      ],
+      [
+        "kern",
+        65,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        113,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        116,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        65,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        65,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        86,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        87,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        88,
+        -0.025999
+      ],
+      [
+        "kern",
+        68,
+        89,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        70,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        103,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        109,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        110,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        112,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        115,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        70,
+        122,
+        -0.025999
+      ],
+      [
+        "kern",
+        73,
+        73,
+        0.025999
+      ],
+      [
+        "kern",
+        75,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        75,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        76,
+        84,
+        -0.078
+      ],
+      [
+        "kern",
+        76,
+        86,
+        -0.103999
+      ],
+      [
+        "kern",
+        76,
+        87,
+        -0.103999
+      ],
+      [
+        "kern",
+        76,
+        89,
+        -0.078
+      ],
+      [
+        "kern",
+        79,
+        65,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        86,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        87,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        88,
+        -0.025999
+      ],
+      [
+        "kern",
+        79,
+        89,
+        -0.025999
+      ],
+      [
+        "kern",
+        80,
+        44,
+        -0.078
+      ],
+      [
+        "kern",
+        80,
+        46,
+        -0.078
+      ],
+      [
+        "kern",
+        80,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        80,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        80,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        80,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        82,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        84,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        97,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        99,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        100,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        101,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        103,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        110,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        111,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        112,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        114,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        115,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        117,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        118,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        119,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        120,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        121,
+        -0.078
+      ],
+      [
+        "kern",
+        84,
+        122,
+        -0.078
+      ],
+      [
+        "kern",
+        86,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        86,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        103,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        109,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        110,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        112,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        115,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        86,
+        122,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        87,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        100,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        103,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        109,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        110,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        112,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        115,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        117,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        118,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        87,
+        122,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        67,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        71,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        79,
+        -0.025999
+      ],
+      [
+        "kern",
+        88,
+        81,
+        -0.025999
+      ],
+      [
+        "kern",
+        89,
+        65,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        97,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        99,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        100,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        101,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        103,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        110,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        111,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        112,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        114,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        115,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        117,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        118,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        119,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        120,
+        -0.078
+      ],
+      [
+        "kern",
+        89,
+        122,
+        -0.078
+      ],
+      [
+        "kern",
+        96,
+        33,
+        0.052
+      ],
+      [
+        "kern",
+        96,
+        46,
+        -0.131
+      ],
+      [
+        "kern",
+        96,
+        63,
+        0.052
+      ],
+      [
+        "kern",
+        97,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        97,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        97,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        99,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        100,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        101,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        111,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        113,
+        0.025999
+      ],
+      [
+        "kern",
+        98,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        120,
+        -0.025999
+      ],
+      [
+        "kern",
+        98,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        101,
+        86,
+        -0.078
+      ],
+      [
+        "kern",
+        102,
+        33,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        34,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        39,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        41,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        63,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        93,
+        0.078
+      ],
+      [
+        "kern",
+        102,
+        96,
+        0.078
+      ],
+      [
+        "kern",
+        103,
+        106,
+        0.078
+      ],
+      [
+        "kern",
+        107,
+        86,
+        -0.078
+      ],
+      [
+        "kern",
+        107,
+        87,
+        -0.078
+      ],
+      [
+        "kern",
+        107,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        107,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        107,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        99,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        100,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        101,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        111,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        113,
+        0.025999
+      ],
+      [
+        "kern",
+        111,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        120,
+        -0.025999
+      ],
+      [
+        "kern",
+        111,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        99,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        100,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        101,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        111,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        113,
+        0.025999
+      ],
+      [
+        "kern",
+        112,
+        114,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        120,
+        -0.025999
+      ],
+      [
+        "kern",
+        112,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        116,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        116,
+        121,
+        -0.025999
+      ],
+      [
+        "kern",
+        117,
+        119,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        99,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        119,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        121,
+        44,
+        -0.078
+      ],
+      [
+        "kern",
+        121,
+        46,
+        -0.078
+      ],
+      [
+        "kern",
+        121,
+        97,
+        -0.025999
+      ],
+      [
+        "kern",
+        121,
+        101,
+        -0.025999
+      ],
+      [
+        "kern",
+        121,
+        111,
+        -0.025999
+      ],
+      [
+        "kern",
+        64256,
+        33,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        34,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        39,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        41,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        63,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        93,
+        0.078
+      ],
+      [
+        "kern",
+        64256,
+        96,
+        0.078
+      ]
+    ],
+    "glyphs": {
+      "33": "M3.38 -6.94H2.58L1.54 -1.69H2.18ZM1.9 0 2.07 -0.8H1.27L1.1 0Z",
+      "34": "M2.6 -4.26 3.2 -7.1H2.44L1.84 -4.26ZM4.12 -4.26 4.72 -7.1H3.96L3.36 -4.26Z",
+      "35": "M7.65 -1.61C7.69 -1.78 7.54 -1.78 7.39 -1.78H5.39L6.03 -3.21H7.69C7.84 -3.21 7.99 -3.21 8.03 -3.38C8.07 -3.56 7.9 -3.56 7.73 -3.56H6.21L7.62 -6.58C7.67 -6.68 7.69 -6.73 7.7 -6.76C7.72 -6.86 7.66 -6.94 7.56 -6.94C7.42 -6.94 7.36 -6.8 7.32 -6.72L5.85 -3.56H4.04L5.45 -6.58C5.5 -6.68 5.52 -6.73 5.53 -6.76C5.55 -6.86 5.49 -6.94 5.39 -6.94C5.25 -6.94 5.19 -6.8 5.15 -6.72L3.68 -3.56H1.62C1.45 -3.56 1.28 -3.56 1.24 -3.38C1.2 -3.21 1.35 -3.21 1.5 -3.21H3.5L2.86 -1.78H1.2C1.05 -1.78 0.9 -1.78 0.86 -1.61C0.82 -1.43 0.99 -1.43 1.16 -1.43H2.68L1.27 1.59C1.22 1.69 1.2 1.74 1.19 1.77C1.17 1.87 1.24 1.95 1.34 1.95C1.48 1.95 1.54 1.81 1.57 1.73L3.04 -1.43H4.85L3.44 1.59C3.39 1.69 3.37 1.74 3.36 1.77C3.34 1.87 3.41 1.95 3.51 1.95C3.65 1.95 3.71 1.81 3.74 1.73L5.21 -1.43H7.27C7.44 -1.43 7.61 -1.43 7.65 -1.61ZM5.67 -3.21 5.03 -1.78H3.22L3.86 -3.21Z",
+      "36": "M4.58 -1.95C4.75 -2.75 4.52 -3.73 3.48 -3.96L3.99 -6.37C4.53 -6.32 4.88 -6.07 5.12 -5.81L5.37 -6.43C5.38 -6.47 4.96 -6.94 4.13 -7.01L4.23 -7.49H3.65L3.55 -7C2.57 -6.83 1.8 -6.01 1.61 -5.13C1.52 -4.71 1.45 -3.58 2.75 -3.25L2.18 -0.58C1.63 -0.64 1.14 -0.88 0.81 -1.28L0.55 -0.61C0.87 -0.3 1.33 -0.01 2.05 0.07L1.94 0.55H2.52L2.63 0.05C3.67 -0.15 4.4 -1.07 4.58 -1.95ZM2.94 -4.12C2.44 -4.27 2.24 -4.74 2.34 -5.23C2.44 -5.67 2.8 -6.18 3.41 -6.34ZM3.85 -1.85C3.76 -1.4 3.41 -0.8 2.77 -0.61L3.3 -3.09C3.86 -2.9 3.95 -2.3 3.85 -1.85Z",
+      "37": "M4.29 -5.48C4.54 -6.64 4.1 -7.49 3.42 -7.49C2.75 -7.49 1.94 -6.66 1.68 -5.48C1.43 -4.3 1.9 -3.47 2.57 -3.47C3.26 -3.47 4.05 -4.32 4.29 -5.48ZM7.74 -7.31C7.77 -7.42 7.69 -7.49 7.61 -7.49C7.5 -7.49 7.44 -7.41 7.36 -7.31L1.68 0.21C1.65 0.25 1.59 0.31 1.58 0.37C1.56 0.48 1.63 0.55 1.72 0.55C1.81 0.55 1.84 0.51 1.95 0.37L7.65 -7.15C7.73 -7.25 7.74 -7.31 7.74 -7.31ZM7.62 -1.46C7.87 -2.62 7.43 -3.47 6.75 -3.47C6.08 -3.47 5.26 -2.64 5.01 -1.46C4.76 -0.28 5.22 0.55 5.89 0.55C6.58 0.55 7.37 -0.3 7.62 -1.46ZM3.56 -5.48C3.42 -4.81 3.07 -4.08 2.7 -4.08C2.49 -4.08 2.19 -4.27 2.44 -5.48C2.7 -6.68 3.08 -6.88 3.29 -6.88C3.66 -6.88 3.71 -6.15 3.56 -5.48ZM6.89 -1.46C6.75 -0.79 6.39 -0.06 6.02 -0.06C5.81 -0.06 5.51 -0.25 5.77 -1.46C6.03 -2.66 6.41 -2.86 6.62 -2.86C6.99 -2.86 7.03 -2.13 6.89 -1.46Z",
+      "38": "M6.59 0.01 6.73 -0.65C6.2 -0.5 5.77 -0.48 5.62 -0.48C5.41 -0.48 5.14 -0.5 4.75 -0.84C4.82 -0.89 6.16 -1.86 7.06 -3.77L6.48 -3.95C5.6 -2.15 4.55 -1.4 4.38 -1.28C4.24 -1.49 3.68 -2.36 3.38 -3.42C3.38 -3.42 4.03 -3.92 4.41 -4.29C4.82 -4.68 5.2 -5.1 5.3 -5.57C5.46 -6.32 5.13 -7.1 4.35 -7.1C3.49 -7.1 2.81 -6.17 2.59 -5.15C2.47 -4.55 2.48 -4.03 2.55 -3.47L1.52 -2.67C1.34 -2.53 0.85 -2.15 0.7 -1.47C0.52 -0.62 1.06 0.16 2.09 0.16C2.78 0.16 3.49 -0.07 4.08 -0.4C4.55 0.05 5.04 0.16 5.47 0.16C5.61 0.16 6.03 0.15 6.59 0.01ZM4.58 -5.58C4.45 -5 3.78 -4.45 3.27 -4.04C3.2 -4.59 3.25 -5.15 3.33 -5.49C3.49 -6.25 3.93 -6.49 4.21 -6.49C4.73 -6.49 4.61 -5.73 4.58 -5.58ZM3.68 -0.85C3.21 -0.62 2.71 -0.48 2.23 -0.48C1.54 -0.48 1.38 -1.09 1.48 -1.53C1.58 -2.01 1.88 -2.26 2 -2.35C2.22 -2.54 2.45 -2.71 2.68 -2.88C2.81 -2.41 3.17 -1.6 3.68 -0.85Z",
+      "39": "M2.6 -4.26 3.2 -7.1H2.44L1.84 -4.26Z",
+      "40": "M2.6 2.5C1.64 1.22 1.62 -0.57 2.03 -2.49C2.44 -4.4 3.2 -6.2 4.72 -7.49H4.11C3.46 -6.94 1.94 -5.66 1.27 -2.5C0.6 0.67 1.57 1.94 1.99 2.5Z",
+      "41": "M3.44 -2.49C4.11 -5.66 3.14 -6.93 2.72 -7.49H2.11C3.07 -6.21 3.09 -4.42 2.68 -2.5C2.28 -0.59 1.51 1.21 -0.01 2.5H0.6C1.26 1.95 2.77 0.67 3.44 -2.49Z",
+      "42": "M5.05 -4.45C5.09 -4.64 4.96 -4.72 4.89 -4.76L3.95 -5.34L5.15 -5.92C5.28 -5.99 5.39 -6.09 5.42 -6.23C5.47 -6.43 5.32 -6.58 5.16 -6.58C5.07 -6.58 4.99 -6.54 4.9 -6.48L3.83 -5.8L4.2 -7.15C4.25 -7.38 4.1 -7.49 3.93 -7.49C3.79 -7.49 3.58 -7.39 3.53 -7.15L3.32 -5.8L2.55 -6.47C2.44 -6.56 2.42 -6.58 2.33 -6.58C2.17 -6.58 1.96 -6.43 1.91 -6.23C1.87 -6.04 2 -5.96 2.07 -5.92L3.02 -5.34L1.81 -4.76C1.68 -4.69 1.57 -4.59 1.54 -4.45C1.49 -4.25 1.64 -4.1 1.8 -4.1C1.89 -4.1 1.97 -4.14 2.06 -4.2L3.13 -4.88L2.76 -3.53C2.71 -3.3 2.86 -3.19 3.03 -3.19C3.17 -3.19 3.38 -3.29 3.43 -3.53L3.44 -3.62L3.64 -4.88L4.41 -4.21C4.52 -4.12 4.54 -4.1 4.63 -4.1C4.79 -4.1 5 -4.25 5.05 -4.45Z",
+      "43": "M7.31 -2.49C7.35 -2.67 7.19 -2.67 7.04 -2.67H4.4L4.96 -5.32C4.99 -5.46 5.03 -5.63 4.86 -5.63C4.68 -5.63 4.64 -5.47 4.61 -5.32L4.05 -2.67H1.4C1.26 -2.67 1.09 -2.67 1.05 -2.5C1.01 -2.32 1.17 -2.32 1.32 -2.32H3.97L3.41 0.33C3.38 0.47 3.34 0.64 3.51 0.64C3.69 0.64 3.73 0.48 3.76 0.33L4.32 -2.32H6.96C7.1 -2.32 7.27 -2.32 7.31 -2.49Z",
+      "44": "M1.7 -0.01 1.87 -0.8H1.07L0.9 0H1.15L0.62 1.25H1.02Z",
+      "45": "M3 -1.86 3.12 -2.44H0.62L0.5 -1.86Z",
+      "46": "M1.7 0 1.87 -0.8H1.07L0.9 0Z",
+      "47": "M5.72 -7.31C5.75 -7.43 5.67 -7.49 5.59 -7.49C5.47 -7.49 5.42 -7.41 5.35 -7.29L0.12 2.14C0.04 2.27 0.03 2.31 0.03 2.31C0 2.43 0.08 2.49 0.16 2.49C0.28 2.49 0.34 2.41 0.4 2.29L5.64 -7.14C5.72 -7.27 5.72 -7.31 5.72 -7.31Z",
+      "48": "M5.01 -3.27C5.13 -3.84 5.34 -4.9 5.11 -5.72C4.86 -6.51 4.25 -6.72 3.78 -6.72C3.1 -6.72 2.43 -6.32 2 -5.68C1.53 -5.01 1.3 -4.32 1.08 -3.27C0.92 -2.55 0.76 -1.67 0.96 -0.9C1.19 -0.05 1.84 0.16 2.31 0.16C2.93 0.16 3.6 -0.17 4.08 -0.86C4.59 -1.58 4.81 -2.37 5.01 -3.27ZM4.27 -3.38C4.07 -2.45 3.65 -0.45 2.44 -0.45C1.68 -0.45 1.63 -1.32 1.62 -1.61C1.61 -2.11 1.69 -2.59 1.86 -3.38C1.99 -4 2.14 -4.7 2.45 -5.25C2.81 -5.89 3.26 -6.11 3.64 -6.11C4.38 -6.11 4.46 -5.37 4.49 -5.11C4.52 -4.58 4.39 -3.96 4.27 -3.38Z",
+      "49": "M4.02 0 4.14 -0.58H2.96L4.27 -6.72H4.08C3.42 -6.16 2.77 -6.08 2.13 -6.06L2 -5.48C2.3 -5.49 2.77 -5.51 3.29 -5.72L2.19 -0.58H1.01L0.89 0Z",
+      "50": "M4.22 0 4.36 -0.68H2.66C2.54 -0.68 2.42 -0.67 2.3 -0.67H1.3V-0.68L3.03 -2.12C3.37 -2.41 3.87 -2.76 4.23 -3.11C4.58 -3.45 5.06 -3.93 5.2 -4.63C5.44 -5.73 4.91 -6.72 3.65 -6.72C2.66 -6.72 1.96 -6.1 1.48 -5.13L1.76 -4.59C2.17 -5.5 2.6 -6.08 3.38 -6.08C4.24 -6.08 4.57 -5.38 4.41 -4.61C4.21 -3.69 3.36 -2.98 2.72 -2.45L0.61 -0.64L0.47 0Z",
+      "51": "M4.69 -1.84C4.86 -2.63 4.45 -3.29 3.75 -3.54C4.42 -3.87 4.99 -4.49 5.15 -5.21C5.33 -6.05 4.7 -6.72 3.76 -6.72C2.9 -6.72 2.12 -6.19 1.71 -5.62C1.76 -5.52 1.88 -5.23 1.94 -5.08C2.29 -5.67 2.95 -6.11 3.62 -6.11C4.18 -6.11 4.47 -5.74 4.36 -5.21C4.24 -4.66 3.76 -4.06 3.14 -3.92C3.1 -3.92 2.47 -3.86 2.39 -3.85L2.26 -3.24H2.94C3.88 -3.24 3.97 -2.42 3.85 -1.85C3.69 -1.07 3.12 -0.46 2.4 -0.46C1.84 -0.46 1.11 -0.74 0.81 -1.48C0.67 -1.13 0.67 -1.11 0.57 -0.87C0.9 -0.18 1.59 0.16 2.29 0.16C3.43 0.16 4.47 -0.79 4.69 -1.84Z",
+      "52": "M4.79 -1.71 4.92 -2.32H4.01L4.91 -6.56H4.03L0.75 -2.32L0.62 -1.71H3.09L2.73 0H3.52L3.88 -1.71ZM3.25 -2.32H1.52C2.32 -3.34 3.9 -5.4 4.06 -6.1Z",
+      "53": "M4.65 -2.03C4.91 -3.26 4.3 -4.21 3.33 -4.21C2.98 -4.21 2.62 -4.09 2.28 -3.85L2.72 -5.92H5.17L5.3 -6.56H2.12L1.34 -2.87H2.01C2.28 -3.29 2.72 -3.6 3.2 -3.6C3.65 -3.6 4.06 -3.2 3.82 -2.05C3.55 -0.82 2.77 -0.46 2.25 -0.46C1.61 -0.46 1.1 -0.85 0.96 -1.39L0.52 -0.83C0.83 -0.12 1.52 0.16 2.12 0.16C3.28 0.16 4.4 -0.83 4.65 -2.03Z",
+      "54": "M4.77 -2.22C5.04 -3.46 4.66 -4.56 3.75 -4.56C3.09 -4.56 2.44 -4.21 2 -3.77C2.4 -5.18 3.26 -6.11 4.21 -6.11C4.47 -6.11 4.8 -6.07 5.15 -5.9L5.29 -6.52C4.9 -6.69 4.61 -6.72 4.33 -6.72C3.03 -6.72 1.53 -5.36 1.07 -3.21C0.49 -0.46 1.51 0.16 2.33 0.16C2.78 0.16 3.26 0.02 3.79 -0.48C4.34 -1.01 4.61 -1.45 4.77 -2.22ZM3.98 -2.22C3.9 -1.83 3.82 -1.44 3.5 -1.04C3.25 -0.73 2.94 -0.46 2.46 -0.46C1.51 -0.46 1.63 -1.79 1.68 -2.19C1.69 -2.27 1.7 -2.32 1.75 -2.47C1.91 -3.25 2.51 -3.95 3.24 -3.95C3.71 -3.95 3.9 -3.7 4.01 -3.39C4.14 -3 4.07 -2.63 3.98 -2.22Z",
+      "55": "M5.56 -5.91 5.69 -6.56H1.78L1.64 -5.88H3.42C3.54 -5.88 3.66 -5.89 3.78 -5.89H4.93C3.15 -4.22 1.88 -2.11 1.41 0.08H2.21C2.66 -2.04 3.82 -4.19 5.56 -5.91Z",
+      "56": "M4.69 -1.84C4.83 -2.5 4.59 -3.2 3.77 -3.55C4.59 -3.8 5.11 -4.4 5.23 -4.99C5.43 -5.92 4.8 -6.72 3.78 -6.72C2.72 -6.72 1.77 -5.89 1.58 -4.99C1.46 -4.41 1.71 -3.81 2.42 -3.55C1.36 -3.17 0.9 -2.41 0.78 -1.84C0.55 -0.74 1.25 0.16 2.31 0.16C3.41 0.16 4.46 -0.76 4.69 -1.84ZM4.52 -4.98C4.37 -4.26 3.8 -3.85 3.17 -3.85C2.5 -3.85 2.14 -4.3 2.29 -4.98C2.44 -5.67 2.98 -6.11 3.65 -6.11C4.27 -6.11 4.67 -5.71 4.52 -4.98ZM3.91 -1.85C3.69 -0.81 2.96 -0.46 2.45 -0.46C1.88 -0.46 1.35 -0.85 1.56 -1.85C1.78 -2.88 2.54 -3.24 3.03 -3.24C3.57 -3.24 4.13 -2.86 3.91 -1.85Z",
+      "57": "M5.01 -3.35C5.63 -6.25 4.48 -6.72 3.81 -6.72C3.14 -6.72 2.64 -6.42 2.17 -5.94C1.62 -5.39 1.43 -4.9 1.31 -4.33C1.17 -3.65 1.2 -3.23 1.37 -2.75C1.62 -2.13 1.95 -2 2.34 -2C2.93 -2 3.58 -2.29 4.08 -2.79C3.73 -1.44 2.91 -0.46 2.03 -0.46C1.67 -0.46 1.4 -0.57 1.17 -0.84L0.75 -0.31C0.97 -0.07 1.29 0.16 1.9 0.16C3.11 0.16 4.55 -1.18 5.01 -3.35ZM4.34 -4.11C4.17 -3.27 3.54 -2.61 2.84 -2.61C2.38 -2.61 2.2 -2.85 2.08 -3.16C1.94 -3.55 2.02 -3.93 2.1 -4.33C2.18 -4.72 2.27 -5.15 2.65 -5.58C2.92 -5.89 3.23 -6.11 3.68 -6.11C4.6 -6.11 4.46 -4.76 4.38 -4.35C4.38 -4.28 4.35 -4.15 4.34 -4.11Z",
+      "58": "M2.44 -3.5 2.61 -4.3H1.81L1.64 -3.5ZM1.7 0 1.87 -0.8H1.07L0.9 0Z",
+      "59": "M2.44 -3.5 2.61 -4.3H1.81L1.64 -3.5ZM1.7 -0.01 1.87 -0.8H1.07L0.9 0H1.15L0.62 1.25H1.02Z",
+      "60": "M6.77 0.09C6.78 0.03 6.78 -0.04 6.62 -0.12L1.97 -2.49L7.63 -4.87C7.82 -4.95 7.86 -5.02 7.87 -5.08C7.89 -5.19 7.83 -5.27 7.72 -5.27C7.72 -5.27 7.69 -5.26 7.54 -5.2L1.6 -2.71C1.4 -2.63 1.36 -2.56 1.35 -2.5C1.34 -2.43 1.33 -2.37 1.5 -2.28L6.39 0.21C6.5 0.27 6.54 0.28 6.54 0.28C6.65 0.28 6.75 0.2 6.77 0.09Z",
+      "61": "M7.5 -3.38C7.54 -3.56 7.37 -3.56 7.2 -3.56H1.62C1.45 -3.56 1.28 -3.56 1.24 -3.38C1.2 -3.21 1.35 -3.21 1.5 -3.21H7.16C7.31 -3.21 7.46 -3.21 7.5 -3.38ZM7.12 -1.61C7.16 -1.78 7.01 -1.78 6.86 -1.78H1.2C1.05 -1.78 0.9 -1.78 0.86 -1.61C0.82 -1.43 0.99 -1.43 1.16 -1.43H6.74C6.91 -1.43 7.08 -1.43 7.12 -1.61Z",
+      "62": "M7.32 -2.5C7.33 -2.56 7.33 -2.63 7.17 -2.71L2.29 -5.2C2.17 -5.26 2.13 -5.27 2.13 -5.27C2.01 -5.27 1.92 -5.17 1.9 -5.09C1.88 -4.97 1.95 -4.93 2.07 -4.87L6.7 -2.5L1.05 -0.12C0.83 -0.03 0.81 0.04 0.8 0.1C0.78 0.18 0.83 0.28 0.95 0.28C0.95 0.28 0.98 0.27 1.14 0.21L7.07 -2.28C7.28 -2.37 7.31 -2.43 7.32 -2.5Z",
+      "63": "M5.07 -5.46C5.25 -6.31 4.87 -7.02 3.59 -7.02C3.04 -7.02 2.48 -6.86 1.9 -6.49L1.99 -5.87C2.56 -6.31 3.07 -6.41 3.46 -6.41C3.98 -6.41 4.48 -6.28 4.31 -5.48C4.22 -5.02 3.98 -4.83 3.87 -4.74C2.71 -3.83 2.36 -2.82 2.23 -2.21L2.12 -1.69H2.76L2.86 -2.17C3.09 -3.25 3.87 -3.96 4.3 -4.27C4.51 -4.43 4.92 -4.75 5.07 -5.46ZM2.48 0 2.65 -0.8H1.85L1.68 0Z",
+      "64": "M5.91 -0.87H5.44C5.29 -0.87 5.27 -0.87 5.16 -0.82C4.7 -0.63 4.24 -0.53 3.78 -0.53C2.44 -0.53 1.67 -1.85 2.02 -3.47C2.39 -5.2 3.79 -6.41 4.99 -6.41C5.37 -6.41 5.8 -6.21 5.9 -5.5C5.69 -5.64 5.46 -5.72 5.2 -5.72C4.28 -5.72 3.24 -4.77 2.97 -3.47C2.69 -2.17 3.33 -1.22 4.24 -1.22C4.84 -1.22 6.1 -1.75 6.5 -3.63C6.68 -4.46 7.22 -7.02 5.12 -7.02C3.51 -7.02 1.7 -5.53 1.26 -3.47C0.83 -1.45 1.95 0.08 3.63 0.08C4.71 0.08 5.57 -0.54 5.91 -0.87ZM5.71 -3.47C5.51 -2.53 4.9 -1.83 4.37 -1.83C3.84 -1.83 3.53 -2.53 3.73 -3.47C3.93 -4.41 4.54 -5.11 5.07 -5.11C5.6 -5.11 5.91 -4.41 5.71 -3.47Z",
+      "65": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65Z",
+      "66": "M6.13 -1.88C6.29 -2.64 5.8 -3.41 4.68 -3.63C6.06 -4.01 6.48 -4.77 6.58 -5.2C6.77 -6.1 5.97 -6.94 4.6 -6.94H2.37L0.89 0H3.38C4.74 0 5.92 -0.9 6.13 -1.88ZM5.79 -5.19C5.67 -4.59 4.88 -3.91 3.59 -3.91H2.53L3.06 -6.38H4.21C5.24 -6.38 5.93 -5.85 5.79 -5.19ZM5.34 -1.89C5.2 -1.21 4.33 -0.56 3.22 -0.56H1.82L2.4 -3.3H3.73C4.81 -3.3 5.5 -2.63 5.34 -1.89Z",
+      "67": "M5.57 -0.47 5.65 -1.15C5.34 -0.96 5.04 -0.77 4.7 -0.67C4.37 -0.57 4.05 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.02 -2.71 2.17 -3.43C2.32 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.24 -6.31 5.51 -6.28 5.77 -6.19C6.03 -6.11 6.25 -5.96 6.46 -5.81L6.77 -6.61C6.52 -6.72 6.25 -6.81 5.96 -6.87C5.68 -6.93 5.39 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C3.92 0.08 4.26 0.07 4.59 -0.02C4.94 -0.12 5.25 -0.29 5.57 -0.47Z",
+      "68": "M6.97 -3.41C7.39 -5.34 6.47 -6.94 4.83 -6.94H2.37L0.89 0H3.35C4.99 0 6.58 -1.54 6.97 -3.41ZM6.15 -3.41C5.8 -1.74 4.6 -0.56 3.25 -0.56H1.83L3.07 -6.38H4.49C5.83 -6.38 6.52 -5.15 6.15 -3.41Z",
+      "69": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0Z",
+      "70": "M6.28 -6.27 6.42 -6.92H2.35L0.88 0H1.72L2.39 -3.16H5.23L5.36 -3.77H2.52L3.05 -6.28H4.27C4.39 -6.28 4.51 -6.27 4.63 -6.27Z",
+      "71": "M5.67 -0.41 6.2 -2.91H4.23L4.1 -2.29H5.31L4.98 -0.75C4.56 -0.62 4.14 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.03 -2.71 2.18 -3.43C2.33 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.27 -6.31 5.57 -6.27 5.85 -6.16C6.13 -6.05 6.36 -5.87 6.57 -5.67L6.88 -6.47C6.62 -6.63 6.35 -6.76 6.04 -6.84C5.73 -6.92 5.42 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C4.27 0.08 4.98 -0.08 5.67 -0.41Z",
+      "72": "M5.74 0 7.22 -6.94H6.38L5.73 -3.91H2.55L3.2 -6.94H2.36L0.88 0H1.72L2.42 -3.3H5.6L4.9 0Z",
+      "73": "M1.71 0 3.19 -6.94H2.35L0.87 0Z",
+      "74": "M3.97 -1.49 5.13 -6.94H4.31L3.15 -1.52C3.05 -1.04 2.73 -0.45 1.83 -0.45C1.32 -0.45 0.94 -0.69 0.73 -0.99L0.45 -0.26C1 0.07 1.55 0.16 1.97 0.16C2.94 0.16 3.74 -0.4 3.97 -1.49Z",
+      "75": "M6.11 0 4.38 -4.19 7.46 -6.94H6.5L2.42 -3.31L3.2 -6.94H2.36L0.88 0H1.72L2.2 -2.25L3.69 -3.58L5.18 0Z",
+      "76": "M4.69 0 4.83 -0.65H2.75C2.63 -0.65 2.51 -0.64 2.39 -0.64H1.86L3.2 -6.94H2.36L0.88 0Z",
+      "77": "M7.29 0 8.77 -6.94H7.61L5.78 -3.73L5 -2.32C4.87 -2.06 4.43 -1.25 4.3 -0.93H4.29C4.3 -1.13 4.28 -1.34 4.23 -1.85L4.13 -2.74L3.55 -6.94H2.38L0.9 0H1.68L2.98 -6.13H2.99C2.99 -6.13 2.99 -5.68 3.23 -3.93L3.74 -0.16H4.48L6.39 -3.51L7.1 -4.82C7.27 -5.12 7.68 -5.86 7.8 -6.15H7.81L6.5 0Z",
+      "78": "M5.74 0 7.22 -6.94H6.44L5.12 -0.77L5.11 -0.76L4.84 -1.92L3.69 -6.57L3.59 -6.94H2.36L0.88 0H1.66L2.97 -6.17L2.98 -6.18L3.26 -5.02L4.41 -0.37L4.51 0Z",
+      "79": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59Z",
+      "80": "M6.52 -4.92C6.75 -6 6.01 -6.94 4.71 -6.94H2.37L0.89 0H1.73L2.34 -2.89H3.9C5.1 -2.89 6.28 -3.82 6.52 -4.92ZM5.73 -4.92C5.58 -4.24 4.95 -3.47 3.75 -3.47H2.45L3.07 -6.38H4.37C5.53 -6.38 5.88 -5.65 5.73 -4.92Z",
+      "81": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C3.78 0.16 4.09 0.08 4.32 0L4.89 1.25H5.87L5.08 -0.37C6.51 -1.36 6.97 -2.7 7.14 -3.46ZM6.32 -3.46C6.18 -2.82 5.85 -1.75 4.81 -0.93L4.3 -1.94H3.44L4.07 -0.55C3.92 -0.5 3.74 -0.47 3.56 -0.47C2.48 -0.47 1.68 -1.6 2.08 -3.46C2.47 -5.31 3.75 -6.47 4.84 -6.47C5.94 -6.47 6.71 -5.3 6.32 -3.46Z",
+      "82": "M5.79 0 4.63 -3.26 4.66 -3.27C6.33 -3.81 6.57 -4.89 6.61 -5.08C6.81 -6.03 6.05 -6.94 4.61 -6.94H2.37L0.89 0H1.71L2.38 -3.17H3.85L4.95 0ZM5.82 -5.08C5.7 -4.54 5.14 -3.78 3.82 -3.78H2.51L3.07 -6.38H4.38C5.65 -6.38 5.94 -5.66 5.82 -5.08Z",
+      "83": "M5.1 -1.91C5.18 -2.31 5.17 -2.82 4.85 -3.29C4.53 -3.74 4.2 -3.84 3.42 -4.06C2.98 -4.18 2.7 -4.26 2.51 -4.57C2.39 -4.79 2.34 -5 2.4 -5.27C2.52 -5.83 3.13 -6.44 4.01 -6.44C4.45 -6.44 5 -6.35 5.46 -5.81L5.77 -6.61C5.39 -6.87 4.96 -7.1 4.15 -7.1C2.86 -7.1 1.83 -6.15 1.62 -5.18C1.54 -4.8 1.56 -4.37 1.86 -3.93C2.15 -3.49 2.57 -3.37 3.1 -3.23C3.31 -3.17 3.68 -3.06 3.74 -3.03C4.26 -2.81 4.42 -2.3 4.32 -1.82C4.18 -1.19 3.55 -0.52 2.68 -0.52C2.38 -0.52 1.51 -0.57 0.84 -1.33L0.53 -0.54C1.23 0.06 2.1 0.16 2.55 0.16C3.78 0.16 4.86 -0.81 5.1 -1.91Z",
+      "84": "M7.39 -6.26 7.53 -6.91H1.81L1.67 -6.26H2.92C3.04 -6.26 3.16 -6.27 3.28 -6.27H4.11L2.78 0H3.62L4.95 -6.27H5.78C5.9 -6.27 6.02 -6.26 6.14 -6.26Z",
+      "85": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33Z",
+      "86": "M7.59 -6.94H6.81L4.05 -2.14C3.98 -2 3.47 -1.08 3.34 -0.76H3.33C3.33 -1.14 3.2 -2.03 3.14 -2.52L2.67 -5.77L2.49 -6.94H1.61L2.68 0H3.56Z",
+      "87": "M10.2 -6.94H9.44L7.93 -3.83L7.25 -2.33C6.91 -1.59 6.67 -1.07 6.59 -0.81H6.58C6.62 -1.08 6.61 -1.65 6.59 -2.29L6.53 -3.87L6.36 -6.94H5.52L4.11 -4.03L3.37 -2.44C2.8 -1.18 2.75 -1 2.69 -0.8H2.68C2.69 -0.86 2.72 -1.19 2.69 -2.36L2.63 -4.09L2.47 -6.94H1.61L2.03 0H2.86L4.26 -2.89L5 -4.48C5.51 -5.6 5.63 -5.88 5.7 -6.13H5.71C5.7 -6.09 5.66 -5.46 5.74 -4L5.95 0H6.82Z",
+      "88": "M6.11 0 4.24 -3.66 7.2 -6.94H6.28L3.97 -4.34L2.73 -6.94H1.74L3.42 -3.66L0.13 0H1.05L3.7 -3.05L5.12 0Z",
+      "89": "M7.69 -6.94H6.83L4.76 -4.52C4.6 -4.33 4.15 -3.81 3.93 -3.52L3.61 -4.31L2.49 -6.94H1.51L3.3 -2.78L2.71 0H3.53L4.12 -2.77Z",
+      "90": "M5.27 0 5.41 -0.66H4.52L2.02 -0.64H1.72L6.61 -6.53L6.7 -6.94H2.13L1.99 -6.31H3.86C3.98 -6.31 4.1 -6.32 4.22 -6.32H5.5L0.61 -0.43L0.52 0Z",
+      "91": "M1.99 2.49 2.12 1.88H1.26L3.12 -6.88H3.98L4.11 -7.49H2.52L0.4 2.49Z",
+      "92": "M3.94 2.3C3.94 2.3 3.95 2.25 3.93 2.12L2.53 -7.28C2.51 -7.39 2.49 -7.5 2.35 -7.5C2.24 -7.5 2.14 -7.41 2.11 -7.3C2.11 -7.3 2.1 -7.25 2.12 -7.12L3.53 2.28C3.54 2.39 3.56 2.5 3.7 2.5C3.81 2.5 3.92 2.41 3.94 2.3Z",
+      "93": "M1.26 2.49 3.38 -7.49H1.79L1.66 -6.88H2.52L0.66 1.88H-0.2L-0.33 2.49Z",
+      "94": "M6.85 -5.84 4.36 -7.44 1.19 -5.84 1.25 -5.62 4.23 -6.85 6.68 -5.62Z",
+      "95": "M5.9 1.63 6.07 0.87H-0.18L-0.35 1.63Z",
+      "96": "M4.12 -5.18 3.26 -6.94H2.5L3.51 -5.18Z",
+      "97": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94Z",
+      "98": "M4.96 -2.16C5.21 -3.32 4.83 -4.38 3.94 -4.38C3.31 -4.38 2.7 -4.12 2.31 -3.85L2.97 -6.94H2.23L0.75 0H1.51L1.61 -0.45C1.91 -0.08 2.33 0.08 2.74 0.08C3.7 0.08 4.69 -0.89 4.96 -2.16ZM4.2 -2.16C3.93 -0.9 3.05 -0.53 2.5 -0.53C2.3 -0.53 2.1 -0.58 1.94 -0.75C1.72 -0.99 1.75 -1.14 1.78 -1.28L2.2 -3.26C2.48 -3.54 2.84 -3.77 3.28 -3.77C3.87 -3.77 4.45 -3.34 4.2 -2.16Z",
+      "99": "M4 -0.4 4.08 -1.06C3.58 -0.73 3.04 -0.55 2.5 -0.55C1.72 -0.55 1.35 -1.23 1.55 -2.16C1.7 -2.88 2.23 -3.79 3.23 -3.79C3.78 -3.79 4.06 -3.68 4.46 -3.37L4.7 -3.99C4.71 -4.06 4.3 -4.26 4.18 -4.3C3.88 -4.42 3.46 -4.42 3.35 -4.42C2.05 -4.42 1.03 -3.29 0.79 -2.15C0.53 -0.95 1.18 0.08 2.35 0.08C3.02 0.08 3.55 -0.14 4 -0.4Z",
+      "100": "M4.08 0 5.56 -6.94H4.82L4.16 -3.88C3.91 -4.14 3.45 -4.38 2.89 -4.38C1.98 -4.38 1.05 -3.39 0.79 -2.15C0.52 -0.91 1.02 0.08 1.91 0.08C2.6 0.08 3.14 -0.29 3.43 -0.5L3.32 0ZM3.6 -1.34C3.58 -1.2 3.54 -1.05 3.18 -0.78C2.94 -0.61 2.68 -0.53 2.45 -0.53C1.91 -0.53 1.29 -0.93 1.54 -2.14C1.81 -3.4 2.69 -3.77 3.24 -3.77C3.61 -3.77 3.87 -3.59 4.02 -3.29Z",
+      "101": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74Z",
+      "102": "M4.58 -6.28 4.73 -6.94C4.51 -6.99 4.23 -7.02 4.01 -7.02C3.08 -7.02 2.27 -6.26 2.06 -5.27L1.85 -4.3H1.16L1.04 -3.72H1.73L0.94 0H1.68L2.47 -3.72H3.48L3.6 -4.3H2.57L2.85 -5.58C3 -6.29 3.56 -6.41 3.87 -6.41C3.97 -6.41 4.25 -6.41 4.58 -6.28Z",
+      "103": "M5.36 -3.76 5.38 -4.38C4.81 -4.37 4.3 -4.26 3.86 -4.07C3.58 -4.33 3.25 -4.38 3.02 -4.38C2.15 -4.38 1.34 -3.66 1.16 -2.82C1.04 -2.28 1.26 -1.87 1.27 -1.85C1.04 -1.6 0.88 -1.33 0.82 -1.03C0.74 -0.68 0.83 -0.43 0.91 -0.29C0.32 0.03 0.15 0.52 0.11 0.71C-0.05 1.44 0.74 2.04 1.91 2.04C3.09 2.04 4.12 1.44 4.28 0.7C4.57 -0.68 3.05 -0.69 2.63 -0.69H1.82C1.67 -0.69 1.27 -0.69 1.38 -1.2C1.42 -1.4 1.55 -1.54 1.55 -1.54C1.67 -1.43 1.95 -1.26 2.36 -1.26C3.19 -1.26 4.03 -1.96 4.21 -2.82C4.31 -3.3 4.17 -3.65 4.1 -3.77H4.13C4.16 -3.77 4.59 -3.8 4.74 -3.8C5.06 -3.8 5.09 -3.79 5.36 -3.76ZM3.5 -2.82C3.31 -1.95 2.73 -1.81 2.47 -1.81C2.13 -1.81 1.7 -2.02 1.87 -2.82C2.05 -3.69 2.63 -3.83 2.89 -3.83C3.23 -3.83 3.67 -3.62 3.5 -2.82ZM3.57 0.72C3.48 1.15 2.78 1.49 2.03 1.49C1.27 1.49 0.72 1.16 0.82 0.71C0.83 0.66 0.96 0.04 1.65 0.04H2.46C2.7 0.04 3.71 0.04 3.57 0.72Z",
+      "104": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.11 -4.38 2.64 -4.07 2.27 -3.73L2.96 -6.94H2.22L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0Z",
+      "105": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM2.74 -5.64 2.92 -6.48H2.08L1.9 -5.64Z",
+      "106": "M1.61 0.6 2.65 -4.3H1.91L0.85 0.69C0.73 1.29 0.28 1.39 0.01 1.39C-0.26 1.39 -0.46 1.29 -0.61 1.08L-0.94 1.69C-0.66 1.89 -0.3 2.03 0.12 2.03C0.75 2.03 1.42 1.49 1.61 0.6ZM2.94 -5.64 3.12 -6.48H2.28L2.1 -5.64Z",
+      "107": "M4.41 0 3.21 -2.65 5.11 -4.3H4.15L2.01 -2.44L2.97 -6.94H2.23L0.75 0H1.48L1.78 -1.4L2.6 -2.11L3.56 0Z",
+      "108": "M1.48 0 2.96 -6.94H2.22L0.74 0Z",
+      "109": "M6.7 0 7.32 -2.92C7.46 -3.59 7.46 -4.38 6.34 -4.38C5.59 -4.38 5.04 -3.91 4.78 -3.62C4.71 -4.15 4.34 -4.38 3.74 -4.38C3.06 -4.38 2.55 -3.99 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.14 -3.01 2.52 -3.77 3.23 -3.77C4.14 -3.77 4.01 -3.13 3.94 -2.84L3.34 0H4.1L4.61 -2.42C4.74 -3.01 5.12 -3.77 5.83 -3.77C6.74 -3.77 6.61 -3.13 6.54 -2.84L5.94 0Z",
+      "110": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.1 -4.38 2.61 -4.05 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0Z",
+      "111": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22Z",
+      "112": "M4.96 -2.16C5.21 -3.34 4.83 -4.38 3.97 -4.38C3.47 -4.38 2.83 -4.2 2.31 -3.84L2.4 -4.3H1.66L0.34 1.95H1.1L1.61 -0.45C1.87 -0.13 2.27 0.08 2.75 0.08C3.68 0.08 4.69 -0.88 4.96 -2.16ZM4.2 -2.16C3.99 -1.17 3.17 -0.53 2.5 -0.53C2.3 -0.53 2.1 -0.58 1.94 -0.75C1.72 -0.99 1.75 -1.14 1.78 -1.28L2.2 -3.25C2.31 -3.37 2.73 -3.75 3.28 -3.75C3.98 -3.75 4.38 -3.03 4.2 -2.16Z",
+      "113": "M3.67 1.95 5.01 -4.38H4.27L4.14 -3.77C4.11 -3.82 3.77 -4.38 2.99 -4.38C2.08 -4.38 1.06 -3.45 0.78 -2.14C0.53 -0.93 1 0.08 1.9 0.08C2.32 0.08 2.88 -0.07 3.43 -0.5L2.91 1.95ZM3.63 -1.37C3.6 -1.24 3.57 -1.06 3.2 -0.8C3.11 -0.73 2.84 -0.53 2.46 -0.53C1.75 -0.53 1.36 -1.27 1.54 -2.14C1.75 -3.11 2.56 -3.75 3.24 -3.75C3.81 -3.75 4.02 -3.19 3.93 -2.77Z",
+      "114": "M3.85 -3.72 3.99 -4.38C3.35 -4.37 2.68 -4.05 2.21 -3.53L2.38 -4.33H1.67L0.75 0H1.49L1.94 -2.13C2.14 -3.07 2.97 -3.7 3.85 -3.72Z",
+      "115": "M3.64 -1.24C3.75 -1.73 3.54 -2.06 3.38 -2.21C3.11 -2.47 2.99 -2.5 2.21 -2.67C2.07 -2.69 1.61 -2.8 1.7 -3.25C1.82 -3.82 2.45 -3.82 2.59 -3.82C3.24 -3.82 3.6 -3.62 3.84 -3.47L4.1 -4.12C3.57 -4.4 3.11 -4.42 2.81 -4.42C2.1 -4.42 1.2 -4.17 0.98 -3.16C0.77 -2.15 1.82 -1.93 2.11 -1.87C2.55 -1.78 3.04 -1.68 2.93 -1.18C2.8 -0.55 2.08 -0.55 1.95 -0.55C1.55 -0.55 1.02 -0.66 0.6 -1.02L0.33 -0.35C0.83 -0.02 1.36 0.08 1.82 0.08C3.05 0.08 3.52 -0.67 3.64 -1.24Z",
+      "116": "M3.19 -0.29 3.16 -0.88C2.87 -0.67 2.56 -0.55 2.25 -0.55C1.81 -0.55 1.91 -1.11 1.96 -1.36L2.46 -3.72H3.76L3.88 -4.3H2.58L2.85 -5.53H2.14L1.87 -4.3H1.08L0.96 -3.72H1.73L1.19 -1.19C1.07 -0.62 1.05 0.08 1.71 0.08C2.21 0.08 2.7 -0.06 3.19 -0.29Z",
+      "117": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0Z",
+      "118": "M5.09 -4.3H4.31L3.25 -2.43C2.91 -1.82 2.43 -0.98 2.29 -0.55H2.28C2.3 -0.73 2.27 -0.99 2.26 -1.17L2.2 -1.83L1.84 -4.3H1.04L1.71 0H2.6Z",
+      "119": "M7.18 -4.3H6.42L5.51 -2.5C5.32 -2.12 4.79 -1.07 4.64 -0.58H4.63C4.68 -0.88 4.66 -1.6 4.58 -2.55L4.44 -4.3H3.75L2.89 -2.59C2.46 -1.72 2.11 -0.98 2 -0.58H1.99C2.08 -1.17 1.96 -2.55 1.95 -2.77L1.82 -4.3H1.04L1.43 0H2.19C3.08 -1.72 3.76 -3.05 3.93 -3.72C3.88 -3.39 3.9 -2.68 3.93 -2.33L4.09 0H4.97Z",
+      "120": "M4.31 0 2.95 -2.22 5.06 -4.3H4.19L2.72 -2.79L1.85 -4.3H0.96L2.25 -2.22L0 0H0.88L2.5 -1.76L3.43 0Z",
+      "121": "M5.09 -4.3H4.31C2.98 -2.01 2.49 -1.08 2.36 -0.58H2.35C2.43 -1.07 2.24 -2.27 2.08 -3.13L1.85 -4.3H1.04L1.9 0C1.73 0.3 1.47 0.75 1.4 0.85C1.06 1.41 0.91 1.41 0.75 1.41C0.71 1.41 0.39 1.4 0.06 1.29L-0.02 1.95C0.21 2 0.46 2.03 0.64 2.03C0.89 2.03 1.39 2.03 2.11 0.8Z",
+      "122": "M3.78 0 3.91 -0.62H2.55C2.43 -0.62 2.31 -0.61 2.19 -0.61H1.42L4.58 -3.91L4.66 -4.3H1.3L1.18 -3.7H2.46C2.58 -3.7 2.7 -3.71 2.82 -3.71H3.52L0.35 -0.41L0.26 0Z",
+      "123": "M3.76 2.39C3.78 2.29 3.72 2.29 3.63 2.28C2.85 2.23 2.57 1.78 2.56 1.42C2.55 1.31 2.56 1.29 2.63 0.94L2.95 -0.56C3.01 -0.86 3.12 -1.37 3.12 -1.47C3.13 -2.13 2.55 -2.39 2.18 -2.5C3.43 -2.84 3.58 -3.55 3.64 -3.83L4.03 -5.63C4.18 -6.35 4.23 -6.57 4.52 -6.82C4.74 -7 5.02 -7.24 5.73 -7.28C5.78 -7.29 5.83 -7.33 5.84 -7.39C5.86 -7.5 5.78 -7.5 5.66 -7.5C4.66 -7.5 3.67 -6.99 3.49 -6.27L3.1 -4.44C2.9 -3.5 2.87 -3.34 2.55 -3.06C2.38 -2.92 2.05 -2.65 1.41 -2.61C1.34 -2.61 1.27 -2.6 1.25 -2.5C1.23 -2.4 1.29 -2.4 1.39 -2.39C1.81 -2.36 2.62 -2.15 2.4 -1.15L1.98 0.83C1.86 1.41 1.79 1.75 2.23 2.12C2.6 2.42 3.23 2.5 3.54 2.5C3.66 2.5 3.74 2.5 3.76 2.39Z",
+      "124": "M1.13 2.17 3.11 -7.17C3.14 -7.31 3.18 -7.5 2.98 -7.5C2.78 -7.5 2.74 -7.31 2.71 -7.17L0.73 2.17C0.7 2.31 0.66 2.5 0.86 2.5C1.06 2.5 1.1 2.31 1.13 2.17Z",
+      "125": "M4.8 -2.5C4.82 -2.6 4.76 -2.6 4.66 -2.61C4.24 -2.64 3.44 -2.85 3.65 -3.85L4.07 -5.83C4.19 -6.41 4.26 -6.75 3.82 -7.12C3.46 -7.41 2.83 -7.5 2.51 -7.5C2.41 -7.5 2.31 -7.5 2.29 -7.39C2.27 -7.29 2.33 -7.29 2.43 -7.28C3.21 -7.23 3.48 -6.78 3.49 -6.42C3.5 -6.31 3.5 -6.29 3.42 -5.94L3.1 -4.44C3.04 -4.14 2.93 -3.63 2.93 -3.53C2.92 -2.87 3.5 -2.61 3.87 -2.5C2.62 -2.16 2.47 -1.45 2.41 -1.17L2.03 0.63C1.87 1.35 1.83 1.57 1.53 1.82C1.31 2 1.03 2.24 0.33 2.28C0.27 2.29 0.22 2.33 0.21 2.39C0.19 2.5 0.29 2.5 0.39 2.5C1.39 2.5 2.39 1.99 2.56 1.27L2.95 -0.56C3.15 -1.5 3.18 -1.66 3.5 -1.94C3.67 -2.08 4 -2.35 4.64 -2.39C4.71 -2.39 4.78 -2.4 4.8 -2.5Z",
+      "126": "M6.17 -2.9 6.06 -3.07C5.49 -2.66 4.89 -2.36 4.38 -2.36C3.98 -2.36 3.73 -2.53 3.42 -2.73C3.17 -2.9 2.89 -3.07 2.49 -3.07C2.24 -3.07 1.97 -2.99 1.72 -2.89C1.5 -2.79 1.28 -2.68 1.08 -2.54L0.45 -2.1L0.55 -1.93C1.13 -2.34 1.72 -2.64 2.23 -2.64C2.63 -2.64 2.89 -2.47 3.19 -2.27C3.45 -2.1 3.72 -1.93 4.12 -1.93C4.37 -1.93 4.65 -2.01 4.89 -2.11C5.11 -2.21 5.33 -2.32 5.53 -2.46Z",
+      "192": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM5.64 -7.4 4.15 -8.62H3.04L4.75 -7.4Z",
+      "193": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM6.86 -8.62H5.75L3.74 -7.4H4.63Z",
+      "194": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM6.23 -7.3 5.26 -8.64H4.66L3.11 -7.3H3.7L4.88 -8.27L5.64 -7.3Z",
+      "195": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM6.49 -8.47H5.88C5.83 -8.23 5.7 -7.91 5.42 -7.91C5.27 -7.91 5.11 -7.99 4.94 -8.14C4.71 -8.33 4.55 -8.47 4.28 -8.47C3.87 -8.47 3.3 -8.09 3.11 -7.3H3.72C3.77 -7.54 3.9 -7.86 4.18 -7.86C4.33 -7.86 4.49 -7.78 4.66 -7.63C4.89 -7.44 5.05 -7.3 5.32 -7.3C5.73 -7.3 6.3 -7.68 6.49 -8.47Z",
+      "196": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM4.23 -7.3 4.39 -8.05H3.63L3.47 -7.3ZM5.87 -7.3 6.03 -8.05H5.27L5.11 -7.3Z",
+      "197": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM5.25 -7.82C5.19 -7.51 4.92 -7.43 4.7 -7.43C4.5 -7.43 4.24 -7.5 4.31 -7.82C4.38 -8.13 4.64 -8.21 4.86 -8.21C5.06 -8.21 5.32 -8.14 5.25 -7.82ZM5.83 -7.82C5.93 -8.28 5.57 -8.7 4.97 -8.7C4.37 -8.7 3.83 -8.28 3.73 -7.82C3.63 -7.36 3.99 -6.94 4.59 -6.94C5.19 -6.94 5.73 -7.36 5.83 -7.82Z",
+      "198": "M7.69 0 7.84 -0.69 5.97 -0.68C5.21 -0.68 5.01 -0.68 4.9 -0.67L5.46 -3.3H8L8.13 -3.91H5.59L6.1 -6.3H7.11C7.23 -6.3 7.35 -6.29 7.47 -6.29H8.9L9.04 -6.94H4.39L0.26 0H1.02L2.34 -2.22H4.4L3.93 0ZM4.52 -2.78H2.68L4.77 -6.3H5.27Z",
+      "199": "M5.62 -0.4 5.66 -0.73C5.67 -0.82 5.68 -0.98 5.69 -1.08C4.99 -0.61 4.54 -0.48 3.83 -0.48C2.39 -0.48 1.88 -1.97 2.2 -3.47C2.54 -5.06 3.75 -6.46 5.07 -6.46C5.52 -6.46 6.03 -6.38 6.55 -5.95L6.86 -6.75C6.33 -6.99 5.83 -7.1 5.22 -7.1C3.41 -7.1 1.77 -5.4 1.36 -3.47C0.95 -1.56 1.84 0.16 3.69 0.16C4.49 0.16 4.89 0.02 5.62 -0.4ZM3.69 0.34H3.08L2.03 2.02H2.71Z",
+      "200": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM5.33 -7.4 3.84 -8.62H2.73L4.44 -7.4Z",
+      "201": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM6.55 -8.62H5.44L3.43 -7.4H4.32Z",
+      "202": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM5.92 -7.3 4.95 -8.64H4.35L2.8 -7.3H3.39L4.57 -8.27L5.33 -7.3Z",
+      "203": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM3.92 -7.3 4.08 -8.05H3.32L3.16 -7.3ZM5.56 -7.3 5.72 -8.05H4.96L4.8 -7.3Z",
+      "204": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM3.28 -7.4 1.79 -8.62H0.68L2.39 -7.4Z",
+      "205": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM5.56 -8.62H4.45L2.44 -7.4H3.33Z",
+      "206": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM4.4 -7.3 3.43 -8.64H2.83L1.28 -7.3H1.87L3.05 -8.27L3.81 -7.3Z",
+      "207": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM2.4 -7.3 2.56 -8.05H1.8L1.64 -7.3ZM4.04 -7.3 4.2 -8.05H3.44L3.28 -7.3Z",
+      "208": "M6.97 -3.41C7.39 -5.34 6.47 -6.94 4.83 -6.94H2.37L1.7 -3.79H0.94L0.8 -3.15H1.56L0.89 0H3.35C4.99 0 6.58 -1.54 6.97 -3.41ZM6.15 -3.41C5.8 -1.74 4.6 -0.56 3.25 -0.56H1.83L2.38 -3.15H3.3L3.44 -3.79H2.52L3.07 -6.38H4.49C5.83 -6.38 6.52 -5.15 6.15 -3.41Z",
+      "209": "M5.74 0 7.22 -6.94H6.44L5.12 -0.77L5.11 -0.76L4.84 -1.92L3.69 -6.57L3.59 -6.94H2.36L0.88 0H1.66L2.97 -6.17L2.98 -6.18L3.26 -5.02L4.41 -0.37L4.51 0ZM6.69 -8.47H6.08C6.03 -8.23 5.9 -7.91 5.62 -7.91C5.47 -7.91 5.31 -7.99 5.14 -8.14C4.91 -8.33 4.75 -8.47 4.48 -8.47C4.07 -8.47 3.5 -8.09 3.31 -7.3H3.92C3.97 -7.54 4.1 -7.86 4.38 -7.86C4.53 -7.86 4.69 -7.78 4.86 -7.63C5.09 -7.44 5.25 -7.3 5.52 -7.3C5.93 -7.3 6.5 -7.68 6.69 -8.47Z",
+      "210": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM5.98 -7.4 4.49 -8.62H3.38L5.09 -7.4Z",
+      "211": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM7.2 -8.62H6.09L4.08 -7.4H4.97Z",
+      "212": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM6.57 -7.3 5.6 -8.64H5L3.45 -7.3H4.04L5.22 -8.27L5.98 -7.3Z",
+      "213": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM6.83 -8.47H6.22C6.17 -8.23 6.04 -7.91 5.76 -7.91C5.61 -7.91 5.45 -7.99 5.28 -8.14C5.05 -8.33 4.89 -8.47 4.62 -8.47C4.21 -8.47 3.64 -8.09 3.45 -7.3H4.06C4.11 -7.54 4.24 -7.86 4.52 -7.86C4.67 -7.86 4.83 -7.78 5 -7.63C5.23 -7.44 5.39 -7.3 5.66 -7.3C6.07 -7.3 6.64 -7.68 6.83 -8.47Z",
+      "214": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM4.57 -7.3 4.73 -8.05H3.97L3.81 -7.3ZM6.21 -7.3 6.37 -8.05H5.61L5.45 -7.3Z",
+      "215": "M5.93 -0.28C6.08 -0.41 5.99 -0.52 5.9 -0.62L4.43 -2.5L6.7 -4.37C6.82 -4.46 6.96 -4.58 6.87 -4.7C6.77 -4.83 6.63 -4.72 6.5 -4.61L4.23 -2.75L2.76 -4.62C2.68 -4.72 2.59 -4.84 2.44 -4.72C2.29 -4.59 2.38 -4.48 2.46 -4.37L3.94 -2.5L1.66 -0.62C1.54 -0.53 1.4 -0.41 1.49 -0.29C1.59 -0.16 1.73 -0.27 1.86 -0.38L4.13 -2.25L5.61 -0.38C5.69 -0.28 5.78 -0.16 5.93 -0.28Z",
+      "216": "M7.52 -3.46C7.88 -5.16 7.14 -6.06 6.89 -6.36L7.58 -7.28L7.08 -7.58L6.45 -6.73C6.2 -6.89 5.76 -7.1 5.16 -7.1C3.47 -7.1 1.69 -5.51 1.26 -3.46C1.02 -2.33 1.23 -1.27 1.88 -0.58L1.2 0.34L1.69 0.64L2.23 -0.08C2.31 -0.18 2.33 -0.19 2.33 -0.19C2.33 -0.19 2.36 -0.19 2.47 -0.13C2.84 0.08 3.26 0.16 3.62 0.16C5.29 0.16 7.08 -1.39 7.52 -3.46ZM6.03 -6.17 2.34 -1.2C1.84 -2.02 2 -3 2.1 -3.46C2.51 -5.41 3.87 -6.49 5.03 -6.49C5.48 -6.49 5.82 -6.32 6.03 -6.17ZM6.68 -3.46C6.25 -1.47 4.88 -0.45 3.75 -0.45C3.36 -0.45 3.03 -0.57 2.74 -0.77L6.43 -5.73C6.91 -4.96 6.79 -3.98 6.68 -3.46Z",
+      "217": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM5.74 -7.4 4.25 -8.62H3.14L4.85 -7.4Z",
+      "218": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM6.96 -8.62H5.85L3.84 -7.4H4.73Z",
+      "219": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM6.33 -7.3 5.36 -8.64H4.76L3.21 -7.3H3.8L4.98 -8.27L5.74 -7.3Z",
+      "220": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM4.33 -7.3 4.49 -8.05H3.73L3.57 -7.3ZM5.97 -7.3 6.13 -8.05H5.37L5.21 -7.3Z",
+      "221": "M7.69 -6.94H6.83L4.76 -4.52C4.6 -4.33 4.15 -3.81 3.93 -3.52L3.61 -4.31L2.49 -6.94H1.51L3.3 -2.78L2.71 0H3.53L4.12 -2.77ZM6.86 -8.62H5.75L3.74 -7.4H4.63Z",
+      "222": "M5.72 -3.67C5.89 -4.49 5.49 -5.56 4.06 -5.56H2.77L3.04 -6.83H2.44L0.99 0H1.59L1.97 -1.78H3.36C4.52 -1.78 5.51 -2.68 5.72 -3.67ZM5.09 -3.66C4.95 -3.01 4.22 -2.26 3.19 -2.26H2.07L2.67 -5.08H3.58C4.86 -5.08 5.22 -4.27 5.09 -3.66Z",
+      "223": "M4.61 -1.74C4.88 -3 4.26 -3.74 3.94 -3.99C4.72 -4.41 5.05 -5.05 5.15 -5.5C5.33 -6.34 4.75 -7.02 3.85 -7.02C3.09 -7.02 2.13 -6.48 1.91 -5.45L0.75 0H1.49L2.64 -5.43C2.85 -6.41 3.64 -6.41 3.72 -6.41C4.18 -6.41 4.53 -6.1 4.4 -5.5C4.28 -4.95 3.78 -4.32 2.92 -4.3L2.79 -3.69C3.73 -3.67 4.07 -2.74 3.86 -1.74C3.69 -0.94 3.18 -0.53 2.69 -0.53C2.66 -0.53 2.38 -0.53 2.12 -0.65L1.77 -0.07C1.84 -0.04 2.17 0.08 2.56 0.08C3.49 0.08 4.39 -0.71 4.61 -1.74Z",
+      "224": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM4.02 -5.18 3.16 -6.94H2.4L3.41 -5.18Z",
+      "225": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM5.06 -6.94H4.3L2.68 -5.18H3.29Z",
+      "226": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM4.91 -5.2 4.02 -6.92H3.42L1.81 -5.2H2.4L3.62 -6.43L4.32 -5.2Z",
+      "227": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM5.23 -6.65H4.62C4.57 -6.41 4.44 -6.09 4.16 -6.09C4.01 -6.09 3.85 -6.17 3.68 -6.32C3.45 -6.51 3.29 -6.65 3.02 -6.65C2.61 -6.65 2.04 -6.27 1.85 -5.48H2.46C2.52 -5.72 2.64 -6.04 2.92 -6.04C3.07 -6.04 3.24 -5.96 3.4 -5.81C3.63 -5.62 3.79 -5.48 4.06 -5.48C4.47 -5.48 5.05 -5.86 5.23 -6.65Z",
+      "228": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM3.14 -5.69 3.3 -6.44H2.54L2.38 -5.69ZM4.54 -5.69 4.7 -6.44H3.94L3.78 -5.69Z",
+      "229": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM3.98 -5.95C3.92 -5.64 3.65 -5.56 3.43 -5.56C3.23 -5.56 2.98 -5.63 3.04 -5.95C3.11 -6.26 3.38 -6.34 3.6 -6.34C3.8 -6.34 4.05 -6.27 3.98 -5.95ZM4.56 -5.95C4.66 -6.41 4.3 -6.83 3.7 -6.83C3.1 -6.83 2.56 -6.41 2.46 -5.95C2.37 -5.49 2.73 -5.07 3.33 -5.07C3.93 -5.07 4.47 -5.49 4.56 -5.95Z",
+      "230": "M6.99 -2.19C7.06 -2.52 7.46 -4.42 5.87 -4.42C5.43 -4.42 4.85 -4.22 4.32 -3.71C4.14 -4.12 3.77 -4.42 3.14 -4.42C2.78 -4.42 2.24 -4.37 1.57 -4.02L1.49 -3.36C1.92 -3.62 2.38 -3.83 3 -3.83C3.48 -3.83 3.75 -3.46 3.61 -2.82L3.53 -2.46C2.42 -2.46 0.87 -2.12 0.67 -1.16C0.59 -0.82 0.58 0.08 1.49 0.08C1.53 0.08 2.14 0.08 2.69 -0.08C2.93 -0.15 3.36 -0.28 3.69 -0.63C3.72 -0.58 4.13 0.08 5.06 0.08C5.52 0.08 6.05 -0.07 6.56 -0.41C6.57 -0.45 6.58 -0.68 6.58 -0.68C6.58 -0.68 6.62 -1.01 6.63 -1.05C6.1 -0.65 5.56 -0.53 5.2 -0.53C4.49 -0.53 4.04 -1.2 4.24 -2.19ZM6.43 -2.74H4.42C4.75 -3.42 5.3 -3.81 5.74 -3.81C6.12 -3.81 6.49 -3.54 6.43 -2.74ZM3.32 -1.25C3.16 -0.53 2.18 -0.53 2.09 -0.53C1.58 -0.53 1.33 -0.83 1.4 -1.17C1.54 -1.83 2.99 -1.9 3.43 -1.92L3.4 -1.75C3.38 -1.57 3.35 -1.42 3.32 -1.25Z",
+      "231": "M4 -0.4 4.08 -1.06C3.58 -0.73 3.04 -0.55 2.5 -0.55C1.72 -0.55 1.35 -1.23 1.55 -2.16C1.7 -2.88 2.23 -3.79 3.23 -3.79C3.78 -3.79 4.06 -3.68 4.46 -3.37L4.7 -3.99C4.71 -4.06 4.3 -4.26 4.18 -4.3C3.88 -4.42 3.46 -4.42 3.35 -4.42C2.05 -4.42 1.03 -3.29 0.79 -2.15C0.53 -0.95 1.18 0.08 2.35 0.08C3.02 0.08 3.55 -0.14 4 -0.4ZM2.68 0.34H2.07L1.02 2.02H1.7Z",
+      "232": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM3.86 -5.18 3 -6.94H2.24L3.25 -5.18Z",
+      "233": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM4.9 -6.94H4.14L2.52 -5.18H3.13Z",
+      "234": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM4.75 -5.2 3.86 -6.92H3.26L1.65 -5.2H2.24L3.46 -6.43L4.16 -5.2Z",
+      "235": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM2.98 -5.69 3.14 -6.44H2.38L2.22 -5.69ZM4.38 -5.69 4.54 -6.44H3.78L3.62 -5.69Z",
+      "236": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM2.58 -5.18 1.72 -6.94H0.96L1.97 -5.18Z",
+      "237": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM4.22 -6.94H3.46L1.84 -5.18H2.45Z",
+      "238": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM3.77 -5.2 2.88 -6.92H2.28L0.67 -5.2H1.26L2.48 -6.43L3.18 -5.2Z",
+      "239": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM2 -5.69 2.16 -6.44H1.4L1.24 -5.69ZM3.4 -5.69 3.56 -6.44H2.8L2.64 -5.69Z",
+      "240": "M4.75 -2.13C5.11 -3.68 4.8 -5.15 3.93 -6.16L4.81 -6.75L4.6 -7.14L3.62 -6.48C3.32 -6.75 2.98 -6.98 2.59 -7.15L2.23 -6.74C2.56 -6.58 2.86 -6.38 3.12 -6.15L2.24 -5.56L2.46 -5.17L3.44 -5.83C3.88 -5.35 4.18 -4.75 4.3 -4.06C3.97 -4.33 3.61 -4.42 3.29 -4.42C2.22 -4.42 1.11 -3.4 0.84 -2.14C0.57 -0.85 1.3 0.08 2.32 0.08C3.27 0.08 4.43 -0.74 4.75 -2.13ZM4.23 -2.18C4.03 -1.23 3.28 -0.44 2.44 -0.44C1.65 -0.44 1.16 -1.13 1.39 -2.23C1.63 -3.33 2.44 -3.92 3.17 -3.92C4.03 -3.92 4.44 -3.13 4.23 -2.18Z",
+      "241": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.1 -4.38 2.61 -4.05 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0ZM5.4 -6.65H4.79C4.74 -6.41 4.61 -6.09 4.33 -6.09C4.18 -6.09 4.02 -6.17 3.85 -6.32C3.62 -6.51 3.46 -6.65 3.19 -6.65C2.78 -6.65 2.21 -6.27 2.02 -5.48H2.63C2.69 -5.72 2.81 -6.04 3.09 -6.04C3.24 -6.04 3.41 -5.96 3.57 -5.81C3.8 -5.62 3.96 -5.48 4.23 -5.48C4.64 -5.48 5.22 -5.86 5.4 -6.65Z",
+      "242": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM4.12 -5.18 3.26 -6.94H2.5L3.51 -5.18Z",
+      "243": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM5.16 -6.94H4.4L2.78 -5.18H3.39Z",
+      "244": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM5.01 -5.2 4.12 -6.92H3.52L1.91 -5.2H2.5L3.72 -6.43L4.42 -5.2Z",
+      "245": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM5.33 -6.65H4.72C4.67 -6.41 4.54 -6.09 4.26 -6.09C4.11 -6.09 3.95 -6.17 3.78 -6.32C3.55 -6.51 3.39 -6.65 3.12 -6.65C2.71 -6.65 2.14 -6.27 1.95 -5.48H2.56C2.62 -5.72 2.74 -6.04 3.02 -6.04C3.17 -6.04 3.34 -5.96 3.5 -5.81C3.73 -5.62 3.89 -5.48 4.16 -5.48C4.57 -5.48 5.15 -5.86 5.33 -6.65Z",
+      "246": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM3.24 -5.69 3.4 -6.44H2.64L2.48 -5.69ZM4.64 -5.69 4.8 -6.44H4.04L3.88 -5.69Z",
+      "247": "M7.31 -2.5C7.35 -2.68 7.18 -2.68 7.01 -2.68H1.43C1.26 -2.68 1.09 -2.68 1.05 -2.5C1.02 -2.33 1.17 -2.33 1.32 -2.33H6.98C7.13 -2.33 7.28 -2.33 7.31 -2.5ZM4.76 -3.32 4.93 -4.12H4.13L3.96 -3.32ZM4.24 -0.9 4.41 -1.7H3.61L3.44 -0.9Z",
+      "248": "M4.87 -2.14C5.02 -2.83 4.87 -3.47 4.48 -3.92L5.4 -5.13L4.92 -5.43L4.04 -4.25C3.93 -4.31 3.64 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.57 -1.41 0.76 -0.77 1.14 -0.41L0.21 0.82L0.68 1.12L1.59 -0.08C1.73 -0.01 1.99 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM3.63 -3.71 1.58 -1.01C1.37 -1.39 1.42 -1.85 1.48 -2.14C1.73 -3.28 2.49 -3.81 3.16 -3.81C3.33 -3.81 3.49 -3.78 3.63 -3.71ZM4.11 -2.14C3.87 -1.01 3.09 -0.53 2.45 -0.53C2.29 -0.53 2.14 -0.56 2 -0.62L4.02 -3.31C4.23 -2.93 4.18 -2.45 4.11 -2.14Z",
+      "249": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM4.19 -5.18 3.33 -6.94H2.57L3.58 -5.18Z",
+      "250": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM5.23 -6.94H4.47L2.85 -5.18H3.46Z",
+      "251": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM5.08 -5.2 4.19 -6.92H3.59L1.98 -5.2H2.57L3.79 -6.43L4.49 -5.2Z",
+      "252": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM3.31 -5.69 3.47 -6.44H2.71L2.55 -5.69ZM4.71 -5.69 4.87 -6.44H4.11L3.95 -5.69Z",
+      "253": "M5.09 -4.3H4.31C2.98 -2.01 2.49 -1.08 2.36 -0.58H2.35C2.43 -1.07 2.24 -2.27 2.08 -3.13L1.85 -4.3H1.04L1.9 0C1.73 0.3 1.47 0.75 1.4 0.85C1.06 1.41 0.91 1.41 0.75 1.41C0.71 1.41 0.39 1.4 0.06 1.29L-0.02 1.95C0.21 2 0.46 2.03 0.64 2.03C0.89 2.03 1.39 2.03 2.11 0.8ZM4.97 -6.94H4.21L2.59 -5.18H3.2Z",
+      "254": "M4.96 -2.16C5.21 -3.34 4.83 -4.38 3.97 -4.38C3.47 -4.38 2.83 -4.2 2.31 -3.84L2.97 -6.94H2.23L0.34 1.95H1.1L1.61 -0.45C1.87 -0.13 2.27 0.08 2.75 0.08C3.68 0.08 4.69 -0.88 4.96 -2.16ZM4.2 -2.16C3.99 -1.17 3.17 -0.53 2.5 -0.53C2.3 -0.53 2.1 -0.58 1.94 -0.75C1.72 -0.99 1.75 -1.14 1.78 -1.28L2.2 -3.25C2.31 -3.37 2.73 -3.75 3.28 -3.75C3.98 -3.75 4.38 -3.03 4.2 -2.16Z",
+      "255": "M5.09 -4.3H4.31C2.98 -2.01 2.49 -1.08 2.36 -0.58H2.35C2.43 -1.07 2.24 -2.27 2.08 -3.13L1.85 -4.3H1.04L1.9 0C1.73 0.3 1.47 0.75 1.4 0.85C1.06 1.41 0.91 1.41 0.75 1.41C0.71 1.41 0.39 1.4 0.06 1.29L-0.02 1.95C0.21 2 0.46 2.03 0.64 2.03C0.89 2.03 1.39 2.03 2.11 0.8ZM3.05 -5.69 3.21 -6.44H2.45L2.29 -5.69ZM4.45 -5.69 4.61 -6.44H3.85L3.69 -5.69Z",
+      "256": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM6.41 -7.5 6.55 -8.14H3.16L3.02 -7.5Z",
+      "257": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM5.17 -5.74 5.31 -6.38H1.92L1.78 -5.74Z",
+      "258": "M5.98 0 5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65ZM6.71 -9.33H6.1C5.91 -8.53 5.34 -8.06 4.84 -8.06C4.3 -8.06 3.97 -8.55 4.11 -9.33H3.5C3.28 -8.13 3.87 -7.4 4.69 -7.4C5.55 -7.4 6.43 -8.16 6.71 -9.33Z",
+      "259": "M3.86 0 4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94ZM5.35 -7.03H4.74C4.55 -6.23 3.98 -5.76 3.48 -5.76C2.94 -5.76 2.61 -6.25 2.75 -7.03H2.14C1.92 -5.83 2.51 -5.1 3.33 -5.1C4.19 -5.1 5.08 -5.86 5.35 -7.03Z",
+      "260": "M5.81 1.87 5.8 1.28C5.56 1.37 5.32 1.43 5.1 1.42C4.82 1.4 4.6 1.34 4.65 1.04C4.73 0.6 5.23 0.26 5.75 0H5.98L5.03 -6.94H4.17L0.26 0H1.02L2.15 -2.02H4.83L5.11 0C4.55 0.28 4.05 0.76 3.97 1.27C3.89 1.7 4.11 2.12 4.78 2.12C5.11 2.12 5.37 2.06 5.81 1.87ZM4.76 -2.58H2.46C3.24 -3.98 4.21 -5.72 4.37 -6.17H4.38C4.36 -5.76 4.44 -5.16 4.5 -4.65Z",
+      "261": "M3.82 1.87 3.81 1.28C3.57 1.37 3.33 1.43 3.11 1.42C2.83 1.4 2.61 1.34 2.66 1.04C2.74 0.6 3.23 0.26 3.75 0H3.86L4.46 -2.83C4.66 -3.77 4.13 -4.42 3.23 -4.42C2.79 -4.42 2.29 -4.34 1.67 -4.02L1.59 -3.36C1.88 -3.54 2.37 -3.83 3.09 -3.83C3.6 -3.83 3.83 -3.44 3.7 -2.82L3.62 -2.44C2.01 -2.39 0.91 -1.93 0.74 -1.14C0.66 -0.73 0.73 0.08 1.56 0.08C1.71 0.08 2.53 0.06 3.2 -0.37L3.12 0C2.56 0.28 2.06 0.76 1.98 1.27C1.9 1.7 2.12 2.12 2.79 2.12C3.12 2.12 3.38 2.06 3.82 1.87ZM3.38 -1.32C3.34 -1.14 3.29 -0.9 2.95 -0.72C2.66 -0.55 2.32 -0.53 2.18 -0.53C1.68 -0.53 1.4 -0.81 1.48 -1.16C1.63 -1.86 3.2 -1.93 3.51 -1.94Z",
+      "262": "M5.57 -0.47 5.65 -1.15C5.34 -0.96 5.04 -0.77 4.7 -0.67C4.37 -0.57 4.05 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.02 -2.71 2.17 -3.43C2.32 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.24 -6.31 5.51 -6.28 5.77 -6.19C6.03 -6.11 6.25 -5.96 6.46 -5.81L6.77 -6.61C6.52 -6.72 6.25 -6.81 5.96 -6.87C5.68 -6.93 5.39 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C3.92 0.08 4.26 0.07 4.59 -0.02C4.94 -0.12 5.25 -0.29 5.57 -0.47ZM7.04 -8.62H5.93L3.92 -7.4H4.81Z",
+      "263": "M4 -0.4 4.08 -1.06C3.58 -0.73 3.04 -0.55 2.5 -0.55C1.72 -0.55 1.35 -1.23 1.55 -2.16C1.7 -2.88 2.23 -3.79 3.23 -3.79C3.78 -3.79 4.06 -3.68 4.46 -3.37L4.7 -3.99C4.71 -4.06 4.3 -4.26 4.18 -4.3C3.88 -4.42 3.46 -4.42 3.35 -4.42C2.05 -4.42 1.03 -3.29 0.79 -2.15C0.53 -0.95 1.18 0.08 2.35 0.08C3.02 0.08 3.55 -0.14 4 -0.4ZM5.11 -6.94H4.35L2.73 -5.18H3.34Z",
+      "264": "M5.57 -0.47 5.65 -1.15C5.34 -0.96 5.04 -0.77 4.7 -0.67C4.37 -0.57 4.05 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.02 -2.71 2.17 -3.43C2.32 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.24 -6.31 5.51 -6.28 5.77 -6.19C6.03 -6.11 6.25 -5.96 6.46 -5.81L6.77 -6.61C6.52 -6.72 6.25 -6.81 5.96 -6.87C5.68 -6.93 5.39 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C3.92 0.08 4.26 0.07 4.59 -0.02C4.94 -0.12 5.25 -0.29 5.57 -0.47ZM6.41 -7.3 5.44 -8.64H4.84L3.29 -7.3H3.88L5.06 -8.27L5.82 -7.3Z",
+      "265": "M4 -0.4 4.08 -1.06C3.58 -0.73 3.04 -0.55 2.5 -0.55C1.72 -0.55 1.35 -1.23 1.55 -2.16C1.7 -2.88 2.23 -3.79 3.23 -3.79C3.78 -3.79 4.06 -3.68 4.46 -3.37L4.7 -3.99C4.71 -4.06 4.3 -4.26 4.18 -4.3C3.88 -4.42 3.46 -4.42 3.35 -4.42C2.05 -4.42 1.03 -3.29 0.79 -2.15C0.53 -0.95 1.18 0.08 2.35 0.08C3.02 0.08 3.55 -0.14 4 -0.4ZM4.96 -5.2 4.07 -6.92H3.47L1.86 -5.2H2.45L3.67 -6.43L4.37 -5.2Z",
+      "266": "M5.57 -0.47 5.65 -1.15C5.34 -0.96 5.04 -0.77 4.7 -0.67C4.37 -0.57 4.05 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.02 -2.71 2.17 -3.43C2.32 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.24 -6.31 5.51 -6.28 5.77 -6.19C6.03 -6.11 6.25 -5.96 6.46 -5.81L6.77 -6.61C6.52 -6.72 6.25 -6.81 5.96 -6.87C5.68 -6.93 5.39 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C3.92 0.08 4.26 0.07 4.59 -0.02C4.94 -0.12 5.25 -0.29 5.57 -0.47ZM5.27 -7.3 5.45 -8.14H4.61L4.43 -7.3Z",
+      "267": "M4 -0.4 4.08 -1.06C3.58 -0.73 3.04 -0.55 2.5 -0.55C1.72 -0.55 1.35 -1.23 1.55 -2.16C1.7 -2.88 2.23 -3.79 3.23 -3.79C3.78 -3.79 4.06 -3.68 4.46 -3.37L4.7 -3.99C4.71 -4.06 4.3 -4.26 4.18 -4.3C3.88 -4.42 3.46 -4.42 3.35 -4.42C2.05 -4.42 1.03 -3.29 0.79 -2.15C0.53 -0.95 1.18 0.08 2.35 0.08C3.02 0.08 3.55 -0.14 4 -0.4ZM3.92 -5.64 4.1 -6.48H3.26L3.08 -5.64Z",
+      "268": "M5.57 -0.47 5.65 -1.15C5.34 -0.96 5.04 -0.77 4.7 -0.67C4.37 -0.57 4.05 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.02 -2.71 2.17 -3.43C2.32 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.24 -6.31 5.51 -6.28 5.77 -6.19C6.03 -6.11 6.25 -5.96 6.46 -5.81L6.77 -6.61C6.52 -6.72 6.25 -6.81 5.96 -6.87C5.68 -6.93 5.39 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C3.92 0.08 4.26 0.07 4.59 -0.02C4.94 -0.12 5.25 -0.29 5.57 -0.47ZM6.7 -8.64H6.11L4.93 -7.67L4.17 -8.64H3.58L4.55 -7.3H5.15Z",
+      "269": "M4 -0.4 4.08 -1.06C3.58 -0.73 3.04 -0.55 2.5 -0.55C1.72 -0.55 1.35 -1.23 1.55 -2.16C1.7 -2.88 2.23 -3.79 3.23 -3.79C3.78 -3.79 4.06 -3.68 4.46 -3.37L4.7 -3.99C4.71 -4.06 4.3 -4.26 4.18 -4.3C3.88 -4.42 3.46 -4.42 3.35 -4.42C2.05 -4.42 1.03 -3.29 0.79 -2.15C0.53 -0.95 1.18 0.08 2.35 0.08C3.02 0.08 3.55 -0.14 4 -0.4ZM5.32 -6.92H4.73L3.51 -5.69L2.81 -6.92H2.22L3.11 -5.2H3.71Z",
+      "270": "M6.97 -3.41C7.39 -5.34 6.47 -6.94 4.83 -6.94H2.37L0.89 0H3.35C4.99 0 6.58 -1.54 6.97 -3.41ZM6.15 -3.41C5.8 -1.74 4.6 -0.56 3.25 -0.56H1.83L3.07 -6.38H4.49C5.83 -6.38 6.52 -5.15 6.15 -3.41ZM5.82 -8.64H5.23L4.05 -7.67L3.29 -8.64H2.7L3.67 -7.3H4.27Z",
+      "271": "M4.08 0 5.56 -6.94H4.82L4.16 -3.88C3.91 -4.14 3.45 -4.38 2.89 -4.38C1.98 -4.38 1.05 -3.39 0.79 -2.15C0.52 -0.91 1.02 0.08 1.91 0.08C2.6 0.08 3.14 -0.29 3.43 -0.5L3.32 0ZM3.6 -1.34C3.58 -1.2 3.54 -1.05 3.18 -0.78C2.94 -0.61 2.68 -0.53 2.45 -0.53C1.91 -0.53 1.29 -0.93 1.54 -2.14C1.81 -3.4 2.69 -3.77 3.24 -3.77C3.61 -3.77 3.87 -3.59 4.02 -3.29ZM6.49 -6.23 6.64 -6.94H5.92L5.76 -6.22H5.98L5.51 -5.1H5.87Z",
+      "272": "M6.97 -3.41C7.39 -5.34 6.47 -6.94 4.83 -6.94H2.37L1.7 -3.79H0.94L0.8 -3.15H1.56L0.89 0H3.35C4.99 0 6.58 -1.54 6.97 -3.41ZM6.15 -3.41C5.8 -1.74 4.6 -0.56 3.25 -0.56H1.83L2.38 -3.15H3.3L3.44 -3.79H2.52L3.07 -6.38H4.49C5.83 -6.38 6.52 -5.15 6.15 -3.41Z",
+      "273": "M5.97 -5.3 6.1 -5.94H5.34L5.56 -6.94H4.82L4.6 -5.94H3.2L3.07 -5.3H4.47L4.16 -3.88C3.91 -4.14 3.45 -4.38 2.89 -4.38C1.98 -4.38 1.05 -3.39 0.79 -2.15C0.52 -0.91 1.02 0.08 1.91 0.08C2.6 0.08 3.14 -0.29 3.43 -0.5L3.32 0H4.08L5.21 -5.3ZM3.6 -1.34C3.58 -1.2 3.54 -1.05 3.18 -0.78C2.94 -0.61 2.68 -0.53 2.45 -0.53C1.91 -0.53 1.29 -0.93 1.54 -2.14C1.81 -3.4 2.69 -3.77 3.24 -3.77C3.61 -3.77 3.87 -3.59 4.02 -3.29Z",
+      "274": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM6.1 -7.5 6.24 -8.14H2.85L2.71 -7.5Z",
+      "275": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM5.01 -5.74 5.15 -6.38H1.76L1.62 -5.74Z",
+      "276": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM6.4 -9.33H5.79C5.6 -8.53 5.03 -8.06 4.53 -8.06C3.99 -8.06 3.66 -8.55 3.8 -9.33H3.19C2.97 -8.13 3.56 -7.4 4.38 -7.4C5.24 -7.4 6.12 -8.16 6.4 -9.33Z",
+      "277": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM5.19 -7.03H4.58C4.39 -6.23 3.82 -5.76 3.32 -5.76C2.78 -5.76 2.45 -6.25 2.59 -7.03H1.98C1.76 -5.83 2.35 -5.1 3.17 -5.1C4.03 -5.1 4.92 -5.86 5.19 -7.03Z",
+      "278": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM4.78 -7.3 4.96 -8.14H4.12L3.94 -7.3Z",
+      "279": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM3.71 -5.64 3.89 -6.48H3.05L2.87 -5.64Z",
+      "280": "M4.86 1.87 4.85 1.28C4.61 1.37 4.37 1.43 4.15 1.42C3.87 1.4 3.65 1.34 3.7 1.04C3.78 0.6 4.27 0.26 4.79 0H5.21L5.36 -0.69L3.2 -0.68L1.86 -0.67L2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0H4.16C3.6 0.28 3.1 0.76 3.02 1.27C2.94 1.7 3.16 2.12 3.83 2.12C4.16 2.12 4.42 2.06 4.86 1.87Z",
+      "281": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C1.83 0.38 1.39 0.8 1.32 1.27C1.24 1.7 1.46 2.12 2.13 2.12C2.46 2.12 2.72 2.06 3.16 1.87L3.15 1.28C2.91 1.37 2.67 1.43 2.45 1.42C2.17 1.4 1.95 1.34 2 1.04C2.08 0.6 2.59 0.22 3.11 -0.04C3.38 -0.12 3.66 -0.23 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74Z",
+      "282": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM6.21 -8.64H5.62L4.44 -7.67L3.68 -8.64H3.09L4.06 -7.3H4.66Z",
+      "283": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM5.11 -6.92H4.52L3.3 -5.69L2.6 -6.92H2.01L2.9 -5.2H3.5Z",
+      "284": "M5.67 -0.41 6.2 -2.91H4.23L4.1 -2.29H5.31L4.98 -0.75C4.56 -0.62 4.14 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.03 -2.71 2.18 -3.43C2.33 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.27 -6.31 5.57 -6.27 5.85 -6.16C6.13 -6.05 6.36 -5.87 6.57 -5.67L6.88 -6.47C6.62 -6.63 6.35 -6.76 6.04 -6.84C5.73 -6.92 5.42 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C4.27 0.08 4.98 -0.08 5.67 -0.41ZM6.24 -7.3 5.27 -8.64H4.67L3.12 -7.3H3.71L4.89 -8.27L5.65 -7.3Z",
+      "285": "M5.36 -3.76 5.38 -4.38C4.81 -4.37 4.3 -4.26 3.86 -4.07C3.58 -4.33 3.25 -4.38 3.02 -4.38C2.15 -4.38 1.34 -3.66 1.16 -2.82C1.04 -2.28 1.26 -1.87 1.27 -1.85C1.04 -1.6 0.88 -1.33 0.82 -1.03C0.74 -0.68 0.83 -0.43 0.91 -0.29C0.32 0.03 0.15 0.52 0.11 0.71C-0.05 1.44 0.74 2.04 1.91 2.04C3.09 2.04 4.12 1.44 4.28 0.7C4.57 -0.68 3.05 -0.69 2.63 -0.69H1.82C1.67 -0.69 1.27 -0.69 1.38 -1.2C1.42 -1.4 1.55 -1.54 1.55 -1.54C1.67 -1.43 1.95 -1.26 2.36 -1.26C3.19 -1.26 4.03 -1.96 4.21 -2.82C4.31 -3.3 4.17 -3.65 4.1 -3.77H4.13C4.16 -3.77 4.59 -3.8 4.74 -3.8C5.06 -3.8 5.09 -3.79 5.36 -3.76ZM3.5 -2.82C3.31 -1.95 2.73 -1.81 2.47 -1.81C2.13 -1.81 1.7 -2.02 1.87 -2.82C2.05 -3.69 2.63 -3.83 2.89 -3.83C3.23 -3.83 3.67 -3.62 3.5 -2.82ZM3.57 0.72C3.48 1.15 2.78 1.49 2.03 1.49C1.27 1.49 0.72 1.16 0.82 0.71C0.83 0.66 0.96 0.04 1.65 0.04H2.46C2.7 0.04 3.71 0.04 3.57 0.72ZM4.68 -5.2 3.79 -6.92H3.19L1.58 -5.2H2.17L3.39 -6.43L4.09 -5.2Z",
+      "286": "M5.67 -0.41 6.2 -2.91H4.23L4.1 -2.29H5.31L4.98 -0.75C4.56 -0.62 4.14 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.03 -2.71 2.18 -3.43C2.33 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.27 -6.31 5.57 -6.27 5.85 -6.16C6.13 -6.05 6.36 -5.87 6.57 -5.67L6.88 -6.47C6.62 -6.63 6.35 -6.76 6.04 -6.84C5.73 -6.92 5.42 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C4.27 0.08 4.98 -0.08 5.67 -0.41ZM6.72 -9.33H6.11C5.92 -8.53 5.35 -8.06 4.85 -8.06C4.31 -8.06 3.98 -8.55 4.12 -9.33H3.51C3.29 -8.13 3.88 -7.4 4.7 -7.4C5.56 -7.4 6.44 -8.16 6.72 -9.33Z",
+      "287": "M5.36 -3.76 5.38 -4.38C4.81 -4.37 4.3 -4.26 3.86 -4.07C3.58 -4.33 3.25 -4.38 3.02 -4.38C2.15 -4.38 1.34 -3.66 1.16 -2.82C1.04 -2.28 1.26 -1.87 1.27 -1.85C1.04 -1.6 0.88 -1.33 0.82 -1.03C0.74 -0.68 0.83 -0.43 0.91 -0.29C0.32 0.03 0.15 0.52 0.11 0.71C-0.05 1.44 0.74 2.04 1.91 2.04C3.09 2.04 4.12 1.44 4.28 0.7C4.57 -0.68 3.05 -0.69 2.63 -0.69H1.82C1.67 -0.69 1.27 -0.69 1.38 -1.2C1.42 -1.4 1.55 -1.54 1.55 -1.54C1.67 -1.43 1.95 -1.26 2.36 -1.26C3.19 -1.26 4.03 -1.96 4.21 -2.82C4.31 -3.3 4.17 -3.65 4.1 -3.77H4.13C4.16 -3.77 4.59 -3.8 4.74 -3.8C5.06 -3.8 5.09 -3.79 5.36 -3.76ZM3.5 -2.82C3.31 -1.95 2.73 -1.81 2.47 -1.81C2.13 -1.81 1.7 -2.02 1.87 -2.82C2.05 -3.69 2.63 -3.83 2.89 -3.83C3.23 -3.83 3.67 -3.62 3.5 -2.82ZM3.57 0.72C3.48 1.15 2.78 1.49 2.03 1.49C1.27 1.49 0.72 1.16 0.82 0.71C0.83 0.66 0.96 0.04 1.65 0.04H2.46C2.7 0.04 3.71 0.04 3.57 0.72ZM5.12 -7.03H4.51C4.32 -6.23 3.75 -5.76 3.25 -5.76C2.71 -5.76 2.38 -6.25 2.52 -7.03H1.91C1.69 -5.83 2.28 -5.1 3.1 -5.1C3.96 -5.1 4.85 -5.86 5.12 -7.03Z",
+      "288": "M5.67 -0.41 6.2 -2.91H4.23L4.1 -2.29H5.31L4.98 -0.75C4.56 -0.62 4.14 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.03 -2.71 2.18 -3.43C2.33 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.27 -6.31 5.57 -6.27 5.85 -6.16C6.13 -6.05 6.36 -5.87 6.57 -5.67L6.88 -6.47C6.62 -6.63 6.35 -6.76 6.04 -6.84C5.73 -6.92 5.42 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C4.27 0.08 4.98 -0.08 5.67 -0.41ZM5.11 -7.3 5.29 -8.14H4.45L4.27 -7.3Z",
+      "289": "M5.36 -3.76 5.38 -4.38C4.81 -4.37 4.3 -4.26 3.86 -4.07C3.58 -4.33 3.25 -4.38 3.02 -4.38C2.15 -4.38 1.34 -3.66 1.16 -2.82C1.04 -2.28 1.26 -1.87 1.27 -1.85C1.04 -1.6 0.88 -1.33 0.82 -1.03C0.74 -0.68 0.83 -0.43 0.91 -0.29C0.32 0.03 0.15 0.52 0.11 0.71C-0.05 1.44 0.74 2.04 1.91 2.04C3.09 2.04 4.12 1.44 4.28 0.7C4.57 -0.68 3.05 -0.69 2.63 -0.69H1.82C1.67 -0.69 1.27 -0.69 1.38 -1.2C1.42 -1.4 1.55 -1.54 1.55 -1.54C1.67 -1.43 1.95 -1.26 2.36 -1.26C3.19 -1.26 4.03 -1.96 4.21 -2.82C4.31 -3.3 4.17 -3.65 4.1 -3.77H4.13C4.16 -3.77 4.59 -3.8 4.74 -3.8C5.06 -3.8 5.09 -3.79 5.36 -3.76ZM3.5 -2.82C3.31 -1.95 2.73 -1.81 2.47 -1.81C2.13 -1.81 1.7 -2.02 1.87 -2.82C2.05 -3.69 2.63 -3.83 2.89 -3.83C3.23 -3.83 3.67 -3.62 3.5 -2.82ZM3.57 0.72C3.48 1.15 2.78 1.49 2.03 1.49C1.27 1.49 0.72 1.16 0.82 0.71C0.83 0.66 0.96 0.04 1.65 0.04H2.46C2.7 0.04 3.71 0.04 3.57 0.72ZM3.64 -5.64 3.82 -6.48H2.98L2.8 -5.64Z",
+      "290": "M5.67 -0.41 6.2 -2.91H4.23L4.1 -2.29H5.31L4.98 -0.75C4.56 -0.62 4.14 -0.56 3.73 -0.56C3.12 -0.56 2.64 -0.91 2.39 -1.4C2.06 -1.99 2.03 -2.71 2.18 -3.43C2.33 -4.16 2.68 -4.89 3.25 -5.47C3.71 -5.95 4.34 -6.31 4.95 -6.31C5.27 -6.31 5.57 -6.27 5.85 -6.16C6.13 -6.05 6.36 -5.87 6.57 -5.67L6.88 -6.47C6.62 -6.63 6.35 -6.76 6.04 -6.84C5.73 -6.92 5.42 -6.95 5.09 -6.95C4.27 -6.95 3.42 -6.55 2.75 -5.92C2.01 -5.23 1.53 -4.34 1.34 -3.43C1.15 -2.53 1.25 -1.64 1.69 -0.95C2.1 -0.32 2.77 0.08 3.59 0.08C4.27 0.08 4.98 -0.08 5.67 -0.41ZM3.23 1.29 3.38 0.58H2.66L2.5 1.3H2.72L2.26 2.42H2.62Z",
+      "291": "M3.91 -7.14H3.55L2.94 -6.01L2.79 -5.3H3.51L3.66 -6.02H3.44ZM5.36 -3.76 5.38 -4.38C4.81 -4.37 4.3 -4.26 3.86 -4.07C3.58 -4.33 3.25 -4.38 3.02 -4.38C2.15 -4.38 1.34 -3.66 1.16 -2.82C1.04 -2.28 1.26 -1.87 1.27 -1.85C1.04 -1.6 0.88 -1.33 0.82 -1.03C0.74 -0.68 0.83 -0.43 0.91 -0.29C0.32 0.03 0.15 0.52 0.11 0.71C-0.05 1.44 0.74 2.04 1.91 2.04C3.09 2.04 4.12 1.44 4.28 0.7C4.57 -0.68 3.05 -0.69 2.63 -0.69H1.82C1.67 -0.69 1.27 -0.69 1.38 -1.2C1.42 -1.4 1.55 -1.54 1.55 -1.54C1.67 -1.43 1.95 -1.26 2.36 -1.26C3.19 -1.26 4.03 -1.96 4.21 -2.82C4.31 -3.3 4.17 -3.65 4.1 -3.77H4.13C4.16 -3.77 4.59 -3.8 4.74 -3.8C5.06 -3.8 5.09 -3.79 5.36 -3.76ZM3.5 -2.82C3.31 -1.95 2.73 -1.81 2.47 -1.81C2.13 -1.81 1.7 -2.02 1.87 -2.82C2.05 -3.69 2.63 -3.83 2.89 -3.83C3.23 -3.83 3.67 -3.62 3.5 -2.82ZM3.57 0.72C3.48 1.15 2.78 1.49 2.03 1.49C1.27 1.49 0.72 1.16 0.82 0.71C0.83 0.66 0.96 0.04 1.65 0.04H2.46C2.7 0.04 3.71 0.04 3.57 0.72Z",
+      "292": "M5.74 0 7.22 -6.94H6.38L5.73 -3.91H2.55L3.2 -6.94H2.36L0.88 0H1.72L2.42 -3.3H5.6L4.9 0ZM6.43 -7.3 5.46 -8.64H4.86L3.31 -7.3H3.9L5.08 -8.27L5.84 -7.3Z",
+      "293": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.11 -4.38 2.64 -4.07 2.27 -3.73L2.96 -6.94H2.22L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0ZM5.53 -7.3 4.56 -8.64H3.96L2.41 -7.3H3L4.18 -8.27L4.94 -7.3Z",
+      "294": "M7.29 -4.89 7.43 -5.53H6.92L7.22 -6.94H6.38L6.08 -5.53H2.9L3.2 -6.94H2.36L2.06 -5.53H1.55L1.41 -4.89H1.92L0.88 0H1.72L2.42 -3.3H5.6L4.9 0H5.74L6.78 -4.89ZM5.73 -3.91H2.55L2.76 -4.89H5.94Z",
+      "295": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.11 -4.38 2.64 -4.07 2.27 -3.73L2.61 -5.3H3.55L3.68 -5.94H2.74L2.96 -6.94H2.22L2 -5.94H1.24L1.11 -5.3H1.87L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0Z",
+      "296": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM4.66 -8.47H4.05C4 -8.23 3.87 -7.91 3.59 -7.91C3.44 -7.91 3.28 -7.99 3.11 -8.14C2.88 -8.33 2.72 -8.47 2.45 -8.47C2.04 -8.47 1.47 -8.09 1.28 -7.3H1.89C1.94 -7.54 2.07 -7.86 2.35 -7.86C2.5 -7.86 2.66 -7.78 2.83 -7.63C3.06 -7.44 3.22 -7.3 3.49 -7.3C3.9 -7.3 4.47 -7.68 4.66 -8.47Z",
+      "297": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM4.09 -6.65H3.48C3.43 -6.41 3.3 -6.09 3.02 -6.09C2.87 -6.09 2.71 -6.17 2.54 -6.32C2.31 -6.51 2.15 -6.65 1.88 -6.65C1.47 -6.65 0.9 -6.27 0.71 -5.48H1.32C1.38 -5.72 1.5 -6.04 1.78 -6.04C1.93 -6.04 2.1 -5.96 2.26 -5.81C2.49 -5.62 2.65 -5.48 2.92 -5.48C3.33 -5.48 3.91 -5.86 4.09 -6.65Z",
+      "298": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM4.58 -7.5 4.72 -8.14H1.33L1.19 -7.5Z",
+      "299": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM4.03 -5.74 4.17 -6.38H0.78L0.64 -5.74Z",
+      "300": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM4.88 -9.33H4.27C4.08 -8.53 3.51 -8.06 3.01 -8.06C2.47 -8.06 2.14 -8.55 2.28 -9.33H1.67C1.45 -8.13 2.04 -7.4 2.86 -7.4C3.72 -7.4 4.6 -8.16 4.88 -9.33Z",
+      "301": "M1.48 0 2.39 -4.3H1.65L0.74 0ZM4.21 -7.03H3.6C3.41 -6.23 2.84 -5.76 2.34 -5.76C1.8 -5.76 1.47 -6.25 1.61 -7.03H1C0.78 -5.83 1.37 -5.1 2.19 -5.1C3.05 -5.1 3.94 -5.86 4.21 -7.03Z",
+      "302": "M1.78 1.87 1.77 1.28C1.53 1.37 1.29 1.43 1.07 1.42C0.79 1.4 0.57 1.34 0.62 1.04C0.7 0.6 1.19 0.26 1.71 0L3.19 -6.94H2.35L0.87 0H1.08C0.52 0.28 0.02 0.76 -0.06 1.27C-0.14 1.7 0.08 2.12 0.75 2.12C1.08 2.12 1.34 2.06 1.78 1.87Z",
+      "303": "M2.75 -5.74 2.93 -6.58H2.09L1.91 -5.74ZM1.55 1.87 1.54 1.28C1.3 1.37 1.06 1.43 0.84 1.42C0.56 1.4 0.34 1.34 0.39 1.04C0.47 0.6 0.96 0.26 1.48 0L2.39 -4.3H1.65L0.74 0H0.85C0.29 0.28 -0.21 0.76 -0.29 1.27C-0.37 1.7 -0.15 2.12 0.52 2.12C0.85 2.12 1.11 2.06 1.55 1.87Z",
+      "304": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM3.27 -7.3 3.45 -8.14H2.61L2.43 -7.3Z",
+      "305": "M1.48 0 2.39 -4.3H1.65L0.74 0Z",
+      "306": "M1.71 0 3.19 -6.94H2.35L0.87 0ZM6.3 -1.49 7.46 -6.94H6.64L5.48 -1.52C5.38 -1.04 5.06 -0.45 4.16 -0.45C3.65 -0.45 3.27 -0.69 3.06 -0.99L2.78 -0.26C3.33 0.07 3.88 0.16 4.3 0.16C5.27 0.16 6.07 -0.4 6.3 -1.49Z",
+      "307": "M2.73 -5.64 2.91 -6.48H2.07L1.89 -5.64ZM4.94 -5.64 5.12 -6.48H4.28L4.1 -5.64ZM1.48 0 2.39 -4.3H1.65L0.74 0ZM3.61 0.6 4.65 -4.3H3.91L2.85 0.69C2.72 1.3 2.24 1.39 1.98 1.39C1.76 1.39 1.52 1.32 1.34 1.08L1.06 1.69C1.34 1.89 1.7 2.03 2.12 2.03C2.75 2.03 3.42 1.49 3.61 0.6Z",
+      "308": "M3.97 -1.49 5.13 -6.94H4.31L3.15 -1.52C3.05 -1.04 2.73 -0.45 1.83 -0.45C1.32 -0.45 0.94 -0.69 0.73 -0.99L0.45 -0.26C1 0.07 1.55 0.16 1.97 0.16C2.94 0.16 3.74 -0.4 3.97 -1.49ZM6.35 -7.3 5.38 -8.64H4.78L3.23 -7.3H3.82L5 -8.27L5.76 -7.3Z",
+      "309": "M1.61 0.6 2.65 -4.3H1.91L0.85 0.69C0.73 1.29 0.28 1.39 0.01 1.39C-0.26 1.39 -0.46 1.29 -0.61 1.08L-0.94 1.69C-0.66 1.89 -0.3 2.03 0.12 2.03C0.75 2.03 1.42 1.49 1.61 0.6ZM3.98 -5.2 3.09 -6.92H2.49L0.88 -5.2H1.47L2.69 -6.43L3.39 -5.2Z",
+      "310": "M6.11 0 4.38 -4.19 7.46 -6.94H6.5L2.42 -3.31L3.2 -6.94H2.36L0.88 0H1.72L2.2 -2.25L3.69 -3.58L5.18 0ZM3.35 1.29 3.5 0.58H2.78L2.62 1.3H2.84L2.38 2.42H2.74Z",
+      "311": "M4.41 0 3.21 -2.65 5.11 -4.3H4.15L2.01 -2.44L2.97 -6.94H2.23L0.75 0H1.48L1.78 -1.4L2.6 -2.11L3.56 0ZM2.39 1.29 2.54 0.58H1.82L1.66 1.3H1.88L1.42 2.42H1.78Z",
+      "313": "M4.69 0 4.83 -0.65H2.75C2.63 -0.65 2.51 -0.64 2.39 -0.64H1.86L3.2 -6.94H2.36L0.88 0ZM5.57 -8.62H4.46L2.45 -7.4H3.34Z",
+      "314": "M1.48 0 2.96 -6.94H2.22L0.74 0ZM5.43 -8.62H4.32L2.31 -7.4H3.2Z",
+      "315": "M4.69 0 4.83 -0.65H2.75C2.63 -0.65 2.51 -0.64 2.39 -0.64H1.86L3.2 -6.94H2.36L0.88 0ZM2.64 1.29 2.79 0.58H2.07L1.91 1.3H2.13L1.67 2.42H2.03Z",
+      "316": "M1.48 0 2.96 -6.94H2.22L0.74 0ZM1.21 1.29 1.36 0.58H0.64L0.48 1.3H0.7L0.24 2.42H0.6Z",
+      "317": "M4.69 0 4.83 -0.65H2.75C2.63 -0.65 2.51 -0.64 2.39 -0.64H1.86L3.2 -6.94H2.36L0.88 0ZM4.3 -6.23 4.45 -6.94H3.73L3.57 -6.22H3.79L3.32 -5.1H3.68Z",
+      "318": "M1.48 0 2.96 -6.94H2.22L0.74 0ZM3.89 -6.23 4.04 -6.94H3.32L3.16 -6.22H3.38L2.91 -5.1H3.27Z",
+      "319": "M4.69 0 4.83 -0.65H2.75C2.63 -0.65 2.51 -0.64 2.39 -0.64H1.86L3.2 -6.94H2.36L0.88 0ZM4.94 -3.21 5.12 -4.05H4.28L4.1 -3.21Z",
+      "320": "M1.48 0 2.96 -6.94H2.22L0.74 0ZM3.62 -3.21 3.8 -4.05H2.96L2.78 -3.21Z",
+      "321": "M5.45 0 5.59 -0.65H3.51C3.39 -0.65 3.27 -0.64 3.15 -0.64H2.62L3.25 -3.61L5.26 -5.03L4.97 -5.48L3.41 -4.37L3.96 -6.94H3.12L2.42 -3.65L1.2 -2.78L1.48 -2.35L2.26 -2.91L1.64 0Z",
+      "322": "M3.99 -4.48 3.69 -4.92 2.86 -4.3 3.43 -6.94H2.69L2 -3.7L0.83 -2.82L1.11 -2.37L1.83 -2.91L1.21 0H1.95L2.7 -3.53Z",
+      "323": "M5.74 0 7.22 -6.94H6.44L5.12 -0.77L5.11 -0.76L4.84 -1.92L3.69 -6.57L3.59 -6.94H2.36L0.88 0H1.66L2.97 -6.17L2.98 -6.18L3.26 -5.02L4.41 -0.37L4.51 0ZM7.06 -8.62H5.95L3.94 -7.4H4.83Z",
+      "324": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.1 -4.38 2.61 -4.05 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0ZM5.23 -6.94H4.47L2.85 -5.18H3.46Z",
+      "325": "M5.74 0 7.22 -6.94H6.44L5.12 -0.77L5.11 -0.76L4.84 -1.92L3.69 -6.57L3.59 -6.94H2.36L0.88 0H1.66L2.97 -6.17L2.98 -6.18L3.26 -5.02L4.41 -0.37L4.51 0ZM3.41 1.29 3.56 0.58H2.84L2.68 1.3H2.9L2.44 2.42H2.8Z",
+      "326": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.1 -4.38 2.61 -4.05 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0ZM2.52 1.29 2.67 0.58H1.95L1.79 1.3H2.01L1.55 2.42H1.91Z",
+      "327": "M5.74 0 7.22 -6.94H6.44L5.12 -0.77L5.11 -0.76L4.84 -1.92L3.69 -6.57L3.59 -6.94H2.36L0.88 0H1.66L2.97 -6.17L2.98 -6.18L3.26 -5.02L4.41 -0.37L4.51 0ZM6.72 -8.64H6.13L4.95 -7.67L4.19 -8.64H3.6L4.57 -7.3H5.17Z",
+      "328": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.1 -4.38 2.61 -4.05 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0ZM5.44 -6.92H4.85L3.63 -5.69L2.93 -6.92H2.34L3.23 -5.2H3.83Z",
+      "330": "M6.48 -3.47C6.86 -5.25 6.7 -7.1 5.16 -7.1C4.39 -7.1 3.65 -6.77 3.05 -6.25L3.2 -6.94H2.36L0.88 0H1.72L2.7 -4.6C3.08 -5.57 4.01 -6.34 5 -6.34C6.16 -6.34 5.92 -4.82 5.64 -3.47C5.35 -2.12 4.94 -0.6 3.78 -0.6L3.62 0.16C5.16 0.16 6.1 -1.7 6.48 -3.47Z",
+      "331": "M4.09 0 4.71 -2.92C4.84 -3.55 4.87 -4.38 3.74 -4.38C3.1 -4.38 2.61 -4.05 2.26 -3.71L2.39 -4.33H1.66L0.74 0H1.5L2.01 -2.42C2.15 -3.05 2.54 -3.77 3.22 -3.77C4.1 -3.77 4.01 -3.18 3.93 -2.84L3.33 0C3.19 0.67 2.93 1.41 2.36 1.41L2.22 2.05C3.15 2.05 3.87 1.03 4.09 0Z",
+      "332": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM6.75 -7.5 6.89 -8.14H3.5L3.36 -7.5Z",
+      "333": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM5.27 -5.74 5.41 -6.38H2.02L1.88 -5.74Z",
+      "334": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM7.05 -9.33H6.44C6.25 -8.53 5.68 -8.06 5.18 -8.06C4.64 -8.06 4.31 -8.55 4.45 -9.33H3.84C3.62 -8.13 4.21 -7.4 5.03 -7.4C5.89 -7.4 6.77 -8.16 7.05 -9.33Z",
+      "335": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM5.45 -7.03H4.84C4.65 -6.23 4.08 -5.76 3.58 -5.76C3.04 -5.76 2.71 -6.25 2.85 -7.03H2.24C2.02 -5.83 2.61 -5.1 3.43 -5.1C4.29 -5.1 5.18 -5.86 5.45 -7.03Z",
+      "336": "M7.14 -3.46C7.58 -5.54 6.54 -7.1 4.97 -7.1C3.4 -7.1 1.7 -5.53 1.26 -3.46C0.81 -1.37 1.88 0.16 3.43 0.16C4.98 0.16 6.69 -1.37 7.14 -3.46ZM6.32 -3.59C5.92 -1.69 4.65 -0.47 3.56 -0.47C2.46 -0.47 1.72 -1.7 2.12 -3.59C2.51 -5.43 3.8 -6.47 4.84 -6.47C5.88 -6.47 6.71 -5.43 6.32 -3.59ZM5.4 -9.16H4.64L3.67 -7.4H4.28ZM6.97 -9.16H6.21L5.24 -7.4H5.85Z",
+      "337": "M4.87 -2.14C5.15 -3.42 4.41 -4.42 3.29 -4.42C2.14 -4.42 0.99 -3.39 0.72 -2.14C0.45 -0.87 1.21 0.08 2.32 0.08C3.46 0.08 4.61 -0.9 4.87 -2.14ZM4.13 -2.22C3.89 -1.09 3.12 -0.54 2.45 -0.54C1.75 -0.54 1.27 -1.13 1.5 -2.22C1.75 -3.38 2.55 -3.8 3.15 -3.8C3.8 -3.8 4.37 -3.34 4.13 -2.22ZM3.82 -6.94H3.06L2.09 -5.18H2.7ZM5.39 -6.94H4.63L3.66 -5.18H4.27Z",
+      "338": "M8.73 0 8.88 -0.69 5.39 -0.67 5.95 -3.3H9.04L9.17 -3.91H6.08L6.59 -6.3L9.94 -6.29L10.08 -6.94H6.36C6.23 -6.94 6.06 -6.94 5.66 -7.01C5.19 -7.09 5.04 -7.1 4.89 -7.1C3.2 -7.1 1.42 -5.51 0.99 -3.46C0.54 -1.38 1.69 0.16 3.35 0.16C3.57 0.16 3.75 0.13 4.18 0.07C4.59 0 4.74 0 4.88 0ZM5.17 -3.48C4.93 -2.36 4.78 -1.64 4.67 -1.32C4.48 -0.8 4.3 -0.45 3.5 -0.45C2.18 -0.45 1.47 -1.89 1.83 -3.59C2.19 -5.26 3.52 -6.49 4.78 -6.49C5.57 -6.49 5.63 -6.15 5.58 -5.58C5.55 -5.26 5.35 -4.32 5.17 -3.48Z",
+      "339": "M7.51 -2.19C7.58 -2.52 7.98 -4.42 6.39 -4.42C5.95 -4.42 5.26 -4.22 4.64 -3.5C4.34 -4.17 3.75 -4.42 3.21 -4.42C2.14 -4.42 1 -3.44 0.73 -2.17C0.46 -0.89 1.19 0.08 2.25 0.08C2.7 0.08 3.43 -0.1 4.09 -0.86C4.46 -0.12 5.05 0.08 5.58 0.08C6.04 0.08 6.57 -0.07 7.08 -0.41C7.09 -0.45 7.13 -0.78 7.13 -0.78C7.13 -0.78 7.14 -1.01 7.15 -1.05C6.62 -0.65 6.08 -0.53 5.72 -0.53C5.01 -0.53 4.56 -1.2 4.76 -2.19ZM6.95 -2.74H4.94C5.27 -3.42 5.82 -3.81 6.26 -3.81C6.64 -3.81 7.01 -3.54 6.95 -2.74ZM4 -2.23C3.75 -1.03 2.99 -0.53 2.38 -0.53C1.77 -0.53 1.22 -1.04 1.47 -2.23C1.71 -3.35 2.48 -3.81 3.08 -3.81C3.7 -3.81 4.24 -3.34 4 -2.23Z",
+      "340": "M5.79 0 4.63 -3.26 4.66 -3.27C6.33 -3.81 6.57 -4.89 6.61 -5.08C6.81 -6.03 6.05 -6.94 4.61 -6.94H2.37L0.89 0H1.71L2.38 -3.17H3.85L4.95 0ZM5.82 -5.08C5.7 -4.54 5.14 -3.78 3.82 -3.78H2.51L3.07 -6.38H4.38C5.65 -6.38 5.94 -5.66 5.82 -5.08ZM6.77 -8.62H5.66L3.65 -7.4H4.54Z",
+      "341": "M3.85 -3.72 3.99 -4.38C3.35 -4.37 2.68 -4.05 2.21 -3.53L2.38 -4.33H1.67L0.75 0H1.49L1.94 -2.13C2.14 -3.07 2.97 -3.7 3.85 -3.72ZM4.23 -6.94H3.47L1.85 -5.18H2.46Z",
+      "342": "M5.79 0 4.63 -3.26 4.66 -3.27C6.33 -3.81 6.57 -4.89 6.61 -5.08C6.81 -6.03 6.05 -6.94 4.61 -6.94H2.37L0.89 0H1.71L2.38 -3.17H3.85L4.95 0ZM5.82 -5.08C5.7 -4.54 5.14 -3.78 3.82 -3.78H2.51L3.07 -6.38H4.38C5.65 -6.38 5.94 -5.66 5.82 -5.08ZM3.13 1.29 3.28 0.58H2.56L2.4 1.3H2.62L2.16 2.42H2.52Z",
+      "343": "M3.85 -3.72 3.99 -4.38C3.35 -4.37 2.68 -4.05 2.21 -3.53L2.38 -4.33H1.67L0.75 0H1.49L1.94 -2.13C2.14 -3.07 2.97 -3.7 3.85 -3.72ZM1.22 1.29 1.37 0.58H0.65L0.49 1.3H0.71L0.25 2.42H0.61Z",
+      "344": "M5.79 0 4.63 -3.26 4.66 -3.27C6.33 -3.81 6.57 -4.89 6.61 -5.08C6.81 -6.03 6.05 -6.94 4.61 -6.94H2.37L0.89 0H1.71L2.38 -3.17H3.85L4.95 0ZM5.82 -5.08C5.7 -4.54 5.14 -3.78 3.82 -3.78H2.51L3.07 -6.38H4.38C5.65 -6.38 5.94 -5.66 5.82 -5.08ZM6.43 -8.64H5.84L4.66 -7.67L3.9 -8.64H3.31L4.28 -7.3H4.88Z",
+      "345": "M3.85 -3.72 3.99 -4.38C3.35 -4.37 2.68 -4.05 2.21 -3.53L2.38 -4.33H1.67L0.75 0H1.49L1.94 -2.13C2.14 -3.07 2.97 -3.7 3.85 -3.72ZM4.62 -6.92H4.03L2.81 -5.69L2.11 -6.92H1.52L2.41 -5.2H3.01Z",
+      "346": "M5.1 -1.91C5.18 -2.31 5.17 -2.82 4.85 -3.29C4.53 -3.74 4.2 -3.84 3.42 -4.06C2.98 -4.18 2.7 -4.26 2.51 -4.57C2.39 -4.79 2.34 -5 2.4 -5.27C2.52 -5.83 3.13 -6.44 4.01 -6.44C4.45 -6.44 5 -6.35 5.46 -5.81L5.77 -6.61C5.39 -6.87 4.96 -7.1 4.15 -7.1C2.86 -7.1 1.83 -6.15 1.62 -5.18C1.54 -4.8 1.56 -4.37 1.86 -3.93C2.15 -3.49 2.57 -3.37 3.1 -3.23C3.31 -3.17 3.68 -3.06 3.74 -3.03C4.26 -2.81 4.42 -2.3 4.32 -1.82C4.18 -1.19 3.55 -0.52 2.68 -0.52C2.38 -0.52 1.51 -0.57 0.84 -1.33L0.53 -0.54C1.23 0.06 2.1 0.16 2.55 0.16C3.78 0.16 4.86 -0.81 5.1 -1.91ZM6.35 -8.62H5.24L3.23 -7.4H4.12Z",
+      "347": "M3.64 -1.24C3.75 -1.73 3.54 -2.06 3.38 -2.21C3.11 -2.47 2.99 -2.5 2.21 -2.67C2.07 -2.69 1.61 -2.8 1.7 -3.25C1.82 -3.82 2.45 -3.82 2.59 -3.82C3.24 -3.82 3.6 -3.62 3.84 -3.47L4.1 -4.12C3.57 -4.4 3.11 -4.42 2.81 -4.42C2.1 -4.42 1.2 -4.17 0.98 -3.16C0.77 -2.15 1.82 -1.93 2.11 -1.87C2.55 -1.78 3.04 -1.68 2.93 -1.18C2.8 -0.55 2.08 -0.55 1.95 -0.55C1.55 -0.55 1.02 -0.66 0.6 -1.02L0.33 -0.35C0.83 -0.02 1.36 0.08 1.82 0.08C3.05 0.08 3.52 -0.67 3.64 -1.24ZM4.61 -6.94H3.85L2.23 -5.18H2.84Z",
+      "348": "M5.1 -1.91C5.18 -2.31 5.17 -2.82 4.85 -3.29C4.53 -3.74 4.2 -3.84 3.42 -4.06C2.98 -4.18 2.7 -4.26 2.51 -4.57C2.39 -4.79 2.34 -5 2.4 -5.27C2.52 -5.83 3.13 -6.44 4.01 -6.44C4.45 -6.44 5 -6.35 5.46 -5.81L5.77 -6.61C5.39 -6.87 4.96 -7.1 4.15 -7.1C2.86 -7.1 1.83 -6.15 1.62 -5.18C1.54 -4.8 1.56 -4.37 1.86 -3.93C2.15 -3.49 2.57 -3.37 3.1 -3.23C3.31 -3.17 3.68 -3.06 3.74 -3.03C4.26 -2.81 4.42 -2.3 4.32 -1.82C4.18 -1.19 3.55 -0.52 2.68 -0.52C2.38 -0.52 1.51 -0.57 0.84 -1.33L0.53 -0.54C1.23 0.06 2.1 0.16 2.55 0.16C3.78 0.16 4.86 -0.81 5.1 -1.91ZM5.72 -7.3 4.75 -8.64H4.15L2.6 -7.3H3.19L4.37 -8.27L5.13 -7.3Z",
+      "349": "M3.64 -1.24C3.75 -1.73 3.54 -2.06 3.38 -2.21C3.11 -2.47 2.99 -2.5 2.21 -2.67C2.07 -2.69 1.61 -2.8 1.7 -3.25C1.82 -3.82 2.45 -3.82 2.59 -3.82C3.24 -3.82 3.6 -3.62 3.84 -3.47L4.1 -4.12C3.57 -4.4 3.11 -4.42 2.81 -4.42C2.1 -4.42 1.2 -4.17 0.98 -3.16C0.77 -2.15 1.82 -1.93 2.11 -1.87C2.55 -1.78 3.04 -1.68 2.93 -1.18C2.8 -0.55 2.08 -0.55 1.95 -0.55C1.55 -0.55 1.02 -0.66 0.6 -1.02L0.33 -0.35C0.83 -0.02 1.36 0.08 1.82 0.08C3.05 0.08 3.52 -0.67 3.64 -1.24ZM4.46 -5.2 3.57 -6.92H2.97L1.36 -5.2H1.95L3.17 -6.43L3.87 -5.2Z",
+      "350": "M5.1 -1.91C5.18 -2.31 5.17 -2.82 4.85 -3.29C4.53 -3.74 4.2 -3.84 3.42 -4.06C2.98 -4.18 2.7 -4.26 2.51 -4.57C2.39 -4.79 2.34 -5 2.4 -5.27C2.52 -5.83 3.13 -6.44 4.01 -6.44C4.45 -6.44 5 -6.35 5.46 -5.81L5.77 -6.61C5.39 -6.87 4.96 -7.1 4.15 -7.1C2.86 -7.1 1.83 -6.15 1.62 -5.18C1.54 -4.8 1.56 -4.37 1.86 -3.93C2.15 -3.49 2.57 -3.37 3.1 -3.23C3.31 -3.17 3.68 -3.06 3.74 -3.03C4.26 -2.81 4.42 -2.3 4.32 -1.82C4.18 -1.19 3.55 -0.52 2.68 -0.52C2.38 -0.52 1.51 -0.57 0.84 -1.33L0.53 -0.54C1.23 0.06 2.1 0.16 2.55 0.16C3.78 0.16 4.86 -0.81 5.1 -1.91ZM3 0.34H2.39L1.34 2.02H2.02Z",
+      "351": "M3.64 -1.24C3.75 -1.73 3.54 -2.06 3.38 -2.21C3.11 -2.47 2.99 -2.5 2.21 -2.67C2.07 -2.69 1.61 -2.8 1.7 -3.25C1.82 -3.82 2.45 -3.82 2.59 -3.82C3.24 -3.82 3.6 -3.62 3.84 -3.47L4.1 -4.12C3.57 -4.4 3.11 -4.42 2.81 -4.42C2.1 -4.42 1.2 -4.17 0.98 -3.16C0.77 -2.15 1.82 -1.93 2.11 -1.87C2.55 -1.78 3.04 -1.68 2.93 -1.18C2.8 -0.55 2.08 -0.55 1.95 -0.55C1.55 -0.55 1.02 -0.66 0.6 -1.02L0.33 -0.35C0.83 -0.02 1.36 0.08 1.82 0.08C3.05 0.08 3.52 -0.67 3.64 -1.24ZM2.19 0.34H1.58L0.53 2.02H1.21Z",
+      "352": "M5.1 -1.91C5.18 -2.31 5.17 -2.82 4.85 -3.29C4.53 -3.74 4.2 -3.84 3.42 -4.06C2.98 -4.18 2.7 -4.26 2.51 -4.57C2.39 -4.79 2.34 -5 2.4 -5.27C2.52 -5.83 3.13 -6.44 4.01 -6.44C4.45 -6.44 5 -6.35 5.46 -5.81L5.77 -6.61C5.39 -6.87 4.96 -7.1 4.15 -7.1C2.86 -7.1 1.83 -6.15 1.62 -5.18C1.54 -4.8 1.56 -4.37 1.86 -3.93C2.15 -3.49 2.57 -3.37 3.1 -3.23C3.31 -3.17 3.68 -3.06 3.74 -3.03C4.26 -2.81 4.42 -2.3 4.32 -1.82C4.18 -1.19 3.55 -0.52 2.68 -0.52C2.38 -0.52 1.51 -0.57 0.84 -1.33L0.53 -0.54C1.23 0.06 2.1 0.16 2.55 0.16C3.78 0.16 4.86 -0.81 5.1 -1.91ZM6.01 -8.64H5.42L4.24 -7.67L3.48 -8.64H2.89L3.86 -7.3H4.46Z",
+      "353": "M3.64 -1.24C3.75 -1.73 3.54 -2.06 3.38 -2.21C3.11 -2.47 2.99 -2.5 2.21 -2.67C2.07 -2.69 1.61 -2.8 1.7 -3.25C1.82 -3.82 2.45 -3.82 2.59 -3.82C3.24 -3.82 3.6 -3.62 3.84 -3.47L4.1 -4.12C3.57 -4.4 3.11 -4.42 2.81 -4.42C2.1 -4.42 1.2 -4.17 0.98 -3.16C0.77 -2.15 1.82 -1.93 2.11 -1.87C2.55 -1.78 3.04 -1.68 2.93 -1.18C2.8 -0.55 2.08 -0.55 1.95 -0.55C1.55 -0.55 1.02 -0.66 0.6 -1.02L0.33 -0.35C0.83 -0.02 1.36 0.08 1.82 0.08C3.05 0.08 3.52 -0.67 3.64 -1.24ZM4.82 -6.92H4.23L3.01 -5.69L2.31 -6.92H1.72L2.61 -5.2H3.21Z",
+      "354": "M7.39 -6.26 7.53 -6.91H1.81L1.67 -6.26H2.92C3.04 -6.26 3.16 -6.27 3.28 -6.27H4.11L2.78 0H3.62L4.95 -6.27H5.78C5.9 -6.27 6.02 -6.26 6.14 -6.26ZM3.47 0.18H2.86L1.81 1.86H2.49Z",
+      "355": "M3.19 -0.29 3.16 -0.88C2.87 -0.67 2.56 -0.55 2.25 -0.55C1.81 -0.55 1.91 -1.11 1.96 -1.36L2.46 -3.72H3.76L3.88 -4.3H2.58L2.85 -5.53H2.14L1.87 -4.3H1.08L0.96 -3.72H1.73L1.19 -1.19C1.07 -0.62 1.05 0.08 1.71 0.08C2.21 0.08 2.7 -0.06 3.19 -0.29ZM2.25 0.18H1.64L0.59 1.86H1.27Z",
+      "356": "M7.39 -6.26 7.53 -6.91H1.81L1.67 -6.26H2.92C3.04 -6.26 3.16 -6.27 3.28 -6.27H4.11L2.78 0H3.62L4.95 -6.27H5.78C5.9 -6.27 6.02 -6.26 6.14 -6.26ZM6.6 -8.64H6.01L4.83 -7.67L4.07 -8.64H3.48L4.45 -7.3H5.05Z",
+      "357": "M3.19 -0.29 3.16 -0.88C2.87 -0.67 2.56 -0.55 2.25 -0.55C1.81 -0.55 1.91 -1.11 1.96 -1.36L2.46 -3.72H3.76L3.88 -4.3H2.58L2.85 -5.53H2.14L1.87 -4.3H1.08L0.96 -3.72H1.73L1.19 -1.19C1.07 -0.62 1.05 0.08 1.71 0.08C2.21 0.08 2.7 -0.06 3.19 -0.29ZM3.98 -5.78 4.13 -6.49H3.41L3.26 -5.77H3.48L3.01 -4.65H3.37Z",
+      "360": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM6.59 -8.47H5.98C5.93 -8.23 5.8 -7.91 5.52 -7.91C5.37 -7.91 5.21 -7.99 5.04 -8.14C4.81 -8.33 4.65 -8.47 4.38 -8.47C3.97 -8.47 3.4 -8.09 3.21 -7.3H3.82C3.87 -7.54 4 -7.86 4.28 -7.86C4.43 -7.86 4.59 -7.78 4.76 -7.63C4.99 -7.44 5.15 -7.3 5.42 -7.3C5.83 -7.3 6.4 -7.68 6.59 -8.47Z",
+      "361": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM5.4 -6.65H4.79C4.74 -6.41 4.61 -6.09 4.33 -6.09C4.18 -6.09 4.02 -6.17 3.85 -6.32C3.62 -6.51 3.46 -6.65 3.19 -6.65C2.78 -6.65 2.21 -6.27 2.02 -5.48H2.63C2.69 -5.72 2.81 -6.04 3.09 -6.04C3.24 -6.04 3.41 -5.96 3.57 -5.81C3.8 -5.62 3.96 -5.48 4.23 -5.48C4.64 -5.48 5.22 -5.86 5.4 -6.65Z",
+      "362": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM6.51 -7.5 6.65 -8.14H3.26L3.12 -7.5Z",
+      "363": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM5.34 -5.74 5.48 -6.38H2.09L1.95 -5.74Z",
+      "364": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM6.81 -9.33H6.2C6.01 -8.53 5.44 -8.06 4.94 -8.06C4.4 -8.06 4.07 -8.55 4.21 -9.33H3.6C3.38 -8.13 3.97 -7.4 4.79 -7.4C5.65 -7.4 6.53 -8.16 6.81 -9.33Z",
+      "365": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM5.52 -7.03H4.91C4.72 -6.23 4.15 -5.76 3.65 -5.76C3.11 -5.76 2.78 -6.25 2.92 -7.03H2.31C2.09 -5.83 2.68 -5.1 3.5 -5.1C4.36 -5.1 5.25 -5.86 5.52 -7.03Z",
+      "366": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM5.34 -7.82C5.28 -7.51 5.01 -7.43 4.79 -7.43C4.59 -7.43 4.33 -7.5 4.4 -7.82C4.47 -8.13 4.73 -8.21 4.95 -8.21C5.15 -8.21 5.41 -8.14 5.34 -7.82ZM5.92 -7.82C6.02 -8.28 5.66 -8.7 5.06 -8.7C4.46 -8.7 3.92 -8.28 3.82 -7.82C3.72 -7.36 4.08 -6.94 4.68 -6.94C5.28 -6.94 5.82 -7.36 5.92 -7.82Z",
+      "367": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM4.14 -5.95C4.08 -5.64 3.81 -5.56 3.59 -5.56C3.39 -5.56 3.14 -5.63 3.2 -5.95C3.27 -6.26 3.54 -6.34 3.76 -6.34C3.96 -6.34 4.21 -6.27 4.14 -5.95ZM4.72 -5.95C4.82 -6.41 4.46 -6.83 3.86 -6.83C3.26 -6.83 2.72 -6.41 2.62 -5.95C2.53 -5.49 2.89 -5.07 3.49 -5.07C4.09 -5.07 4.63 -5.49 4.72 -5.95Z",
+      "368": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.07 -0.89 1.96 0.16 3.2 0.16C4.44 0.16 5.74 -0.89 6.05 -2.33ZM5.16 -9.16H4.4L3.43 -7.4H4.04ZM6.73 -9.16H5.97L5 -7.4H5.61Z",
+      "369": "M4.09 0 5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0ZM3.89 -6.94H3.13L2.16 -5.18H2.77ZM5.46 -6.94H4.7L3.73 -5.18H4.34Z",
+      "370": "M6.05 -2.33 7.03 -6.94H6.27L5.28 -2.32C5 -0.99 4.07 -0.4 3.33 -0.4C2.57 -0.4 1.94 -1.02 2.21 -2.31L3.2 -6.94H2.36L1.38 -2.33C1.08 -0.95 1.88 0.07 3.04 0.15C2.59 0.44 2.23 0.84 2.16 1.27C2.08 1.7 2.3 2.12 2.97 2.12C3.3 2.12 3.56 2.06 4 1.87L3.99 1.28C3.75 1.37 3.51 1.43 3.29 1.42C3.01 1.4 2.79 1.34 2.84 1.04C2.92 0.65 3.32 0.34 3.77 0.09C4.82 -0.17 5.79 -1.11 6.05 -2.33Z",
+      "371": "M4.16 1.87 4.15 1.28C3.91 1.37 3.67 1.43 3.45 1.42C3.17 1.4 2.95 1.34 3 1.04C3.08 0.6 3.57 0.26 4.09 0L5 -4.3H4.24L3.66 -1.54C3.5 -0.8 2.9 -0.5 2.33 -0.5C1.67 -0.5 1.65 -0.72 1.74 -1.13L2.41 -4.3H1.65L0.97 -1.08C0.8 -0.3 0.99 0.08 1.68 0.08C2.02 0.08 2.81 0 3.46 -0.5L3.35 0H3.46C2.9 0.28 2.4 0.76 2.32 1.27C2.24 1.7 2.46 2.12 3.13 2.12C3.46 2.12 3.72 2.06 4.16 1.87Z",
+      "372": "M10.2 -6.94H9.44L7.93 -3.83L7.25 -2.33C6.91 -1.59 6.67 -1.07 6.59 -0.81H6.58C6.62 -1.08 6.61 -1.65 6.59 -2.29L6.53 -3.87L6.36 -6.94H5.52L4.11 -4.03L3.37 -2.44C2.8 -1.18 2.75 -1 2.69 -0.8H2.68C2.69 -0.86 2.72 -1.19 2.69 -2.36L2.63 -4.09L2.47 -6.94H1.61L2.03 0H2.86L4.26 -2.89L5 -4.48C5.51 -5.6 5.63 -5.88 5.7 -6.13H5.71C5.7 -6.09 5.66 -5.46 5.74 -4L5.95 0H6.82ZM7.54 -7.3 6.57 -8.64H5.97L4.42 -7.3H5.01L6.19 -8.27L6.95 -7.3Z",
+      "373": "M7.18 -4.3H6.42L5.51 -2.5C5.32 -2.12 4.79 -1.07 4.64 -0.58H4.63C4.68 -0.88 4.66 -1.6 4.58 -2.55L4.44 -4.3H3.75L2.89 -2.59C2.46 -1.72 2.11 -0.98 2 -0.58H1.99C2.08 -1.17 1.96 -2.55 1.95 -2.77L1.82 -4.3H1.04L1.43 0H2.19C3.08 -1.72 3.76 -3.05 3.93 -3.72C3.88 -3.39 3.9 -2.68 3.93 -2.33L4.09 0H4.97ZM5.86 -5.2 4.97 -6.92H4.37L2.76 -5.2H3.35L4.57 -6.43L5.27 -5.2Z",
+      "374": "M7.69 -6.94H6.83L4.76 -4.52C4.6 -4.33 4.15 -3.81 3.93 -3.52L3.61 -4.31L2.49 -6.94H1.51L3.3 -2.78L2.71 0H3.53L4.12 -2.77ZM6.23 -7.3 5.26 -8.64H4.66L3.11 -7.3H3.7L4.88 -8.27L5.64 -7.3Z",
+      "375": "M5.09 -4.3H4.31C2.98 -2.01 2.49 -1.08 2.36 -0.58H2.35C2.43 -1.07 2.24 -2.27 2.08 -3.13L1.85 -4.3H1.04L1.9 0C1.73 0.3 1.47 0.75 1.4 0.85C1.06 1.41 0.91 1.41 0.75 1.41C0.71 1.41 0.39 1.4 0.06 1.29L-0.02 1.95C0.21 2 0.46 2.03 0.64 2.03C0.89 2.03 1.39 2.03 2.11 0.8ZM4.82 -5.2 3.93 -6.92H3.33L1.72 -5.2H2.31L3.53 -6.43L4.23 -5.2Z",
+      "376": "M7.69 -6.94H6.83L4.76 -4.52C4.6 -4.33 4.15 -3.81 3.93 -3.52L3.61 -4.31L2.49 -6.94H1.51L3.3 -2.78L2.71 0H3.53L4.12 -2.77ZM4.23 -7.3 4.39 -8.05H3.63L3.47 -7.3ZM5.87 -7.3 6.03 -8.05H5.27L5.11 -7.3Z",
+      "377": "M5.27 0 5.41 -0.66H4.52L2.02 -0.64H1.72L6.61 -6.53L6.7 -6.94H2.13L1.99 -6.31H3.86C3.98 -6.31 4.1 -6.32 4.22 -6.32H5.5L0.61 -0.43L0.52 0ZM6.61 -8.62H5.5L3.49 -7.4H4.38Z",
+      "378": "M3.78 0 3.91 -0.62H2.55C2.43 -0.62 2.31 -0.61 2.19 -0.61H1.42L4.58 -3.91L4.66 -4.3H1.3L1.18 -3.7H2.46C2.58 -3.7 2.7 -3.71 2.82 -3.71H3.52L0.35 -0.41L0.26 0ZM4.85 -6.94H4.09L2.47 -5.18H3.08Z",
+      "379": "M5.27 0 5.41 -0.66H4.52L2.02 -0.64H1.72L6.61 -6.53L6.7 -6.94H2.13L1.99 -6.31H3.86C3.98 -6.31 4.1 -6.32 4.22 -6.32H5.5L0.61 -0.43L0.52 0ZM4.85 -7.3 5.03 -8.14H4.19L4.01 -7.3Z",
+      "380": "M3.78 0 3.91 -0.62H2.55C2.43 -0.62 2.31 -0.61 2.19 -0.61H1.42L4.58 -3.91L4.66 -4.3H1.3L1.18 -3.7H2.46C2.58 -3.7 2.7 -3.71 2.82 -3.71H3.52L0.35 -0.41L0.26 0ZM3.67 -5.64 3.85 -6.48H3.01L2.83 -5.64Z",
+      "381": "M5.27 0 5.41 -0.66H4.52L2.02 -0.64H1.72L6.61 -6.53L6.7 -6.94H2.13L1.99 -6.31H3.86C3.98 -6.31 4.1 -6.32 4.22 -6.32H5.5L0.61 -0.43L0.52 0ZM6.27 -8.64H5.68L4.5 -7.67L3.74 -8.64H3.15L4.12 -7.3H4.72Z",
+      "382": "M3.78 0 3.91 -0.62H2.55C2.43 -0.62 2.31 -0.61 2.19 -0.61H1.42L4.58 -3.91L4.66 -4.3H1.3L1.18 -3.7H2.46C2.58 -3.7 2.7 -3.71 2.82 -3.71H3.52L0.35 -0.41L0.26 0ZM5.06 -6.92H4.47L3.25 -5.69L2.55 -6.92H1.96L2.85 -5.2H3.45Z",
+      "383": "M4.38 -6.28 4.53 -6.94C4.31 -6.99 4.03 -7.02 3.81 -7.02C2.88 -7.02 2.07 -6.26 1.86 -5.27L0.74 0H1.48L2.67 -5.58C2.82 -6.29 3.36 -6.41 3.67 -6.41C3.77 -6.41 4.05 -6.41 4.38 -6.28Z",
+      "7868": "M5.21 0 5.36 -0.69 3.2 -0.68 1.86 -0.67 2.42 -3.29H5.52L5.65 -3.9H2.55L3.05 -6.28H4.34C4.46 -6.28 4.58 -6.27 4.7 -6.27H6.41L6.55 -6.92H2.35L0.88 0ZM6.18 -8.47H5.57C5.52 -8.23 5.39 -7.91 5.11 -7.91C4.96 -7.91 4.8 -7.99 4.63 -8.14C4.4 -8.33 4.24 -8.47 3.97 -8.47C3.56 -8.47 2.99 -8.09 2.8 -7.3H3.41C3.46 -7.54 3.59 -7.86 3.87 -7.86C4.02 -7.86 4.18 -7.78 4.35 -7.63C4.58 -7.44 4.74 -7.3 5.01 -7.3C5.42 -7.3 5.99 -7.68 6.18 -8.47Z",
+      "7869": "M4.38 -2.19C4.45 -2.52 4.56 -3.16 4.35 -3.69C4.13 -4.26 3.59 -4.42 3.16 -4.42C2.12 -4.42 1.03 -3.44 0.76 -2.17C0.5 -0.93 1.19 0.08 2.34 0.08C2.79 0.08 3.37 -0.05 3.95 -0.41C3.96 -0.45 3.97 -0.68 3.97 -0.68C3.97 -0.68 4.01 -1.01 4.02 -1.05C3.46 -0.66 2.88 -0.53 2.48 -0.53C1.84 -0.53 1.27 -1.07 1.48 -2.19ZM3.83 -2.74H1.67C1.92 -3.29 2.47 -3.81 3.03 -3.81C3.18 -3.81 3.88 -3.79 3.83 -2.74ZM5.07 -6.65H4.46C4.41 -6.41 4.28 -6.09 4 -6.09C3.85 -6.09 3.69 -6.17 3.52 -6.32C3.29 -6.51 3.13 -6.65 2.86 -6.65C2.45 -6.65 1.88 -6.27 1.69 -5.48H2.3C2.36 -5.72 2.48 -6.04 2.76 -6.04C2.91 -6.04 3.08 -5.96 3.24 -5.81C3.47 -5.62 3.63 -5.48 3.9 -5.48C4.31 -5.48 4.89 -5.86 5.07 -6.65Z",
+      "8211": "M5.19 -2.35 5.32 -2.96H0.63L0.5 -2.35Z",
+      "8212": "M9.89 -2.35 10.02 -2.96H0.63L0.5 -2.35Z",
+      "8216": "M3.19 -6.94H2.79L2.11 -5.68L1.94 -4.89H2.74L2.91 -5.69H2.66Z",
+      "8217": "M3.01 -6.15 3.18 -6.94H2.38L2.21 -6.14H2.46L1.93 -4.89H2.33Z",
+      "8220": "M3.19 -6.94H2.79L2.11 -5.68L1.94 -4.89H2.74L2.91 -5.69H2.66ZM5.02 -6.94H4.62L3.94 -5.68L3.77 -4.89H4.57L4.74 -5.69H4.49Z",
+      "8221": "M3.02 -6.15 3.19 -6.94H2.39L2.22 -6.14H2.47L1.94 -4.89H2.34ZM4.85 -6.15 5.02 -6.94H4.22L4.05 -6.14H4.3L3.77 -4.89H4.17Z",
+      "8226": "M5.23 -1.42 5.77 -3.96H3.23L2.69 -1.42Z",
+      "8230": "M1.71 0 1.88 -0.8H1.08L0.91 0ZM3.36 0 3.53 -0.8H2.73L2.56 0ZM5.01 0 5.18 -0.8H4.38L4.21 0Z",
+      "64256": "M4.6 -6.28 4.75 -6.94C4.64 -6.96 4.35 -7.02 4.02 -7.02C3.1 -7.02 2.27 -6.27 2.06 -5.27L1.85 -4.3H1.16L1.04 -3.72H1.73L0.94 0H1.68L2.47 -3.72H3.5L3.62 -4.3H2.57L2.85 -5.58C2.99 -6.27 3.54 -6.41 3.88 -6.41C4.23 -6.41 4.5 -6.32 4.6 -6.28ZM7.2 -6.28 7.35 -6.94C7.24 -6.96 6.95 -7.02 6.62 -7.02C5.7 -7.02 4.87 -6.27 4.66 -5.27L3.54 0H4.28L5.07 -3.72H6.1L6.22 -4.3H5.17L5.45 -5.58C5.59 -6.27 6.14 -6.41 6.48 -6.41C6.83 -6.41 7.1 -6.32 7.2 -6.28Z",
+      "64257": "M5.61 -6.15 5.78 -6.95H4.98L4.81 -6.15ZM4.27 0 5.18 -4.3H4.44L3.53 0ZM3.56 -3.72 3.68 -4.3H2.57L2.85 -5.61C2.97 -6.14 3.26 -6.41 3.58 -6.41C3.77 -6.41 3.95 -6.36 4.1 -6.27L4.25 -6.94C4.17 -6.96 3.95 -7.02 3.71 -7.02C2.96 -7.02 2.27 -6.26 2.06 -5.29L1.85 -4.3H1.16L1.04 -3.72H1.73L0.94 0H1.68L2.47 -3.72Z",
+      "64258": "M3.56 -3.72 3.68 -4.3H2.57L2.85 -5.61C2.97 -6.14 3.26 -6.41 3.58 -6.41C3.85 -6.41 4.08 -6.3 4.1 -6.28L4.25 -6.94C4.17 -6.96 3.95 -7.02 3.71 -7.02C2.96 -7.02 2.27 -6.26 2.06 -5.29L1.85 -4.3H1.16L1.04 -3.72H1.73L0.94 0H1.68L2.47 -3.72ZM4.27 0 5.75 -6.94H5.01L3.53 0Z",
+      "64259": "M8.22 -6.15 8.39 -6.95H7.59L7.42 -6.15ZM6.88 0 7.79 -4.3H7.05L6.14 0ZM6.16 -3.72 6.28 -4.3H5.17L5.45 -5.61C5.57 -6.14 5.86 -6.41 6.18 -6.41C6.4 -6.41 6.6 -6.34 6.7 -6.27L6.85 -6.95C6.68 -7 6.6 -7.02 6.31 -7.02C5.56 -7.02 4.87 -6.26 4.66 -5.29L3.54 0H4.28L5.07 -3.72ZM4.33 -6.28 4.48 -6.94C4.23 -7.01 4.19 -7.02 3.85 -7.02C3.03 -7.02 2.27 -6.27 2.06 -5.28L1.85 -4.3H1.16L1.04 -3.72H1.73L0.94 0H1.68L2.47 -3.72H3.56L3.68 -4.3H2.57L2.85 -5.59C2.99 -6.26 3.43 -6.41 3.72 -6.41C3.89 -6.41 4.13 -6.38 4.33 -6.28Z",
+      "64260": "M4.33 -6.28 4.48 -6.94C4.23 -7.01 4.19 -7.02 3.85 -7.02C3.03 -7.02 2.27 -6.27 2.06 -5.28L1.85 -4.3H1.16L1.04 -3.72H1.73L0.94 0H1.68L2.47 -3.72H3.56L3.68 -4.3H2.57L2.85 -5.59C2.99 -6.26 3.43 -6.41 3.72 -6.41C3.89 -6.41 4.13 -6.38 4.33 -6.28ZM6.88 0 8.36 -6.94H7.62L6.14 0ZM6.16 -3.72 6.28 -4.3H5.17L5.45 -5.61C5.57 -6.14 5.86 -6.41 6.18 -6.41C6.45 -6.41 6.68 -6.3 6.7 -6.28L6.85 -6.94C6.77 -6.96 6.55 -7.02 6.31 -7.02C5.56 -7.02 4.87 -6.26 4.66 -5.29L3.54 0H4.28L5.07 -3.72Z"
+    }
   }
 };
