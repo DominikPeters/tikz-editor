@@ -22,6 +22,7 @@ import {
   summarizeMutoolStructuredText,
 } from "./lib/beamer-frame-oracle.mjs";
 import { texOracleEnv } from "./lib/tex-oracle.mjs";
+import { collectBeamerDeckContext } from "./lib/beamer-deck-context.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const defaultOutDir = join(repoRoot, "artifacts", "beamer-frame-probe");
@@ -260,13 +261,22 @@ async function main() {
   const document = scanBeamerDocument(source);
   const frameIndex = options.frameNumber - 1;
   const selectedFrame = document.frames[frameIndex];
+  // Source frame indexes are not frame counters once allowframebreaks is
+  // present. Obtain counters and navigation from an actual full TeX run.
+  // The recorder-backed cache keeps this one full-deck compilation shared
+  // by subsequent isolated probes without using native layout estimates.
+  const deckContext = document.frames.some(frame => frame.options?.allowFrameBreaks != null) ? collectBeamerDeckContext({
+    source, document, inputPath: options.inputPath, sourceDir: options.sourceDir ?? dirname(options.inputPath),
+    texRoot: options.texRoot, cacheDir: join(repoRoot, "artifacts", "beamer-full-deck-context"),
+  }) : null;
   const probe = buildBeamerFrameProbeSource(
     source,
     document,
     frameIndex,
     selectedFrame
       ? resolveBeamerTheoremCounterSeed(document, selectedFrame.span.from)
-      : []
+      : [],
+    deckContext
   );
   const deckName = basename(
     options.inputPath,
@@ -333,6 +343,7 @@ async function main() {
       compilationScope: "original-preamble-and-selected-source-frame",
       sourceDirectory: options.sourceDir ?? dirname(options.inputPath),
       texRoot: options.texRoot,
+      ...(deckContext ? { frameCounterContext: { kind: "full-authored-tex-deck", beforeFrameNumber: deckContext.frames[frameIndex].beforeFrameNumber, firstPage: deckContext.frames[frameIndex].firstPage, totalFrames: deckContext.totalFrames, cached: deckContext.cached, cacheDirectory: deckContext.cacheDirectory } } : {}),
     },
     environment: collectEnvironment(),
     pdf,

@@ -33,6 +33,11 @@ export interface BeamerStructuredTextLine {
 
 export function beamerProbeInstrumentation(): string;
 export function beamerPageTraceLuaSource(): string;
+export interface BeamerDeckCounterContext {
+  readonly totalFrames: number;
+  readonly navSource: string;
+  readonly frames: readonly { readonly beforeFrameNumber: number; readonly afterFrameNumber: number; readonly firstPage: number; readonly lastPage: number }[];
+}
 export function buildBeamerFrameProbeSource(
   source: string,
   document: BeamerDocumentModel,
@@ -40,7 +45,8 @@ export function buildBeamerFrameProbeSource(
   theoremCounterSeed?: readonly {
     readonly counter: string;
     readonly value: number;
-  }[]
+  }[],
+  deckContext?: BeamerDeckCounterContext | null
 ): {
   readonly frame: BeamerFrameModel;
   readonly source: string;
@@ -48,7 +54,8 @@ export function buildBeamerFrameProbeSource(
 };
 export function buildBeamerNavigationSeed(
   source: string,
-  document: BeamerDocumentModel
+  document: BeamerDocumentModel,
+  deckContext?: BeamerDeckCounterContext | null
 ): string;
 export function parseBeamerProbeLog(log: string): {
   readonly pages: readonly BeamerProbePageTrace[];

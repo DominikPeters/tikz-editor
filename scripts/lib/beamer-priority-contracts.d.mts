@@ -12,7 +12,7 @@ export interface PriorityFixture {
   readonly oracleTextByPage?: readonly (readonly string[])[];
 }
 export function priorityFidelityFailures(report: {
-  readonly input: { readonly overlayStepCount: number };
+  readonly input: { readonly overlayStepCount: number; readonly pageCount?: number };
   readonly oracle: { readonly page: { readonly pageCount: number } };
   readonly structural: { readonly summary: BeamerStructuralComparison["summary"] } | null;
   readonly paint?: import("./beamer-paint-compare.mjs").BeamerPaintComparison | null;

@@ -5,7 +5,8 @@ import { paintContractFailures } from "./beamer-paint-compare.mjs";
 export function priorityFidelityFailures(report, fixture, imageCount = 0) {
   const failures = [];
   if (report.oracle.page.pageCount !== fixture.pages) failures.push(`oracle pages=${report.oracle.page.pageCount}, fixture expects ${fixture.pages}`);
-  if (report.input.overlayStepCount !== fixture.pages) failures.push(`native pages/states=${report.input.overlayStepCount}, fixture expects ${fixture.pages}`);
+  const nativePageCount = report.input.pageCount ?? report.input.overlayStepCount;
+  if (nativePageCount !== fixture.pages) failures.push(`native pages/states=${nativePageCount}, fixture expects ${fixture.pages}`);
   if (report.structural) failures.push(...structuralContractFailures(report.structural.summary));
   else failures.push("No valid page correspondence; exact glyph comparison withheld.");
   failures.push(...paintContractFailures(report.paint));

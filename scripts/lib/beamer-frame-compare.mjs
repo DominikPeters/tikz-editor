@@ -43,6 +43,7 @@ export function normalizeOracleBeamerPageTrace(pageTrace, pageGeometry) {
     fontId: glyph.fontId,
     fontName: normalizeFontName(glyph.fontName),
     fontSize: round(glyph.fontSize.texPt),
+    ...(nonIdentityAxes(glyph.transform) ? { transform: glyph.transform.map(round) } : {}),
   }));
   return {
     coordinateSystem: {
@@ -104,9 +105,14 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
   const coveredGlyphs = [];
   for (const paragraph of render.layout.paragraphs) {
     const marginLabelSpans = [];
+    const marginLabelLines = new Set();
     const collectMarginLabels = (items) => {
       for (const positioned of items) {
-        if (positioned.item.kind === "hbox" && positioned.item.role?.kind === "list-label") marginLabelSpans.push(positioned.item.sourceSpan);
+        if (positioned.item.kind === "hbox" && positioned.item.role?.kind === "list-label") {
+          marginLabelSpans.push(positioned.item.sourceSpan);
+          const owner = paragraph.vlistLayout.paragraphPlacements.find(candidate => candidate.blockIndex === positioned.item.role.blockIndex);
+          if (owner?.lineIndices[0] !== undefined) marginLabelLines.add(owner.lineIndices[0]);
+        }
         if (positioned.children) collectMarginLabels(positioned.children);
       }
     };
@@ -162,7 +168,7 @@ export function buildNativeBeamerPageTrace(render, metricProvider) {
           segment.kind !== "text" ||
           !segment.text ||
           !segment.fontId ||
-          (segment.role === "list-label" && marginLabelSpans.some((span) => span && span.start <= segment.sourceStartRaw && segment.sourceEndRaw <= span.end))
+          (segment.role === "list-label" && (marginLabelLines.has(line.lineIndex) || marginLabelSpans.some((span) => span && span.start <= segment.sourceStartRaw && segment.sourceEndRaw <= span.end)))
         ) {
           continue;
         }
@@ -907,13 +913,46 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
     ...untracedOracleLines,
   ];
   const excludedOracleLineSet = new Set(excludedOracleLines);
+  const coveredGlyphs = (nativeTrace.coveredLines ?? []).flatMap(line => line.glyphs);
+  const availableCoveredGlyphs = new Set(coveredGlyphs.map((_, index) => index));
+  const partialCoveredOracleLines = [];
+  const visibleOracleLines = [];
+  for (const line of oracleTrace.lines) {
+    if (excludedOracleLineSet.has(line)) continue;
+    const visible = [];
+    const covered = [];
+    for (const glyph of line.glyphs) {
+      const matchingIndex = [...availableCoveredGlyphs].find(index => {
+        const candidate = coveredGlyphs[index];
+        return candidate.code === glyph.code &&
+          Math.abs(candidate.x - glyph.x) <= .02 &&
+          Math.abs(candidate.y - glyph.y) <= .02 &&
+          candidate.fontName === glyph.fontName &&
+          Math.abs(candidate.fontSize - glyph.fontSize) <= .01 &&
+          axesMatch(candidate.transform, glyph.transform);
+      });
+      if (matchingIndex === undefined) visible.push(glyph);
+      else {
+        availableCoveredGlyphs.delete(matchingIndex);
+        covered.push(glyph);
+      }
+    }
+    if (covered.length === 0) visibleOracleLines.push(line);
+    else {
+      // Covered material remains in TeX's physical box even when its adjacent
+      // siblings are painted. Remove only matched covered glyphs, then regroup
+      // the visible remainder along its painted baseline.
+      partialCoveredOracleLines.push({ ...line, text: glyphText(covered), glyphs: covered });
+      visibleOracleLines.push(...groupOracleGlyphLines(visible));
+    }
+  }
   const text = compareTextLines(
     nativeTrace.lines,
-    oracleTrace.lines.filter((line) => !excludedOracleLineSet.has(line))
+    visibleOracleLines
   );
-  text.excludedOracle = excludedOracleLines.map((line) => ({
+  text.excludedOracle = [...excludedOracleLines, ...partialCoveredOracleLines].map((line) => ({
     ...line,
-    reason: coveredOracleLineSet.has(line)
+    reason: coveredOracleLineSet.has(line) || partialCoveredOracleLines.includes(line)
       ? "covered Beamer overlay material remains in the Lua node trace but is not painted"
       : "native embedded-TikZ glyph tracing is not yet merged into the page trace",
   }));
@@ -929,12 +968,13 @@ export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
       unmatchedNativeTextLines: text.unmatchedNative.length,
       unmatchedOracleTextLines: text.unmatchedOracle.length,
       excludedOracleTextLines: untracedOracleLines.length,
-      coveredOverlayTextLines: coveredOracleLines.length,
+      coveredOverlayTextLines: coveredOracleLines.length + partialCoveredOracleLines.length,
       comparedGlyphs: text.comparedGlyphs,
       maxAbsoluteGlyphDxPt: text.maxAbsoluteGlyphDxPt,
       maxAbsoluteGlyphDyPt: text.maxAbsoluteGlyphDyPt,
       glyphCodeMatch: text.glyphCodeMatch,
       fontMatch: text.fontMatch,
+      transformMatch: text.transformMatch,
     },
     geometry,
     text,
@@ -1031,6 +1071,7 @@ function compareTextLines(nativeLines, oracleLines) {
     )),
     glyphCodeMatch: matches.every((match) => match.glyphCodeMatch),
     fontMatch: matches.every((match) => match.fontMatch),
+    transformMatch: matches.every((match) => match.transformMatch),
   };
 }
 
@@ -1043,6 +1084,7 @@ function compareGlyphLines(native, oracle) {
     glyphs.push({
       index,
       codeMatch: nativeGlyph.code === oracleGlyph.code,
+      transformMatch: axesMatch(nativeGlyph.transform, oracleGlyph.transform),
       fontMatch: nativeGlyph.fontName === oracleGlyph.fontName &&
         Number.isFinite(nativeGlyph.fontSize) && Number.isFinite(oracleGlyph.fontSize) &&
         Math.abs(nativeGlyph.fontSize - oracleGlyph.fontSize) <= .01,
@@ -1082,6 +1124,7 @@ function compareGlyphLines(native, oracle) {
     fontMatch:
       native.glyphs.length === oracle.glyphs.length &&
       glyphs.every((glyph) => glyph.fontMatch),
+    transformMatch: native.glyphs.length === oracle.glyphs.length && glyphs.every(glyph => glyph.transformMatch),
     comparedGlyphs: count,
     maxAbsoluteGlyphDxPt: round(Math.max(
       0,
@@ -1095,50 +1138,36 @@ function compareGlyphLines(native, oracle) {
   };
 }
 
+function axesMatch(left, right) {
+  const a = left ?? [1, 0, 0, 1]; const b = right ?? [1, 0, 0, 1];
+  return a.every((value, index) => Number.isFinite(value) && Number.isFinite(b[index]) && Math.abs(value - b[index]) <= .0001);
+}
+function nonIdentityAxes(axes) { return axes && axes.some((value, index) => Math.abs(value - [1, 0, 0, 1][index]) > 1e-8); }
 function groupOracleGlyphLines(glyphs) {
   const rows = [];
-  for (const glyph of [...glyphs].sort(
-    (left, right) => left.y - right.y || left.x - right.x
-  )) {
-    let row = rows.find(
-      (candidate) =>
-        Math.abs(candidate.baselineY - glyph.y) <=
-        GLYPH_LINE_Y_TOLERANCE_PT
-    );
-    if (!row) {
-      row = { baselineY: glyph.y, glyphs: [] };
-      rows.push(row);
-    }
+  for (const glyph of [...glyphs].sort((left, right) => left.y - right.y || left.x - right.x)) {
+    const axes = glyph.transform ?? [1, 0, 0, 1]; const scale = Math.hypot(axes[0], axes[1]);
+    const direction = scale > 1e-9 ? [axes[0] / scale, axes[1] / scale] : [1, 0];
+    const normal = -direction[1] * glyph.x + direction[0] * glyph.y;
+    let row = rows.find(candidate => Math.abs(candidate.normal - normal) <= GLYPH_LINE_Y_TOLERANCE_PT && candidate.direction.every((value, index) => Math.abs(value - direction[index]) < .0001));
+    if (!row) { row = { normal, direction, glyphs: [] }; rows.push(row); }
     row.glyphs.push(glyph);
   }
   const lines = [];
   for (const row of rows) {
-    row.glyphs.sort((left, right) => left.x - right.x);
+    const projection = glyph => glyph.x * row.direction[0] + glyph.y * row.direction[1];
+    row.glyphs.sort((left, right) => projection(left) - projection(right));
     let cluster = [];
     for (const glyph of row.glyphs) {
-      const previous = cluster.at(-1);
-      const gap = previous
-        ? glyph.x - (previous.x + previous.width)
-        : 0;
-      const splitThreshold = Math.max(
-        MIN_CLUSTER_GAP_PT,
-        3 * Math.max(previous?.fontSize ?? 0, glyph.fontSize)
-      );
-      if (previous && gap > splitThreshold) {
-        lines.push(oracleLine(cluster, row.baselineY));
-        cluster = [];
-      }
+      const previous = cluster.at(-1); const axes = previous?.transform ?? [1, 0, 0, 1];
+      const gap = previous ? projection(glyph) - projection(previous) - previous.width * Math.hypot(axes[0], axes[1]) : 0;
+      const splitThreshold = Math.max(MIN_CLUSTER_GAP_PT, 3 * Math.max(previous?.fontSize ?? 0, glyph.fontSize));
+      if (previous && gap > splitThreshold) { lines.push(oracleLine(cluster, cluster[0].y)); cluster = []; }
       cluster.push(glyph);
     }
-    if (cluster.length > 0) {
-      lines.push(oracleLine(cluster, row.baselineY));
-    }
+    if (cluster.length) lines.push(oracleLine(cluster, cluster[0].y));
   }
-  return lines.sort(
-    (left, right) =>
-      left.baselineY - right.baselineY ||
-      left.x - right.x
-  );
+  return lines.sort((left, right) => left.baselineY - right.baselineY || left.x - right.x);
 }
 
 function oracleLine(glyphs, baselineY) {
@@ -1151,74 +1180,34 @@ function oracleLine(glyphs, baselineY) {
 }
 
 function featuresFromNativeMathSvg(params) {
-  const glyphs = [];
-  for (const match of params.svgBody.matchAll(/<path\b[^>]*>/gu)) {
-    const tag = match[0];
-    const fontId = readSvgAttribute(tag, "data-tex-font");
-    const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
-    const transform = readSvgAttribute(tag, "transform") ?? "";
-    const parsed = parseTranslateScale(transform);
-    if (!fontId || !Number.isFinite(code) || !parsed) {
-      continue;
-    }
-    const atPt = parsed.scale / 10;
-    const font = params.metricProvider.resolveFont({ fontId, atPt });
-    const metric = font.data.chars[String(code)];
-    glyphs.push({
-      code: normalizeGlyphCode(code),
-      x: round(params.originX + parsed.x / 100),
-      y: round(params.baselineY + parsed.y / 100),
-      width: round((metric?.width ?? 0) * font.atPt),
-      height: round((metric?.height ?? 0) * font.atPt),
-      depth: round((metric?.depth ?? 0) * font.atPt),
-      fontName: normalizeFontName(font.id),
-      fontSize: round(font.atPt),
-    });
-  }
-  const rules = [];
-  for (const match of params.svgBody.matchAll(/<rect\b[^>]*>/gu)) {
-    const tag = match[0];
-    const role = readSvgAttribute(tag, "data-tex-rule");
-    const x = Number(readSvgAttribute(tag, "x"));
-    const y = Number(readSvgAttribute(tag, "y"));
-    const width = Number(readSvgAttribute(tag, "width"));
-    const height = Number(readSvgAttribute(tag, "height"));
-    if (
-      !role ||
-      !Number.isFinite(x) ||
-      !Number.isFinite(y) ||
-      !Number.isFinite(width) ||
-      !Number.isFinite(height)
-    ) {
-      continue;
-    }
-    rules.push({
-      role,
-      x: round(params.originX + x / 100),
-      y: round(params.baselineY + y / 100),
-      width: round(width / 100),
-      height: round(height / 100),
-    });
-  }
-  // PDF image nodes appear as rules in LuaTeX's shipout trace. Preserve
-  // ancestor transforms when comparing a graphic inside an LR/raised box.
-  const transforms = [identityMatrix()];
+  const glyphs = []; const rules = []; const transforms = [identityMatrix()];
+  const transformedRect = (matrix, x, y, width, height) => {
+    const corners = [[x,y], [x+width,y], [x,y+height], [x+width,y+height]].map(([a,b]) => transformPoint(matrix,a,b));
+    const left = Math.min(...corners.map(p => p.x)); const top = Math.min(...corners.map(p => p.y));
+    return { x: round(params.originX + left / 100), y: round(params.baselineY + top / 100), width: round((Math.max(...corners.map(p => p.x)) - left) / 100), height: round((Math.max(...corners.map(p => p.y)) - top) / 100) };
+  };
   for (const match of params.svgBody.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
     const tag = match[0];
     if (tag.startsWith("</")) { if (transforms.length > 1) transforms.pop(); continue; }
     const name = /^<([\w:-]+)/u.exec(tag)?.[1];
-    const transform = multiplyMatrices(transforms.at(-1), parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""));
-    if (name === "image") {
-      const x = numericSvgAttribute(tag, "x", 0);
-      const y = numericSvgAttribute(tag, "y", 0);
-      const width = numericSvgAttribute(tag, "width", 0);
-      const height = numericSvgAttribute(tag, "height", 0);
-      const origin = transformPoint(transform, x, y);
-      rules.push({ role: "image", x: round(params.originX + origin.x / 100), y: round(params.baselineY + origin.y / 100), width: round(width * transform[0] / 100), height: round(height * transform[3] / 100) });
+    const local = parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""); const transform = multiplyMatrices(transforms.at(-1), local);
+    if (name === "path") {
+      const fontId = readSvgAttribute(tag, "data-tex-font"); const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
+      const explicitSize = Number(readSvgAttribute(tag, "data-tex-font-at-pt"));
+      const atPt = explicitSize > 0 ? explicitSize : parseTranslateScale(readSvgAttribute(tag, "transform") ?? "")?.scale / 10;
+      if (fontId && Number.isFinite(code) && Number.isFinite(atPt)) {
+        const font = params.metricProvider.resolveFont({fontId, atPt}); const metric = font.data.chars[String(code)];
+        const origin = transformPoint(transform, 0, 0); const axes = transform.slice(0,4).map(value => round(value / (atPt * 10)));
+        glyphs.push({ code:normalizeGlyphCode(code), x:round(params.originX + origin.x / 100), y:round(params.baselineY + origin.y / 100), width:round((metric?.width ?? 0) * font.atPt), height:round((metric?.height ?? 0) * font.atPt), depth:round((metric?.depth ?? 0) * font.atPt), fontName:normalizeFontName(font.id), fontSize:round(font.atPt), ...(nonIdentityAxes(axes) ? {transform:axes} : {}) });
+      }
+    } else if (name === "rect" || name === "image") {
+      const role = name === "image" ? "image" : readSvgAttribute(tag,"data-tex-rule");
+      const x = numericSvgAttribute(tag,"x",0); const y = numericSvgAttribute(tag,"y",0); const width = Number(readSvgAttribute(tag,"width")); const height = Number(readSvgAttribute(tag,"height"));
+      if (role && Number.isFinite(width) && Number.isFinite(height)) rules.push({role, ...transformedRect(transform,x,y,width,height)});
     }
     if (!tag.endsWith("/>") && !isVoidSvgElement(name)) transforms.push(transform);
   }
-  return { glyphs, rules };
+  return {glyphs,rules};
 }
 
 function parseTranslateScale(transform) {

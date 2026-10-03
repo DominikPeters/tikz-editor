@@ -325,6 +325,7 @@ export function structuralContractFailures(summary) {
   if (!summary.fontMatch) {
     failures.push("fontMatch=false");
   }
+  if (summary.transformMatch === false) failures.push("transformMatch=false");
   for (const [key, tolerance] of [
     ["maxRectangleEdgeDeltaPt", 0.01],
     ["maxAbsoluteGlyphDxPt", 0.02],
@@ -377,13 +378,15 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const { computerModernTexMetricProvider } = coreRenderer;
   const preparedDocument = runtime.preparedDocument ??
     coreRenderer.prepareBeamerDocument(source);
-  const stepCount = preparedDocument.frameStepCount(options.frameNumber - 1);
-  const selectedPage = options.pageNumber ?? stepCount;
-  const render = runtime.render ?? await preparedDocument.renderFrame({
+  const framePages = runtime.framePages ?? await preparedDocument.renderFramePages({
     frameIndex: options.frameNumber - 1,
-    step: selectedPage,
     graphicsResolver: runtime.graphicsResolver,
   });
+  const stepCount = framePages.stepCount;
+  const pageCount = framePages.pageCount ?? framePages.pages.length;
+  const selectedPage = options.pageNumber ?? pageCount;
+  const render = runtime.render ?? framePages.pages[selectedPage - 1] ?? framePages.pages.at(-1);
+  if (!render) throw new Error("Renderer did not produce a frame page.");
   const rendererSvg = join(runDir, "renderer.svg");
   writeFileSync(rendererSvg, render.svg.svg, "utf8");
 
@@ -392,20 +395,20 @@ export async function compareBeamerFrame(options, runtime = {}) {
   const oracleReport = JSON.parse(
     readFileSync(join(oracleDir, "report.json"), "utf8")
   );
-  if (oracleReport.pdf.pageCount !== stepCount) {
+  if (oracleReport.pdf.pageCount !== pageCount || selectedPage < 1 || selectedPage > pageCount) {
     // Preserve evidence before failing. Different counts provide no valid
     // one-to-one mapping, so do not compare an arbitrary pair of pages.
     writeFileSync(join(runDir, "report.json"), JSON.stringify({
       formatVersion: 4,
       status: "page-count-mismatch",
-      input: { path: options.inputPath, frameNumber: options.frameNumber, overlayStep: selectedPage, overlayStepCount: stepCount },
-      correspondence: { valid: false, nativeOverlayStepCount: stepCount, oraclePageCount: oracleReport.pdf.pageCount },
+      input: { path: options.inputPath, frameNumber: options.frameNumber, overlayStep: render.layout.step, overlayStepCount: stepCount, pageCount, compiledPage: selectedPage },
+      correspondence: { valid: false, nativePageCount: pageCount, nativeOverlayStepCount: stepCount, oraclePageCount: oracleReport.pdf.pageCount },
       renderer: { diagnostics: render.diagnostics },
       oracle: { report: relativeArtifact(runDir, join(oracleDir, "report.json")), page: oracleReport.pdf },
       structural: null,
       artifacts: { input: "input.tex", rendererSvg: "renderer.svg", oraclePdf: relativeArtifact(runDir, join(oracleDir, oracleReport.artifacts.pdf ?? "probe.pdf")) },
     }, null, 2) + "\n");
-    throw new Error(`Overlay page counts differ: renderer=${stepCount}, oracle=${oracleReport.pdf.pageCount}. Cannot establish page correspondence.`);
+    throw new Error(`Frame page counts differ: renderer=${pageCount}, oracle=${oracleReport.pdf.pageCount}. Cannot establish page correspondence.`);
   }
   const nativePageTrace = buildNativeBeamerPageTrace(
     render,
@@ -476,6 +479,8 @@ export async function compareBeamerFrame(options, runtime = {}) {
       frameTitle: render.frame.title?.value ?? null,
       overlayStep: render.layout.step,
       overlayStepCount: render.layout.stepCount,
+      pageCount,
+      ...(render.layout.continuation ? { continuation: render.layout.continuation } : {}),
       compiledPage: oracleReport.input.compiledPage,
     },
     renderer: {

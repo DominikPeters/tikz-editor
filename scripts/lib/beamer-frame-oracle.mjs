@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 6;
+export const BEAMER_FRAME_ORACLE_VERSION = 7;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -349,7 +349,8 @@ export function buildBeamerFrameProbeSource(
   source,
   document,
   frameIndex,
-  theoremCounterSeed = []
+  theoremCounterSeed = [],
+  deckContext = null
 ) {
   if (!Number.isInteger(frameIndex) || frameIndex < 0) {
     throw new RangeError("frameIndex must be a non-negative integer.");
@@ -381,14 +382,15 @@ export function buildBeamerFrameProbeSource(
     .join("\n");
   return {
     frame,
-    navSource: buildBeamerNavigationSeed(source, document),
+    navSource: buildBeamerNavigationSeed(source, document, deckContext),
     source: `${preamble.trimEnd()}
 
 ${beamerProbeInstrumentation()}
 
 \\begin{document}
-\\setcounter{framenumber}{${frameIndex}}
-\\def\\inserttotalframenumber{${document.frames.length}}
+\\setcounter{framenumber}{${deckContext?.frames[frameIndex]?.beforeFrameNumber ?? frameIndex}}
+${deckContext ? `\\setcounter{page}{${deckContext.frames[frameIndex].firstPage}}` : ""}
+\\def\\inserttotalframenumber{${deckContext?.totalFrames ?? document.frames.length}}
 ${navigationState}
 ${theoremCounterState}
 ${frameSource}
@@ -405,7 +407,8 @@ ${frameSource}
  * source index is a stable synthetic page number. Section/subsection/frame
  * topology and short navigation titles remain faithful to the source model.
  */
-export function buildBeamerNavigationSeed(source, document) {
+export function buildBeamerNavigationSeed(source, document, deckContext = null) {
+  if (deckContext) return deckContext.navSource;
   const topLevelSections = document.sections.filter(
     (section) => section.level === 1
   );

@@ -351,6 +351,7 @@ Fraction:
       maxAbsoluteGlyphDyPt: 2,
       glyphCodeMatch: true,
       fontMatch: true,
+      transformMatch: true,
     });
     const changedSize = { ...native, lines: native.lines.map(line => ({
       ...line, glyphs: line.glyphs.map(g => ({ ...g, fontSize: 9 })),

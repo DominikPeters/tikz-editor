@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { collectBeamerDeckContext, instrumentBeamerDeckCounters, parseBeamerDeckCounters } from "../scripts/lib/beamer-deck-context.mjs";
 
 import { scanBeamerDocument } from "../packages/core/src/index.js";
 import {
@@ -21,6 +22,57 @@ const runOracleIntegration = process.env.BEAMER_ORACLE_TESTS === "1" &&
   spawnSync("lualatex", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("Beamer frame oracle", () => {
+  it("seeds an isolated probe from real full-deck frame counters and navigation", () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}
+\begin{frame}[allowframebreaks]{First}A.\newpage B.\end{frame}
+\begin{frame}{Second}C.\end{frame}\end{document}`;
+    const document = scanBeamerDocument(source);
+    const nav = String.raw`\headcommand{\gdef\inserttotalframenumber{3}}`;
+    const context = parseBeamerDeckCounters(`TIKZ_BEAMER_CONTEXT B 0 0 1
+TIKZ_BEAMER_CONTEXT E 0 2 3
+TIKZ_BEAMER_CONTEXT B 1 2 3
+TIKZ_BEAMER_CONTEXT E 1 3 4`, nav, 2);
+    expect(context.frames).toEqual([
+      { beforeFrameNumber: 0, afterFrameNumber: 2, firstPage: 1, lastPage: 2 },
+      { beforeFrameNumber: 2, afterFrameNumber: 3, firstPage: 3, lastPage: 3 },
+    ]);
+    const probe = buildBeamerFrameProbeSource(source, document, 1, [], context);
+    expect(probe.source).toContain(String.raw`\setcounter{framenumber}{2}`);
+    expect(probe.source).toContain(String.raw`\setcounter{page}{3}`);
+    expect(probe.source).toContain(String.raw`\def\inserttotalframenumber{3}`);
+    expect(probe.navSource).toBe(nav);
+    const instrumented = instrumentBeamerDeckCounters(source, document);
+    expect(instrumented).toContain(String.raw`TIKZ_BEAMER_CONTEXT B 0 \arabic{framenumber} \arabic{page}`);
+    expect(instrumented.indexOf("CONTEXT B 0")).toBeLessThan(instrumented.indexOf("{First}"));
+    expect(instrumented.indexOf("CONTEXT E 0")).toBeGreaterThan(instrumented.indexOf("B."));
+    expect(() => parseBeamerDeckCounters("", nav, 2)).toThrow("missing authored frame");
+  });
+
+  it.skipIf(!runOracleIntegration)("caches actual full-deck counters and invalidates changed input assets", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tikz-beamer-counter-context-"));
+    try {
+      const source = String.raw`\documentclass{beamer}\begin{document}
+\begin{frame}[allowframebreaks]{Pages}\input{body.tex}\end{frame}
+\begin{frame}{Next}Gamma.\end{frame}\end{document}`;
+      const inputPath = join(directory, "deck.tex");
+      writeFileSync(inputPath, source);
+      writeFileSync(join(directory, "body.tex"), String.raw`Alpha.\newpage Beta.`);
+      const params = { source, document: scanBeamerDocument(source), inputPath, cacheDir: join(directory, "cache") };
+      const first = collectBeamerDeckContext(params);
+      expect(first.cached).toBe(false);
+      expect(first.totalFrames).toBe(3);
+      expect(first.frames[1].beforeFrameNumber).toBe(2);
+      expect(collectBeamerDeckContext(params).cached).toBe(true);
+      writeFileSync(join(directory, "body.tex"), String.raw`Alpha.\newpage Beta.\newpage Delta.`);
+      const changed = collectBeamerDeckContext(params);
+      expect(changed.cached).toBe(false);
+      expect(changed.totalFrames).toBe(4);
+      expect(changed.frames[1].beforeFrameNumber).toBe(3);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("builds a single-frame probe while retaining the source preamble", () => {
     const source = String.raw`\documentclass[aspectratio=169]{beamer}
 \newcommand{\term}{oracle}

@@ -14,6 +14,8 @@ export interface BeamerTraceGlyph {
   readonly depth: number;
   readonly fontName: string;
   readonly fontSize: number;
+  /** Underlying font axes after graphicx/PDF transforms, in y-down coordinates. */
+  readonly transform?: readonly [number, number, number, number];
 }
 
 export interface NativeBeamerTraceLine {
@@ -104,6 +106,7 @@ export interface BeamerStructuralComparison {
     readonly maxAbsoluteGlyphDyPt: number;
     readonly glyphCodeMatch: boolean;
     readonly fontMatch: boolean;
+    readonly transformMatch?: boolean;
   };
   readonly geometry: unknown;
   readonly text: unknown;

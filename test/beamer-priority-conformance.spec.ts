@@ -67,6 +67,12 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(priorityOracleFailures({ pdf: { pageCount: 3 }, pageTrace: { pages: [tracedPage("Alpha"), tracedPage("Gamma"), tracedPage("Beta")] } }, { pages: 3, oracleTextByPage: [["Alpha"], ["Beta"], ["Gamma"]] })).toHaveLength(2);
   });
 
+  it("gates continuation page count separately from overlay step count", () => {
+    const report = { input: { overlayStepCount: 1, pageCount: 3 }, oracle: { page: { pageCount: 3 } }, structural: { summary: perfectSummary() } };
+    expect(priorityFidelityFailures(report, { pages: 3 })).toEqual([]);
+    expect(priorityFidelityFailures({ ...report, input: { overlayStepCount: 3, pageCount: 2 } }, { pages: 3 })).toContain("native pages/states=2, fixture expects 3");
+  });
+
   it.each(manifest.recognition)("recognizes $id with a bounded complete source card and supported siblings", async fixture => {
     const render = await prepareBeamerDocument(codeSource).renderFrame({ frameIndex: fixture.frame - 1, step: 1 });
     const from = codeSource.indexOf(`\\begin{${fixture.environment}}`, render.frame.bodySpan.from);
