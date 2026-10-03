@@ -10,13 +10,14 @@ export interface PriorityFixture {
   readonly images?: number;
   readonly oracleText?: readonly string[];
   readonly oracleTextByPage?: readonly (readonly string[])[];
+  readonly paintProbes?: readonly import("./beamer-paint-compare.mjs").BeamerPaintProbe[];
 }
 export function priorityFidelityFailures(report: {
   readonly input: { readonly overlayStepCount: number; readonly pageCount?: number };
   readonly oracle: { readonly page: { readonly pageCount: number } };
   readonly structural: { readonly summary: BeamerStructuralComparison["summary"] } | null;
   readonly paint?: import("./beamer-paint-compare.mjs").BeamerPaintComparison | null;
-}, fixture: Pick<PriorityFixture, "pages" | "images">, imageCount?: number): string[];
+}, fixture: Pick<PriorityFixture, "pages" | "images" | "paintProbes">, imageCount?: number): string[];
 export function priorityOracleFailures(oracle: {
   readonly pdf: { readonly pageCount: number };
   readonly pageTrace: { readonly pages: readonly { readonly glyphs: readonly { readonly code: number }[] }[] };

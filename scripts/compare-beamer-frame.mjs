@@ -504,7 +504,7 @@ export async function compareBeamerFrame(options, runtime = {}) {
     },
     structural: structuralComparison,
     paint: options.structuralOnly ? null : compareBlockPaint(render, nativePageTrace, oraclePageTrace,
-      join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight),
+      join(runDir, "renderer.png"), join(runDir, "oracle.png"), options.width, rasterHeight, options.paintProbes),
     raster: options.structuralOnly ? null : {
       width: options.width,
       height: rasterHeight,

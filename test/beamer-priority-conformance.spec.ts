@@ -58,6 +58,14 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect(paintContractFailures({ ...paint, samples: [{ id: "body", maxChannelDelta: 2 }] })).toEqual([]);
   });
 
+  it("requires requested canvas paint measurements even in structural-only comparisons", () => {
+    const fixture = { pages: 1, paintProbes: [{ id: "canvas", x: 2, y: 100 }] };
+    expect(priorityFidelityFailures(comparison(), fixture)).toContain("Required paint probe canvas was not measured (use raster comparison).");
+    expect(priorityFidelityFailures({ ...comparison(), paint: { tolerance: 2, samples: [] } }, fixture)).toHaveLength(1);
+    expect(priorityFidelityFailures({ ...comparison(), paint: { tolerance: 2, samples: [{ id: "canvas", maxChannelDelta: 0 }] } }, fixture)).toEqual([]);
+    expect(priorityFidelityFailures({ ...comparison(), paint: { tolerance: 2, samples: [{ id: "canvas", maxChannelDelta: 26 }] } }, fixture)).toContainEqual(expect.stringContaining("RGB delta 26"));
+  });
+
   it("withholds glyph comparisons when states or continuation pages have no correspondence", () => {
     const report = { input: { overlayStepCount: 1 }, oracle: { page: { pageCount: 3 } }, structural: null };
     expect(priorityFidelityFailures(report, { pages: 3 })).toEqual([

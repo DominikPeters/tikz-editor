@@ -13,7 +13,7 @@ export const reviewFeatures = [
   { id: "columns", origin: "Beamer", envs: ["columns", "column"], commands: ["column"], reference: beamer },
   { id: "overlays", origin: "Beamer", commands: ["pause", "only", "uncover", "visible", "invisible", "onslide", "alt", "temporal"], reference: beamer },
   { id: "overlay-containers", origin: "Beamer", envs: ["overprint", "overlayarea", "onlyenv", "uncoverenv", "visibleenv", "actionenv"], reference: beamer },
-  { id: "frame-sizing-breaks", origin: "Beamer", commands: ["framebreak", "framezoom", "againframe"], headPattern: /\b(?:allowframebreaks|shrink|squeeze)\b/u, reference: beamer },
+  { id: "frame-sizing-breaks", origin: "Beamer", commands: ["framebreak", "framezoom", "againframe"], optionKeys: ["allowframebreaks", "shrink", "squeeze"], reference: beamer },
   { id: "blocks-theorems", origin: "Beamer / amsthm", envs: ["block", "alertblock", "exampleblock", "theorem", "lemma", "definition", "example", "proof", "corollary", "proposition"], reference: beamer },
   { id: "toc-title", origin: "Beamer", commands: ["tableofcontents", "titlepage", "maketitle"], reference: beamer },
   { id: "tables", origin: "LaTeX / array / booktabs / tabularx", envs: ["tabular", "tabular*", "tabularx", "longtable"], commands: ["toprule", "midrule", "bottomrule", "multicolumn", "multirow", "rowcolor", "cellcolor"], reference: "https://ctan.org/pkg/booktabs" },
@@ -38,23 +38,27 @@ export function featuresForFrame(context, frame) {
   const controls = context.syntax.controlsIn(frame.bodySpan);
   const commands = new Set(controls.map(c => c.name));
   const envs = new Set(context.syntax.environmentBoundariesIn(frame.bodySpan).filter(e => e.kind === "begin").map(e => e.name));
-  const head = context.source.slice(frame.span.from, frame.bodySpan.from);
   // Anchoring overlay detection to real control tokens excludes comments and
   // commands printed inside an opaque code environment.
   const itemOverlay = controls.some(c => c.name === "item" && /^\s*</u.test(context.source.slice(c.span.to, c.span.to + 30)));
   const features = reviewFeatures.filter(f =>
     f.commands?.some(c => commands.has(c)) || f.envs?.some(e => envs.has(e)) ||
-    (f.id === "overlays" && itemOverlay) || f.headPattern?.test(head)
+    (f.id === "overlays" && itemOverlay) ||
+    f.optionKeys?.some(key => frame.options?.entries.some(entry => entry.key === key))
   ).map(f => f.id);
   return { features, commands: [...commands], environments: [...envs] };
 }
 
-export function selectDiverseFrames(frames, limit = 40, maxPerDeck = 4, maxPerRepository = 8) {
+export function reviewedFrameKey(frame) {
+  return JSON.stringify([frame.repository, frame.path, frame.frame]);
+}
+
+export function selectDiverseFrames(frames, limit = 40, maxPerDeck = 4, maxPerRepository = 8, excluded = new Set()) {
   const selected = [];
   const covered = new Set();
   const decks = new Map();
   const repositories = new Map();
-  const remaining = frames.filter(f => f.complete && f.features.length);
+  const remaining = frames.filter(f => f.complete && f.features.length && !excluded.has(reviewedFrameKey(f)));
   while (selected.length < limit) {
     let best = null;
     let score = -Infinity;
@@ -79,18 +83,28 @@ export function selectDiverseFrames(frames, limit = 40, maxPerDeck = 4, maxPerRe
 }
 
 async function main(argv) {
-  const options = { index: resolve(repoRoot, "artifacts/beamer-sources/deck-index.json"), out: resolve(repoRoot, "artifacts/beamer-corpus-renderer/shortlist"), count: 40, maxPerDeck: 4, maxPerRepository: 8, renderSelected: false };
+  const options = { index: resolve(repoRoot, "artifacts/beamer-sources/deck-index.json"), out: resolve(repoRoot, "artifacts/beamer-corpus-renderer/shortlist"), count: 40, maxPerDeck: 4, maxPerRepository: 8, renderSelected: false, excludeReviewed: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (["--index", "--out"].includes(arg)) options[arg.slice(2)] = resolve(argv[++i]);
+    else if (arg === "--exclude-reviewed") options.excludeReviewed.push(resolve(argv[++i]));
     else if (arg === "--count") options.count = Number(argv[++i]);
     else if (arg === "--max-per-deck") options.maxPerDeck = Number(argv[++i]);
     else if (arg === "--max-per-repository") options.maxPerRepository = Number(argv[++i]);
     else if (arg === "--render-selected") options.renderSelected = true;
-    else if (arg === "--help") { console.log("Usage: node scripts/shortlist-beamer-corpus.mjs [--index deck-index.json] [--out directory] [--count 40] [--max-per-deck 4] [--max-per-repository 8] [--render-selected]"); return; }
+    else if (arg === "--help") { console.log("Usage: node scripts/shortlist-beamer-corpus.mjs [--index deck-index.json] [--out directory] [--count 40] [--max-per-deck 4] [--max-per-repository 8] [--exclude-reviewed selected.json (repeatable)] [--render-selected]"); return; }
     else throw new Error(`Unknown argument: ${arg}`);
   }
   for (const n of [options.count, options.maxPerDeck, options.maxPerRepository]) if (!Number.isInteger(n) || n < 1) throw new Error("Sample limits must be positive integers.");
+  const excluded = new Set();
+  for (const file of options.excludeReviewed) {
+    const rows = JSON.parse(readFileSync(file, "utf8"));
+    if (!Array.isArray(rows)) throw new Error(`Expected a reviewed frame array: ${file}`);
+    for (const row of rows) {
+      if (typeof row?.repository !== "string" || typeof row?.path !== "string" || !Number.isInteger(row?.frame) || row.frame < 1) throw new Error(`Invalid reviewed frame identity in ${file}`);
+      excluded.add(reviewedFrameKey(row));
+    }
+  }
   const coreRenderer = await loadCoreRenderer();
   const [{ scanBeamerDocument }, { createBeamerSyntaxContext }] = await Promise.all([
     import(pathToFileURL(join(repoRoot, "packages/core/dist/beamer/index.js")).href),
@@ -117,11 +131,11 @@ async function main(argv) {
     } catch (error) { decks.push({ entry, error: error.message }); }
   }
   const uniqueFrames = frames.filter(f => !f.duplicateSourceForm);
-  const frequency = reviewFeatures.map(({ headPattern, ...feature }) => {
+  const frequency = reviewFeatures.map(({ optionKeys, ...feature }) => {
     const matches = uniqueFrames.filter(f => f.complete && f.features.includes(feature.id));
     return { ...feature, distinctSourceForms: matches.length, entryPoints: new Set(matches.map(f => f.deckId)).size, repositories: [...new Set(matches.map(f => f.repository))] };
   }).sort((a, b) => b.repositories.length - a.repositories.length || b.distinctSourceForms - a.distinctSourceForms);
-  const selected = selectDiverseFrames(uniqueFrames, options.count, options.maxPerDeck, options.maxPerRepository);
+  const selected = selectDiverseFrames(uniqueFrames, options.count, options.maxPerDeck, options.maxPerRepository, excluded);
   mkdirSync(options.out, { recursive: true });
   const codeFiles = [];
   function fingerprint(directory) {
@@ -132,7 +146,7 @@ async function main(argv) {
     }
   }
   fingerprint(join(repoRoot, "packages/core/dist"));
-  const report = { generatedAt: new Date().toISOString(), rendererFingerprint: sha256(JSON.stringify(codeFiles)), options, limitations: ["Frequency counts only complete scanner-discovered environment frames. Command/macro-generated and recovery spans can be missed.", "Frequency is source usage, not rendering support. Package presence alone does not count as use.", "Exact repeated frame source is deduplicated per repository; semantic duplicates and generated variants can remain.", "Inputs are expanded conservatively; conditionals, package definitions and custom build wrappers are not executed.", "Repository diversity here covers eight source collections, not population-wide package popularity."], summary: { entryPoints: decks.length, frames: frames.length, distinctSourceForms: uniqueFrames.length, completeDistinctSourceForms: uniqueFrames.filter(f => f.complete).length, selected: selected.length }, frequency, selected, frames: uniqueFrames, decks };
+  const report = { generatedAt: new Date().toISOString(), rendererFingerprint: sha256(JSON.stringify(codeFiles)), options, limitations: ["Frequency counts only complete scanner-discovered environment frames. Command/macro-generated and recovery spans can be missed.", "Frequency is source usage, not rendering support. Package presence alone does not count as use.", "Exact repeated frame source is deduplicated per repository; semantic duplicates and generated variants can remain.", "Inputs are expanded conservatively; conditionals, package definitions and custom build wrappers are not executed.", "Repository diversity here covers eight source collections, not population-wide package popularity."], summary: { entryPoints: decks.length, frames: frames.length, distinctSourceForms: uniqueFrames.length, completeDistinctSourceForms: uniqueFrames.filter(f => f.complete).length, excludedReviewed: uniqueFrames.filter(f => excluded.has(reviewedFrameKey(f))).length, selected: selected.length }, frequency, selected, frames: uniqueFrames, decks };
   if (options.renderSelected) {
     const renders = [];
     for (const frame of selected) {

@@ -10,6 +10,9 @@ export function priorityFidelityFailures(report, fixture, imageCount = 0) {
   if (report.structural) failures.push(...structuralContractFailures(report.structural.summary));
   else failures.push("No valid page correspondence; exact glyph comparison withheld.");
   failures.push(...paintContractFailures(report.paint));
+  for (const probe of fixture.paintProbes ?? []) {
+    if (!report.paint?.samples.some(sample => sample.id === probe.id)) failures.push(`Required paint probe ${probe.id} was not measured (use raster comparison).`);
+  }
   if (fixture.images != null && imageCount !== fixture.images) failures.push(`SVG images=${imageCount}, expected ${fixture.images}`);
   return failures;
 }

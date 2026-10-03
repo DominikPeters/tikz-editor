@@ -160,7 +160,7 @@ async function main(argv) {
           rmSync(comparisonPath, { force: true });
           let error = null;
           try {
-            await compareBeamerFrame({ inputPath, frameNumber: fixture.frame, pageNumber: page, outDir: options.outDir, name, width: 1600, themeVariant: {}, structuralOnly: !options.raster, pdfOnly: true, assertStructural: false }, { source, preparedDocument: prepared, coreRenderer: core, graphicsResolver: graphics.resolver });
+            await compareBeamerFrame({ inputPath, frameNumber: fixture.frame, pageNumber: page, outDir: options.outDir, name, width: 1600, themeVariant: {}, structuralOnly: !options.raster, pdfOnly: true, assertStructural: false, paintProbes: fixture.paintProbes }, { source, preparedDocument: prepared, coreRenderer: core, graphicsResolver: graphics.resolver });
           } catch (caught) { error = caught.message; }
           if (!existsSync(comparisonPath)) throw new Error(error ?? "Comparator did not write a report.");
           const comparison = readJson(comparisonPath);

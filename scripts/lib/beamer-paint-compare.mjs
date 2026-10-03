@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-// Compare flat block fills separately from glyph geometry. A global raster
+// Compare flat fills separately from glyph geometry. A global raster
 // threshold could hide a small but completely wrong block background.
 export function blockPaintProbes(render, nativeTrace, oracleTrace) {
   const probes = [];
@@ -36,8 +36,17 @@ function pixelRgb(path, x, y) {
   return values;
 }
 
-export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height) {
-  const samples = blockPaintProbes(render, nativeTrace, oracleTrace).map(probe => {
+export function compareBlockPaint(render, nativeTrace, oracleTrace, nativePng, oraclePng, width, height, additionalProbes = []) {
+  const automaticProbes = blockPaintProbes(render, nativeTrace, oracleTrace);
+  const ids = new Set(automaticProbes.map(probe => probe.id));
+  for (const probe of additionalProbes) {
+    if (typeof probe.id !== "string" || !probe.id || ids.has(probe.id) || !Number.isFinite(probe.x) || !Number.isFinite(probe.y) ||
+        probe.x <= 0 || probe.x >= render.svg.viewBox.width || probe.y <= 0 || probe.y >= render.svg.viewBox.height) {
+      throw new Error("Invalid or duplicate explicit paint probe.");
+    }
+    ids.add(probe.id);
+  }
+  const samples = [...automaticProbes, ...additionalProbes].map(probe => {
     const x = Math.round(probe.x * width / render.svg.viewBox.width);
     const y = Math.round(probe.y * height / render.svg.viewBox.height);
     const native = pixelRgb(nativePng, x, y);

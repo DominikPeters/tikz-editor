@@ -11,9 +11,17 @@ export function beamerReviewSignals(render, { expectedGraphics = 0, assets = [] 
     })))
   );
   const unsupportedItems = render.layout.items.filter(item => item.kind === "unsupported").map(item => ({ sourceSpan: item.sourceSpan, bounds: item.bounds }));
+  // Display-math fallbacks are painted by the SVG backend and need not be
+  // paragraph literal segments. Read the backend's explicit source markers.
+  const paintedFallbacks = [...render.svg.svg.matchAll(/<g\b[^>]*\bdata-tex-literal="([^"]+)"[^>]*>/gu)].map(match => ({
+    reason: match[1],
+    from: Number(/\bdata-source-start="(\d+)"/u.exec(match[0])?.[1] ?? NaN),
+    to: Number(/\bdata-source-end="(\d+)"/u.exec(match[0])?.[1] ?? NaN),
+  })).map(marker => ({ ...marker, from: Number.isFinite(marker.from) ? marker.from : null, to: Number.isFinite(marker.to) ? marker.to : null }));
   const imageElements = (render.svg.svg.match(/<image\b/gu) ?? []).length;
   const flags = [];
   if (literals.length) flags.push("literal-fallback");
+  if (paintedFallbacks.length) flags.push("painted-literal-fallback");
   if (unsupportedItems.length) flags.push("unsupported-flow");
   if (expectedGraphics > 0 && imageElements === 0) flags.push("possible-missing-graphic");
   if (assets.some(asset => asset.status === "missing" || asset.status === "unsupported")) flags.push("asset-resolution-gap");
@@ -21,11 +29,13 @@ export function beamerReviewSignals(render, { expectedGraphics = 0, assets = [] 
   const bodyLiterals = literals.filter(literal => literal.role === "body" || literal.role === "block-body");
   const reportedUnsupported = render.diagnostics.some(diagnostic => /unsupported|literal|fallback/u.test(diagnostic.code));
   if (bodyLiterals.length && !reportedUnsupported) flags.push("body-fallback-without-diagnostic");
+  if (paintedFallbacks.length && !reportedUnsupported) flags.push("paint-fallback-without-diagnostic");
   return {
     flags,
     literalSegments: literals.length,
     literalDetails: [...new Set(literals.map(literal => literal.detail).filter(Boolean))],
     literals,
+    paintedFallbacks,
     unsupportedItems,
     expectedGraphics,
     imageElements,
