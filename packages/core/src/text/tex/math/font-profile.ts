@@ -104,6 +104,8 @@ export interface TexMathLayoutParameters {
 }
 
 export interface TexMathFontProfile {
+  /** Locally inherited LaTeX arraystretch; cases resets it to 1.2. */
+  readonly arrayStretch?: number;
   readonly id: string;
   readonly label: string;
   readonly engine: "lualatex";

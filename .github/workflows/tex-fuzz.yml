@@ -29,11 +29,16 @@ jobs:
           sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended
       - name: Shared generator, invariants, coverage, and oracle canary
         run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed ${{ github.run_number }} --profile document --malformed-cases 500 --prefix-base-cases 8 --prefix-limit-per-case 128 --metamorphic-cases 200 --projection-control-cases 128 --supported-cases 128 --supported-max-attempts 16384 --boundary-cases 128 --engine-history-cases 24 --math-oracle-cases 16 --math-oracle-policy diagnostic --oracle-sample-cases 128 --oracle-geometry-policy fail --out artifacts/tex-fuzz/nightly-bundle.json --coverage-out artifacts/tex-fuzz/nightly-coverage.json
+      - name: Mandatory math symbol and layout comparisons
+        if: ${{ !cancelled() }}
+        run: node scripts/check-tex-math-symbols.mjs
       - name: Oracle batching, cache, timeout, and isolation tests
-        run: TEX_FUZZ_ORACLE_TESTS=1 npx vitest run test/tex-fuzz-kernel.spec.ts test/tex-fuzz-oracle-hardening.spec.ts test/tex-fuzz-paragraph-oracle.spec.ts
+        run: TEX_FUZZ_ORACLE_TESTS=1 npx vitest run test/tex-fuzz-kernel.spec.ts test/tex-fuzz-oracle-hardening.spec.ts test/tex-fuzz-paragraph-oracle.spec.ts test/tex-fuzz-math-oracle.spec.ts
       - name: Math differential diagnostic sample
         continue-on-error: true
-        run: node scripts/compare-tex-math.mjs --math-fuzz 80 --seed ${{ github.run_number }} --summary-only
+        run: |
+          mkdir -p artifacts/tex-fuzz
+          node scripts/compare-tex-math.mjs --math-fuzz 80 --seed ${{ github.run_number }} --summary-only | tee artifacts/tex-fuzz/math-differential.json
       - name: Inline differential diagnostic sample
         continue-on-error: true
         run: node scripts/compare-tex-inline-math-paragraph.mjs --fuzz 40 --seed ${{ github.run_number }} --formula-mode mixed --widths 80,120,160 --summary-only --oracle-cache-dir artifacts/tex-fuzz/inline-oracle-cache

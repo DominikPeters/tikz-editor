@@ -11,6 +11,7 @@ import {
   caseFromTexFuzzAst,
   checkTexFuzzLayoutResultInvariants,
   checkTexFuzzPaintedMathContent,
+  checkTexFuzzMetamorphicInvariants,
   generateFullySupportedTexFuzzCases,
   TEX_FUZZ_HARD_INVARIANT_WIDTHS,
 } from "@tikz-editor/tex-fuzz";
@@ -27,6 +28,52 @@ function layout(source: string, width = 160) {
 }
 
 describe("TeX fuzz renderer hard invariants", () => {
+  it("keeps leading comments from changing vertical glue before a display", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "vertical-glue", command: "medskip" },
+      { kind: "display-math", delimiter: "multline", body: { kind: "atom", value: "a" } },
+    ], { profile: "document" });
+    expect(checkTexFuzzMetamorphicInvariants(caseData).findings).toEqual([]);
+  });
+  it("retains adjacent inline formulas as separate painted math leaves", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "math", body: { kind: "atom", value: "x" } },
+      { kind: "math", body: { kind: "atom", value: "y" } },
+      { kind: "math", body: { kind: "atom", value: "z" } },
+    ], { profile: "document" });
+    expect(caseData.source).toBe("$x$$y$$z$");
+    const result = layout(caseData.source);
+    expect(result.supported).toBe(true);
+    expect(checkTexFuzzLayoutResultInvariants(caseData, 160, result)).toEqual([]);
+    const svg = renderTexParagraphSvgBody(result.report!, { vlistLayout: result.vlistLayout,
+      lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider });
+    expect(checkTexFuzzPaintedMathContent(caseData, 160, svg)).toEqual([]);
+  });
+
+  it("keeps empty paragraph measurements around display math and incomplete input", () => {
+    const source = String.raw`\newline\begin{equation*}\end{equation*}` + "\\";
+    expect(() => layout(source)).not.toThrow();
+    const result = layout(source);
+    expect(result.report).not.toBeNull();
+  });
+
+  it("preserves custom labels across separate adjacent lists and invisible item bodies", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "environment", name: "enumerate", children: [
+        { kind: "item", label: [{ kind: "text", value: "Label" }] }, { kind: "text", value: "Alpha" },
+      ] },
+      { kind: "environment", name: "enumerate", children: [
+        { kind: "item" }, { kind: "color", color: "red", children: [{ kind: "space", nonBreaking: true }] },
+        { kind: "item", label: [{ kind: "text", value: "Hidden body" }] },
+        { kind: "dimension-box", command: "phantom", children: [{ kind: "text", value: "Invisible" }] },
+      ] },
+      { kind: "text", value: "After" },
+    ], { profile: "document" });
+    const result = layout(caseData.source);
+    expect(result.supported).toBe(true);
+    expect(checkTexFuzzLayoutResultInvariants(caseData, 160, result)).toEqual([]);
+    expect(result.report?.lines.flatMap(line => line.segments).filter(segment => segment.text === "After")).toHaveLength(1);
+  });
   it("detects prose corruption in supported documents while ignoring automatic list markers", () => {
     const caseData = caseFromTexFuzzAst([
       { kind: "text", value: "Before" }, { kind: "paragraph-break", command: "par" },

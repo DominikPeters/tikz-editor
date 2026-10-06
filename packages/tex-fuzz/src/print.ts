@@ -66,9 +66,9 @@ function printMathNode(
     case "radical":
       output.source += "\\sqrt";
       if (node.degree) {
-        output.source += "[";
+        output.source += "[{";
         nested(node.degree, "degree");
-        output.source += "]";
+        output.source += "}]";
       }
       output.source += "{";
       nested(node.body, "body");
@@ -119,9 +119,9 @@ function printMathNode(
     case "xarrow":
       output.source += `\\${node.command}`;
       if (node.below) {
-        output.source += "[";
+        output.source += "[{";
         nested(node.below, "below");
-        output.source += "]";
+        output.source += "}]";
       }
       output.source += "{";
       nested(node.above, "above");
@@ -133,7 +133,10 @@ function printMathNode(
         if (rowIndex > 0) output.source += "\\\\";
         row.forEach((cell, columnIndex) => {
           if (columnIndex > 0) output.source += "&";
+          const protectRowArgument = rowIndex > 0 && columnIndex === 0 && startsWithMathRowArgument(cell);
+          if (protectRowArgument) output.source += "{";
           nested(cell, `cells/${rowIndex}/${columnIndex}`);
+          if (protectRowArgument) output.source += "}";
         });
       });
       output.source += `\\end{${node.environment}}`;
@@ -141,6 +144,11 @@ function printMathNode(
     case "text": output.source += `\\${node.command}{${node.value}}`; break;
   }
   output.spans.push({ path, kind: `math.${node.kind}`, start, end: output.source.length });
+}
+
+function startsWithMathRowArgument(node: TexFuzzMathNode): boolean {
+  return node.kind === "atom" ? node.value.startsWith("[") || node.value.startsWith("*")
+    : node.kind === "sequence" && node.items[0] !== undefined && startsWithMathRowArgument(node.items[0]);
 }
 
 export function printTexFuzzMathAst(ast: TexFuzzMathNode): PrintedTexFuzzAst {

@@ -23,6 +23,7 @@ export type UseCanvasViewportPersistenceArgs = {
   baseSvgResult: CanvasSnapshot["svg"];
   svgResult: CanvasSnapshot["svg"];
   viewportSize: { width: number; height: number };
+  fitPadding?: number;
   dispatch: CanvasDispatch;
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   activeDocumentId: string;
@@ -53,6 +54,7 @@ export function useCanvasViewportPersistence({
   baseSvgResult,
   svgResult,
   viewportSize,
+  fitPadding = 44,
   dispatch,
   dispatchCanvasTransform,
   activeDocumentId,
@@ -95,9 +97,10 @@ export function useCanvasViewportPersistence({
       viewportSize.width,
       viewportSize.height,
       MIN_SCALE,
-      MAX_SCALE
+      MAX_SCALE,
+      fitPadding
     ),
-    [baseSvgResult, MAX_SCALE, MIN_SCALE, svgResult, viewportSize.height, viewportSize.width]
+    [baseSvgResult, fitPadding, MAX_SCALE, MIN_SCALE, svgResult, viewportSize.height, viewportSize.width]
   );
 
   useEffect(() => {
@@ -115,7 +118,7 @@ export function useCanvasViewportPersistence({
     const viewportWidth = viewportRef.current.clientWidth;
     const viewportHeight = viewportRef.current.clientHeight;
 
-    const scale = computeFitToContentScale(fitViewBox, viewportWidth, viewportHeight, MIN_SCALE, MAX_SCALE);
+    const scale = computeFitToContentScale(fitViewBox, viewportWidth, viewportHeight, MIN_SCALE, MAX_SCALE, fitPadding);
     if (scale == null) {
       return false;
     }
@@ -129,7 +132,7 @@ export function useCanvasViewportPersistence({
     dispatchCanvasTransform(next);
     canvasTransformRef.current = next;
     return true;
-  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, MAX_SCALE, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
+  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, fitPadding, MAX_SCALE, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
     () => rootKey(activeDocumentId, activeRootId),
@@ -461,7 +464,8 @@ function computeFitToContentScale(
   viewportWidth: number,
   viewportHeight: number,
   minScale: number,
-  maxScale: number
+  maxScale: number,
+  padding: number
 ): number | null {
   if (
     !fitViewBox ||
@@ -472,8 +476,8 @@ function computeFitToContentScale(
   ) {
     return null;
   }
-  const availableWidth = Math.max(1, viewportWidth - 44 * 2);
-  const availableHeight = Math.max(1, viewportHeight - 44 * 2);
+  const availableWidth = Math.max(1, viewportWidth - padding * 2);
+  const availableHeight = Math.max(1, viewportHeight - padding * 2);
   return clamp(
     Math.min(availableWidth / fitViewBox.width, availableHeight / fitViewBox.height),
     minScale,

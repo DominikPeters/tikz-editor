@@ -123,6 +123,7 @@ export type SimpleTexScopePathRole =
     }
   | {
       readonly kind: "list";
+      readonly sourceStart?: number;
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
       readonly labelDepth: number;
@@ -4719,6 +4720,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     ] ?? 1;
     const scopeRole = {
       kind: "list",
+      sourceStart,
       listKind: kind,
       depth,
       labelDepth,
@@ -5280,7 +5282,13 @@ function hasNonSpaceSourceText(
 ): boolean {
   for (let index = start; index < end; index += 1) {
     const char = text[index - sourceOffset];
-    if (char !== " " && char !== "\n") {
+    if (char === "%") {
+      // Comments do not enter horizontal mode or turn a leading skip into a
+      // paragraph adjustment. An escaped percent is already caught at its \.
+      while (index < end && text[index - sourceOffset] !== "\n") index += 1;
+      continue;
+    }
+    if (char !== " " && char !== "\n" && char !== "\r" && char !== "\t") {
       return true;
     }
   }

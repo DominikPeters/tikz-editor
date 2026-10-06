@@ -166,6 +166,12 @@ export function prepareTexLayoutParagraphsFromVList(
       paragraphStateResult.alignment,
       blockIndex
     );
+    if (segments.length === 0) {
+      // A discarded blank/forced-break segment still owns a paragraph in the
+      // vlist. Preserve its identity so the breaker can measure an empty box.
+      segments.push({ text: "", nodes: [], noIndent: paragraph.noIndent,
+        sourceStart: paragraph.sourceSpan.start, sourceEnd: paragraph.sourceSpan.end });
+    }
     const spaceGlueProfile = paragraph.spaceGlueProfile ?? paragraphStateResult.spaceGlueProfile;
     if (segments.some((segment) => segment.forcedBreakAfter)) {
       layoutMode = "wrapped-explicit";

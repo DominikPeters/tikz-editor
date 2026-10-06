@@ -16,6 +16,19 @@ function nestedNodes(nodes: readonly TexFuzzNode[]): readonly TexFuzzNode[] {
 }
 
 describe("TeX fuzz model and printer breadth", () => {
+  it("protects literal brackets from optional-argument and matrix-row parsing", () => {
+    const ast = [{ kind: "math", body: { kind: "sequence", operators: ["+", "+"], items: [
+      { kind: "radical", degree: { kind: "atom", value: "]" }, body: { kind: "atom", value: "x" } },
+      { kind: "xarrow", command: "xrightarrow", below: { kind: "atom", value: "]" }, above: { kind: "atom", value: "x" } },
+      { kind: "matrix", environment: "matrix", cells: [[{ kind: "atom", value: "x" }], [{ kind: "atom", value: "[" }], [{ kind: "atom", value: "*" }]] },
+    ] } } satisfies TexFuzzNode];
+    const printed = printTexFuzzAst(ast);
+    expect(printed.source).toContain(String.raw`\sqrt[{]}]{x}`);
+    expect(printed.source).toContain(String.raw`\xrightarrow[{]}]{x}`);
+    expect(printed.source).toContain(String.raw`\\{[}`);
+    expect(printed.source).toContain(String.raw`\\{*}`);
+    expect(printed.sourceMap.filter(span => span.kind === "math.atom").every(span => span.end > span.start)).toBe(true);
+  });
   it("prints scoped declarations and inline box families without changing v1 forms", () => {
     const ast = [
       { kind: "font", command: "textbf", children: [{ kind: "text", value: "old" }] },

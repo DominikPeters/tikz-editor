@@ -7,6 +7,8 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   layoutTexMathList,
+  luaLatexAmsMathFontProfile,
+  luaLatexDefaultMathFontProfile,
   parseTexMath,
   texMathSymbolCommandNames,
 } from "../packages/core/dist/text/tex/math/index.js";
@@ -362,6 +364,8 @@ export function compareFormula(formula, tolerance = 0.01, options = {}) {
     }
   }
   compareNumber(mismatches, "total width", ours.width, tex.width, tolerance);
+  compareNumber(mismatches, "total height", ours.height, tex.height, tolerance);
+  compareNumber(mismatches, "total depth", ours.depth, tex.depth, tolerance);
   return {
     formula,
     ok: mismatches.length === 0,
@@ -372,6 +376,13 @@ export function compareFormula(formula, tolerance = 0.01, options = {}) {
 }
 
 function comparisonItemsForFormula(formula, ours, tex) {
+  if (/\\(?:overbrace|underbrace)\b/.test(formula)) {
+    // Vbox traversal paints brace rows before their bodies; SVG may emit the
+    // body first. Compare the same glyph/rule multiset at exact paint positions.
+    const order = (a, b) => a.kind.localeCompare(b.kind) || (a.fontId ?? "").localeCompare(b.fontId ?? "") ||
+      (a.code ?? 0) - (b.code ?? 0) || a.x - b.x || a.y - b.y || a.width - b.width;
+    return { ours: visibleMathItems(ours).sort(order), tex: visibleMathItems(tex).sort(order) };
+  }
   if (
     formula.includes(String.raw`\begin{aligned}`) ||
     hasArrayEnvironment(formula) ||
@@ -385,6 +396,8 @@ function comparisonItemsForFormula(formula, ours, tex) {
     || hasSubarrayEnvironment(formula)
     || hasSidesetCommand(formula)
     || hasAmsMathCommand(formula)
+    || hasAmsMathDelimiterCommand(formula)
+    || /\\sqrt\[/.test(formula)
     || hasMathtoolsColonRelationCommand(formula)
   ) {
     return {
@@ -408,7 +421,12 @@ function isIndefiniteVerticalRuleTrace(item) {
 
 function ourTrace(formula) {
   const parsed = parseTexMath(formula);
-  const result = layoutTexMathList(parsed.list);
+  // Compare under the same package/font context on both sides. Package
+  // inference in the native renderer is separate from this layout oracle.
+  const fontProfile = /\{(?:amsmath|amssymb|mathtools)\}/.test(mathPackagePreamble(formula))
+    ? luaLatexAmsMathFontProfile
+    : luaLatexDefaultMathFontProfile;
+  const result = layoutTexMathList(parsed.list, { fontProfile });
   if (!result.supported) {
     return {
       supported: false,
@@ -421,6 +439,8 @@ function ourTrace(formula) {
     supported: true,
     items: flattenOurItems(result.hlist.items, 0, 0),
     width: result.hlist.width,
+    height: result.hlist.height,
+    depth: result.hlist.depth,
   };
 }
 
@@ -476,16 +496,23 @@ function texTrace(formula, options) {
   try {
     writeFileSync(join(tempDir, "trace.lua"), traceLuaSource(), "utf8");
     writeFileSync(join(tempDir, "case.tex"), texSource(formula), "utf8");
-    execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "case.tex"], {
-      cwd: tempDir,
-      env: texOracleEnv(),
-      stdio: "pipe",
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: options.timeoutMs ?? 20_000,
-    });
+    try {
+      execFileSync("lualatex", ["--interaction=nonstopmode", "--halt-on-error", "case.tex"], {
+        cwd: tempDir,
+        env: texOracleEnv(),
+        stdio: "pipe",
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: options.timeoutMs ?? 20_000,
+      });
+    } catch (error) {
+      const output = error.stdout?.toString() ?? "";
+      throw new Error(`${error.message}\n${output.slice(-3000)}`, { cause: error });
+    }
     const log = readFileSync(join(tempDir, "case.log"), "utf8");
     const items = [];
     let width = 0;
+    let height = 0;
+    let depth = 0;
     for (const line of log.split(/\r?\n/)) {
       const glyph = /^TMT g x=(?<x>[-.\d]+) y=(?<y>[-.\d]+) f=(?<font>\S+) c=(?<char>\d+) w=(?<width>[-.\d]+)/.exec(line);
       if (glyph?.groups) {
@@ -530,18 +557,20 @@ function texTrace(formula, options) {
         });
         continue;
       }
-      const total = /^TMT width=(?<width>[-.\d]+)/.exec(line);
+      const total = /^TMT width=(?<width>[-.\d]+) height=(?<height>[-.\d]+) depth=(?<depth>[-.\d]+)/.exec(line);
       if (total?.groups) {
         width = round(Number(total.groups.width));
+        height = round(Number(total.groups.height));
+        depth = round(Number(total.groups.depth));
       }
     }
-    return { items, width };
+    return { items, width, height, depth };
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-function texSource(formula) {
+function mathPackagePreamble(formula) {
   const amsmathPreamble = formula.includes(String.raw`\begin{aligned}`) ||
     hasMatrixEnvironment(formula) ||
     hasCasesEnvironment(formula) ||
@@ -567,8 +596,12 @@ function texSource(formula) {
   const mathtoolsPreamble = hasMathtoolsColonRelationCommand(formula)
     ? String.raw`\usepackage{mathtools}` + "\n"
     : "";
+  return amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble;
+}
+
+function texSource(formula) {
   return String.raw`\documentclass{article}
-` + amsmathPreamble + amssymbPreamble + mathtoolsPreamble + arrayPreamble + String.raw`
+` + mathPackagePreamble(formula) + String.raw`
 \newbox\m
 \begin{document}
 \setbox\m=\hbox{$` + formula + String.raw`$}
@@ -645,23 +678,34 @@ local function walk_hlist(list, origin_x, baseline_y, box)
       x=x+node_width(n)
     elseif n.id==glue_id then
       local w=glue_width(n, box)
-      -- Centered leaders are paint, not just glue advance. amsmath uses them
-      -- for extensible arrow shafts, including zero repetitions in short arrows.
+      -- Leaders are paint, not just glue advance: arrows use centered hboxes,
+      -- while stock over/underbraces use aligned rule leaders.
       if n.leader then
-        if n.subtype ~= 101 then error('Unsupported math trace leader subtype '..n.subtype) end
         local leader=n.leader
-        local unit=leader.width or 0
-        local available=math.floor(w*65536+0.5)
-        if unit > 0 then
-          local count=math.max(0, math.floor(available/unit))
-          local start=x+sp(math.floor((available-count*unit)/2))
-          for i=0,count-1 do
-            local leader_x=start+sp(i*unit)
-            if leader.id==hlist_id then
-              walk_hlist(leader.list, leader_x, baseline_y+sp(leader.shift), leader)
-            elseif leader.id==vlist_id then
-              walk_vlist(leader.list, leader_x, baseline_y+sp(leader.shift), node_height(leader), node_width(leader))
-            else error('Unsupported math trace leader node '..leader.id) end
+        if leader.id==rule_id then
+          if w >= 0 then
+            texio.write_nl(string.format('TMT rule x=%.6f y=%.6f w=%.6f h=%.6f',
+              x, baseline_y-node_height(leader), w, node_height(leader)+node_depth(leader)))
+          end
+        else
+          if n.subtype ~= 100 and n.subtype ~= 101 then error('Unsupported math trace leader subtype '..n.subtype) end
+          local unit=leader.width or 0
+          local available=math.floor(w*65536+0.5)
+          if unit > 0 then
+            local count=math.max(0, math.floor(available/unit))
+            local start=x+sp(math.floor((available-count*unit)/2))
+            if n.subtype==100 then
+              start=origin_x+sp(math.ceil((x-origin_x)*65536/unit)*unit)
+              count=math.max(0, math.floor(((x+w)-start)*65536/unit+0.00001))
+            end
+            for i=0,count-1 do
+              local leader_x=start+sp(i*unit)
+              if leader.id==hlist_id then
+                walk_hlist(leader.list, leader_x, baseline_y+sp(leader.shift), leader)
+              elseif leader.id==vlist_id then
+                walk_vlist(leader.list, leader_x, baseline_y+sp(leader.shift), node_height(leader), node_width(leader))
+              else error('Unsupported math trace leader node '..leader.id) end
+            end
           end
         end
       end
@@ -717,7 +761,7 @@ function walk_vlist(list, origin_x, baseline_y, height, width)
   end
 end
 walk_hlist(tex.box.m.list, 0, 0, tex.box.m)
-texio.write_nl(string.format('TMT width=%.6f', node_width(tex.box.m)))
+texio.write_nl(string.format('TMT width=%.6f height=%.6f depth=%.6f', node_width(tex.box.m), node_height(tex.box.m), node_depth(tex.box.m)))
 `;
 }
 

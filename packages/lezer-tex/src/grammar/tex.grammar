@@ -257,6 +257,11 @@ MathEnvironmentName {
   MissingOpaqueEnvironmentEnd
 }
 
+@external tokens mathDelimiterTokens from "./math-delimiter-tokens.js" {
+  Dollar
+  DoubleDollar
+}
+
 @tokens {
   @precedence {
     OverlayOpen,
@@ -282,7 +287,6 @@ MathEnvironmentName {
     InlineMathClose,
     DisplayMathOpen,
     DisplayMathClose,
-    DoubleDollar,
     ControlWord,
     ControlSymbol,
     Comment,
@@ -327,8 +331,6 @@ MathEnvironmentName {
   InlineMathClose { "\\)" }
   DisplayMathOpen { "\\[" }
   DisplayMathClose { "\\]" }
-  DoubleDollar { "$$" }
-  Dollar { "$" }
 
   Star { "*" }
   Superscript { "^" }

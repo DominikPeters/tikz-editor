@@ -19,6 +19,22 @@ import {
 } from "@tikz-editor/tex-fuzz";
 
 describe("TeX fuzz semantic coverage", () => {
+  it("counts exact symbol co-occurrences across membership word boundaries", () => {
+    const cases = Array.from({ length: 70 }, (_, index) => ({
+      ast: [], source: "", features: ["always", "always", ...(index % 2 ? ["a"] : []),
+        ...(index % 3 ? ["b"] : []), ...(index % 5 ? ["c"] : [])],
+    }));
+    const coverage = measureTexFuzzCoverage(cases);
+    for (const tuple of [["a", "always"], ["a", "b"], ["always", "c"]]) {
+      expect(coverage.featurePairCounts[texFuzzCombinationKey(tuple)])
+        .toBe(cases.filter(item => tuple.every(feature => item.features.includes(feature))).length);
+    }
+    for (const tuple of [["a", "always", "b"], ["a", "b", "c"], ["always", "b", "c"]]) {
+      expect(coverage.featureTripleCounts[texFuzzCombinationKey(tuple)])
+        .toBe(cases.filter(item => tuple.every(feature => item.features.includes(feature))).length);
+    }
+    expect(coverage.featureCounts.always).toBe(70);
+  });
   it("bounds dense novelty feedback while retaining exhaustive coverage reports", () => {
     const features = Array.from({ length: 40 }, (_, index) => `feature-${index}`);
     const novelty = new TexFuzzNoveltyTracker();

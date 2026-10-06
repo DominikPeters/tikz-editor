@@ -9,8 +9,21 @@ import {
   generateTexMathFuzzTexCase,
 } from "../packages/tex-fuzz/src/generate-math.js";
 import { applyTexFuzzMutations, printTexFuzzAst } from "../packages/tex-fuzz/src/print.js";
+import { TEX_FUZZ_MATH_SYMBOLS } from "../packages/tex-fuzz/src/math-symbols.js";
 
 describe("adversarial TeX math generator", () => {
+  it("reaches every literal and escaped symbol and records their coverage separately", () => {
+    const cases = Array.from({ length: 2000 }, (_, seed) => generateTexMathFuzzTexCase(seed, { depth: 0 }));
+    const coverage = measureTexFuzzCoverage(cases);
+    for (const symbol of TEX_FUZZ_MATH_SYMBOLS) {
+      expect(coverage.featureCounts[`math.symbol.${symbol}`], symbol).toBeGreaterThan(0);
+      const reached = cases.find(item => item.features.includes(`math.symbol.${symbol}`));
+      expect(reached?.source).toBe(`$${symbol}$`);
+      expect(TEX_FUZZ_FEATURE_DEFINITIONS[`math.symbol.${symbol}`]).toBeDefined();
+    }
+    expect(coverage.featureCounts["math.symbol.|"]).toBeGreaterThan(0);
+    expect(coverage.featureCounts[String.raw`math.symbol.\|`]).toBeGreaterThan(0);
+  });
   it("is deterministic and produces bounded valid parser inputs", () => {
     for (let seed = 0; seed < 200; seed += 1) {
       const first = generateTexMathFuzzCase(seed, { depth: 4 });

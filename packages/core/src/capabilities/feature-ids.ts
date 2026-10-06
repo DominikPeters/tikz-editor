@@ -92,7 +92,7 @@ export const FEATURE_IDS = [
   "svg_text",
   "text_includegraphics",
   "text_tabular", // Source-backed LaTeX tabular and booktabs alignments.
-  "text_math_fonts", // Genuine math alphabets, scoped bold math and class font substitutions.
+  "text_math_fonts", // Literal mathcodes, genuine math alphabets, scoped bold math and class font substitutions.
   "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
   "beamer_document_scan",
   "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.

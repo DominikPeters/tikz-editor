@@ -167,6 +167,8 @@ export interface TexMathListNucleus {
   readonly role?: "ellipsis";
   readonly ellipsisCommand?: "ldots" | "cdots" | "dots" | "dotsc" | "dotsb" | "dotsm" | "dotsi" | "dotso";
   readonly leadingKern?: TexLength;
+  /** A single-character math operator, as used by LaTeX's stackrel. */
+  readonly operator?: boolean;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

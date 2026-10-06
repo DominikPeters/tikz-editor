@@ -11,6 +11,38 @@ export interface TexMathSymbolDeclaration {
   readonly requiresAmsMathFontProfile: boolean;
 }
 
+type TexMathCharacterDeclaration = Pick<TexMathSymbolDeclaration, "atomClass" | "family" | "code">;
+
+// Literal mathcodes from LaTeX's fontmath.ltx. Control symbols are a separate
+// namespace: the character | is a single bar, whereas the command \| is double.
+const mathCharacterDeclarations = {
+  "!": { atomClass: "close", family: "operators", code: 0x21 },
+  "(": { atomClass: "open", family: "operators", code: 0x28 },
+  ")": { atomClass: "close", family: "operators", code: 0x29 },
+  "*": { atomClass: "bin", family: "symbols", code: 0x03 },
+  "+": { atomClass: "bin", family: "operators", code: 0x2b },
+  ",": { atomClass: "punct", family: "letters", code: 0x3b },
+  "-": { atomClass: "bin", family: "symbols", code: 0x00 },
+  ".": { atomClass: "ord", family: "letters", code: 0x3a },
+  "/": { atomClass: "ord", family: "letters", code: 0x3d },
+  ":": { atomClass: "rel", family: "operators", code: 0x3a },
+  ";": { atomClass: "punct", family: "operators", code: 0x3b },
+  "<": { atomClass: "rel", family: "letters", code: 0x3c },
+  "=": { atomClass: "rel", family: "operators", code: 0x3d },
+  ">": { atomClass: "rel", family: "letters", code: 0x3e },
+  "?": { atomClass: "close", family: "operators", code: 0x3f },
+  "[": { atomClass: "open", family: "operators", code: 0x5b },
+  "]": { atomClass: "close", family: "operators", code: 0x5d },
+  "|": { atomClass: "ord", family: "symbols", code: 0x6a },
+} as const satisfies Record<string, TexMathCharacterDeclaration>;
+
+export function texMathCharacterDeclaration(text: string): TexMathCharacterDeclaration | null {
+  if (/^[A-Za-z]$/.test(text)) return { atomClass: "ord", family: "letters", code: text.charCodeAt(0) };
+  if (/^[0-9]$/.test(text)) return { atomClass: "ord", family: "operators", code: text.charCodeAt(0) };
+  return Object.hasOwn(mathCharacterDeclarations, text)
+    ? (mathCharacterDeclarations as Record<string, TexMathCharacterDeclaration>)[text] : null;
+}
+
 // TeX Live 2025 amssymb.sty / amsfonts.sty DeclareMathSymbol declarations.
 const amsSymbolDeclarations = {
   backepsilon: ams("rel", "amsSymbolsB", 0x7f),

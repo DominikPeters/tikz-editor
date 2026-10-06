@@ -260,6 +260,7 @@ export type TexVBoxRole =
     }
   | {
       readonly kind: "list";
+      readonly sourceStart?: number;
       readonly listKind: SimpleTexListKind;
       readonly depth: number;
       readonly labelDepth: number;

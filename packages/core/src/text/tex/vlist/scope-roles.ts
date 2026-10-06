@@ -18,6 +18,7 @@ export interface TexVBoxRoleScopeInput {
 }
 
 export interface TexVBoxRoleListScopeInput {
+  readonly listStart?: number;
   readonly kind: SimpleTexListKind;
   readonly depth: number;
   readonly labelDepth: number;
@@ -107,6 +108,7 @@ export function texVBoxRolePathForScope(
   if (listScope) {
     roles.push({
       kind: "list",
+      ...(listScope.listStart !== undefined ? { sourceStart: listScope.listStart } : {}),
       listKind: listScope.kind,
       depth: listScope.depth,
       labelDepth: listScope.labelDepth,
@@ -168,6 +170,7 @@ export function texVBoxScopeKeyForRole(role: TexVBoxRole): string {
   }
   return [
     "list",
+    role.sourceStart ?? "",
     role.listKind,
     role.depth,
     role.labelDepth,

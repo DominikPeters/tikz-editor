@@ -13,6 +13,19 @@ function atomAt(result: ReturnType<typeof parseTexMath>, index: number): TexMath
 }
 
 describe("TeX math parser", () => {
+  it("keeps literal bars distinct from escaped bars and uses LaTeX punctuation classes", () => {
+    const result = parseTexMath(String.raw`|\|!;?/`);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.list.items).toMatchObject([
+      { atomClass: "ord", nucleus: { text: "|" } },
+      { atomClass: "ord", nucleus: { text: String.raw`\|` } },
+      { atomClass: "close", nucleus: { text: "!" } },
+      { atomClass: "punct", nucleus: { text: ";" } },
+      { atomClass: "close", nucleus: { text: "?" } },
+      { atomClass: "ord", nucleus: { text: "/" } },
+    ]);
+  });
+
   it("parses the plain TeX double-vertical norm delimiter as an ordinary atom", () => {
     const result = parseTexMath(String.raw`\|w\|`);
 

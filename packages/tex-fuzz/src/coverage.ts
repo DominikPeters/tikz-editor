@@ -1,5 +1,5 @@
 /** Versioned semantic telemetry; adding or renaming a key requires a version bump. */
-export const TEX_FUZZ_COVERAGE_SCHEMA_VERSION = 1 as const;
+export const TEX_FUZZ_COVERAGE_SCHEMA_VERSION = 2 as const;
 
 export interface TexFuzzCoverageCase {
   readonly features: readonly string[];
@@ -38,26 +38,48 @@ interface MutableCoverage {
 
 export function measureTexFuzzCoverage(cases: readonly TexFuzzCoverageCase[]): TexFuzzCoverage {
   const coverage = emptyMutableCoverage();
-  const featureSets = new Map<string, { features: readonly string[]; count: number }>();
   for (const caseData of cases) {
     const features = [...new Set(caseData.features)].sort();
     addCase(coverage, caseData, features);
-    const signature = JSON.stringify(features);
-    const group = featureSets.get(signature);
-    if (group) group.count++;
-    else featureSets.set(signature, { features, count: 1 });
   }
-  // Dense fixture catalogs often have identical feature sets. Enumerate each
-  // set once with its multiplicity while still visiting every AST/source.
-  for (const { features, count } of featureSets.values()) {
-    combinations(features, 2, (values) => {
-      increment(coverage.featurePairCounts, texFuzzCombinationKey(values), count);
-    });
-    combinations(features, 3, (values) => {
-      increment(coverage.featureTripleCounts, texFuzzCombinationKey(values), count);
-    });
-  }
+  countFeatureCombinations(cases, coverage);
   return freezeCoverage(coverage);
+}
+
+// Count exact co-occurrences with case-membership bitsets. Enumerating and
+// serializing every tuple in every dense case becomes prohibitively expensive
+// as the symbol vocabulary expands; each output key now needs serialization once.
+function countFeatureCombinations(cases: readonly TexFuzzCoverageCase[], coverage: MutableCoverage): void {
+  const names = Object.keys(coverage.featureCounts).sort();
+  const words = Math.ceil(cases.length / 32);
+  const members = names.map(() => new Uint32Array(words));
+  const byName = new Map(names.map((name, index) => [name, members[index]]));
+  cases.forEach((caseData, index) => {
+    for (const feature of caseData.features) byName.get(feature)![index >>> 5] |= 1 << (index & 31);
+  });
+  const pair = new Uint32Array(words);
+  for (let a = 0; a < names.length; a += 1) {
+    for (let b = a + 1; b < names.length; b += 1) {
+      let pairCount = 0;
+      for (let word = 0; word < words; word += 1) {
+        pair[word] = members[a][word] & members[b][word];
+        pairCount += bitCount(pair[word]);
+      }
+      if (!pairCount) continue;
+      coverage.featurePairCounts[texFuzzCombinationKey([names[a], names[b]])] = pairCount;
+      for (let c = b + 1; c < names.length; c += 1) {
+        let count = 0;
+        for (let word = 0; word < words; word += 1) count += bitCount(pair[word] & members[c][word]);
+        if (count) coverage.featureTripleCounts[texFuzzCombinationKey([names[a], names[b], names[c]])] = count;
+      }
+    }
+  }
+}
+
+function bitCount(value: number): number {
+  value -= (value >>> 1) & 0x55555555;
+  value = (value & 0x33333333) + ((value >>> 2) & 0x33333333);
+  return Math.imul((value + (value >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24;
 }
 
 export function mergeTexFuzzCoverage(reports: readonly TexFuzzCoverage[]): TexFuzzCoverage {

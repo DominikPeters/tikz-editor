@@ -11,6 +11,7 @@ export * from "./generate-math.js";
 export * from "./invariants.js";
 export * from "./metamorphic.js";
 export * from "./model.js";
+export * from "./math-symbols.js";
 export * from "./mutate.js";
 export * from "./print.js";
 export * from "./profiles.js";

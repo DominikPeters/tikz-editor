@@ -41,7 +41,7 @@ import type {
   TexMathUnsupportedItem,
   TexMathVarLimitCommand,
 } from "./ir.js";
-import { texMathSymbolDeclaration } from "./symbol-definitions.js";
+import { texMathCharacterDeclaration, texMathSymbolDeclaration } from "./symbol-definitions.js";
 import {
   parseSimpleTexInlineNodes,
   simpleTexTextBoxAlignment,
@@ -730,6 +730,8 @@ class TexMathParser {
       nucleus: {
         kind: "list",
         list: baseList,
+        ...(stackCommand === "stackrel" ? { operator: true } : {}),
+        ...(stackCommand !== "stackrel" ? { leadingKern: texLength(0) } : {}),
         sourceSpan: base?.sourceSpan ?? command.sourceSpan,
       },
       ...(below ? { subscript: { list: below.list, sourceSpan: below.sourceSpan } } : {}),
@@ -6354,6 +6356,7 @@ function atomClassForToken(token: TexMathToken): TexMathAtomClass | null {
 const ordinaryNamedSymbolCommands = new Set([
   "%",
   "|",
+  "vert", "Vert",
   "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon", "Phi", "Psi", "Omega",
   "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta", "theta", "vartheta",
   "iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "varpi", "rho", "varrho", "sigma", "varsigma",
@@ -6398,22 +6401,7 @@ const punctNamedSymbolCommands = new Set([
 ]);
 
 function atomClassForCharacter(char: string): TexMathAtomClass {
-  if (char === "(" || char === "[") {
-    return "open";
-  }
-  if (char === ")" || char === "]") {
-    return "close";
-  }
-  if (char === "," || char === ";") {
-    return "punct";
-  }
-  if (char === "=" || char === "<" || char === ">" || char === ":") {
-    return "rel";
-  }
-  if (char === "+" || char === "-" || char === "*" || char === "/") {
-    return "bin";
-  }
-  return "ord";
+  return texMathCharacterDeclaration(char)?.atomClass ?? "ord";
 }
 
 function atomClassCommandName(command: string): TexMathAtomClass | null {

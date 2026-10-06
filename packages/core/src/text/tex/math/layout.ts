@@ -94,7 +94,7 @@ import {
   type TexMathResolvedGlue,
 } from "./spacing.js";
 import { parseTexMath } from "./parser.js";
-import { texMathSymbolDeclaration } from "./symbol-definitions.js";
+import { texMathCharacterDeclaration, texMathSymbolDeclaration } from "./symbol-definitions.js";
 
 export type TexMathHListItem =
   | TexMathGlyphLayoutItem
@@ -524,6 +524,15 @@ export function layoutTexMathList(
   list: TexMathList,
   options: TexMathLayoutOptions = {}
 ): TexMathLayoutResult {
+  try {
+    return layoutTexMathListContents(list, options);
+  } catch (error) {
+    if (!(error instanceof TexMathAssemblyLimitError)) throw error;
+    return { supported: false, hlist: null, errors: [{ message: error.message, sourceSpan: error.sourceSpan }] };
+  }
+}
+
+function layoutTexMathListContents(list: TexMathList, options: TexMathLayoutOptions): TexMathLayoutResult {
   const style = options.style ?? "text";
   const cramped = options.cramped ?? false;
   let currentStyle = style;
@@ -972,7 +981,7 @@ function layoutAtom(
   suppressTrailingItalicCorrection = false,
   ordGlyph?: ResolvedMathGlyph
 ): TexMathAtomLayout | null {
-  const nucleus = ordGlyph && atom.nucleus.kind === "glyph"
+  let nucleus = ordGlyph && atom.nucleus.kind === "glyph"
     ? layoutGlyphNucleus(atom.nucleus, fontProfile, style, baseAtPt, alphabet, ordGlyph)
     : layoutNucleus(
     atom.nucleus,
@@ -985,6 +994,14 @@ function layoutAtom(
   );
   if (!nucleus) {
     return null;
+  }
+
+  if (nucleus.isCharacterNucleus && (atom.atomClass === "op" ||
+    (atom.nucleus.kind === "list" && atom.nucleus.operator))) {
+    const shift = roundTexPt((nucleus.height - nucleus.depth) / 2 - mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt));
+    nucleus = mathAtomLayout({ ...nucleus,
+      items: nucleus.items.map(item => offsetTexMathHListItem(item, texHBoxOffsetX(0), texHBoxOffsetY(shift))),
+      height: roundTexPt(Math.max(0, nucleus.height - shift)), depth: roundTexPt(Math.max(0, nucleus.depth + shift)) });
   }
 
   if (shouldUseOperatorLimits(atom, style)) {
@@ -1100,6 +1117,7 @@ function prepareOrdNoads(
     if (item.kind !== "atom" || item.nucleus.kind !== "list") return item;
     let nucleus: TexMathNucleus = item.nucleus;
     while (nucleus.kind === "list") {
+      if (nucleus.leadingKern !== undefined || nucleus.operator) return item;
       const child: TexMathItem | undefined = nucleus.list.items[0];
       if (nucleus.list.items.length !== 1 || child?.kind !== "atom" || child.atomClass !== "ord" ||
         child.subscript || child.superscript) return item;
@@ -1427,7 +1445,7 @@ function layoutNucleus(
     return layoutSidesetNucleus(nucleus, fontProfile, baseAtPt, alphabet);
   }
   if (nucleus.kind === "array") {
-    return layoutArrayNucleus(nucleus, fontProfile, baseAtPt, alphabet);
+    return layoutArrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
   }
   if (nucleus.kind === "cases") {
     return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
@@ -1455,6 +1473,7 @@ function layoutSingleAtomGroupNucleus(
   const item = list.items[0];
   if (
     item?.kind !== "atom" ||
+    item.atomClass !== "ord" ||
     item.subscript ||
     item.superscript ||
     item.limits
@@ -1540,7 +1559,10 @@ function layoutTextNucleus(
   style: TexMathStyle,
   baseAtPt: TexLength
 ): TexMathAtomLayout | null {
-  const isTextBoxCommand = isTextBoxNucleusCommand(nucleus.command);
+  // Without amstext, LaTeX's NFSS text commands use an ordinary ambient-size
+  // hbox. amstext replaces nfss@text with a math-style-aware text box.
+  const isTextBoxCommand = isTextBoxNucleusCommand(nucleus.command) ||
+    (fontProfile.id === defaultTexMathFontProfile.id && nucleus.command !== "text");
   const atPt = isTextBoxCommand
     ? baseAtPt
     : fontProfile.resolveMathStyleAtPt(style, baseAtPt);
@@ -2669,7 +2691,7 @@ function layoutMatrixNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const body = layoutMatrixBody(nucleus, fontProfile, baseAtPt, alphabet);
+  const body = layoutMatrixBody(nucleus, fontProfile, style, baseAtPt, alphabet);
   if (!body) {
     return null;
   }
@@ -2686,7 +2708,7 @@ function layoutCasesNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const body = layoutCasesBody(nucleus, fontProfile, baseAtPt, alphabet);
+  const body = layoutCasesBody(nucleus, fontProfile, style, baseAtPt, alphabet);
   if (!body) {
     return null;
   }
@@ -2696,6 +2718,7 @@ function layoutCasesNucleus(
 function layoutCasesBody(
   nucleus: TexMathCasesNucleus,
   fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -2705,10 +2728,11 @@ function layoutCasesBody(
   const rowDepth = roundTexPt(
     fontProfile.layoutParameters.arrayStrutDepth * TEX_CASES_ARRAY_STRETCH
   );
+  const cellFontProfile = { ...fontProfile, arrayStretch: TEX_CASES_ARRAY_STRETCH };
   const rows = nucleus.rows.map((row) =>
     layoutMatrixRow(
       row,
-      fontProfile,
+      cellFontProfile,
       baseAtPt,
       alphabet,
       rowHeight,
@@ -2752,7 +2776,7 @@ function layoutCasesBody(
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
-  const axis = mathParameterToPt(fontProfile, "axisHeight", "text", baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   let baselineY = roundTexPt(-height + concreteRows[0].height);
@@ -2808,6 +2832,7 @@ function layoutCasesBody(
 function layoutArrayNucleus(
   nucleus: TexMathArrayNucleus,
   fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -2862,7 +2887,7 @@ function layoutArrayNucleus(
     lastRow.depth +
     bottomRuleHeight
   );
-  const axis = mathParameterToPt(fontProfile, "axisHeight", "text", baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   const firstBaselineY = roundTexPt(-height + topRuleHeight + concreteRows[0].height);
@@ -3026,11 +3051,11 @@ function layoutArrayRow(
     cells,
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(
-      fontProfile.layoutParameters.arrayStrutHeight,
+      fontProfile.layoutParameters.arrayStrutHeight * (fontProfile.arrayStretch ?? 1),
       ...cells.map((cell) => cell.hlist.height)
     )),
     depth: roundTexPt(Math.max(
-      fontProfile.layoutParameters.arrayStrutDepth,
+      fontProfile.layoutParameters.arrayStrutDepth * (fontProfile.arrayStretch ?? 1),
       ...cells.map((cell) => cell.hlist.depth)
     )),
   });
@@ -3358,6 +3383,7 @@ function layoutSmallMatrixBody(
 function layoutMatrixBody(
   nucleus: TexMathMatrixNucleus,
   fontProfile: TexMathFontProfile,
+  style: TexMathStyle,
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
@@ -3395,7 +3421,7 @@ function layoutMatrixBody(
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
-  const axis = mathParameterToPt(fontProfile, "axisHeight", "text", baseAtPt);
+  const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
   let baselineY = roundTexPt(-height + concreteRows[0].height);
@@ -3543,11 +3569,11 @@ function layoutMatrixRow(
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
     height: roundTexPt(Math.max(
-      minimumHeight ?? fontProfile.layoutParameters.arrayStrutHeight,
+      minimumHeight ?? fontProfile.layoutParameters.arrayStrutHeight * (fontProfile.arrayStretch ?? 1),
       ...concreteCells.map((cell) => cell.hlist.height)
     )),
     depth: roundTexPt(Math.max(
-      minimumDepth ?? fontProfile.layoutParameters.arrayStrutDepth,
+      minimumDepth ?? fontProfile.layoutParameters.arrayStrutDepth * (fontProfile.arrayStretch ?? 1),
       ...concreteCells.map((cell) => cell.hlist.depth)
     )),
   });
@@ -4139,7 +4165,9 @@ function layoutRadicalNucleus(
   const height = Math.max(
     radicand.height,
     ...radicalItems.map((item) => 0 - item.y + item.height),
-    0 - rule.y + rule.height
+    // TeX overbar adds a top kern of default_rule_thickness, which can
+    // differ from the selected radical glyph's painted bar thickness.
+    0 - rule.y + thickness
   );
   const depth = Math.max(
     radicand.depth,
@@ -4643,7 +4671,7 @@ function layoutBraceNucleus(
   const braceHeight = Math.max(...metrics.map((metric) => roundTexPt(tfmToPt(font, metric.height))));
   const braceDepth = Math.max(...metrics.map((metric) => roundTexPt(tfmToPt(font, metric.depth))));
   const braceY = nucleus.command === "overbrace"
-    ? roundTexPt(-(body.height + body.depth + 3 + braceDepth))
+    ? roundTexPt(-(body.height + 3 + braceDepth))
     : roundTexPt(body.depth + 3 + braceHeight);
   const halfWidth = roundTexPt(width / 2);
   const leftRuleWidth = roundTexPt(Math.max(0, halfWidth - widths[0] - widths[1]));
@@ -4690,17 +4718,16 @@ function layoutBraceNucleus(
       sourceSpan: nucleus.commandSourceSpan,
     }),
   ];
-  // \overbrace uses a vbox, whose reference point is its bottom; \underbrace
-  // uses a vtop, whose reference point is the first (body) row baseline.
-  const bodyY = nucleus.command === "overbrace" ? 0 - body.depth : 0;
-  const bodyChild = childHList("nucleus", bodyX, bodyY, body, nucleus.body.sourceSpan);
+  // Both reference the body row's baseline. The outer vbox retains its last
+  // row's depth, and the stock definitions include a further 3pt outside kern.
+  const bodyChild = childHList("nucleus", bodyX, 0, body, nucleus.body.sourceSpan);
   return mathAtomLayout({
     items: [bodyChild, ...rules, ...glyphs],
     width,
     height: nucleus.command === "overbrace"
-      ? roundTexPt(body.height + body.depth + 3 + braceHeight + braceDepth)
+      ? roundTexPt(body.height + 6 + braceHeight + braceDepth)
       : body.height,
-    depth: nucleus.command === "underbrace" ? roundTexPt(body.depth + 3 + braceHeight + braceDepth) : 0,
+    depth: nucleus.command === "underbrace" ? roundTexPt(body.depth + 6 + braceHeight + braceDepth) : body.depth,
     italicCorrection: 0,
     isCharacterNucleus: false,
     sourceSpan: nucleus.sourceSpan,
@@ -5881,12 +5908,9 @@ function selectRadicalDelimiter(
     return smallCandidate.delimiter;
   }
 
-  const large = fontProfile.resolveMathFont({
-    family: "extension",
-    style: "text",
-    baseAtPt,
-  });
-  const largeCandidate = selectDelimiterFromChain(large, "extension", 112, targetHeight, sourceSpan);
+  const largeCandidate = selectDelimiterFromStyleLadder(
+    fontProfile, "extension", 112, delimiterProbeStyles(style), baseAtPt, targetHeight, sourceSpan
+  );
   return largeCandidate?.delimiter ?? smallCandidate?.delimiter ?? null;
 }
 
@@ -6231,6 +6255,17 @@ function extensibleArrowMinimumWidth(
   return roundTexPt(relbarWidth + arrowWidth + muToPt(fontProfile, style, baseAtPt, -14));
 }
 
+// A tiny font around normally sized labels can otherwise expand leaders into
+// millions of glyph objects. Report unsupported layout rather than exhausting
+// the editor or fuzz worker's memory.
+const MAX_MATH_ASSEMBLY_GLYPHS = 10_000;
+
+class TexMathAssemblyLimitError extends Error {
+  constructor(readonly sourceSpan: TexMathSourceSpan) {
+    super("Extensible math assembly exceeds the glyph budget.");
+  }
+}
+
 function layoutExtensibleArrowBody(
   command: TexMathExtensibleArrowNucleus["command"],
   fontProfile: TexMathFontProfile,
@@ -6254,6 +6289,7 @@ function layoutExtensibleArrowBody(
   const minimumWidth = roundTexPt(relbarWidth + 2 * headKern + headWidth);
   const leaderWidth = Math.max(0, targetWidth - minimumWidth);
   const repeatCount = leaderUnitWidth > 0 ? Math.floor(leaderWidth / leaderUnitWidth) : 0;
+  if (repeatCount > MAX_MATH_ASSEMBLY_GLYPHS) throw new TexMathAssemblyLimitError(sourceSpan);
   const leaderMargin = roundTexPt((leaderWidth - repeatCount * leaderUnitWidth) / 2);
   const items: TexMathHListItem[] = [];
   let cursor = 0;
@@ -6381,10 +6417,8 @@ function selectDelimiterFromChain(
       break;
     }
     if (metric.varchar) {
-      return {
-        delimiter: layoutExtensibleDelimiter(font, family, metric.varchar, targetHeight, sourceSpan),
-        largeEnough: true,
-      };
+      const delimiter = layoutExtensibleDelimiter(font, family, metric.varchar, targetHeight, sourceSpan);
+      return { delimiter, largeEnough: true };
     }
     const height = charHeightPlusDepth(font, metric);
     if (height > bestHeight) {
@@ -6436,10 +6470,12 @@ function layoutExtensibleDelimiter(
   const fixedCodes = [recipe.bot, recipe.mid, recipe.top].filter((code): code is number => code !== undefined);
   let totalSize = fixedCodes.reduce((sum, code) => sum + charHeightPlusDepth(font, requiredCharMetric(font, code)), 0);
   let repeatCount = 0;
+  if (repSize <= 0 && totalSize < targetHeight) throw new TexMathAssemblyLimitError(sourceSpan);
   if (repSize > 0) {
     while (totalSize < targetHeight) {
       totalSize += repSize;
       repeatCount += 1;
+      if (repeatCount * (recipe.mid !== undefined ? 2 : 1) + fixedCodes.length > MAX_MATH_ASSEMBLY_GLYPHS) throw new TexMathAssemblyLimitError(sourceSpan);
       if (recipe.mid !== undefined) {
         totalSize += repSize;
       }
@@ -6562,7 +6598,11 @@ function layoutGlyphNucleus(
     }));
     cursor = roundTexPt(cursor + glyph.advance);
     height = Math.max(height, roundTexPt(0 - glyph.yOffset + glyphHeight));
-    depth = Math.max(depth, roundTexPt(glyph.yOffset + glyphDepth));
+    // LaTeX notin is an ooalign: its last row (in) sets the logical depth.
+    // The slash remains painted below that box, without moving nearby scripts.
+    depth = nucleus.text === String.raw`\notin`
+      ? roundTexPt(glyph.yOffset + glyphDepth)
+      : Math.max(depth, roundTexPt(glyph.yOffset + glyphDepth));
   }
   return mathAtomLayout({
     items,
@@ -6983,13 +7023,11 @@ function accentBaseSingleGlyphMetrics(
 function defaultLuaLatexMathSymbols(
   text: string
 ): readonly MathGlyphSpec[] {
-  if (/^[A-Za-z]$/.test(text)) {
-    return [{ family: "letters", code: text.charCodeAt(0) }];
+  if (!text.startsWith("\\")) {
+    const character = texMathCharacterDeclaration(text);
+    return character ? [{ family: character.family, code: character.code }] : [];
   }
-  if (/^[0-9]$/.test(text)) {
-    return [{ family: "operators", code: text.charCodeAt(0) }];
-  }
-  const command = text.startsWith("\\") ? text.slice(1) : text;
+  const command = text.slice(1);
   const declaration = texMathSymbolDeclaration(command);
   if (declaration) {
     return [{ family: declaration.family, code: declaration.code }];
@@ -7376,10 +7414,12 @@ function defaultLuaLatexMathSymbols(
     case "vdash":
       return [{ family: "symbols", code: 96 }];
     case "mid":
+    case "vert":
     case "lvert":
     case "rvert":
       return [{ family: "symbols", code: 106 }];
     case "parallel":
+    case "Vert":
     case "|":
     case "lVert":
     case "rVert":
@@ -7451,28 +7491,6 @@ function defaultLuaLatexMathSymbols(
         { family: "symbols", code: 54 },
         { family: "symbols", code: 20 },
       ];
-    case "+":
-    case "=":
-    case "(":
-    case ")":
-    case "[":
-    case "]":
-      return [{ family: "operators", code: text.charCodeAt(0) }];
-    case "-":
-      return [{ family: "symbols", code: 0 }];
-    case "*":
-      return [{ family: "symbols", code: 3 }];
-    case ",":
-      return [{ family: "letters", code: 59 }];
-    case ":":
-      return [{ family: "operators", code: 58 }];
-    case ".":
-      return [{ family: "letters", code: 58 }];
-    case "/":
-      return [{ family: "letters", code: 61 }];
-    case "<":
-    case ">":
-      return [{ family: "letters", code: text.charCodeAt(0) }];
     default:
       return [];
   }
@@ -7615,7 +7633,9 @@ function isSingleCharacterCleanBoxList(list: TexMathList): boolean {
     item?.kind === "atom" &&
     !item.subscript &&
     !item.superscript &&
-    item.nucleus.kind === "glyph";
+    (item.nucleus.kind === "glyph" ||
+      (item.atomClass === "ord" && item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined &&
+        isSingleCharacterCleanBoxList(item.nucleus.list)));
 }
 
 function childHList(

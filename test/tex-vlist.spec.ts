@@ -3608,7 +3608,7 @@ describe("TeX vlist spacing", () => {
       { kind: "paragraph", role: undefined, layout: undefined, size: undefined },
       {
         kind: "vbox",
-        role: { kind: "list", listKind: "itemize", depth: 2, labelDepth: 1, ownLeftMarginEm: 2.2, totalLeftMarginEm: 2.2 },
+        role: { kind: "list", sourceStart: 35, listKind: "itemize", depth: 2, labelDepth: 1, ownLeftMarginEm: 2.2, totalLeftMarginEm: 2.2 },
         layout: {
           leftMarginWidth: 22,
           rightMarginWidth: 0,

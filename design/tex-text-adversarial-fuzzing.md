@@ -884,7 +884,8 @@ batch may have started additional work. Candidate construction itself remains
 synchronous and structurally bounded.
 
 The richer math lane selects actual generated math subtrees without projecting
-away their syntax. It reuses the LuaLaTeX glyph/font/rule trace comparison,
+away their syntax. Display nodes retain display style while equation wrappers
+are normalized to a single math list. It reuses the LuaLaTeX glyph/font/rule trace comparison,
 calibrates simple controls, stores the TeX tool banners with findings, and emits
 replayable artifacts in `math-differential/`. Unsupported inputs or failed oracle
 compilations are recorded as uncomparable, never counted as passes. Defaults are
@@ -911,6 +912,23 @@ omit their limit boxes. Fixed regressions cover widths, centered leaders,
 upper/lower baselines, scriptscript labels, and empty labels. The Lua trace now
 expands centered leaders instead of silently skipping their painted glyphs;
 other leader subtypes explicitly make the trace uncomparable.
+
+The subsequent math-comparison follow-up expands the mandatory suite to literal
+and escaped symbols, grouped punctuation scripts, single-character operators,
+AMS stacking commands, nested arrays/cases, matrix centering in scripts and
+fractions, over/underbraces, radicals, NFSS text sizing, and logical negation
+depth. Run `node scripts/check-tex-math-symbols.mjs` after building. Nightly CI
+runs this as a blocking check and also runs the optional real-TeX math oracle
+tests. Broad generated comparisons remain diagnostic, with their JSON retained
+in the uploaded `math-differential.json` artifact.
+
+Both sides of the oracle now use the same inferred package/font context. It
+compares glyph identity and position, nonzero painted rules, and box width,
+height, and depth at 0.01pt tolerance for the mandatory suite. The shared random
+lane retains its 0.03pt tolerance. Brace rule leaders are traced, and brace paint
+is compared independent of emission order while retaining every glyph's font,
+code, position, and dimensions. Oracle compile failures include TeX diagnostics
+and remain uncomparable.
 
 Twelve short/long/empty/nested arrow formulas pass the real LuaLaTeX oracle,
 including both original unminimized findings. Painted LuaLaTeX output is saved

@@ -11,6 +11,7 @@ import { TEX_FUZZ_GENERATOR_VERSION, TEX_FUZZ_SCHEMA_VERSION } from "./model.js"
 import { mutateTexFuzzCase } from "./mutate.js";
 import { printTexFuzzAst, printTexFuzzMathAst } from "./print.js";
 import { TexFuzzRandom } from "./random.js";
+import { TEX_FUZZ_MATH_SYMBOLS, texFuzzMathSymbolFeature } from "./math-symbols.js";
 
 export interface GeneratedTexMathFuzzCase {
   readonly seed: number;
@@ -20,8 +21,8 @@ export interface GeneratedTexMathFuzzCase {
   readonly malformed: boolean;
 }
 
-const ATOMS = ["x", "y", "z", "a", "b", "1", "2", "\\alpha", "\\beta", "\\infty", "\\partial", "\\ell"] as const;
-const INFIX = ["+", "-", "=", "\\cdot", "\\leq", "\\to"] as const;
+const ATOMS = ["x", "y", "z", "a", "b", "1", "2", "\\alpha", "\\beta", "\\infty", "\\partial", "\\ell", ...TEX_FUZZ_MATH_SYMBOLS] as const;
+const INFIX = ["+", "-", "=", "/", ",", ";", ":", "\\cdot", "\\leq", "\\to"] as const;
 const ACCENTS = ["hat", "bar", "tilde", "vec", "dot", "ddot", "widehat", "widetilde"] as const satisfies readonly TexFuzzMathAccentCommand[];
 const ALPHABETS = ["mathrm", "mathbf", "mathit", "mathsf", "mathtt", "mathcal", "mathbb", "mathfrak", "boldsymbol"] as const satisfies readonly TexFuzzMathAlphabetCommand[];
 const OPERATORS = ["sum", "prod", "int", "lim", "bigcup", "bigcap"] as const;
@@ -120,9 +121,19 @@ function collectMathFeatures(node: TexFuzzMathNode, features: Set<string>, regis
   features.add(`math.${node.kind}`);
   registered?.add(`math.node.${node.kind}`);
   switch (node.kind) {
-    case "atom": break;
+    case "atom": {
+      const symbol = texFuzzMathSymbolFeature(node.value);
+      if (symbol) { features.add(symbol); registered?.add(symbol); }
+      break;
+    }
     case "group": collectMathFeatures(node.body, features, registered); break;
-    case "sequence": node.items.forEach((item) => { collectMathFeatures(item, features, registered); }); break;
+    case "sequence":
+      node.items.forEach((item) => { collectMathFeatures(item, features, registered); });
+      for (const operator of node.operators) {
+        const symbol = texFuzzMathSymbolFeature(operator);
+        if (symbol) { features.add(symbol); registered?.add(symbol); }
+      }
+      break;
     case "fraction":
       features.add(`math.fraction.${node.command}`);
       registered?.add(`math.fraction.${node.command}`);

@@ -188,7 +188,7 @@ export function DeckInspectorPanel(): JSX.Element {
     <SidePanel className={css.panel}>
       <SidePanel.Header>{rendered.title}</SidePanel.Header>
       <SidePanel.Content className={css.content}>
-        <div className={css.elementInfo}>
+        <SidePanel.SectionBody>
           {rendered.fields.length === 0 ? (
             <p className={css.hint}>This object has no editable properties yet.</p>
           ) : (
@@ -201,7 +201,7 @@ export function DeckInspectorPanel(): JSX.Element {
               />
             ))
           )}
-        </div>
+        </SidePanel.SectionBody>
       </SidePanel.Content>
     </SidePanel>
   );
@@ -324,7 +324,7 @@ function DeckField(props: {
               checked={field.value}
               onChange={(event) => { onCommit(field.write, event.currentTarget.checked); }}
             />
-            {field.label}
+            <span className={css.checkboxLabel}>{field.label}</span>
           </label>
         </div>
       );

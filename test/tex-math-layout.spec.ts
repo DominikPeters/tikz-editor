@@ -3,6 +3,7 @@ import { createBeamerTexMathFontProfile } from "../packages/core/src/beamer/them
 import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 import {
   computerModernTexMetricProvider,
+  luaLatexAmsMathFontProfile,
   layoutTexMathList,
   parseTexMath,
   resolveMathGlyph,
@@ -46,6 +47,49 @@ function flattenMathItems(items: readonly TexMathHListItem[]): readonly TexMathH
 }
 
 describe("TeX math hlist layout", () => {
+  it("bounds extensible glyph assemblies when font families have extreme relative sizes", () => {
+    const fontProfile = {
+      ...luaLatexAmsMathFontProfile,
+      resolveMathFont(request: Parameters<typeof luaLatexAmsMathFontProfile.resolveMathFont>[0]) {
+        const font = luaLatexAmsMathFontProfile.resolveMathFont(request);
+        const atPt = request.family === "letters" ? 100 : request.family === "extension" ? 1 / 65536 : font.atPt;
+        return computerModernTexMetricProvider.resolveFont({ fontId: font.id, atPt: texLength(atPt) });
+      },
+    };
+    for (const source of [String.raw`\xrightarrow{x}`, String.raw`\left|x\right|`]) {
+      const parsed = parseTexMath(source);
+      expect(parsed.diagnostics).toEqual([]);
+      const result = layoutTexMathList(parsed.list, { fontProfile, baseAtPt: texLength(1 / 65536) });
+      expect(result.supported, source).toBe(false);
+    }
+  });
+  it.each([
+    [String.raw`|X|`, 106],
+    [String.raw`\vert X\vert`, 106],
+    [String.raw`\lvert X\rvert`, 106],
+    [String.raw`\|X\|`, 107],
+    [String.raw`\Vert X\Vert`, 107],
+    [String.raw`\lVert X\rVert`, 107],
+    [String.raw`\left|X\right|`, 106],
+    [String.raw`\left\|X\right\|`, 107],
+  ])("keeps the correct single/double bar glyphs in %s", (source, code) => {
+    const result = layout(source);
+    expect(result.supported).toBe(true);
+    const bars = flattenGlyphItems(result.hlist?.items ?? []).filter(glyph => glyph.fontId === "cmsy10");
+    expect(bars.map(glyph => glyph.code)).toEqual([code, code]);
+  });
+
+  it("renders literal punctuation natively and leaves slash ordinary without binary spacing", () => {
+    const punctuation = glyphItems("!;?");
+    expect(punctuation.map(glyph => ({ font: glyph.fontId, code: glyph.code }))).toEqual([
+      { font: "cmr10", code: 33 }, { font: "cmr10", code: 59 }, { font: "cmr10", code: 63 },
+    ]);
+    const quotient = layout("a/b");
+    expect(quotient.supported).toBe(true);
+    expect(quotient.hlist?.items.some(item => item.kind === "glue" && item.source === "inter-atom")).toBe(false);
+    expect(flattenGlyphItems(quotient.hlist?.items ?? []).map(glyph => glyph.code)).toEqual([97, 61, 98]);
+  });
+
   it("resolves default LuaLaTeX math glyph families and codes for simple symbols", () => {
     const parsed = parseTexMath("a1+-=(),");
     const glyphs = parsed.list.items
@@ -2938,6 +2982,7 @@ describe("TeX math hlist layout", () => {
         y: expect.closeTo(-8.94445, 5),
         items: [{ kind: "glyph", fontId: "cmmi7", code: 97 }],
       },
+      { kind: "kern", width: 0 },
       {
         kind: "glyph",
         fontId: "cmmi10",
@@ -2950,6 +2995,7 @@ describe("TeX math hlist layout", () => {
     expect(underset.supported).toBe(true);
     expect(underset.hlist?.width).toBeCloseTo(4.337648, 6);
     expect(underset.hlist?.items).toMatchObject([
+      { kind: "kern", width: 0 },
       {
         kind: "glyph",
         fontId: "cmmi10",
@@ -2975,6 +3021,7 @@ describe("TeX math hlist layout", () => {
         x: expect.closeTo(0.49361, 5),
         y: expect.closeTo(-6.30555, 5),
       },
+      { kind: "kern", width: 0 },
       {
         kind: "glyph",
         fontId: "cmmi10",

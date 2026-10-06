@@ -303,7 +303,7 @@ export const capabilityFixtures: Record<string, string> = {
   \node at (0,0) {A \includegraphics[width=1cm]{missing-image} B};
 \end{tikzpicture}`,
   text_tabular: String.raw`\begin{tikzpicture}\node {\begin{tabular}{lr}\toprule Alpha & Value\\ \midrule Beta & 2\\ \bottomrule\end{tabular}};\end{tikzpicture}`,
-  text_math_fonts: String.raw`\begin{tikzpicture}\node {$\bm{x}_i+\boldsymbol{\alpha}+5\%$};\end{tikzpicture}`,
+  text_math_fonts: String.raw`\begin{tikzpicture}\node {$\bm{x}_i+\boldsymbol{\alpha}+5\%+|X|+\|X\|+\vert X\vert+\Vert X\Vert+a/b+n!;x?$};\end{tikzpicture}`,
   text_transform_boxes: String.raw`\begin{tikzpicture}\node {Before \rotatebox{90}{Alpha} \scalebox{.8}{Beta} After};\end{tikzpicture}`,
   beamer_frame_shrink: String.raw`\documentclass{beamer}\begin{document}\begin{frame}[shrink=20]{Title}\begin{enumerate}\item Alpha\item Beta\end{enumerate}\end{frame}\end{document}`,
   beamer_frame_flow: String.raw`\documentclass[14pt]{beamer}\begin{document}\begin{frame}{Title}\framesubtitle{Subtitle}\begin{columns}[T,onlytextwidth]\column{.4\textwidth}Left\column{.5\textwidth}Right\end{columns}\end{frame}\end{document}`,

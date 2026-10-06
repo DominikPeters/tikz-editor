@@ -8,6 +8,7 @@ import {
   SIMPLE_TEX_TEXT_BOX_COMMAND_NAMES,
 } from "@tikz-editor/core/text/tex/index.js";
 import type { TexFuzzFeatureId } from "./model.js";
+import { TEX_FUZZ_MATH_SYMBOLS } from "./math-symbols.js";
 
 export type TexFuzzFeatureMode = "text" | "math" | "mixed" | "document" | "oracle";
 export type TexFuzzFeatureCategory =
@@ -79,6 +80,10 @@ const BASE_FEATURE_DEFINITIONS = {
 } satisfies Readonly<Partial<Record<TexFuzzFeatureId, TexFuzzFeatureDefinition>>>;
 
 const GENERATED_FEATURE_DEFINITIONS: readonly (readonly [TexFuzzFeatureId, TexFuzzFeatureDefinition])[] = [
+  ...TEX_FUZZ_MATH_SYMBOLS.map((symbol) => {
+    const id = `math.symbol.${symbol}` as const;
+    return [id, definition(id, [], [`math-symbol:${symbol}`], "math", "math")] as const;
+  }),
   ...MATH_NODE_KINDS.map((kind) => {
     const id = `math.node.${kind}` as const;
     return [id, definition(id, [], [`math:${kind}`], "math", "math")] as const;

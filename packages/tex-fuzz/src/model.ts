@@ -1,7 +1,8 @@
 import type { SimpleTexDisplayMathDelimiter } from "@tikz-editor/core/text/tex/index.js";
+import type { TexFuzzMathSymbol } from "./math-symbols.js";
 
 export const TEX_FUZZ_SCHEMA_VERSION = 1 as const;
-export const TEX_FUZZ_GENERATOR_VERSION = "shared-adversarial-v2";
+export const TEX_FUZZ_GENERATOR_VERSION = "shared-adversarial-v3";
 
 export type TexFuzzFeatureId =
   | "text.literal"
@@ -12,6 +13,7 @@ export type TexFuzzFeatureId =
   | "text.color"
   | "text.accent"
   | "math.inline"
+  | `math.symbol.${TexFuzzMathSymbol}`
   | `math.node.${TexFuzzMathNode["kind"]}`
   | `math.fraction.${TexFuzzMathFractionCommand}`
   | `math.accent.${TexFuzzMathAccentCommand}`

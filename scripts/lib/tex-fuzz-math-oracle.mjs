@@ -8,8 +8,11 @@ export function texFuzzMathOracleCases(cases, limit) {
     for (const node of nodes) {
       if (selected.size >= limit) return;
       if (node.kind === "math" || node.kind === "display-math") {
-        const caseData = caseFromTexFuzzAst([node.body
-          ? { kind: "math", body: node.body } : { kind: "math", content: node.content }],
+        // Keep display style while normalizing away equation/align wrappers;
+        // this oracle compares one math list, not display-environment layout.
+        const mathNode = node.kind === "display-math"
+          ? { ...node, delimiter: "bracket" } : node;
+        const caseData = caseFromTexFuzzAst([mathNode],
         { seed: owner.seed, profile: owner.profile });
         selected.set(caseData.source, caseData);
       } else if ("children" in node) visit(node.children, owner);
@@ -24,10 +27,12 @@ export function texFuzzMathOracleCases(cases, limit) {
 
 /** Return shared findings rather than unstructured standalone-script diagnostics. */
 export function compareTexFuzzMathOracle(caseData, options = {}) {
-  if (!caseData.source.startsWith("$") || !caseData.source.endsWith("$") || caseData.source.length < 3) {
+  const display = caseData.source.startsWith(String.raw`\[`) && caseData.source.endsWith(String.raw`\]`);
+  const inline = caseData.source.startsWith("$") && caseData.source.endsWith("$") && !caseData.source.startsWith("$$");
+  if ((!display && !inline) || caseData.source.length < (display ? 5 : 3)) {
     return { compared: false, observation: null };
   }
-  const formula = caseData.source.slice(1, -1);
+  const formula = display ? String.raw`\displaystyle ` + caseData.source.slice(2, -2) : caseData.source.slice(1, -1);
   const tolerance = options.tolerance ?? 0.03;
   const result = (options.compare ?? compareFormula)(formula, tolerance, { timeoutMs: options.timeoutMs });
   const comparable = result.ours.supported && !result.mismatches.some((message) => message.startsWith("TeX oracle failed:"));

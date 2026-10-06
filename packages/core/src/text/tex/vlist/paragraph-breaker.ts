@@ -93,6 +93,23 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       })
     );
     if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {
+      if (plan.lineLabel) {
+        // Invisible list-item bodies still need a baseline for their label.
+        brokenEntries.push({
+          paragraph: { blockIndex: plan.blockIndex, vlistPath: plan.vlistPath },
+          broken: breakTexParagraphAsSingleLine({ runs, shapedRuns: blockShapedRuns,
+            measurement: runAdapter.measurement, width: lineWidth }),
+          label: plan.lineLabel.label,
+        });
+        continue;
+      }
+      // Empty/formatting-only paragraphs still own a vlist measurement. They
+      // have no painted lines, but dropping their identity breaks assembly.
+      brokenEntries.push({
+        paragraph: { blockIndex: plan.blockIndex, vlistPath: plan.vlistPath },
+        broken: { lines: [], runs: [], runWidths: new Map(), shapedRuns: new Map(),
+          errors: [], linebreakingMode: "feasible" },
+      });
       continue;
     }
 
@@ -182,7 +199,7 @@ function breakTexParagraphAsSingleLine(params: {
       lineIndex: 0,
       startRun: params.runs[0]?.runIndex ?? 0,
       startTextOffset: 0,
-      endRun: lastRun?.runIndex ?? 0,
+      endRun: lastRun?.runIndex ?? -1,
       endTextOffset: null,
       width: params.width,
       targetWidth: params.width,

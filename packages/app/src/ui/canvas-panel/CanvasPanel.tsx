@@ -1703,6 +1703,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     baseSvgResult,
     svgResult,
     viewportSize,
+    fitPadding: deckActiveFrame ? 12 : 44,
     dispatch,
     dispatchCanvasTransform,
     activeDocumentId,

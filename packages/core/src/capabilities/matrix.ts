@@ -672,7 +672,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "none",
     fixtures: ["text_math_fonts"],
-    notes: "Shared math layout supports scoped math alphabets, boldsymbol and the common bm alphabet with genuine bold fonts, class-specific Latin/operator substitutions, nested Roman alphabets, scripts and accents. Escaped percent uses the active operators font. bm's unavailable bold extension fallback (pmb) is explicitly unsupported; arbitrary math font declarations are not executed. Dedicated parser, spacing, font and LuaLaTeX glyph checks cover these contracts.",
+    notes: "Shared math layout supports literal LaTeX mathcodes, scoped math alphabets, boldsymbol and the common bm alphabet with genuine bold fonts, class-specific Latin/operator substitutions, nested Roman alphabets, scripts and accents. Literal bars and vert are single; escaped bars and Vert are double. Literal punctuation uses its declared font and atom class, including ordinary slash spacing. Escaped percent uses the active operators font. bm's unavailable bold extension fallback (pmb) is explicitly unsupported; arbitrary math font declarations are not executed. Dedicated parser, spacing, font and LuaLaTeX glyph checks cover these contracts.",
   },
   text_transform_boxes: {
     parser: "partial",

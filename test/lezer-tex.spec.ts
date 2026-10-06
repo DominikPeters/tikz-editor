@@ -33,6 +33,12 @@ function countNodes(tree: Tree, name: string): number {
 }
 
 describe("@tikz-editor/lezer-tex", () => {
+  it("closes adjacent inline dollar math before opening the next formula", () => {
+    const tree = texFragmentParser.parse("$x$$y$$z$ $$w$$");
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "InlineMath")).toBe(3);
+    expect(countNodes(tree, "DisplayMath")).toBe(1);
+  });
   it("parses source-backed TeX fragments and structured inline math", () => {
     const source = String.raw`Hello \textbf{world} and $x_1+\lambda=0$.`;
     const tree = texFragmentParser.parse(source);

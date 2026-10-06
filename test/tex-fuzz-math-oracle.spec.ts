@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { caseFromTexFuzzAst, shrinkTexFuzzCase } from "@tikz-editor/tex-fuzz";
+import { caseFromTexFuzzAst, shrinkTexFuzzCase, TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS } from "@tikz-editor/tex-fuzz";
 import { texFuzzMathOracleCases, compareTexFuzzMathOracle } from "../scripts/lib/tex-fuzz-math-oracle.mjs";
 
 import { commandExists } from "../scripts/lib/tex-fuzz-oracle.mjs";
@@ -8,6 +8,14 @@ const caseData = caseFromTexFuzzAst([{ kind: "math", body: { kind: "fraction", c
   numerator: { kind: "atom", value: "x" }, denominator: { kind: "atom", value: "y" } } }]);
 
 describe("shared math glyph differential findings", () => {
+  it.runIf(process.env.TEX_FUZZ_ORACLE_TESTS === "1" && commandExists("lualatex"))(
+    "matches mandatory symbol and layout regressions", () => {
+      for (const content of [...TEX_FUZZ_MATH_SYMBOL_ORACLE_FORMULAS, ...TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS]) {
+        const candidate = caseFromTexFuzzAst([{ kind: "math", content }]);
+        expect(compareTexFuzzMathOracle(candidate), content).toEqual({ compared: true, observation: null });
+      }
+    }, 60_000
+  );
   it("selects actual nested syntax rather than replacing generated math with prose", () => {
     const owner = caseFromTexFuzzAst([{ kind: "font", command: "textbf", children: caseData.ast }]);
     const selected = texFuzzMathOracleCases([owner, owner], 8);
@@ -27,6 +35,18 @@ describe("shared math glyph differential findings", () => {
       candidates.map((candidate) => compareTexFuzzMathOracle(candidate, { compare }).observation)
     );
     expect(shrunk.minimizedCase.source).toContain("frac");
+  });
+
+  it("preserves display style when selecting an equation for the math-list oracle", () => {
+    const owner = caseFromTexFuzzAst([{ kind: "display-math", delimiter: "equation", content: String.raw`\sum_{i=1}^n i` }]);
+    const [selected] = texFuzzMathOracleCases([owner], 1);
+    expect(selected.source).toBe(String.raw`\[\sum_{i=1}^n i\]`);
+    let comparedFormula = "";
+    expect(compareTexFuzzMathOracle(selected, { compare: formula => {
+      comparedFormula = formula;
+      return { ok: true, mismatches: [], ours: { supported: true } };
+    } })).toEqual({ compared: true, observation: null });
+    expect(comparedFormula).toBe(String.raw`\displaystyle \sum_{i=1}^n i`);
   });
 
   it("records an incomparable oracle result without claiming a successful comparison", () => {

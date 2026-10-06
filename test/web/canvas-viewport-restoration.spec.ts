@@ -15,7 +15,7 @@ const firstManual = { translateX: 130, translateY: 70, scale: 1.8 };
 const secondManual = { translateX: 25, translateY: 48, scale: .82 };
 const noop = () => {};
 type Input = { documentId: string; rootId: string; snapshotRootId: string; svg: CanvasSnapshot["svg"]; infinite: boolean;
-  tabOrder: string[]; source: string; snapshotSource: string; width: number; height: number };
+  tabOrder: string[]; source: string; snapshotSource: string; width: number; height: number; fitPadding?: number };
 let root: Root, host: HTMLDivElement, viewport: HTMLDivElement;
 let api: { transform: CanvasTransform; fit: boolean; input: Input; manual: (next: CanvasTransform) => void;
   setInput: React.Dispatch<React.SetStateAction<Input>>; fitRequest: () => void; zoom: () => void; zoomScale: () => void };
@@ -42,6 +42,7 @@ function Harness() {
   const setFitMode = useCallback((next: boolean) => { fitRef.current = next; setFit(next); }, []);
   useLayoutEffect(() => { transformRef.current = transform; fitRef.current = fit; svgRef.current = svg; });
   const { viewportStateReadyRef } = useCanvasViewportPersistence({ baseSvgResult: input.svg, svgResult: svg, viewportSize: { width: input.width, height: input.height },
+    fitPadding: input.fitPadding,
     dispatch: noop, dispatchCanvasTransform: dispatchTransform, activeDocumentId: input.documentId, activeRootId: input.rootId,
     snapshotActiveRootId: input.snapshotRootId,
     tabOrder: input.tabOrder, canvasTransform: transform, fitToContentModeActive: fit, fitToContentModeActiveRef: fitRef,
@@ -94,8 +95,8 @@ it("restores the entire manual transform and fit mode with delayed SVG and expan
   expect(api.transform).toEqual(secondManual);
 });
 
-function expectFit(base: NonNullable<CanvasSnapshot["svg"]>) {
-  const expectedScale = Math.min(4, (api.input.width - 88) / base.viewBox.width, (api.input.height - 88) / base.viewBox.height);
+function expectFit(base: NonNullable<CanvasSnapshot["svg"]>, padding = 44) {
+  const expectedScale = Math.min(4, (api.input.width - padding * 2) / base.viewBox.width, (api.input.height - padding * 2) / base.viewBox.height);
   expect(api.fit).toBe(true);
   expect(api.transform.scale).toBeCloseTo(expectedScale);
   const rendered = api.input.infinite ? expandSvgViewBox(base.viewBox, { width: api.input.width, height: api.input.height }, api.transform.scale) : base.viewBox;
@@ -103,6 +104,18 @@ function expectFit(base: NonNullable<CanvasSnapshot["svg"]>) {
   expect(api.transform.translateX + (base.viewBox.x - rendered.x) * api.transform.scale).toBeCloseTo((api.input.width - base.viewBox.width * api.transform.scale) / 2);
   expect(api.transform.translateY + (base.viewBox.y - rendered.y) * api.transform.scale).toBeCloseTo((api.input.height - base.viewBox.height * api.transform.scale) / 2);
 }
+
+it("fits slide pages with smaller margins on first visit, explicit fit, and resize", async () => {
+  await act(async () => {
+    api.setInput(input => ({ ...input, rootId: "frame:0", snapshotRootId: "frame:0", svg: secondSvg, infinite: false, fitPadding: 12 }));
+  });
+  expectFit(secondSvg, 12);
+  await manual(secondManual);
+  await act(async () => { api.fitRequest(); });
+  expectFit(secondSvg, 12);
+  await act(async () => { api.setInput(input => ({ ...input, width: 900, height: 500 })); });
+  expectFit(secondSvg, 12);
+});
 
 it.each([true, false])("restores exact saved states through repeated simultaneous root/SVG switches with infinite canvas %s", async infinite => {
   await act(async () => { api.setInput(input => ({ ...input, infinite })); });
