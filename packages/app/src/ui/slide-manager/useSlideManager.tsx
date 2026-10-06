@@ -60,11 +60,6 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
     }
     dispatch({ type: "EDIT_DECK_SLIDES", documentId, baseRevision: revision, edit: operation });
   };
-  const insert = () => {
-    const last = model?.frames.filter(frame => ids.includes(frame.id) && editable.includes(frame.id)).at(-1);
-    const destination: BeamerSlideDestination = last ? { kind: "after", frameId: last.id } : { kind: "end" };
-    edit({ kind: "insert", destination });
-  };
   const copyText = (chosen = ids) => enabled ? copyBeamerSlides(doc.source, chosen) : null;
   const copy = async (chosen = ids) => {
     const text = copyText(chosen);
@@ -128,7 +123,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
       setMenu({ revision: doc.sourceRevision, documentId, anchor: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) }, bindings });
     }
   };
-  return { ids, anchorId, select, edit, insert, copy, copyText, paste, pasteText, enabled, editable, movable, canEditSelection, canMoveSelection, contextMenu,
+  return { ids, anchorId, select, edit, copy, copyText, paste, pasteText, enabled, editable, movable, canEditSelection, canMoveSelection, contextMenu,
     selectAll: () => { dispatch({ type: "SELECT_DECK_SLIDES", documentId, baseRevision: doc.sourceRevision,
       frameIds: model?.frames.map(frame => frame.id) ?? [], anchorId }); },
     review: currentReview ? <SlideMoveReview analysis={currentReview.analysis} onClose={() => { setPending(null); }}
@@ -148,11 +143,11 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
         onCommandRun={(id, origin) => { if (menu.bindings[id].enabled) void menu.bindings[id].run(origin); }} /> : null };
 }
 const MENU_ITEMS: readonly AppMenuItem[] = [
-  { kind: "command", commandId: IDS.COPY, label: "Copy slides" },
-  { kind: "command", commandId: IDS.PASTE, label: "Paste slides" },
+  { kind: "command", commandId: IDS.COPY, label: "Copy" },
+  { kind: "command", commandId: IDS.PASTE, label: "Paste" },
   { kind: "separator" },
-  { kind: "command", commandId: IDS.DUPLICATE, label: "Duplicate slides" },
-  { kind: "command", commandId: IDS.DELETE, label: "Delete slides" },
+  { kind: "command", commandId: IDS.DUPLICATE, label: "Duplicate" },
+  { kind: "command", commandId: IDS.DELETE, label: "Delete" },
   { kind: "separator" },
   { kind: "command", commandId: IDS.UNDO, label: "Undo" },
   { kind: "command", commandId: IDS.REDO, label: "Redo" },

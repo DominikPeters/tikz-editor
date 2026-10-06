@@ -1,8 +1,5 @@
 .panel { height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--bg-pane); color: var(--text); font-size: calc(var(--app-ui-scale, 1) * 11px); }
 .toolbar { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-bottom: 1px solid var(--border-light); flex: 0 0 auto; }
-.toolbar button { border: 1px solid var(--border-light); border-radius: 3px; background: var(--bg-pane); color: var(--text); padding: 3px 8px; font: inherit; cursor: pointer; }
-.toolbar button:hover { background: var(--bg-diagnostics); }
-.toolbar button:disabled { opacity: .45; cursor: default; }
 .toolbar span { color: var(--text-muted); }
 .viewport { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
 .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; align-items: start; }
@@ -11,7 +8,7 @@
 .thumb:hover { border-color: var(--border); background: var(--bg-pane); }
 .thumb[data-selected] { background: color-mix(in srgb, var(--bg-pane) 85%, var(--accent) 15%); border-color: var(--accent); }
 .thumb[data-active] { box-shadow: 0 0 0 1px var(--accent); }
-.thumb:focus-visible, .section button:focus-visible, .toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.thumb:focus-visible, .section button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .preview { position: relative; width: 100%; aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center; background: var(--bg-pane); color: var(--text-faint); font-size: calc(var(--app-ui-scale, 1) * 10px); }
 .preview img { width: 100%; height: 100%; object-fit: contain; background: white; pointer-events: none; }
 .stepBadge { position: absolute; right: 3px; bottom: 3px; padding: 0 4px; border-radius: 3px; background: color-mix(in srgb, var(--text) 72%, transparent); color: var(--bg-pane); font-size: calc(var(--app-ui-scale, 1) * 9px); font-variant-numeric: tabular-nums; line-height: 1.5; }

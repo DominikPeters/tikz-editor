@@ -21,6 +21,8 @@ type UseFigureThumbnailsOptions = {
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   refreshDelayMs?: number;
+  /** Reuse an existing render without caching it as a final-overlay thumbnail. */
+  externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
 };
 const EMPTY_PRIORITY_FIGURE_IDS: readonly string[] = [];
 
@@ -68,8 +70,12 @@ export function useFigureThumbnails(
     graphicsPreviewBundleKey = null,
     priorityFigureIds = EMPTY_PRIORITY_FIGURE_IDS,
     maxToRender = 8,
-    refreshDelayMs = 350
+    refreshDelayMs = 350,
+    externalThumbnail
   } = options;
+  const externalFigureId = externalThumbnail?.figureId;
+  const externalDeckFrameIndex = externalThumbnail?.deckFrameIndex;
+  const externalUrl = externalThumbnail?.url;
   const [stableInput, setStableInput] = useState<{
     source: string;
     figures: readonly FigureEntry[];
@@ -136,6 +142,11 @@ export function useFigureThumbnails(
     void tick;
     const next = new Map<string, string>();
     for (const figure of figures) {
+      if (figure.id === externalFigureId && externalUrl) {
+        lastThumbnailByFigureId.set(figure.id, externalUrl);
+        next.set(figure.id, externalUrl);
+        continue;
+      }
       const signature = figureSignatures.get(figure.id);
       if (signature) {
         const cached = thumbnailCache.get(
@@ -153,7 +164,7 @@ export function useFigureThumbnails(
       }
     }
     return next;
-  }, [documentKey, figureSignatures, figures, lastThumbnailByFigureId, tick]);
+  }, [documentKey, externalFigureId, externalUrl, figureSignatures, figures, lastThumbnailByFigureId, tick]);
 
   useEffect(() => {
     if (stableFigures.length === 0 || maxToRender <= 0) {
@@ -162,6 +173,10 @@ export function useFigureThumbnails(
 
     const figureById = new Map(stableFigures.map((figure) => [figure.id, figure]));
     const missingIds = stableFigures
+      // Frame indices also exclude the previous source revision's thumbnail ID
+      // while edited frame content is acquiring a new fingerprint.
+      .filter(figure => figure.id !== externalFigureId &&
+        (externalDeckFrameIndex == null || figure.deckFrameIndex !== externalDeckFrameIndex))
       .map((figure) => figure.id)
       .filter((figureId) => {
         const signature = figureSignatures.get(figureId);
@@ -281,7 +296,7 @@ export function useFigureThumbnails(
         window.clearTimeout(timer.id);
       }
     };
-  }, [documentKey, figureKey, figureSignatures, maxToRender, priorityFigureIds, priorityKey, stableFigures, stableInput.graphicsPreviewBundleKey, stableSource]);
+  }, [documentKey, externalDeckFrameIndex, externalFigureId, figureKey, figureSignatures, maxToRender, priorityFigureIds, priorityKey, stableFigures, stableInput.graphicsPreviewBundleKey, stableSource]);
 
   return thumbnails;
 }

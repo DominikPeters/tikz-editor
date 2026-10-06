@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { scanBeamerDocument, type BeamerSlideDestination } from "@tikz-editor/core/beamer/index";
+import { resolveBeamerPageGeometry, scanBeamerDocument, type BeamerSlideDestination } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { getActiveEditorPlatform } from "../platform/current";
@@ -42,6 +42,11 @@ export function RootNavigator() {
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => collapsedByDocument.get(documentId) ?? new Set());
   const model = useMemo(() => deckMode ? scanBeamerDocument(source) : null, [deckMode, source]);
+  const previewAspectRatio = useMemo(() => {
+    if (!model) return;
+    const { page } = resolveBeamerPageGeometry(model);
+    return `${page.width} / ${page.height}`;
+  }, [model]);
   const manager = useSlideManager(model, panelRef);
   const roots: Root[] = useMemo(() => {
     const occurrences = new Map<string, number>();
@@ -138,15 +143,27 @@ export function RootNavigator() {
     lastFocusSource.current = source;
     if (!ownsFocus.current || !panelRef.current) return;
     const target = manager.ids.includes(activeRootId ?? "") ? activeRootId : manager.ids[0];
-    const button = buttons.current.get(target ?? "") ?? panelRef.current.querySelector<HTMLButtonElement>("button");
-    button?.focus();
+    const button = buttons.current.get(target ?? "");
+    (button ?? panelRef.current).focus({ preventScroll: true });
   }, [source, activeRootId, manager.ids]);
 
   const thumbnailRoots = useMemo(() => roots.map(root => ({ ...root, id: root.thumbnailId })), [roots]);
+  const mainFrame = snapshot.deck?.activeFrame;
+  const mainFrameUrl = useMemo(() => mainFrame?.svg
+    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(mainFrame.svg)}` : null, [mainFrame?.svg]);
+  const mirrorActiveFrame = rootRef?.kind === "beamer-frame";
+  const externalThumbnail = useMemo(() => {
+    if (!mirrorActiveFrame) return;
+    const root = roots.find(root => root.id === activeRootId);
+    if (!root) return;
+    return { figureId: root.thumbnailId, deckFrameIndex: root.deckFrameIndex,
+      url: mainFrame?.frameId === root.id ? mainFrameUrl : null };
+  }, [activeRootId, mainFrame?.frameId, mainFrameUrl, mirrorActiveFrame, roots]);
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
   const thumbnails = useFigureThumbnails(model ? source : snapshot.source, thumbnailRoots, {
     documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
     priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4), refreshDelayMs: 350,
+    externalThumbnail,
   });
   const clearDrag = () => { dragPreview.current?.remove(); dragPreview.current = null; drag.current = null; setDragging(false); setDrop(null); };
   const toggleSection = (id: string) => {
@@ -264,12 +281,11 @@ export function RootNavigator() {
     onPointerDownCapture={() => { ownsFocus.current = true; }}
     onFocusCapture={event => {
       ownsFocus.current = true;
-      if (event.target === event.currentTarget) buttons.current.get(manager.ids[0] ?? activeRootId ?? "")?.focus();
+      // WebKit can focus the panel on pointer down before the clicked card.
+      // Focusing the previous selection must not scroll that card into view.
+      if (event.target === event.currentTarget) buttons.current.get(manager.ids[0] ?? activeRootId ?? "")?.focus({ preventScroll: true });
     }}>
-    {deckMode ? <div className={css.toolbar}>
-      <button type="button" onClick={manager.insert} disabled={!manager.enabled}>New slide</button>
-      {manager.ids.length > 1 ? <span>{manager.ids.length} selected</span> : null}
-    </div> : null}
+    {deckMode && manager.ids.length > 1 ? <div className={css.toolbar}><span>{manager.ids.length} selected</span></div> : null}
     <div ref={viewportRef} className={css.viewport} data-testid="figure-navigator-strip" onDragOver={dragOver}
       onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDrop(null); }}
       onDrop={event => {
@@ -295,7 +311,10 @@ export function RootNavigator() {
               <button type="button" className={css.thumb} data-selected={selected || undefined} data-active={activeRootId === root.id || undefined}
                 aria-pressed={selected} aria-current={activeRootId === root.id ? "true" : undefined} aria-label={root.label} title={root.label}
                 ref={node => { if (node) buttons.current.set(root.id, node); else buttons.current.delete(root.id); }}
-                onClick={event => { if (deckMode) manager.select(root.id, event); else dispatch({ type: "SET_ACTIVE_ROOT", rootId: root.id }); }}
+                onClick={event => {
+                  event.currentTarget.focus({ preventScroll: true });
+                  if (deckMode) manager.select(root.id, event); else dispatch({ type: "SET_ACTIVE_ROOT", rootId: root.id });
+                }}
                 onContextMenu={event => { if (deckMode) manager.contextMenu(event, root.id); }}
                 draggable={deckMode && manager.enabled && manager.movable.includes(root.id)}
                 onDragStart={event => {
@@ -322,7 +341,8 @@ export function RootNavigator() {
                     event.dataTransfer.setDragImage(ghost, 24, 24);
                   }
                 }} onDragEnd={clearDrag}>
-                <div className={css.preview}>{thumbnail ? <img src={thumbnail} alt="" draggable={false} /> : <span>Rendering…</span>}
+                <div className={css.preview} style={layout === "strip" ? undefined : { aspectRatio: previewAspectRatio }}>
+                  {thumbnail ? <img src={thumbnail} alt="" draggable={false} /> : <span>Rendering…</span>}
                   {root.stepCount != null && root.stepCount > 1 ? <span className={css.stepBadge} data-testid="navigator-step-badge" title={`${root.stepCount} overlay steps`}>{root.stepCount}</span> : null}
                 </div>
                 <div className={css.label}>{root.label}</div>
