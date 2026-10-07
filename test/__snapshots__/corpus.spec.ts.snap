@@ -13,23 +13,23 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
   },
   "parse": {
     "failedHard": 0,
-    "parsedClean": 1444,
-    "parsedWithRecovery": 743,
-    "recoverableRate": 0.3397,
+    "parsedClean": 1469,
+    "parsedWithRecovery": 718,
+    "recoverableRate": 0.3283,
   },
   "sampleHardFailures": [],
   "semantic": {
     "elementTotals": {
       "circles": 431,
       "ellipses": 40,
-      "paths": 7792,
-      "texts": 4298,
-      "total": 12561,
+      "paths": 7806,
+      "texts": 4300,
+      "total": 12577,
     },
     "semanticEmptySceneRate": 0.3297,
     "semanticEmptySceneSnippets": 721,
-    "semanticErrorRate": 0.0489,
-    "semanticErrorSnippets": 107,
+    "semanticErrorRate": 0.0498,
+    "semanticErrorSnippets": 109,
     "semanticUnsupportedRate": 0.4705,
     "semanticUnsupportedSnippets": 1029,
     "semanticWarningRate": 0.4774,
@@ -40,57 +40,57 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     "pathItemTotals": {
       "commentItemRate": 0.0022,
       "commentItems": 28,
-      "coordinateItemRate": 0.4322,
-      "coordinateItems": 5495,
+      "coordinateItemRate": 0.4323,
+      "coordinateItems": 5497,
       "coordinateOperationItemRate": 0.0042,
       "coordinateOperationItems": 53,
       "keywordItemRate": 0.2409,
-      "keywordItems": 3063,
+      "keywordItems": 3064,
       "letOperationItemRate": 0.0008,
       "letOperationItems": 10,
       "nodeItemRate": 0.1139,
       "nodeItems": 1448,
       "optionItemRate": 0.1349,
-      "optionItems": 1715,
+      "optionItems": 1716,
       "plotOperationItemRate": 0.0038,
       "plotOperationItems": 48,
       "svgOperationItemRate": 0.0002,
       "svgOperationItems": 2,
       "toOperationItemRate": 0.0086,
       "toOperationItems": 109,
-      "totalPathItems": 12713,
-      "unknownPathItemRate": 0.0584,
+      "totalPathItems": 12717,
+      "unknownPathItemRate": 0.0583,
       "unknownPathItems": 742,
     },
-    "snippetCoordinateCoverageRate": 0.5085,
+    "snippetCoordinateCoverageRate": 0.5089,
     "snippetNodeCoverageRate": 0.2771,
     "snippetPathCoverageRate": 0.7796,
     "snippetsAllUnknownStatements": 430,
-    "snippetsWithCoordinateItems": 1112,
+    "snippetsWithCoordinateItems": 1113,
     "snippetsWithNodeItems": 606,
     "snippetsWithPathStatements": 1705,
     "statementTotals": {
       "foreachStatements": 164,
-      "pathStatementRate": 0.7648,
-      "pathStatements": 3710,
+      "pathStatementRate": 0.7664,
+      "pathStatements": 3711,
       "scopeStatements": 95,
-      "totalStatements": 4851,
-      "unknownStatementRate": 0.1818,
-      "unknownStatements": 882,
+      "totalStatements": 4842,
+      "unknownStatementRate": 0.1801,
+      "unknownStatements": 872,
     },
   },
   "topDiagnosticCodes": [
     {
       "code": "parse-error",
-      "count": 1136,
+      "count": 1072,
     },
     {
       "code": "missing-semicolon",
-      "count": 661,
+      "count": 615,
     },
     {
       "code": "stray-token",
-      "count": 436,
+      "count": 383,
     },
     {
       "code": "malformed-coordinate",
@@ -106,7 +106,7 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     },
     {
       "code": "missing-group-close",
-      "count": 12,
+      "count": 11,
     },
   ],
   "topRecoveryFiles": [
@@ -115,7 +115,7 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
       "filePath": "pgfmanual-en-dv-stylesheets.tex",
     },
     {
-      "count": 69,
+      "count": 68,
       "filePath": "pgfmanual-en-tikz-animations.tex",
     },
     {
@@ -123,16 +123,16 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
       "filePath": "pgfmanual-en-dv-axes.tex",
     },
     {
-      "count": 32,
+      "count": 31,
       "filePath": "pgfmanual-en-tikz-shapes.tex",
-    },
-    {
-      "count": 24,
-      "filePath": "pgfmanual-en-base-transformations.tex",
     },
     {
       "count": 23,
       "filePath": "pgfmanual-en-library-plot-handlers.tex",
+    },
+    {
+      "count": 21,
+      "filePath": "pgfmanual-en-base-transformations.tex",
     },
     {
       "count": 19,
@@ -154,7 +154,7 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
   "topSemanticDiagnosticCodes": [
     {
       "code": "unsupported-statement",
-      "count": 1280,
+      "count": 1186,
     },
     {
       "code": "foreach-body-parse-error",
@@ -204,7 +204,7 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
   "topSemanticUnsupportedCodes": [
     {
       "code": "unsupported-statement",
-      "count": 1280,
+      "count": 1186,
     },
     {
       "code": "unsupported-option-key:sibling angle",

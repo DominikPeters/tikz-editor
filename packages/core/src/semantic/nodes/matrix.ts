@@ -177,6 +177,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
     for (let column = 0; column < colCount; column += 1) {
       const rawCell = rawRow.cells[column] ?? {
         raw: "",
+        structure: "",
         span: { from: params.item.textSpan.from, to: params.item.textSpan.from }
       };
       const parsedCell = parseMatrixCell(rawCell, params.matrixMode);
@@ -1231,10 +1232,11 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
     cursor += 1;
   }
 
-  rows.push(splitMatrixRowCells(input.slice(start), cellSeparator, baseOffset + start, structure.slice(start)));
-  while (rows.length > 1 && rows[rows.length - 1]?.cells.every((cell) => cell.raw.trim().length === 0)) {
-    rows.pop();
-    rowGapOverrides.pop();
+  const tail = splitMatrixRowCells(input.slice(start), cellSeparator, baseOffset + start, structure.slice(start));
+  // A final row separator leaves an uncommitted whitespace tail. Rows already
+  // terminated by a separator remain real rows even when every cell is empty.
+  if (rows.length === 0 || tail.cells.length > 1 || tail.cells.some(cell => cell.raw.trim().length > 0)) {
+    rows.push(tail);
   }
 
   return { rows, rowGapOverrides };

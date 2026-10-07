@@ -9,6 +9,45 @@ import {
 import { evaluateSemantic } from "./semantic/helpers.js";
 
 describe("semantic matrix nodes", () => {
+  it.each([
+    String.raw`& & \\ & & \\ & & \\`,
+    String.raw`A & & \\ & & \\ & & \\`,
+    String.raw`& & \\ & & \\ A & & \\`,
+    String.raw`& & \\ & & \\ & &`
+  ])("preserves explicitly separated empty rows in %s (#31)", body => {
+    const source = String.raw`\begin{tikzpicture}
+\matrix (test) [matrix of nodes,nodes in empty cells,nodes={draw=red,minimum height=1cm,minimum width=1cm},draw] {${body}};
+\draw (test-3-3) -- (test-1-1);
+\end{tikzpicture}`;
+    const result = evaluateSemantic(source);
+    expect(result.diagnostics).toEqual([]);
+    const boxes = result.scene.elements.filter(element => element.kind === "Path" && element.id.includes(":matrix-cell:"));
+    expect(boxes).toHaveLength(9);
+    const mode = resolveMatrixMode(parseOptionListRaw("[matrix of nodes,nodes in empty cells]"));
+    expect(parseMatrixRowsForEdit(body, mode.cellSeparator, 200).rows.map(row => row.cells.length)).toEqual([3, 3, 3]);
+    const target = resolveMatrixCellEditTarget(body, { from: 200, to: 200 + body.length }, mode, 3, 3);
+    expect(target).not.toBeNull();
+    expect(body.slice(target!.textSpan.from - 200, target!.textSpan.to - 200)).toBe("");
+  });
+
+  it("keeps empty single-cell rows and their row gap overrides (#31)", () => {
+    const body = String.raw`\\[4pt] \\[6pt] \\`;
+    expect(parseMatrixRowsForEdit(body, "&", 0).rows.map(row => row.cells.length)).toEqual([1, 1, 1]);
+    const source = String.raw`\begin{tikzpicture}\matrix (m) [matrix of nodes,nodes in empty cells,nodes={draw,minimum height=1cm}] {${body}};\end{tikzpicture}`;
+    const result = evaluateSemantic(source);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.scene.elements.filter(element => element.kind === "Path" && element.id.includes(":matrix-cell:"))).toHaveLength(3);
+  });
+
+  it("pads ragged rows with empty cell structures (#31)", () => {
+    const source = String.raw`\begin{tikzpicture}
+\matrix [matrix of nodes,nodes in empty cells,nodes={draw}] { A & B \\ C \\ & \\ };
+\end{tikzpicture}`;
+    const result = evaluateSemantic(source);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.scene.elements.filter(element => element.kind === "Path" && element.id.includes(":matrix-cell:"))).toHaveLength(6);
+  });
+
   it("renders matrix containers through the supported node shape dispatch", () => {
     const shapes = [
       "chamfered rectangle",
