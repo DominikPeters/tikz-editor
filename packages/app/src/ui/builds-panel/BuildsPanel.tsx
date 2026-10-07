@@ -97,7 +97,21 @@ export function BuildsPanel() {
     } else dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null });
   }, [activeSelection, dispatch, documentId, model, publishSelection, selected, selection?.model, sourceRevision, step]);
 
-  useEffect(() => () => { dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null }); }, [dispatch]);
+  const mountGeneration = useRef(0);
+  useEffect(() => {
+    const lifetime = mountGeneration;
+    const owner = ++lifetime.current;
+    return () => {
+      const selectionAtClose = useEditorStore.getState().deckBuildSelection;
+      // StrictMode simulates an unmount before remounting the same owner.
+      // A real close must also not erase a newer panel/frame selection.
+      queueMicrotask(() => {
+        if (lifetime.current === owner && useEditorStore.getState().deckBuildSelection === selectionAtClose) {
+          dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null });
+        }
+      });
+    };
+  }, [dispatch]);
 
   const select = (row: BeamerBuildRow) => {
     if (!model) return;

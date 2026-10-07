@@ -10,7 +10,7 @@ import {
 import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
 import { rootKey } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
-import { computeSnapshot, makeEmptySnapshot, type ComputeRequest, type ComputeResponse } from "../compute";
+import { computeSnapshot, makeEmptySnapshot, deckPageCacheStats, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
 import { useActiveDocumentAssetWatches } from "./useActiveDocumentAssetWatches";
 import { applyEditAction } from "@tikz-editor/core/edit/actions";
@@ -47,7 +47,9 @@ import type { AssistantEvent, UpdateInfo, UpdateInstallProgress } from "../platf
 import { resolveOpenedFileForDocument, dataTransferHasFilePayload } from "./svg-import";
 import type { AssistantComposerImageAttachment } from "./assistant-image-attachments";
 import { formatEquationText, type EquationNodeTarget } from "./equation-utils";
-import { useDebouncedEffect } from "./hooks/useDebouncedEffect";
+import { useScheduledCompute } from "./hooks/useScheduledCompute";
+import { useDeckNeighborPrewarm } from "./hooks/useDeckNeighborPrewarm";
+import type { ComputeSchedulingInput } from "./compute-scheduling";
 import { useDocumentFileOperations } from "./useDocumentFileOperations";
 import type { DocumentFileRef } from "../store/types";
 import { createArxivVirtualFileName, type ArxivPaperSession, type ArxivTikzCandidate } from "../arxiv-source";
@@ -234,10 +236,14 @@ export function App() {
     activeInspectorEditDocumentId,
     activeDeckStep,
     textEditMaskSpan,
+    sourceChangeOrigin,
+    canvasTextEditActive,
     dispatch
   } = useEditorStore(useShallow((s) => ({
     source: s.source,
     sourceRevision: s.sourceRevision,
+    sourceChangeOrigin: s.documents[s.activeDocumentId]?.lastSourceChangeOrigin ?? "edit-command",
+    canvasTextEditActive: s.activeCanvasTextEditSourceId != null,
     snapshot: s.snapshot,
     activeRootId: s.activeRootId,
     activeDeckStep:
@@ -837,23 +843,9 @@ export function App() {
     setDragRenderViewBox((current) => current ?? snapshot.svg?.viewBox ?? null);
   }, [isInteractiveEdit, snapshot.svg?.viewBox]);
   const renderViewBox = isInteractiveEdit ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
-  const typingComputeDelay = trigger === "other" && changedSourceIds == null
-    ? (source.length > 80_000 ? 220 : 120)
-    : null;
-
-  // Typing may debounce the next render for 120–220 ms. Stop an obsolete
-  // evaluation as soon as the source changes, before that timer fires.
-  useLayoutEffect(() => {
-    computeSchedulerRef.current?.invalidate();
-  }, [source, activeDocumentId, activeRootId, activeDeckStep, textEditMaskSpan, imageAssetRefreshToken]);
-
-  useEffect(() => {
-    const scheduler = computeSchedulerRef.current;
-    if (!scheduler || typingComputeDelay != null) {
-      return;
-    }
-    scheduler.schedule({
-      id: crypto.randomUUID(),
+  const publishedDeckSnapshot = snapshot.deck ? snapshot : null;
+  const computeInput = useMemo<ComputeSchedulingInput>(() => ({
+    request: {
       documentId: activeDocumentId,
       kind: "render",
       source,
@@ -867,31 +859,19 @@ export function App() {
       trigger,
       renderViewBox,
       textEditMaskSpan
-    });
-  }, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceRevision, textEditMaskSpan, trigger, typingComputeDelay]);
-
-  useDebouncedEffect(() => {
-    const scheduler = computeSchedulerRef.current;
-    if (!scheduler || typingComputeDelay == null) {
-      return;
-    }
-    scheduler.schedule({
-      id: crypto.randomUUID(),
-      documentId: activeDocumentId,
-      kind: "render",
-      inferSourceChanges: true,
-      source,
-      sourceRevision,
-      documentFileRef: activeDocumentFileRef,
-      activeRootId,
-      deckStep: activeDeckStep,
-      changedSourceIds,
-      patches: lastEditPatches ? [...lastEditPatches] : null,
-      patchBaseRevision: lastEditPatchBaseRevision,
-      trigger,
-      textEditMaskSpan
-    });
-  }, typingComputeDelay, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, changedSourceIds, dispatch, imageAssetRefreshToken, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, textEditMaskSpan, trigger, typingComputeDelay]);
+    },
+    sourceChangeOrigin,
+    dragKind: activeCanvasDragKind,
+    sourceScrubActive: activeSourceScrubSourceId != null,
+    inspectorEditActive: activeInspectorEditDocumentId === activeDocumentId,
+    canvasTextEditActive,
+    assetRefreshToken: imageAssetRefreshToken,
+    publishedDeckSnapshot
+  }), [activeCanvasDragKind, activeDeckStep, activeDocumentFileRef, activeDocumentId, activeInspectorEditDocumentId,
+    activeRootId, activeSourceScrubSourceId, canvasTextEditActive, changedSourceIds, imageAssetRefreshToken,
+    lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceChangeOrigin, sourceRevision, textEditMaskSpan, trigger, publishedDeckSnapshot]);
+  useScheduledCompute(computeSchedulerRef, computeInput);
+  useDeckNeighborPrewarm();
 
   useEffect(() => {
     let prewarmTimer: number | null = null;
@@ -907,6 +887,7 @@ export function App() {
     const isPrewarmable = (state: ReturnType<typeof useEditorStore.getState>, hoveredElementId: string | null): hoveredElementId is string => (
       state.activeCanvasDragKind == null &&
       state.activeSourceScrubSourceId == null &&
+      state.snapshot.deck == null &&
       state.pendingRequestId == null &&
       hoveredElementId != null &&
       state.snapshot.source === state.source
@@ -1378,6 +1359,7 @@ export function App() {
         }>;
         resetProfilingSession: (label?: string | null) => void;
         getProfilingSnapshot: () => ReturnType<typeof readAppProfilingSnapshot>;
+        getDeckCacheStats: () => ReturnType<typeof deckPageCacheStats>;
       };
     };
     globalLike.__TIKZ_EDITOR_APP_TEST_API__ = {
@@ -1488,7 +1470,8 @@ export function App() {
       },
       getProfilingSnapshot: () => {
         return readAppProfilingSnapshot();
-      }
+      },
+      getDeckCacheStats: deckPageCacheStats
     };
     return () => {
       delete globalLike.__TIKZ_EDITOR_APP_TEST_API__;

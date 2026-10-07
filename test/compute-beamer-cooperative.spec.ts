@@ -12,6 +12,10 @@ function request(source: string, activeRootId = "frame:0"): ComputeRequest {
 }
 function comparable(response: Awaited<ReturnType<typeof computeSnapshot>>): unknown {
   const { revision: _revision, textLayoutContext: _context, ...snapshot } = response.snapshot;
+  if (snapshot.deck) {
+    const { cacheEpoch: _epoch, ...deck } = snapshot.deck;
+    snapshot.deck = deck;
+  }
   return JSON.parse(JSON.stringify({ snapshot, diagnostics: response.diagnostics }));
 }
 

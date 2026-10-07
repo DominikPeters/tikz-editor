@@ -48,6 +48,10 @@ export function RootNavigator() {
     return `${page.width} / ${page.height}`;
   }, [model]);
   const manager = useSlideManager(model, panelRef);
+  // A new active-frame SVG does not change the deck inventory. Keep card and
+  // thumbnail inputs stable instead of rebuilding them for every snapshot.
+  const deckFrames = snapshot.source === source ? snapshot.deck?.frames : undefined;
+  const figures = model ? undefined : snapshot.figures;
   const roots: Root[] = useMemo(() => {
     const occurrences = new Map<string, number>();
     return model ? model.frames.map((frame, i) => {
@@ -55,9 +59,9 @@ export function RootNavigator() {
       const occurrence = occurrences.get(fingerprint) ?? 0; occurrences.set(fingerprint, occurrence + 1);
       return { id: frame.id, span: frame.span, label: frame.title?.value ? `${i + 1}. ${frame.title.value}` : `Slide ${i + 1}`,
         thumbnailId: `slide:${fingerprint}:${occurrence}`, deckFrameIndex: i,
-        stepCount: snapshot.source === source ? snapshot.deck?.frames[i]?.stepCount : undefined };
-    }) : snapshot.figures.map((figure, i) => ({ id: figure.id, span: figure.span, label: `Figure ${i + 1} (L${figure.startLine})`, thumbnailId: figure.id }));
-  }, [model, snapshot, source]);
+        stepCount: deckFrames?.[i]?.stepCount };
+    }) : (figures ?? []).map((figure, i) => ({ id: figure.id, span: figure.span, label: `Figure ${i + 1} (L${figure.startLine})`, thumbnailId: figure.id }));
+  }, [model, deckFrames, figures, source]);
   const entries = useMemo(() => {
     if (!model) return roots.map<Entry>(root => ({ kind: "frame", root }));
     const byId = new Map(roots.map(root => [root.id, root]));

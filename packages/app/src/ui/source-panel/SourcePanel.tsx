@@ -1,3 +1,4 @@
+import { useAfterCanvasPaint } from "../hooks/useAfterCanvasPaint";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { clamp } from "@tikz-editor/core/utils/math";
 import { useShallow } from "zustand/react/shallow";
@@ -788,6 +789,7 @@ export function SourcePanel() {
     lastEditPatches,
     lastEditPatchBaseRevision,
     activeRootId,
+    deckNavigationSource,
     snapshot,
     activeCanvasDragKind,
     activeCanvasTextEditSourceId,
@@ -807,6 +809,7 @@ export function SourcePanel() {
     lastEditPatches: s.lastEditPatches,
     lastEditPatchBaseRevision: s.lastEditPatchBaseRevision,
     activeRootId: s.activeRootId,
+    deckNavigationSource: s.documents[s.activeDocumentId]?.deckSlideSelection?.source === s.source ? s.source : null,
     snapshot: s.snapshot,
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeCanvasTextEditSourceId: s.activeCanvasTextEditSourceId,
@@ -857,13 +860,7 @@ export function SourcePanel() {
   const activeRootIdRef = useRef(activeRootId);
   const [activeColorPicker, setActiveColorPicker] = useState<ActiveColorPickerSession | null>(null);
   const projectNamedColorSwatches = useProjectNamedColorSwatches();
-  const figureOverlaySignature = useMemo(
-    () =>
-      !hasMultipleRoots(figures.length)
-        ? `${activeRootId ?? ""}:single:${source.length}`
-        : `${activeRootId ?? ""}:${source.length}:${figures.map((figure) => `${figure.id}:${figure.span.from}:${figure.span.to}`).join("|")}`,
-    [activeRootId, figures, source.length]
-  );
+
 
   useEffect(() => {
     selectedElementIdsRef.current = selectedElementIds;
@@ -1132,12 +1129,12 @@ export function SourcePanel() {
     if (selected.revealSource) view.focus();
   }, [activeDocumentId, activeRootId, deckBuildSelection, showSourcePanel, sourceRevision]);
 
-  const lastSourceReveal = useRef<typeof sourceReveal>(null);
+  const lastSourceReveal = useRef<{ value: typeof sourceReveal; view: EditorView } | null>(null);
   useEffect(() => {
     const view = viewRef.current;
-    if (!view || !showSourcePanel || !sourceReveal || lastSourceReveal.current === sourceReveal ||
+    if (!view || !showSourcePanel || !sourceReveal || (lastSourceReveal.current?.value === sourceReveal && lastSourceReveal.current.view === view) ||
       sourceReveal.documentId !== activeDocumentId || sourceReveal.sourceRevision !== sourceRevision) return;
-    lastSourceReveal.current = sourceReveal;
+    lastSourceReveal.current = { value: sourceReveal, view };
     ignoreNextSelectionSyncRef.current = true;
     dispatchSelectionWithStableHorizontalScroll(view, {
       selection: { anchor: sourceReveal.span.from, head: sourceReveal.span.to },
@@ -1146,7 +1143,7 @@ export function SourcePanel() {
     view.focus();
   }, [sourceReveal, activeDocumentId, sourceRevision, showSourcePanel]);
 
-  const revealedPlaceholderSelectionRef = useRef<typeof deckObjectSelection>(null);
+  const revealedPlaceholderSelectionRef = useRef<{ value: typeof deckObjectSelection; view: EditorView } | null>(null);
   useEffect(() => {
     const view = viewRef.current;
     const frame = snapshot.deck?.activeFrame;
@@ -1154,7 +1151,7 @@ export function SourcePanel() {
       !view ||
       !showSourcePanel ||
       !deckObjectSelection ||
-      revealedPlaceholderSelectionRef.current === deckObjectSelection ||
+      (revealedPlaceholderSelectionRef.current?.value === deckObjectSelection && revealedPlaceholderSelectionRef.current.view === view) ||
       deckObjectSelection.documentId !== activeDocumentId ||
       deckObjectSelection.frameId !== frame?.frameId ||
       snapshot.source !== source
@@ -1167,7 +1164,7 @@ export function SourcePanel() {
     if (!item || item.visibility === "hidden") {
       return;
     }
-    revealedPlaceholderSelectionRef.current = deckObjectSelection;
+    revealedPlaceholderSelectionRef.current = { value: deckObjectSelection, view };
     ignoreNextSelectionSyncRef.current = true;
     dispatchSelectionWithStableHorizontalScroll(view, {
       selection: { anchor: item.sourceSpan.from, head: item.sourceSpan.to },
@@ -1237,13 +1234,14 @@ export function SourcePanel() {
     });
   }, [selectedElementIds]);
 
-  const prevActiveFigureIdRef = useRef(activeRootId);
+  const prevActiveFigureRef = useRef<{ rootId: string | null; navigationSource: string | null; view: EditorView | null }>({ rootId: activeRootId, navigationSource: deckNavigationSource, view: null });
   const syncActiveFigureSelection = useCallback(() => {
     const view = viewRef.current;
     // A slide edit changes source and root selection before the new render
     // snapshot and the coalesced CodeMirror update arrive. Do not consume the
     // root change using positions from either older document.
-    if (!view || snapshot.source !== source || view.state.doc.toString() !== source) {
+    if (!view || snapshot.source !== source || view.state.doc.toString() !== source ||
+      (snapshot.deck && snapshot.activeRootId !== activeRootId)) {
       return;
     }
     const activeFigure = figures.find((figure) => figure.id === activeRootId);
@@ -1252,8 +1250,9 @@ export function SourcePanel() {
     }
     // Only scroll to figure top when the active figure actually changes,
     // not on every reparse (which updates the `figures` array reference).
-    const figureChanged = prevActiveFigureIdRef.current !== activeRootId;
-    prevActiveFigureIdRef.current = activeRootId;
+    const figureChanged = prevActiveFigureRef.current.view !== view || prevActiveFigureRef.current.rootId !== activeRootId ||
+      (deckNavigationSource != null && prevActiveFigureRef.current.navigationSource !== deckNavigationSource);
+    prevActiveFigureRef.current = { rootId: activeRootId, navigationSource: deckNavigationSource, view };
     if (!figureChanged) {
       return;
     }
@@ -1277,9 +1276,21 @@ export function SourcePanel() {
     view.dispatch({
       effects: EditorView.scrollIntoView(anchor, { y: "start", yMargin: 8 })
     });
-  }, [activeRootId, figures, snapshot.source, source]);
+  }, [activeRootId, deckNavigationSource, figures, snapshot.source, snapshot.deck, snapshot.activeRootId, source]);
 
-  // ── Sync store source → CodeMirror (for WYSIWYG changes) ───────────────────
+  const syncSourceCosmetics = useCallback(() => {
+    syncActiveFigureSelection();
+    const view = viewRef.current;
+    if (view?.state.doc.toString() === source) {
+      view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
+    }
+  }, [activeRootId, figures, snapshot.source, source, syncActiveFigureSelection]);
+  const sourceCosmeticsReady = snapshot.source === source &&
+    (!snapshot.deck || snapshot.activeRootId === activeRootId);
+  const scheduleSourceCosmetics = useAfterCanvasPaint(syncSourceCosmetics, sourceCosmeticsReady);
+
+  // Buffer and edit bookkeeping remain immediate; only auto-scroll/dimming
+  // wait until the current canvas has had a paint opportunity.
   useExternalSourceSync(
     viewRef,
     source,
@@ -1288,18 +1299,8 @@ export function SourcePanel() {
     lastEditPatchBaseRevision,
     activeCanvasDragKind != null || lastEditPatches != null,
     activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0,
-    syncActiveFigureSelection
+    scheduleSourceCosmetics
   );
-
-  useEffect(syncActiveFigureSelection, [syncActiveFigureSelection]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    view.dispatch({ effects: setFigureOverlay.of({ source: snapshot.source, figures, activeRootId }) });
-  }, [activeRootId, figureOverlaySignature, figures, snapshot.source]);
 
   useEffect(() => {
     if (!activeColorPicker) {

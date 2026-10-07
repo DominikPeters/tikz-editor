@@ -1,3 +1,4 @@
+import { deckPageDerived } from "../../deck-page-derived-cache";
 import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit } from "../../edit-execution";
 import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
@@ -495,6 +496,9 @@ export const CanvasPanel = memo(function CanvasPanel({
   // same SVG pipeline. Scene and edit handles are empty, so tikz
   // interactions are inert; the reducer additionally rejects edit actions.
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
+  const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const deckFrameFresh = !!deckActiveFrame && snapshot.source === source && deckActiveFrame.frameId === activeRootId &&
+    deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));
   const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
   const deckBuildSelectionRects = useMemo(() => {
     if (!deckActiveFrame || !deckBuildSelection || snapshot.source !== source ||
@@ -508,19 +512,21 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!deckActiveFrame) {
       return null;
     }
-    const paragraphs = deckActiveFrame.layout.paragraphs;
-    const reports = paragraphs.map((paragraph) => paragraph.report);
-    const layouts = paragraphs.map((paragraph) => ({
-      paragraphId: paragraph.paragraphId,
-      layout: paragraph.vlistLayout
-    }));
-    const layoutsByParagraph = new Map(layouts.map((entry) => [entry.paragraphId, entry.layout]));
-    return createTextLayoutContext({
-      getParagraphReports: () => reports,
-      getVListLayouts: () => layouts,
-      getVListLayout: (paragraphId) => layoutsByParagraph.get(paragraphId) ?? null,
+    return deckPageDerived(deckActiveFrame, snapshot.source, "text-context", () => {
+      const paragraphs = deckActiveFrame.layout.paragraphs;
+      const reports = paragraphs.map((paragraph) => paragraph.report);
+      const layouts = paragraphs.map((paragraph) => ({
+        paragraphId: paragraph.paragraphId,
+        layout: paragraph.vlistLayout
+      }));
+      const layoutsByParagraph = new Map(layouts.map((entry) => [entry.paragraphId, entry.layout]));
+      return createTextLayoutContext({
+        getParagraphReports: () => reports,
+        getVListLayouts: () => layouts,
+        getVListLayout: (paragraphId) => layoutsByParagraph.get(paragraphId) ?? null,
+      });
     });
-  }, [deckActiveFrame]);
+  }, [deckActiveFrame, snapshot.source]);
   const textLayoutContext =
     deckTextLayoutContext ?? snapshot.textLayoutContext ?? null;
   const deckSvgResult = useMemo(
@@ -1327,152 +1333,155 @@ export const CanvasPanel = memo(function CanvasPanel({
       maskRanges: Span[];
       anchorBounds: SvgBounds | null;
     };
-    const scopesById = new Map<string, DeckScopeEntry>();
-    const paragraphById = new Map<string, DeckParagraph>();
-    const regions: HitRegion[] = [];
-    const atomSpanByRegionKey = new Map<string, Span>();
     const layout = deckActiveFrame?.layout;
     if (!layout) {
-      return { scopesById, paragraphById, regions, atomSpanByRegionKey };
+      return { scopesById: new Map<string, DeckScopeEntry>(), paragraphById: new Map<string, DeckParagraph>(),
+        regions: [] as HitRegion[], atomSpanByRegionKey: new Map<string, Span>() };
     }
-    const editScopes = layout.editScopes ?? [];
-    for (const scope of editScopes) {
-      scopesById.set(scope.id, {
-        scope,
-        scopeParagraphs: [],
-        maskRanges: [],
-        anchorBounds: null
-      });
-    }
-    for (const paragraph of layout.paragraphs) {
-      paragraphById.set(paragraph.paragraphId, paragraph);
-      // Chrome text (headline/footline) can mirror preamble metadata spans;
-      // it never participates in editing sessions.
-      if (paragraph.role === "headline" || paragraph.role === "footline") {
-        continue;
+    return deckPageDerived(deckActiveFrame, snapshot.source, "editing-topology", () => {
+      const scopesById = new Map<string, DeckScopeEntry>();
+      const paragraphById = new Map<string, DeckParagraph>();
+      const regions: HitRegion[] = [];
+      const atomSpanByRegionKey = new Map<string, Span>();
+      const editScopes = layout.editScopes ?? [];
+      for (const scope of editScopes) {
+        scopesById.set(scope.id, {
+          scope,
+          scopeParagraphs: [],
+          maskRanges: [],
+          anchorBounds: null
+        });
       }
-      const scope = resolveBeamerEditScopeAt(editScopes, paragraph.sourceSpan.from);
-      if (!scope || paragraph.sourceSpan.to > scope.span.to) {
-        continue;
+      for (const paragraph of layout.paragraphs) {
+        paragraphById.set(paragraph.paragraphId, paragraph);
+        // Chrome text (headline/footline) can mirror preamble metadata spans;
+        // it never participates in editing sessions.
+        if (paragraph.role === "headline" || paragraph.role === "footline") {
+          continue;
+        }
+        const scope = resolveBeamerEditScopeAt(editScopes, paragraph.sourceSpan.from);
+        if (!scope || paragraph.sourceSpan.to > scope.span.to) {
+          continue;
+        }
+        const entry = scopesById.get(scope.id);
+        if (!entry) {
+          continue;
+        }
+        entry.scopeParagraphs.push({
+          paragraphId: paragraph.paragraphId,
+          sourceSpan: paragraph.sourceSpan,
+          bounds: paragraph.bounds
+        });
+        entry.anchorBounds = entry.anchorBounds
+          ? svgBounds(
+              pt(Math.min(entry.anchorBounds.minX, paragraph.bounds.x)),
+              pt(Math.min(entry.anchorBounds.minY, paragraph.bounds.y)),
+              pt(Math.max(entry.anchorBounds.maxX, paragraph.bounds.x + paragraph.bounds.width)),
+              pt(Math.max(entry.anchorBounds.maxY, paragraph.bounds.y + paragraph.bounds.height))
+            )
+          : svgBounds(
+              pt(paragraph.bounds.x),
+              pt(paragraph.bounds.y),
+              pt(paragraph.bounds.x + paragraph.bounds.width),
+              pt(paragraph.bounds.y + paragraph.bounds.height)
+            );
+        const pushRegion = (key: string, bounds: { x: number; y: number; width: number; height: number }) => {
+          regions.push({
+            shape: "rect",
+            key,
+            sourceId: scope.id,
+            targetId: scope.id,
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            cx: bounds.x + bounds.width / 2,
+            cy: bounds.y + bounds.height / 2,
+            rotation: 0,
+            interactionMode: "text",
+            pointerMode: "fill",
+            sceneTextKey: paragraph.paragraphId,
+            contentWidth: bounds.width,
+            contentHeight: bounds.height
+          });
+        };
+        for (const editable of paragraph.editableTextSpans) {
+          // Math islands are click-into targets, but only structure-free
+          // prose runs are safe to mask during edits.
+          if (editable.kind === "text") {
+            entry.maskRanges.push(editable.span);
+          }
+          editable.hitBounds.forEach((bounds, index) => {
+            pushRegion(`deck-text:${editable.id}:${index}`, bounds);
+          });
+        }
+        // Atomic renders (macro output) select their invocation span.
+        for (const atom of paragraph.atomicRenderSpans ?? []) {
+          atom.hitBounds.forEach((bounds, index) => {
+            const key = `deck-atom:${atom.id}:${index}`;
+            atomSpanByRegionKey.set(key, atom.span);
+            pushRegion(key, bounds);
+          });
+        }
       }
-      const entry = scopesById.get(scope.id);
-      if (!entry) {
-        continue;
-      }
-      entry.scopeParagraphs.push({
-        paragraphId: paragraph.paragraphId,
-        sourceSpan: paragraph.sourceSpan,
-        bounds: paragraph.bounds
-      });
-      entry.anchorBounds = entry.anchorBounds
-        ? svgBounds(
-            pt(Math.min(entry.anchorBounds.minX, paragraph.bounds.x)),
-            pt(Math.min(entry.anchorBounds.minY, paragraph.bounds.y)),
-            pt(Math.max(entry.anchorBounds.maxX, paragraph.bounds.x + paragraph.bounds.width)),
-            pt(Math.max(entry.anchorBounds.maxY, paragraph.bounds.y + paragraph.bounds.height))
-          )
-        : svgBounds(
-            pt(paragraph.bounds.x),
-            pt(paragraph.bounds.y),
-            pt(paragraph.bounds.x + paragraph.bounds.width),
-            pt(paragraph.bounds.y + paragraph.bounds.height)
-          );
-      const pushRegion = (key: string, bounds: { x: number; y: number; width: number; height: number }) => {
+      // Frame-level atoms: embedded tikzpictures and graphics select their
+      // whole source span in the enclosing scope's session.
+      const frameAtoms = [
+        ...layout.embeddedTikz.map((tikz) => ({
+          id: tikz.itemId,
+          span: tikz.sourceSpan,
+          bounds: tikz.bounds,
+          visible: true
+        })),
+        ...layout.graphics.map((graphics) => ({
+          id: graphics.itemId,
+          span: graphics.sourceSpan,
+          bounds: graphics.bounds,
+          visible: graphics.visibility === "visible"
+        }))
+      ];
+      for (const atom of frameAtoms) {
+        if (!atom.visible) {
+          continue;
+        }
+        const scope = resolveBeamerEditScopeAt(editScopes, atom.span.from);
+        const entry = scope ? scopesById.get(scope.id) : undefined;
+        if (!scope || !entry) {
+          continue;
+        }
+        // Atom-only scopes (e.g. a drawing-only frame body) have no rendered
+        // paragraphs; the atom itself anchors the session surface.
+        const anchorParagraph = entry.scopeParagraphs[0]?.paragraphId;
+        entry.anchorBounds ??= svgBounds(
+          pt(atom.bounds.x),
+          pt(atom.bounds.y),
+          pt(atom.bounds.x + atom.bounds.width),
+          pt(atom.bounds.y + atom.bounds.height)
+        );
+        const key = `deck-atom:${atom.id}`;
+        atomSpanByRegionKey.set(key, atom.span);
         regions.push({
           shape: "rect",
           key,
           sourceId: scope.id,
           targetId: scope.id,
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height,
-          cx: bounds.x + bounds.width / 2,
-          cy: bounds.y + bounds.height / 2,
+          x: atom.bounds.x,
+          y: atom.bounds.y,
+          width: atom.bounds.width,
+          height: atom.bounds.height,
+          cx: atom.bounds.x + atom.bounds.width / 2,
+          cy: atom.bounds.y + atom.bounds.height / 2,
           rotation: 0,
           interactionMode: "text",
           pointerMode: "fill",
-          sceneTextKey: paragraph.paragraphId,
-          contentWidth: bounds.width,
-          contentHeight: bounds.height
-        });
-      };
-      for (const editable of paragraph.editableTextSpans) {
-        // Math islands are click-into targets, but only structure-free
-        // prose runs are safe to mask during edits.
-        if (editable.kind === "text") {
-          entry.maskRanges.push(editable.span);
-        }
-        editable.hitBounds.forEach((bounds, index) => {
-          pushRegion(`deck-text:${editable.id}:${index}`, bounds);
+          ...(anchorParagraph ? { sceneTextKey: anchorParagraph } : {}),
+          contentWidth: atom.bounds.width,
+          contentHeight: atom.bounds.height
         });
       }
-      // Atomic renders (macro output) select their invocation span.
-      for (const atom of paragraph.atomicRenderSpans ?? []) {
-        atom.hitBounds.forEach((bounds, index) => {
-          const key = `deck-atom:${atom.id}:${index}`;
-          atomSpanByRegionKey.set(key, atom.span);
-          pushRegion(key, bounds);
-        });
-      }
-    }
-    // Frame-level atoms: embedded tikzpictures and graphics select their
-    // whole source span in the enclosing scope's session.
-    const frameAtoms = [
-      ...layout.embeddedTikz.map((tikz) => ({
-        id: tikz.itemId,
-        span: tikz.sourceSpan,
-        bounds: tikz.bounds,
-        visible: true
-      })),
-      ...layout.graphics.map((graphics) => ({
-        id: graphics.itemId,
-        span: graphics.sourceSpan,
-        bounds: graphics.bounds,
-        visible: graphics.visibility === "visible"
-      }))
-    ];
-    for (const atom of frameAtoms) {
-      if (!atom.visible) {
-        continue;
-      }
-      const scope = resolveBeamerEditScopeAt(editScopes, atom.span.from);
-      const entry = scope ? scopesById.get(scope.id) : undefined;
-      if (!scope || !entry) {
-        continue;
-      }
-      // Atom-only scopes (e.g. a drawing-only frame body) have no rendered
-      // paragraphs; the atom itself anchors the session surface.
-      const anchorParagraph = entry.scopeParagraphs[0]?.paragraphId;
-      entry.anchorBounds ??= svgBounds(
-        pt(atom.bounds.x),
-        pt(atom.bounds.y),
-        pt(atom.bounds.x + atom.bounds.width),
-        pt(atom.bounds.y + atom.bounds.height)
-      );
-      const key = `deck-atom:${atom.id}`;
-      atomSpanByRegionKey.set(key, atom.span);
-      regions.push({
-        shape: "rect",
-        key,
-        sourceId: scope.id,
-        targetId: scope.id,
-        x: atom.bounds.x,
-        y: atom.bounds.y,
-        width: atom.bounds.width,
-        height: atom.bounds.height,
-        cx: atom.bounds.x + atom.bounds.width / 2,
-        cy: atom.bounds.y + atom.bounds.height / 2,
-        rotation: 0,
-        interactionMode: "text",
-        pointerMode: "fill",
-        ...(anchorParagraph ? { sceneTextKey: anchorParagraph } : {}),
-        contentWidth: atom.bounds.width,
-        contentHeight: atom.bounds.height
-      });
-    }
-    return { scopesById, paragraphById, regions, atomSpanByRegionKey };
-  }, [deckActiveFrame]);
+      return { scopesById, paragraphById, regions, atomSpanByRegionKey };
+    });
+  }, [deckActiveFrame, snapshot.source]);
 
   // Object-layer topology (design doc "Object layer"): selectable structural
   // nodes for the active frame. Built against the snapshot's own source so
@@ -1483,11 +1492,11 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!layout) {
       return null;
     }
-    return buildBeamerObjectIndex({
+    return deckPageDerived(deckActiveFrame, snapshot.source, "object-index", () => buildBeamerObjectIndex({
       items: layout.items,
       paragraphs: layout.paragraphs,
       source: snapshot.source
-    });
+    }));
   }, [deckActiveFrame, snapshot.source]);
 
   const deckSelectedObject = useMemo(() => {
@@ -1505,7 +1514,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   const selectDeckObject = useCallback(
     (objectId: string | null) => {
-      if (!deckActiveFrame || snapshot.source !== source) {
+      if (!deckActiveFrame || !deckFrameFresh) {
         return;
       }
       const placeholder = deckActiveFrame.layout.items.find((item) =>
@@ -1533,7 +1542,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         objectId
       });
     },
-    [deckActiveFrame, dispatch, snapshot.source, source]
+    [deckActiveFrame, deckFrameFresh, dispatch]
   );
 
 
@@ -2018,6 +2027,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       }
       const deckScopeEntry = deckEditing.scopesById.get(targetId);
       if (deckScopeEntry) {
+        if (!deckFrameFresh) return null;
         const { scope } = deckScopeEntry;
         const text = source.slice(scope.span.from, scope.span.to);
         if (!text) {
@@ -2172,7 +2182,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             )
       };
     },
-    [deckEditing, sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
+    [deckEditing, deckFrameFresh, sceneTextByRegionKey, snapshot.parseResult, snapshot.scene, source, sourceBoundsSvg, svgResult]
   );
 
   const editableTextRegionKeys = useMemo(() => {

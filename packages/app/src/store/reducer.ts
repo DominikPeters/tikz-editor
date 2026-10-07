@@ -463,6 +463,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...doc,
         source: action.source,
         sourceRevision: doc.source === action.source ? doc.sourceRevision : doc.sourceRevision + 1,
+        lastSourceChangeOrigin: "disk",
         savedSource: action.source,
         dirty: false,
         fileRef: action.fileRef ?? doc.fileRef,
@@ -510,6 +511,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           ...doc,
           source: action.source,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "source-editor",
           activeRootId: doc.activeRootId,
           lastEditChangedSourceIds: scrubChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
@@ -546,6 +548,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           action.snapshot.source !== doc.snapshot.source;
         if (!isCurrentPendingRequest && !canApplyIntermediateDragSnapshot) {
           return doc;
+        }
+        const page = action.snapshot.deck?.activeFrame;
+        if (page) {
+          const expected = action.snapshot.deck?.frames.find(frame => frame.id === doc.activeRootId);
+          const step = Math.min(Math.max(1, ui.deckStepByRootKey[rootKey(documentId, doc.activeRootId)] ?? 1), Math.max(1, page.stepCount));
+          if (action.snapshot.source !== doc.source || page.layout.frameId !== page.frameId || page.layout.step !== page.step ||
+            (expected && (page.frameId !== expected.id || page.step !== step))) return doc;
         }
         // A nested-figure snapshot (beamer document, tikz-shaped result)
         // publishes the parsed picture as its only root; the store's
@@ -759,6 +768,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           ...doc,
           source: action.source,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "assistant",
           lastEditChangedSourceIds: null,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: null,
@@ -912,6 +922,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           pendingIdentityMoves: result.identityMoves,
           editingTargetsStale,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: incrementalChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: incrementalPatches,
@@ -984,6 +995,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           editingTargetsStale,
           pendingPropertyCleanup,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: incrementalChangedSourceIds,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: incrementalPatches,
@@ -1021,6 +1033,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         editingTargetsStale,
         pendingPropertyCleanup,
         sourceRevision: doc.sourceRevision + 1,
+        lastSourceChangeOrigin: "edit-command",
         lastEditChangedSourceIds: incrementalChangedSourceIds,
         lastEditChangeToken: doc.lastEditChangeToken + 1,
         lastEditPatches: incrementalPatches,
@@ -1087,6 +1100,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const history = [...doc.history.slice(0, doc.historyIndex + 1), entry];
       workspace = updateDocument(workspace, doc.id, current => ({
         ...current, source: result.source, sourceRevision: current.sourceRevision + 1,
+        lastSourceChangeOrigin: "edit-command",
         activeRootId: after.activeRootId, hasInitializedRootSelection: true, deckSlideSelection: after.selection,
         lastEditPatches: result.patches, lastEditPatchBaseRevision: current.sourceRevision,
         lastEditChangedSourceIds: [], lastEditChangeToken: current.lastEditChangeToken + 1,
@@ -1177,6 +1191,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...doc,
         source: applied.source,
         sourceRevision: doc.sourceRevision + 1,
+        lastSourceChangeOrigin: "edit-command",
         lastEditChangedSourceIds: [...action.changedSourceIds],
         lastEditChangeToken: doc.lastEditChangeToken + 1,
         lastEditPatches: action.patches,
@@ -1223,6 +1238,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           source: action.source,
           pendingIdentityMoves: action.identityMoves,
           sourceRevision: doc.sourceRevision + 1,
+          lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: action.changedSourceIds ?? null,
           lastEditChangeToken: doc.lastEditChangeToken + 1,
           lastEditPatches: patches,
@@ -1255,6 +1271,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         editingIdentityRoots: entry.identityRootsBefore,
         editingIdentities: entry.identitiesBefore ? { ...entry.identitiesBefore, nextId: Math.max(entry.identitiesBefore.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
         sourceRevision: current.sourceRevision + 1,
+        lastSourceChangeOrigin: "history",
         lastEditChangedSourceIds: null,
         lastEditChangeToken: current.lastEditChangeToken + 1,
         lastEditPatches: null,
@@ -1292,6 +1309,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         editingIdentityRoots: entry.identityRootsAfter,
         editingIdentities: entry.identitiesAfter ? { ...entry.identitiesAfter, nextId: Math.max(entry.identitiesAfter.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
         sourceRevision: current.sourceRevision + 1,
+        lastSourceChangeOrigin: "history",
         lastEditChangedSourceIds: null,
         lastEditChangeToken: current.lastEditChangeToken + 1,
         lastEditPatches: null,

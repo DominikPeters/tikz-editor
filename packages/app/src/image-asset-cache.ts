@@ -48,6 +48,9 @@ const pendingPathReads = new Map<string, {
 const previewBundles = new Map<string, DocumentGraphicsPreviewBundle>();
 let cacheGeneration = 0;
 
+/** Synchronous freshness fence for completed page caches. */
+export function getImageAssetCacheGeneration(): number { return cacheGeneration; }
+
 export type PreparedDocumentGraphicsContext = {
   readonly resolver: DocumentGraphicsResolver;
   readonly previewBundle: DocumentGraphicsPreviewBundle;

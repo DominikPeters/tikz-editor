@@ -131,6 +131,8 @@ export type FileRevision = {
 
 export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-needed" | "error";
 
+export type SourceChangeOrigin = "source-editor" | "assistant" | "disk" | "history" | "edit-command";
+
 export type DocumentSession = {
   deckSlideSelection?: DeckSlideSelection;
   /** Session-only identities for every figure visited in this document. */
@@ -145,6 +147,8 @@ export type DocumentSession = {
   title: string;
   source: string;
   sourceRevision: number;
+  /** Session-only origin of this source revision, used when scheduling renders. */
+  lastSourceChangeOrigin?: SourceChangeOrigin;
   activeRootId: string | null;
   hasInitializedRootSelection: boolean;
   snapshot: SessionSnapshot;

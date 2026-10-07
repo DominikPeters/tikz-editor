@@ -36,7 +36,9 @@ import {
 } from "@tikz-editor/core/beamer/index";
 import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
-import { prepareDocumentGraphicsContext } from "./image-asset-cache";
+import { prepareDocumentGraphicsContext, getImageAssetCacheGeneration, type PreparedDocumentGraphicsContext } from "./image-asset-cache";
+import { getActiveEditorPlatformGeneration } from "./platform/current";
+import { BoundedLru } from "./bounded-lru";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
 
@@ -89,6 +91,8 @@ export type DeckActiveFrame = {
 };
 
 export type DeckSnapshot = {
+  /** Opaque, clone-safe freshness fence for the complete SVG/layout pair. */
+  cacheEpoch?: number;
   frames: DeckFrameSummary[];
   activeFrame: DeckActiveFrame | null;
   diagnostics: Diagnostic[];
@@ -126,6 +130,8 @@ export type ComputeRequest = {
   patches?: SourcePatch[] | null;
   patchBaseRevision?: number | null;
   trigger?: IncrementalSemanticTrigger;
+  /** UI scheduling cause, separate from the incremental evaluator's drag hint. */
+  schedulingTrigger?: string;
   kind?: "render" | "prewarm";
   /** Source-editor renders infer changed statements against the last completed parse. */
   inferSourceChanges?: boolean;
@@ -194,6 +200,7 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
  * publish its parser, semantic, SVG and text-layout baseline together.
  */
 export async function computeSnapshot(request: ComputeRequest, work?: CooperativeWorkOptions): Promise<ComputeResponse> {
+  cancelDeckPrewarm();
   const revision = ++revisionCounter;
   const previous = committedCache?.documentId === request.documentId ? committedCache : null;
   const cache: ComputeCache = {
@@ -308,7 +315,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       recordProfilingComputeTiming({
         requestId: request.id,
         kind: requestKind,
-        trigger,
+        trigger: request.schedulingTrigger ?? trigger,
         durationMs: performance.now() - computeStartedAt,
         changedSourceCount: result.changedSourceIds.length,
         incremental: true,
@@ -407,7 +414,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     recordProfilingComputeTiming({
       requestId: request.id,
       kind: requestKind,
-      trigger,
+      trigger: request.schedulingTrigger ?? trigger,
       durationMs: performance.now() - computeStartedAt,
       changedSourceCount: changedSourceIds.length,
       incremental: false,
@@ -466,16 +473,120 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
  * changes; rendered pages are memoized per (frame, step).
  */
 type DeckComputeSession = {
+  contextKey: string;
+  epoch: number;
   source: string;
   sourceRevision: number | null;
   resolverCacheKey: string;
   structuralMaskKey: string;
   prepared: PreparedBeamerDocument;
   frames: DeckFrameSummary[];
-  renderedPages: Map<string, DeckActiveFrame>;
+  graphicsContext: PreparedDocumentGraphicsContext;
+  renderedPages: BoundedLru<string, DeckActiveFrame>;
 };
 
 let deckComputeSession: DeckComputeSession | null = null;
+let deckCacheEpoch = 0;
+let deckPrewarmController: AbortController | null = null;
+export const DECK_PAGE_CACHE_LIMIT = 32;
+export const DECK_PAGE_CACHE_BYTE_LIMIT = 32 * 1024 * 1024;
+
+export function deckPageCacheStats(): { pages: number; estimatedBytes: number } {
+  return { pages: deckComputeSession?.renderedPages.size ?? 0, estimatedBytes: deckComputeSession?.renderedPages.retainedBytes ?? 0 };
+}
+
+function deckContextKey(request: ComputeRequest): string {
+  const file = request.documentFileRef;
+  return JSON.stringify([request.documentId ?? null, request.sourceRevision ?? null,
+    file ? [file.kind, file.provider, file.path, file.handleId, file.name] : null,
+    getImageAssetCacheGeneration(), getActiveEditorPlatformGeneration(),
+    request.textEditMaskSpan?.from ?? null, request.textEditMaskSpan?.to ?? null]);
+}
+
+function matchingDeckSession(request: ComputeRequest): DeckComputeSession | null {
+  const session = deckComputeSession;
+  return session?.source === request.source && session.contextKey === deckContextKey(request) ? session : null;
+}
+
+function requestedDeckPage(session: DeckComputeSession, request: ComputeRequest): { index: number; step: number; key: string } | null {
+  const ref = request.activeRootId ? parseDocumentRootId(request.activeRootId) : null;
+  if (ref?.kind !== "beamer-frame") return null;
+  const frame = session.frames[ref.index];
+  if (!frame || frame.id !== request.activeRootId) return null;
+  const step = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, frame.stepCount));
+  return { index: ref.index, step, key: `${ref.index}:${step}` };
+}
+
+export function isDeckSnapshotCurrent(snapshot: SessionSnapshot, request: ComputeRequest): boolean {
+  const session = matchingDeckSession(request);
+  if (session && snapshot.source === request.source && snapshot.deck?.cacheEpoch === session.epoch &&
+    request.activeRootId === null && snapshot.activeRootId === null && snapshot.deck.activeFrame === null) return true;
+  const page = session && requestedDeckPage(session, request);
+  const frame = snapshot.deck?.activeFrame;
+  return !!(session && page && frame && snapshot.source === request.source &&
+    snapshot.deck?.cacheEpoch === session.epoch && frame.frameId === request.activeRootId && frame.step === page.step &&
+    frame.layout.frameId === frame.frameId && frame.layout.step === frame.step);
+}
+
+function deckSnapshot(session: DeckComputeSession, frame: DeckActiveFrame, revision: number): SessionSnapshot {
+  return { ...makeEmptySnapshot(session.source), revision, activeRootId: frame.frameId,
+    graphicsPreviewBundleKey: session.graphicsContext.previewBundle.cacheKey,
+    deck: { cacheEpoch: session.epoch, frames: session.frames, activeFrame: frame,
+      diagnostics: session.prepared.document.diagnostics } };
+}
+
+/** Only completed pages in the exact current render context can be published. */
+export function claimCachedDeckSnapshot(request: ComputeRequest): SessionSnapshot | null {
+  const started = performance.now();
+  const session = matchingDeckSession(request);
+  const page = session && requestedDeckPage(session, request);
+  const frame = page && session?.renderedPages.get(page.key);
+  if (!session || !frame) return null;
+  cancelDeckPrewarm();
+  const snapshot = deckSnapshot(session, frame, ++revisionCounter);
+  recordProfilingComputeTiming({ requestId: request.id, kind: "render", trigger: request.schedulingTrigger ?? "cached-navigation",
+    durationMs: performance.now() - started, phaseDurationsMs: { cachedNavigation: performance.now() - started } });
+  return snapshot;
+}
+
+export function cancelDeckPrewarm(): void {
+  deckPrewarmController?.abort(); deckPrewarmController = null;
+}
+
+/** Warm at most two neighbors. Never publishes UI state or advances foreground revisions. */
+export async function prewarmDeckNeighbors(request: ComputeRequest, work: CooperativeWorkOptions): Promise<void> {
+  cancelDeckPrewarm();
+  const session = matchingDeckSession(request);
+  const page = session && requestedDeckPage(session, request);
+  if (!session || !page || request.textEditMaskSpan) return;
+  const controller = new AbortController(); deckPrewarmController = controller;
+  const abort = () => { controller.abort(); };
+  work.signal?.addEventListener("abort", abort, { once: true });
+  if (work.signal?.aborted) controller.abort();
+  try {
+    for (const index of [page.index + 1, page.index - 1]) {
+      controller.signal.throwIfAborted();
+      if (deckComputeSession !== session || matchingDeckSession(request) !== session) return;
+      if (!session.frames[index] || session.renderedPages.get(`${index}:1`)) continue;
+      const rendered = await renderDeckPage(session, index, 1, { ...work, budgetMs: Math.min(work.budgetMs ?? 4, 4), signal: controller.signal,
+        yieldControl: async () => {
+          await work.yieldControl();
+          if (matchingDeckSession(request) !== session) controller.abort();
+          controller.signal.throwIfAborted();
+        } });
+      controller.signal.throwIfAborted();
+      if (deckComputeSession !== session || matchingDeckSession(request) !== session) return;
+      session.renderedPages.set(`${index}:1`, rendered.frame, rendered.bytes);
+      // Keep the visible page hot so idle work cannot evict it first.
+      session.renderedPages.get(page.key);
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+  } finally {
+    work.signal?.removeEventListener("abort", abort);
+    if (deckPrewarmController === controller) deckPrewarmController = null;
+  }
+}
 
 /**
  * Beamer's paragraph reports retain font resolvers used while laying out the
@@ -483,14 +594,16 @@ let deckComputeSession: DeckComputeSession | null = null;
  * omit those executable helpers at the worker boundary while preserving the
  * report/vlist data consumed by canvas hit testing.
  */
-function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): BeamerFrameLayout {
+function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): { layout: BeamerFrameLayout; bytes: number } {
   const copies = new WeakMap<object, object>();
+  let bytes = 0;
 
   const copy = (value: unknown): unknown => {
     if (typeof value === "function" || typeof value === "symbol") {
       return undefined;
     }
     if (value === null || typeof value !== "object") {
+      bytes += typeof value === "string" ? value.length * 2 : 8;
       return value;
     }
     const cached = copies.get(value);
@@ -498,6 +611,7 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): BeamerFrameLayout
       return cached;
     }
     if (Array.isArray(value)) {
+      bytes += 24 + value.length * 8;
       const result: unknown[] = [];
       copies.set(value, result);
       for (const entry of value) {
@@ -506,6 +620,7 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): BeamerFrameLayout
       return result;
     }
     const result: Record<string, unknown> = {};
+    bytes += 48 + Object.keys(value).length * 16;
     copies.set(value, result);
     for (const [key, entry] of Object.entries(value)) {
       if (typeof entry !== "function" && typeof entry !== "symbol") {
@@ -515,7 +630,19 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): BeamerFrameLayout
     return result;
   };
 
-  return copy(layout) as BeamerFrameLayout;
+  const result = copy(layout) as BeamerFrameLayout;
+  return { layout: result, bytes };
+}
+
+async function renderDeckPage(session: DeckComputeSession, frameIndex: number, step: number, work?: CooperativeWorkOptions) {
+  const result = await session.prepared.renderFrame({ frameIndex, step,
+    graphicsResolver: session.graphicsContext.resolver, cooperative: work });
+  work?.signal?.throwIfAborted();
+  const clone = makeBeamerLayoutCloneSafe(result.layout);
+  const frame: DeckActiveFrame = { frameId: result.frame.id, frameIndex, step, stepCount: result.layout.stepCount,
+    svg: result.svg.svg, svgModel: result.svg.model, viewBox: result.svg.viewBox, layout: clone.layout };
+  const bytes = clone.bytes + (frame.svg.length + frame.svgModel.parts.reduce((sum, part) => sum + part.markup.length, 0)) * 2;
+  return { frame, bytes };
 }
 
 function resolveDeckFrameIndex(
@@ -560,6 +687,7 @@ async function computeDeckSnapshot(
       diagnostics: []
     };
   }
+  const contextKey = deckContextKey(request);
   const graphicsContext = await prepareDocumentGraphicsContext({
     source: request.source,
     documentFileRef: request.documentFileRef ?? null
@@ -573,6 +701,7 @@ async function computeDeckSnapshot(
   let session: DeckComputeSession;
   if (
     deckComputeSession?.source !== request.source ||
+    deckComputeSession.contextKey !== contextKey ||
     deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey ||
     deckComputeSession.structuralMaskKey !== structuralMaskKey
   ) {
@@ -593,6 +722,7 @@ async function computeDeckSnapshot(
         : undefined
     });
     session = {
+      contextKey, epoch: ++deckCacheEpoch, graphicsContext,
       source: request.source,
       sourceRevision: request.sourceRevision ?? null,
       resolverCacheKey: graphicsResolver.cacheKey,
@@ -605,12 +735,12 @@ async function computeDeckSnapshot(
         title: frame.title?.value ?? null,
         stepCount: prepared.frameStepCount(frameIndex)
       })),
-      renderedPages: new Map()
+      renderedPages: new BoundedLru(DECK_PAGE_CACHE_LIMIT, DECK_PAGE_CACHE_BYTE_LIMIT)
     };
   } else {
     // A suspended render owns its page writes. Aborted or older requests must
     // not replace the newest completed deck baseline, even for the same source.
-    session = { ...deckComputeSession, renderedPages: new Map(deckComputeSession.renderedPages) };
+    session = { ...deckComputeSession, renderedPages: deckComputeSession.renderedPages.fork() };
   }
   const frameIndex = resolveDeckFrameIndex(session.frames, request.activeRootId);
   let activeFrame: DeckActiveFrame | null = null;
@@ -622,24 +752,9 @@ async function computeDeckSnapshot(
     if (cached) {
       activeFrame = cached;
     } else {
-      const result = await session.prepared.renderFrame({
-        frameIndex,
-        step,
-        graphicsResolver,
-        cooperative: work
-      });
-      work?.signal?.throwIfAborted();
-      activeFrame = {
-        frameId: result.frame.id,
-        frameIndex,
-        step,
-        stepCount: result.layout.stepCount,
-        svg: result.svg.svg,
-        svgModel: result.svg.model,
-        viewBox: result.svg.viewBox,
-        layout: makeBeamerLayoutCloneSafe(result.layout)
-      };
-      session.renderedPages.set(pageKey, activeFrame);
+      const rendered = await renderDeckPage(session, frameIndex, step, work);
+      activeFrame = rendered.frame;
+      session.renderedPages.set(pageKey, activeFrame, rendered.bytes);
     }
   }
   work?.signal?.throwIfAborted();
@@ -660,6 +775,7 @@ async function computeDeckSnapshot(
     graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
     incremental: null,
     deck: {
+      cacheEpoch: session.epoch,
       frames: session.frames,
       activeFrame,
       diagnostics: session.prepared.document.diagnostics
@@ -668,7 +784,7 @@ async function computeDeckSnapshot(
   recordProfilingComputeTiming({
     requestId: request.id,
     kind: requestKind,
-    trigger: request.trigger ?? "other",
+    trigger: request.schedulingTrigger ?? request.trigger ?? "other",
     durationMs: performance.now() - computeStartedAt,
     changedSourceCount: 0,
     incremental: false
@@ -783,7 +899,7 @@ async function computeNestedTikzSnapshot(
   recordProfilingComputeTiming({
     requestId: request.id,
     kind: requestKind,
-    trigger: request.trigger ?? "other",
+    trigger: request.schedulingTrigger ?? request.trigger ?? "other",
     durationMs: performance.now() - computeStartedAt,
     changedSourceCount: 0,
     incremental: false

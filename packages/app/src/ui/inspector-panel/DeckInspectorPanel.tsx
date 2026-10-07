@@ -1,3 +1,5 @@
+import { deckPageDerived } from "../../deck-page-derived-cache";
+import { rootKey } from "../../root-key";
 import { useCallback, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
   applyDeckEditAction,
@@ -36,7 +38,10 @@ export function DeckInspectorPanel(): JSX.Element {
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
 
   const activeFrame = snapshot.deck?.activeFrame ?? null;
-  const fresh = activeFrame != null && snapshot.source === source;
+  const activeRootId = useEditorStore(s => s.activeRootId);
+  const activeStep = useEditorStore(s => s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const fresh = activeFrame != null && snapshot.source === source && activeFrame.frameId === activeRootId &&
+    activeFrame.step === Math.min(activeStep, Math.max(1, activeFrame.stepCount));
 
   const selectedNode = useMemo(() => {
     if (!fresh || !activeFrame || deckObjectSelection == null) {
@@ -48,11 +53,11 @@ export function DeckInspectorPanel(): JSX.Element {
     ) {
       return null;
     }
-    const index = buildBeamerObjectIndex({
+    const index = deckPageDerived(activeFrame, source, "object-index", () => buildBeamerObjectIndex({
       items: activeFrame.layout.items,
       paragraphs: activeFrame.layout.paragraphs,
       source,
-    });
+    }));
     return index.byId.get(deckObjectSelection.objectId) ?? null;
   }, [activeDocumentId, activeFrame, deckObjectSelection, fresh, source]);
 
@@ -82,12 +87,12 @@ export function DeckInspectorPanel(): JSX.Element {
       write: DeckInspectorWrite,
       value: string | number | boolean | null
     ): DeckEditAction | null => {
-      if (frameId == null) {
+      if (frameId == null || !fresh) {
         return null;
       }
       return deckActionForWrite(write, frameId, objectId, value);
     },
-    [frameId, objectId]
+    [frameId, fresh, objectId]
   );
 
   const commit = useCallback(
@@ -189,6 +194,8 @@ export function DeckInspectorPanel(): JSX.Element {
       <SidePanel.Header>{rendered.title}</SidePanel.Header>
       <SidePanel.Content className={css.content}>
         <SidePanel.SectionBody>
+          <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame?.step !== Math.min(activeStep, Math.max(1, activeFrame?.stepCount ?? 1))}
+            style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {rendered.fields.length === 0 ? (
             <p className={css.hint}>This object has no editable properties yet.</p>
           ) : (
@@ -201,6 +208,7 @@ export function DeckInspectorPanel(): JSX.Element {
               />
             ))
           )}
+          </fieldset>
         </SidePanel.SectionBody>
       </SidePanel.Content>
     </SidePanel>

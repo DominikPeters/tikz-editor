@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { diffSvgModels, type SvgDiffHints, type SvgPatchOp, type SvgRenderModel } from "@tikz-editor/core/svg/index";
 import { recordProfilingSvgPatchTiming } from "@tikz-editor/core/profiling";
 
@@ -19,7 +19,7 @@ export function CanvasSVGLayer(params: {
   const patcherRef = useRef<SvgDomPatcher | null>(null);
   const previousModelRef = useRef<SvgRenderModel | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = internalHostRef.current;
     if (!host) {
       return;
@@ -33,7 +33,9 @@ export function CanvasSVGLayer(params: {
     };
   }, []);
 
-  useEffect(() => {
+  // The model is ready; install its SVG during the commit so the next paint
+  // shows this frame rather than painting the previous slide once more.
+  useLayoutEffect(() => {
     if (!model || !patcherRef.current) {
       return;
     }

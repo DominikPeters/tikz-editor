@@ -74,6 +74,12 @@ export const PROFILING_SCENARIOS: ProfilingScenarioManifest[] = [
     specPath: "profiling/profile-beamer-canvas-text-latency.spec.ts"
   },
   {
+    id: "beamer-slide-switch",
+    category: "canvas-edit",
+    description: "KKT slide clicks through computation, SVG commit, and the next paint opportunity, on first and repeat visits.",
+    specPath: "profiling/profile-beamer-slide-switch.spec.ts"
+  },
+  {
     id: "source-typing",
     category: "source-edit",
     description: "Source editor typing profiling with paced keystrokes in small and dense TikZ documents.",
