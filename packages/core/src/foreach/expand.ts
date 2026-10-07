@@ -70,6 +70,7 @@ import {
 } from "./snippet-parse.js";
 import { expandTexConditionals } from "../conditionals/expand.js";
 import { substituteForeachBindingsWithMap } from "./substitute.js";
+import { readTexControlSequence, skipTexWhitespaceAndComments } from "../parser/tex-lexical.js";
 import type {
   ExpansionSourceMap,
   ForeachExpansionDiagnostic,
@@ -1089,9 +1090,22 @@ function tryExpandMacroStatement(
 function normalizeExpandedMacroStatement(expanded: string, raw: string): string {
   const rawTrimmed = raw.trimEnd();
   const expandedTrimmed = expanded.trimEnd();
-  if (!rawTrimmed.endsWith(";") || !expandedTrimmed.endsWith(";;")) {
+  if (!rawTrimmed.endsWith(";") || !expandedTrimmed.endsWith(";")) {
     return expanded;
   }
+
+  const finalSemicolon = expandedTrimmed.length - 1;
+  // A macro body's terminator and the call's terminator can be separated by
+  // TeX whitespace or comments; escaped control symbols are not terminators.
+  let precedingSemicolon = false;
+  for (let cursor = 0; cursor < finalSemicolon;) {
+    cursor = skipTexWhitespaceAndComments(expanded, cursor, finalSemicolon);
+    if (cursor === finalSemicolon) break;
+    const command = readTexControlSequence(expanded, cursor);
+    precedingSemicolon = command == null && expanded[cursor] === ";";
+    cursor = command?.to ?? cursor + 1;
+  }
+  if (!precedingSemicolon) return expanded;
 
   return `${expandedTrimmed.slice(0, -1)}${expanded.slice(expandedTrimmed.length)}`;
 }
