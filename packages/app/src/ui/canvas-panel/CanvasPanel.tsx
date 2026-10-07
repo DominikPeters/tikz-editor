@@ -62,7 +62,6 @@ import { GRID_SIZE_MINOR_TARGET_PX } from "../../settings/types";
 import { useSettingsStore } from "../../settings/useSettingsStore";
 import { useEditorStore } from "../../store/store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
-import { resolveBucketFillEdit } from "./bucket-fill";
 import { rootKey } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
@@ -638,6 +637,10 @@ export const CanvasPanel = memo(function CanvasPanel({
     [dispatch]
   );
   const bucketPreviewSessionRef = useRef<BucketPreviewSession | null>(null);
+  const { commitFill } = useBucketFillPreview({
+    toolMode, hoveredElementId, bucketFillColor, source, snapshot,
+    activeDocumentId, activeRootId, dispatch, bucketPreviewSessionRef
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -2659,16 +2662,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     source,
     setWarning,
     onBucketFillRegion: (region: HitRegion | undefined) => {
-      const resolution = resolveBucketFillEdit({
-        sourceId: region?.sourceId ?? "",
-        colorToken: bucketFillColor,
-        source: bucketPreviewSessionRef.current?.baseSource ?? source,
-        elements: snapshot.scene?.elements ?? [],
-        editHandles: snapshot.editHandles,
-        activeRootId,
-        figureCount: snapshot.figures.length,
-        propertyWriteMode: "commit"
-      });
+      const resolution = commitFill(region?.sourceId ?? "");
 
       if (resolution.kind !== "ready") {
         if (resolution.reason !== "setProperty would not change the source.") {
@@ -2682,12 +2676,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         setWarning(`${resolution.result.reason} (${skippedCount} handle${skippedCount === 1 ? "" : "s"} skipped)`);
       }
 
-      dispatch({
-        type: "APPLY_EDIT_ACTION",
-        action: resolution.action,
-        precomputedResult: resolution.result
-      });
-      bucketPreviewSessionRef.current = null;
     },
     setSnapLines,
     logSnapDebug,
@@ -3012,18 +3000,6 @@ export const CanvasPanel = memo(function CanvasPanel({
     isPointerOverGuideDeleteZone,
     setGuides,
     showGuides
-  });
-
-  useBucketFillPreview({
-    toolMode,
-    hoveredElementId,
-    bucketFillColor,
-    source,
-    snapshot,
-    activeDocumentId,
-    activeRootId,
-    dispatch,
-    bucketPreviewSessionRef
   });
 
   useEffect(() => {
