@@ -326,6 +326,7 @@ UnknownPart {
   OptionList |
   Group |
   PathOperator |
+  PathKeyword |
   UnknownPathItem
 }
 
