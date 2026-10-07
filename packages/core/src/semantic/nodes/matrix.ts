@@ -15,6 +15,7 @@ import { pt } from "../../coords/scalars.js";
 import type { WorldPoint } from "../../coords/points.js";
 import type { MatrixCellInfo, ResolvedStyle, SceneElement } from "../types.js";
 import { parseBooleanishNormalized } from "../../utils/booleanish.js";
+import { readTexControlSequence, skipTexComment } from "../../parser/tex-lexical.js";
 import { placeNodeCenter, registerNamedNodeAnchors } from "./anchors.js";
 import {
   applyNodeBoxPaintMode,
@@ -96,6 +97,7 @@ export type MatrixParsedRowsForEdit = {
 type MatrixParsedCell = {
   raw: string;
   structure: string;
+  trimText: string;
   span: Span;
 };
 
@@ -178,6 +180,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       const rawCell = rawRow.cells[column] ?? {
         raw: "",
         structure: "",
+        trimText: "",
         span: { from: params.item.textSpan.from, to: params.item.textSpan.from }
       };
       const parsedCell = parseMatrixCell(rawCell, params.matrixMode);
@@ -1040,7 +1043,7 @@ export function resolveMatrixCellEditTarget(
     textMode: mode.textMode,
     cellSpan: rawCell.span,
     textSpan: parsedCell.textSpan,
-    optionSpan: resolveLeadingMatrixCellOptionSpan(rawCell.raw, rawCell.span.from, rawCell.structure)
+    optionSpan: resolveLeadingMatrixCellOptionSpan(rawCell.raw, rawCell.span.from, rawCell.structure, rawCell.trimText)
   };
 }
 
@@ -1175,9 +1178,35 @@ export function resolveMatrixMode(options: OptionListAst | undefined): MatrixMod
   };
 }
 
-// Scan masked text for delimiters, but retain real text and offsets for rendering
-// and editing. Whitespace trimming also uses real text so masked cells survive.
-function parseMatrixRows(input: string, cellSeparator: string, baseOffset: number, structure = input): MatrixParsedRows {
+// Locate comments in the structural text so a protected cell edit containing
+// '%' cannot hide real separators. Keep offsets and unmasked cell text intact.
+function maskMatrixComments(input: string, structure: string): { structure: string; trimText: string } {
+  const structureParts: string[] = [];
+  const textParts: string[] = [];
+  let start = 0;
+  for (let cursor = 0; cursor < structure.length;) {
+    const command = readTexControlSequence(structure, cursor);
+    if (command) {
+      cursor = command.to;
+    } else if (structure[cursor] === "%") {
+      const end = skipTexComment(structure, cursor);
+      const comment = structure.slice(cursor, end).replace(/[^\r\n]/g, " ");
+      structureParts.push(structure.slice(start, cursor), comment);
+      textParts.push(input.slice(start, cursor), comment);
+      start = cursor = end;
+    } else {
+      cursor += 1;
+    }
+  }
+  structureParts.push(structure.slice(start));
+  textParts.push(input.slice(start));
+  return { structure: structureParts.join(""), trimText: textParts.join("") };
+}
+
+// Trim actual cell text with only comments masked; structural edit masks must
+// not turn temporarily unfinished, nonempty cells into empty cells.
+function parseMatrixRows(input: string, cellSeparator: string, baseOffset: number, structuralText = input): MatrixParsedRows {
+  const { structure, trimText } = maskMatrixComments(input, structuralText);
   const rows: Array<{ cells: MatrixParsedCell[]; columnGapOverrides: number[] }> = [];
   const rowGapOverrides: number[] = [];
   let start = 0;
@@ -1191,11 +1220,11 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
     if (char === "\\") {
       if (braceDepth === 0 && bracketDepth === 0 && parenDepth === 0 && structure.startsWith("\\\\", cursor)) {
         const rowRaw = input.slice(start, cursor);
-        const split = splitMatrixRowCells(rowRaw, cellSeparator, baseOffset + start, structure.slice(start, cursor));
+        const split = splitMatrixRowCells(rowRaw, cellSeparator, baseOffset + start, structure.slice(start, cursor), trimText.slice(start, cursor));
         rows.push(split);
 
         cursor += 2;
-        while (cursor < input.length && /\s/u.test(input[cursor] ?? "")) {
+        while (cursor < input.length && /\s/u.test(trimText[cursor] ?? "")) {
           cursor += 1;
         }
         let rowGap = 0;
@@ -1232,10 +1261,10 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
     cursor += 1;
   }
 
-  const tail = splitMatrixRowCells(input.slice(start), cellSeparator, baseOffset + start, structure.slice(start));
+  const tail = splitMatrixRowCells(input.slice(start), cellSeparator, baseOffset + start, structure.slice(start), trimText.slice(start));
   // A final row separator leaves an uncommitted whitespace tail. Rows already
   // terminated by a separator remain real rows even when every cell is empty.
-  if (rows.length === 0 || tail.cells.length > 1 || tail.cells.some(cell => cell.raw.trim().length > 0)) {
+  if (rows.length === 0 || tail.cells.length > 1 || tail.cells.some(cell => cell.trimText.trim().length > 0)) {
     rows.push(tail);
   }
 
@@ -1258,7 +1287,8 @@ function splitMatrixRowCells(
   rowRaw: string,
   cellSeparator: string,
   rowOffset: number,
-  structure = rowRaw
+  structure = rowRaw,
+  trimText = rowRaw
 ): { cells: MatrixParsedCell[]; columnGapOverrides: number[] } {
   const cells: MatrixParsedCell[] = [];
   const columnGapOverrides: number[] = [];
@@ -1275,13 +1305,14 @@ function splitMatrixRowCells(
       cells.push({
         raw: rowRaw.slice(start, cursor),
         structure: structure.slice(start, cursor),
+        trimText: trimText.slice(start, cursor),
         span: {
           from: rowOffset + start,
           to: rowOffset + cursor
         }
       });
       cursor += separatorLength;
-      while (cursor < rowRaw.length && /\s/u.test(rowRaw[cursor] ?? "")) {
+      while (cursor < rowRaw.length && /\s/u.test(trimText[cursor] ?? "")) {
         cursor += 1;
       }
       let columnGap = 0;
@@ -1322,6 +1353,7 @@ function splitMatrixRowCells(
   cells.push({
     raw: rowRaw.slice(start),
     structure: structure.slice(start),
+    trimText: trimText.slice(start),
     span: {
       from: rowOffset + start,
       to: rowOffset + rowRaw.length
@@ -1331,9 +1363,10 @@ function splitMatrixRowCells(
 }
 
 function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCell | null {
-  const outer = trimOuterWhitespaceWorldBounds(rawCell.raw, 0, rawCell.raw.length);
+  const outer = trimOuterWhitespaceWorldBounds(rawCell.trimText, 0, rawCell.raw.length);
   let working = rawCell.raw.slice(outer.from, outer.to);
   let structure = rawCell.structure.slice(outer.from, outer.to);
+  let trimText = rawCell.trimText.slice(outer.from, outer.to);
   let workingOffset = rawCell.span.from + outer.from;
   if (working.length === 0 && !mode.includeEmptyCells) {
     return null;
@@ -1357,13 +1390,14 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
     }
     workingOffset += closing + 1;
     const nextWorking = working.slice(closing + 1);
-    const trimmedLeading = trimLeadingWhitespace(nextWorking);
+    const trimmedLeading = trimLeadingWhitespace(trimText.slice(closing + 1));
     workingOffset += trimmedLeading.consumed;
-    working = trimmedLeading.text;
+    working = nextWorking.slice(trimmedLeading.consumed);
     structure = structure.slice(closing + 1 + trimmedLeading.consumed);
+    trimText = trimText.slice(closing + 1 + trimmedLeading.consumed);
   }
 
-  const explicitNode = parseExplicitMatrixNode(working, workingOffset, structure);
+  const explicitNode = parseExplicitMatrixNode(working, workingOffset, structure, trimText);
   if (explicitNode) {
     const options = mergeOptionLists([mergeOptionLists(prefixOptions), explicitNode.options]);
     const explicitAliases = explicitNode.aliases ?? [];
@@ -1380,12 +1414,12 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
     };
   }
 
-  let textEnd = trimRightWhitespaceBoundary(working, working.length);
+  let textEnd = trimRightWhitespaceBoundary(trimText, working.length);
   if (textEnd > 0 && structure[textEnd - 1] === ";") {
     textEnd -= 1;
-    textEnd = trimRightWhitespaceBoundary(working, textEnd);
+    textEnd = trimRightWhitespaceBoundary(trimText, textEnd);
   }
-  const textStart = trimLeftWhitespaceBoundary(working, 0, textEnd);
+  const textStart = trimLeftWhitespaceBoundary(trimText, 0, textEnd);
   const text = working.slice(textStart, textEnd);
   if (text.length === 0 && !mode.includeEmptyCells) {
     return null;
@@ -1413,9 +1447,10 @@ function parseMatrixCell(rawCell: MatrixParsedCell, mode: MatrixMode): MatrixCel
 function parseExplicitMatrixNode(
   raw: string,
   baseOffset: number,
-  structure = raw
+  structure = raw,
+  trimText = raw
 ): { text: string; textSpan: Span; name?: string; aliases?: string[]; options?: OptionListAst } | null {
-  let cursor = skipWhitespace(raw, 0);
+  let cursor = skipWhitespace(trimText, 0);
   if (!structure.startsWith("\\node", cursor)) {
     return null;
   }
@@ -1425,10 +1460,10 @@ function parseExplicitMatrixNode(
   let explicitName: string | undefined;
 
   while (cursor < raw.length) {
-    cursor = skipWhitespace(raw, cursor);
+    cursor = skipWhitespace(trimText, cursor);
     const char = raw[cursor];
     if (char === "[") {
-      const block = readBalancedBlock(raw, cursor, "[", "]");
+      const block = readBalancedBlock(structure, cursor, "[", "]");
       if (!block) {
         return null;
       }
@@ -1438,7 +1473,7 @@ function parseExplicitMatrixNode(
     }
 
     if (char === "(") {
-      const block = readBalancedBlock(raw, cursor, "(", ")");
+      const block = readBalancedBlock(structure, cursor, "(", ")");
       if (!block) {
         return null;
       }
@@ -1452,9 +1487,9 @@ function parseExplicitMatrixNode(
 
     if (raw.slice(cursor, cursor + 2) === "at" && /[\s(]/u.test(raw[cursor + 2] ?? "")) {
       cursor += 2;
-      cursor = skipWhitespace(raw, cursor);
+      cursor = skipWhitespace(trimText, cursor);
       if (raw[cursor] === "(") {
-        const block = readBalancedBlock(raw, cursor, "(", ")");
+        const block = readBalancedBlock(structure, cursor, "(", ")");
         if (!block) {
           return null;
         }
@@ -1466,7 +1501,7 @@ function parseExplicitMatrixNode(
     break;
   }
 
-  cursor = skipWhitespace(raw, cursor);
+  cursor = skipWhitespace(trimText, cursor);
   if (raw[cursor] !== "{") {
     return null;
   }
@@ -1757,8 +1792,8 @@ function findMatrixPipeClosing(input: string): number {
   return -1;
 }
 
-function resolveLeadingMatrixCellOptionSpan(rawCell: string, baseOffset: number, structure = rawCell): Span | undefined {
-  const trimmed = trimOuterWhitespaceWorldBounds(rawCell, 0, rawCell.length);
+function resolveLeadingMatrixCellOptionSpan(rawCell: string, baseOffset: number, structure = rawCell, trimText = rawCell): Span | undefined {
+  const trimmed = trimOuterWhitespaceWorldBounds(trimText, 0, rawCell.length);
   if (trimmed.from >= trimmed.to || structure[trimmed.from] !== "|") {
     return undefined;
   }
@@ -1770,22 +1805,20 @@ function resolveLeadingMatrixCellOptionSpan(rawCell: string, baseOffset: number,
 
   const absoluteClose = trimmed.from + firstPipeClose;
   const payloadRaw = rawCell.slice(trimmed.from + 1, absoluteClose);
-  const payloadTrimStart = trimLeftWhitespaceBoundary(payloadRaw, 0, payloadRaw.length);
-  const payloadTrimEnd = trimRightWhitespaceBoundary(payloadRaw, payloadRaw.length, payloadTrimStart);
+  const payloadTrimText = trimText.slice(trimmed.from + 1, absoluteClose);
+  const payloadTrimStart = trimLeftWhitespaceBoundary(payloadTrimText, 0, payloadRaw.length);
+  const payloadTrimEnd = trimRightWhitespaceBoundary(payloadTrimText, payloadRaw.length, payloadTrimStart);
   const trimmedPayload = payloadRaw.slice(payloadTrimStart, payloadTrimEnd);
   if (!trimmedPayload.startsWith("[") || !trimmedPayload.endsWith("]")) {
     return undefined;
   }
 
-  const optionBlock = readBalancedBlock(trimmedPayload, 0, "[", "]");
+  const optionBlock = readBalancedBlock(structure.slice(trimmed.from + 1 + payloadTrimStart, trimmed.from + 1 + payloadTrimEnd), 0, "[", "]");
   if (optionBlock?.nextIndex !== trimmedPayload.length) {
     return undefined;
   }
 
-  const openBracketOffset = rawCell.indexOf("[", trimmed.from + 1);
-  if (openBracketOffset < 0 || openBracketOffset > absoluteClose) {
-    return undefined;
-  }
+  const openBracketOffset = trimmed.from + 1 + payloadTrimStart;
 
   return {
     from: baseOffset + openBracketOffset,

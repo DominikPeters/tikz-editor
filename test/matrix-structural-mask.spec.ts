@@ -11,7 +11,7 @@ function resolveTarget(result: ReturnType<typeof renderTikzToSvg>, targetId: str
 }
 
 describe("matrix cell structural masks", () => {
-  const unfinishedTexts = [String.raw`\textbf{`, "}", "\\", "&", "\\\\", "[", "(", "|[draw]|", "word;"];
+  const unfinishedTexts = [String.raw`\textbf{`, "}", "\\", "&", "\\\\", "[", "(", "|[draw]|", "word;", "%", "% & \\\\ }"];
 
   for (const matrixKind of ["matrix of nodes", "matrix of math nodes", "explicit nodes"]) {
     for (const cellIndex of [0, 1, 2, 3]) {

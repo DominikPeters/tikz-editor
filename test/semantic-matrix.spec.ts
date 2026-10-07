@@ -10,6 +10,49 @@ import { evaluateSemantic } from "./semantic/helpers.js";
 
 describe("semantic matrix nodes", () => {
   it.each([
+    [String.raw`A & B \\` + "\n% trailing & \\\\ } [ ( 🐱\n", ["A", "B"], [2]],
+    ["% leading } [ & \\\\ 🐱\n" + String.raw`|[draw]| A & B \\` + "\n% row comment & \\\\\n" + String.raw`C & D \\`, ["A", "B", "C", "D"], [2, 2]],
+    [String.raw`A &` + "\n% ignored & \\\\ { [\n" + String.raw`B \\`, ["A", "B"], [2]],
+    [String.raw`A\% & B \\` + "\r\n% trailing comment\r\n", [String.raw`A\%`, "B"], [2]],
+    [String.raw`A &` + "\n% empty cell\n" + String.raw`\\`, ["A"], [2]]
+  ] as const)("ignores comments in matrix structure while retaining source spans: %s", (body, labels, columns) => {
+    const source = String.raw`\begin{tikzpicture}\matrix (m) [matrix of nodes,nodes in empty cells,nodes={draw}] {${body}};\end{tikzpicture}`;
+    const result = evaluateSemantic(source);
+    expect(result.diagnostics).toEqual([]);
+    const texts = result.scene.elements.filter(element => element.kind === "Text").filter(element => element.matrixCell);
+    expect(texts.map(element => element.text)).toEqual(labels);
+    for (const element of texts) {
+      expect(source.slice(element.matrixCell!.textSpan.from, element.matrixCell!.textSpan.to)).toBe(element.text);
+    }
+    expect(parseMatrixRowsForEdit(body, "&", 200).rows.map(row => row.cells.length)).toEqual(columns);
+    const expectedCells = columns.reduce((sum, count) => sum + count, 0);
+    expect(result.scene.elements.filter(element => element.kind === "Path" && element.matrixCell)).toHaveLength(expectedCells);
+  });
+
+  it("keeps explicit empty rows after comment-only trivia", () => {
+    const body = String.raw`A & B \\` + "\n% empty row follows & \\\\\n" + String.raw`\\` + "\n% trailing comment\n";
+    const result = evaluateSemantic(String.raw`\begin{tikzpicture}\matrix [matrix of nodes,nodes in empty cells,nodes={draw}] {${body}};\end{tikzpicture}`);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.scene.elements.filter(element => element.kind === "Path" && element.matrixCell)).toHaveLength(4);
+    expect(parseMatrixRowsForEdit(body, "&", 0).rows.map(row => row.cells.length)).toEqual([2, 1]);
+  });
+
+  it("preserves commented cell prefixes and explicit node edit spans", () => {
+    const body = "% leading 🐱 [ & \\\\\n" + String.raw`|[draw,` + "% ] | ignored\n" + String.raw`fill=red]|` + "% cell text\n A & % second cell\n" + String.raw`\node` + "% before options\n" + String.raw`[draw]` + "% before text\n" + String.raw`{B}; \\`;
+    const mode = resolveMatrixMode(parseOptionListRaw("[matrix of nodes]"));
+    const result = evaluateSemantic(String.raw`\begin{tikzpicture}\matrix [matrix of nodes] {${body}};\end{tikzpicture}`);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.scene.elements.filter(element => element.kind === "Text").map(element => element.text)).toEqual(["A", "B"]);
+    for (const [column, label] of [[1, "A"], [2, "B"]] as const) {
+      const target = resolveMatrixCellEditTarget(body, { from: 200, to: 200 + body.length }, mode, 1, column);
+      expect(target).not.toBeNull();
+      expect(body.slice(target!.textSpan.from - 200, target!.textSpan.to - 200)).toBe(label);
+    }
+    const target = resolveMatrixCellEditTarget(body, { from: 200, to: 200 + body.length }, mode, 1, 1);
+    expect(body.slice(target!.optionSpan!.from - 200, target!.optionSpan!.to - 200)).toBe("[draw,% ] | ignored\nfill=red]");
+  });
+
+  it.each([
     String.raw`& & \\ & & \\ & & \\`,
     String.raw`A & & \\ & & \\ & & \\`,
     String.raw`& & \\ & & \\ A & & \\`,
