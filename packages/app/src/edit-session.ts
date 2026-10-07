@@ -1,6 +1,7 @@
 import type { EditorAction, EditorState } from "./store/types";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
-import { patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import { composeSourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
 
 type SessionState = Pick<EditorState, "documents" | "activeDocumentId">;
 export type DocumentEditSession = {
@@ -10,12 +11,13 @@ export type DocumentEditSession = {
   latestSource: string;
   latestRevision: number;
   changedSourceIds: string[] | null;
+  patches: SourcePatch[] | null;
 };
 
 export function beginDocumentEdit(state: SessionState, changedSourceIds: string[] | null = null): DocumentEditSession {
   const doc = state.documents[state.activeDocumentId];
   return { documentId: doc.id, activeRootId: doc.activeRootId, baseSource: doc.source,
-    latestSource: doc.source, latestRevision: doc.sourceRevision, changedSourceIds };
+    latestSource: doc.source, latestRevision: doc.sourceRevision, changedSourceIds, patches: [] };
 }
 
 export function ownsDocumentEdit(session: DocumentEditSession, state: SessionState): boolean {
@@ -32,6 +34,11 @@ export function canContinueDocumentEdit(session: DocumentEditSession, state: Ses
 export function trackDocumentEdit(session: DocumentEditSession, state: SessionState): void {
   const doc = state.documents[session.documentId];
   if (doc) {
+    if (doc.source !== session.latestSource) {
+      session.patches = session.patches != null && doc.lastEditPatchBaseRevision === session.latestRevision &&
+        doc.lastEditPatches && patchesMatchSourceTransition(session.latestSource, doc.source, doc.lastEditPatches)
+        ? composeSourcePatches(session.baseSource, [session.patches, doc.lastEditPatches]) : null;
+    }
     session.latestSource = doc.source;
     session.latestRevision = doc.sourceRevision;
   }
@@ -45,10 +52,15 @@ export function restoreDocumentEdit(
   if (!ownsDocumentEdit(session, getState())) return false;
   if (preview && (preview.newSource !== session.latestSource ||
     !patchesMatchSourceTransition(session.baseSource, session.latestSource, preview.patches))) return false;
+  // Reuse the owned edit patches when undoing a preview. Inferring a fresh text
+  // diff can lose object identity when options move around preserved color flags.
+  const trackedPatches = session.patches && patchesMatchSourceTransition(session.baseSource, session.latestSource, session.patches)
+    ? session.patches : undefined;
+  const patches = preview?.patches ?? trackedPatches;
   dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: session.documentId,
     source: session.baseSource, expectedSource: session.latestSource, expectedSourceRevision: session.latestRevision,
     changedSourceIds: session.changedSourceIds,
-    patches: preview?.patches.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
+    patches: patches?.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
       replacement: session.baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) })),
     identityMoves: preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan })) });
   trackDocumentEdit(session, getState());

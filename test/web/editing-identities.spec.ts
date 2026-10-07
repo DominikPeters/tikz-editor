@@ -9,6 +9,7 @@ import { wp } from "../coords-helpers.js";
 import { createEditGeometrySession } from "../../packages/core/src/edit/geometry-session.js";
 import { executeDocumentEdit } from "../../packages/app/src/edit-execution.js";
 import type { EditorState } from "../../packages/app/src/store/types.js";
+import { beginDocumentEdit, restoreDocumentEdit, trackDocumentEdit } from "../../packages/app/src/edit-session.js";
 
 const wrap = (body: string) => `\\begin{tikzpicture}\n${body}\n\\end{tikzpicture}`;
 const a = String.raw`\draw (0,0) rectangle (1,1);`, b = String.raw`\draw (3,0) rectangle (4,1);`;
@@ -26,6 +27,26 @@ function setup(source = wrap(`${a}\n${b}`)) { return ready(editorReducer(makeIni
 function entries(state: EditorState) { return state.documents[state.activeDocumentId].editingIdentities!.entries.filter(entry => entry.kind === "Path"); }
 
 describe("document editing identities", () => {
+  it.each(["->", "->,red", "->,blue", "->,draw=red"])("preserves selected arrow identity through a %s property preview (#32)", options => {
+    let state = setup(wrap(String.raw`\draw[${options}] (0.89,1.5) -- (2.5,2.27);`));
+    const original = entries(state).map(entry => entry.id);
+    state = editorReducer(state, { type: "SELECT", id: "path:0", additive: false });
+    const source = state.source;
+    const session = beginDocumentEdit(state, ["path:0"]);
+    state = ready(editorReducer(state, { type: "APPLY_EDIT_ACTION", recordInHistory: false, action: {
+      kind: "setProperty", elementId: "path:0", level: "command", propertyId: "arrow-tip", key: "arrows", value: "-Stealth", clearKeys: ["arrows", "-", "->", "<-", "<->"]
+    } }));
+    expect(state.source).toContain("Stealth");
+    expect(entries(state).map(entry => entry.id)).toEqual(original);
+    expect([...state.selectedElementIds]).toEqual(["path:0"]);
+    trackDocumentEdit(session, state);
+    expect(restoreDocumentEdit(session, () => state, action => { state = editorReducer(state, action); })).toBe(true);
+    state = ready(state);
+    expect(state.source).toBe(source);
+    expect(entries(state).map(entry => entry.id)).toEqual(original);
+    expect([...state.selectedElementIds]).toEqual(["path:0"]);
+  });
+
   it("preserves identity through commands, reordering, undo, and redo", () => {
     let state = setup(); const original = entries(state).map(entry => entry.id);
     state = editorReducer(state, { type: "SELECT", id: "path:0", additive: false });
