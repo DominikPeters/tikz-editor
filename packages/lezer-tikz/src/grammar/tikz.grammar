@@ -327,6 +327,22 @@ UnknownPart {
   Group |
   PathOperator |
   PathKeyword |
+  NodeKw |
+  ToKw |
+  EdgeKw |
+  ChildKw |
+  FromKw |
+  ParentKw |
+  SvgKw |
+  LetKw |
+  InKw |
+  CoordinateKw |
+  DecorateKw |
+  PicKw |
+  ForeachKw |
+  ForeachCmd |
+  QuotedSvg |
+  "=" |
   UnknownPathItem
 }
 
