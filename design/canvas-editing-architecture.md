@@ -751,9 +751,12 @@ uses positions but deletion still uses raw source ranges.
    math caret entry on that side, and glyph entries publish a font-level
    caret extent (0.75 em up, 0.25 em down) next to their ink-based
    geometry. So the inside of `x^\star‸)` is a short caret at the star,
-   and the outside a full-size one before the parenthesis. Outlines use
-   the same edges. After a construct (`$x^\star$‸`), the default
-   projection still decides.
+   and the outside a full-size one before the parenthesis. After a
+   construct at a slot's end (`$x^\star$‸`), the caret is after it as a
+   whole: at its rightmost entry, sized like its first item. Outlines use
+   the same edges. On slide text, the hit map's default projection is
+   then only a fallback where the layout has no matching entry; it stays
+   for callers without a tree (TikZ node text).
 
    Open: sub-paragraph `\pause` hiding, and `\alt`, where one argument
    is hidden, are not detected yet.
