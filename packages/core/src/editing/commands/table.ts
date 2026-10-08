@@ -55,6 +55,8 @@ export type EnvironmentSchema = {
   readonly node: EditNodeKind;
   readonly body: EnvironmentBody;
   readonly args: readonly ArgSchema[];
+  /** For a list body: the command that starts an item and the arguments it takes. */
+  readonly item?: { readonly command: string; readonly args: readonly ArgSchema[] };
 };
 
 export type CommandTable = {
@@ -133,6 +135,9 @@ const TEXT_COMMANDS = new Map<string, Entry>([
   ["pause", { category: "vertical", node: "vertical", args: [value("options", "optional")] }],
   ["vspace", { category: "vertical", node: "vertical", args: [overlay, value("dimension")], star: true }],
   ["newline", { category: "break", node: "break", args: [] }],
+  ["newblock", { category: "spacing", node: "space", args: [] }],
+  // The optional short caption only appears in a list of figures.
+  ["caption", { category: "style", node: "style", args: [overlay, value("value", "optional"), content("text")], star: true }],
   ["framebreak", { category: "vertical", node: "vertical", args: [] }],
   ...entries(["frametitle", "framesubtitle"], { category: "style", node: "style", args: [overlay, value("options", "optional"), content("text")] }),
   ["beamerreturnbutton", { category: "style", node: "style", args: [content("text")] }],
@@ -266,11 +271,26 @@ const INLINE_MATH_ALIGNMENT = ["aligned", "gathered", "split", "cases", "dcases"
   "Bmatrix", "vmatrix", "Vmatrix", "smallmatrix", "array", "subarray", "alignedat"];
 const TEXT_ALIGNMENT = ["tabular", "tabular*", "tabularx"];
 const OPAQUE = ["tikzpicture", "verbatim", "verbatim*", "Verbatim", "BVerbatim", "semiverbatim", "lstlisting",
-  "minted", "alltt", "columns", "column", "figure", "table", "thebibliography", "picture", "pgfpicture"];
+  "minted", "alltt", "columns", "column", "picture", "pgfpicture"];
+const FLOATS = ["figure", "figure*", "table", "table*"];
+const LIST_ITEM = { command: "item", args: [overlay, slot("label", "optional", "text")] };
 
 function environmentEntry(name: string): EnvironmentSchema | null {
   if (LIST_ENVIRONMENTS.includes(name)) {
-    return { name, node: "list", body: "list", args: [overlay, value("options", "optional")] };
+    return { name, node: "list", body: "list", args: [overlay, value("options", "optional")], item: LIST_ITEM };
+  }
+  if (name === "thebibliography") {
+    // The argument is the widest label, used only to size the label column.
+    return {
+      name,
+      node: "list",
+      body: "list",
+      args: [value("value")],
+      item: { command: "bibitem", args: [slot("label", "optional", "text"), value("label-key")] },
+    };
+  }
+  if (FLOATS.includes(name)) {
+    return { name, node: "container", body: "flow", args: [value("options", "optional")] };
   }
   if (TITLED_BLOCKS.includes(name)) {
     return { name, node: "container", body: "flow", args: [overlay, slot("title", "mandatory", "text")] };

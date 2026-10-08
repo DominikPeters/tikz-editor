@@ -84,6 +84,7 @@ import type {
   TextSelectionOverlay
 } from "./types";
 import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
+import { useEditTreeShadow } from "./edit-tree-shadow";
 
 type TextEditCaretOverlay = {
   left: number;
@@ -656,6 +657,11 @@ export function useCanvasTextEditSession(
   const textEditFocusSurface = state.focusSurface;
   const canvasSurfaceFocused =
     textEditingSession?.isScopeSession === true && textEditFocusSurface === "canvas";
+  // Shadow mode: built on every revision, not yet driving the UI.
+  useEditTreeShadow(
+    textEditingSession?.isScopeSession ? textEditingSession.text : null,
+    snapshot.deck?.activeFrame?.editingEnvironment ?? null
+  );
   const [pendingAdornmentTextEditTargetId, setPendingAdornmentTextEditTargetId] = useState<string | null>(null);
   const textSelectionDragRef = useRef<TextSelectionDrag | null>(null);
   const textEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);

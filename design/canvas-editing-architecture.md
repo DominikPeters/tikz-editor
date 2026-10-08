@@ -215,12 +215,17 @@ type EditSlot = {
 };
 ```
 
-Node kinds (initial set):
-- **Flow:** `scope`, `paragraph`, `list`, `item`, `display`, `alignment`
-  with `row` and `cell`, `vertical` (`\medskip`, `\vspace`, `\pause`).
-- **Inline:** `style` (font commands and declarations, `\textcolor`,
-  `\alert`, style macros), `formula`, `text-in-math`, `link`,
-  `verbatim-slot`.
+Node kinds (as built in step 3):
+- **Flow:** `scope`, `paragraph`, `list`, `item`, `container` (blocks,
+  theorems, floats, `center`, `minipage`, …), `display`, `alignment`
+  with `row`, `vertical` (`\medskip`, `\vspace`, `\pause`). Alignment
+  cells are the slots of a row, as numerator and denominator are the
+  slots of a fraction; there is no cell node.
+- **Inline:** `style` (font commands, `\textcolor`, `\alert`, style
+  macros), `declaration` (`\bfseries`, `\color`, `\centering`, which
+  scope to the end of their group), `overlay` (`\only`, `\uncover`,
+  `\alt`), `group` (bare braces), `formula`, `text-in-math`, `link`,
+  `break` (`\\`, `\newline`). Verbatim content is an `atom`.
 - **Math:** `fraction`, `radical`, `scripted` (a base that owns its
   scripts, per scenarios doc O3), `delimited`, `accent`, `overset`,
   `operator`.
@@ -282,6 +287,11 @@ type Selection = {
   (R11), but offsets inside invisibles are not caret positions. The
   property test is "every position round-trips through
   offset-with-affinity", not "every offset round-trips".
+- **Offsets in insignificant whitespace** (a slot gap: spaces in math,
+  blank lines between blocks) have no positions of their own. They
+  resolve to the position the gap belongs to, so `\le‸ 0` and
+  `\le ‸0` are one place. Offsets inside a command name, a brace or a
+  value have no position at all.
 - **Present vs absent slots.** An absent optional slot (no `[n]` on
   `\sqrt`) has no positions until it is created through its ghost. A
   present-but-empty slot has exactly one position.
@@ -673,10 +683,30 @@ uses positions but deletion still uses raw source ranges.
    checked against invariants and against today's behaviour in tests, but
    not yet driving the UI. Includes the engine annotations for math slots
    and style wrappers. Latency is measured against the gate.
+
+   *Status:* done, except the engine annotations, which moved to step 4
+   (caret drawing and vertical motion are their first consumers, and
+   nothing in shadow mode reads them). The CommandTable is in
+   `editing/commands/`, and math commands are classified by the math
+   parser's own command families. The tree, its builder and invariants
+   are in `editing/tree/`, and positions in `editing/position/`. The
+   session hook builds the tree for a scope session on every revision
+   (`edit-tree-shadow.ts`), and dev builds check its invariants. Tests
+   over every scope of the Beamer fixtures check:
+   - the invariants;
+   - agreement with the math parser (fractions, radicals, scripts) and
+     the text IR (font commands);
+   - that every caret stop today's renderer publishes is a tree position,
+     or lies inside one construct's own source (`\la‸mbda`), which the
+     tree treats as a unit by design.
+
+   Building takes 1–2 ms per frame. The latency gate on the KKT frame
+   measured a median of 51.1 ms and p95 of 56.5 ms with the tree on,
+   within the earlier baseline.
 4. **First vertical slice: navigation, selection *and* deletion
    together.** It covers prose, one style wrapper, inline math (fraction,
    script, symbol), one editable style macro (K1), and one alignment
-   (`align*`). Outlines and the breadcrumb are drawn from the tree.
+   (`align*`). Includes the engine annotations (moved from step 3). Outlines and the breadcrumb are drawn from the tree.
    *Exit:* the `\setminus` and `\frac` scenarios and the F5/O2/O3/K4
    contract tests pass.
 5. **Input rules and the chip.** Escaping, auto-pairing, completion from
