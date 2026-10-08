@@ -194,7 +194,8 @@ test("opens scope-wide sessions and edits title and list text with undo/redo", a
 
 test("KKT display math caret and highlights align with the rendered glyphs", async ({ page }) => {
   await setSource(page, KKT_SOURCE);
-  await page.getByRole("button", { name: "Problem form and notation", exact: true }).click();
+  await page.getByTestId("figure-navigator")
+    .getByRole("button", { name: /^\d+\. Problem form and notation$/u }).click();
   await expect.poll(() => page.locator(
     '[data-hit-region-target-id^="frame:2:"][data-hit-region-interaction-mode="text"]'
   ).count()).toBeGreaterThan(0);

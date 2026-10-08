@@ -516,7 +516,7 @@ function coalescedSameLineMathSegment(
       sourceKind: rootBox.sourceKind ?? "math",
       x,
       width,
-      caretStops: texMathBoxCaretStops(rootBox, x, width),
+      caretStops: contentCaretStops(rootBox, texMathBoxCaretStops(rootBox, x, width)),
       mathConstructRanges: texMathBoxConstructRanges(rootBox, x, width),
       mathCaretEntries: texMathBoxCaretEntries(rootBox, x, width),
       mathBreakpoints: texMathBoxBreakpoints(rootBox, x, width),
@@ -961,6 +961,30 @@ function isGeneratedDelimiterGlyph(item: TexMathHListItem): boolean {
     return item.code === 40 || item.code === 41 || item.code === 91 || item.code === 93;
   }
   return item.family === "extension";
+}
+
+/**
+ * A segment's caret stops are indexed from its `sourceStartRaw`. The coalesced
+ * segment reports only the formula content, but a root box's stops start at its
+ * opening delimiter, so drop the stops before the content (otherwise every
+ * stop is shifted by the delimiter length and the final glyph is unreachable).
+ */
+function contentCaretStops(
+  rootBox: {
+    readonly sourceStart: number;
+    readonly sourceEnd: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+  },
+  boxStops: readonly TexLineX[]
+): TexLineX[] {
+  if (boxStops.length !== rootBox.sourceEnd - rootBox.sourceStart + 1) {
+    return [...boxStops];
+  }
+  return boxStops.slice(
+    rootBox.contentStart - rootBox.sourceStart,
+    rootBox.contentEnd - rootBox.sourceStart + 1
+  );
 }
 
 function texMathBoxCaretStops(

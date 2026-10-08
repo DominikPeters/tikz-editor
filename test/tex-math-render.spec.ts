@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getKnuthPlassParagraphCaretStops } from "../packages/core/src/text/knuth-plass/index.js";
 import type { ParagraphLayoutReport } from "../packages/core/src/text/knuth-plass/paragraph/report.js";
 import {
   texHBoxX,
@@ -1978,6 +1979,42 @@ describe("TeX math SVG rendering", () => {
     expect(mathSegments[0]?.mathSvgBody).not.toContain('data-tex-math-fragment="true"');
     expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="120"');
     expect(mathSegments[0]?.mathSvgBody).toContain('data-tex-font="cmmi10" data-tex-glyph="121"');
+  });
+
+  it("indexes coalesced inline math caret stops from the content start so the last atom stays reachable", () => {
+    const source = String.raw`Hello $x=y$`;
+    const result = layoutSimpleTexParagraph(source, {
+      paragraphId: "tex:math-coalesced-caret-stops",
+      width: 200,
+      alignment: "ragged-right",
+      parindent: 0,
+      rightskipStretch: 200,
+      spaceGlueProfile: "font",
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const math = result.report?.lines
+      .flatMap((line) => line.segments)
+      .find((segment) => segment.kind === "math");
+    const contentStart = source.indexOf("x=y");
+    expect(math).toMatchObject({ sourceStartRaw: contentStart, sourceEndRaw: contentStart + 3 });
+    // One stop per content offset, the last at the right edge of "y".
+    expect(math?.caretStops).toHaveLength(4);
+    expect(math?.caretStops?.[0]).toBeCloseTo(math?.x ?? 0, 6);
+    expect(math?.caretStops?.[3]).toBeCloseTo((math?.x ?? 0) + (math?.width ?? 0), 6);
+
+    const stops = getKnuthPlassParagraphCaretStops({
+      report: result.report as ParagraphLayoutReport,
+      sourceText: source,
+      sourceTextStartOffset: 0,
+    });
+    expect(stops.error).toBeNull();
+    const xAt = (offset: number) => stops.lines[0]?.stops
+      .filter((stop) => stop.offset === offset && stop.kind === "math")
+      .map((stop) => stop.x) ?? [];
+    const mathEnd = (math?.x ?? 0) + (math?.width ?? 0);
+    expect(xAt(contentStart + 3).at(-1)).toBeCloseTo(mathEnd, 6);
+    expect(xAt(contentStart + 2).at(-1)).toBeLessThan(mathEnd - 3);
   });
 
   it("renders split inline math fragments without repainting earlier formula glyphs", () => {
