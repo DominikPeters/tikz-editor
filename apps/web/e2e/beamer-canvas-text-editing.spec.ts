@@ -442,6 +442,46 @@ test("canvas focus: arrows move by rendered stops and rows, and Backspace delete
   await expect(page.getByTestId("canvas-text-selection-overlay")).toHaveCount(1);
 });
 
+test("canvas focus: outlines and the breadcrumb show the constructs around the caret", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Block body typo");
+  const buffer = await textarea.inputValue();
+  const hiddenInput = page.getByTestId("canvas-focus-input");
+  const readSelection = () => hiddenInput.evaluate((element) => {
+    const input = element as HTMLTextAreaElement;
+    return [input.selectionStart, input.selectionEnd];
+  });
+  const setCaret = (offset: number) => hiddenInput.evaluate((element, value) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(value, value);
+    input.dispatchEvent(new Event("select", { bubbles: true }));
+  }, offset);
+  const breadcrumb = page.getByTestId("canvas-text-breadcrumb");
+  const focusOutline = page.getByTestId("canvas-context-outline-focus");
+
+  // Top-level prose: only the scope itself, nothing outlined.
+  await setCaret(buffer.indexOf("Body typo") + 2);
+  await expect(breadcrumb).toHaveText("frame");
+  await expect(focusOutline).toHaveCount(0);
+
+  // Inside display math: the formula is the focus, outlined and tagged.
+  await setCaret(buffer.indexOf("x + y") + 1);
+  await expect(breadcrumb).toHaveText("frame›display");
+  await expect(focusOutline).toHaveText("display");
+
+  // In a block title: the title slot is the focus.
+  await setCaret(buffer.indexOf("Block typo") + 2);
+  await expect(breadcrumb).toHaveText("frame›block›title");
+  await expect(focusOutline).toHaveText("title");
+
+  // A crumb selects its construct, and the session stays open.
+  await breadcrumb.getByRole("button", { name: "block", exact: true }).click();
+  const blockStart = buffer.indexOf(String.raw`\begin{block}`);
+  const blockEnd = buffer.indexOf(String.raw`\end{block}`) + String.raw`\end{block}`.length;
+  await expect.poll(readSelection).toEqual([blockStart, blockEnd]);
+  await expect(hiddenInput).toBeFocused();
+});
+
 test("canvas focus: structural Enter splits items, Backspace merges, Tab nests and unnests", async ({ page }) => {
   await openScopeContaining(page, "List typo");
   const hiddenInput = page.getByTestId("canvas-focus-input");

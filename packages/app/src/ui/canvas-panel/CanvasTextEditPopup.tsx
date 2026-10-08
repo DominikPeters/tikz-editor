@@ -12,6 +12,7 @@ import {
 import type { CanvasTextEditFocusSurface } from "./canvas-text-edit-machine";
 import type { TextEditingSession } from "./types";
 import css from "./CanvasPanel.module.css";
+import type { CanvasContextOutline } from "./useCanvasContextOutlines";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -116,6 +117,8 @@ export type CanvasTextEditViewModel = {
   canvasFocusInput: CanvasFocusInputModel | null;
   /** Dashed PowerPoint-style edit outline around the scope container, viewport px. */
   scopeEditBorder: CanvasScopeEditBorder | null;
+  /** Focus and parent outlines around the caret's constructs (R8), viewport px. */
+  contextOutlines: readonly CanvasContextOutline[];
 };
 
 const GLYPH_CLASS_NAMES: Record<

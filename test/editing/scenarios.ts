@@ -91,6 +91,10 @@ export const treeEditingScenarios: readonly Scenario[] = [
   { id: "→ {}", title: "→ does not stop inside or after a {} terminator", body: R`\LaTeX‸{} is`, keys: "→", expect: R`\LaTeX{} ‸is` },
   { id: "→ paragraphs", title: "crossing a paragraph break costs one press", body: "One‸.\n\nTwo.", keys: "→ → →", expect: "One.\n\nT‸wo." },
   { id: "→ align rows", title: "crossing an alignment row break costs one press", body: align(R`a &= b‸ \\`, "c &= d"), keys: "→ → →", expect: align(R`a &= b \\`, "c &‸= d") },
+  { id: "→ hidden overlay", title: "→ skips overlay content hidden on this step", body: R`a‸ \only<2>{xy} b`, keys: "→ →", expect: R`a \only<2>{xy} ‸b` },
+  { id: "→ shown overlay", title: "→ enters overlay content shown on this step", step: 2, body: R`a‸ \only<2>{xy} b`, keys: "→ →", expect: R`a \only<2>{‸xy} b` },
+  { id: "⌫ hidden overlay", title: "⌫ passes over overlay content hidden on this step", body: R`a \only<2>{xy}‸b`, keys: "⌫", expect: R`a‸\only<2>{xy}b` },
+  { id: "→ after \\pause", title: "→ does not enter a paragraph \\pause hides on this step", body: "One‸.\n\\pause\n\nTwo.\n\nThree.", keys: "→ →", expect: "One.‸\n\\pause\n\nTwo.\n\nThree." },
   // Selection (N3).
   { id: "⇧← releases", title: "⇧← back out of a formula releases the promotion", body: R`a‸b $x$`, keys: "⇧→ ⇧→ ⇧→ ⇧←", expect: R`a⟦b ⟧$x$` },
   { id: "⇧← out of math", title: "a selection leaving a formula covers all of it", body: R`$a+b‸$ c`, keys: "⇧← ⇧← ⇧← ⇧←", expect: R`⟦‸$a+b$⟧ c` },

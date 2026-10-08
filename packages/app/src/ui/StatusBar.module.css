@@ -65,6 +65,36 @@
   color: var(--text-faint);
 }
 
+/* V11 breadcrumb: the caret's context path while editing slide text. */
+.crumbItem {
+  display: inline-flex;
+  align-items: center;
+}
+
+.crumbSeparator {
+  color: var(--text-dim);
+  margin: 0 3px;
+}
+
+.crumb {
+  border: 0;
+  padding: 0 2px;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.crumb:hover {
+  background: var(--btn-hover-bg);
+  color: var(--text);
+}
+
+.crumbItem:last-child .crumb {
+  color: var(--text);
+}
+
 .dismissButton {
   border: 0;
   background: transparent;

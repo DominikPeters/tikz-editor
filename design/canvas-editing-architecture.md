@@ -706,9 +706,50 @@ uses positions but deletion still uses raw source ranges.
 4. **First vertical slice: navigation, selection *and* deletion
    together.** It covers prose, one style wrapper, inline math (fraction,
    script, symbol), one editable style macro (K1), and one alignment
-   (`align*`). Includes the engine annotations (moved from step 3). Outlines and the breadcrumb are drawn from the tree.
+   (`align*`). Includes the engine annotations (moved from step 3).
+   Outlines and the breadcrumb are drawn from the tree.
    *Exit:* the `\setminus` and `\frac` scenarios and the F5/O2/O3/K4
    contract tests pass.
+
+   *Status:* done, with the per-position caret geometry left open (see
+   below). On the canvas of a scope session, ←/→, ⌫/⌦, typing over a
+   selection and `^`/`_` work on the tree:
+   - `position/view.ts`: caret stops (positions of caret slots, minus
+     those that look the same as the stop before: after invisible items,
+     a script's base start, bare group edges);
+   - `position/selection.ts`: promotion from raw ends;
+   - `operations/`: ⌫/⌦ by the O2 precedence, range deletion keeping
+     wrappers, K4, R6;
+   - `ownership/kinds.ts`: one role per kind (invisible, unit,
+     transparent, scripted, construct, flow), the data the operations
+     read. The full owns/barrier resolution arrives with Enter and the
+     input rules in step 5.
+
+   Paragraph and item edges still go to the structural keys. Transactions
+   carry the raw selection ends as positions, and the edit machine keeps
+   them while buffer and selection are unchanged, so the inside and
+   outside of `x^2‸` stay apart.
+
+   Engine facts used so far:
+   - nodes the layout hides on the current step (overlay content,
+     paragraphs after `\pause`): a hideable node with no rendered caret
+     stop in it is invisible for motion and deletion
+     (`position/rendered.ts`). Spaces TeX drops at a paragraph's edges
+     are invisible too (`text\n\pause` ends with "text");
+   - K1: style macros are classified from their definition
+     (`commands/macro-classes.ts`), and the renderer keeps their argument
+     editable instead of atomic.
+
+   Outlines are the union of the hit maps' selection rects for the focus
+   and parent spans, narrowed to the caret positions at both ends on a
+   single line (math selection rects cover whole rows). The breadcrumb is
+   in the status bar, and each crumb selects its construct.
+
+   Open: caret geometry per position. Today the caret is drawn from the
+   offset, so the inside and outside of an unbraced script share a
+   caret; the outline tells them apart. Sub-paragraph `\pause` hiding,
+   and `\alt`, where one argument is hidden, are not detected yet.
+   Latency gate: median 52.9 ms, p95 60.2 ms.
 5. **Input rules and the chip.** Escaping, auto-pairing, completion from
    the CommandTable, scripts, the pending command.
 6. **Breadth.** All node kinds, wrapping and pickers (R10, O8), paste and

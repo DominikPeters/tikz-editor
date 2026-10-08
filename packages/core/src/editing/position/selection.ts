@@ -1,4 +1,3 @@
-import { itemRole } from "../ownership/kinds.js";
 import { childIndex, slotChain } from "../tree/navigate.js";
 import type { NodeId, SlotId } from "../tree/types.js";
 import type { Position } from "./position.js";
@@ -49,7 +48,7 @@ function outermostConstructBelow(view: EditView, slot: SlotId, common: SlotId): 
   let current: SlotId | null = slot;
   while (current != null && current !== common) {
     const owner: NodeId = tree.slots[current].node;
-    const role = itemRole(tree, owner);
+    const role = view.role(owner);
     if (role === "construct" || role === "scripted") {
       found = owner;
     }

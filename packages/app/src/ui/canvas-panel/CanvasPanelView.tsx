@@ -825,6 +825,20 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           )}
 
+          {canvasTextEdit.contextOutlines.map((outline) => (
+            <div
+              key={`${outline.role}:${outline.left}:${outline.top}:${outline.width}:${outline.height}`}
+              className={outline.role === "focus" ? css.contextOutlineFocus : css.contextOutlineParent}
+              aria-hidden="true"
+              data-testid={`canvas-context-outline-${outline.role}`}
+              style={{ left: outline.left, top: outline.top, width: outline.width, height: outline.height }}
+            >
+              {outline.role === "focus" && outline.tag ? (
+                <span className={css.contextOutlineTag}>{outline.tag}</span>
+              ) : null}
+            </div>
+          ))}
+
           {canvasTextEdit.scopeEditBorder ? (
             <div
               className={[

@@ -473,6 +473,38 @@
   outline-color: color-mix(in srgb, var(--text-muted) 45%, transparent 55%);
 }
 
+/* R8 context outlines: the construct around the caret (focus, with its
+   tag) and the one around that (parent, fainter). They make the inside and
+   outside of a construct's edge visibly different caret stops. */
+.contextOutlineFocus,
+.contextOutlineParent {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+.contextOutlineFocus {
+  outline: 1.25px solid color-mix(in srgb, var(--accent) 70%, transparent 30%);
+}
+
+.contextOutlineParent {
+  outline: 1px solid color-mix(in srgb, var(--accent) 28%, transparent 72%);
+}
+
+.contextOutlineTag {
+  position: absolute;
+  left: -1px;
+  bottom: 100%;
+  margin-bottom: 2px;
+  padding: 0 3px;
+  border-radius: 2px;
+  font: 500 9px/13px var(--font-ui);
+  color: #fff;
+  background: var(--accent-dark);
+  white-space: nowrap;
+}
+
 /* Hidden input capturing keyboard/IME while the canvas surface owns focus.
    Kept 1x1 near the canvas caret so IME candidate windows open in place;
    never display:none, which would make it unfocusable. */

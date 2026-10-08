@@ -1,4 +1,4 @@
-import { ARGUMENT_ROLES, itemRole } from "../ownership/kinds.js";
+import { ARGUMENT_ROLES } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import { presentSlots } from "../tree/navigate.js";
@@ -23,7 +23,7 @@ export function enterExistingScript(view: EditView, caret: Position, marker: "^"
     scripted = owner.id;
   } else {
     let at = caret.index;
-    while (at > 0 && itemRole(tree, slot.children[at - 1]) === "invisible") {
+    while (at > 0 && view.role(slot.children[at - 1]) === "invisible") {
       at -= 1;
     }
     const previous = at > 0 ? slot.children[at - 1] : null;

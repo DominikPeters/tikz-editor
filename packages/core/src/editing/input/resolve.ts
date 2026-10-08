@@ -30,7 +30,14 @@ import {
   insertIntoUnbracedArgument,
   type EditOutcome,
 } from "../operations/index.js";
-import { promoteSelection, type EditView, type Position, type SelectionEnds } from "../position/index.js";
+import {
+  hiddenNodes,
+  promoteSelection,
+  type EditView,
+  type Position,
+  type SelectionEnds,
+} from "../position/index.js";
+import type { NodeId } from "../tree/types.js";
 import {
   applyPatches,
   replacementPatches,
@@ -76,10 +83,11 @@ export type IntentContext = {
   readonly domain: BeamerCaretDomain | null;
   readonly verticalGoal: VerticalGoal | null;
   /**
-   * The edit view of a buffer text, for tree-backed editing on the canvas
-   * of a scope session; null keeps source-character semantics.
+   * The edit view of a buffer text (with the nodes the layout hides), for
+   * tree-backed editing on the canvas of a scope session; null keeps
+   * source-character semantics.
    */
-  readonly structure: ((text: string) => EditView) | null;
+  readonly structure: ((text: string, hidden?: ReadonlySet<NodeId>) => EditView) | null;
   /** The raw selection ends as positions in the current buffer, when the caller still has them. */
   readonly positions: SelectionEnds | null;
 };
@@ -173,7 +181,14 @@ class Resolver {
   constructor(private readonly context: IntentContext) {
     this.from = Math.min(context.anchor, context.focus);
     this.to = Math.max(context.anchor, context.focus);
-    this.view = context.surface === "canvas" && context.structure ? context.structure(context.text) : null;
+    this.view = context.surface === "canvas" && context.structure ? this.currentView(context.structure) : null;
+  }
+
+  /** The current buffer's view, minus what the rendered layout hides on this step. */
+  private currentView(structure: NonNullable<IntentContext["structure"]>): EditView {
+    const view = structure(this.context.text);
+    const hidden = this.context.domain ? hiddenNodes(view.tree, this.context.domain, this.context.bufferFrom) : null;
+    return hidden && hidden.size > 0 ? structure(this.context.text, hidden) : view;
   }
 
   /** The raw selection ends, from the caller or from the offsets. */
