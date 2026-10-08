@@ -50,8 +50,10 @@ export {
   parseTexMathAlignedBody,
   parseTexMathDisplayBody,
   parseTexMath,
+  texMathCommandFamily,
   tokenizeTexMath,
   type ParseTexMathOptions,
+  type TexMathCommandFamily,
 } from "./parser.js";
 export {
   normalizeTexMathAtomClasses,

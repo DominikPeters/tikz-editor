@@ -124,6 +124,85 @@ export function isTexMathTypesettingCommand(command: string): boolean {
     ["sqrt", "left", "right", "middle", "operatorname", "not", "text"].includes(commandName(command));
 }
 
+/**
+ * How the parser treats a math command, by family. The editing command
+ * table derives argument shapes from it, so the parser stays the single
+ * source of truth for which math commands exist.
+ */
+export type TexMathCommandFamily =
+  | "symbol"
+  | "operator"
+  | "operatorname"
+  | "alphabet"
+  | "alphabet-declaration"
+  | "accent"
+  | "line"
+  | "brace"
+  | "stack"
+  | "overunderset"
+  | "extensible-arrow"
+  | "fraction"
+  | "infix-fraction"
+  | "radical"
+  | "left"
+  | "right"
+  | "middle"
+  | "big-delimiter"
+  | "spacing"
+  | "phantom"
+  | "atom-class"
+  | "limits"
+  | "style"
+  | "text"
+  | "modular"
+  | "not";
+
+export function texMathCommandFamily(command: string): TexMathCommandFamily | null {
+  const name = commandName(command);
+  if (fractionCommandStyle(command) !== null || binomialCommandStyle(command) !== null) return "fraction";
+  if (infixFractionPrimitive(command) !== null) return "infix-fraction";
+  if (name === "sqrt") return "radical";
+  if (name === "left") return "left";
+  if (name === "right") return "right";
+  if (name === "middle") return "middle";
+  if (name === "not") return "not";
+  if (name === "operatorname") return "operatorname";
+  if (accentCommandName(command) !== null) return "accent";
+  if (lineCommandName(command) !== null) return "line";
+  if (braceCommandName(command) !== null) return "brace";
+  const stack = stackingCommandName(command);
+  if (stack !== null) return stack === "overunderset" ? "overunderset" : "stack";
+  if (extensibleArrowCommandName(command) !== null) return "extensible-arrow";
+  if (alphabetCommandName(command) !== null) return "alphabet";
+  if (alphabetDeclarationCommandName(command) !== null) return "alphabet-declaration";
+  if (mathTextCommandName(command) !== null) return "text";
+  if (phantomCommandName(command) !== null) return "phantom";
+  if (atomClassCommandName(command) !== null) return "atom-class";
+  if (bigDelimiterCommand(command) !== null) return "big-delimiter";
+  if (spacingCommandName(command) !== null) return "spacing";
+  if (styleCommandName(command) !== null) return "style";
+  if (operatorLimitsCommandName(command) !== null) return "limits";
+  if (modularArithmeticCommandName(command) !== null) return "modular";
+  if (
+    operatorCommandName(command) !== null ||
+    namedOperatorCommandName(command) !== null ||
+    amsNamedOperatorDeclaration(command) !== null ||
+    varLimitCommandName(command) !== null
+  ) {
+    return "operator";
+  }
+  if (
+    namedSymbolCommand(command) !== null ||
+    ellipsisCommandName(command) !== null ||
+    verticalDotsCommandName(command) !== null ||
+    amsImplicationCommandName(command) !== null ||
+    mathtoolsColonRelationCommandName(command) !== null
+  ) {
+    return "symbol";
+  }
+  return null;
+}
+
 export function parseTexMath(
   source: string,
   options: ParseTexMathOptions = {}
