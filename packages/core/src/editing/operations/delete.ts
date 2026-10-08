@@ -1,4 +1,4 @@
-import { ARGUMENT_ROLES, itemRole } from "../ownership/kinds.js";
+import { ARGUMENT_ROLES } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
@@ -35,7 +35,7 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
   for (;;) {
     const record = tree.slots[slot];
     const owner = record.node;
-    while (at > 0 && itemRole(tree, record.children[at - 1]) === "invisible") {
+    while (at > 0 && view.role(record.children[at - 1]) === "invisible") {
       at -= 1;
     }
     if (at === 0) {
@@ -48,7 +48,7 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
       continue;
     }
     const child = record.children[at - 1];
-    switch (itemRole(tree, child)) {
+    switch (view.role(child)) {
       case "transparent": {
         const content = presentSlots(tree, child).at(-1);
         if (!content || isEmptySlot(view, content.id)) {
@@ -87,7 +87,7 @@ export function deleteForward(view: EditView, caret: Position): EditOutcome {
   for (;;) {
     const record = tree.slots[slot];
     const owner = record.node;
-    while (at < record.children.length && itemRole(tree, record.children[at]) === "invisible") {
+    while (at < record.children.length && view.role(record.children[at]) === "invisible") {
       at += 1;
     }
     if (at === record.children.length) {
@@ -100,7 +100,7 @@ export function deleteForward(view: EditView, caret: Position): EditOutcome {
       continue;
     }
     const child = record.children[at];
-    switch (itemRole(tree, child)) {
+    switch (view.role(child)) {
       case "transparent": {
         const content = presentSlots(tree, child)[0];
         if (!content || isEmptySlot(view, content.id)) {
@@ -134,7 +134,7 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   const { tree } = view;
   const record = tree.slots[slot];
   const owner = record.node;
-  const role = itemRole(tree, owner);
+  const role = view.role(owner);
   const outcome = (value: EditOutcome): EdgeDecision => ({ kind: "outcome", outcome: value });
   if (role === "flow") {
     // Paragraph and item edges are structural; the edges of a display or
@@ -190,7 +190,7 @@ function neighbouringRow(view: EditView, row: NodeId, edge: "start" | "end"): Ed
 
 /** A slot with nothing visible in it. */
 function isEmptySlot(view: EditView, slot: SlotId): boolean {
-  return view.tree.slots[slot].children.every((child) => itemRole(view.tree, child) === "invisible");
+  return view.tree.slots[slot].children.every((child) => view.role(child) === "invisible");
 }
 
 /** The script slot last in source (the one ⌫ reaches first), or null. */
@@ -259,7 +259,7 @@ function emptiedSlotCleanup(
   const { tree } = view;
   const record = tree.slots[slot];
   const owner = record.node;
-  if (itemRole(tree, owner) === "transparent" && presentSlots(tree, owner).length === 1) {
+  if (view.role(owner) === "transparent" && presentSlots(tree, owner).length === 1) {
     const parent = tree.nodes[owner].parent;
     if (parent != null && tree.slots[parent].children.length === 1) {
       const outer = emptiedSlotCleanup(view, parent, throughScript);
@@ -330,7 +330,7 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
       if (!emptied) {
         continue;
       }
-      if (itemRole(tree, node.id) === "transparent") {
+      if (view.role(node.id) === "transparent") {
         removals.push({ span: node.span });
       } else if (!slot.braced && ARGUMENT_ROLES.has(slot.role)) {
         removals.push({ span: slot.contentSpan, insert: "{}" });

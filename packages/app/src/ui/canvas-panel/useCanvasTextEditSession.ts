@@ -42,6 +42,7 @@ import {
   type Intent
 } from "@tikz-editor/core/editing/input/index";
 import { applyTransaction, type Transaction } from "@tikz-editor/core/editing/transaction/index";
+import { caretContext, type ContextCrumb } from "@tikz-editor/core/editing/position/index";
 import {
   activeTextFormatWrapper,
   isTextFormatActive,
@@ -86,6 +87,8 @@ import type {
 } from "./types";
 import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
 import { canvasEditView, useEditCommands, useEditTree } from "./edit-tree-shadow";
+import { setCanvasTextContext } from "./canvas-text-context";
+import { useCanvasContextOutlines, type CanvasContextOutlineRequest } from "./useCanvasContextOutlines";
 
 type TextEditCaretOverlay = {
   left: number;
@@ -799,7 +802,9 @@ export function useCanvasTextEditSession(
           : null,
         domain: session.isScopeSession ? resolveDeckCaretDomainRef.current(session.sourceId) : null,
         verticalGoal: state.verticalGoal,
-        structure: session.isScopeSession ? (text) => canvasEditView(text, editCommandsRef.current) : null,
+        structure: session.isScopeSession
+          ? (text, hidden) => canvasEditView(text, editCommandsRef.current, hidden)
+          : null,
         positions: selectionPositions(state, anchor, focus)
       },
       intent
@@ -1831,6 +1836,10 @@ export function useCanvasTextEditSession(
       if (!(target instanceof Node) || viewportRef.current?.contains(target)) {
         return;
       }
+      // Session chrome outside the canvas (the status bar breadcrumb).
+      if (target instanceof Element && target.closest("[data-keeps-text-session]")) {
+        return;
+      }
       textSelectionDragRef.current = null;
       dispatchCanvasTextEditAction({ type: "session_close" });
     };
@@ -2157,6 +2166,78 @@ export function useCanvasTextEditSession(
     textSelectionOverlay
   ]);
 
+  /**
+   * The caret's context (R8, V11): the constructs around the selection's
+   * focus, from the edit tree. The raw focus position is used when the last
+   * transaction recorded it (the inside and outside of `x^2‸` share an
+   * offset).
+   */
+  const caretCrumbs = useMemo<readonly ContextCrumb[] | null>(() => {
+    if (!textEditingSession?.isScopeSession) {
+      return null;
+    }
+    const view = canvasEditView(textEditingSession.text, editCommands);
+    const { selectionStart: start, selectionEnd: end } = textEditingSession;
+    const recorded = state.treeSelection;
+    const matches = recorded?.text === textEditingSession.text &&
+      ((recorded.anchor === start && recorded.focus === end) || (recorded.anchor === end && recorded.focus === start));
+    const focus = matches ? recorded.ends.focus : view.positionAt(end);
+    return caretContext(view, focus);
+  }, [editCommands, state.treeSelection, textEditingSession]);
+
+  useEffect(() => {
+    if (!caretCrumbs || textEditFocusSurface !== "canvas") {
+      setCanvasTextContext(null);
+      return;
+    }
+    // The path starts at the scope itself, which selects the whole buffer.
+    const scopeId = textEditingSession?.sourceId ?? "";
+    const root = scopeId.endsWith(":scope:title") ? "frametitle"
+      : scopeId.includes(":scope:preamble:") ? scopeId.slice(scopeId.lastIndexOf(":") + 1)
+        : scopeId.includes("column") ? "column" : "frame";
+    setCanvasTextContext({
+      crumbs: [root, ...caretCrumbs.map((crumb) => crumb.label)],
+      select: (index) => {
+        const current = stateRef.current;
+        const span = index === 0
+          ? { from: 0, to: current.session?.text.length ?? 0 }
+          : caretCrumbs[index - 1]?.span;
+        if (!span || !current.session) {
+          return;
+        }
+        commitTransaction({
+          baseRevision: current.inputRevision,
+          patches: [],
+          selection: { kind: "absolute", anchor: span.from, focus: span.to },
+          undo: { group: "own-step" }
+        }, true);
+      }
+    });
+    return () => { setCanvasTextContext(null); };
+  }, [caretCrumbs, commitTransaction, textEditFocusSurface, textEditingSession?.sourceId]);
+
+  const outlineRequests = useMemo<CanvasContextOutlineRequest[]>(() => {
+    const outlined = (caretCrumbs ?? []).filter((crumb) => crumb.outlined);
+    const focus = outlined.at(-1);
+    const parent = outlined.at(-2);
+    return [
+      ...(focus ? [{ role: "focus" as const, tag: focus.label, span: focus.span }] : []),
+      ...(parent ? [{ role: "parent" as const, tag: null, span: parent.span }] : [])
+    ];
+  }, [caretCrumbs]);
+
+  const contextOutlines = useCanvasContextOutlines({
+    session: textEditFocusSurface === "canvas" ? textEditingSession : null,
+    requests: outlineRequests,
+    renderedSource: snapshot.source,
+    source,
+    textLayoutContext,
+    canvasTransform,
+    viewportRef,
+    resolveTarget: (session) => resolveEditableTextTargetById(session.sourceId, session.sceneTextId),
+    resolveContainer: resolveRenderedMathTextElement
+  });
+
   const scopeEditBorder = useMemo<CanvasScopeEditBorder | null>(() => {
     if (!textEditingSession?.isScopeSession || !svgResult) {
       return null;
@@ -2185,9 +2266,10 @@ export function useCanvasTextEditSession(
       popup,
       focusSurface: textEditFocusSurface,
       canvasFocusInput,
-      scopeEditBorder
+      scopeEditBorder,
+      contextOutlines
     }),
-    [canvasFocusInput, popup, scopeEditBorder, textEditFocusSurface, textEditingSession]
+    [canvasFocusInput, contextOutlines, popup, scopeEditBorder, textEditFocusSurface, textEditingSession]
   );
 
   return {

@@ -1,4 +1,4 @@
-import { isCaretSlot, itemRole } from "../ownership/kinds.js";
+import { isCaretSlot, itemRole, type ItemRole } from "../ownership/kinds.js";
 import { slotChain } from "../tree/navigate.js";
 import type { EditTree, NodeId, SlotId } from "../tree/types.js";
 import { createPositionIndex, positionOffset, type Position, type PositionIndex } from "./position.js";
@@ -15,10 +15,19 @@ import { createPositionIndex, positionOffset, type Position, type PositionIndex 
  *
  * A position that is not a stop is represented by the stop it looks like,
  * the nearest stop before it in document order.
+ *
+ * `hidden` nodes are what the rendered layout does not show (overlay
+ * content on another step, paragraphs after `\pause`): they count as
+ * invisible items, so motion and deletion pass over them. So do spaces at
+ * a paragraph's start or end (around invisibles only), which TeX drops:
+ * `text\n\pause` ends with "text".
  */
 export type EditView = {
   readonly tree: EditTree;
   readonly index: PositionIndex;
+  readonly hidden: ReadonlySet<NodeId>;
+  /** The node's role for motion and deletion: its kind's, or invisible when hidden. */
+  role(node: NodeId): ItemRole;
   /** Caret stops in document order. */
   readonly stops: readonly Position[];
   /** Document-order rank of a position (total over all positions). */
@@ -46,8 +55,18 @@ export type EditView = {
 
 const key = (position: Position) => `${position.slot}:${position.index}`;
 
-export function createEditView(tree: EditTree): EditView {
+export type EditViewOptions = {
+  readonly hidden?: ReadonlySet<NodeId>;
+};
+
+const NO_HIDDEN: ReadonlySet<NodeId> = new Set();
+
+export function createEditView(tree: EditTree, options: EditViewOptions = {}): EditView {
   const index = createPositionIndex(tree);
+  const hidden = options.hidden ?? NO_HIDDEN;
+  const baseRole = (node: NodeId): ItemRole => (hidden.has(node) ? "invisible" : itemRole(tree, node));
+  const droppedSpaces = paragraphEdgeSpaces(tree, baseRole);
+  const role = (node: NodeId): ItemRole => (droppedSpaces.has(node) ? "invisible" : baseRole(node));
   const ranks = new Map<string, number>();
   index.positions.forEach((position, rank) => ranks.set(key(position), rank));
   const rank = (position: Position): number => {
@@ -71,7 +90,7 @@ export function createEditView(tree: EditTree): EditView {
   const suppressed = (slot: SlotId, at: number): boolean => {
     const record = tree.slots[slot];
     const owner = tree.nodes[record.node];
-    if (at > 0 && itemRole(tree, record.children[at - 1]) === "invisible") {
+    if (at > 0 && role(record.children[at - 1]) === "invisible") {
       return true;
     }
     if (owner.kind === "scripted" && record.role === "base" && at === 0) {
@@ -83,6 +102,9 @@ export function createEditView(tree: EditTree): EditView {
   const stops: Position[] = [];
   const stopRanks: number[] = [];
   const visitNode = (node: NodeId) => {
+    if (hidden.has(node)) {
+      return;
+    }
     for (const slot of tree.nodes[node].slots) {
       if (tree.slots[slot].presence === "present") {
         visitSlot(slot);
@@ -129,6 +151,8 @@ export function createEditView(tree: EditTree): EditView {
   const view: EditView = {
     tree,
     index,
+    hidden,
+    role,
     stops,
     rank,
     depth,
@@ -164,4 +188,27 @@ export function createEditView(tree: EditTree): EditView {
     },
   };
   return view;
+}
+
+/** Spaces TeX drops: at a paragraph's start or end, with only invisible items beyond them. */
+function paragraphEdgeSpaces(tree: EditTree, role: (node: NodeId) => ItemRole): Set<NodeId> {
+  const dropped = new Set<NodeId>();
+  for (const node of tree.nodes) {
+    if (node.kind !== "paragraph") {
+      continue;
+    }
+    const children = tree.slots[node.slots[0]].children;
+    const mark = (order: readonly NodeId[]) => {
+      for (const child of order) {
+        if (tree.nodes[child].kind === "space") {
+          dropped.add(child);
+        } else if (role(child) !== "invisible") {
+          return;
+        }
+      }
+    };
+    mark(children);
+    mark([...children].reverse());
+  }
+  return dropped;
 }

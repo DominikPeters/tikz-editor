@@ -3,7 +3,13 @@ import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { checkEditTree } from "../../packages/core/src/editing/tree/invariants.js";
 import { compareEditTreeWithEngines } from "../../packages/core/src/editing/tree/agreement.js";
 import { printEditTree } from "../../packages/core/src/editing/tree/print.js";
-import { createPositionIndex, positionOffset } from "../../packages/core/src/editing/position/index.js";
+import {
+  caretContext,
+  createEditView,
+  createPositionIndex,
+  positionOffset,
+} from "../../packages/core/src/editing/position/index.js";
+import { parseMarkedSource } from "../../packages/core/src/editing/testing/index.js";
 import { beamerCorpusScopes } from "./beamer-corpus.js";
 
 const R = String.raw;
@@ -76,6 +82,27 @@ describe("edit tree binding", () => {
     }
     // Inside a command name there is no position.
     expect(index.resolve(R`$a \l`.length, "before")).toBeNull();
+  });
+});
+
+describe("caret context", () => {
+  const path = (marked: string) => {
+    const { source, selection } = parseMarkedSource(marked);
+    const view = createEditView(tree(source));
+    return caretContext(view, view.positionAt(selection.focus))
+      .map((crumb) => `${crumb.label}${crumb.outlined ? "*" : ""}`)
+      .join(" › ");
+  };
+
+  it("names lists, formulas, wrappers and slots, outermost first (V11)", () => {
+    expect(path(R`\begin{itemize}\item a $\frac{1}{n‸}$\end{itemize}`)).toBe("itemize › item › math* › frac* › denominator*");
+    expect(path(R`$x^{2‸}$`)).toBe("math* › sup*");
+    expect(path(R`\begin{block}{T‸i} x \end{block}`)).toBe("block › title*");
+  });
+
+  it("tells the inside of a construct's edge from the outside (R8)", () => {
+    expect(path(R`\textbf{a‸} b`)).toBe("textbf*");
+    expect(path(R`\textbf{a}‸ b`)).toBe("");
   });
 });
 

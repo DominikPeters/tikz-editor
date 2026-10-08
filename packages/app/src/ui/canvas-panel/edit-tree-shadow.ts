@@ -55,8 +55,8 @@ export function useEditCommands(environment: EditingEnvironment | null): Command
 }
 
 /** The edit view of a buffer text (cached). Dev and test builds check the tree's invariants. */
-export function canvasEditView(text: string, commands: CommandTable): EditView {
-  const view = editViews(text, commands);
+export function canvasEditView(text: string, commands: CommandTable, hidden?: ReadonlySet<number>): EditView {
+  const view = editViews(text, commands, hidden);
   if (IS_CHECKED && !checkedTrees.has(view.tree)) {
     checkedTrees.add(view.tree);
     reportEditTreeViolations(view.tree);

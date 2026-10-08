@@ -11,6 +11,10 @@ import {
   subscribeUiNotifications
 } from "./ui-notifications";
 import css from "./StatusBar.module.css";
+import {
+  getCanvasTextContextSnapshot,
+  subscribeCanvasTextContext
+} from "./canvas-panel/canvas-text-context";
 import { hasMultipleRoots, snapshotRoots } from "../root-inventory";
 
 const TEX_PT_PER_IN = 72.27;
@@ -36,6 +40,11 @@ export function StatusBar() {
   const activeSourceScrubSourceId = useEditorStore((s) => s.activeSourceScrubSourceId);
   const canvasStatusHint = useEditorStore((s) => s.canvasStatusHint);
   const dispatch = useEditorStore((s) => s.dispatch);
+  const textContext = useSyncExternalStore(
+    subscribeCanvasTextContext,
+    getCanvasTextContextSnapshot,
+    getCanvasTextContextSnapshot
+  );
   const uiNotification = useSyncExternalStore(
     subscribeUiNotifications,
     getUiNotificationSnapshot,
@@ -190,6 +199,27 @@ export function StatusBar() {
             <span className={incrementalFallbackClass}>
               fallback ({incrementalFallbackReason})
             </span>
+          </div>
+        )}
+
+        {textContext && textContext.crumbs.length > 0 && (
+          <div className={css.cell} data-testid="canvas-text-breadcrumb" aria-label="Caret context" data-keeps-text-session>
+            {textContext.crumbs.map((crumb, index) => (
+              <span key={index} className={css.crumbItem}>
+                {index > 0 && <span className={css.crumbSeparator}>›</span>}
+                <button
+                  type="button"
+                  className={css.crumb}
+                  title={`Select ${crumb}`}
+                  // Keep keyboard focus in the editing session.
+                  onPointerDown={(event) => { event.preventDefault(); }}
+                  onMouseDown={(event) => { event.preventDefault(); }}
+                  onClick={() => { textContext.select(index); }}
+                >
+                  {crumb}
+                </button>
+              </span>
+            ))}
           </div>
         )}
 

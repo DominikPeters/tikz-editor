@@ -224,7 +224,7 @@ class CanvasSession implements EditorSession {
           : null,
         domain: this.layout?.domain ?? null,
         verticalGoal: state.verticalGoal,
-        structure: (text) => this.views(text, this.commands),
+        structure: (text, hidden) => this.views(text, this.commands, hidden),
         positions: selectionPositions(state, anchor, focus),
       },
       intent
