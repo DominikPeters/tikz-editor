@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from "react";
-import { svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
+import { clientPoint, svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
 import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
 import {
   documentSourceOffset,
@@ -43,6 +43,8 @@ export type UseCanvasTextEditingEffectsArgs = {
   canvasTransform: CanvasTransform;
   svgResult: CanvasSnapshot["svg"];
   textLayoutContext: unknown;
+  /** In math, the rendered item the caret hugs (document offsets): sizes the caret to its level. */
+  caretEdge: { side: "before" | "after"; within: { from: number; to: number } } | null;
 };
 
 type RegionSelectionOverlayBox = {
@@ -257,7 +259,8 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     setPendingAdornmentTextEditTargetId,
     canvasTransform,
     svgResult,
-    textLayoutContext
+    textLayoutContext,
+    caretEdge
   } = args;
 
   useEffect(() => {
@@ -458,7 +461,8 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
               sourceCoordinateSpace: "document",
               containerElement: paragraphContainer,
-              offset: caretDocumentOffset
+              offset: caretDocumentOffset,
+              ...(caretEdge ? { edge: caretEdge } : {})
             });
             if (requestRef.cancelled) {
               return;
@@ -467,7 +471,18 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               pushOverlay(null);
               return;
             }
-            const height =
+            // In math the caret spans the font size of the item it hugs
+            // (smaller in scripts), centred on that extent.
+            const mathHeight = point.caretTop && point.caretBottom
+              ? Math.hypot(point.caretBottom.x - point.caretTop.x, point.caretBottom.y - point.caretTop.y)
+              : null;
+            const caretCenter = point.caretTop && point.caretBottom && mathHeight != null && mathHeight >= 1
+              ? clientPoint(
+                  px((point.caretTop.x + point.caretBottom.x) / 2),
+                  px((point.caretTop.y + point.caretBottom.y) / 2)
+                )
+              : point.clientPoint;
+            const height = (mathHeight != null && mathHeight >= 1 ? mathHeight : null) ??
               (await estimateCaretHeight(
                 layoutContext,
                 paragraph.paragraphId,
@@ -485,12 +500,12 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               selectionEnd: boundedEnd,
               caret: {
                 bounds: viewportBounds(
-                  px(point.clientPoint.x - viewportRect.left),
-                  px(point.clientPoint.y - viewportRect.top - height / 2),
-                  px(point.clientPoint.x - viewportRect.left),
-                  px(point.clientPoint.y - viewportRect.top + height / 2)
+                  px(caretCenter.x - viewportRect.left),
+                  px(caretCenter.y - viewportRect.top - height / 2),
+                  px(caretCenter.x - viewportRect.left),
+                  px(caretCenter.y - viewportRect.top + height / 2)
                 ),
-                center: clientToViewport(point.clientPoint, viewportRect),
+                center: clientToViewport(caretCenter, viewportRect),
                 rotationDeg:
                   typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg)
                     ? point.rotationDeg
@@ -659,7 +674,8 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     viewportRef,
     canvasTransform,
     svgResult,
-    textLayoutContext
+    textLayoutContext,
+    caretEdge
   ]);
 
   useEffect(() => {

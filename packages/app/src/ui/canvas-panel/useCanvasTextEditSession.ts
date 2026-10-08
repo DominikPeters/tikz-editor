@@ -42,7 +42,14 @@ import {
   type Intent
 } from "@tikz-editor/core/editing/input/index";
 import { applyTransaction, type Transaction } from "@tikz-editor/core/editing/transaction/index";
-import { caretContext, type ContextCrumb } from "@tikz-editor/core/editing/position/index";
+import {
+  caretContext,
+  caretEdge,
+  type CaretEdge,
+  type ContextCrumb,
+  type EditView,
+  type Position
+} from "@tikz-editor/core/editing/position/index";
 import {
   activeTextFormatWrapper,
   isTextFormatActive,
@@ -1847,6 +1854,38 @@ export function useCanvasTextEditSession(
     return () => { window.removeEventListener("pointerdown", handleGlobalPointerDown, true); };
   }, [dispatchCanvasTextEditAction, textEditingSession, viewportRef]);
 
+  /**
+   * The caret's context (R8, V11): the constructs around the selection's
+   * focus, from the edit tree. The raw focus position is used when the last
+   * transaction recorded it (the inside and outside of `x^2‸` share an
+   * offset).
+   */
+  const caretFocus = useMemo<{ view: EditView; position: Position } | null>(() => {
+    if (!textEditingSession?.isScopeSession) {
+      return null;
+    }
+    const view = canvasEditView(textEditingSession.text, editCommands);
+    const { selectionStart: start, selectionEnd: end } = textEditingSession;
+    const recorded = state.treeSelection;
+    const matches = recorded?.text === textEditingSession.text &&
+      ((recorded.anchor === start && recorded.focus === end) || (recorded.anchor === end && recorded.focus === start));
+    return { view, position: matches ? recorded.ends.focus : view.positionAt(end) };
+  }, [editCommands, state.treeSelection, textEditingSession]);
+  const caretCrumbs = useMemo<readonly ContextCrumb[] | null>(
+    () => (caretFocus ? caretContext(caretFocus.view, caretFocus.position) : null),
+    [caretFocus]
+  );
+
+  /** Which rendered item the caret hugs, in document offsets (math only; R8 caret size). */
+  const caretEdgeInDocument = useMemo<CaretEdge | null>(() => {
+    const edge = caretFocus && textEditingSession ? caretEdge(caretFocus.view, caretFocus.position) : null;
+    if (!edge || !textEditingSession) {
+      return null;
+    }
+    const from = textEditingSession.sourceSpan.from;
+    return { side: edge.side, within: { from: from + edge.within.from, to: from + edge.within.to } };
+  }, [caretFocus, textEditingSession]);
+
   useCanvasTextEditingEffects({
     toolMode,
     textEditingSession,
@@ -1864,7 +1903,8 @@ export function useCanvasTextEditSession(
     setPendingAdornmentTextEditTargetId,
     canvasTransform,
     svgResult,
-    textLayoutContext
+    textLayoutContext,
+    caretEdge: caretEdgeInDocument
   });
 
   const supportsFieldSizing =
@@ -2165,25 +2205,6 @@ export function useCanvasTextEditSession(
     textEditingSession,
     textSelectionOverlay
   ]);
-
-  /**
-   * The caret's context (R8, V11): the constructs around the selection's
-   * focus, from the edit tree. The raw focus position is used when the last
-   * transaction recorded it (the inside and outside of `x^2‸` share an
-   * offset).
-   */
-  const caretCrumbs = useMemo<readonly ContextCrumb[] | null>(() => {
-    if (!textEditingSession?.isScopeSession) {
-      return null;
-    }
-    const view = canvasEditView(textEditingSession.text, editCommands);
-    const { selectionStart: start, selectionEnd: end } = textEditingSession;
-    const recorded = state.treeSelection;
-    const matches = recorded?.text === textEditingSession.text &&
-      ((recorded.anchor === start && recorded.focus === end) || (recorded.anchor === end && recorded.focus === start));
-    const focus = matches ? recorded.ends.focus : view.positionAt(end);
-    return caretContext(view, focus);
-  }, [editCommands, state.treeSelection, textEditingSession]);
 
   useEffect(() => {
     if (!caretCrumbs || textEditFocusSurface !== "canvas") {

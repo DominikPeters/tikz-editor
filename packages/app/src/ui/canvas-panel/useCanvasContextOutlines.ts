@@ -31,8 +31,11 @@ const OUTLINE_PADDING_PX = 2;
  * Viewport boxes for the context outlines: the union of the selection
  * rects the paragraph hit maps give for each construct's source span.
  * Inside math those rects cover whole rows, so a construct on one line is
- * narrowed to the caret positions at its two ends. Recomputed when the
- * outlined spans, the rendered source or the view transform change.
+ * narrowed to the carets at its two ends: horizontally to their positions
+ * (hugging the construct's first and last items), and vertically to their
+ * extent when both are math carets, which are sized to their level.
+ * Recomputed when the outlined spans, the rendered source or the view
+ * transform change.
  */
 export function useCanvasContextOutlines(args: {
   session: TextEditingSession | null;
@@ -100,9 +103,13 @@ export function useCanvasContextOutlines(args: {
         if (cancelled.value) {
           return;
         }
-        if (ends && Math.abs(ends.start.y - ends.end.y) < 2 && Number.isFinite(minX)) {
+        if (ends && onOneLine(ends.start, ends.end) && Number.isFinite(minX)) {
           minX = Math.min(ends.start.x, ends.end.x) - viewportRect.left;
           maxX = Math.max(ends.start.x, ends.end.x) - viewportRect.left;
+          if (ends.start.extent && ends.end.extent) {
+            minY = Math.min(ends.start.extent.top, ends.end.extent.top) - viewportRect.top;
+            maxY = Math.max(ends.start.extent.bottom, ends.end.extent.bottom) - viewportRect.top;
+          }
         }
         if (Number.isFinite(minX) && maxX > minX) {
           result.push({
@@ -129,7 +136,7 @@ export function useCanvasContextOutlines(args: {
   return outlines;
 }
 
-type ClientXY = { readonly x: number; readonly y: number };
+type ClientXY = { readonly x: number; readonly y: number; readonly extent?: { top: number; bottom: number } };
 
 /** Client points of the caret at a span's two ends, when one paragraph renders both. */
 async function caretEnds(
@@ -146,18 +153,33 @@ async function caretEnds(
   if (!paragraph || !container) {
     return null;
   }
-  const point = async (offset: number): Promise<ClientXY | null> => {
+  const point = async (offset: number, side: "before" | "after"): Promise<ClientXY | null> => {
     const result = await getKnuthPlassPointFromOffset(layoutContext, {
       paragraphId: paragraph.paragraphId,
       sourceText: source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to),
       sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
       sourceCoordinateSpace: "document",
       containerElement: container,
-      offset: documentSourceOffset(offset)
+      offset: documentSourceOffset(offset),
+      edge: { side, within: { from, to } }
     });
-    return result.ok && result.clientPoint ? { x: result.clientPoint.x, y: result.clientPoint.y } : null;
+    if (!result.ok || !result.clientPoint) {
+      return null;
+    }
+    const extent = result.caretTop && result.caretBottom
+      ? { top: Math.min(result.caretTop.y, result.caretBottom.y), bottom: Math.max(result.caretTop.y, result.caretBottom.y) }
+      : undefined;
+    return { x: result.clientPoint.x, y: result.clientPoint.y, extent };
   };
-  const start = await point(from);
-  const end = await point(to);
+  const start = await point(from, "before");
+  const end = await point(to, "after");
   return start && end ? { start, end } : null;
+}
+
+/** Whether two caret points are on one rendered line: their extents overlap (math), or their centres agree. */
+function onOneLine(start: ClientXY, end: ClientXY): boolean {
+  if (start.extent && end.extent) {
+    return start.extent.top < end.extent.bottom && end.extent.top < start.extent.bottom;
+  }
+  return Math.abs(start.y - end.y) < 2;
 }

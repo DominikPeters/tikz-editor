@@ -651,11 +651,16 @@ function addMathItemCaretMapEntries(
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       const caretY = texHBoxY(roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd)));
       const characterSpans = mathGlyphSourceCharacterSpans(item) ?? [item.sourceSpan];
+      const caretExtent = {
+        top: texHBoxY(roundTexPt(y - item.atPt * 0.75)),
+        bottom: texHBoxY(roundTexPt(y + item.atPt * 0.25)),
+      };
+      const addGlyphEntry = (entry: TexMathCaretEntry) => { addEntry({ ...entry, caretExtent }); };
       characterSpans.forEach((span, index) => {
         const xStart = texHBoxX(roundTexPt(x + item.width * index / characterSpans.length));
         const xEnd = texHBoxX(roundTexPt(x + item.width * (index + 1) / characterSpans.length));
         const geometry = { y: caretY, height: texLength(Math.max(0, caretY - hitBounds.yStart)),
-          depth: texLength(Math.max(0, hitBounds.yEnd - caretY)), hitBounds, addEntry };
+          depth: texLength(Math.max(0, hitBounds.yEnd - caretY)), hitBounds, addEntry: addGlyphEntry };
         const previous = characterSpans[index - 1];
         if (previous && previous.end < span.start) {
           // Braces between ligature characters own source positions, but
