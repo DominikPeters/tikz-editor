@@ -88,6 +88,8 @@ export type DeckActiveFrame = {
   svgModel: SvgRenderModel;
   viewBox: SvgViewBox;
   layout: BeamerFrameLayout;
+  /** Interpretation environment for canvas editing (user macros, theorem names). */
+  editingEnvironment: ReturnType<PreparedBeamerDocument["frameEditingEnvironment"]>;
 };
 
 export type DeckSnapshot = {
@@ -640,7 +642,8 @@ async function renderDeckPage(session: DeckComputeSession, frameIndex: number, s
   work?.signal?.throwIfAborted();
   const clone = makeBeamerLayoutCloneSafe(result.layout);
   const frame: DeckActiveFrame = { frameId: result.frame.id, frameIndex, step, stepCount: result.layout.stepCount,
-    svg: result.svg.svg, svgModel: result.svg.model, viewBox: result.svg.viewBox, layout: clone.layout };
+    svg: result.svg.svg, svgModel: result.svg.model, viewBox: result.svg.viewBox, layout: clone.layout,
+    editingEnvironment: session.prepared.frameEditingEnvironment(frameIndex) };
   const bytes = clone.bytes + (frame.svg.length + frame.svgModel.parts.reduce((sum, part) => sum + part.markup.length, 0)) * 2;
   return { frame, bytes };
 }

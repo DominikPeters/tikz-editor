@@ -101,6 +101,7 @@ import { createBeamerSyntaxContext } from "./syntax.js";
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type { NodeTextColorResolver } from "../text/types.js";
 import {
+  activeBeamerTheoremDeclarations,
   resolveBeamerTheoremOccurrences,
   type BeamerTheoremOccurrence,
 } from "./theorems.js";
@@ -342,6 +343,15 @@ export type PreparedBeamerDocument = {
   readonly syntaxTree: TexSyntaxIndex["tree"];
   /** Overlay step count for one frame, without rendering it. */
   frameStepCount(frameIndex: number): number;
+  /**
+   * The interpretation environment for editing a frame: the user macros
+   * in effect at it, and the theorem-like environment names declared
+   * before it.
+   */
+  frameEditingEnvironment(frameIndex: number): {
+    readonly macros: ReadonlyMap<string, MacroBinding>;
+    readonly theorems: readonly string[];
+  };
   renderFrame(
     options?: RenderBeamerFrameOptions
   ): Promise<RenderBeamerFrameResult>;
@@ -437,6 +447,13 @@ export function prepareBeamerDocument(
     syntaxTree: context.syntax.tree,
     frameStepCount: (frameIndex) => {
       return context.overlaysByFrameId.get(requireFrame(frameIndex).id)!.stepCount;
+    },
+    frameEditingEnvironment: (frameIndex) => {
+      const frame = requireFrame(frameIndex);
+      return {
+        macros: context.macroBindingsForFrame(frame),
+        theorems: [...activeBeamerTheoremDeclarations(context.document, frame.span.from).keys()],
+      };
     },
     async renderFrame(options = {}) {
       options.cooperative?.signal?.throwIfAborted();
