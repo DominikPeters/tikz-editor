@@ -40,48 +40,45 @@ export const characterisationScenarios: readonly Scenario[] = [
 
 /**
  * Target behavior from design/canvas-keyboard-scenarios.md, written before
- * the editing core exists (architecture "Contract tests first"). `legacy`
- * records whether today's behavior already satisfies the contract. For
- * unmet contracts the legacy run must complete and differ from the
- * target, so each one is known to be meaningful (not a driver gap) and a
- * change that accidentally satisfies it is noticed. Carets are written at canonical offsets: a position between two
- * children sits at the start of the next child, after any invisible
- * whitespace (`$A\cup ‸B$`, not `$A\cup‸ B$`).
+ * the editing core exists (architecture "Contract tests first"). These are
+ * plain assertions run against today's editor, so every contract it does
+ * not yet meet is a failing test until the new editing core replaces the
+ * legacy driver. Carets are written at canonical offsets: a position
+ * between two children sits at the start of the next child, after any
+ * invisible whitespace (`$A\cup ‸B$`, not `$A\cup‸ B$`).
  */
-export type ContractScenario = Scenario & { readonly legacy: "passes" | "fails" };
-
 export const contractScenarios: readonly ContractScenario[] = [
   // Navigation: one press per visible step (R7, N1).
-  { id: "N1", legacy: "fails", title: "crossing $A\\setminus B$ takes five presses", body: R`‸$A\setminus B$ x`, keys: "→×5", expect: R`$A\setminus B$‸ x` },
-  { id: "N1 frac", legacy: "fails", title: "→ enters the numerator, then the denominator", body: R`‸$\frac{a}{b}$ x`, keys: "→×4", expect: R`$\frac{a}{‸b}$ x` },
-  { id: "R8 bold", legacy: "passes", title: "the inside and outside of \\textbf are separate stops", body: R`\textbf{bold‸} x`, keys: "→", expect: R`\textbf{bold}‸ x` },
-  { id: "R8 formula", legacy: "passes", title: "the inside and outside of a formula are separate stops", body: R`$x‸$ y`, keys: "→", expect: R`$x$‸ y` },
+  { id: "N1", title: "crossing $A\\setminus B$ takes five presses", body: R`‸$A\setminus B$ x`, keys: "→×5", expect: R`$A\setminus B$‸ x` },
+  { id: "N1 frac", title: "→ enters the numerator, then the denominator", body: R`‸$\frac{a}{b}$ x`, keys: "→×4", expect: R`$\frac{a}{‸b}$ x` },
+  { id: "R8 bold", title: "the inside and outside of \\textbf are separate stops", body: R`\textbf{bold‸} x`, keys: "→", expect: R`\textbf{bold}‸ x` },
+  { id: "R8 formula", title: "the inside and outside of a formula are separate stops", body: R`$x‸$ y`, keys: "→", expect: R`$x$‸ y` },
   // Deletion (R9, O2, O3).
-  { id: "M7", legacy: "fails", title: "replace \\setminus with \\cup", body: R`$A\setminus B‸$`, keys: R`← ⌫ \cup␣`, expect: R`$A\cup ‸B$` },
-  { id: "R9 bold", legacy: "fails", title: "⌫ after a bold run deletes its last character", body: R`\textbf{bold}‸ x`, keys: "⌫", expect: R`\textbf{bol‸} x` },
-  { id: "R9 formula", legacy: "fails", title: "⌫ after a formula selects it first", body: R`Let $x$‸ be.`, keys: "⌫", expect: R`Let ⟦‸$x$⟧ be.` },
-  { id: "R9 formula twice", legacy: "fails", title: "a second ⌫ deletes the selected formula", body: R`Let $x$‸ be.`, keys: "⌫ ⌫", expect: R`Let ‸ be.` },
-  { id: "R9 repeat", legacy: "fails", title: "auto-repeat never confirms a select-then-delete", body: R`Let $x$‸ be.`, keys: "⌫ ⌫↻", expect: R`Let ⟦‸$x$⟧ be.` },
-  { id: "M11", legacy: "fails", title: "⌫ after a fraction selects it", body: R`$\frac{a}{b}‸+c$`, keys: "⌫", expect: R`$⟦‸\frac{a}{b}⟧+c$` },
-  { id: "O2 empty denominator", legacy: "fails", title: "⌫ in an empty denominator moves to the numerator", body: R`$\frac{a}{‸}$`, keys: "⌫", expect: R`$\frac{a‸}{}$` },
-  { id: "O3 backward", legacy: "fails", title: "⌫ after x² deletes the 2 and the empty script", body: R`$ax^2 ‸$ y`, keys: "⌫", expect: R`$ax ‸$ y` },
-  { id: "O3 forward", legacy: "fails", title: "⌦ before a scripted base selects the whole scripted atom", body: R`$a‸x^2$`, keys: "⌦", expect: R`$a⟦x^2⟧$` },
-  { id: "F5", legacy: "fails", title: "deleting a range across \\textbf{ keeps the wrapper", body: R`a⟦b\textbf{c⟧d}e`, keys: "⌫", expect: R`a‸\textbf{d}e` },
+  { id: "M7", title: "replace \\setminus with \\cup", body: R`$A\setminus B‸$`, keys: R`← ⌫ \cup␣`, expect: R`$A\cup ‸B$` },
+  { id: "R9 bold", title: "⌫ after a bold run deletes its last character", body: R`\textbf{bold}‸ x`, keys: "⌫", expect: R`\textbf{bol‸} x` },
+  { id: "R9 formula", title: "⌫ after a formula selects it first", body: R`Let $x$‸ be.`, keys: "⌫", expect: R`Let ⟦‸$x$⟧ be.` },
+  { id: "R9 formula twice", title: "a second ⌫ deletes the selected formula", body: R`Let $x$‸ be.`, keys: "⌫ ⌫", expect: R`Let ‸ be.` },
+  { id: "R9 repeat", title: "auto-repeat never confirms a select-then-delete", body: R`Let $x$‸ be.`, keys: "⌫ ⌫↻", expect: R`Let ⟦‸$x$⟧ be.` },
+  { id: "M11", title: "⌫ after a fraction selects it", body: R`$\frac{a}{b}‸+c$`, keys: "⌫", expect: R`$⟦‸\frac{a}{b}⟧+c$` },
+  { id: "O2 empty denominator", title: "⌫ in an empty denominator moves to the numerator", body: R`$\frac{a}{‸}$`, keys: "⌫", expect: R`$\frac{a‸}{}$` },
+  { id: "O3 backward", title: "⌫ after x² deletes the 2 and the empty script", body: R`$ax^2 ‸$ y`, keys: "⌫", expect: R`$ax ‸$ y` },
+  { id: "O3 forward", title: "⌦ before a scripted base selects the whole scripted atom", body: R`$a‸x^2$`, keys: "⌦", expect: R`$a⟦x^2⟧$` },
+  { id: "F5", title: "deleting a range across \\textbf{ keeps the wrapper", body: R`a⟦b\textbf{c⟧d}e`, keys: "⌫", expect: R`a‸\textbf{d}e` },
   // Scripts (R6, K4).
-  { id: "R6", legacy: "fails", title: "typing into an unbraced script adds braces", body: R`$x^‸2 +1$`, keys: "→ 3", expect: R`$x^{23‸} +1$` },
-  { id: "K4", legacy: "fails", title: "a second ^ enters the existing superscript", body: R`$x^2 ‸+1$`, keys: "^3", expect: R`$x^{23‸} +1$` },
+  { id: "R6", title: "typing into an unbraced script adds braces", body: R`$x^‸2 +1$`, keys: "→ 3", expect: R`$x^{23‸} +1$` },
+  { id: "K4", title: "a second ^ enters the existing superscript", body: R`$x^2 ‸+1$`, keys: "^3", expect: R`$x^{23‸} +1$` },
   // Input rules (R2, R3, K9).
-  { id: "R2 %", legacy: "fails", title: "% in prose is escaped", body: "Up by 5‸ overall.", keys: "%", expect: R`Up by 5\%‸ overall.` },
-  { id: "R3 $", legacy: "fails", title: "$ opens a formula with its closer", body: "Let ‸ be.", keys: "$x", expect: "Let $x‸$ be." },
-  { id: "R3 $ step over", legacy: "passes", title: "typing the closing $ steps over it", body: "Let ‸.", keys: "$x$␣be", expect: "Let $x$ be‸." },
-  { id: "K9", legacy: "fails", title: "[ at item content start is protected from \\item's optional argument", body: itemize(R`\item ‸more`), keys: "[0,1]", expect: itemize(R`\item {}[0,1]‸more`) },
+  { id: "R2 %", title: "% in prose is escaped", body: "Up by 5‸ overall.", keys: "%", expect: R`Up by 5\%‸ overall.` },
+  { id: "R3 $", title: "$ opens a formula with its closer", body: "Let ‸ be.", keys: "$x", expect: "Let $x‸$ be." },
+  { id: "R3 $ step over", title: "typing the closing $ steps over it", body: "Let ‸.", keys: "$x$␣be", expect: "Let $x$ be‸." },
+  { id: "K9", title: "[ at item content start is protected from \\item's optional argument", body: itemize(R`\item ‸more`), keys: "[0,1]", expect: itemize(R`\item {}[0,1]‸more`) },
   // Enter ownership (O1, Z1).
-  { id: "Z1", legacy: "fails", title: "⏎ mid-formula splits it when both halves are valid", body: "Let $a‸+b$ be.", keys: "⏎", expect: "Let $a$\n\n$‸+b$ be." },
-  { id: "O1 text-in-math", legacy: "passes", title: "⏎ in a formula inside \\text{} does nothing", body: R`$\text{one $a‸+b$ two}$`, keys: "⏎", expect: R`$\text{one $a‸+b$ two}$` },
-  { id: "O1 slot", legacy: "passes", title: "⏎ in a fraction slot does nothing", body: R`$\frac{a‸+b}{c}$`, keys: "⏎", expect: R`$\frac{a‸+b}{c}$` },
+  { id: "Z1", title: "⏎ mid-formula splits it when both halves are valid", body: "Let $a‸+b$ be.", keys: "⏎", expect: "Let $a$\n\n$‸+b$ be." },
+  { id: "O1 text-in-math", title: "⏎ in a formula inside \\text{} does nothing", body: R`$\text{one $a‸+b$ two}$`, keys: "⏎", expect: R`$\text{one $a‸+b$ two}$` },
+  { id: "O1 slot", title: "⏎ in a fraction slot does nothing", body: R`$\frac{a‸+b}{c}$`, keys: "⏎", expect: R`$\frac{a‸+b}{c}$` },
   // Selection (R9 promotion, N3).
-  { id: "N3 inside", legacy: "passes", title: "a selection inside one slot is free", body: R`$a‸+b$`, keys: "⇧→", expect: R`$a⟦+⟧b$` },
-  { id: "N3 crossing", legacy: "fails", title: "a selection crossing into a formula covers all of it", body: R`a‸b $x+y$`, keys: "⇧→×3", expect: R`a⟦b $x+y$⟧` },
+  { id: "N3 inside", title: "a selection inside one slot is free", body: R`$a‸+b$`, keys: "⇧→", expect: R`$a⟦+⟧b$` },
+  { id: "N3 crossing", title: "a selection crossing into a formula covers all of it", body: R`a‸b $x+y$`, keys: "⇧→×3", expect: R`a⟦b $x+y$⟧` },
   // Formatting (F1).
-  { id: "F1 mid-run", legacy: "passes", title: "⌘B mid-run splits in place without moving the caret", body: R`\textbf{one ‸two}`, keys: "⌘B", expect: R`\textbf{one }‸\textbf{two}` },
+  { id: "F1 mid-run", title: "⌘B mid-run splits in place without moving the caret", body: R`\textbf{one ‸two}`, keys: "⌘B", expect: R`\textbf{one }‸\textbf{two}` },
 ];
