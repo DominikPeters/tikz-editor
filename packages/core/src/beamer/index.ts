@@ -33,10 +33,13 @@ export {
 } from "./caret-stops.js";
 export {
   applyBeamerStructuralPatchToBuffer,
+  resolveCanvasAtomSelection,
   resolveCanvasRenderedMotion,
-  resolveCanvasStructuralKey,
+  resolveCanvasStructuralDelete,
+  resolveCanvasStructuralEnter,
+  resolveCanvasStructuralTab,
   type CanvasBufferSelection,
-  type CanvasKeyStroke,
+  type CanvasMotion,
   type CanvasMotionResult,
   type CanvasStructuralKeyOutcome,
   type CanvasVerticalGoal,

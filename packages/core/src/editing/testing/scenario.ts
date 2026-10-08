@@ -99,7 +99,9 @@ export type ScenarioKey =
       /** An auto-repeat keystroke (`↻` suffix). */
       readonly repeat: boolean;
     }
-  | { readonly kind: "text"; readonly text: string };
+  | { readonly kind: "text"; readonly text: string }
+  /** A pause longer than any typing-run window (`⏸`). */
+  | { readonly kind: "pause" };
 
 const NAMED_KEYS: Readonly<Record<string, string>> = {
   "←": "ArrowLeft",
@@ -121,6 +123,7 @@ const NAMED_KEYS: Readonly<Record<string, string>> = {
  * - Named keys: `← → ↑ ↓ ⌫ ⌦ ⏎ ⇥ ␣ Esc Home End`.
  * - Modifier prefixes `⇧ ⌘ ⌥` in any order: `⇧→`, `⌘B`, `⇧⇥`.
  * - `×N` repeats a token N times; a trailing `↻` marks auto-repeat.
+ * - `⏸` is a pause (it ends a typing run for undo).
  * - Any other token is typed text, one keystroke per character; inside
  *   text, `␣` types a space (`\cup␣`).
  */
@@ -155,6 +158,12 @@ export function parseScenarioKeys(spec: string): ScenarioKey[] {
       }
       rest = rest.slice(1);
     }
+    if (rest === "⏸" && !shift && !primary && !alt) {
+      for (let index = 0; index < times; index += 1) {
+        keys.push({ kind: "pause" });
+      }
+      continue;
+    }
     const named = NAMED_KEYS[rest];
     const modified = shift || primary || alt;
     let parsed: ScenarioKey[];
@@ -182,6 +191,8 @@ export type EditorState = {
 
 export interface EditorSession {
   press(key: ScenarioKey): Promise<void>;
+  /** Lets deferred work (e.g. layout the editor is waiting for) complete. */
+  settle?(): Promise<void>;
   state(): EditorState;
 }
 
@@ -242,6 +253,7 @@ export async function runScenario(
   for (const key of parseScenarioKeys(scenario.keys)) {
     await session.press(key);
   }
+  await session.settle?.();
   const end = session.state();
   if (!end.source.startsWith(prefix) || !end.source.endsWith(suffix)) {
     throw new Error(`[${driver.name}] ${scenario.id}: edit escaped the frame body:\n${end.source}`);

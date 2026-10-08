@@ -1632,11 +1632,14 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   // Rendered caret-stop domains for canvas-focus arrow motion, built lazily
   // per scope from the same layout the hit regions come from and cached
-  // until the frame layout changes.
+  // until the frame layout changes. A domain carries the source its layout
+  // was rendered from (not the newer store source), which is how a session
+  // tells whether the layout has caught up with its buffer.
+  const layoutSource = snapshot.source;
   const deckCaretDomainCache = useMemo(
     () => new Map<string, BeamerCaretDomain | null>(),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cache identity tracks the layout inputs
-    [deckEditing, source]
+    [deckEditing, layoutSource]
   );
   const resolveDeckCaretDomain = useCallback((scopeId: string): BeamerCaretDomain | null => {
     const cached = deckCaretDomainCache.get(scopeId);
@@ -1652,11 +1655,11 @@ export const CanvasPanel = memo(function CanvasPanel({
       .map((ref) => deckEditing.paragraphById.get(ref.paragraphId))
       .filter((paragraph): paragraph is NonNullable<typeof paragraph> => paragraph != null);
     const domain = paragraphs.length
-      ? buildBeamerCaretStopDomain({ paragraphs, source })
+      ? buildBeamerCaretStopDomain({ paragraphs, source: layoutSource })
       : null;
     deckCaretDomainCache.set(scopeId, domain);
     return domain;
-  }, [deckCaretDomainCache, deckEditing, source]);
+  }, [deckCaretDomainCache, deckEditing, layoutSource]);
 
   useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
