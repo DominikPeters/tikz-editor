@@ -737,6 +737,28 @@ export function useCanvasTextEditSession(
     dispatchCanvasTextEditAction({ type: "apply_transaction", transaction, time: performance.now() });
   }, [dispatchCanvasTextEditAction]);
 
+  /**
+   * Pointer-resolved selections arrive asynchronously (hit-testing awaits the
+   * paragraph hit map). The inputs still hold the previous programmatic
+   * selection, whose queued `select` event would otherwise fire before React
+   * re-renders and echo the stale range back over the new one, dropping the
+   * last drag step. Writing the resolved range into the inputs immediately
+   * after the dispatch makes that queued event read the current value.
+   */
+  const syncInputSelectionFromSession = useCallback(() => {
+    const session = stateRef.current.session;
+    if (!session) {
+      return;
+    }
+    const start = clamp(session.selectionStart, 0, session.text.length);
+    const end = clamp(session.selectionEnd, 0, session.text.length);
+    for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
+      if (input && (input.selectionStart !== start || input.selectionEnd !== end)) {
+        input.setSelectionRange(start, end);
+      }
+    }
+  }, []);
+
   const resolveDeckCaretDomainRef = useRef(resolveDeckCaretDomain);
 
   /** Resolves one intent against the current session state and applies it. */
@@ -1260,6 +1282,7 @@ export function useCanvasTextEditSession(
           anchorOffset: resolvedOffset,
           anchorLineRange: resolvedLineRange
         });
+        syncInputSelectionFromSession();
         if (textSelectionDragRef.current?.pointerId === pointerId) {
           textSelectionDragRef.current = {
             pointerId,
@@ -1283,6 +1306,7 @@ export function useCanvasTextEditSession(
       interactionSvgRef,
       resolveTextLineRangeFromClient,
       resolveTextSourceHitFromClient,
+      syncInputSelectionFromSession,
       source,
       startTextEditingSession,
       state.asyncRequestRevision,
@@ -1759,6 +1783,7 @@ export function useCanvasTextEditSession(
           selectionStart: selection.start,
           selectionEnd: selection.end
         });
+        syncInputSelectionFromSession();
       });
     };
 
@@ -1781,6 +1806,7 @@ export function useCanvasTextEditSession(
     resolveEditableTextTargetById,
     resolveTextLineRangeFromClient,
     resolveTextSourceHitFromClient,
+    syncInputSelectionFromSession,
   ]);
 
   useEffect(() => {
