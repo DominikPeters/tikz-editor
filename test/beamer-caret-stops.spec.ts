@@ -107,11 +107,16 @@ describe("beamer caret-stop domain", () => {
         corpusSource.indexOf(String.raw`\highlight{a wrapped phrase}`) +
         String.raw`\highlight{a wrapped phrase}`.length,
     };
-    expect(domain.atomSpans).toEqual([inner, highlight]);
+    // A style macro (K1: `\highlight{#1}` expands to `\textbf{#1}`) is not
+    // an atom: its argument is edited like bold text.
+    expect(domain.atomSpans).toEqual([inner]);
+    const phrase = corpusSource.indexOf("a wrapped phrase");
+    expect(domain.offsets).toContain(phrase + 1);
+    expect(highlight.to).toBeGreaterThan(phrase);
 
     // Atom interiors are not caret stops; traversal over a macro call is a
     // single step from one endpoint to the other.
-    for (const atom of [inner, highlight]) {
+    for (const atom of [inner]) {
       expect(domain.offsets.some((offset) => atom.from < offset && offset < atom.to)).toBe(false);
       expect(domain.offsets).toContain(atom.from);
       expect(domain.offsets).toContain(atom.to);

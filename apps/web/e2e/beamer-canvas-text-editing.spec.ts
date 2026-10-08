@@ -374,7 +374,7 @@ test("canvas focus: types on the slide, Cmd+E and Esc walk the surfaces, indicat
   await expect(page.getByTestId("canvas-scope-edit-border")).toHaveCount(0);
 });
 
-test("canvas focus: arrows move by rendered stops, rows, and select-then-delete atoms", async ({ page }) => {
+test("canvas focus: arrows move by rendered stops and rows, and Backspace deletes symbol macros", async ({ page }) => {
   const titleTextarea = await openScopeContaining(page, "Titel typo");
   const hiddenInput = page.getByTestId("canvas-focus-input");
   const titleBuffer = await titleTextarea.inputValue();
@@ -400,11 +400,9 @@ test("canvas focus: arrows move by rendered stops, rows, and select-then-delete 
   await page.keyboard.press("ArrowLeft");
   await expect.poll(readSelection).toEqual([invocationStart, invocationStart]);
 
-  // Backspace beside the atom selects it first (select-then-delete), and
-  // the second press deletes the whole invocation; undo restores it.
+  // Backspace deletes a symbol macro (no arguments) in one press, like a
+  // symbol (K1); undo restores it.
   await setCaret(titleBuffer.length);
-  await page.keyboard.press("Backspace");
-  await expect.poll(readSelection).toEqual([invocationStart, titleBuffer.length]);
   await page.keyboard.press("Backspace");
   await expect.poll(() => readStoreSource(page)).toBe(
     SOURCE.replace(String.raw`Titel typo \generatedword`, "Titel typo ")

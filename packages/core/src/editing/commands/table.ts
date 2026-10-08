@@ -4,6 +4,7 @@ import {
   SIMPLE_TEX_FONT_DECLARATION_NAMES,
 } from "../../text/tex/ir.js";
 import { texMathCommandFamily } from "../../text/tex/math/parser.js";
+import { classifyMacro } from "./macro-classes.js";
 import type { EditMode, EditNodeKind, EditValue, SlotRole } from "../tree/types.js";
 
 /**
@@ -354,6 +355,10 @@ export function createCommandTable(
       if (macro) {
         if (macro.provenance.at(-1)?.commandRaw === "\\DeclareMathOperator") {
           return { name, category: "operator", node: "operator", args: [], userMacro: true };
+        }
+        const macroClass = classifyMacro(macro);
+        if (macroClass.kind === "style") {
+          return { name, category: "style", node: "style", args: [content(macroClass.mode)], userMacro: true };
         }
         const args: ArgSchema[] = [];
         if (macro.kind === "callable") {

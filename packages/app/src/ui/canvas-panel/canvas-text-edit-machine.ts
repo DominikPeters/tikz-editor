@@ -12,6 +12,7 @@ import {
   type UndoHistory,
   type VerticalGoal
 } from "@tikz-editor/core/editing/transaction/index";
+import type { SelectionEnds } from "@tikz-editor/core/editing/position/index";
 
 import type { EditableTextTarget, TextEditingSession, TextSelectionOverlay } from "./types";
 import { clamp } from "./geometry";
@@ -52,11 +53,38 @@ export type CanvasTextEditState = {
   history: UndoHistory;
   /** Sticky goal for consecutive ↑/↓ under canvas focus. */
   verticalGoal: VerticalGoal | null;
+  /**
+   * The raw selection ends as edit-tree positions, from the last
+   * transaction that knew them. Valid only while the buffer and selection
+   * are still the ones it recorded (see selectionPositions).
+   */
+  treeSelection: CanvasTreeSelection | null;
   /** Buffer revision: advances with every buffer edit. */
   inputRevision: number;
   asyncRequestRevision: number;
   sourceRevision: number;
 };
+
+export type CanvasTreeSelection = {
+  readonly text: string;
+  readonly anchor: number;
+  readonly focus: number;
+  readonly ends: SelectionEnds;
+};
+
+/**
+ * The raw selection ends for the current buffer and selection, or null
+ * when anything changed them since the transaction that recorded them
+ * (typing, a click, undo): the caller then resolves positions from offsets.
+ */
+export function selectionPositions(state: CanvasTextEditState, anchor: number, focus: number): SelectionEnds | null {
+  const recorded = state.treeSelection;
+  const session = state.session;
+  if (!recorded || recorded.text !== session?.text) {
+    return null;
+  }
+  return recorded.anchor === anchor && recorded.focus === focus ? recorded.ends : null;
+}
 
 export type CanvasTextEditAction =
   | {
@@ -173,6 +201,7 @@ export const INITIAL_CANVAS_TEXT_EDIT_STATE: CanvasTextEditState = {
   focusSurface: "bar",
   history: EMPTY_UNDO_HISTORY,
   verticalGoal: null,
+  treeSelection: null,
   inputRevision: 0,
   asyncRequestRevision: 0,
   sourceRevision: 0
@@ -636,6 +665,9 @@ export function reduceCanvasTextEdit(
         ? { start: transaction.composition.from, end: transaction.composition.to }
         : null;
       const verticalGoal = transaction.verticalGoal ?? null;
+      const treeSelection = transaction.selection.kind === "absolute" && transaction.selection.positions
+        ? { text: applied.text, anchor: applied.anchor, focus: applied.focus, ends: transaction.selection.positions }
+        : null;
       if (applied.text === session.text) {
         const selection = normalizeSelection(session.text.length, applied.anchor, applied.focus);
         return {
@@ -648,7 +680,8 @@ export function reduceCanvasTextEdit(
             },
             history: breakTypingRun(state.history),
             compositionRange,
-            verticalGoal
+            verticalGoal,
+            treeSelection
           },
           effects: []
         };
@@ -659,7 +692,8 @@ export function reduceCanvasTextEdit(
           ...reduced.state,
           history: recordTransaction(state.history, sessionSnapshot(session), transaction, action.time),
           compositionRange,
-          verticalGoal
+          verticalGoal,
+          treeSelection
         },
         effects: reduced.effects
       };

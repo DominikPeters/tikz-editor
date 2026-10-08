@@ -1,3 +1,5 @@
+import type { SelectionEnds } from "../position/selection.js";
+
 /**
  * Transactions (design/canvas-editing-architecture.md, "Transactions"):
  * every edit in a canvas editing session is a set of disjoint patches
@@ -27,8 +29,19 @@ export type MappedPosition = {
 
 export type TransactionSelection =
   | { readonly kind: "mapped"; readonly anchor: MappedPosition; readonly focus: MappedPosition }
-  /** Post-edit offsets, for edits that compute their caret themselves. */
-  | { readonly kind: "absolute"; readonly anchor: number; readonly focus: number };
+  /**
+   * Post-edit offsets, for edits that compute their caret themselves.
+   * `positions` are the raw selection ends as tree positions in the
+   * post-edit buffer, when known: they keep what offsets cannot (the
+   * inside and outside of `x^2‸` share an offset; a promoted selection's
+   * raw focus differs from its effective one).
+   */
+  | {
+      readonly kind: "absolute";
+      readonly anchor: number;
+      readonly focus: number;
+      readonly positions?: SelectionEnds;
+    };
 
 /**
  * Undo grouping is declared by the transaction, never inferred from text:
