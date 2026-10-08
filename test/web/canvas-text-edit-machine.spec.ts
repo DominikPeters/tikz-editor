@@ -110,7 +110,9 @@ function reduceInputIntent(
         ? { from: state.compositionRange.start, to: state.compositionRange.end }
         : null,
       domain: null,
-      verticalGoal: state.verticalGoal
+      verticalGoal: state.verticalGoal,
+      structure: null,
+      positions: null
     },
     intent
   );

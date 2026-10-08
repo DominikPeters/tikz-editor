@@ -14,6 +14,8 @@ import {
   type IntentScheduler,
 } from "../../packages/core/src/editing/input/index.js";
 import { applyTransaction, TYPING_RUN_PAUSE_MS } from "../../packages/core/src/editing/transaction/index.js";
+import { createCommandTable, type CommandTable } from "../../packages/core/src/editing/commands/index.js";
+import { createEditViewCache } from "../../packages/core/src/editing/position/index.js";
 import type {
   EditorDriver,
   EditorSession,
@@ -23,6 +25,7 @@ import type {
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
   reduceCanvasTextEdit,
+  selectionPositions,
   type CanvasTextEditAction,
   type CanvasTextEditState,
 } from "../../packages/app/src/ui/canvas-panel/canvas-text-edit-machine.js";
@@ -66,6 +69,8 @@ class CanvasSession implements EditorSession {
   private layout: Layout | null = null;
   private time = 0;
   private readonly scheduler: IntentScheduler;
+  private readonly views = createEditViewCache();
+  private commands: CommandTable = createCommandTable();
 
   constructor(
     private readonly layoutMode: "eager" | "burst",
@@ -83,6 +88,7 @@ class CanvasSession implements EditorSession {
   async start(initial: EditorState): Promise<void> {
     const caret = Math.min(initial.selection.anchor, initial.selection.focus);
     const page = await this.renderPage(initial.source);
+    this.commands = createCommandTable(prepareBeamerDocument(initial.source).frameEditingEnvironment(0));
     const scope = resolveBeamerEditScopeAt(page.layout.editScopes ?? [], caret);
     if (!scope) {
       throw new Error(`No edit scope at offset ${caret}`);
@@ -201,6 +207,8 @@ class CanvasSession implements EditorSession {
   private run(intent: Intent): void {
     const state = this.machine;
     const session = this.session();
+    const anchor = this.backward ? session.selectionEnd : session.selectionStart;
+    const focus = this.backward ? session.selectionStart : session.selectionEnd;
     const resolution = resolveIntent(
       {
         surface: "canvas",
@@ -209,13 +217,15 @@ class CanvasSession implements EditorSession {
         revision: state.inputRevision,
         text: session.text,
         bufferFrom: session.sourceSpan.from,
-        anchor: this.backward ? session.selectionEnd : session.selectionStart,
-        focus: this.backward ? session.selectionStart : session.selectionEnd,
+        anchor,
+        focus,
         composition: state.compositionRange
           ? { from: state.compositionRange.start, to: state.compositionRange.end }
           : null,
         domain: this.layout?.domain ?? null,
         verticalGoal: state.verticalGoal,
+        structure: (text) => this.views(text, this.commands),
+        positions: selectionPositions(state, anchor, focus),
       },
       intent
     );

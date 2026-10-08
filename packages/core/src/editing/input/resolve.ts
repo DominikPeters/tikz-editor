@@ -23,6 +23,16 @@ import {
   type TextFormatToggleResult,
 } from "../../text/format-commands.js";
 import {
+  deleteBackward,
+  deleteForward,
+  deleteRange,
+  enterExistingScript,
+  insertIntoUnbracedArgument,
+  type EditOutcome,
+} from "../operations/index.js";
+import { promoteSelection, type EditView, type Position, type SelectionEnds } from "../position/index.js";
+import {
+  applyPatches,
   replacementPatches,
   type BufferPatch,
   type BufferRange,
@@ -38,11 +48,13 @@ import { logicalLineBoundary, nextWordBoundary, previousWordBoundary } from "./t
 /**
  * Resolves an intent against the session state into a transaction.
  *
- * This is today's canvas and bar behaviour expressed as one function per
- * intent type (migration step 2 of design/canvas-editing-architecture.md):
- * the precedence that used to live in a ladder of key handlers (structural
- * keys, then rendered motion, then the textarea) is now explicit per
- * intent. Ownership-based resolution replaces it in a later step.
+ * On the canvas of a scope session, horizontal motion, selection and
+ * deletion work on the edit tree (migration step 4 of
+ * design/canvas-editing-architecture.md): caret stops, selection
+ * promotion and the deletion operations. Flow edges (paragraph and item
+ * starts) still go to the structural keys, which read the rendered layout,
+ * as do vertical motion, row edges and Enter/Tab. The bar keeps source
+ * semantics.
  */
 export type IntentContext = {
   readonly surface: InputSurface;
@@ -63,6 +75,13 @@ export type IntentContext = {
    */
   readonly domain: BeamerCaretDomain | null;
   readonly verticalGoal: VerticalGoal | null;
+  /**
+   * The edit view of a buffer text, for tree-backed editing on the canvas
+   * of a scope session; null keeps source-character semantics.
+   */
+  readonly structure: ((text: string) => EditView) | null;
+  /** The raw selection ends as positions in the current buffer, when the caller still has them. */
+  readonly positions: SelectionEnds | null;
 };
 
 export type IntentResolution =
@@ -118,17 +137,14 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
       ) {
         return NONE;
       }
-      return resolver.replaceSelection(
-        intent.text,
-        intent.origin === "keyboard" ? { group: "typing-run", run: "insert" } : { group: "own-step" }
-      );
+      return resolver.insertText(intent.text, intent.origin === "keyboard");
     case "compose":
       return resolver.compose(intent.text, intent.commit);
     case "deleteBackward":
     case "deleteForward":
-      return resolver.delete(intent.type === "deleteBackward" ? "backward" : "forward", intent.unit);
+      return resolver.delete(intent.type === "deleteBackward" ? "backward" : "forward", intent.unit, intent.repeat);
     case "cut":
-      return resolver.hasRange() ? resolver.replaceSelection("", { group: "own-step" }) : NONE;
+      return resolver.cut();
     case "enter":
       return resolver.enter(intent.soft);
     case "tab":
@@ -151,10 +167,70 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
 class Resolver {
   private readonly from: number;
   private readonly to: number;
+  /** The edit view of the current buffer, on tree-backed surfaces. */
+  private readonly view: EditView | null;
 
   constructor(private readonly context: IntentContext) {
     this.from = Math.min(context.anchor, context.focus);
     this.to = Math.max(context.anchor, context.focus);
+    this.view = context.surface === "canvas" && context.structure ? context.structure(context.text) : null;
+  }
+
+  /** The raw selection ends, from the caller or from the offsets. */
+  private rawEnds(view: EditView): SelectionEnds {
+    return this.context.positions ?? {
+      anchor: view.positionAt(this.context.anchor),
+      focus: view.positionAt(this.context.focus),
+    };
+  }
+
+  /** The promoted selection, start first. */
+  private effectiveRange(view: EditView, raw: SelectionEnds): { start: Position; end: Position } {
+    const effective = promoteSelection(view, raw);
+    return view.rank(effective.anchor) <= view.rank(effective.focus)
+      ? { start: effective.anchor, end: effective.focus }
+      : { start: effective.focus, end: effective.anchor };
+  }
+
+  /** Selects by raw ends; the selection drawn is their promotion. */
+  private selectPositions(view: EditView, raw: SelectionEnds): IntentResolution {
+    const effective = promoteSelection(view, raw);
+    return this.transaction(
+      [],
+      { kind: "absolute", anchor: view.offset(effective.anchor), focus: view.offset(effective.focus), positions: raw },
+      { group: "own-step" }
+    );
+  }
+
+  /**
+   * Turns an operation's outcome into a transaction. After an edit, the
+   * caret snaps to the stop it names in the new buffer (`$ax‸ $` becomes
+   * `$ax ‸$`), keeping that position for the next intent.
+   */
+  private outcome(view: EditView, outcome: EditOutcome, typingRun?: string): IntentResolution | null {
+    switch (outcome.kind) {
+      case "patch": {
+        const structure = this.context.structure!;
+        const nextText = applyPatches(this.context.text, outcome.patches);
+        const nextView = structure(nextText);
+        const stop = nextView.stopAt(outcome.caret);
+        const caret = stop ? nextView.offset(stop) : outcome.caret;
+        const run = typingRun ?? outcome.run;
+        return this.transaction(
+          outcome.patches,
+          { kind: "absolute", anchor: caret, focus: caret, positions: stop ? { anchor: stop, focus: stop } : undefined },
+          run ? { group: "typing-run", run } : { group: "own-step" }
+        );
+      }
+      case "select":
+        return this.selectPositions(view, { anchor: outcome.anchor, focus: outcome.focus });
+      case "move":
+        return this.selectPositions(view, { anchor: outcome.to, focus: outcome.to });
+      case "none":
+        return NONE;
+      case "structural":
+        return null;
+    }
   }
 
   hasRange(): boolean {
@@ -196,6 +272,45 @@ class Resolver {
     );
   }
 
+  /**
+   * Typed or inserted text. On the tree: typing over a selection removes it
+   * as a range deletion would (F6), `^`/`_` enter an existing script (K4),
+   * and typing into an unbraced argument adds its braces (R6).
+   */
+  insertText(text: string, keyboard: boolean): IntentResolution {
+    const typing: UndoGrouping = keyboard ? { group: "typing-run", run: "insert" } : { group: "own-step" };
+    const view = this.view;
+    if (!view || !keyboard) {
+      return this.replaceSelection(text, typing);
+    }
+    const raw = this.rawEnds(view);
+    if (this.hasRange()) {
+      const { start, end } = this.effectiveRange(view, raw);
+      return this.outcome(view, deleteRange(view, start, end, text), "insert") ?? NONE;
+    }
+    const caret = view.representative(raw.focus);
+    if (text === "^" || text === "_") {
+      const entered = enterExistingScript(view, caret, text);
+      if (entered) {
+        return this.outcome(view, entered) ?? NONE;
+      }
+    }
+    const braced = insertIntoUnbracedArgument(view, caret, text);
+    if (braced) {
+      return this.outcome(view, braced, "insert") ?? NONE;
+    }
+    return this.replaceSelection(text, typing);
+  }
+
+  cut(): IntentResolution {
+    const view = this.view;
+    if (view && this.hasRange()) {
+      const { start, end } = this.effectiveRange(view, this.rawEnds(view));
+      return this.outcome(view, deleteRange(view, start, end)) ?? NONE;
+    }
+    return this.hasRange() ? this.replaceSelection("", { group: "own-step" }) : NONE;
+  }
+
   /** Replaces the selection; the caret lands after the inserted text. */
   replaceSelection(insert: string, undo: UndoGrouping): IntentResolution {
     const after = { offset: this.to, assoc: 1 as const };
@@ -225,8 +340,28 @@ class Resolver {
     );
   }
 
-  delete(direction: "backward" | "forward", unit: "char" | "item" | "word" | "line"): IntentResolution {
+  delete(direction: "backward" | "forward", unit: "char" | "item" | "word" | "line", repeat: boolean): IntentResolution {
     const { text } = this.context;
+    const view = this.view;
+    if (unit === "item" && view) {
+      const raw = this.rawEnds(view);
+      let outcome: EditOutcome;
+      if (this.hasRange()) {
+        // R9: auto-repeat never deletes a selection (a construct ⌫ just selected).
+        if (repeat) {
+          return NONE;
+        }
+        const { start, end } = this.effectiveRange(view, raw);
+        outcome = deleteRange(view, start, end);
+      } else {
+        const caret = view.representative(raw.focus);
+        outcome = direction === "backward" ? deleteBackward(view, caret) : deleteForward(view, caret);
+      }
+      const resolved = this.outcome(view, outcome);
+      if (resolved) {
+        return resolved;
+      }
+    }
     if (unit === "item" && this.context.surface === "canvas") {
       const structural = resolveCanvasStructuralDelete(this.context.domain, this.bufferSelection(), direction);
       if (structural.kind !== "native") {
@@ -275,6 +410,10 @@ class Resolver {
     if (this.context.surface !== "canvas") {
       return NONE;
     }
+    const view = this.view;
+    if (view && motion.unit === "item" && (motion.dir === "left" || motion.dir === "right")) {
+      return this.moveOnTree(view, motion.dir === "left" ? -1 : 1, motion.extend);
+    }
     const rendered = resolveCanvasRenderedMotion(
       this.context.domain,
       this.bufferSelection(),
@@ -306,6 +445,22 @@ class Resolver {
         return NONE;
     }
     return motion.extend ? this.select(anchor, next) : this.select(next, next);
+  }
+
+  /**
+   * ←/→ by caret stops (R7, R8, N1). Without ⇧, a selection collapses to
+   * its start or end; with ⇧, the raw focus moves and the selection drawn
+   * is its promotion (N3).
+   */
+  private moveOnTree(view: EditView, direction: -1 | 1, extend: boolean): IntentResolution {
+    const raw = this.rawEnds(view);
+    if (!extend && this.hasRange()) {
+      const { start, end } = this.effectiveRange(view, raw);
+      const target = direction < 0 ? start : end;
+      return this.selectPositions(view, { anchor: target, focus: target });
+    }
+    const next = view.step(raw.focus, direction) ?? view.representative(raw.focus);
+    return this.selectPositions(view, extend ? { anchor: raw.anchor, focus: next } : { anchor: next, focus: next });
   }
 
   structural(outcome: CanvasStructuralKeyOutcome): IntentResolution {

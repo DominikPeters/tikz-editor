@@ -128,6 +128,7 @@ import type {
   ResolvedBeamerTheme,
 } from "./theme/types.js";
 import { beamerRoundedShadowMarkup } from "./theme/rounded-shadow.js";
+import { classifyMacro } from "../editing/commands/macro-classes.js";
 import {
   escapeAttribute,
   paragraphMarkup,
@@ -3849,7 +3850,9 @@ function layoutParagraph(params: {
   };
   const height =
     documentResult.vlistLayout.metrics.height + documentResult.vlistLayout.metrics.depth;
-  const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped);
+  const macroArgumentRuns = collectMappedMacroArgumentRuns(mapped).filter((run) =>
+    !isStyleMacroInvocation(params.references.source, run.invocationSpan, params.macroBindings)
+  );
   const readOnlySourceSpans = macroArgumentRuns.map((run) => run.span);
   const listStructure: BeamerListTopology[] = (documentResult.listStructure ?? []).flatMap((list) => list.name === "bibliography" ? [] : [{
     environment: list.name,
@@ -4210,6 +4213,21 @@ function collectBeamerAtomicRenderSpans(
     span,
     hitBounds,
   }));
+}
+
+/**
+ * K1: a style macro's argument (`\ee{…}` for `\newcommand{\ee}[1]{\textcolor{c}{#1}}`)
+ * is edited like `\textbf`'s content, so it is neither read-only nor part
+ * of an atomic invocation.
+ */
+function isStyleMacroInvocation(
+  source: string,
+  invocation: Span,
+  bindings: ReadonlyMap<string, MacroBinding> | undefined
+): boolean {
+  const name = /^\\[A-Za-z@]+/u.exec(source.slice(invocation.from, invocation.to))?.[0];
+  const binding = name ? bindings?.get(name) : undefined;
+  return binding != null && classifyMacro(binding).kind === "style";
 }
 
 function collectMappedMacroArgumentRuns(

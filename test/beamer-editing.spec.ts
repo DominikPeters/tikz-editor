@@ -62,7 +62,8 @@ describe("Beamer canvas editing contract", () => {
     expect(joined).toContain("Editable block body");
     expect(joined).not.toContain("Generated");
     expect(joined).not.toContain("Macro argument");
-    expect(joined).not.toContain("Plain wrapped");
+    // K1: a macro whose output is just its argument edits like a style wrapper.
+    expect(joined).toContain("Plain|wrapped");
     expect(joined).not.toContain("Overlay text");
     expect(joined).not.toContain("x + y");
 
@@ -79,10 +80,10 @@ describe("Beamer canvas editing contract", () => {
       )
     );
     expect(atomSlices).toContain(String.raw`\generatedword`);
-    // Rendered argument output selects the whole invocation, including for
-    // macros whose output is nothing but their argument.
+    // Rendered argument output selects the whole invocation, unless the
+    // macro only styles its argument (K1).
     expect(atomSlices).toContain(String.raw`\shout{Macro argument}`);
-    expect(atomSlices).toContain(String.raw`\plain{Plain wrapped}`);
+    expect(atomSlices).not.toContain(String.raw`\plain{Plain wrapped}`);
     expect(atomSlices.join("|")).not.toContain("Overlay text");
     expect(
       page.layout.paragraphs.flatMap((paragraph) =>
@@ -319,14 +320,15 @@ describe("Beamer canvas editing contract", () => {
         page.layout.paragraphs.filter((p) => p.role === "body").map((p) => p.paragraphId)
       ).toEqual(["frame:0:paragraph:0", "frame:0:paragraph:0:1"]);
 
-      // Argument-bearing macro calls publish whole-invocation atoms.
+      // Argument-bearing macro calls publish whole-invocation atoms, except
+      // style macros (K1), whose argument is editable text.
       const atoms = page.layout.paragraphs.flatMap((paragraph) =>
         paragraph.atomicRenderSpans.map((atom) =>
           corpusSource.slice(atom.span.from, atom.span.to)
         )
       );
       expect(atoms).toContain(String.raw`\inner{x}{y}`);
-      expect(atoms).toContain(String.raw`\highlight{a wrapped phrase}`);
+      expect(atoms).not.toContain(String.raw`\highlight{a wrapped phrase}`);
     });
 
     it("publishes editable prose for nested lists, empty items, and description bodies", async () => {

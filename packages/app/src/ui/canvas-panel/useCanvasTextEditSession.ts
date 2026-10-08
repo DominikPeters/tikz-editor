@@ -55,6 +55,7 @@ import { resolveRectHitRegionContentBox } from "../coords/regions";
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
   reduceCanvasTextEdit,
+  selectionPositions,
   type CanvasTextEditAction,
   type CanvasTextEditState
 } from "./canvas-text-edit-machine";
@@ -84,7 +85,7 @@ import type {
   TextSelectionOverlay
 } from "./types";
 import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
-import { useEditTreeShadow } from "./edit-tree-shadow";
+import { canvasEditView, useEditCommands, useEditTree } from "./edit-tree-shadow";
 
 type TextEditCaretOverlay = {
   left: number;
@@ -657,11 +658,13 @@ export function useCanvasTextEditSession(
   const textEditFocusSurface = state.focusSurface;
   const canvasSurfaceFocused =
     textEditingSession?.isScopeSession === true && textEditFocusSurface === "canvas";
-  // Shadow mode: built on every revision, not yet driving the UI.
-  useEditTreeShadow(
-    textEditingSession?.isScopeSession ? textEditingSession.text : null,
-    snapshot.deck?.activeFrame?.editingEnvironment ?? null
-  );
+  const editCommands = useEditCommands(snapshot.deck?.activeFrame?.editingEnvironment ?? null);
+  const editCommandsRef = useRef(editCommands);
+  useLayoutEffect(() => {
+    editCommandsRef.current = editCommands;
+  }, [editCommands]);
+  // Bound in the render path on every revision, so intents find it built.
+  useEditTree(textEditingSession?.isScopeSession ? textEditingSession.text : null, editCommands);
   const [pendingAdornmentTextEditTargetId, setPendingAdornmentTextEditTargetId] = useState<string | null>(null);
   const textSelectionDragRef = useRef<TextSelectionDrag | null>(null);
   const textEditTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -779,6 +782,8 @@ export function useCanvasTextEditSession(
     // focused DOM input.
     const input = surface === "canvas" ? canvasFocusInputRef.current : textEditTextareaRef.current;
     const backward = input?.selectionDirection === "backward";
+    const anchor = backward ? session.selectionEnd : session.selectionStart;
+    const focus = backward ? session.selectionStart : session.selectionEnd;
     const resolution = resolveIntent(
       {
         surface,
@@ -787,13 +792,15 @@ export function useCanvasTextEditSession(
         revision: state.inputRevision,
         text: session.text,
         bufferFrom: session.sourceSpan.from,
-        anchor: backward ? session.selectionEnd : session.selectionStart,
-        focus: backward ? session.selectionStart : session.selectionEnd,
+        anchor,
+        focus,
         composition: state.compositionRange
           ? { from: state.compositionRange.start, to: state.compositionRange.end }
           : null,
         domain: session.isScopeSession ? resolveDeckCaretDomainRef.current(session.sourceId) : null,
-        verticalGoal: state.verticalGoal
+        verticalGoal: state.verticalGoal,
+        structure: session.isScopeSession ? (text) => canvasEditView(text, editCommandsRef.current) : null,
+        positions: selectionPositions(state, anchor, focus)
       },
       intent
     );

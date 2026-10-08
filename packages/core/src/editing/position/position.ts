@@ -13,9 +13,9 @@ export type Position = { readonly slot: SlotId; readonly index: number };
 export type Affinity = "before" | "after";
 
 /**
- * The canonical offset of a position: the start of the next child (after
- * any insignificant source), else the end of the last child, else the
- * start of the empty slot.
+ * The canonical offset of a position: the start of the next child, else
+ * the end of the slot's content; either way after any insignificant
+ * whitespace (`$a\cup ‸B$`, `$x^2 ‸$`).
  */
 export function positionOffset(tree: EditTree, position: Position): number {
   const slot = tree.slots[position.slot];
@@ -26,8 +26,7 @@ export function positionOffset(tree: EditTree, position: Position): number {
   if (position.index < children.length) {
     return tree.nodes[children[position.index]].span.from;
   }
-  const last = children.at(-1);
-  return last != null ? tree.nodes[last].span.to : slot.contentSpan.from;
+  return slot.contentSpan.to;
 }
 
 export type PositionIndex = {
