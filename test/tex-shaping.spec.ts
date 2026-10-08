@@ -5294,6 +5294,19 @@ describe("simple TeX paragraph layout", () => {
     expect(height(inside)).toBeGreaterThan(0);
     expect(height(inside)).toBeLessThan(height(outside) * 0.85);
     expect(Number(inside.clientPoint?.x)).toBeLessThanOrEqual(Number(outside.clientPoint?.x));
+
+    // After the scripted atom as a whole: at its right edge, at the base's size.
+    const base = sourceText.indexOf("x^");
+    const after = await getKnuthPlassPointFromOffset(layoutContext, {
+      paragraphId: "tex:script-edge-caret",
+      sourceText,
+      containerElement,
+      offset,
+      edge: { side: "after", within: { from: base, to: offset }, whole: true },
+    });
+    expect(after.error?.message ?? null).toBeNull();
+    expect(height(after)).toBeCloseTo(height(outside), 1);
+    expect(Number(after.clientPoint?.x)).toBeGreaterThanOrEqual(Number(inside.clientPoint?.x));
   });
 
   it("uses row-local selections and caret centers inside TeX-derived fractions", async () => {

@@ -44,7 +44,7 @@ export type UseCanvasTextEditingEffectsArgs = {
   svgResult: CanvasSnapshot["svg"];
   textLayoutContext: unknown;
   /** In math, the rendered item the caret hugs (document offsets): sizes the caret to its level. */
-  caretEdge: { side: "before" | "after"; within: { from: number; to: number } } | null;
+  caretEdge: { side: "before" | "after"; within: { from: number; to: number }; whole?: boolean } | null;
 };
 
 type RegionSelectionOverlayBox = {

@@ -139,9 +139,11 @@ export interface PointFromOffsetParams<
    * Which rendered item the caret hugs when several meet at the offset
    * (math only): the end of an item inside `within` (`x^\star‸)` inside
    * the superscript), or the start of one (`x^\star‸)` before the
-   * parenthesis). Without it, the default projection decides.
+   * parenthesis). With `whole`, the caret is after `within` as one item
+   * (`$x^\star$‸`): at its rightmost caret entry, sized like its start.
+   * Without an edge, the default projection decides.
    */
-  edge?: { side: 'before' | 'after'; within: { from: number; to: number } };
+  edge?: { side: 'before' | 'after'; within: { from: number; to: number }; whole?: boolean };
 }
 
 export interface SelectionRectsParams<
@@ -3624,6 +3626,16 @@ function edgeMathCaretEntry(
   offset: number,
   edge: NonNullable<PointFromOffsetParams['edge']>
 ): MathCaretEntry | null {
+  if (edge.whole && edge.side === 'after') {
+    // After a whole item: its start entry's level, at its right edge.
+    const start = edgeMathCaretEntry(entries, edge.within.from, { side: 'before', within: edge.within });
+    const inside = entries?.filter((entry) =>
+      entry.sourceOffsetRaw >= edge.within.from && entry.sourceOffsetRaw <= edge.within.to) ?? [];
+    if (!start || inside.length === 0) {
+      return null;
+    }
+    return { ...start, x: inside.reduce((right, entry) => (entry.x > right ? entry.x : right), start.x) };
+  }
   const matching = entries?.filter((entry) => {
     if (entry.sourceOffsetRaw !== offset || entry.sourceStartRaw == null || entry.sourceEndRaw == null) {
       return false;

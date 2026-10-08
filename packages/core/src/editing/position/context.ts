@@ -70,15 +70,19 @@ function isOutlined(view: EditView, node: EditNode): boolean {
   return role === "construct" || role === "transparent";
 }
 
-/** The rendered item a caret hugs: the end of the item before it, or the start of the one after (buffer-local). */
-export type CaretEdge = { readonly side: "before" | "after"; readonly within: Span };
+/**
+ * The rendered item a caret hugs: the end of the item before it, or the
+ * start of the one after (buffer-local). `whole`: after a construct taken
+ * as one item, at its right edge and its own level.
+ */
+export type CaretEdge = { readonly side: "before" | "after"; readonly within: Span; readonly whole?: boolean };
 
 /**
  * Where a math position's caret is drawn, as an edge of a rendered item:
- * at the end of a slot, after its last item when that is a single item
- * (`x^\star‸` hugs the star, small, inside the superscript); otherwise
- * before the next item. Null outside math, in an empty slot, or after a
- * construct, where the default projection decides.
+ * before the next item, or at a slot's end after its last one: a single
+ * item (`x^\star‸` hugs the star, small, inside the superscript), or a
+ * construct as a whole (`$x^\star$‸` is after the scripted atom, at the
+ * size of its base). Null outside math and in an empty slot.
  */
 export function caretEdge(view: EditView, position: Position): CaretEdge | null {
   const { tree } = view;
@@ -90,5 +94,7 @@ export function caretEdge(view: EditView, position: Position): CaretEdge | null 
     return { side: "before", within: tree.nodes[slot.children[position.index]].span };
   }
   const last = tree.nodes[slot.children[slot.children.length - 1]];
-  return last.slots.length === 0 ? { side: "after", within: last.span } : null;
+  return last.slots.length === 0
+    ? { side: "after", within: last.span }
+    : { side: "after", within: last.span, whole: true };
 }
