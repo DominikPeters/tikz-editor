@@ -32,6 +32,16 @@ export {
   type BeamerCaretStop,
 } from "./caret-stops.js";
 export {
+  applyBeamerStructuralPatchToBuffer,
+  resolveCanvasRenderedMotion,
+  resolveCanvasStructuralKey,
+  type CanvasBufferSelection,
+  type CanvasKeyStroke,
+  type CanvasMotionResult,
+  type CanvasStructuralKeyOutcome,
+  type CanvasVerticalGoal,
+} from "./canvas-keys.js";
+export {
   applyBeamerStructuralEdits,
   beamerListItemAt,
   beamerObjectDeletionPatch,

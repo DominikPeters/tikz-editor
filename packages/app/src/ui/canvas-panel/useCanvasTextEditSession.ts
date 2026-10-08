@@ -31,20 +31,16 @@ import {
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
 import {
-  beamerCaretAtomBeside,
-  beamerCaretRowEdgeOffset,
+  applyBeamerStructuralPatchToBuffer,
   beamerListItemAt,
-  beamerStructuralBackspacePatch,
-  beamerStructuralDeletePatch,
-  beamerStructuralEnterPatch,
-  beamerStructuralLineBreakPatch,
   beamerStructuralListTogglePatch,
   beamerStructuralTabPatch,
-  nearestBeamerCaretOffset,
-  nextBeamerCaretOffset,
-  verticalBeamerCaretOffset,
+  resolveCanvasRenderedMotion,
+  resolveCanvasStructuralKey,
   type BeamerCaretDomain,
-  type BeamerStructuralKeyResult
+  type CanvasBufferSelection,
+  type CanvasKeyStroke,
+  type CanvasVerticalGoal
 } from "@tikz-editor/core/beamer/index";
 import {
   activeTextFormatWrapper,
@@ -214,44 +210,34 @@ function textFormatSelectionEditable(session: TextEditingSession): boolean {
   return !/\\(?:item|begin|end)(?![a-zA-Z])/u.test(session.text.slice(from, to));
 }
 
-/**
- * Applies a structural patch to the session buffer under the staleness
- * guard (the domain reflects the last reconciled render): every edited
- * range must still hold the text the patch was computed against, else the
- * edit is dropped and the caller waits for reconciliation.
- */
-function sessionTextAfterStructuralPatch(
-  session: TextEditingSession,
-  domainSource: string,
-  result: Exclude<BeamerStructuralKeyResult, "swallow" | null>
-): { nextText: string; caretLocal: number; selectionEndLocal: number } | null {
-  const toLocal = (documentOffset: number) => documentOffset - session.sourceSpan.from;
-  for (const edit of result.edits) {
-    const from = toLocal(edit.span.from);
-    const to = toLocal(edit.span.to);
-    if (from < 0 || to > session.text.length || from > to) {
-      return null;
-    }
-    if (
-      session.text.slice(from, to) !== domainSource.slice(edit.span.from, edit.span.to)
-    ) {
-      return null;
-    }
-  }
-  let nextText = session.text;
-  for (let index = result.edits.length - 1; index >= 0; index -= 1) {
-    const edit = result.edits[index];
-    nextText =
-      nextText.slice(0, toLocal(edit.span.from)) +
-      edit.insert +
-      nextText.slice(toLocal(edit.span.to));
-  }
+const CANVAS_MOTION_KEYS: ReadonlySet<string> = new Set([
+  "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Backspace", "Delete"
+]);
+
+const CANVAS_STRUCTURAL_KEYS: ReadonlySet<string> = new Set(["Enter", "Tab", "Backspace", "Delete"]);
+
+function canvasKeyStroke(event: ReactKeyboardEvent<HTMLTextAreaElement>): CanvasKeyStroke {
   return {
-    nextText,
-    caretLocal: clamp(toLocal(result.caretOffset), 0, nextText.length),
-    selectionEndLocal: clamp(toLocal(result.selectionEnd ?? result.caretOffset), 0, nextText.length)
+    key: event.key,
+    shift: event.shiftKey,
+    primary: event.metaKey || event.ctrlKey,
+    alt: event.altKey
   };
 }
+
+function canvasBufferSelection(
+  session: TextEditingSession,
+  backward = false
+): CanvasBufferSelection {
+  return {
+    bufferFrom: session.sourceSpan.from,
+    bufferLength: session.text.length,
+    selectionStart: session.selectionStart,
+    selectionEnd: session.selectionEnd,
+    backward
+  };
+}
+
 const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
   "box-sizing",
   "direction",
@@ -715,7 +701,7 @@ export function useCanvasTextEditSession(
    * (click, typing, horizontal keys) starts a fresh goal without needing to
    * hook every selection path.
    */
-  const canvasVerticalGoalRef = useRef<{ offset: number; x: number } | null>(null);
+  const canvasVerticalGoalRef = useRef<CanvasVerticalGoal | null>(null);
   const previousContextKeyRef = useRef(contextKey);
   const sourceRevisionRef = useRef(sourceRevision);
 
@@ -1367,7 +1353,11 @@ export function useCanvasTextEditSession(
     if (!result || result === "swallow") {
       return;
     }
-    const applied = sessionTextAfterStructuralPatch(session, domain.source, result);
+    const applied = applyBeamerStructuralPatchToBuffer(
+      { text: session.text, from: session.sourceSpan.from },
+      domain.source,
+      result
+    );
     if (!applied) {
       return;
     }
@@ -1492,195 +1482,64 @@ export function useCanvasTextEditSession(
    */
   const handleCanvasRenderedMotionKey = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     const session = stateRef.current.session;
-    if (!session?.isScopeSession) {
-      return false;
-    }
-    const key = event.key;
-    const horizontal = key === "ArrowLeft" ? -1 : key === "ArrowRight" ? 1 : 0;
-    const vertical = key === "ArrowUp" ? -1 : key === "ArrowDown" ? 1 : 0;
-    const isHome = key === "Home";
-    const isEnd = key === "End";
-    const isBackspace = key === "Backspace";
-    const isDelete = key === "Delete";
-    if (!horizontal && !vertical && !isHome && !isEnd && !isBackspace && !isDelete) {
-      return false;
-    }
-    if (event.altKey) {
-      return false;
-    }
-    const withPrimary = event.metaKey || event.ctrlKey;
-    if ((isBackspace || isDelete) && (withPrimary || event.shiftKey)) {
-      return false;
-    }
-    const domain = resolveDeckCaretDomain(session.sourceId);
-    if (!domain || domain.offsets.length === 0) {
+    if (!session?.isScopeSession || !CANVAS_MOTION_KEYS.has(event.key)) {
       return false;
     }
     const input = event.currentTarget;
-    const bufferLength = session.text.length;
-    const toDocument = (local: number) => session.sourceSpan.from + clamp(local, 0, bufferLength);
-    const toLocal = (documentOffset: number) =>
-      clamp(documentOffset - session.sourceSpan.from, 0, bufferLength);
-    const applySelection = (start: number, end: number, direction: "forward" | "backward" | "none") => {
-      event.preventDefault();
-      event.stopPropagation();
-      pendingTextEditInsertTextRef.current = null;
-      input.setSelectionRange(start, end, direction);
-      dispatchCanvasTextEditAction({
-        type: "textarea_selection",
-        selectionStart: start,
-        selectionEnd: end
-      });
-    };
-
-    if (isBackspace || isDelete) {
-      if (session.selectionStart !== session.selectionEnd) {
-        // Range deletes (including an atom selected by the previous press)
-        // run natively through the beforeinput machine.
-        return false;
-      }
-      const atom = beamerCaretAtomBeside(
-        domain,
-        toDocument(session.selectionStart),
-        isBackspace ? "before" : "after"
-      );
-      if (!atom) {
-        return false;
-      }
-      applySelection(toLocal(atom.from), toLocal(atom.to), isBackspace ? "backward" : "forward");
-      return true;
-    }
-
-    const selectionBackward = input.selectionDirection === "backward";
-    const focusLocal = selectionBackward ? session.selectionStart : session.selectionEnd;
-    const anchorLocal = selectionBackward ? session.selectionEnd : session.selectionStart;
-    const hasRange = session.selectionStart !== session.selectionEnd;
-    const focusDoc = toDocument(focusLocal);
-    const domainFocus = nearestBeamerCaretOffset(domain, focusDoc) ?? focusDoc;
-
-    let nextDoc: number | null;
-    let nextVerticalGoal: { offset: number; x: number } | null = null;
-    if (isHome || isEnd || (withPrimary && horizontal !== 0)) {
-      nextDoc = beamerCaretRowEdgeOffset(
-        domain,
-        domainFocus,
-        isHome || horizontal < 0 ? "start" : "end"
-      );
-    } else if (withPrimary && vertical !== 0) {
-      const row = vertical < 0 ? domain.rows[0] : domain.rows[domain.rows.length - 1];
-      const stop = vertical < 0 ? row?.stops[0] : row?.stops[row.stops.length - 1];
-      nextDoc = stop?.offset ?? null;
-    } else if (horizontal !== 0) {
-      if (!event.shiftKey && hasRange) {
-        // Plain arrows collapse a range onto its edge without moving.
-        nextDoc = horizontal < 0
-          ? toDocument(session.selectionStart)
-          : toDocument(session.selectionEnd);
-      } else {
-        nextDoc = nextBeamerCaretOffset(domain, domainFocus, horizontal) ?? domainFocus;
-      }
-    } else {
-      const remembered = canvasVerticalGoalRef.current;
-      const goalX = remembered?.offset === domainFocus ? remembered.x : null;
-      const moved = verticalBeamerCaretOffset(domain, domainFocus, vertical as -1 | 1, goalX);
-      if (moved) {
-        nextDoc = moved.offset;
-        nextVerticalGoal = { offset: moved.offset, x: moved.goalX };
-      } else {
-        nextDoc = domainFocus;
-      }
-    }
-    if (nextDoc == null) {
+    const result = resolveCanvasRenderedMotion(
+      resolveDeckCaretDomain(session.sourceId),
+      canvasBufferSelection(session, input.selectionDirection === "backward"),
+      canvasKeyStroke(event),
+      canvasVerticalGoalRef.current
+    );
+    if (!result) {
       return false;
     }
-    canvasVerticalGoalRef.current = nextVerticalGoal;
-
-    const nextLocal = toLocal(nextDoc);
-    if (event.shiftKey) {
-      applySelection(
-        Math.min(anchorLocal, nextLocal),
-        Math.max(anchorLocal, nextLocal),
-        nextLocal < anchorLocal ? "backward" : "forward"
-      );
-    } else {
-      applySelection(nextLocal, nextLocal, "none");
-    }
+    canvasVerticalGoalRef.current = result.verticalGoal;
+    event.preventDefault();
+    event.stopPropagation();
+    pendingTextEditInsertTextRef.current = null;
+    input.setSelectionRange(result.selectionStart, result.selectionEnd, result.direction);
+    dispatchCanvasTextEditAction({
+      type: "textarea_selection",
+      selectionStart: result.selectionStart,
+      selectionEnd: result.selectionEnd
+    });
     return true;
   }, [dispatchCanvasTextEditAction, resolveDeckCaretDomain]);
 
   const handleCanvasStructuralKey = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     const currentState = stateRef.current;
     const session = currentState.session;
-    if (!session?.isScopeSession || currentState.compositionRange) {
+    if (
+      !session?.isScopeSession ||
+      currentState.compositionRange ||
+      !CANVAS_STRUCTURAL_KEYS.has(event.key)
+    ) {
       return false;
     }
-    const key = event.key;
-    const isEnter = key === "Enter";
-    const isTab = key === "Tab";
-    const isBackspace = key === "Backspace";
-    const isDelete = key === "Delete";
-    if (!isEnter && !isTab && !isBackspace && !isDelete) {
-      return false;
-    }
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-      return false;
-    }
-    if ((isBackspace || isDelete) && event.shiftKey) {
-      return false;
-    }
-    const hasRange = session.selectionStart !== session.selectionEnd;
-    if (hasRange && (isBackspace || isDelete)) {
-      // Range deletes (including a selected atom) run natively through the
-      // beforeinput machine.
-      return false;
-    }
-    const swallow = (): boolean => {
-      event.preventDefault();
-      event.stopPropagation();
-      return true;
-    };
     const domain = resolveDeckCaretDomain(session.sourceId);
-    if (!domain) {
-      // No rendered domain: degrade to plain source keys (design safety
-      // property); Tab still must not escape the session.
-      return isTab ? swallow() : false;
-    }
-    const offset =
-      session.sourceSpan.from + Math.min(session.selectionStart, session.selectionEnd);
-    let result: BeamerStructuralKeyResult;
-    if (isEnter) {
-      const end = session.sourceSpan.from + Math.max(session.selectionStart, session.selectionEnd);
-      result = event.shiftKey
-        ? beamerStructuralLineBreakPatch(domain, offset, end)
-        : beamerStructuralEnterPatch(domain, offset, end);
-      if (result == null) {
-        // Unknown context (fallback-rendered chunk): plain newline through
-        // the beforeinput machine.
-        return false;
-      }
-    } else if (isTab) {
-      result = beamerStructuralTabPatch(
-        domain, offset, event.shiftKey ? "unnest" : "nest",
-        session.sourceSpan.from + Math.max(session.selectionStart, session.selectionEnd)
-      );
-    } else {
-      result = isBackspace
-        ? beamerStructuralBackspacePatch(domain, offset)
-        : beamerStructuralDeletePatch(domain, offset);
-      if (result == null) {
-        return false;
-      }
-    }
-    if (!result || result === "swallow") {
-      return swallow();
-    }
-    const applied = sessionTextAfterStructuralPatch(session, domain.source, result);
-    if (!applied) {
-      return swallow();
+    const outcome = resolveCanvasStructuralKey(
+      domain,
+      canvasBufferSelection(session),
+      canvasKeyStroke(event)
+    );
+    if (outcome.kind === "native") {
+      return false;
     }
     event.preventDefault();
     event.stopPropagation();
-    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.selectionEndLocal);
+    if (outcome.kind === "swallow" || !domain) {
+      return true;
+    }
+    const applied = applyBeamerStructuralPatchToBuffer(
+      { text: session.text, from: session.sourceSpan.from },
+      domain.source,
+      outcome.patch
+    );
+    if (applied) {
+      applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.selectionEndLocal);
+    }
     return true;
   }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
 

@@ -124,6 +124,10 @@ numerator, move down, type denominator").
   `←→↑↓`, `⌘ ⌥ ⇧` modifiers. A typed string like `\in` means those
   keystrokes in order.
 - **Sees** describes the canvas; **Rule** cites the rules below.
+- Carets sit at **canonical offsets**: a position between two items is
+  written at the start of the next item, after any invisible whitespace
+  (`$A\cup ‸B$`, not `$A\cup‸ B$`). The executable versions of these
+  scenarios (`test/editing/scenarios.ts`) use this convention.
 - *Content construct*: has its own outline and slot(s) — math island, math
   slot (numerator, script, root body, `\text{}`, `\left…\right` body),
   `\url`/`\href` argument, macro argument slot.
@@ -424,7 +428,8 @@ Correct, if a bit ugly. (The format-commands deferral of "mixed-run partial
 toggling" becomes required.)
 
 **F5 Deleting across a style boundary.** `a⟦b\textbf{c⟧d}e` · `⌫`
-→ `a\textbf{‸d}e`. Selecting all of `bcd` → `a‸e`: the empty wrapper is
+→ `a‸\textbf{d}e`. As in F6, a deleted range collapses to its start
+position, which is outside the bold run here. Selecting all of `bcd` → `a‸e`: the empty wrapper is
 removed. *R9.*
 
 **F6 Typing over a selection that crosses a boundary.** `a⟦b\textbf{c⟧d}` ·
@@ -491,10 +496,10 @@ a *small* caret inside the script. Typing `3` → `x^{23}`. Clicking just
 past the 2 (a full-size caret, outside the script) and typing `3` → `x^23`,
 which renders x²3. The caret size shows which one you'll get. *R6, R7.*
 
-**M7 Replacing a symbol.** `$A\setminus B‸$` · `←` → `$A\setminus‸ B$`:
+**M7 Replacing a symbol.** `$A\setminus B‸$` · `←` → `$A\setminus ‸B$`:
 one press over B, and the terminator space costs nothing. `⌫` removes
 `\setminus` and its now-pointless space → `$A‸B$`. Keys `\cup␣` →
-`$A\cup‸ B$`; R5 adds the space because B is a letter. That is three
+`$A\cup ‸B$`; R5 adds the space because B is a letter. That is three
 actions where today it takes ten keystrokes or more. Alternative: `⇧←` to select ∖,
 then `⏎` re-opens it as a chip `\setminus‸` to rename. *R4, R5, R7, R9.*
 
