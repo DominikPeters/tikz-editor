@@ -6,7 +6,13 @@ import {
   type TexSyntaxIndex,
   type TexSyntaxMatchedEnvironment,
 } from "../../text/tex/syntax-index.js";
-import { createCommandTable, type ArgSchema, type CommandSchema, type CommandTable } from "../commands/table.js";
+import {
+  createCommandTable,
+  type ArgSchema,
+  type CommandSchema,
+  type CommandTable,
+  type EnvironmentSchema,
+} from "../commands/table.js";
 import type {
   EditMode,
   EditNode,
@@ -54,6 +60,15 @@ type MutableNode = Omit<EditNode, "kind" | "span" | "slots" | "delimiters" | "va
 type MutableSlot = Omit<EditSlot, "contentSpan" | "children"> & {
   contentSpan: MutableSpan;
   children: NodeId[];
+};
+
+/** `\item<overlay>[label]`, for list environments that do not declare their own item. */
+const DEFAULT_LIST_ITEM: NonNullable<EnvironmentSchema["item"]> = {
+  command: "item",
+  args: [
+    { kind: "overlay", rendered: false, role: "overlay" },
+    { kind: "optional", rendered: true, role: "label", mode: "text" },
+  ],
 };
 
 type Stop = "dollar" | "double-dollar" | "paren" | "bracket" | "right" | "cell";
@@ -876,7 +891,7 @@ class Binder {
         break;
       }
       case "list":
-        this.list(node, cursor, bodyEnd);
+        this.list(node, cursor, bodyEnd, schema.item ?? DEFAULT_LIST_ITEM);
         break;
       case "math-alignment":
         this.alignment(node, cursor, bodyEnd, "math");
@@ -922,20 +937,21 @@ class Binder {
     return found;
   }
 
-  private list(list: NodeId, from: number, to: number): void {
+  private list(list: NodeId, from: number, to: number, itemSchema: NonNullable<EnvironmentSchema["item"]>): void {
     const slot = this.slot(list, "flow", { from, to }, { mode: "text", flow: true });
-    const starts = this.topLevelControls(from, to, new Set(["item"]));
+    const starts = this.topLevelControls(from, to, new Set([itemSchema.command]));
     const firstItem = starts[0] ?? to;
     this.preamble(slot, from, firstItem);
     starts.forEach((start, index) => {
       const itemEnd = starts[index + 1] ?? to;
-      const item = this.node("item", "text", { from: start, to: itemEnd }, "item");
+      const item = this.node("item", "text", { from: start, to: itemEnd }, itemSchema.command);
       this.attach(slot, item);
       const itemRun = this.run(slot, "text", itemEnd);
-      let cursor = start + "\\item".length;
+      let cursor = start + 1 + itemSchema.command.length;
       this.delimiter(item, start, cursor);
-      cursor = this.bindArgument(itemRun, item, { kind: "overlay", rendered: false, role: "overlay" }, cursor);
-      cursor = this.bindArgument(itemRun, item, { kind: "optional", rendered: true, role: "label", mode: "text" }, cursor);
+      for (const arg of itemSchema.args) {
+        cursor = this.bindArgument(itemRun, item, arg, cursor);
+      }
       // Spaces on the item's own line belong to `\item `; content on the next line starts after a gap.
       let contentFrom = cursor;
       while (contentFrom < itemEnd && (this.text[contentFrom] === " " || this.text[contentFrom] === "\t")) {

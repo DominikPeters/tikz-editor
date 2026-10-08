@@ -39,6 +39,15 @@ describe("edit tree binding", () => {
     );
   });
 
+  it("opens floats and bibliographies as editable flow", () => {
+    expect(printEditTree(tree(`\\begin{figure}[h]\\centering\n  \\caption{Plot}\n\\end{figure}`))).toBe(
+      `(scope (container:figure options=h (paragraph \\centering (style:caption "Plot"))))`
+    );
+    expect(printEditTree(tree(`\\begin{thebibliography}{9}\n\\bibitem[AB]{key} A. Author.\n\\newblock Title.\n\\end{thebibliography}`))).toBe(
+      `(scope (list:thebibliography value=9 (item:bibitem label-key=key label:["AB"] flow:[(paragraph "A." ␣ "Author." ␣ \\newblock "Title.")])))`
+    );
+  });
+
   it("keeps broken source sound and says why", () => {
     const broken = tree(R`Broken $x^{2 and \foo{bar}`);
     expect(broken.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
@@ -54,6 +63,19 @@ describe("edit tree binding", () => {
     const supSlot = built.slots.find((slot) => slot.role === "sup")!;
     expect(index.positionAt(4, "before")).toEqual({ slot: supSlot.id, index: 1 });
     expect(positionOffset(built, index.positionAt(4, "after")!)).toBe(4);
+  });
+
+  it("resolves offsets in insignificant whitespace to the position they belong to", () => {
+    const built = tree(R`$a \le  b$`);
+    const index = createPositionIndex(built);
+    const beforeB = index.positionAt(R`$a \le  `.length, "before")!;
+    // Just after `\le`, inside the math spaces, and at the start of `b` are one place.
+    for (const offset of [R`$a \le`.length, R`$a \le `.length]) {
+      expect(index.positionAt(offset, "before")).toBeNull();
+      expect(index.resolve(offset, "before")).toEqual(beforeB);
+    }
+    // Inside a command name there is no position.
+    expect(index.resolve(R`$a \l`.length, "before")).toBeNull();
   });
 });
 

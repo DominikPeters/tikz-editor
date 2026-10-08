@@ -36,6 +36,14 @@ export type PositionIndex = {
   readonly offsets: readonly number[];
   positionsAt(offset: number): readonly Position[];
   positionAt(offset: number, affinity: Affinity): Position | null;
+  /**
+   * The position for any source offset. An offset with positions resolves
+   * by affinity; an offset in or at the edge of a slot gap (insignificant
+   * whitespace) resolves to the position that gap belongs to. Offsets
+   * inside a leaf or inside a construct's own syntax (command names,
+   * braces, values) have no position: null.
+   */
+  resolve(offset: number, affinity: Affinity): Position | null;
 };
 
 /**
@@ -64,6 +72,24 @@ export function createPositionIndex(tree: EditTree): PositionIndex {
     offsets.push(positionOffset(tree, { slot: slotId, index: slot.children.length }));
   };
   visitNode(tree.root);
+  // The position each gap character belongs to: the one before the next child.
+  const gapPosition = new Map<number, Position>();
+  for (const slot of tree.slots) {
+    if (slot.presence === "absent") {
+      continue;
+    }
+    let cursor = slot.contentSpan.from;
+    const markGap = (to: number, index: number) => {
+      for (let offset = cursor; offset < to; offset += 1) {
+        gapPosition.set(offset, { slot: slot.id, index });
+      }
+    };
+    slot.children.forEach((child, index) => {
+      markGap(tree.nodes[child].span.from, index);
+      cursor = Math.max(cursor, tree.nodes[child].span.to);
+    });
+    markGap(slot.contentSpan.to, slot.children.length);
+  }
   const byOffset = new Map<number, Position[]>();
   positions.forEach((position, index) => {
     const offset = offsets[index];
@@ -74,16 +100,19 @@ export function createPositionIndex(tree: EditTree): PositionIndex {
       byOffset.set(offset, [position]);
     }
   });
+  const positionAt = (offset: number, affinity: Affinity): Position | null => {
+    const candidates = byOffset.get(offset);
+    if (!candidates) {
+      return null;
+    }
+    return affinity === "before" ? candidates[0] : candidates[candidates.length - 1];
+  };
   return {
     positions,
     offsets,
     positionsAt: (offset) => byOffset.get(offset) ?? [],
-    positionAt(offset, affinity) {
-      const candidates = byOffset.get(offset);
-      if (!candidates) {
-        return null;
-      }
-      return affinity === "before" ? candidates[0] : candidates[candidates.length - 1];
-    },
+    positionAt,
+    resolve: (offset, affinity) =>
+      positionAt(offset, affinity) ?? gapPosition.get(offset) ?? gapPosition.get(offset - 1) ?? null,
   };
 }

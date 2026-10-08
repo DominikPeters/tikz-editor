@@ -52,9 +52,8 @@ function summarize(samples: readonly StructuralLatencySample[]) {
 }
 
 async function openKktColumnScope(page: Page): Promise<void> {
-  await page.getByRole("button", {
-    name: "Why KKT conditions matter",
-    exact: true
+  await page.getByTestId("figure-navigator").getByRole("button", {
+    name: /^\d+\. Why KKT conditions matter$/u
   }).click();
   await expect.poll(async () =>
     page.locator(
