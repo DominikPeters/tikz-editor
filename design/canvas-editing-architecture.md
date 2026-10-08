@@ -745,10 +745,18 @@ uses positions but deletion still uses raw source ranges.
    single line (math selection rects cover whole rows). The breadcrumb is
    in the status bar, and each crumb selects its construct.
 
-   Open: caret geometry per position. Today the caret is drawn from the
-   offset, so the inside and outside of an unbraced script share a
-   caret; the outline tells them apart. Sub-paragraph `\pause` hiding,
-   and `\alt`, where one argument is hidden, are not detected yet.
+   Caret geometry per position (math): the tree says which rendered item
+   a caret hugs (`position/context.ts`, `caretEdge`): the end of the last
+   item at a slot's end, else the start of the next. The hit map picks the
+   math caret entry on that side, and glyph entries publish a font-level
+   caret extent (0.75 em up, 0.25 em down) next to their ink-based
+   geometry. So the inside of `x^\star‸)` is a short caret at the star,
+   and the outside a full-size one before the parenthesis. Outlines use
+   the same edges. After a construct (`$x^\star$‸`), the default
+   projection still decides.
+
+   Open: sub-paragraph `\pause` hiding, and `\alt`, where one argument
+   is hidden, are not detected yet.
    Latency gate: median 52.9 ms, p95 60.2 ms.
 5. **Input rules and the chip.** Escaping, auto-pairing, completion from
    the CommandTable, scripts, the pending command.

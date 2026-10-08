@@ -1066,6 +1066,10 @@ function texMathBoxCaretEntries(
     depth: texLength(roundTexPt(entry.depth)),
     kind: entry.kind,
     ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
+    ...(entry.caretExtent ? {
+      caretTop: projectRoundedTexMathHBoxYToLine(entry.caretExtent.top),
+      caretBottom: projectRoundedTexMathHBoxYToLine(entry.caretExtent.bottom),
+    } : {}),
     hitBounds: {
       xStart: projectRoundedTexHBoxXToLine(
         texHBoxX(Math.max(0, Math.min(width, entry.hitBounds.xStart))),

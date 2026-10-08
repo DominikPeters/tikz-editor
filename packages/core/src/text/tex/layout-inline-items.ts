@@ -213,6 +213,13 @@ export interface TexMathCaretEntry {
     readonly end: number;
   };
   readonly priority?: number;
+  /**
+   * The caret's extent at the item's font size (glyphs): 0.75 em above the
+   * baseline and 0.25 em below, so a caret after a star is as tall as one
+   * after a letter of the same level. y/height/depth stay ink-based for
+   * hit-testing.
+   */
+  readonly caretExtent?: { readonly top: TexHBoxY; readonly bottom: TexHBoxY };
 }
 
 export type TexMathCaretDiagnosticCode =

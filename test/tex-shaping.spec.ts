@@ -5258,6 +5258,44 @@ describe("simple TeX paragraph layout", () => {
     });
   });
 
+  it("places a caret on either side of a script's edge, sized to its level", async () => {
+    const sourceText = String.raw`Point $x^\star)$ here`;
+    const result = layoutSimpleTexParagraph(sourceText, {
+      paragraphId: "tex:script-edge-caret",
+      width: 200,
+      parindent: 0,
+      hyphenator: { hyphenate: () => [] },
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider(),
+    });
+    const report = result.report;
+    expect(report).toBeTruthy();
+    const layoutContext = { linebreaks: { getReports: () => report ? [report] : [] } };
+    const containerElement = {
+      querySelectorAll: () => [
+        makeLineElement({ left: 0, top: 0, right: report?.width ?? 200, bottom: 10 }, report?.width ?? 200),
+      ],
+    };
+    const star = sourceText.indexOf(String.raw`\star`);
+    const offset = star + String.raw`\star`.length;
+    const point = (side: "before" | "after", within: { from: number; to: number }) =>
+      getKnuthPlassPointFromOffset(layoutContext, {
+        paragraphId: "tex:script-edge-caret",
+        sourceText,
+        containerElement,
+        offset,
+        edge: { side, within },
+      });
+    // Inside the superscript: hugging the star. Outside: before the parenthesis.
+    const inside = await point("after", { from: star, to: offset });
+    const outside = await point("before", { from: offset, to: offset + 1 });
+    expect(inside.error?.message ?? null).toBeNull();
+    expect(outside.error?.message ?? null).toBeNull();
+    const height = (result: typeof inside) => Number(result.caretBottom?.y) - Number(result.caretTop?.y);
+    expect(height(inside)).toBeGreaterThan(0);
+    expect(height(inside)).toBeLessThan(height(outside) * 0.85);
+    expect(Number(inside.clientPoint?.x)).toBeLessThanOrEqual(Number(outside.clientPoint?.x));
+  });
+
   it("uses row-local selections and caret centers inside TeX-derived fractions", async () => {
     const sourceText = String.raw`A fraction: $\frac{1234}{98765}$`;
     const result = layoutSimpleTexParagraph(sourceText, {

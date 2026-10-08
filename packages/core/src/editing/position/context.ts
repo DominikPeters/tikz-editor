@@ -69,3 +69,26 @@ function isOutlined(view: EditView, node: EditNode): boolean {
   const role = view.role(node.id);
   return role === "construct" || role === "transparent";
 }
+
+/** The rendered item a caret hugs: the end of the item before it, or the start of the one after (buffer-local). */
+export type CaretEdge = { readonly side: "before" | "after"; readonly within: Span };
+
+/**
+ * Where a math position's caret is drawn, as an edge of a rendered item:
+ * at the end of a slot, after its last item when that is a single item
+ * (`x^\star‸` hugs the star, small, inside the superscript); otherwise
+ * before the next item. Null outside math, in an empty slot, or after a
+ * construct, where the default projection decides.
+ */
+export function caretEdge(view: EditView, position: Position): CaretEdge | null {
+  const { tree } = view;
+  const slot = tree.slots[position.slot];
+  if (slot.mode !== "math" || slot.children.length === 0) {
+    return null;
+  }
+  if (position.index < slot.children.length) {
+    return { side: "before", within: tree.nodes[slot.children[position.index]].span };
+  }
+  const last = tree.nodes[slot.children[slot.children.length - 1]];
+  return last.slots.length === 0 ? { side: "after", within: last.span } : null;
+}

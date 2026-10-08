@@ -104,6 +104,9 @@ export interface LineMathCaretEntryReport<Space extends SourceCoordinateSpace = 
   depth: TexLength;
   kind: LineMathCaretEntryKind;
   priority?: number;
+  /** The caret's extent at the item's font size (glyphs), where it differs from the ink-based height. */
+  caretTop?: TexLineY;
+  caretBottom?: TexLineY;
   hitBounds: {
     xStart: TexLineX;
     xEnd: TexLineX;

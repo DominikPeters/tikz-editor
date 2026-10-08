@@ -135,6 +135,13 @@ export interface PointFromOffsetParams<
   Space extends CaretSourceCoordinateSpace = CaretSourceCoordinateSpace
 > extends CaretBaseParams<Space> {
   offset: number;
+  /**
+   * Which rendered item the caret hugs when several meet at the offset
+   * (math only): the end of an item inside `within` (`x^\star‸)` inside
+   * the superscript), or the start of one (`x^\star‸)` before the
+   * parenthesis). Without it, the default projection decides.
+   */
+  edge?: { side: 'before' | 'after'; within: { from: number; to: number } };
 }
 
 export interface SelectionRectsParams<
@@ -180,6 +187,9 @@ export interface CaretPointResult<
   clientPoint: ClientPoint | null;
   rotationDeg: number | null;
   kind: 'text' | 'space' | 'math' | null;
+  /** In math: the caret's top and bottom at the chosen item's size (a script's caret is short). */
+  caretTop?: ClientPoint;
+  caretBottom?: ClientPoint;
 }
 
 export interface LineRangeFromPointResult<
@@ -485,6 +495,9 @@ interface MathCaretEntry {
   depth: MathBaselineCoord;
   kind: NonNullable<LineSegmentReport['mathCaretEntries']>[number]['kind'];
   priority?: number;
+  /** Font-level caret extent (glyphs); y/height/depth are ink-based. */
+  caretTop?: MathBaselineCoord;
+  caretBottom?: MathBaselineCoord;
   hitBounds: MathCaretBounds;
 }
 
@@ -1897,6 +1910,9 @@ function normalizeMathCaretEntries(
       depth: mathBaselineCoord(depth),
       kind: entry.kind,
       ...(Number.isFinite(Number(entry.priority)) ? { priority: Number(entry.priority) } : {}),
+      ...(Number.isFinite(Number(entry.caretTop)) && Number.isFinite(Number(entry.caretBottom))
+        ? { caretTop: mathBaselineCoord(Number(entry.caretTop)), caretBottom: mathBaselineCoord(Number(entry.caretBottom)) }
+        : {}),
       hitBounds: {
         xStart: lineReportCoord(Math.min(xStart, xEnd)),
         xEnd: lineReportCoord(Math.max(xStart, xEnd)),
@@ -3198,6 +3214,10 @@ function displayMathCaretEntriesForBox<Space extends SourceCoordinateSpace>(
     depth: entry.depth,
     kind: entry.kind,
     ...(entry.priority !== undefined ? { priority: entry.priority } : {}),
+    ...(entry.caretExtent ? {
+      caretTop: projectDisplayMathHBoxYToLine(entry.caretExtent.top),
+      caretBottom: projectDisplayMathHBoxYToLine(entry.caretExtent.bottom),
+    } : {}),
     hitBounds: {
       xStart: projectDisplayMathHBoxXToLine(
         entry.hitBounds.xStart,
@@ -3592,6 +3612,27 @@ function bestMathCaretEntryForOffset(
     left.y - right.y ||
     left.x - right.x
   )[0] ?? null;
+}
+
+/**
+ * The math caret entry for an offset on a given side of the items there:
+ * an item ending at the offset inside `within` ('after'), or one starting
+ * there inside it ('before'). Null when the layout has no such entry.
+ */
+function edgeMathCaretEntry(
+  entries: readonly MathCaretEntry[] | undefined,
+  offset: number,
+  edge: NonNullable<PointFromOffsetParams['edge']>
+): MathCaretEntry | null {
+  const matching = entries?.filter((entry) => {
+    if (entry.sourceOffsetRaw !== offset || entry.sourceStartRaw == null || entry.sourceEndRaw == null) {
+      return false;
+    }
+    return edge.side === 'after'
+      ? entry.sourceEndRaw === offset && entry.sourceStartRaw >= edge.within.from && entry.sourceStartRaw < offset
+      : entry.sourceStartRaw === offset && entry.sourceEndRaw <= edge.within.to && entry.sourceEndRaw > offset;
+  }) ?? [];
+  return matching.sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))[0] ?? null;
 }
 
 function mathCaretOffsetAnchorScore(entry: MathCaretEntry, offset: number): number {
@@ -4186,7 +4227,8 @@ export async function getKnuthPlassPointFromOffset(
   const reportLine = selected.line.reportLine;
 
   const mathPointEntry = selected.stop.kind === 'math'
-    ? bestMathCaretEntryForOffset(selected.line.mathCaretEntries, selected.stop.offset)
+    ? (params.edge ? edgeMathCaretEntry(selected.line.mathCaretEntries, selected.stop.offset, params.edge) : null) ??
+      bestMathCaretEntryForOffset(selected.line.mathCaretEntries, selected.stop.offset)
     : null;
   const mathLocalY = mathPointEntry
     ? mathCaretEntryCenterY(mathPointEntry)
@@ -4204,8 +4246,17 @@ export async function getKnuthPlassPointFromOffset(
     px(localPoint.x + normal.x * normalOffset),
     px(localPoint.y + normal.y * normalOffset)
   );
+  const caretExtent = mathPointEntry
+    ? {
+        caretTop: lineLocalClientPoint(selected.line, reportLine, pointX, mathBaselineYToLineY(reportLine,
+          mathBaselineCoord(mathPointEntry.caretTop ?? mathPointEntry.y - mathPointEntry.height))),
+        caretBottom: lineLocalClientPoint(selected.line, reportLine, pointX, mathBaselineYToLineY(reportLine,
+          mathBaselineCoord(mathPointEntry.caretBottom ?? mathPointEntry.y + mathPointEntry.depth))),
+      }
+    : {};
 
   return {
+    ...caretExtent,
     ok: true,
     paragraphId,
     offset: sourceOffsetForSpace(
