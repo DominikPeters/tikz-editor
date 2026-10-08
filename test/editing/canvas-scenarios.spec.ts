@@ -14,17 +14,10 @@ describe("canvas editing: today's behaviour (legacy driver)", () => {
 
 describe("canvas editing: contracts from the scenarios doc", () => {
   for (const scenario of contractScenarios) {
-    if (scenario.legacy === "passes") {
-      it(`${scenario.id}: ${scenario.title}`, async () => {
-        const { actual, expected } = await runScenario(legacyCanvasDriver, scenario);
-        expect(actual).toBe(expected);
-      });
-    } else {
-      it(`${scenario.id}: ${scenario.title} (not yet met)`, async () => {
-        const { actual, expected } = await runScenario(legacyCanvasDriver, scenario);
-        expect(actual).not.toBe(expected);
-      });
-    }
+    it(`${scenario.id}: ${scenario.title}`, async () => {
+      const { actual, expected } = await runScenario(legacyCanvasDriver, scenario);
+      expect(actual).toBe(expected);
+    });
   }
 
   it.todo("burst typing ahead of layout never drops keystrokes (revision protocol)");
