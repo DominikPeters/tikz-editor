@@ -9,6 +9,7 @@ import {
   type CanvasTextEditState
 } from "../../packages/app/src/ui/canvas-panel/canvas-text-edit-machine";
 import type { EditableTextTarget } from "../../packages/app/src/ui/canvas-panel/types";
+import { intentFromBeforeInput, resolveIntent } from "../../packages/core/src/editing/input/index";
 
 const BASE_SOURCE = String.raw`\begin{tikzpicture}
   \node at (0,0) {$x$};
@@ -73,20 +74,61 @@ function reduceMany(state: CanvasTextEditState, actions: CanvasTextEditAction[])
   return { state: current, effectsCount };
 }
 
+let inputClock = 0;
+
+/**
+ * A textarea `beforeinput` event through the app's pipeline: the input
+ * adapter, the intent resolver (bar surface, selection taken from the
+ * event as the hook syncs it), then the machine.
+ */
 function reduceInputIntent(
   state: CanvasTextEditState,
   inputType: string,
   selectionStart: number,
   selectionEnd: number,
   data: string | null = null
-) {
-  return reduceCanvasTextEdit(state, {
-    type: "textarea_input_intent",
-    inputType,
-    data,
-    selectionStart,
-    selectionEnd
-  });
+): { state: CanvasTextEditState; effects: CanvasTextEditEffect[] } {
+  const intent = intentFromBeforeInput(inputType, data);
+  if (!intent) {
+    throw new Error(`unsupported inputType "${inputType}"`);
+  }
+  const session = state.session;
+  if (!session) {
+    return { state, effects: [] };
+  }
+  const resolution = resolveIntent(
+    {
+      surface: "bar",
+      editMode: session.editMode,
+      isScopeSession: session.isScopeSession,
+      revision: state.inputRevision,
+      text: session.text,
+      bufferFrom: session.sourceSpan.from,
+      anchor: selectionStart,
+      focus: selectionEnd,
+      composition: state.compositionRange
+        ? { from: state.compositionRange.start, to: state.compositionRange.end }
+        : null,
+      domain: null,
+      verticalGoal: state.verticalGoal
+    },
+    intent
+  );
+  inputClock += 10;
+  switch (resolution.kind) {
+    case "transaction":
+      return reduceCanvasTextEdit(state, {
+        type: "apply_transaction",
+        transaction: resolution.transaction,
+        time: inputClock
+      });
+    case "history":
+      return reduceCanvasTextEdit(state, { type: "history", direction: resolution.direction });
+    case "close":
+      return reduceCanvasTextEdit(state, { type: "session_close" });
+    case "none":
+      return { state, effects: [] };
+  }
 }
 
 function buildTargetAtOccurrence(source: string, text: string, occurrence: number): EditableTextTarget {
@@ -333,46 +375,23 @@ describe("canvas text edit machine", () => {
 
   it("reproduces exact regression sequence and returns to original source", () => {
     const target = buildTarget(BASE_SOURCE, "$x$");
-    const { state } = reduceMany(INITIAL_CANVAS_TEXT_EDIT_STATE, [
-      {
-        type: "start_session",
-        source: BASE_SOURCE,
-        target,
-        selectionStart: 2,
-        selectionEnd: 2,
-        historyMergeKey: "merge"
-      },
-      {
-        type: "textarea_input_intent",
-        inputType: "insertText",
-        data: "}",
-        selectionStart: 2,
-        selectionEnd: 2
-      },
-      {
-        type: "source_reconciled",
-        source: String.raw`\begin{tikzpicture}
+    const editedSource = String.raw`\begin{tikzpicture}
   \node at (0,0) {$x}$};
-\end{tikzpicture}`,
-        sourceRevision: 1,
-        target: null
-      },
-      {
-        type: "source_reconciled",
-        source: String.raw`\begin{tikzpicture}
-  \node at (0,0) {$x}$};
-\end{tikzpicture}`,
-        sourceRevision: 2,
-        target: null
-      },
-      {
-        type: "textarea_input_intent",
-        inputType: "deleteContentBackward",
-        data: null,
-        selectionStart: 3,
-        selectionEnd: 3
-      }
-    ]);
+\end{tikzpicture}`;
+    let state = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session",
+      source: BASE_SOURCE,
+      target,
+      selectionStart: 2,
+      selectionEnd: 2,
+      historyMergeKey: "merge"
+    }).state;
+    state = reduceInputIntent(state, "insertText", 2, 2, "}").state;
+    state = reduceMany(state, [
+      { type: "source_reconciled", source: editedSource, sourceRevision: 1, target: null },
+      { type: "source_reconciled", source: editedSource, sourceRevision: 2, target: null }
+    ]).state;
+    state = reduceInputIntent(state, "deleteContentBackward", 3, 3).state;
 
     expect(state.session?.text).toBe("$x$");
     expect(state.session?.workingSource).toBe(BASE_SOURCE);
@@ -447,8 +466,8 @@ describe("canvas text edit machine", () => {
     expect(state.session).toBeNull();
     expect(state.selectionOverlay).toBeNull();
     expect(state.dragSelection).toBeNull();
-    expect(state.undoStack).toHaveLength(0);
-    expect(state.redoStack).toHaveLength(0);
+    expect(state.history.undo).toHaveLength(0);
+    expect(state.history.redo).toHaveLength(0);
   });
 
   it("keeps text and selection unchanged for stale async responses", () => {
@@ -1027,19 +1046,19 @@ describe("canvas text edit machine", () => {
     const firstComposition = reduceInputIntent(started, "insertCompositionText", 2, 2, "k").state;
     expect(firstComposition.session?.text).toBe("$xk$");
     expect(firstComposition.compositionRange).toEqual({ start: 2, end: 3 });
-    expect(firstComposition.undoStack).toHaveLength(1);
+    expect(firstComposition.history.undo).toHaveLength(1);
 
     const updatedComposition = reduceInputIntent(firstComposition, "insertCompositionText", 3, 3, "ka").state;
     expect(updatedComposition.session?.text).toBe("$xka$");
     expect(updatedComposition.compositionRange).toEqual({ start: 2, end: 4 });
-    expect(updatedComposition.undoStack).toHaveLength(1);
+    expect(updatedComposition.history.undo).toHaveLength(1);
 
     const committed = reduceInputIntent(updatedComposition, "insertFromComposition", 4, 4, "か").state;
     expect(committed.session?.text).toBe("$xか$");
     expect(committed.session?.selectionStart).toBe(3);
     expect(committed.session?.selectionEnd).toBe(3);
     expect(committed.compositionRange).toBeNull();
-    expect(committed.undoStack).toHaveLength(1);
+    expect(committed.history.undo).toHaveLength(1);
   });
 
   it("preserves composition range across selection sync before commit", () => {
@@ -1307,38 +1326,32 @@ describe("canvas text edit machine", () => {
 
     const insertedBrace = reduceInputIntent(started, "insertText", 2, 2, "}").state;
     expect(insertedBrace.session?.text).toBe("$x}$");
-    expect(insertedBrace.undoStack).toHaveLength(1);
-    expect(insertedBrace.redoStack).toHaveLength(0);
+    expect(insertedBrace.history.undo).toHaveLength(1);
+    expect(insertedBrace.history.redo).toHaveLength(0);
 
     const insertedChar = reduceInputIntent(insertedBrace, "insertText", 3, 3, "a").state;
     expect(insertedChar.session?.text).toBe("$x}a$");
-    expect(insertedChar.undoStack).toHaveLength(2);
+    // One typing run, one undo step.
+    expect(insertedChar.history.undo).toHaveLength(1);
 
     const undone = reduceInputIntent(insertedChar, "historyUndo", 4, 4).state;
-    expect(undone.session?.text).toBe("$x}$");
-    expect(undone.undoStack).toHaveLength(1);
-    expect(undone.redoStack).toHaveLength(1);
+    expect(undone.session?.text).toBe("$x$");
+    expect(undone.history.undo).toHaveLength(0);
+    expect(undone.history.redo).toHaveLength(1);
 
-    const redone = reduceInputIntent(undone, "historyRedo", 3, 3).state;
+    const redone = reduceInputIntent(undone, "historyRedo", 2, 2).state;
     expect(redone.session?.text).toBe("$x}a$");
-    expect(redone.undoStack).toHaveLength(2);
-    expect(redone.redoStack).toHaveLength(0);
+    expect(redone.history.undo).toHaveLength(1);
+    expect(redone.history.redo).toHaveLength(0);
+
+    // A caret move ends the run: the next character is its own step.
+    const moved = reduceCanvasTextEdit(redone, { type: "textarea_selection", selectionStart: 1, selectionEnd: 1 }).state;
+    const typedAgain = reduceInputIntent(moved, "insertText", 1, 1, "b").state;
+    expect(typedAgain.history.undo).toHaveLength(2);
   });
 
-  it("throws on unsupported inputType in test mode", () => {
-    const target = buildTarget(BASE_SOURCE, "$x$");
-    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
-      type: "start_session",
-      source: BASE_SOURCE,
-      target,
-      selectionStart: 2,
-      selectionEnd: 2,
-      historyMergeKey: "merge"
-    }).state;
-
-    expect(() =>
-      reduceInputIntent(started, "insertOrderedList", 2, 2, "x")
-    ).toThrowError(/unsupported inputType/i);
+  it("rejects unsupported input types at the adapter", () => {
+    expect(intentFromBeforeInput("insertOrderedList", "x")).toBeNull();
   });
 });
 
@@ -1483,7 +1496,7 @@ describe("focus surface", () => {
   });
 });
 
-describe("structural edits", () => {
+describe("transactions", () => {
   const STRUCTURAL_SOURCE = String.raw`\begin{tikzpicture}
   \node at (0,0) {hello};
 \end{tikzpicture}`;
@@ -1500,13 +1513,20 @@ describe("structural edits", () => {
     }).state;
   };
 
-  it("applies an atomic buffer replacement with explicit caret placement", () => {
+  it("applies disjoint patches with explicit caret placement", () => {
     const started = startSession();
     const edited = reduceCanvasTextEdit(started, {
-      type: "structural_edit",
-      nextText: "heABllCDo",
-      selectionStart: 4,
-      selectionEnd: 4
+      type: "apply_transaction",
+      transaction: {
+        baseRevision: started.inputRevision,
+        patches: [
+          { from: 2, to: 2, insert: "AB" },
+          { from: 4, to: 4, insert: "CD" }
+        ],
+        selection: { kind: "absolute", anchor: 4, focus: 4 },
+        undo: { group: "own-step" }
+      },
+      time: 0
     });
     expect(edited.state.session?.text).toBe("heABllCDo");
     expect(edited.state.session?.selectionStart).toBe(4);
@@ -1517,44 +1537,92 @@ describe("structural edits", () => {
     expect(effect.nextSource).toContain("heABllCDo");
   });
 
-  it("creates its own undo checkpoint", () => {
+  it("creates its own undo step", () => {
     const started = startSession();
     const edited = reduceCanvasTextEdit(started, {
-      type: "structural_edit",
-      nextText: "hel\\item lo",
-      selectionStart: 9,
-      selectionEnd: 9
+      type: "apply_transaction",
+      transaction: {
+        baseRevision: started.inputRevision,
+        patches: [{ from: 3, to: 3, insert: "\\item " }],
+        selection: { kind: "absolute", anchor: 9, focus: 9 },
+        undo: { group: "own-step" }
+      },
+      time: 0
     }).state;
-    expect(edited.undoStack).toHaveLength(1);
-    const undone = reduceCanvasTextEdit(edited, {
-      type: "textarea_input_intent",
-      inputType: "historyUndo",
-      data: null,
-      selectionStart: 9,
-      selectionEnd: 9
-    }).state;
+    expect(edited.history.undo).toHaveLength(1);
+    const undone = reduceCanvasTextEdit(edited, { type: "history", direction: "undo" }).state;
     expect(undone.session?.text).toBe("hello");
     expect(undone.session?.selectionStart).toBe(2);
   });
 
-  it("is a no-op without a session or without a change", () => {
+  it("merges a typing run into one undo step until a pause", () => {
+    const started = startSession();
+    const type = (state: CanvasTextEditState, at: number, text: string, time: number) =>
+      reduceCanvasTextEdit(state, {
+        type: "apply_transaction",
+        transaction: {
+          baseRevision: state.inputRevision,
+          patches: [{ from: at, to: at, insert: text }],
+          selection: { kind: "mapped", anchor: { offset: at, assoc: 1 }, focus: { offset: at, assoc: 1 } },
+          undo: { group: "typing-run", run: "insert" }
+        },
+        time
+      }).state;
+    const run = type(type(started, 2, "a", 0), 3, "b", 100);
+    expect(run.history.undo).toHaveLength(1);
+    const afterPause = type(run, 4, "c", 5000);
+    expect(afterPause.history.undo).toHaveLength(2);
+    const moved = reduceCanvasTextEdit(afterPause, { type: "textarea_selection", selectionStart: 0, selectionEnd: 0 }).state;
+    const afterMove = type(moved, 0, "d", 5100);
+    expect(afterMove.history.undo).toHaveLength(3);
+  });
+
+  it("does not record selection-only transactions", () => {
+    const started = startSession();
+    const moved = reduceCanvasTextEdit(started, {
+      type: "apply_transaction",
+      transaction: {
+        baseRevision: started.inputRevision,
+        patches: [],
+        selection: { kind: "absolute", anchor: 4, focus: 1 },
+        undo: { group: "own-step" }
+      },
+      time: 0
+    });
+    expect(moved.effects).toEqual([]);
+    expect(moved.state.history.undo).toHaveLength(0);
+    expect(moved.state.session?.selectionStart).toBe(1);
+    expect(moved.state.session?.selectionEnd).toBe(4);
+  });
+
+  it("rejects a transaction computed against another revision", () => {
+    const started = startSession();
+    expect(() =>
+      reduceCanvasTextEdit(started, {
+        type: "apply_transaction",
+        transaction: {
+          baseRevision: started.inputRevision + 1,
+          patches: [{ from: 0, to: 0, insert: "x" }],
+          selection: { kind: "absolute", anchor: 1, focus: 1 },
+          undo: { group: "own-step" }
+        },
+        time: 0
+      })
+    ).toThrowError(/revision/u);
+  });
+
+  it("is a no-op without a session", () => {
     const noSession = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
-      type: "structural_edit",
-      nextText: "anything",
-      selectionStart: 0,
-      selectionEnd: 0
+      type: "apply_transaction",
+      transaction: {
+        baseRevision: 0,
+        patches: [{ from: 0, to: 0, insert: "anything" }],
+        selection: { kind: "absolute", anchor: 0, focus: 0 },
+        undo: { group: "own-step" }
+      },
+      time: 0
     });
     expect(noSession.state.session).toBeNull();
     expect(noSession.effects).toEqual([]);
-
-    const started = startSession();
-    const unchanged = reduceCanvasTextEdit(started, {
-      type: "structural_edit",
-      nextText: "hello",
-      selectionStart: 2,
-      selectionEnd: 2
-    });
-    expect(unchanged.effects).toEqual([]);
-    expect(unchanged.state.undoStack).toHaveLength(0);
   });
 });

@@ -47,7 +47,7 @@ export const characterisationScenarios: readonly Scenario[] = [
  * between two children sits at the start of the next child, after any
  * invisible whitespace (`$A\cup ‸B$`, not `$A\cup‸ B$`).
  */
-export const contractScenarios: readonly ContractScenario[] = [
+export const contractScenarios: readonly Scenario[] = [
   // Navigation: one press per visible step (R7, N1).
   { id: "N1", title: "crossing $A\\setminus B$ takes five presses", body: R`‸$A\setminus B$ x`, keys: "→×5", expect: R`$A\setminus B$‸ x` },
   { id: "N1 frac", title: "→ enters the numerator, then the denominator", body: R`‸$\frac{a}{b}$ x`, keys: "→×4", expect: R`$\frac{a}{‸b}$ x` },
@@ -81,4 +81,32 @@ export const contractScenarios: readonly ContractScenario[] = [
   { id: "N3 crossing", title: "a selection crossing into a formula covers all of it", body: R`a‸b $x+y$`, keys: "⇧→×3", expect: R`a⟦b $x+y$⟧` },
   // Formatting (F1).
   { id: "F1 mid-run", title: "⌘B mid-run splits in place without moving the caret", body: R`\textbf{one ‸two}`, keys: "⌘B", expect: R`\textbf{one }‸\textbf{two}` },
+];
+
+/**
+ * Undo grouping (architecture "Transactions"): a typing run is one step;
+ * it ends at a pause, a caret move, or a switch between typing and
+ * deleting. Structural edits are their own step.
+ */
+export const undoScenarios: readonly Scenario[] = [
+  { id: "undo run", title: "a typing run is one undo step", body: "a‸", keys: "bcd ⌘Z", expect: "a‸" },
+  { id: "undo pause", title: "a pause ends the typing run", body: "a‸", keys: "bc ⏸ de ⌘Z", expect: "abc‸" },
+  { id: "undo caret move", title: "a caret move ends the typing run", body: "a‸ z", keys: "bc ← → d ⌘Z", expect: "abc‸ z" },
+  { id: "undo ⌫ run", title: "consecutive ⌫ are one step", body: "abcd‸", keys: "⌫ ⌫ ⌘Z", expect: "abcd‸" },
+  { id: "undo type then ⌫", title: "typing and deleting are separate steps", body: "a‸", keys: "bc ⌫ ⌘Z", expect: "abc‸" },
+  { id: "undo structural", title: "an item split is its own step", body: itemize(R`\item First‸`), keys: "⏎ x ⌘Z", expect: itemize(R`\item First`, R`\item ‸`) },
+  { id: "undo structural twice", title: "undoing past an item split restores the item", body: itemize(R`\item First‸`), keys: "⏎ x ⌘Z ⌘Z", expect: itemize(R`\item First‸`) },
+  { id: "redo", title: "⇧⌘Z redoes the run", body: "a‸", keys: "bc ⌘Z ⇧⌘Z", expect: "abc‸" },
+];
+
+/**
+ * Typing ahead of layout (revision protocol): keys that read the layout
+ * wait for it, and later keys wait behind them. Run with the burst driver,
+ * these must end exactly where the eager driver ends.
+ */
+export const burstScenarios: readonly Scenario[] = [
+  { id: "burst type ⏎ type", title: "type, split the item, keep typing", body: itemize(R`\item First‸`), keys: "ly ⏎ Next", expect: itemize(R`\item Firstly`, R`\item Next‸`) },
+  { id: "burst type → ⌫", title: "type, move, delete", body: "One‸ two.", keys: "x → → ⌫", expect: "Onex ‸wo." },
+  { id: "burst type ⇥ type", title: "type, nest, type", body: itemize(R`\item First`, R`\item ‸`), keys: "Se ⇥ cond", expect: itemize(R`\item First`, R`\begin{itemize}`, R`\item Second‸`, R`\end{itemize}`) },
+  { id: "burst ↓ after typing", title: "↓ after typing uses the new layout", body: itemize(R`\item Alpha beta‸`, R`\item Delta epsilon zeta`), keys: "␣gamma ↓", expect: itemize(R`\item Alpha beta gamma`, R`\item Delta epsilon zeta‸`) },
 ];

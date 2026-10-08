@@ -30,22 +30,21 @@ import {
   documentOffsetToTextarea,
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
+import { beamerListItemAt, type BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
 import {
-  applyBeamerStructuralPatchToBuffer,
-  beamerListItemAt,
-  beamerStructuralListTogglePatch,
-  beamerStructuralTabPatch,
-  resolveCanvasRenderedMotion,
-  resolveCanvasStructuralKey,
-  type BeamerCaretDomain,
-  type CanvasBufferSelection,
-  type CanvasKeyStroke,
-  type CanvasVerticalGoal
-} from "@tikz-editor/core/beamer/index";
+  createIntentScheduler,
+  intentFromBeforeInput,
+  interpretKeyDown,
+  needsFreshLayout,
+  resolveIntent,
+  SUPPORTED_BEFORE_INPUT_TYPES,
+  type InputSurface,
+  type Intent
+} from "@tikz-editor/core/editing/input/index";
+import { applyTransaction, type Transaction } from "@tikz-editor/core/editing/transaction/index";
 import {
   activeTextFormatWrapper,
   isTextFormatActive,
-  applyTextColorCommand,
   toggleTextFormatCommand,
   type TextFormatCommandName
 } from "@tikz-editor/core/text/format-commands";
@@ -55,9 +54,9 @@ import type { ClientPoint, SvgBounds, ViewportPoint } from "../coords/types";
 import { resolveRectHitRegionContentBox } from "../coords/regions";
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
-  isCanvasTextInputIntentType,
   reduceCanvasTextEdit,
-  type CanvasTextEditAction
+  type CanvasTextEditAction,
+  type CanvasTextEditState
 } from "./canvas-text-edit-machine";
 import type {
   CanvasFocusInputModel,
@@ -173,17 +172,6 @@ const TEXT_CARET_OVERLAY_EPSILON_PX = 0.25;
  */
 const SCOPE_POPUP_MAX_BUFFER_CHARS = 400;
 
-/** Toolbar wrap buttons and the format command each one toggles. */
-const TEXT_FORMAT_WRAP_COMMANDS: Partial<
-  Record<CanvasTextFormatCommandId, Exclude<TextFormatCommandName, "textcolor">>
-> = {
-  bold: "textbf",
-  italic: "textit",
-  underline: "underline",
-  mono: "texttt",
-  alert: "alert"
-};
-
 /**
  * Toolbar color menu: xcolor names the engine resolves natively, with their
  * display values.
@@ -210,32 +198,17 @@ function textFormatSelectionEditable(session: TextEditingSession): boolean {
   return !/\\(?:item|begin|end)(?![a-zA-Z])/u.test(session.text.slice(from, to));
 }
 
-const CANVAS_MOTION_KEYS: ReadonlySet<string> = new Set([
-  "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Backspace", "Delete"
-]);
+/**
+ * How long an intent that needs the rendered layout waits for it before
+ * running against the layout as it is (a render failed or fell far behind).
+ */
+const LAYOUT_WAIT_TIMEOUT_MS = 200;
 
-const CANVAS_STRUCTURAL_KEYS: ReadonlySet<string> = new Set(["Enter", "Tab", "Backspace", "Delete"]);
+const IS_FAIL_FAST = import.meta.env.DEV || import.meta.env.MODE === "test";
 
-function canvasKeyStroke(event: ReactKeyboardEvent<HTMLTextAreaElement>): CanvasKeyStroke {
-  return {
-    key: event.key,
-    shift: event.shiftKey,
-    primary: event.metaKey || event.ctrlKey,
-    alt: event.altKey
-  };
-}
-
-function canvasBufferSelection(
-  session: TextEditingSession,
-  backward = false
-): CanvasBufferSelection {
-  return {
-    bufferFrom: session.sourceSpan.from,
-    bufferLength: session.text.length,
-    selectionStart: session.selectionStart,
-    selectionEnd: session.selectionEnd,
-    backward
-  };
+/** The surface interpreting the keyboard: canvas only for canvas-focused scope sessions. */
+function sessionSurface(state: CanvasTextEditState): InputSurface {
+  return state.session?.isScopeSession && state.focusSurface === "canvas" ? "canvas" : "bar";
 }
 
 const TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES = [
@@ -695,13 +668,6 @@ export function useCanvasTextEditSession(
   >(null);
   const pendingTextEditPasteRef = useRef<string | null>(null);
   const pendingTextEditInsertTextRef = useRef<string | null>(null);
-  /**
-   * Sticky goal column for consecutive ↑/↓ presses: survives only while the
-   * caret sits where the last vertical move left it, so any other movement
-   * (click, typing, horizontal keys) starts a fresh goal without needing to
-   * hook every selection path.
-   */
-  const canvasVerticalGoalRef = useRef<CanvasVerticalGoal | null>(null);
   const previousContextKeyRef = useRef(contextKey);
   const sourceRevisionRef = useRef(sourceRevision);
 
@@ -744,6 +710,132 @@ export function useCanvasTextEditSession(
     }
   }, [dispatch]);
 
+  /**
+   * Applies a transaction. Unless an IME composition owns the DOM inputs,
+   * both inputs are written before dispatching so a queued selectionchange
+   * cannot echo a stale offset back into the machine.
+   */
+  const commitTransaction = useCallback((transaction: Transaction, writeInputs: boolean) => {
+    const session = stateRef.current.session;
+    if (!session) {
+      return;
+    }
+    if (writeInputs) {
+      const applied = applyTransaction(session.text, transaction);
+      const start = Math.min(applied.anchor, applied.focus);
+      const end = Math.max(applied.anchor, applied.focus);
+      const direction = applied.focus < applied.anchor ? "backward" : "forward";
+      for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
+        if (input) {
+          if (input.value !== applied.text) {
+            input.value = applied.text;
+          }
+          input.setSelectionRange(start, end, direction);
+        }
+      }
+    }
+    dispatchCanvasTextEditAction({ type: "apply_transaction", transaction, time: performance.now() });
+  }, [dispatchCanvasTextEditAction]);
+
+  const resolveDeckCaretDomainRef = useRef(resolveDeckCaretDomain);
+
+  /** Resolves one intent against the current session state and applies it. */
+  const runIntent = useCallback((intent: Intent) => {
+    const state = stateRef.current;
+    const session = state.session;
+    if (!session) {
+      return;
+    }
+    const surface = sessionSurface(state);
+    // The machine stores a normalized selection; its direction lives on the
+    // focused DOM input.
+    const input = surface === "canvas" ? canvasFocusInputRef.current : textEditTextareaRef.current;
+    const backward = input?.selectionDirection === "backward";
+    const resolution = resolveIntent(
+      {
+        surface,
+        editMode: session.editMode,
+        isScopeSession: session.isScopeSession,
+        revision: state.inputRevision,
+        text: session.text,
+        bufferFrom: session.sourceSpan.from,
+        anchor: backward ? session.selectionEnd : session.selectionStart,
+        focus: backward ? session.selectionStart : session.selectionEnd,
+        composition: state.compositionRange
+          ? { from: state.compositionRange.start, to: state.compositionRange.end }
+          : null,
+        domain: session.isScopeSession ? resolveDeckCaretDomainRef.current(session.sourceId) : null,
+        verticalGoal: state.verticalGoal
+      },
+      intent
+    );
+    switch (resolution.kind) {
+      case "transaction":
+        commitTransaction(resolution.transaction, intent.type !== "compose");
+        return;
+      case "history":
+        dispatchCanvasTextEditAction({ type: "history", direction: resolution.direction });
+        return;
+      case "close":
+        dispatchCanvasTextEditAction({ type: "session_close" });
+        return;
+      case "none":
+        return;
+    }
+  }, [commitTransaction, dispatchCanvasTextEditAction]);
+
+  const runIntentRef = useRef(runIntent);
+  const layoutWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Revision protocol: intents that read the rendered layout wait until it
+   * reflects the buffer, and later intents queue behind them, so a burst of
+   * keys ahead of layout is neither dropped nor reordered.
+   */
+  const [intentScheduler] = useState(() => {
+    const scheduler = createIntentScheduler({
+      needsFreshLayout: (intent) => {
+        const state = stateRef.current;
+        return state.session != null &&
+          needsFreshLayout(intent, sessionSurface(state), state.session.isScopeSession);
+      },
+      isLayoutFresh: () => {
+        const session = stateRef.current.session;
+        if (!session?.isScopeSession) {
+          return true;
+        }
+        const domain = resolveDeckCaretDomainRef.current(session.sourceId);
+        return domain == null || domain.source === session.workingSource;
+      },
+      run: (intent) => {
+        runIntentRef.current(intent);
+      },
+      onWait: () => {
+        if (layoutWaitTimerRef.current != null) {
+          clearTimeout(layoutWaitTimerRef.current);
+        }
+        layoutWaitTimerRef.current = setTimeout(() => {
+          layoutWaitTimerRef.current = null;
+          scheduler.flush();
+        }, LAYOUT_WAIT_TIMEOUT_MS);
+      }
+    });
+    return scheduler;
+  });
+
+  useLayoutEffect(() => {
+    runIntentRef.current = runIntent;
+  }, [runIntent]);
+
+  // A new caret domain means a new layout: run the intents waiting for it.
+  useLayoutEffect(() => {
+    resolveDeckCaretDomainRef.current = resolveDeckCaretDomain;
+    intentScheduler.layoutChanged();
+    if (intentScheduler.pending === 0 && layoutWaitTimerRef.current != null) {
+      clearTimeout(layoutWaitTimerRef.current);
+      layoutWaitTimerRef.current = null;
+    }
+  }, [intentScheduler, resolveDeckCaretDomain]);
+
   const closeTextEditingSession = useCallback(() => {
     dispatchCanvasTextEditAction({ type: "session_close" });
   }, [dispatchCanvasTextEditAction]);
@@ -774,8 +866,13 @@ export function useCanvasTextEditSession(
     if (!textEditingSession) {
       pendingTextEditPasteRef.current = null;
       pendingTextEditInsertTextRef.current = null;
+      intentScheduler.reset();
+      if (layoutWaitTimerRef.current != null) {
+        clearTimeout(layoutWaitTimerRef.current);
+        layoutWaitTimerRef.current = null;
+      }
     }
-  }, [textEditingSession]);
+  }, [intentScheduler, textEditingSession]);
 
   const resolveRenderedMathTextElement = useCallback((
     target: EditableTextTarget,
@@ -1197,15 +1294,54 @@ export function useCanvasTextEditSession(
     ]
   );
 
+  /**
+   * Text-carrying input from either surface (typing, IME, paste, drop,
+   * modified deletes, undo from the Edit menu) enters as an intent.
+   */
+  const submitTextareaInput = useCallback((
+    inputType: string,
+    data: string | null,
+    textarea: HTMLTextAreaElement
+  ): boolean => {
+    const intent = intentFromBeforeInput(inputType, data);
+    if (!intent) {
+      const message =
+        `[canvas-text-edit] unsupported inputType "${inputType}". Supported: ${SUPPORTED_BEFORE_INPUT_TYPES.join(", ")}`;
+      if (IS_FAIL_FAST) {
+        throw new Error(message);
+      }
+      console.warn(message);
+      return false;
+    }
+    // Native text input acts at the input's own selection, which a click
+    // may have moved before its selectionchange arrived. With intents
+    // queued, the DOM selection is the machine's (written on commit).
+    if (
+      !stateRef.current.compositionRange &&
+      intentScheduler.pending === 0 &&
+      document.activeElement === textarea
+    ) {
+      dispatchCanvasTextEditAction({
+        type: "textarea_selection",
+        selectionStart: textarea.selectionStart ?? 0,
+        selectionEnd: textarea.selectionEnd ?? 0
+      });
+    }
+    if (intent.type === "compose") {
+      // The browser has already changed the input for a composition, so
+      // it cannot wait behind queued intents.
+      intentScheduler.flush();
+    }
+    intentScheduler.submit(intent);
+    return true;
+  }, [dispatchCanvasTextEditAction, intentScheduler]);
+
   const dispatchTextEditBeforeInputIntent = useCallback(
     (nativeEvent: InputEvent, textarea: HTMLTextAreaElement) => {
       if (typeof nativeEvent.inputType !== "string") {
         return;
       }
       const inputType = nativeEvent.inputType;
-      if (isCanvasTextInputIntentType(inputType)) {
-        nativeEvent.preventDefault();
-      }
       nativeEvent.stopPropagation();
       let data = nativeEvent.data;
       if (inputType === "insertFromDrop" && data == null) {
@@ -1221,15 +1357,11 @@ export function useCanvasTextEditSession(
         pendingTextEditPasteRef.current = null;
       }
       pendingTextEditInsertTextRef.current = null;
-      dispatchCanvasTextEditAction({
-        type: "textarea_input_intent",
-        inputType,
-        data,
-        selectionStart: textarea.selectionStart ?? 0,
-        selectionEnd: textarea.selectionEnd ?? 0
-      });
+      if (submitTextareaInput(inputType, data, textarea)) {
+        nativeEvent.preventDefault();
+      }
     },
-    [dispatchCanvasTextEditAction]
+    [submitTextareaInput]
   );
 
   const handleTextEditTextareaSelect = useCallback((event: ReactSyntheticEvent<HTMLTextAreaElement>) => {
@@ -1256,344 +1388,101 @@ export function useCanvasTextEditSession(
   const handleTextEditTextareaDrop = useCallback((event: ReactDragEvent<HTMLTextAreaElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    const textarea = event.currentTarget;
-    dispatchCanvasTextEditAction({
-      type: "textarea_input_intent",
-      inputType: "insertFromDrop",
-      data: event.dataTransfer.getData("text/plain"),
-      selectionStart: textarea.selectionStart ?? 0,
-      selectionEnd: textarea.selectionEnd ?? 0
-    });
-  }, [dispatchCanvasTextEditAction]);
+    submitTextareaInput("insertFromDrop", event.dataTransfer.getData("text/plain"), event.currentTarget);
+  }, [submitTextareaInput]);
 
-  /**
-   * Atomic buffer replacement shared by structural keys and the format
-   * toolbar: writes the DOM inputs before dispatching (the motion handler's
-   * order) so a queued selectionchange cannot echo a stale offset back into
-   * the machine, then routes through `structural_edit` for its own undo
-   * checkpoint and minimal-diff source patch.
-   */
-  const applyTextEditBufferReplacement = useCallback((
-    nextText: string,
-    selectionStart: number,
-    selectionEnd: number
-  ) => {
-    pendingTextEditInsertTextRef.current = null;
-    canvasVerticalGoalRef.current = null;
-    for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
-      if (input) {
-        input.value = nextText;
-        input.setSelectionRange(selectionStart, selectionEnd);
-      }
-    }
-    dispatchCanvasTextEditAction({
-      type: "structural_edit",
-      nextText,
-      selectionStart,
-      selectionEnd
-    });
-  }, [dispatchCanvasTextEditAction]);
-
-  const handleTextFormatCommand = useCallback((commandId: CanvasTextFormatCommandId) => {
-    const currentState = stateRef.current;
-    const session = currentState.session;
-    if (!session || currentState.compositionRange) {
-      return;
-    }
-    const wrapName = TEXT_FORMAT_WRAP_COMMANDS[commandId];
-    if (wrapName) {
-      const active = activeTextFormatWrapper(
-        session.text,
-        session.selectionStart,
-        session.selectionEnd,
-        wrapName
-      );
-      // Formatting must preserve structure; the helper also checks that
-      // splitting the enclosing inline wrappers leaves valid TeX.
-      if (!active && !textFormatSelectionEditable(session)) {
-        return;
-      }
-      const result = toggleTextFormatCommand(
-        session.text,
-        session.selectionStart,
-        session.selectionEnd,
-        wrapName
-      );
-      if (result) {
-        applyTextEditBufferReplacement(
-          result.nextText,
-          result.selectionStart,
-          result.selectionEnd
-        );
-      }
-      return;
-    }
-    if (!session.isScopeSession) {
-      return;
-    }
-    const domain = resolveDeckCaretDomain(session.sourceId);
-    if (!domain) {
-      return;
-    }
-    const offset =
-      session.sourceSpan.from + Math.min(session.selectionStart, session.selectionEnd);
-    const result =
-      commandId === "bullets" || commandId === "numbered"
-        ? beamerStructuralListTogglePatch(
-            domain,
-            offset,
-            commandId === "bullets" ? "itemize" : "enumerate"
-          )
-        : beamerStructuralTabPatch(
-            domain,
-            offset,
-            commandId === "indent" ? "nest" : "unnest",
-            session.sourceSpan.from + Math.max(session.selectionStart, session.selectionEnd)
-          );
-    if (!result || result === "swallow") {
-      return;
-    }
-    const applied = applyBeamerStructuralPatchToBuffer(
-      { text: session.text, from: session.sourceSpan.from },
-      domain.source,
-      result
-    );
-    if (!applied) {
-      return;
-    }
-    applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.selectionEndLocal);
-  }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
+  const handleTextFormatCommand = useCallback((command: CanvasTextFormatCommandId) => {
+    intentScheduler.submit({ type: "format", command, origin: "menu", repeat: false });
+  }, [intentScheduler]);
 
   const handleTextFormatColor = useCallback((color: string | null) => {
-    const currentState = stateRef.current;
-    const session = currentState.session;
-    if (!session || currentState.compositionRange) {
-      return;
-    }
-    const active = activeTextFormatWrapper(
-      session.text,
-      session.selectionStart,
-      session.selectionEnd,
-      "textcolor"
-    );
-    if (!active && !textFormatSelectionEditable(session)) {
-      return;
-    }
-    const result = applyTextColorCommand(
-      session.text,
-      session.selectionStart,
-      session.selectionEnd,
-      color
-    );
-    if (result) {
-      applyTextEditBufferReplacement(
-        result.nextText,
-        result.selectionStart,
-        result.selectionEnd
-      );
-    }
-  }, [applyTextEditBufferReplacement]);
-
-  const handleSharedTextEditModifierKeys = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
-      const formatKey = event.key.toLowerCase();
-      const formatCommand =
-        formatKey === "b" ? "bold" : formatKey === "i" ? "italic" : formatKey === "u" ? "underline" : null;
-      if (formatCommand) {
-        pendingTextEditInsertTextRef.current = null;
-        event.preventDefault();
-        event.stopPropagation();
-        handleTextFormatCommand(formatCommand);
-        return;
-      }
-    }
-    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-      const lowerKey = event.key.toLowerCase();
-      let historyIntent: "historyUndo" | "historyRedo" | null = null;
-      if (lowerKey === "z") {
-        historyIntent = event.shiftKey ? "historyRedo" : "historyUndo";
-      } else if (lowerKey === "y" && !event.shiftKey) {
-        historyIntent = "historyRedo";
-      }
-      if (historyIntent) {
-        pendingTextEditInsertTextRef.current = null;
-        event.preventDefault();
-        event.stopPropagation();
-        const textarea = event.currentTarget;
-        dispatchCanvasTextEditAction({
-          type: "textarea_input_intent",
-          inputType: historyIntent,
-          data: null,
-          selectionStart: textarea.selectionStart ?? 0,
-          selectionEnd: textarea.selectionEnd ?? 0
-        });
-        return;
-      }
-    }
-
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-      pendingTextEditInsertTextRef.current = null;
-      event.stopPropagation();
-      return;
-    }
-    pendingTextEditInsertTextRef.current = event.key.length === 1 ? event.key : null;
-  }, [dispatchCanvasTextEditAction, handleTextFormatCommand]);
-
-  const isFocusSurfaceChord = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => (
-    (event.metaKey || event.ctrlKey) &&
-    !event.altKey &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === "e"
-  ), []);
-
-  const handleTextEditTextareaKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      textSelectionDragRef.current = null;
-      // Esc steps out one level: bar focus hands the keyboard back to the
-      // canvas surface in scope sessions; node sessions close outright.
-      if (stateRef.current.session?.isScopeSession) {
-        dispatchCanvasTextEditAction({ type: "focus_surface", surface: "canvas" });
-      } else {
-        dispatchCanvasTextEditAction({ type: "session_close" });
-      }
-      return;
-    }
-
-    if (isFocusSurfaceChord(event)) {
-      // Cmd+E targets the bar, which is already focused; swallow it so the
-      // browser's "use selection for find" cannot fire mid-session.
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
-    handleSharedTextEditModifierKeys(event);
-  }, [dispatchCanvasTextEditAction, handleSharedTextEditModifierKeys, isFocusSurfaceChord]);
+    intentScheduler.submit({ type: "color", color, origin: "menu", repeat: false });
+  }, [intentScheduler]);
 
   /**
-   * Canvas-focus navigation over the rendered caret-stop domain: arrows move
-   * by rendered stops (atomic over macro calls and embedded objects, per-
-   * offset inside math), ↑/↓ by rendered rows, Home/End to row edges, and
-   * Backspace/Delete beside an atomic span select it before deleting (Word's
-   * select-then-delete convention). Returns false to fall through to native
-   * source-style behavior (no domain, alt-modified keys, range deletes).
+   * Keydown on either surface. The adapter decides what the key means;
+   * keys it leaves native reach the browser (text then arrives through
+   * `beforeinput`).
    */
-  const handleCanvasRenderedMotionKey = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
-    const session = stateRef.current.session;
-    if (!session?.isScopeSession || !CANVAS_MOTION_KEYS.has(event.key)) {
-      return false;
-    }
-    const input = event.currentTarget;
-    const result = resolveCanvasRenderedMotion(
-      resolveDeckCaretDomain(session.sourceId),
-      canvasBufferSelection(session, input.selectionDirection === "backward"),
-      canvasKeyStroke(event),
-      canvasVerticalGoalRef.current
+  const handleSessionKeyDown = useCallback((
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+    surface: InputSurface
+  ) => {
+    const decision = interpretKeyDown(
+      {
+        key: event.key,
+        shift: event.shiftKey,
+        primary: event.metaKey || event.ctrlKey,
+        alt: event.altKey,
+        repeat: event.repeat,
+        composing: event.nativeEvent.isComposing
+      },
+      surface
     );
-    if (!result) {
-      return false;
+    if (decision.kind === "native") {
+      const modified = event.ctrlKey || event.metaKey || event.altKey;
+      if (intentScheduler.pending > 0 && (modified || event.key.length !== 1)) {
+        // Native navigation and editing act on the DOM selection, so the
+        // queued intents must land first.
+        intentScheduler.flush();
+      }
+      if (modified) {
+        // Keep app-level shortcuts from firing mid-session.
+        pendingTextEditInsertTextRef.current = null;
+        event.stopPropagation();
+        return;
+      }
+      pendingTextEditInsertTextRef.current = event.key.length === 1 ? event.key : null;
+      return;
     }
-    canvasVerticalGoalRef.current = result.verticalGoal;
     event.preventDefault();
     event.stopPropagation();
     pendingTextEditInsertTextRef.current = null;
-    input.setSelectionRange(result.selectionStart, result.selectionEnd, result.direction);
-    dispatchCanvasTextEditAction({
-      type: "textarea_selection",
-      selectionStart: result.selectionStart,
-      selectionEnd: result.selectionEnd
-    });
-    return true;
-  }, [dispatchCanvasTextEditAction, resolveDeckCaretDomain]);
+    switch (decision.kind) {
+      case "block":
+        return;
+      case "intent":
+        intentScheduler.submit(decision.intent);
+        return;
+      case "focusBar":
+        intentScheduler.flush();
+        dispatchCanvasTextEditAction({ type: "focus_surface", surface: "bar" });
+        return;
+      case "escape": {
+        intentScheduler.flush();
+        textSelectionDragRef.current = null;
+        const session = stateRef.current.session;
+        if (surface === "bar") {
+          // Esc steps out one level: bar focus hands the keyboard back to
+          // the canvas surface in scope sessions; node sessions close.
+          dispatchCanvasTextEditAction(
+            session?.isScopeSession
+              ? { type: "focus_surface", surface: "canvas" }
+              : { type: "session_close" }
+          );
+          return;
+        }
+        // Esc ladder rung 1: hand the caret position to the object layer
+        // before closing; the panel selects the innermost containing object.
+        if (session?.isScopeSession && onCanvasSessionEscape) {
+          onCanvasSessionEscape(
+            session,
+            session.sourceSpan.from + Math.min(session.selectionStart, session.selectionEnd)
+          );
+        }
+        dispatchCanvasTextEditAction({ type: "session_close" });
+        return;
+      }
+    }
+  }, [dispatchCanvasTextEditAction, intentScheduler, onCanvasSessionEscape]);
 
-  const handleCanvasStructuralKey = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
-    const currentState = stateRef.current;
-    const session = currentState.session;
-    if (
-      !session?.isScopeSession ||
-      currentState.compositionRange ||
-      !CANVAS_STRUCTURAL_KEYS.has(event.key)
-    ) {
-      return false;
-    }
-    const domain = resolveDeckCaretDomain(session.sourceId);
-    const outcome = resolveCanvasStructuralKey(
-      domain,
-      canvasBufferSelection(session),
-      canvasKeyStroke(event)
-    );
-    if (outcome.kind === "native") {
-      return false;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (outcome.kind === "swallow" || !domain) {
-      return true;
-    }
-    const applied = applyBeamerStructuralPatchToBuffer(
-      { text: session.text, from: session.sourceSpan.from },
-      domain.source,
-      outcome.patch
-    );
-    if (applied) {
-      applyTextEditBufferReplacement(applied.nextText, applied.caretLocal, applied.selectionEndLocal);
-    }
-    return true;
-  }, [applyTextEditBufferReplacement, resolveDeckCaretDomain]);
+  const handleTextEditTextareaKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    handleSessionKeyDown(event, "bar");
+  }, [handleSessionKeyDown]);
 
   const handleCanvasFocusInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      textSelectionDragRef.current = null;
-      // Esc ladder rung 1: hand the caret position to the object layer
-      // before closing; the panel selects the innermost containing object.
-      const session = stateRef.current.session;
-      if (session?.isScopeSession && onCanvasSessionEscape) {
-        onCanvasSessionEscape(
-          session,
-          session.sourceSpan.from +
-            Math.min(session.selectionStart, session.selectionEnd)
-        );
-      }
-      dispatchCanvasTextEditAction({ type: "session_close" });
-      return;
-    }
-
-    if (isFocusSurfaceChord(event)) {
-      event.preventDefault();
-      event.stopPropagation();
-      dispatchCanvasTextEditAction({ type: "focus_surface", surface: "bar" });
-      return;
-    }
-
-    if (handleCanvasStructuralKey(event)) {
-      return;
-    }
-
-    if (event.key === "Tab") {
-      // A modified Tab the structural handler declined: swallow so focus
-      // cannot tab out of the hidden input mid-session.
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
-    if (handleCanvasRenderedMotionKey(event)) {
-      return;
-    }
-
-    handleSharedTextEditModifierKeys(event);
-  }, [
-    dispatchCanvasTextEditAction,
-    handleCanvasRenderedMotionKey,
-    handleCanvasStructuralKey,
-    handleSharedTextEditModifierKeys,
-    isFocusSurfaceChord,
-    onCanvasSessionEscape
-  ]);
+    handleSessionKeyDown(event, "canvas");
+  }, [handleSessionKeyDown]);
 
   const handleTextEditTextareaFocus = useCallback(() => {
     const currentState = stateRef.current;

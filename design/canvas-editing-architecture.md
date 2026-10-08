@@ -474,6 +474,17 @@ annotations and geometry are revision-tagged. Until they catch up:
 - anything needing new geometry (vertical motion, clicks) waits for it,
   or uses the mapped estimate.
 
+Until the binding layer exists (step 3), the only structure source is
+the rendered layout, so the step-2 protocol is the "waits for it" half:
+an intent that reads the layout (canvas motion, Enter, Tab, ⌫/⌦ on the
+canvas, list toolbar commands) is queued until the caret domain was built
+from the current buffer, and every later intent queues behind it. If the
+layout has not caught up after 200 ms (a render failed), the queue runs
+against the layout as it is, with the structural staleness guard, and
+later intents stop waiting until the layout is current again. The caret
+domain records the source its layout was rendered from, which is its
+revision tag.
+
 No intent is dropped because layout lags. This replaces today's "swallow
 stale structural edits".
 
@@ -483,7 +494,15 @@ internally.
 
 **Undo grouping is explicit and new** (today's machine checkpoints every
 input and every structural edit):
-- consecutive `typing-run` transactions in one slot merge;
+- consecutive `typing-run` transactions in one slot merge. The run ends
+  at a pause of more than one second, at any selection change that is not
+  part of the run (arrows, clicks), at any other transaction, and at
+  undo/redo. Typing and deleting are separate runs. Other editors differ
+  (TeXmacs merges adjacent inserts with no time or word limit, VS Code
+  breaks before a space, LibreOffice at letter/non-letter changes,
+  CodeMirror after 500 ms); the pause rule was chosen so that ⌘Z never
+  removes a whole sentence typed in one go;
+- an IME composition, from its first update to its commit, is one step;
 - a chip from `\` to commit is one group;
 - `transformation` groups (smart quotes, list autoformat) are a separate
   step after their literal keystroke (R12);
@@ -640,6 +659,16 @@ uses positions but deletion still uses raw source ranges.
 
    *Exit:* characterisation tests are green, burst-typing tests pass, and
    the key ladders are gone.
+
+   *Status:* done. Intents, the adapter, the resolver and the scheduler
+   live in `editing/input/`, transactions and undo history in
+   `editing/transaction/`. The hook has one keydown handler per surface,
+   and the edit machine applies transactions. The scenario driver runs
+   the app's machine headlessly, with rendering after every key or only
+   when an intent waits for it; both must agree. Today's per-intent
+   precedence (structural keys before atom selection before plain
+   deletion) still lives in `editing/input/resolve.ts`, until ownership
+   replaces it in step 4.
 3. **Binding layer and tree in shadow mode.** Built on every revision and
    checked against invariants and against today's behaviour in tests, but
    not yet driving the UI. Includes the engine annotations for math slots

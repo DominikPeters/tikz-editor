@@ -17,19 +17,11 @@ import {
 } from "./structural-edit.js";
 
 /**
- * Canvas-focus key decisions for Beamer scope sessions, kept DOM-free so
- * the app's key handlers and headless scenario tests share one
+ * Canvas-focus editing decisions for Beamer scope sessions, kept DOM-free
+ * so the editing session and headless scenario tests share one
  * implementation. Selections are buffer-local offsets into the session
  * buffer, which starts at `bufferFrom` in the document.
  */
-export type CanvasKeyStroke = {
-  readonly key: string;
-  readonly shift: boolean;
-  /** Cmd on macOS, Ctrl elsewhere. */
-  readonly primary: boolean;
-  readonly alt: boolean;
-};
-
 export type CanvasBufferSelection = {
   readonly bufferFrom: number;
   readonly bufferLength: number;
@@ -39,6 +31,16 @@ export type CanvasBufferSelection = {
 };
 
 export type CanvasVerticalGoal = { readonly offset: number; readonly x: number };
+
+/**
+ * `item`: ←/→ by rendered stops; `line`: ↑/↓ by rendered rows; `edge`:
+ * row edges; `scope`: the first or last stop of the scope.
+ */
+export type CanvasMotion = {
+  readonly dir: "left" | "right" | "up" | "down";
+  readonly unit: "item" | "line" | "edge" | "scope";
+  readonly extend: boolean;
+};
 
 export type CanvasMotionResult = {
   readonly selectionStart: number;
@@ -52,36 +54,16 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Rendered-stop navigation: arrows move by rendered stops (atomic over
- * macro calls and embedded objects, per-offset inside math), ↑/↓ by
- * rendered rows, Home/End to row edges, and Backspace/Delete beside an
- * atomic span select it before deleting (Word's select-then-delete
- * convention). Returns null to fall through to native source-style
- * behavior (no domain, alt-modified keys, range deletes).
+ * Rendered-stop navigation: atomic over macro calls and embedded objects,
+ * per-offset inside math. Returns null when there is no rendered domain
+ * (the caller degrades to source-character motion).
  */
 export function resolveCanvasRenderedMotion(
   domain: BeamerCaretDomain | null,
   selection: CanvasBufferSelection,
-  stroke: CanvasKeyStroke,
+  motion: CanvasMotion,
   verticalGoal: CanvasVerticalGoal | null
 ): CanvasMotionResult | null {
-  const key = stroke.key;
-  const horizontal = key === "ArrowLeft" ? -1 : key === "ArrowRight" ? 1 : 0;
-  const vertical = key === "ArrowUp" ? -1 : key === "ArrowDown" ? 1 : 0;
-  const isHome = key === "Home";
-  const isEnd = key === "End";
-  const isBackspace = key === "Backspace";
-  const isDelete = key === "Delete";
-  if (!horizontal && !vertical && !isHome && !isEnd && !isBackspace && !isDelete) {
-    return null;
-  }
-  if (stroke.alt) {
-    return null;
-  }
-  const withPrimary = stroke.primary;
-  if ((isBackspace || isDelete) && (withPrimary || stroke.shift)) {
-    return null;
-  }
   if (!domain || domain.offsets.length === 0) {
     return null;
   }
@@ -89,28 +71,7 @@ export function resolveCanvasRenderedMotion(
   const toDocument = (local: number) => bufferFrom + clamp(local, 0, bufferLength);
   const toLocal = (documentOffset: number) =>
     clamp(documentOffset - bufferFrom, 0, bufferLength);
-
-  if (isBackspace || isDelete) {
-    if (selection.selectionStart !== selection.selectionEnd) {
-      // Range deletes (including an atom selected by the previous press)
-      // run natively through the beforeinput machine.
-      return null;
-    }
-    const atom = beamerCaretAtomBeside(
-      domain,
-      toDocument(selection.selectionStart),
-      isBackspace ? "before" : "after"
-    );
-    if (!atom) {
-      return null;
-    }
-    return {
-      selectionStart: toLocal(atom.from),
-      selectionEnd: toLocal(atom.to),
-      direction: isBackspace ? "backward" : "forward",
-      verticalGoal,
-    };
-  }
+  const backwardDir = motion.dir === "left" || motion.dir === "up";
 
   const focusLocal = selection.backward ? selection.selectionStart : selection.selectionEnd;
   const anchorLocal = selection.backward ? selection.selectionEnd : selection.selectionStart;
@@ -120,33 +81,36 @@ export function resolveCanvasRenderedMotion(
 
   let nextDoc: number | null;
   let nextVerticalGoal: CanvasVerticalGoal | null = null;
-  if (isHome || isEnd || (withPrimary && horizontal !== 0)) {
-    nextDoc = beamerCaretRowEdgeOffset(
-      domain,
-      domainFocus,
-      isHome || horizontal < 0 ? "start" : "end"
-    );
-  } else if (withPrimary && vertical !== 0) {
-    const row = vertical < 0 ? domain.rows[0] : domain.rows[domain.rows.length - 1];
-    const stop = vertical < 0 ? row?.stops[0] : row?.stops[row.stops.length - 1];
-    nextDoc = stop?.offset ?? null;
-  } else if (horizontal !== 0) {
-    if (!stroke.shift && hasRange) {
-      // Plain arrows collapse a range onto its edge without moving.
-      nextDoc = horizontal < 0
-        ? toDocument(selection.selectionStart)
-        : toDocument(selection.selectionEnd);
-    } else {
-      nextDoc = nextBeamerCaretOffset(domain, domainFocus, horizontal) ?? domainFocus;
+  switch (motion.unit) {
+    case "edge":
+      nextDoc = beamerCaretRowEdgeOffset(domain, domainFocus, backwardDir ? "start" : "end");
+      break;
+    case "scope": {
+      const row = backwardDir ? domain.rows[0] : domain.rows[domain.rows.length - 1];
+      const stop = backwardDir ? row?.stops[0] : row?.stops[row.stops.length - 1];
+      nextDoc = stop?.offset ?? null;
+      break;
     }
-  } else {
-    const goalX = verticalGoal?.offset === domainFocus ? verticalGoal.x : null;
-    const moved = verticalBeamerCaretOffset(domain, domainFocus, vertical as -1 | 1, goalX);
-    if (moved) {
-      nextDoc = moved.offset;
-      nextVerticalGoal = { offset: moved.offset, x: moved.goalX };
-    } else {
-      nextDoc = domainFocus;
+    case "item":
+      if (!motion.extend && hasRange) {
+        // Plain arrows collapse a range onto its edge without moving.
+        nextDoc = backwardDir
+          ? toDocument(selection.selectionStart)
+          : toDocument(selection.selectionEnd);
+      } else {
+        nextDoc = nextBeamerCaretOffset(domain, domainFocus, backwardDir ? -1 : 1) ?? domainFocus;
+      }
+      break;
+    case "line": {
+      const goalX = verticalGoal?.offset === domainFocus ? verticalGoal.x : null;
+      const moved = verticalBeamerCaretOffset(domain, domainFocus, backwardDir ? -1 : 1, goalX);
+      if (moved) {
+        nextDoc = moved.offset;
+        nextVerticalGoal = { offset: moved.offset, x: moved.goalX };
+      } else {
+        nextDoc = domainFocus;
+      }
+      break;
     }
   }
   if (nextDoc == null) {
@@ -154,7 +118,7 @@ export function resolveCanvasRenderedMotion(
   }
 
   const nextLocal = toLocal(nextDoc);
-  if (stroke.shift) {
+  if (motion.extend) {
     return {
       selectionStart: Math.min(anchorLocal, nextLocal),
       selectionEnd: Math.max(anchorLocal, nextLocal),
@@ -170,74 +134,104 @@ export function resolveCanvasRenderedMotion(
   };
 }
 
+/**
+ * Backspace/Delete beside an atomic span (macro output, embedded object)
+ * selects it instead of deleting (Word's select-then-delete convention).
+ * Null when the selection is a range or nothing atomic is adjacent.
+ */
+export function resolveCanvasAtomSelection(
+  domain: BeamerCaretDomain | null,
+  selection: CanvasBufferSelection,
+  direction: "backward" | "forward"
+): CanvasMotionResult | null {
+  if (!domain || domain.offsets.length === 0 || selection.selectionStart !== selection.selectionEnd) {
+    return null;
+  }
+  const { bufferFrom, bufferLength } = selection;
+  const atom = beamerCaretAtomBeside(
+    domain,
+    bufferFrom + clamp(selection.selectionStart, 0, bufferLength),
+    direction === "backward" ? "before" : "after"
+  );
+  if (!atom) {
+    return null;
+  }
+  return {
+    selectionStart: clamp(atom.from - bufferFrom, 0, bufferLength),
+    selectionEnd: clamp(atom.to - bufferFrom, 0, bufferLength),
+    direction,
+    verticalGoal: null,
+  };
+}
+
+/**
+ * Outcome of a structural key: "native" means the key has no structural
+ * meaning here (the caller applies its plain behaviour); "swallow"
+ * consumes it without editing.
+ */
 export type CanvasStructuralKeyOutcome =
   | { readonly kind: "native" }
   | { readonly kind: "swallow" }
   | { readonly kind: "patch"; readonly patch: BeamerStructuralPatch };
 
-/**
- * Structural keys under canvas focus (Enter, Shift+Enter, Tab, and
- * Backspace/Delete at list-item edges). "native" falls through to the
- * next handler; "swallow" consumes the key without editing.
- */
-export function resolveCanvasStructuralKey(
-  domain: BeamerCaretDomain | null,
-  selection: CanvasBufferSelection,
-  stroke: CanvasKeyStroke
-): CanvasStructuralKeyOutcome {
-  const key = stroke.key;
-  const isEnter = key === "Enter";
-  const isTab = key === "Tab";
-  const isBackspace = key === "Backspace";
-  const isDelete = key === "Delete";
-  if (!isEnter && !isTab && !isBackspace && !isDelete) {
-    return { kind: "native" };
-  }
-  if (stroke.primary || stroke.alt) {
-    return { kind: "native" };
-  }
-  if ((isBackspace || isDelete) && stroke.shift) {
-    return { kind: "native" };
-  }
-  const hasRange = selection.selectionStart !== selection.selectionEnd;
-  if (hasRange && (isBackspace || isDelete)) {
-    // Range deletes (including a selected atom) run natively through the
-    // beforeinput machine.
-    return { kind: "native" };
-  }
-  if (!domain) {
-    // No rendered domain: degrade to plain source keys (design safety
-    // property); Tab still must not escape the session.
-    return isTab ? { kind: "swallow" } : { kind: "native" };
-  }
-  const offset =
-    selection.bufferFrom + Math.min(selection.selectionStart, selection.selectionEnd);
-  const end =
-    selection.bufferFrom + Math.max(selection.selectionStart, selection.selectionEnd);
-  let result: BeamerStructuralKeyResult;
-  if (isEnter) {
-    result = stroke.shift
-      ? beamerStructuralLineBreakPatch(domain, offset, end)
-      : beamerStructuralEnterPatch(domain, offset, end);
-    if (result == null) {
-      // Unknown context (fallback-rendered chunk): plain newline through
-      // the beforeinput machine.
-      return { kind: "native" };
-    }
-  } else if (isTab) {
-    result = beamerStructuralTabPatch(domain, offset, stroke.shift ? "unnest" : "nest", end);
-  } else {
-    result = isBackspace
-      ? beamerStructuralBackspacePatch(domain, offset)
-      : beamerStructuralDeletePatch(domain, offset);
-    if (result == null) {
-      return { kind: "native" };
-    }
-  }
+function structuralOutcome(result: BeamerStructuralKeyResult): CanvasStructuralKeyOutcome {
   if (!result || result === "swallow") {
     return { kind: "swallow" };
   }
   return { kind: "patch", patch: result };
+}
+
+function documentRange(selection: CanvasBufferSelection): { offset: number; end: number } {
+  return {
+    offset: selection.bufferFrom + Math.min(selection.selectionStart, selection.selectionEnd),
+    end: selection.bufferFrom + Math.max(selection.selectionStart, selection.selectionEnd),
+  };
+}
+
+/** Enter (item split) and Shift+Enter (line break) under canvas focus. */
+export function resolveCanvasStructuralEnter(
+  domain: BeamerCaretDomain | null,
+  selection: CanvasBufferSelection,
+  soft: boolean
+): CanvasStructuralKeyOutcome {
+  if (!domain) {
+    return { kind: "native" };
+  }
+  const { offset, end } = documentRange(selection);
+  const result = soft
+    ? beamerStructuralLineBreakPatch(domain, offset, end)
+    : beamerStructuralEnterPatch(domain, offset, end);
+  // Unknown context (fallback-rendered chunk): plain newline.
+  return result == null ? { kind: "native" } : structuralOutcome(result);
+}
+
+/** Tab / Shift+Tab: nest or unnest list items; never leaves the session. */
+export function resolveCanvasStructuralTab(
+  domain: BeamerCaretDomain | null,
+  selection: CanvasBufferSelection,
+  back: boolean
+): CanvasStructuralKeyOutcome {
+  if (!domain) {
+    return { kind: "swallow" };
+  }
+  const { offset, end } = documentRange(selection);
+  return structuralOutcome(beamerStructuralTabPatch(domain, offset, back ? "unnest" : "nest", end));
+}
+
+/** Backspace/Delete at list-item edges (merge, unnest). Collapsed carets only. */
+export function resolveCanvasStructuralDelete(
+  domain: BeamerCaretDomain | null,
+  selection: CanvasBufferSelection,
+  direction: "backward" | "forward"
+): CanvasStructuralKeyOutcome {
+  if (!domain || selection.selectionStart !== selection.selectionEnd) {
+    return { kind: "native" };
+  }
+  const { offset } = documentRange(selection);
+  const result = direction === "backward"
+    ? beamerStructuralBackspacePatch(domain, offset)
+    : beamerStructuralDeletePatch(domain, offset);
+  return result == null ? { kind: "native" } : structuralOutcome(result);
 }
 
 /**
