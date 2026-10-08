@@ -161,7 +161,8 @@ async function caretEnds(
       sourceCoordinateSpace: "document",
       containerElement: container,
       offset: documentSourceOffset(offset),
-      edge: { side, within: { from, to } }
+      // The end is after the span as a whole: its rightmost item, at its own level.
+      edge: { side, within: { from, to }, whole: side === "after" }
     });
     if (!result.ok || !result.clientPoint) {
       return null;

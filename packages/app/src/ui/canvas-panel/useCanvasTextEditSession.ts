@@ -1883,7 +1883,7 @@ export function useCanvasTextEditSession(
       return null;
     }
     const from = textEditingSession.sourceSpan.from;
-    return { side: edge.side, within: { from: from + edge.within.from, to: from + edge.within.to } };
+    return { ...edge, within: { from: from + edge.within.from, to: from + edge.within.to } };
   }, [caretFocus, textEditingSession]);
 
   useCanvasTextEditingEffects({
