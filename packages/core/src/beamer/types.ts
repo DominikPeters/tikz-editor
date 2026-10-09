@@ -1,3 +1,4 @@
+import type { BeamerEnvironmentAliasModel } from "./environment-aliases.js";
 import type {
   MacroAliasStatement,
   MacroCommandDefinitionStatement,
@@ -162,6 +163,8 @@ export type BeamerPreambleModel = {
   metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>>;
   atBeginSectionSpans: Span[];
   theoremDeclarations: BeamerTheoremDeclarationModel[];
+  /** User environments that are a list under another name (environment-aliases.ts). */
+  environmentAliases: BeamerEnvironmentAliasModel[];
   theoremTemplate: BeamerTheoremTemplateVariant;
   macroDefinitions: Array<
     | MacroDefinitionStatement

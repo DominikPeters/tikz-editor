@@ -129,6 +129,7 @@ import type {
 } from "./theme/types.js";
 import { beamerRoundedShadowMarkup } from "./theme/rounded-shadow.js";
 import { classifyMacro } from "../editing/commands/macro-classes.js";
+import { beamerEnvironmentAliasMap } from "./environment-aliases.js";
 import {
   escapeAttribute,
   paragraphMarkup,
@@ -454,6 +455,7 @@ export function prepareBeamerDocument(
       return {
         macros: context.macroBindingsForFrame(frame),
         theorems: [...activeBeamerTheoremDeclarations(context.document, frame.span.from).keys()],
+        environmentAliases: beamerEnvironmentAliasMap(context.document.preamble.environmentAliases),
       };
     },
     async renderFrame(options = {}) {
@@ -598,6 +600,7 @@ async function renderBeamerFrameStep(params: {
     continuationBreaks: allowFrameBreaks == null ? undefined : collectBeamerContinuationBreaks(context.syntax, frame),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
     tableRegisters: parseSimpleTexTabularRegisters(source.slice(document.preamble.span.from, document.preamble.span.to)),
+    environmentAliases: beamerEnvironmentAliasMap(document.preamble.environmentAliases),
     arrayPackage: context.syntax.controlsIn(document.preamble.span).some(control => {
       if (control.name !== "usepackage" && control.name !== "RequirePackage") return false;
       const optional = context.syntax.argumentAfter(control.span.to, "optional", document.preamble.span.to);
@@ -3640,6 +3643,16 @@ function layoutParagraph(params: {
   let mapped = params.macroBindings
     ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
     : params.mapped;
+  // A user environment that is a list under another name is laid out as that list. Only the
+  // name is replaced, so the list's `\begin{…}` and `\end{…}` still map to the user's source.
+  for (const [alias, target] of params.references.environmentAliases ?? []) {
+    mapped = replaceBeamerNamedSize(
+      mapped,
+      new RegExp(String.raw`(?<=\\(?:begin|end)\s*\{)${alias}(?=\})`, "gu"),
+      target,
+      `environment ${alias} as ${target}`
+    );
+  }
   const namedSize = activeBeamerNamedSize(mapped.text, params.references.theme);
   const namedSizes = beamerNamedFontSizes(params.references.theme);
   for (const [command, sizePt, lineHeightPt] of namedSizes) {

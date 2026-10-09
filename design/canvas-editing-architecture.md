@@ -884,6 +884,18 @@ uses positions but deletion still uses raw source ranges.
      content hidden on the current step, specifications as values).
    - `\frame{…}` and `\slide{…}{…}`-style frames are not recognized.
 
+   **User environments that are lists, done.** A `\newenvironment`
+   without parameters whose begin part opens one list (`\itemize` or
+   `\begin{enumerate}`, …) and whose end part closes it, with only length
+   and label settings around them, is that list under another name
+   (`beamer/environment-aliases.ts`, classified like K1's macros, with no
+   per-name rules). The preview lays it out as that list (spacing and label
+   settings are not reproduced) and the edit tree binds it as one, keeping
+   its name in what list edits write. In the corpus this opens
+   `wideitemize` (685 frames); the other common user environments wrap
+   LaTeX's generic `list`, `mdframed` or a minipage with a TikZ title, and
+   stay unsupported in the preview and opaque to editing.
+
    **Paste and copy (O6), done.** A canvas copy carries balanced source
    (wrappers and lists it cuts through are closed and reopened) with its
    mode, under its own clipboard type, and the rendered text as
