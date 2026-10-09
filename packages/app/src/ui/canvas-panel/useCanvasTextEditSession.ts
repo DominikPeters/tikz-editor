@@ -45,6 +45,19 @@ import {
   type Intent
 } from "@tikz-editor/core/editing/input/index";
 
+/**
+ * A pointer selection as it is drawn and acted on: in a scope session its
+ * promotion on the edit tree (N3, R9: a deletion never takes more than the
+ * highlight shows), elsewhere widened to whole formulas.
+ */
+function promoteTextSelection(target: EditableTextTarget, range: TextSelectionRange, commands: CommandTable): TextSelectionRange {
+  if (!target.scopeParagraphs || range.start === range.end) {
+    return expandSelectionToMathDelimiters(target.text, range);
+  }
+  const promoted = promotedOffsets(canvasEditView(target.text, commands), range.start, range.end);
+  return { start: promoted.anchor, end: promoted.focus };
+}
+
 /** What the chip's completion list says about each command. */
 const CHIP_CATEGORY_LABELS: Record<ChipCandidate["category"], string> = {
   style: "style",
@@ -60,9 +73,11 @@ const CHIP_CATEGORY_LABELS: Record<ChipCandidate["category"], string> = {
   break: "break"
 };
 import { applyTransaction, type Transaction } from "@tikz-editor/core/editing/transaction/index";
+import type { CommandTable } from "@tikz-editor/core/editing/commands/index";
 import {
   caretContext,
   caretEdge,
+  promotedOffsets,
   type CaretEdge,
   type ContextCrumb,
   type EditView,
@@ -99,7 +114,7 @@ import type {
 } from "./CanvasTextEditPopup";
 import { clamp, clientToSvgPoint, viewportToSvgPoint } from "./geometry";
 import { makeMergeKey, mapPointToRectRegionLocal } from "./panel-helpers";
-import { expandSelectionToMathDelimiters } from "./text-selection-ranges";
+import { expandSelectionToMathDelimiters, type TextSelectionRange } from "./text-selection-ranges";
 import {
   applyTextMeasureFont,
   collectLogicalLineRanges,
@@ -834,7 +849,8 @@ export function useCanvasTextEditSession(
           : null,
         positions: selectionPositions(state, anchor, focus),
         interaction: interactionState(state, anchor, focus),
-        commands: session.isScopeSession ? editCommandsRef.current : null
+        commands: session.isScopeSession ? editCommandsRef.current : null,
+        title: session.sourceId.endsWith(":scope:title")
       },
       intent
     );
@@ -1316,7 +1332,7 @@ export function useCanvasTextEditSession(
         const selection = (mode === "char" || mode === "line") && sourceHit?.selectionRange
           ? sourceHit.selectionRange
           : resolveTextSelectionRangeForMode(target.text, mode, resolvedOffset, resolvedLineRange);
-        const expandedSelection = expandSelectionToMathDelimiters(target.text, selection);
+        const expandedSelection = promoteTextSelection(target, selection, editCommandsRef.current);
         dispatchCanvasTextEditAction({
           type: "pointer_resolved",
           requestRevision,
@@ -1818,14 +1834,14 @@ export function useCanvasTextEditSession(
         : Promise.resolve<TextLineRange | null>(null);
       void Promise.all([offsetPromise, lineRangePromise]).then(([offset, focusLineRange]) => {
         const resolvedOffset = offset == null ? drag.anchorOffset : clamp(offset, 0, target.text.length);
-        const selection = expandSelectionToMathDelimiters(target.text, resolveTextSelectionRangeForDrag(
+        const selection = promoteTextSelection(target, resolveTextSelectionRangeForDrag(
           target.text,
           drag.mode,
           drag.anchorOffset,
           resolvedOffset,
           drag.anchorLineRange,
           focusLineRange
-        ));
+        ), editCommandsRef.current);
         dispatchCanvasTextEditAction({
           type: "drag_resolved",
           requestRevision,

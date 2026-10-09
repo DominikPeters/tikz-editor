@@ -143,10 +143,19 @@ export function isBlank(source: string, from: number, to: number): boolean {
 }
 
 export function skipHorizontalBack(source: string, offset: number, min: number): number {
-  while (offset > min && (source[offset - 1] === " " || source[offset - 1] === "\t")) {
+  while (offset > min && (source[offset - 1] === " " || source[offset - 1] === "\t") && !escaped(source, offset - 1)) {
     offset -= 1;
   }
   return offset;
+}
+
+/** Whether the character at an offset is escaped (`\ ` is a control space, not whitespace). */
+function escaped(source: string, offset: number): boolean {
+  let slashes = 0;
+  while (offset - slashes > 0 && source[offset - slashes - 1] === "\\") {
+    slashes += 1;
+  }
+  return slashes % 2 === 1;
 }
 
 export function skipHorizontalForward(source: string, offset: number, max: number): number {
@@ -261,7 +270,8 @@ export function mergeWithPreviousItemPatch(source: string, context: ListContext,
   const previous = list.items[index - 1];
   const from = trimmedEnd(source, previous.contentSpan);
   const empty = from === previous.contentSpan.from || isBlank(source, caret, context.item.contentSpan.to);
-  const insert = empty ? "" : " ";
+  // An empty previous item ends in its `\item`: the joined text must not run into it (R5).
+  const insert = empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, from)) ? "" : " ";
   return { edits: [{ span: { from, to: caret }, insert }], caret: from + insert.length };
 }
 
@@ -272,7 +282,8 @@ export function mergeNextItemPatch(source: string, context: ListContext, caret: 
     return null;
   }
   const next = list.items[index + 1];
-  const insert = trimmedEnd(source, item.contentSpan) === item.contentSpan.from ? "" : " ";
+  const empty = trimmedEnd(source, item.contentSpan) === item.contentSpan.from;
+  const insert = empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, caret)) ? "" : " ";
   return { edits: [{ span: { from: caret, to: next.contentSpan.from }, insert }], caret };
 }
 

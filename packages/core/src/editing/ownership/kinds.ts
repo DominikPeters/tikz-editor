@@ -75,6 +75,10 @@ export function itemRole(tree: EditTree, node: NodeId): ItemRole {
   if (record.kind === "operator" && !isLeaf(tree, node)) {
     return "construct";
   }
+  if (record.kind === "overlay" && record.slots.filter((slot) => tree.slots[slot].presence === "present").length > 1) {
+    // `\alt<2>{a}{b}`: branches, not a wrapper; selected and deleted whole.
+    return "construct";
+  }
   return ROLES[record.kind];
 }
 
@@ -99,11 +103,18 @@ export const ARGUMENT_ROLES: ReadonlySet<string> = new Set([
   "numerator", "denominator", "radicand", "index", "sup", "sub", "above", "below",
 ]);
 
-/** An empty group right after a control word (`\LaTeX{}`, R5): it only ends the name. */
+/**
+ * An empty group that only separates: right after a control word
+ * (`\LaTeX{}`, R5), or right before a `[` it keeps from being read as an
+ * optional argument (`\item {}[0,1]`, K9).
+ */
 export function isTerminatorGroup(tree: EditTree, node: NodeId): boolean {
   const record = tree.nodes[node];
   if (record.kind !== "group" || record.parent == null) {
     return false;
+  }
+  if (tree.text[record.span.to] === "[") {
+    return true;
   }
   const siblings = tree.slots[record.parent].children;
   const previous = siblings[siblings.indexOf(node) - 1];

@@ -43,7 +43,7 @@ export type CommandSchema = {
   readonly category: CommandCategory;
   readonly node: EditNodeKind;
   readonly args: readonly ArgSchema[];
-  /** Accepts a `*` right after the name. */
+  /** Accepts a `*` right after the name (`+` too for `\onslide+`). */
   readonly star?: boolean;
   /** A user macro from the document (bound by arity, rendered opaque). */
   readonly userMacro?: boolean;

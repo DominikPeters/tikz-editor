@@ -51,6 +51,11 @@ export function commitCommand(
   const command = `\\${name}`;
 
   if (held && mandatory.length > 0) {
+    // The selection goes into an argument of its own mode only (not math into `\emph{…}`).
+    const target = schema!.args.find((arg) => arg.kind === "mandatory" && arg.rendered);
+    if (target && (target.mode ?? (mode === "verbatim" ? "text" : mode)) !== mode) {
+      return { outcome: { kind: "none" } };
+    }
     const wrapped = wrapSelection(tree.text, schema!, command, held);
     if (wrapped) {
       return { outcome: wrapped };
@@ -64,18 +69,22 @@ export function commitCommand(
     const insert = `${command}[]${"{}".repeat(mandatory.length)}`;
     return { outcome: edit(range, insert, range.from + command.length + 1) };
   }
-  if (mandatory.length > 0 && key !== "typed") {
+  // Committed as typed right before existing content, a command that takes
+  // arguments would take that content (`\\frac` before `bc`): it gets its
+  // braces instead, as for ␣.
+  // (TeX skips spaces before an undelimited argument, but not a paragraph break.)
+  const ahead = /^[ \t]*\n?[ \t]*(.)/u.exec(tree.text.slice(range.to))?.[1] ?? "";
+  // (Even `&` would be taken, and break; in math a `$` closes, as `}` does.)
+  const absorbs = key === "typed" && mandatory.length > 0 && ahead !== "" && ahead !== "}" && !(mode === "math" && ahead === "$");
+  if (mandatory.length > 0 && (key !== "typed" || absorbs)) {
     const insert = command + "{}".repeat(mandatory.length);
     return { outcome: edit(range, insert, range.from + command.length + 1) };
   }
-  // The name alone, terminated as what follows needs (R5).
-  const following = tree.text.slice(range.to, range.to + 1);
-  let tail = "";
-  if (key === "space") {
-    tail = mode === "math" ? letterTerminator(following, "math") : textSpaceTail(schema, following);
-  } else if (key !== "typed") {
-    tail = letterTerminator(following, mode);
-  }
+  // The name alone, terminated as what follows needs (R5): after placeholder braces it replaces, what follows them.
+  const followsAt = placeholder ? placeholder.open + 2 : range.to;
+  const following = tree.text.slice(followsAt, followsAt + 1);
+  // Even a name committed as typed must not absorb the letters after the caret (`\te` before `lpha`).
+  const tail = key === "space" && mode !== "math" ? textSpaceTail(schema, following) : letterTerminator(following, mode);
   const text = command + tail;
   if (placeholder && tail.trim() === "" && (mandatory.length === 0 || key === "typed")) {
     const span = { from: placeholder.open, to: placeholder.open + 2 };
@@ -109,10 +118,19 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
       return mode === "math" ? null : { outcome: edit(range, "\\[\\]", range.from + 2) };
     case "(":
       return mode === "math" ? null : { outcome: edit(range, "\\(\\)", range.from + 2) };
-    case "\\":
+    case "\\": {
+      // Before an existing `[`, the break must not take it as its spacing (K9).
+      if (/^\s*\[/u.test(tree.text.slice(range.to))) {
+        return { outcome: edit(range, "\\\\{}", range.from + 4) };
+      }
       return { outcome: edit(range, "\\\\", range.from + 2), pending: range.from + 2 };
-    default:
-      return { outcome: edit(range, `\\${char}`, range.from + 1 + char.length) };
+    }
+    default: {
+      // A text accent takes the next character as its argument: given its
+      // own braces, it never grabs the text after the caret (`\\^{}`, as R2).
+      const insert = mode === "text" && TEXT_ACCENTS.has(char) ? `\\${char}{}` : `\\${char}`;
+      return { outcome: edit(range, insert, range.from + insert.length) };
+    }
   }
 }
 
@@ -126,6 +144,8 @@ export function commitLeftDelimiter(at: number, held: Span | null, opener: strin
   const open = `\\left${opener}`;
   return edit(range, `${open}\\right${closer}`, range.from + open.length);
 }
+
+const TEXT_ACCENTS = new Set(["^", "'", "`", "\"", "~", "=", "."]);
 
 const DELIMITER_PAIRS: Readonly<Record<string, string>> = { "(": ")", "[": "]", "|": "|", ".": "." };
 

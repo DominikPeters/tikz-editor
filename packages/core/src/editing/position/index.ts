@@ -5,7 +5,7 @@ export {
   type Position,
   type PositionIndex,
 } from "./position.js";
-export { promoteSelection, type SelectionEnds } from "./selection.js";
+export { promotedOffsets, promoteSelection, selectionEndsAt, type SelectionEnds } from "./selection.js";
 export { createEditView, type EditView, type EditViewOptions } from "./view.js";
 export { hiddenNodes, type RenderedStops } from "./rendered.js";
 export { createEditViewCache, type EditViewCache } from "./view-cache.js";

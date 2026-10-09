@@ -33,6 +33,12 @@ describe("edit tree binding", () => {
     );
   });
 
+  it("binds nothing beyond an unbraced argument that is itself a command", () => {
+    expect(printEditTree(tree(R`a{\textbf\textit{[}} b`))).toBe(
+      `(scope (paragraph "a" (group (style:textbf (style:textit)) (group "[")) ␣ "b"))`
+    );
+  });
+
   it("builds lists, items and style wrappers in prose", () => {
     expect(printEditTree(tree(`Let $x$ be \\textbf{bold}.\n\\begin{itemize}\n  \\item[a] One\n  \\item \n\\end{itemize}`))).toBe(
       `(scope (paragraph "Let" ␣ (formula "x") ␣ "be" ␣ (style:textbf "bold") ".") (list:itemize (item label:["a"] flow:[(paragraph "One")]) (item label:∅ flow:[])))`

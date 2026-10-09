@@ -39,6 +39,34 @@ export function enterExistingScript(view: EditView, caret: Position, marker: "^"
 }
 
 /**
+ * R6 for any edit at a caret in a single-token unbraced argument (`x_‸i`):
+ * the argument gets its braces around the edit, so a command written
+ * there (`x_{\left(\right)i}`) stays inside it. Other outcomes pass.
+ */
+export function braceUnbracedArgument(view: EditView, caret: Position, outcome: EditOutcome): EditOutcome {
+  const slot = view.tree.slots[caret.slot];
+  if (outcome.kind !== "patch" || slot.braced || !ARGUMENT_ROLES.has(slot.role) || slot.children.length === 0) {
+    return outcome;
+  }
+  const { from, to } = slot.contentSpan;
+  if (outcome.patches.some((patch) => patch.from < from || patch.to > to)) {
+    return outcome;
+  }
+  const set = new PatchSet().replace({ from, to: from }, "{");
+  for (const patch of outcome.patches) {
+    set.replace({ from: patch.from, to: patch.to }, patch.insert);
+  }
+  const patches = set.replace({ from: to, to }, "}").patches();
+  return {
+    ...outcome,
+    patches,
+    caret: outcome.caret + 1,
+    selectionEnd: outcome.selectionEnd == null ? undefined : outcome.selectionEnd + 1,
+    placeholder: undefined,
+  };
+}
+
+/**
  * R6: typing into a single-token unbraced argument (`x^2`, `\frac1n`)
  * adds the braces, so the typed text stays in the argument: `x^{23}`.
  * Null when the caret's slot is not such an argument.

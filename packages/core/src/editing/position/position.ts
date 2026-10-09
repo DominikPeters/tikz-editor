@@ -26,7 +26,9 @@ export function positionOffset(tree: EditTree, position: Position): number {
   if (position.index < children.length) {
     return tree.nodes[children[position.index]].span.from;
   }
-  return slot.contentSpan.to;
+  // A slot's end is after its trailing whitespace; an empty slot's only
+  // position is at its start (`\item ‸`, not before the next line's indent).
+  return children.length === 0 ? slot.contentSpan.from : slot.contentSpan.to;
 }
 
 export type PositionIndex = {

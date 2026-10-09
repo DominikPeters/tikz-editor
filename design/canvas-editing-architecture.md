@@ -812,10 +812,13 @@ uses positions but deletion still uses raw source ranges.
      - Each commit is one undo step.
    - **Ownership** (`ownership/keys.ts`): every node declares owns,
      barrier, transparent or pass for ⏎, ⇧⏎ and ⇥. One rule decides:
-     any barrier on the chain stops the key; otherwise the innermost
-     owner handles it, and the transparent nodes inside it (style
-     wrappers, inline formulas) are closed before the break and reopened
-     after it (Z1). A wrapper with nothing on one side of the caret is
+     walking outward from the caret, the first node that decides wins.
+     A barrier stops the key; an owner handles it, and the transparent
+     nodes inside it (style wrappers, inline formulas) are closed before
+     the break and reopened after it (Z1). (This refines the "any
+     barrier on the chain" rule above: an environment is then a barrier
+     only to an owner outside it, so `\scalebox{\begin{minipage}…}` is
+     not split from its paragraph while its own items still split.) A wrapper with nothing on one side of the caret is
      not split: the break goes beside it.
    - **Structural keys** (`operations/structure.ts`, `lists.ts`): item
      split and exit, paragraph break, new row and leaving an alignment

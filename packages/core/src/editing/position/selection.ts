@@ -56,3 +56,36 @@ function outermostConstructBelow(view: EditView, slot: SlotId, common: SlotId): 
   }
   return found;
 }
+
+/**
+ * A selection made by offsets (a pointer drag, the hidden input), as it is
+ * drawn and acted on: its promotion (N3), as offsets with the anchor first.
+ */
+export function promotedOffsets(view: EditView, anchor: number, focus: number): { anchor: number; focus: number } {
+  if (anchor === focus) {
+    return { anchor, focus };
+  }
+  const promoted = promoteSelection(view, selectionEndsAt(view, anchor, focus));
+  const from = view.offset(promoted.anchor);
+  const to = view.offset(promoted.focus);
+  // Promotion only widens: keep the raw end where it already reaches further.
+  return anchor <= focus
+    ? { anchor: Math.min(anchor, from, to), focus: Math.max(focus, from, to) }
+    : { anchor: Math.max(anchor, from, to), focus: Math.min(focus, from, to) };
+}
+
+/**
+ * The raw ends of a selection given by offsets. A range's start belongs to
+ * what follows it and its end to what precedes it: the end of
+ * `⟦Beta & 22\\⟧ Gamma` is after the row, not at the start of `Gamma`'s
+ * row, so promoting a promoted selection again changes nothing.
+ */
+export function selectionEndsAt(view: EditView, anchor: number, focus: number): SelectionEnds {
+  if (anchor === focus) {
+    const caret = view.positionAt(anchor);
+    return { anchor: caret, focus: caret };
+  }
+  const at = (offset: number, affinity: "before" | "after") => view.index.resolve(offset, affinity) ?? view.positionAt(offset);
+  const forward = anchor < focus;
+  return { anchor: at(anchor, forward ? "after" : "before"), focus: at(focus, forward ? "before" : "after") };
+}

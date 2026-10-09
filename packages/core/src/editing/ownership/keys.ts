@@ -11,9 +11,9 @@ import type { EditNodeKind, EditTree, NodeId, SlotId } from "../tree/types.js";
  *   (a style wrapper or formula split across an item break);
  * - `pass`: skip it.
  *
- * The decision is one rule for every key: a barrier anywhere on the
- * caret's chain stops the key; otherwise the innermost owner handles it,
- * with the transparent nodes between.
+ * The decision is one rule for every key: walking outward, the first
+ * barrier stops the key, and the first owner handles it, with the
+ * transparent nodes between.
  */
 export type StructuralKey = "enter" | "line-break" | "tab";
 
@@ -84,14 +84,21 @@ export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slo
     if (key === "line-break") {
       return PASS;
     }
-    // Only a wrapper whose last slot holds the caret closes and reopens cleanly.
-    return record.slots.filter((id) => tree.slots[id].presence === "present").at(-1) === slot &&
+    // Only a wrapper with a single text slot closes and reopens cleanly:
+    // reopening `\alt<2>{During}{…}` would repeat its first branch.
+    const textSlots = record.slots.filter((id) => tree.slots[id].presence === "present");
+    return textSlots.length === 1 && textSlots[0] === slot &&
       (record.kind !== "group" || isDeclarationGroup(tree, node) || tree.slots[slot].children.length > 0)
       ? TRANSPARENT
       : barrier("⏎ does nothing here");
   }
-  if (FLOW_CONTAINERS.has(record.kind)) {
+  if (record.kind === "scope") {
     return PASS;
+  }
+  if (FLOW_CONTAINERS.has(record.kind)) {
+    // Reached only when nothing inside it owned the key (its content is
+    // inline, `\scalebox{\begin{minipage}…}`): a break here would cut the environment.
+    return barrier("⏎ does nothing here");
   }
   return MATH_SLOTS.has(role) || itemRole(tree, node) === "construct" || itemRole(tree, node) === "scripted"
     ? barrier("⏎ does nothing in a fraction or script")
@@ -99,7 +106,7 @@ export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slo
 }
 
 const WRAPPERS = new Set<EditNodeKind>(["style", "overlay", "link", "group"]);
-const FLOW_CONTAINERS = new Set<EditNodeKind>(["list", "container", "scope", "alignment"]);
+const FLOW_CONTAINERS = new Set<EditNodeKind>(["list", "container", "alignment"]);
 
 /** The caret's chain, innermost first: each enclosing node with the slot of it the caret is in. */
 export function capabilityChain(tree: EditTree, key: StructuralKey, slot: SlotId): ChainLink[] {
@@ -112,20 +119,23 @@ export function capabilityChain(tree: EditTree, key: StructuralKey, slot: SlotId
   return links;
 }
 
-/** One rule for every key: any barrier stops it; otherwise the innermost owner, with the transparent links inside it. */
+/**
+ * One rule for every key: walking outward from the caret, the first node
+ * that decides wins. A barrier stops the key; an owner handles it, with the
+ * transparent links inside it. (So an environment is a barrier only to an
+ * owner outside it: `\\scalebox{\\begin{minipage}…}` cannot be split from
+ * the paragraph around it, while its own items split as usual.)
+ */
 export function decideOwner(links: readonly ChainLink[]): OwnerDecision {
-  const stop = links.find((link) => link.capability.kind === "barrier");
-  if (stop?.capability.kind === "barrier") {
-    return { kind: "stop", hint: stop.capability.hint };
-  }
-  const at = links.findIndex((link) => link.capability.kind === "owns");
-  if (at < 0) {
-    return { kind: "stop", hint: null };
+  const at = links.findIndex((link) => link.capability.kind === "owns" || link.capability.kind === "barrier");
+  const decisive = links[at];
+  if (decisive?.capability.kind !== "owns") {
+    return { kind: "stop", hint: decisive?.capability.kind === "barrier" ? decisive.capability.hint : null };
   }
   return {
     kind: "owner",
-    node: links[at].node,
-    slot: links[at].slot,
+    node: decisive.node,
+    slot: decisive.slot,
     transparent: links.slice(0, at).filter((link) => link.capability.kind === "transparent"),
   };
 }
