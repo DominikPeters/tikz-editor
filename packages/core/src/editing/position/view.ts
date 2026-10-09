@@ -125,6 +125,7 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
   const visitSlot = (slot: SlotId) => {
     const record = tree.slots[slot];
     const caret = isCaretSlot(tree, slot);
+    const before = stops.length;
     for (let at = 0; at <= record.children.length; at += 1) {
       if (caret && !suppressed(slot, at)) {
         const position = { slot, index: at };
@@ -134,6 +135,12 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
       if (at < record.children.length) {
         visitNode(record.children[at]);
       }
+    }
+    // A flow with no text in it (`\vspace{1em}`, `\pause`) keeps one stop, after that: somewhere to type.
+    if (record.flow && stops.length === before) {
+      const position = { slot, index: record.children.length };
+      stops.push(position);
+      stopRanks.push(rank(position));
     }
   };
   visitNode(tree.root);

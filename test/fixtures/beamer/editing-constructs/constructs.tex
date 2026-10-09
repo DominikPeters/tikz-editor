@@ -1,0 +1,267 @@
+\documentclass{beamer}
+% Constructs that real decks use inside frames and that canvas editing must
+% keep valid (see the corpus survey): written for the editing fuzzers.
+\usepackage{amsmath,amssymb,booktabs}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\highlight}[1]{\textcolor{red}{#1}}
+\newcommand{\remark}[2][Note]{\textbf{#1:} #2}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\begin{document}
+
+\begin{frame}{Line breaks}
+Alpha beta gamma \\
+delta epsilon\\[4pt]
+zeta eta\newline theta iota \\
+kappa.
+
+Lambda mu nu.
+\end{frame}
+
+\begin{frame}{Item labels}
+\begin{itemize}
+  \item[] Unlabelled alpha.
+  \item[$\to$] Arrow beta.
+  \item[--] Dash gamma.
+  \item[\textcolor{red}{A:}] Coloured delta.
+\end{itemize}
+\begin{description}
+  \item[Term] Its description.
+  \item[Other term] Another one.
+\end{description}
+\end{frame}
+
+\begin{frame}{Item overlays}
+\begin{itemize}[<+->]
+  \item First alpha.
+  \item
+    Second, on its own line.
+  \item<3-> Third with a specification.
+  \begin{itemize}
+    \item Nested beta.
+    \item Nested gamma.
+  \end{itemize}
+  \pause
+  \item Last delta.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Overlay commands}
+Alpha \uncover<2->{beta} \alert<3>{gamma} \alert<1>{delta}.
+
+\textcolor<2->{blue}{Epsilon} \visible<2>{zeta} \alt<2>{eta}{theta}.
+
+\onslide<2|handout:2>
+Iota kappa.
+\only<2->{Lambda mu.}
+\pause
+Nu xi.
+\end{frame}
+
+\begin{frame}{Only around items}
+\begin{itemize}
+  \item Alpha.
+  \only<2->{
+  \item Beta.
+  \item Gamma.
+  }
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Old-style groups}
+Alpha {\bf beta} gamma {\em delta} and {\small epsilon
+  zeta} eta.
+\begin{itemize}
+  \item {\bf Theta}: iota.
+  \item \textcolor{red}{\bf Kappa} lambda.
+\end{itemize}
+$a + {\color{blue} b} = c$.
+\end{frame}
+
+\begin{frame}{Comments}
+\begin{columns}%
+\begin{column}{.5\textwidth}%
+Alpha beta% glued
+gamma. % trailing note
+\end{column}%
+\begin{column}{.5\textwidth}
+\begin{itemize}
+  \item Delta. % note
+  % between items
+  \item Epsilon.
+  % \item Commented out.
+  \item Zeta.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Verbatim-like}
+Use \verb|alpha_beta| or \texttt{gamma\_delta}.
+See \url{https://example.org/~alpha#beta}.
+\end{frame}
+
+\begin{frame}{Rules and cells}
+\begin{tabular}{|l|c|r|}
+\hline
+\multicolumn{2}{|c|}{Alpha beta} & 1\\
+\hline
+Gamma & & 2\\[2pt]
+\cline{2-3}
+{[0,1]} & Delta & 3\\
+\hline
+\end{tabular}
+\end{frame}
+
+\begin{frame}{Booktabs}
+{\small
+\begin{tabular}{lcc}
+\toprule
+Alpha & Beta & Gamma\\
+\cmidrule(lr){2-3}
+Delta & \textcolor{red}{\bf 1} & 2\\
+\midrule
+Epsilon & 3 & 4\\
+\bottomrule
+\end{tabular}}
+\end{frame}
+
+\begin{frame}{Math forms}
+Inline $x^2 + y_i$ and \(f'(x) \le g''(x)\), sets $\{a \mid a > 0\}$ in $\R^n$.
+\[
+  \hat x = \argmin_{z \in \R^n} \|z\|, \quad
+  \underbrace{x_1 + \dots + x_n}_{\text{terms}} \geq 0
+\]
+\begin{equation*}
+  \mathbb{E}[X] = \sum_{k=1}^n k \, p_k
+\end{equation*}
+\end{frame}
+
+\begin{frame}{Cases and alignments}
+\[
+  f(x) = \begin{cases} 0 & \text{if } x < 0,\\ x & \text{otherwise.} \end{cases}
+\]
+\begin{align*}
+  \left. \frac{d}{dx} x^2 \right|_{x=1} &= 2 \notag\\
+  \left\{ a, b \right\} &\subseteq S
+\end{align*}
+\end{frame}
+
+\begin{frame}{Columns}
+\begin{columns}[onlytextwidth,T]
+\column{.4\textwidth}
+Alpha beta.
+\column{.6\textwidth}
+\begin{itemize}
+  \item Gamma.
+\end{itemize}
+\end{columns}
+\begin{columns}[c]
+\begin{column}{.5\textwidth}
+Delta.
+\end{column}
+\begin{column}{.5\textwidth}
+Epsilon.
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Blocks}
+\begin{block}{}
+Untitled alpha.
+\end{block}
+\begin{block}<2->{Claim $1$}
+Beta gamma.
+\end{block}
+\begin{alertblock}{\only<1>{Delta}\only<2>{Epsilon}}
+Zeta.
+\end{alertblock}
+\begin{exampleblock}{Eta}
+Theta.
+\end{exampleblock}
+\end{frame}
+
+\begin{frame}{Links and notes}
+An \emph{alpha} \href{https://example.org}{link}, see~\ref{beta} and \hyperlink{gamma}{delta}.
+Epsilon\footnote{\url{https://example.org}, zeta.} eta.
+\hypertarget<2>{gamma}{Theta.}
+\end{frame}
+
+\begin{frame}{Spacing}
+\vspace{-8pt}
+Alpha\hfill{}beta.
+\medskip
+
+Gamma\hspace*{1em}delta\quad epsilon, e.g.\ zeta\ldots{} eta.
+\bigskip
+\vfill
+\centerline{Theta}
+\begin{center}
+\small Iota.
+\end{center}
+\end{frame}
+
+\begin{frame}{Typography}
+``Alpha'' -- beta --- gamma: \& \% \$ \# \_ and~delta, vs.\ epsilon.
+Accents \c{c} \'e \"o, direct é ü ł, and a citation-like [1].
+\end{frame}
+
+\begin{frame}[plain]
+Plain alpha.
+\end{frame}
+
+\begin{frame}{}
+Empty title beta.
+\end{frame}
+
+\begin{frame}<1->[label=frameheaders]{Title}{Subtitle}
+Gamma.
+\end{frame}
+
+\begin{frame}
+\frametitle{Title in the body}
+Delta.
+\pause
+Epsilon.
+\end{frame}
+
+\begin{frame}[allowframebreaks]{Breaks}
+Alpha beta.
+\framebreak
+Gamma delta.
+\end{frame}
+
+\begin{frame}{Boxes}
+\mbox{alpha beta} \fbox{gamma} \colorbox{yellow}{delta} \makebox[3em][c]{epsilon}
+\parbox{4em}{zeta\\ eta} \scalebox{.8}{theta} \rotatebox{10}{iota} \raisebox{2pt}{kappa}
+\resizebox{2em}{!}{lambda}
+\end{frame}
+
+\begin{frame}{User macros}
+Space $\R n$, \highlight{alpha}, \remark{beta} and \remark[Aside]{gamma}.
+$\argmin_x f(x)$.
+\end{frame}
+
+\begin{frame}{Nested lists}
+\begin{enumerate}
+  \item Alpha.
+
+  \item Beta.
+  \begin{enumerate}
+    \item Gamma.
+    \begin{itemize}
+      \item Delta.
+      \item
+    \end{itemize}
+  \end{enumerate}
+\end{enumerate}
+\end{frame}
+
+\begin{frame}
+$x$ starts this body.
+\end{frame}
+
+\begin{frame}{Bracket first}
+[Draft] alpha beta.
+\end{frame}
+
+\end{document}

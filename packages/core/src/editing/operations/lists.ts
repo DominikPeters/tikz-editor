@@ -165,6 +165,15 @@ export function skipHorizontalForward(source: string, offset: number, max: numbe
   return offset;
 }
 
+/**
+ * What joins two blocks at `end` (the first one's trimmed end): `fallback`,
+ * unless the line there ends in a comment, which would take the joined text
+ * in; then a line end, which the comment eats (F1: `% tail⏎‸Second`).
+ */
+export function joinSeparator(source: string, end: number, fallback: string): string {
+  return /(?:^|[^\\])(?:\\\\)*%[^\n]*$/u.test(source.slice(lineStartAt(source, end), end)) ? "\n" : fallback;
+}
+
 export function trimmedEnd(source: string, span: Span): number {
   let end = span.to;
   while (end > span.from && /\s/u.test(source[end - 1])) {
@@ -271,7 +280,7 @@ export function mergeWithPreviousItemPatch(source: string, context: ListContext,
   const from = trimmedEnd(source, previous.contentSpan);
   const empty = from === previous.contentSpan.from || isBlank(source, caret, context.item.contentSpan.to);
   // An empty previous item ends in its `\item`: the joined text must not run into it (R5).
-  const insert = empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, from)) ? "" : " ";
+  const insert = joinSeparator(source, from, empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, from)) ? "" : " ");
   return { edits: [{ span: { from, to: caret }, insert }], caret: from + insert.length };
 }
 
@@ -283,7 +292,7 @@ export function mergeNextItemPatch(source: string, context: ListContext, caret: 
   }
   const next = list.items[index + 1];
   const empty = trimmedEnd(source, item.contentSpan) === item.contentSpan.from;
-  const insert = empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, caret)) ? "" : " ";
+  const insert = joinSeparator(source, caret, empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, caret)) ? "" : " ");
   return { edits: [{ span: { from: caret, to: next.contentSpan.from }, insert }], caret };
 }
 

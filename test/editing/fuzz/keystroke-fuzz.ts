@@ -382,8 +382,8 @@ function checkStep(
       return { invariant: "balance", message: "an inline formula turned into $$ display math" };
     }
     const rule = contentRule(intent, before.selection.to > before.selection.from, before.chipOpen);
-    // A command still missing its argument takes what is typed next, as TeX reads it (`\b` then `\text`).
-    const waiting = new Set(before.missing);
+    // A command still missing its argument takes what is typed next to it, as TeX reads it (`\b` then `\text`).
+    const waiting = new Set(before.missing.filter((offset) => offset === before.selection.from));
     const typing = rule === "adds" || rule === "replaces-selection";
     const items = typing ? before.items.filter((item) => !waiting.has(item.to)) : before.items;
     const content = checkContent(rule, items, visibleItems(view), before.selection);
