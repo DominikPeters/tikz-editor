@@ -474,6 +474,10 @@ class Resolver {
     if (!structure || !this.context.isScopeSession || transaction.patches.length === 0 || !text.includes("\\\\")) {
       return transaction;
     }
+    // Text typed in place takes no ink away: only deletions, line ends and commands can (and typing must stay fast).
+    if (transaction.patches.every((patch) => patch.from === patch.to && !/[\n\\]/u.test(patch.insert))) {
+      return transaction;
+    }
     const applied = applyTransaction(text, transaction);
     const dead = deadBreaks(structure(applied.text));
     if (dead.length === 0) {
