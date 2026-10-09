@@ -110,6 +110,21 @@ export type CanvasScopeEditBorder = {
   height: number;
 };
 
+/** The command chip (R4): the name being typed after `\`, with completions, below the caret. */
+export type CanvasCommandChipModel = {
+  readonly name: string;
+  /** The rest of the highlighted completion, shown as ghost text (V2). */
+  readonly ghost: string;
+  readonly candidates: readonly {
+    readonly name: string;
+    readonly detail: string;
+    readonly selected: boolean;
+  }[];
+  /** Viewport px. */
+  readonly left: number;
+  readonly top: number;
+};
+
 export type CanvasTextEditViewModel = {
   session: TextEditingSession | null;
   popup: CanvasTextEditPopupModel | null;
@@ -119,6 +134,7 @@ export type CanvasTextEditViewModel = {
   scopeEditBorder: CanvasScopeEditBorder | null;
   /** Focus and parent outlines around the caret's constructs (R8), viewport px. */
   contextOutlines: readonly CanvasContextOutline[];
+  commandChip: CanvasCommandChipModel | null;
 };
 
 const GLYPH_CLASS_NAMES: Record<

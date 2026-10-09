@@ -145,6 +145,13 @@ class CanvasSession implements EditorSession {
           break;
         case "block":
           break;
+        case "escape":
+          // As the session hook: an open chip takes Esc; closing the session is not modelled.
+          if (!this.machine.treeSelection?.interaction.chip) {
+            throw new Error("canvas-session driver: Esc that closes the session is not modelled");
+          }
+          this.scheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
+          break;
         default:
           throw new Error(`canvas-session driver: ${decision.kind} key not modelled: ${JSON.stringify(key)}`);
       }
@@ -228,6 +235,7 @@ class CanvasSession implements EditorSession {
         structure: (text, hidden) => this.views(text, this.commands, hidden),
         positions: selectionPositions(state, anchor, focus),
         interaction: interactionState(state, anchor, focus),
+        commands: this.commands,
       },
       intent
     );

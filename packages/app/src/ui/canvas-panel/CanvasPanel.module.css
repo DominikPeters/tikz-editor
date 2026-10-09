@@ -1283,3 +1283,59 @@
 .deckSpacingHandle:hover .deckSpacingGrip,
 .deckSpacingHandle:focus-visible .deckSpacingGrip,
 .deckSpacingHandle[data-active="true"] .deckSpacingGrip { opacity: 1; }
+
+/* The command chip (R4): the name typed after a backslash, below the caret,
+   with its completions. Outside the source until committed. */
+.commandChip {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  min-width: 120px;
+  font: 12px/18px var(--font-mono);
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  overflow: hidden;
+}
+
+.commandChipName {
+  padding: 1px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.commandChipGhost {
+  color: var(--text-faint);
+}
+
+.commandChipList {
+  margin: 0;
+  padding: 2px 0;
+  list-style: none;
+}
+
+.commandChipOption,
+.commandChipOptionSelected {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.commandChipOptionSelected {
+  color: #fff;
+  background: var(--accent-dark);
+}
+
+.commandChipDetail {
+  font: 10px/18px var(--font-ui);
+  color: var(--text-muted);
+}
+
+.commandChipOptionSelected .commandChipDetail {
+  color: inherit;
+  opacity: 0.8;
+}

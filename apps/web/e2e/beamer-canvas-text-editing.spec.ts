@@ -983,3 +983,39 @@ test("canvas Tab and Shift+Tab indent selected list items and keep their selecti
   await page.keyboard.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(nestedSource);
 });
+
+test("the command chip completes a command at the caret and commits it in one undo step", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const caret = buffer.indexOf("typo");
+  await input.evaluate((element, at) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(at, at);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, caret);
+  for (const key of ["\\", "t", "e"]) {
+    await page.keyboard.type(key);
+  }
+  const chip = page.getByTestId("canvas-command-chip");
+  await expect(chip).toBeVisible();
+  await expect(chip.getByRole("option", { selected: true })).toHaveText(/\\textbf/u);
+  // The name stays out of the source until the chip commits.
+  await expect(textarea).toHaveValue(buffer);
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("x");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textbf{x}typo.`);
+  await expect(chip).toHaveCount(0);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect(textarea).toHaveValue(buffer);
+
+  await page.keyboard.type("\\");
+  await page.keyboard.type("f");
+  await expect(chip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(chip).toHaveCount(0);
+  await expect(textarea).toHaveValue(buffer);
+  await expect(input).toBeFocused();
+});

@@ -3,7 +3,7 @@ import {
   SIMPLE_TEX_FONT_COMMAND_NAMES,
   SIMPLE_TEX_FONT_DECLARATION_NAMES,
 } from "../../text/tex/ir.js";
-import { texMathCommandFamily } from "../../text/tex/math/parser.js";
+import { texMathCommandFamily, texMathNamedSymbolNames } from "../../text/tex/math/parser.js";
 import { classifyMacro } from "./macro-classes.js";
 import type { EditMode, EditNodeKind, EditValue, SlotRole } from "../tree/types.js";
 
@@ -63,6 +63,8 @@ export type EnvironmentSchema = {
 export type CommandTable = {
   command(name: string, mode: EditMode): CommandSchema | null;
   environment(name: string): EnvironmentSchema | null;
+  /** The command names known in a mode (user macros first): the completion vocabulary. */
+  names(mode: EditMode): readonly string[];
 };
 
 const content = (mode?: EditMode): ArgSchema => ({ kind: "mandatory", rendered: true, role: "content", mode });
@@ -336,6 +338,37 @@ function environmentEntry(name: string): EnvironmentSchema | null {
 }
 
 /**
+ * Math commands beyond the named symbols that completion offers: the
+ * constructs, operators, accents, alphabets and spacing in common use.
+ * Each must be one the math parser knows (checked when the vocabulary is
+ * built), so the list cannot drift from what renders.
+ */
+const MATH_VOCABULARY = [
+  "frac", "dfrac", "tfrac", "binom", "sqrt", "sum", "prod", "coprod", "int", "iint", "oint", "bigcup", "bigcap",
+  "bigoplus", "bigotimes", "bigvee", "bigwedge", "lim", "liminf", "limsup", "max", "min", "sup", "inf", "arg", "argmax",
+  "argmin", "det", "dim", "exp", "log", "ln", "sin", "cos", "tan", "deg", "gcd", "Pr", "hat", "widehat", "bar",
+  "vec", "tilde", "widetilde", "dot", "ddot", "check", "breve", "acute", "grave", "overline", "underline",
+  "overbrace", "underbrace", "overrightarrow", "overleftarrow", "mathbb", "mathcal", "mathbf", "mathrm", "mathit",
+  "mathsf", "mathtt", "mathfrak", "mathscr", "boldsymbol", "bm", "text", "textbf", "textit", "textrm", "mbox",
+  "operatorname", "left", "right", "middle", "bigl", "bigr", "Bigl", "Bigr", "biggl", "biggr", "quad", "qquad",
+  "ldots", "cdots", "vdots", "ddots", "dots", "overset", "underset", "stackrel", "xrightarrow", "xleftarrow",
+  "pmod", "bmod", "mod", "not", "phantom", "boxed", "cancel", "displaystyle", "textstyle", "scriptstyle",
+] as const;
+
+let mathVocabulary: readonly string[] | null = null;
+
+function builtInMathNames(): readonly string[] {
+  mathVocabulary ??= [
+    ...MATH_VOCABULARY.filter((name) => MATH_COMMANDS.has(name) || texMathCommandFamily(`\\${name}`) != null),
+    ...texMathNamedSymbolNames(),
+    ...[...MATH_COMMANDS.keys()].filter((name) => /^[A-Za-z]+$/u.test(name)),
+  ].filter((name, index, all) => all.indexOf(name) === index);
+  return mathVocabulary;
+}
+
+const TEXT_VOCABULARY: readonly string[] = [...TEXT_COMMANDS.keys()].filter((name) => /^[A-Za-z]+$/u.test(name));
+
+/**
  * The command table for a scope. `macros` are the user definitions in
  * effect (preamble and body definitions before the frame); they shadow
  * built-ins, as in TeX. `theorems` adds the document's theorem-like
@@ -378,6 +411,11 @@ export function createCommandTable(
           (isWord ? null : { category: "symbol", node: "symbol", args: [] })
         : TEXT_COMMANDS.get(name) ?? (isWord ? null : textControlSymbol(name));
       return entry ? { name, ...entry } : null;
+    },
+    names(mode) {
+      const user = macros ? [...macros.keys()].map((name) => name.slice(1)).filter((name) => /^[A-Za-z@]+$/u.test(name)) : [];
+      const builtIn = mode === "math" ? builtInMathNames() : TEXT_VOCABULARY;
+      return [...user, ...builtIn.filter((name) => !macros?.has(`\\${name}`))];
     },
     environment(name) {
       const entry = environmentEntry(name);

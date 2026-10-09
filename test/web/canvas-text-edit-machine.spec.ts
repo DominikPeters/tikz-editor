@@ -113,7 +113,8 @@ function reduceInputIntent(
       verticalGoal: state.verticalGoal,
       structure: null,
       positions: null,
-      interaction: {}
+      interaction: {},
+      commands: null
     },
     intent
   );
