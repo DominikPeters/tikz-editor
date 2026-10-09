@@ -763,6 +763,77 @@ uses positions but deletion still uses raw source ranges.
    Latency gate: median 52.9 ms, p95 60.2 ms.
 5. **Input rules and the chip.** Escaping, auto-pairing, completion from
    the CommandTable, scripts, the pending command.
+
+   *Status:* done, together with Enter/Tab ownership and the structural
+   keys, which moved here from step 4. Nothing in typing, ⌫/⌦, ⏎ or ⇥ reads
+   the layout any more; only vertical motion, row edges and hidden-step
+   detection do.
+   - **Input rules** (`operations/insert.ts`), by the caret slot's mode:
+     - escaping `%`, `#` and `&` (also in math, where a raw `%` comments
+       out the rest of the line), plus `_` and `^` in prose;
+     - `$` and `{` with their closers, and `}`, `$` and `]` stepping over
+       them;
+     - R5 terminators;
+     - `[` protected after `\item` and `\\`.
+   - **Placeholder braces.** An empty `$…$` cannot be written as `$$`
+     (display math), so `$` writes `${}$`, and `^` writes `x^{}`. These
+     editor-created braces are interaction state, valid until the next
+     intent:
+     - the first character typed replaces them;
+     - in a script it then leaves (`x^2‸`);
+     - leaving them empty removes the script or formula;
+     - ⌫ in them removes the construct.
+
+     Deleting a formula's last item leaves the same placeholder.
+   - **The interaction state** (`input/interaction.ts`) travels on
+     transactions. The machine keeps it while buffer and selection are
+     unchanged, so a click, undo or bar edit drops it. Besides the
+     placeholder, it holds:
+     - the `{` that `}` just moved before (consumed by the next `{`);
+     - the open chip;
+     - the pending command (O4).
+   - **The chip** (`input/chip.ts`, `operations/command.ts`): `\` opens
+     it, and the name stays out of the source until it commits.
+     - Letters extend the name, ⌫ shortens it, Esc cancels it, and ↑/↓
+       pick a completion.
+     - ␣ commits the name as typed (`\foo` stays unknown). ⇥ and ⏎ accept
+       the highlighted completion.
+     - The commit key decides what is written: a word space in text
+       (`\LaTeX{} `), the arguments as `{}` with the caret in the first,
+       or the optional argument for `[`.
+     - Another character commits the name as typed and is then typed
+       itself, in the same step (`\alpha^`, `\frac1`).
+     - A first non-letter commits a control symbol at once: `\%`, `\{`
+       paired with `\}`, `\\` pending for `[`.
+     - A held selection goes into the first rendered argument.
+     - Completion comes from the CommandTable's vocabulary: the document's
+       macros, the text commands, the parser's math symbols and a checked
+       list of math constructs. Names this buffer uses rank first.
+     - Each commit is one undo step.
+   - **Ownership** (`ownership/keys.ts`): every node declares owns,
+     barrier, transparent or pass for ⏎, ⇧⏎ and ⇥. One rule decides:
+     any barrier on the chain stops the key; otherwise the innermost
+     owner handles it, and the transparent nodes inside it (style
+     wrappers, inline formulas) are closed before the break and reopened
+     after it (Z1). A wrapper with nothing on one side of the caret is
+     not split: the break goes beside it.
+   - **Structural keys** (`operations/structure.ts`, `lists.ts`): item
+     split and exit, paragraph break, new row and leaving an alignment
+     (D2, D3), leaving a display, next slot and next cell (with `&` added
+     unless the column count is fixed), nesting items, joins at block
+     edges, and the list toolbar. All of these read the tree. The old
+     layout-based key code is gone, except the object-layer delete and
+     duplicate.
+
+   Not done yet:
+   - `$` in an empty formula does not yet make a display (D1).
+   - The `\begin` environment chip (K15).
+   - Rendered previews in the completion list.
+   - Mouse picking in the chip.
+   - Leaving a placeholder by clicking (only arrows remove it).
+
+   Latency gate: typing median 51.1 ms, p95 56.1 ms. ⏎ and ⇥ no longer
+   wait for layout (median about 40 ms each).
 6. **Breadth.** All node kinds, wrapping and pickers (R10, O8), paste and
    copy (O6), the frequent-styles list and variants, the remaining
    alignments and tables (D2–D4, K13), overlays (Z4).
