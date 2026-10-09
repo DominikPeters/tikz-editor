@@ -101,6 +101,19 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
     "\\text", "\\sum", "\\mathbb", "\\cup", "\\ldots", "\\item", "\\{", "\\}", "\\\\", "\\%", "\\,", "\\$",
     "\\setm", "\\te",
   ]],
+  // Punctuation real decks use (from a survey of public Beamer decks): overlay brackets, dashes, quotes, bars.
+  [8, ["<", ">", "-", "`", "\"", "|", "*", ";", ":", "!", "?", "/", "@"]],
+  // The commands most frames use.
+  [6, [
+    "\\pause", "\\only", "\\alert", "\\textcolor", "\\vspace", "\\hfill", "\\newline", "\\url", "\\footnote", "\\hline",
+    "\\small", "\\textit", "\\texttt", "\\cite", "\\label", "\\uncover", "\\medskip", "\\color", "\\mbox",
+  ]],
+  [4, [
+    "\\hat", "\\vec", "\\mathcal", "\\mathrm", "\\underbrace", "\\leq", "\\to", "\\cdot", "\\quad", "\\operatorname",
+    "\\displaystyle", "\\notag",
+  ]],
+  // Sequences random keys almost never type: overlay specifications, spacing, labels, dashes and quotes.
+  [4, ["<2->", "<+->", "[<+->]", "\\\\[2pt]", "\\item[", "\\item<2->", "--", "---", "``", "''", "{}", "{\\bf"]],
   [16, ["⌫", "⌦"]],
   [6, ["⏎", "⇧⏎"]],
   [5, ["⇥", "⇧⇥"]],

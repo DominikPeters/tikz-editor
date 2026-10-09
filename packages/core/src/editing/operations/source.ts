@@ -130,14 +130,20 @@ export function withTerminator(
   });
 }
 
-/** An `\item`, with its label if any, ending the text before. */
-export const ITEM_BEFORE = /\\item(?:\[[^\]]*\])?$/u;
+/**
+ * What reads a `<` after it as an overlay specification, ending the text
+ * before: `\item` (with its label if any), `\begin{…}` (beamer's
+ * environments: `\begin{proposition}<2->`, and blocks after their title,
+ * `\begin{block}{Title}<2->`), `\\`, and a closing brace, as beamer's
+ * text commands take one after their argument too (`\emph{x}<2>`).
+ */
+export const SPEC_READER_BEFORE = /(?:\\item(?:\[[^\]]*\])?|\\begin\{[^}]*\}(?:\{[^{}]*\})?|\\\\\*?(?:\[[^\]]*\])?|\})$/u;
 
 /**
  * K9 at a seam: when an edit leaves a `[` right after `\\\\` or `\\item`
  * (deleting what stood between), TeX would read it as their optional
- * argument, and a `<` after `\\item` as its overlay specification; `{}`
- * goes in between.
+ * argument, and a `<` after `\\item` or `\\begin{…}` as an overlay
+ * specification; `{}` goes in between.
  */
 export function withBracketGuard(original: string, patches: BufferPatch[], seam: number): BufferPatch[] {
   let after = "";
@@ -150,7 +156,7 @@ export function withBracketGuard(original: string, patches: BufferPatch[], seam:
   const before = after.slice(0, seam).replace(/\s+$/u, "");
   const opens = /(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before) && /^\s*\[/u.test(after.slice(seam));
   // (`\item` also reads a `<` after it, past its label, as an overlay specification.)
-  const spec = ITEM_BEFORE.test(before) && /^\s*</u.test(after.slice(seam));
+  const spec = SPEC_READER_BEFORE.test(before) && /^\s*</u.test(after.slice(seam));
   if (!opens && !spec) {
     return patches;
   }

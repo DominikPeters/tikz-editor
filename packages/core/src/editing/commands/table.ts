@@ -155,6 +155,9 @@ const TEXT_COMMANDS = new Map<string, Entry>([
   ["scalebox", { category: "style", node: "style", args: [value("value"), value("value", "optional"), content("text")] }],
   ["rotatebox", { category: "style", node: "style", args: [value("options", "optional"), value("value"), content("text")] }],
   ["resizebox", { category: "style", node: "style", args: [value("dimension"), value("dimension"), content("text")], star: true }],
+  ["raisebox", { category: "style", node: "style", args: [value("dimension"), value("dimension", "optional"), value("dimension", "optional"), content("text")] }],
+  ["parbox", { category: "style", node: "style", args: [value("options", "optional"), value("dimension", "optional"), value("options", "optional"), value("dimension"), content("text")] }],
+  ...entries(["centerline", "sout", "phantom", "hphantom", "vphantom"], { category: "style", node: "style", args: [content("text")] }),
   ["reflectbox", { category: "style", node: "style", args: [content("text")] }],
   ["multicolumn", { category: "style", node: "style", args: [value("value"), value("spec"), content("text")] }],
   ["rule", { category: "atom", node: "atom", args: [value("dimension", "optional"), value("dimension"), value("dimension")] }],
@@ -224,7 +227,8 @@ function mathFamilyEntry(name: string): Entry | null {
     case "operator":
       return { category: "operator", node: "operator", args: [] };
     case "operatorname":
-      return { category: "operator", node: "operator", args: [content("text")], star: true };
+      // (Set in math mode, upright: a `$` inside would close the formula.)
+      return { category: "operator", node: "operator", args: [content("math")], star: true };
     case "alphabet":
     case "phantom":
     case "atom-class":

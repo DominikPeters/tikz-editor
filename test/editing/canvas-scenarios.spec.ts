@@ -80,7 +80,8 @@ describe("canvas editing: source TeX accepts", () => {
   it.each([
     ["typed", "\nText", 1, ["["], "\n\\relax[Text"],
     ["left by a deletion", "\nx[draft] Text", 2, ["⌫"], "\n\\relax[draft] Text"],
-  ])("X11: a [ %s at a frame body's start is not read as the frame's options", (_, body, caret, keys, expected) => {
+    ["typed as <", "\nText", 1, ["<"], "\n\\relax<Text"],
+  ])("X11: a [ or < %s at a frame body's start is not read by the frame's header", (_, body, caret, keys, expected) => {
     const session = new KeystrokeSession(body, createCommandTable(), caret, caret, false, true);
     for (const key of keys.flatMap((token) => parseScenarioKeys(token))) {
       session.press(key);

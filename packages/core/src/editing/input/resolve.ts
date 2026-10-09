@@ -13,6 +13,7 @@ import {
 } from "../../text/format-commands.js";
 import {
   abandonPlaceholder,
+  beforeMulticolumn,
   braceUnbracedArgument,
   rulesInsideRows,
   deleteBackward,
@@ -22,6 +23,7 @@ import {
   commitControlSymbol,
   commitLeftDelimiter,
   deadBreaks,
+  lineEndable,
   deleteRange,
   enter,
   indentItems,
@@ -133,6 +135,23 @@ const UNCOMMITTABLE = new Set(["verb", "lstinline", "begin", "end"]);
 
 /** Commands that structure flow text, never written into math. */
 const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
+
+/** Table rules, which only start a table's rows. */
+const TABLE_RULES = new Set(["hline", "cline", "toprule", "midrule", "bottomrule", "cmidrule", "addlinespace", "specialrule"]);
+
+/** Whether a slot is in an alignment's rows (a cell, at any depth short of a formula). */
+function inAlignment(view: EditView, slot: number): boolean {
+  const { tree } = view;
+  for (let current: number | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
+    if (tree.slots[current].role === "cell" || tree.nodes[tree.slots[current].node].kind === "alignment") {
+      return true;
+    }
+    if (tree.nodes[tree.slots[current].node].kind === "formula") {
+      return false;
+    }
+  }
+  return false;
+}
 
 /** Whether a slot is a list item's flow, or a paragraph in one. */
 function inListFlow(view: EditView, slot: number): boolean {
@@ -419,9 +438,10 @@ class Resolver {
   }
 
   /**
-   * K9 at a frame body's start: a `[` an edit put first in the body (typed,
-   * or left there by a deletion) would be the frame's options, so `\relax`
-   * goes before it, which ends the header without adding a title as `{}` would.
+   * K9 at a frame body's start: a `[` or `<` an edit put first in the body
+   * (typed, or left there by a deletion) would be the frame's options or
+   * overlay specification, so `\relax` goes before it, which ends the
+   * header without adding a title as `{}` would.
    */
   private protectLeadingBracket(transaction: Transaction): Transaction {
     const { text } = this.context;
@@ -430,7 +450,8 @@ class Resolver {
     }
     const applied = applyTransaction(text, transaction);
     const at = applied.text.length - applied.text.trimStart().length;
-    if (applied.text[at] !== "[" || text.trimStart().startsWith("[")) {
+    const reads = (char: string | undefined) => char === "[" || char === "<";
+    if (!reads(applied.text[at]) || reads(text.trimStart()[0])) {
       return transaction;
     }
     const next = `${applied.text.slice(0, at)}\\relax${applied.text.slice(at)}`;
@@ -522,8 +543,9 @@ class Resolver {
     const raw = this.rawEnds(view);
     if (text === "\\" && this.context.commands && !afterEscape(this.context.text, this.from)) {
       // R4: `\` opens the command chip; the source is untouched until it commits.
-      if (this.hasRange() && this.crossesStructure()) {
-        // As for ⌘B: a command cannot wrap a selection across cells, blocks or a title and its body.
+      if (this.hasRange() ? this.crossesStructure() : beforeMulticolumn(view, this.caretPosition(view))) {
+        // As for ⌘B: a command cannot wrap a selection across cells, blocks or a title and its body;
+        // nor can one go before a `\multicolumn`, which must open its cell.
         return this.keepSelection(NO_INTERACTION);
       }
       const held = this.hasRange() ? this.offsetsOf(view, this.effectiveRange(view, raw)) : null;
@@ -839,6 +861,14 @@ class Resolver {
         return this.commitChip(view, commands, chip, char === "{" ? "brace" : "bracket", false);
       }
     }
+    if (char === "}" || char === "$") {
+      // A closer right after a command that takes arguments would leave it without them (`{\underbrace}`):
+      // it gets its braces, and the closer acts from inside them.
+      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
+      if (commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text")?.args.some((arg) => arg.kind === "mandatory")) {
+        return this.commitChip(view, commands, chip, "structure", false, char);
+      }
+    }
     return this.commitChip(view, commands, chip, "typed", false, char);
   }
 
@@ -877,6 +907,14 @@ class Resolver {
       return this.keepSelection(NO_INTERACTION);
     }
     if (UNCOMMITTABLE.has(name)) {
+      return this.keepSelection(NO_INTERACTION);
+    }
+    if (name === "newline" && !lineEndable(view, caret, chip.at)) {
+      // A line break with no line to end (at an item's start, after a blank line).
+      return this.keepSelection(NO_INTERACTION);
+    }
+    if (TABLE_RULES.has(name) && !inAlignment(view, caret.slot)) {
+      // Outside a table, TeX has no row for a rule ("Misplaced \noalign").
       return this.keepSelection(NO_INTERACTION);
     }
     if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {
