@@ -386,20 +386,16 @@ const TEXT_VOCABULARY: readonly string[] = [...TEXT_COMMANDS.keys()].filter((nam
  * The command table for a scope. `macros` are the user definitions in
  * effect (preamble and body definitions before the frame); they shadow
  * built-ins, as in TeX. `theorems` adds the document's theorem-like
- * environment names, and `environmentAliases` its user environments that
- * are lists.
+ * environment names.
  */
 export function createCommandTable(
   options: {
     readonly macros?: ReadonlyMap<string, MacroBinding>;
     readonly theorems?: readonly string[];
-    /** User environments that are a list under another name (beamer/environment-aliases.ts), by name. */
-    readonly environmentAliases?: ReadonlyMap<string, string>;
   } = {}
 ): CommandTable {
   const macros = options.macros;
   const theorems = new Set(options.theorems ?? []);
-  const aliases = options.environmentAliases;
   return {
     command(name, mode) {
       const macro = macros?.get(`\\${name}`);
@@ -436,12 +432,6 @@ export function createCommandTable(
       return [...user, ...builtIn.filter((name) => !macros?.has(`\\${name}`))];
     },
     environment(name) {
-      const target = aliases?.get(name);
-      const aliased = target == null ? null : environmentEntry(target);
-      if (aliased) {
-        // The user's environment takes no arguments of its own.
-        return { ...aliased, name, args: [] };
-      }
       const entry = environmentEntry(name);
       if (entry) {
         return entry;

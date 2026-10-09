@@ -873,28 +873,21 @@ uses positions but deletion still uses raw source ranges.
    copy (O6), the frequent-styles list and variants, the remaining
    alignments and tables (D2–D4, K13), overlays (Z4).
 
-   A survey of real decks (about 6,600 frames) reorders this:
-   - User-defined environments occur in a third of the frames and are
-     opaque atoms today; macros that open and close environments
-     (`\BI…\EI`) in a tenth. Classifying `\newenvironment` bodies as K1
-     does for macros would open them to editing.
+   A survey of real decks (about 6,600 frames, but from only 11 authors)
+   adds to this. Its counts are weighed by authors, not frames: a few
+   prolific authors dominate the frame counts, and support for one
+   person's macros or redefined environments is not worth what it costs
+   everyone else.
    - The chip writes value arguments empty (`\url{}`, `\textcolor{}{…}`),
      which TeX rejects until filled: O8's pickers are the fix.
    - Overlays need a design from first principles (typing next to
      content hidden on the current step, specifications as values).
-   - `\frame{…}` and `\slide{…}{…}`-style frames are not recognized.
-
-   **User environments that are lists, done.** A `\newenvironment`
-   without parameters whose begin part opens one list (`\itemize` or
-   `\begin{enumerate}`, …) and whose end part closes it, with only length
-   and label settings around them, is that list under another name
-   (`beamer/environment-aliases.ts`, classified like K1's macros, with no
-   per-name rules). The preview lays it out as that list (spacing and label
-   settings are not reproduced) and the edit tree binds it as one, keeping
-   its name in what list edits write. In the corpus this opens
-   `wideitemize` (685 frames); the other common user environments wrap
-   LaTeX's generic `list`, `mdframed` or a minipage with a TikZ title, and
-   stay unsupported in the preview and opaque to editing.
+   - Beamer's own `\frame{…}` form (5 of the 11 authors) is not
+     recognized.
+   - Not pursued: user environments (a third of the frames, but most from
+     one author, whose list alias `wideitemize` alone is 685 frames),
+     environment-opening macros (`\BI…\EI`, two authors) and
+     `\slide{…}{…}` frames (one author). These stay opaque to editing.
 
    **Paste and copy (O6), done.** A canvas copy carries balanced source
    (wrappers and lists it cuts through are closed and reopened) with its
