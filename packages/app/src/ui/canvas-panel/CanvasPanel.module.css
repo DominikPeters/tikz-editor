@@ -1339,3 +1339,66 @@
   color: inherit;
   opacity: 0.8;
 }
+
+/* The value editor (O8): a command in source form with a field per value. */
+.valueEditor {
+  position: absolute;
+  z-index: 7;
+  font: 12px/20px var(--font-mono);
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.valueEditorSyntax {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 2px 6px;
+  white-space: pre;
+}
+
+.valueEditorFixed {
+  color: var(--text-muted);
+}
+
+.valueEditorInput,
+.valueEditorInputProblem {
+  min-width: 4ch;
+  padding: 0 2px;
+  font: inherit;
+  color: inherit;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 0;
+  outline: none;
+}
+
+.valueEditorInput:focus {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.valueEditorInputProblem {
+  border-bottom-color: var(--danger, #d33);
+}
+
+.valueEditorProblem {
+  padding: 0 6px 2px;
+  font: 11px/16px var(--font-ui);
+  color: var(--danger, #d33);
+}
+
+.valueEditorColor {
+  border-top: 1px solid var(--border);
+}
+
+/* A construct's values on its outline tag, clickable to edit them. */
+.contextOutlineValueTag {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  font-family: var(--font-mono);
+}

@@ -13,6 +13,7 @@ import type { CanvasTextEditFocusSurface } from "./canvas-text-edit-machine";
 import type { TextEditingSession } from "./types";
 import css from "./CanvasPanel.module.css";
 import type { CanvasContextOutline } from "./useCanvasContextOutlines";
+import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -135,6 +136,10 @@ export type CanvasTextEditViewModel = {
   /** Focus and parent outlines around the caret's constructs (R8), viewport px. */
   contextOutlines: readonly CanvasContextOutline[];
   commandChip: CanvasCommandChipModel | null;
+  /** The value editor (O8), for a command being written or a construct's values. */
+  valueEditor: CanvasValueEditorModel | null;
+  /** Opens the value editor for the values on an outline's tag. */
+  onEditValues: (outline: CanvasContextOutline) => void;
 };
 
 const GLYPH_CLASS_NAMES: Record<
