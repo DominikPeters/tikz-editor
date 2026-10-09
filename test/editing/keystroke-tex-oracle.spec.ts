@@ -113,6 +113,12 @@ function valueArguments(start: FuzzStart, text: string): string[] {
   });
 }
 
+function waitingCommands(start: FuzzStart, text: string): string[] {
+  return buildEditTree(text, { commands: start.commands }).diagnostics
+    .filter((diagnostic) => diagnostic.code === "missing-argument")
+    .map((diagnostic) => diagnostic.message);
+}
+
 /** Whether a character is left outside the frame titles. */
 function hasText(start: FuzzStart, text: string): boolean {
   const tree = buildEditTree(text, { commands: start.commands });
@@ -140,8 +146,8 @@ function adds(before: readonly string[], after: readonly string[]): boolean {
 }
 
 /**
- * Whether the end state is one TeX can judge: no new unknown commands or
- * value arguments, and some text left (beamer's `shrink` divides by the
+ * Whether the end state is one TeX can judge: no new unknown commands,
+ * value arguments or commands waiting for an argument, and some text left (beamer's `shrink` divides by the
  * height of a frame's content).
  */
 function judgeable(start: FuzzStart, text: string): boolean {
@@ -149,7 +155,9 @@ function judgeable(start: FuzzStart, text: string): boolean {
     return false;
   }
   return !adds(unknownCommands(start, start.text), unknownCommands(start, text)) &&
-    !adds(valueArguments(start, start.text), valueArguments(start, text));
+    !adds(valueArguments(start, start.text), valueArguments(start, text)) &&
+    // A command still waiting for an argument (K2: `\frac1` before the `n`) is being typed.
+    !adds(waitingCommands(start, start.text), waitingCommands(start, text));
 }
 
 describe.skipIf(!ENABLED)("keystroke fuzzing against LuaLaTeX", () => {
@@ -186,8 +194,9 @@ describe.skipIf(!ENABLED)("keystroke fuzzing against LuaLaTeX", () => {
       return describeTexFailure(entry.index, entry.fuzz, entry.run, step, entry.errors);
     }), JOBS);
     expect(reports.join("\n\n")).toBe("");
-    // Most cases must reach a judgeable end state, or the run proves little.
-    expect(cases.length).toBeGreaterThan(CASES / 2);
+    // Enough cases must reach a judgeable end state, or the run proves little. (Commands with
+    // values, `\url{}`, `\label{}`, are left empty until O8's pickers fill them, and skipped.)
+    expect(cases.length).toBeGreaterThan(CASES / 3);
   }, 3_600_000);
 });
 

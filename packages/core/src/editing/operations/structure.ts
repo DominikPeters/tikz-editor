@@ -176,6 +176,9 @@ export function inValue(view: EditView, at: number): boolean {
   return view.tree.nodes.some((node) => node.values.some((value) => value.contentSpan.from <= at && at <= value.contentSpan.to));
 }
 
+/** Commands after which TeX is between paragraphs. */
+const ENDS_PARAGRAPH = new Set(["caption", "frametitle", "framesubtitle"]);
+
 /** Blocks that start a line. */
 const LINE_STARTS = new Set(["paragraph", "item", "list", "row", "display", "container", "alignment"]);
 
@@ -191,8 +194,8 @@ function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | 
       return "line";
     }
     gapEnd = node.span.from;
-    // (A caption ends its paragraph: TeX is back between lines after it.)
-    if (node.kind === "break" || node.kind === "vertical" || node.command === "caption") {
+    // (A caption or frame title ends its paragraph: TeX is back between lines after it.)
+    if (node.kind === "break" || node.kind === "vertical" || (node.command != null && ENDS_PARAGRAPH.has(node.command))) {
       return "line";
     }
     // The node around the caret: its own line so far, then (unless it starts a line) what is before it.
@@ -406,7 +409,8 @@ export function indentItems(view: EditView, start: Position, end: Position, dire
   if (!first || first.list.node !== last?.list.node || last.index < first.index) {
     return { kind: "none" };
   }
-  if (direction === "nest" && !nestable(view, first.list.node)) {
+  const moved = { from: first.item.commandSpan.from, to: last.list.items[last.index].contentSpan.to };
+  if (direction === "nest" && !nestable(view, first.list.node, moved.from, moved.to)) {
     return { kind: "none" };
   }
   const caret = view.offset(start);
@@ -414,20 +418,25 @@ export function indentItems(view: EditView, start: Position, end: Position, dire
   return patch ? patchOutcome(patch) : { kind: "none" };
 }
 
-/** Whether a list may hold one more of its kind: LaTeX nests four of each and six lists in all ("Too deeply nested"). */
-function nestable(view: EditView, list: NodeId): boolean {
+/**
+ * Whether items of `list` from `from` to `to` may go one level deeper:
+ * beamer nests three lists, of any kinds ("Too deeply nested"), counting
+ * the lists inside the items, which go deeper too.
+ */
+function nestable(view: EditView, list: NodeId, from: number, to: number): boolean {
   const { tree } = view;
-  const kind = tree.nodes[list].command;
-  let same = 0;
-  let total = 0;
-  for (let node: NodeId | null = list; node != null; node = tree.nodes[node].parent == null ? null : tree.slots[tree.nodes[node].parent!].node) {
-    if (tree.nodes[node].kind === "list") {
-      total += 1;
-      same += tree.nodes[node].command === kind ? 1 : 0;
+  const depth = (id: NodeId) => {
+    let lists = 0;
+    for (let node: NodeId | null = id; node != null; node = tree.nodes[node].parent == null ? null : tree.slots[tree.nodes[node].parent!].node) {
+      lists += tree.nodes[node].kind === "list" ? 1 : 0;
     }
-  }
-  return same < 4 && total < 6;
+    return lists;
+  };
+  const inner = tree.nodes.filter((node) => node.kind === "list" && node.span.from >= from && node.span.to <= to);
+  return [list, ...inner.map((node) => node.id)].every((id) => depth(id) + 1 <= BEAMER_LIST_DEPTH);
 }
+
+const BEAMER_LIST_DEPTH = 3;
 
 /** The toolbar list buttons: rename, dissolve or create a list at the caret. */
 export function toggleList(view: EditView, caret: Position, environment: "itemize" | "enumerate"): EditOutcome {

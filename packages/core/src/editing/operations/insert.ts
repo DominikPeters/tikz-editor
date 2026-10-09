@@ -6,7 +6,7 @@ import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, EditNode, EditSlot, NodeId, SlotId } from "../tree/types.js";
 import { isDollarFormula, type EditOutcome } from "./delete.js";
 import { braceUnbracedArgument, enterExistingScript } from "./script.js";
-import { ITEM_BEFORE, PatchSet, slotOuterSpan, withTerminator } from "./source.js";
+import { PatchSet, SPEC_READER_BEFORE, slotOuterSpan, withTerminator } from "./source.js";
 import { rowIsFull } from "./structure.js";
 
 /**
@@ -30,6 +30,10 @@ export function typeCharacter(
   const slot = tree.slots[caret.slot];
   if (slot.mode === "verbatim") {
     return insert(at, char);
+  }
+  if (beforeMulticolumn(view, caret)) {
+    // `\multicolumn` must open its cell ("Misplaced \omit"): nothing goes before it.
+    return { kind: "none" };
   }
   if (char === "{" && state.consumeOpen === at) {
     return { kind: "move", to: caret };
@@ -114,6 +118,18 @@ function newRowFor(view: EditView, typed: EditOutcome, at: number, end: number):
   return { ...typed, patches: [{ ...typed.patches[0], insert: `${typed.patches[0].insert} \\\\ ` }] };
 }
 
+/** Whether the caret is in a cell before its `\multicolumn`, with only spaces before. */
+export function beforeMulticolumn(view: EditView, caret: Position): boolean {
+  const { tree } = view;
+  const slot = tree.slots[caret.slot];
+  if (slot.role !== "cell") {
+    return false;
+  }
+  const spaces = (child: NodeId) => tree.nodes[child].kind === "space" || view.role(child) === "invisible";
+  const next = slot.children.slice(caret.index).find((child) => !spaces(child));
+  return next != null && tree.nodes[next].command === "multicolumn" && slot.children.slice(0, caret.index).every(spaces);
+}
+
 /** Whether the caret is right after an atom with a superscript (`x^2‸`). */
 function afterSuperscript(view: EditView, caret: Position): boolean {
   const { tree } = view;
@@ -151,8 +167,8 @@ function typeInText(view: EditView, caret: Position, at: number, char: string, s
   if (char === "[" && (optionalArgumentAhead(view, at) || endsWithControlWord(view.tree.text, skipSpacesBack(view.tree.text, at)))) {
     return insert(at, "{}[");
   }
-  // Beamer's `\item` reads a `<` after it, past spaces and its label, as an overlay specification (F4).
-  if (char === "<" && ITEM_BEFORE.test(view.tree.text.slice(0, skipSpacesBack(view.tree.text, at)))) {
+  // Beamer's `\item` and environments read a `<` after them, past spaces, as an overlay specification (F4).
+  if (char === "<" && SPEC_READER_BEFORE.test(view.tree.text.slice(0, skipSpacesBack(view.tree.text, at)))) {
     return insert(at, "{}<");
   }
   return insert(at, terminated(view, at, char, "text") + char);

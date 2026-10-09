@@ -254,6 +254,11 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "C5", title: "an overlay specification typed after the chip is the command's", body: "a ‸ b", keys: R`\only<1->{x}`, expect: R`a \only<1->{x}‸ b` },
   { id: "C6", title: "a body with nothing but spacing still takes typing", body: R`\vspace{1em}‸`, keys: "x", expect: R`\vspace{1em}x‸` },
   { id: "C7", title: "typing before a command's unbraced argument braces it", body: R`T.\textbf‸(be`, keys: "^", expect: R`T.\textbf{\^{}‸(}be` },
+  { id: "C8", title: "< right after a block's title is not its overlay specification", body: "\\begin{block}{T}\n‸x\n\\end{block}", keys: "<", expect: "\\begin{block}{T}\n{}<‸x\n\\end{block}" },
+  { id: "C9", title: "a prime after a superscript does not make a second one", body: R`$x^2‸$`, keys: "'", expect: R`$x^2{}'‸$` },
+  { id: "C10", title: "a table rule outside a table writes nothing", body: "a ‸ b", keys: R`\hline␣`, expect: "a ‸ b" },
+  { id: "C11", title: "a command closed by } right away gets its braces", body: R`$x {‸} y$`, keys: R`\underbrace}`, expect: R`$x {\underbrace{}‸} y$` },
+  { id: "C12", title: "\\operatorname holds math", body: R`$\operatorname{‸}$`, keys: R`\cup␣`, expect: R`$\operatorname{\cup‸}$` },
 ];
 
 /**

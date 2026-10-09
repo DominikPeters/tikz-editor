@@ -88,7 +88,9 @@ export function commitCommand(
   // (Even `&` would be taken, and break; in math a `$` closes, as `}` does.)
   const absorbs = key === "typed" && mandatory.length > 0 && ahead !== "" && ahead !== "}" && !(mode === "math" && ahead === "$");
   if (mandatory.length > 0 && (key !== "typed" || absorbs)) {
-    const insert = command + "{}".repeat(mandatory.length);
+    // (Before a `<`, beamer would read it as a specification after the argument: `\emph{}{}<`.)
+    const guard = mode === "text" && /^\s*</u.test(tree.text.slice(range.to)) ? "{}" : "";
+    const insert = command + "{}".repeat(mandatory.length) + guard;
     return { outcome: edit(range, insert, range.from + command.length + 1) };
   }
   // The name alone, terminated as what follows needs (R5): after placeholder braces it replaces, what follows them.
@@ -183,6 +185,21 @@ export function commitAcrossModes(
   return { outcome: edit(range, insert, caretAt) };
 }
 
+/**
+ * Whether a line break (`\\\\`, `\\newline`) may go at `at`: as ⇧⏎
+ * (structure.ts), a row's own cell ends the row; elsewhere TeX needs a
+ * line to end, which formulas, displays, titles and boxes do not have,
+ * nor a line with nothing on it yet.
+ */
+export function lineEndable(view: EditView, caret: Position, at: number): boolean {
+  const { tree } = view;
+  if (tree.slots[caret.slot].role === "cell") {
+    return true;
+  }
+  const decision = decideOwner(capabilityChain(tree, "line-break", caret.slot));
+  return decision.kind !== "stop" && tree.nodes[decision.node].kind !== "row" && inkOnLine(view, caret.slot, at);
+}
+
 /** `\\`, `\%`, `\{`: a control symbol, committed as soon as its character is typed. */
 export function commitControlSymbol(view: EditView, caret: Position, at: number, char: string, held: Span | null): CommandCommit | null {
   const { tree } = view;
@@ -202,13 +219,8 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
     case "(":
       return mode === "math" ? null : { outcome: edit(range, "\\(\\)", range.from + 2) };
     case "\\": {
-      // As ⇧⏎ (structure.ts): a row's own cell ends the row; elsewhere TeX needs a line to end, which
-      // formulas, displays, titles and boxes do not have, nor a line with nothing on it yet.
-      if (tree.slots[caret.slot].role !== "cell") {
-        const decision = decideOwner(capabilityChain(tree, "line-break", caret.slot));
-        if (decision.kind === "stop" || tree.nodes[decision.node].kind === "row" || !inkOnLine(view, caret.slot, range.from)) {
-          return null;
-        }
+      if (!lineEndable(view, caret, range.from)) {
+        return null;
       }
       // Before an existing `[`, the break must not take it as its spacing (K9).
       if (/^\s*\[/u.test(tree.text.slice(range.to))) {
