@@ -867,7 +867,7 @@ uses positions but deletion still uses raw source ranges.
      `\bm`, beamer's overlay-aware commands make LuaLaTeX loop, so the
      chip refuses them there.
    The oracle skips what TeX cannot judge yet: unknown commands, value
-   arguments left empty or edited in place (O8), commands waiting for an
+   arguments edited in place, commands waiting for an
    argument (K2).
 6. **Breadth.** All node kinds, wrapping and pickers (R10, O8), paste and
    copy (O6), the frequent-styles list and variants, the remaining
@@ -903,6 +903,29 @@ uses positions but deletion still uses raw source ranges.
    script only with a base and an argument. The fuzzers paste canvas
    copies and a set of outside texts. "Paste as TeX" (C2's pill) and Z3's
    missing-macro hint are still to come.
+
+   **Value editor (O8), done.** A command whose values the preview does
+   not show (colours, URLs, lengths, keys, column specifications, a
+   footnote's text) is never written with them empty: the chip's commit
+   opens the value editor, which shows the command in source form with a
+   field per value (`\href{▢}{…}`), and the command is written whole, as
+   one step, once they are filled; Esc writes nothing. Typed braces work as
+   in source: `{` after the name opens the first field, `}` closes a field,
+   and a `{` typed right after is the next argument's own. A colour field
+   opens the colour picker. A character typed after the name, or a
+   selection the command replaces (`\url` around a URL), starts the first
+   field. Values already written show on the focus outline's tag in source
+   form (`\textcolor{red}`), shortened to the construct's width (but never
+   below a short colour), and clicking the tag edits them in place. Values
+   are checked before they are written: xcolor syntax, TeX lengths, `%`
+   and `#` (escaped in URLs), balanced braces, a table's column count, a
+   colour in its model; unbraced values (`\bigr)`) stay one token, and
+   arguments TeX marks optional that a command cannot do without
+   (`\temporal`'s slides, `\setbeamertemplate`'s option) are asked for and
+   kept. The fuzzer fills the editor and edits written values, and the TeX
+   oracle judges what it writes. Still open: a construct the caret cannot
+   enter (`\hspace`) shows its tag only when selected; cells of
+   `>{$}c<{$}` columns are math to TeX but text to the edit tree.
 
 Parallel: engine recovery (T1–T7) against the interface above. It must
 land before the source lens is promoted as the main escape hatch.

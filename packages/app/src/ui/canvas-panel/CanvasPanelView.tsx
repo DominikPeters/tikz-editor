@@ -9,6 +9,8 @@ import {
   type ReactNode,
   type RefObject
 } from "react";
+import { CanvasValueEditor } from "./CanvasValueEditor";
+import { valueTagText } from "./canvas-value-tag";
 import type { AppMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
 import type { EditorPlatform } from "../../platform/types";
@@ -829,15 +831,30 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             <div
               key={`${outline.role}:${outline.left}:${outline.top}:${outline.width}:${outline.height}`}
               className={outline.role === "focus" ? css.contextOutlineFocus : css.contextOutlineParent}
-              aria-hidden="true"
+              aria-hidden={outline.values ? undefined : true}
               data-testid={`canvas-context-outline-${outline.role}`}
               style={{ left: outline.left, top: outline.top, width: outline.width, height: outline.height }}
             >
-              {outline.role === "focus" && outline.tag ? (
+              {outline.role === "focus" && outline.values ? (
+                <button
+                  type="button"
+                  className={`${css.contextOutlineTag} ${css.contextOutlineValueTag}`}
+                  title="Edit values"
+                  data-testid="canvas-context-outline-values"
+                  onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); }}
+                  onClick={() => { canvasTextEdit.onEditValues(outline); }}
+                >
+                  {valueTagText(outline.values.command, outline.values.values, outline.width)}
+                </button>
+              ) : outline.role === "focus" && outline.tag ? (
                 <span className={css.contextOutlineTag}>{outline.tag}</span>
               ) : null}
             </div>
           ))}
+
+          {canvasTextEdit.valueEditor ? (
+            <CanvasValueEditor key={canvasTextEdit.valueEditor.key} model={canvasTextEdit.valueEditor} />
+          ) : null}
 
           {canvasTextEdit.commandChip ? (
             <div

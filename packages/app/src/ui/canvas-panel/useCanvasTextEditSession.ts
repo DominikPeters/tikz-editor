@@ -33,10 +33,16 @@ import {
 import type { BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
 import {
   CANVAS_CLIP_TYPE,
+  editValues,
+  fieldProblems,
   listItemOf,
+  taggedValues,
+  valueEditorFields,
+  valueProblem,
   type CanvasClip,
   type ClipboardPayload
 } from "@tikz-editor/core/editing/operations/index";
+import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 import {
   chipCandidates,
   copySelection,
@@ -51,6 +57,15 @@ import {
   type Intent,
   type IntentContext
 } from "@tikz-editor/core/editing/input/index";
+
+/** Where a popup below the caret goes, or below a selection's start when there is no caret (viewport px). */
+function belowSelection(overlay: TextSelectionOverlay | null): { left: number; top: number } | null {
+  if (overlay?.caret) {
+    return { left: overlay.caret.bounds.minX, top: overlay.caret.bounds.maxY + 4 };
+  }
+  const first = overlay?.rects[0];
+  return first ? { left: first.bounds.minX, top: Math.max(...overlay.rects.map((rect) => rect.bounds.maxY)) + 4 } : null;
+}
 
 /**
  * A pointer selection as it is drawn and acted on: in a scope session its
@@ -137,7 +152,7 @@ import type {
 import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
 import { canvasEditView, useEditCommands, useEditTree } from "./edit-tree-shadow";
 import { setCanvasTextContext } from "./canvas-text-context";
-import { useCanvasContextOutlines, type CanvasContextOutlineRequest } from "./useCanvasContextOutlines";
+import { useCanvasContextOutlines, type CanvasContextOutline, type CanvasContextOutlineRequest } from "./useCanvasContextOutlines";
 
 type TextEditCaretOverlay = {
   left: number;
@@ -1609,7 +1624,8 @@ export function useCanvasTextEditSession(
           return;
         }
         // An open command chip closes first, writing nothing (R4).
-        if (stateRef.current.treeSelection?.interaction.chip && stateRef.current.treeSelection.text === session?.text) {
+        if ((stateRef.current.treeSelection?.interaction.chip || stateRef.current.treeSelection?.interaction.picker) &&
+          stateRef.current.treeSelection.text === session?.text) {
           intentScheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
           return;
         }
@@ -1684,7 +1700,9 @@ export function useCanvasTextEditSession(
       return;
     }
     const activeInput = canvasSurfaceFocused ? canvasInput : textarea;
-    if (activeInput && document.activeElement !== activeInput) {
+    // (The value editor's fields keep the keyboard while it is open.)
+    const inValueEditor = document.activeElement instanceof HTMLElement && document.activeElement.closest("[data-canvas-value-editor]") != null;
+    if (activeInput && document.activeElement !== activeInput && !inValueEditor) {
       activeInput.focus({ preventScroll: true });
     }
     const start = clamp(textEditingSession.selectionStart, 0, textEditingSession.text.length);
@@ -2338,14 +2356,24 @@ export function useCanvasTextEditSession(
   }, [caretCrumbs, commitTransaction, textEditFocusSurface, textEditingSession?.sourceId]);
 
   const outlineRequests = useMemo<CanvasContextOutlineRequest[]>(() => {
+    const view = caretFocus?.view;
+    // A construct selected whole that has values (`\hspace{2em}`, `\url{…}`): its tag shows them.
+    const selected = view && textEditingSession && textEditingSession.selectionStart !== textEditingSession.selectionEnd
+      ? view.tree.nodes.find((node) => node.span.from === Math.min(textEditingSession.selectionStart, textEditingSession.selectionEnd) &&
+        node.span.to === Math.max(textEditingSession.selectionStart, textEditingSession.selectionEnd) && node.values.length > 0 && node.command != null)
+      : undefined;
+    if (view && selected) {
+      return [{ role: "focus", tag: selected.command ?? null, span: selected.span, values: taggedValues(view, selected) }];
+    }
     const outlined = (caretCrumbs ?? []).filter((crumb) => crumb.outlined);
     const focus = outlined.at(-1);
     const parent = outlined.at(-2);
+    const values = focus && view && focus.slot == null ? taggedValues(view, view.tree.nodes[focus.node]) : null;
     return [
-      ...(focus ? [{ role: "focus" as const, tag: focus.label, span: focus.span }] : []),
+      ...(focus ? [{ role: "focus" as const, tag: focus.label, span: focus.span, values }] : []),
       ...(parent ? [{ role: "parent" as const, tag: null, span: parent.span }] : [])
     ];
-  }, [caretCrumbs]);
+  }, [caretCrumbs, caretFocus, textEditingSession]);
 
   const contextOutlines = useCanvasContextOutlines({
     session: textEditFocusSurface === "canvas" ? textEditingSession : null,
@@ -2385,7 +2413,7 @@ export function useCanvasTextEditSession(
   const commandChip = useMemo<CanvasCommandChipModel | null>(() => {
     const recorded = state.treeSelection;
     const chip = recorded?.interaction.chip;
-    const caret = textSelectionOverlay?.caret ?? null;
+    const caret = belowSelection(textSelectionOverlay);
     if (!chip || !caret || textEditFocusSurface !== "canvas" || !textEditingSession?.isScopeSession ||
       recorded.text !== textEditingSession.text) {
       return null;
@@ -2403,10 +2431,112 @@ export function useCanvasTextEditSession(
         detail: candidate.user ? "document" : CHIP_CATEGORY_LABELS[candidate.category],
         selected: index === selected
       })),
-      left: caret.bounds.minX,
-      top: caret.bounds.maxY + 4
+      left: caret.left,
+      top: caret.top
     };
   }, [editCommands, state.treeSelection, textEditFocusSurface, textEditingSession, textSelectionOverlay]);
+
+  /** Values opened from a construct's tag, while the buffer is as it was then. */
+  const [valueEditTarget, setValueEditTarget] = useState<{
+    readonly text: string;
+    readonly span: { readonly from: number; readonly to: number };
+    readonly left: number;
+    readonly top: number;
+  } | null>(null);
+
+  const refocusCanvas = useCallback(() => {
+    requestAnimationFrame(() => { canvasFocusInputRef.current?.focus({ preventScroll: true }); });
+  }, []);
+
+  const handleEditValues = useCallback((outline: CanvasContextOutline) => {
+    const session = stateRef.current.session;
+    if (!session || !outline.values) {
+      return;
+    }
+    intentScheduler.flush();
+    setValueEditTarget({ text: session.text, span: outline.span, left: outline.left, top: outline.top - 26 });
+  }, [intentScheduler]);
+
+  /** The value editor (O8): for the command the chip is writing, or for the values opened from a tag. */
+  const valueEditor = useMemo<CanvasValueEditorModel | null>(() => {
+    if (!textEditingSession?.isScopeSession || textEditFocusSurface !== "canvas") {
+      return null;
+    }
+    const recorded = state.treeSelection;
+    const picker = recorded?.text === textEditingSession.text ? recorded.interaction.picker : undefined;
+    const caret = belowSelection(textSelectionOverlay);
+    const view = canvasEditView(textEditingSession.text, editCommands);
+    if (picker && caret) {
+      const editor = valueEditorFields(editCommands, view, picker.at, picker.name, picker.key);
+      if (!editor) {
+        return null;
+      }
+      const parts: CanvasValueEditorModel["parts"][number][] = [];
+      editor.schema.args.forEach((arg, argument) => {
+        const field = editor.fields.findIndex((candidate) => candidate.argument === argument);
+        if (field >= 0) {
+          parts.push({ type: "field", field });
+        } else if (arg.kind === "mandatory") {
+          parts.push({ type: "text", text: "{…}" });
+        }
+      });
+      return {
+        key: `new:${picker.name}:${picker.at}:${picker.key}`,
+        command: picker.name,
+        parts,
+        fields: editor.fields,
+        initial: editor.fields.map((_, index) => (index === 0 ? picker.seed : "")),
+        left: caret.left,
+        top: caret.top,
+        problems: (values) => fieldProblems(editor.fields, values),
+        onSubmit: (values, viaBrace) => {
+          intentScheduler.submit({ type: "pickValues", values, viaBrace, origin: "keyboard", repeat: false });
+          refocusCanvas();
+        },
+        onCancel: () => {
+          intentScheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
+          refocusCanvas();
+        }
+      };
+    }
+    const target = valueEditTarget?.text === textEditingSession.text ? valueEditTarget : null;
+    const node = target ? view.tree.nodes.find((each) => each.span.from === target.span.from && each.span.to === target.span.to) : undefined;
+    const tagged = node ? taggedValues(view, node) : null;
+    if (!target || !tagged) {
+      return null;
+    }
+    const fields = tagged.values.map((value) => ({ kind: value.kind, open: value.open, close: value.close, optional: value.optional }));
+    const edits = (values: readonly string[]) => tagged.values.map((value, index) => ({ span: value.span, text: values[index] }));
+    return {
+      key: `edit:${target.span.from}:${target.span.to}:${target.text.length}`,
+      command: tagged.command,
+      parts: fields.map((_, field) => ({ type: "field" as const, field })),
+      fields,
+      initial: tagged.values.map((value) => value.text),
+      left: target.left,
+      top: target.top,
+      problems: (values) => {
+        const each = tagged.values.map((value, index) => valueProblem(value.kind, values[index], value.optional, true));
+        if (each.some((problem) => problem != null)) {
+          return each;
+        }
+        // Each fits; together they must fit the command (a colour in its model, a table's columns).
+        return editValues(view, edits(values)) ? null : each.map((_, index) => (index === 0 ? "These values do not fit the command" : null));
+      },
+      onSubmit: (values) => {
+        const changed = edits(values).filter((edit, index) => edit.text !== tagged.values[index].text);
+        if (changed.length > 0) {
+          intentScheduler.submit({ type: "setValues", edits: changed, origin: "pointer", repeat: false });
+        }
+        setValueEditTarget(null);
+        refocusCanvas();
+      },
+      onCancel: () => {
+        setValueEditTarget(null);
+        refocusCanvas();
+      }
+    };
+  }, [editCommands, intentScheduler, refocusCanvas, state.treeSelection, textEditFocusSurface, textEditingSession, textSelectionOverlay, valueEditTarget]);
 
   const view = useMemo<CanvasTextEditViewModel>(
     () => ({
@@ -2416,9 +2546,11 @@ export function useCanvasTextEditSession(
       canvasFocusInput,
       scopeEditBorder,
       contextOutlines,
-      commandChip
+      commandChip,
+      valueEditor,
+      onEditValues: handleEditValues
     }),
-    [canvasFocusInput, commandChip, contextOutlines, popup, scopeEditBorder, textEditFocusSurface, textEditingSession]
+    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, popup, scopeEditBorder, textEditFocusSurface, textEditingSession, valueEditor]
   );
 
   return {

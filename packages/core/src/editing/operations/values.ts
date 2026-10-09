@@ -330,3 +330,31 @@ export function valueEditorFields(
   const schema = table.command(name, mode) ?? table.command(name, mode === "math" ? "text" : "math");
   return schema ? { schema, fields: valueFields(schema, key) } : null;
 }
+
+/** One value of a construct as its tag shows it: its delimiters and text, and where its text is. */
+export type TaggedValue = {
+  readonly kind: ValueKind;
+  readonly open: string;
+  readonly close: string;
+  readonly text: string;
+  /** The content span: what an edit of it names. */
+  readonly span: Span;
+  readonly optional: boolean;
+};
+
+/**
+ * The values a construct has written, in source order, for its tag
+ * (`\textcolor{red}`); null when it has none.
+ */
+export function taggedValues(view: EditView, node: EditNode): { readonly command: string; readonly values: readonly TaggedValue[] } | null {
+  if (node.command == null || node.values.length === 0) {
+    return null;
+  }
+  const { text } = view.tree;
+  const values = [...node.values].sort((left, right) => left.span.from - right.span.from).map((value): TaggedValue => {
+    const open = value.span.from < value.contentSpan.from ? text[value.span.from] : "";
+    const close = value.contentSpan.to < value.span.to ? text[value.span.to - 1] : "";
+    return { kind: value.role, open, close, text: text.slice(value.contentSpan.from, value.contentSpan.to), span: value.contentSpan, optional: open === "[" || open === "<" };
+  });
+  return { command: node.command, values };
+}

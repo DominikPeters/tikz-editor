@@ -6,4 +6,4 @@ export { listItemOf, listShapes, type ItemShape, type ListContext, type ListShap
 export { breaksBoldMath, inBoldMath, commitAcrossModes, commitCommand, commitControlSymbol, isControlSymbol, lineEndable, commitLeftDelimiter, type CommandCommit, type CommitKey } from "./command.js";
 export { rulesInsideRows } from "./source.js";
 export { CANVAS_CLIP_TYPE, copyRange, pasteAt, type CanvasClip, type ClipboardPayload } from "./paste.js";
-export { commitWithValues, editValues, fieldProblems, needsValues, valueFields, valueProblem, valueSource, valueEditorFields, writtenValueAt, type ValueField, type ValueKind, type WrittenValue } from "./values.js";
+export { commitWithValues, editValues, fieldProblems, needsValues, valueFields, valueProblem, valueSource, taggedValues, valueEditorFields, writtenValueAt, type TaggedValue, type ValueField, type ValueKind, type WrittenValue } from "./values.js";

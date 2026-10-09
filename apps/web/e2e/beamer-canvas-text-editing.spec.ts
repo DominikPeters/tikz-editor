@@ -1061,3 +1061,55 @@ test("the command chip completes a command at the caret and commits it in one un
   await expect(textarea).toHaveValue(buffer);
   await expect(input).toBeFocused();
 });
+
+test("the value editor: a command's values are asked for before it is written, and edited from its tag", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const select = (from: number, to: number) => input.evaluate((element, [start, end]) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(start, end);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, [from, to] as const);
+  const typo = buffer.indexOf("typo.");
+  await select(typo, typo + "typo".length);
+  await page.keyboard.type("\\textcolor ");
+  const editor = page.getByTestId("canvas-value-editor");
+  await expect(editor).toBeVisible();
+  await expect(editor).toContainText("\\textcolor");
+  // Nothing is written until the colour is given; the colour picker is open for it.
+  await expect(textarea).toHaveValue(buffer);
+  await expect(page.getByTestId("canvas-value-editor-field-0")).toBeFocused();
+  await expect(editor.getByRole("button").first()).toBeVisible();
+  await page.keyboard.type("red!60");
+  await page.keyboard.press("Enter");
+  await expect(editor).toHaveCount(0);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textcolor{red!60}{typo}.`);
+  await expect(input).toBeFocused();
+
+  // The construct's tag shows its values in source form; clicking it edits them.
+  const tag = page.getByTestId("canvas-context-outline-values");
+  await expect(tag).toHaveText(String.raw`\textcolor{red!60}`);
+  await tag.click();
+  const field = page.getByTestId("canvas-value-editor-field-0");
+  await expect(field).toHaveValue("red!60");
+  await field.fill("blue");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textcolor{blue}{typo}.`);
+
+  // Typed braces: `{` opens the field, `}` closes it, and the next `{` is the argument's own.
+  const later = (await textarea.inputValue()).indexOf("Body");
+  await select(later, later);
+  await page.keyboard.type("\\href{https://example.org}{site} ");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\href{https://example.org}{site} Body`);
+
+  // Esc writes nothing.
+  const before = await textarea.inputValue();
+  await page.keyboard.type("\\url ");
+  await expect(editor).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(editor).toHaveCount(0);
+  await expect(textarea).toHaveValue(before);
+  await expect(input).toBeFocused();
+});
