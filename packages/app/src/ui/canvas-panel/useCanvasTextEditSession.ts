@@ -33,15 +33,32 @@ import {
 import type { BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
 import { listItemOf } from "@tikz-editor/core/editing/operations/index";
 import {
+  chipCandidates,
   createIntentScheduler,
   intentFromBeforeInput,
   interpretKeyDown,
   needsFreshLayout,
   resolveIntent,
   SUPPORTED_BEFORE_INPUT_TYPES,
+  type ChipCandidate,
   type InputSurface,
   type Intent
 } from "@tikz-editor/core/editing/input/index";
+
+/** What the chip's completion list says about each command. */
+const CHIP_CATEGORY_LABELS: Record<ChipCandidate["category"], string> = {
+  style: "style",
+  construct: "structure",
+  symbol: "symbol",
+  operator: "operator",
+  atom: "command",
+  vertical: "spacing",
+  spacing: "spacing",
+  declaration: "switch",
+  overlay: "overlay",
+  link: "link",
+  break: "break"
+};
 import { applyTransaction, type Transaction } from "@tikz-editor/core/editing/transaction/index";
 import {
   caretContext,
@@ -70,6 +87,7 @@ import {
   type CanvasTextEditState
 } from "./canvas-text-edit-machine";
 import type {
+  CanvasCommandChipModel,
   CanvasFocusInputModel,
   CanvasScopeEditBorder,
   CanvasTextEditPopupModel,
@@ -815,7 +833,8 @@ export function useCanvasTextEditSession(
           ? (text, hidden) => canvasEditView(text, editCommandsRef.current, hidden)
           : null,
         positions: selectionPositions(state, anchor, focus),
-        interaction: interactionState(state, anchor, focus)
+        interaction: interactionState(state, anchor, focus),
+        commands: session.isScopeSession ? editCommandsRef.current : null
       },
       intent
     );
@@ -1512,6 +1531,11 @@ export function useCanvasTextEditSession(
               ? { type: "focus_surface", surface: "canvas" }
               : { type: "session_close" }
           );
+          return;
+        }
+        // An open command chip closes first, writing nothing (R4).
+        if (stateRef.current.treeSelection?.interaction.chip && stateRef.current.treeSelection.text === session?.text) {
+          intentScheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
           return;
         }
         // Esc ladder rung 1: hand the caret position to the object layer
@@ -2282,6 +2306,33 @@ export function useCanvasTextEditSession(
     textEditingSession
   ]);
 
+  /** The command chip while one is open on the canvas, below the caret. */
+  const commandChip = useMemo<CanvasCommandChipModel | null>(() => {
+    const recorded = state.treeSelection;
+    const chip = recorded?.interaction.chip;
+    const caret = textSelectionOverlay?.caret ?? null;
+    if (!chip || !caret || textEditFocusSurface !== "canvas" || !textEditingSession?.isScopeSession ||
+      recorded.text !== textEditingSession.text) {
+      return null;
+    }
+    const view = canvasEditView(textEditingSession.text, editCommands);
+    const mode = view.tree.slots[view.positionAt(chip.at).slot].mode;
+    const candidates = chipCandidates(editCommands, mode, chip.name, textEditingSession.text);
+    const selected = Math.min(chip.selected, candidates.length - 1);
+    const highlighted = candidates[selected]?.name ?? "";
+    return {
+      name: chip.name,
+      ghost: highlighted.startsWith(chip.name) ? highlighted.slice(chip.name.length) : "",
+      candidates: candidates.map((candidate, index) => ({
+        name: candidate.name,
+        detail: candidate.user ? "document" : CHIP_CATEGORY_LABELS[candidate.category],
+        selected: index === selected
+      })),
+      left: caret.bounds.minX,
+      top: caret.bounds.maxY + 4
+    };
+  }, [editCommands, state.treeSelection, textEditFocusSurface, textEditingSession, textSelectionOverlay]);
+
   const view = useMemo<CanvasTextEditViewModel>(
     () => ({
       session: textEditingSession,
@@ -2289,9 +2340,10 @@ export function useCanvasTextEditSession(
       focusSurface: textEditFocusSurface,
       canvasFocusInput,
       scopeEditBorder,
-      contextOutlines
+      contextOutlines,
+      commandChip
     }),
-    [canvasFocusInput, contextOutlines, popup, scopeEditBorder, textEditFocusSurface, textEditingSession]
+    [canvasFocusInput, commandChip, contextOutlines, popup, scopeEditBorder, textEditFocusSurface, textEditingSession]
   );
 
   return {

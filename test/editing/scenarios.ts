@@ -191,6 +191,34 @@ export const structuralKeyScenarios: readonly Scenario[] = [
 ];
 
 /**
+ * The command chip (R4): `\` opens it, the name stays out of the source
+ * until a commit writes the command in one step.
+ */
+export const chipScenarios: readonly Scenario[] = [
+  { id: "P1", title: "\\% commits the control symbol at once", body: "Up by 5‸ overall.", keys: R`\%`, expect: R`Up by 5\%‸ overall.` },
+  { id: "P6", title: "␣ after a text command gives a word space", body: "I use ‸ daily", keys: R`\LaTeX␣`, expect: R`I use \LaTeX{}‸ daily` },
+  { id: "P6 end", title: "␣ after a text command adds the space when none follows", body: "I use ‸", keys: R`\LaTeX␣`, expect: R`I use \LaTeX{} ‸` },
+  { id: "P8", title: "an old-style group with a declaration, typed as TeX", body: "a ‸ b", keys: R`{\bf␣x}`, expect: R`a {\bf x}‸ b` },
+  { id: "M1", title: "a formula typed the TeX way gives exactly the keystrokes", preamble: R_MACRO, body: "Let ‸", keys: R`$x\in\R^n$␣be`, expect: R`Let $x\in\R^n$ be‸` },
+  { id: "M5", title: "a braced exponent with a command inside", body: R`$a‸$`, keys: R`e^{i\pi}`, expect: R`$ae^{i\pi}‸$` },
+  { id: "M8 ␣ ⇥", title: "\\frac␣ creates the slots, ⇥ moves through them", body: R`$a‸$`, keys: R`\frac␣n ⇥ 2 ⇥ +`, expect: R`$a\frac{n}{2}+‸$` },
+  { id: "M8 typed", title: "typed TeX \\frac{n}{2} gives exactly that source", body: R`$a‸$`, keys: R`\frac{n}{2}+`, expect: R`$a\frac{n}{2}+‸$` },
+  { id: "K2", title: "\\frac12 stays unbraced", body: R`$a‸$`, keys: R`\frac12`, expect: R`$a\frac12‸$` },
+  { id: "M12", title: "a command in a script closes it; R5 spaces the next letter", body: R`$f‸$`, keys: R`+\mu^\top␣x`, expect: R`$f+\mu^\top x‸$` },
+  { id: "K3", title: "\\{ pairs with \\}, which is stepped over", body: R`$N = ‸$`, keys: R`\{1\}`, expect: R`$N = \{1\}‸$` },
+  { id: "M14", title: "\\left( adds its \\right)", body: R`$a‸$`, keys: R`\left(x`, expect: R`$a\left(x‸\right)$` },
+  { id: "O4", title: "[ right after \\\\ opens its optional argument", body: "a‸ b", keys: R`\\[5pt]`, expect: R`a\\[5pt]‸ b` },
+  { id: "K9 sqrt", title: "[ while typing \\sqrt opens the root index", body: R`$a‸$`, keys: R`\sqrt[3]x`, expect: R`$a\sqrt[3]{x‸}$` },
+  { id: "V2 ⇥", title: "⇥ accepts the highlighted completion", body: R`$A‸$`, keys: R`\setm ⇥ B`, expect: R`$A\setminus B‸$` },
+  { id: "X1", title: "an unknown name commits as typed", body: R`$a‸$`, keys: R`\foo␣`, expect: R`$a\foo‸$` },
+  { id: "R4 Esc", title: "Esc cancels the chip without writing", body: "a‸ b", keys: R`\foo Esc`, expect: "a‸ b" },
+  { id: "R4 ⌫", title: "⌫ shortens the name, then closes the chip", body: "a‸ b", keys: R`\fo ⌫ ⌫ ⌫ c`, expect: "ac‸ b" },
+  { id: "F7", title: "a chip wraps the selection into the command's content", body: "the ⟦main idea⟧ is", keys: R`\emph␣`, expect: R`the \emph{⟦main idea⟧} is` },
+  { id: "M9", title: "a selection fills the numerator; the caret goes to the denominator", body: R`$⟦a⟧$`, keys: R`\frac␣`, expect: R`$\frac{a}{‸}$` },
+  { id: "R12 chip", title: "a chip commit is one undo step", body: R`$a‸$`, keys: R`\alpha␣ ⌘Z`, expect: R`$a‸$` },
+];
+
+/**
  * Undo grouping (architecture "Transactions"): a typing run is one step;
  * it ends at a pause, a caret move, or a switch between typing and
  * deleting. Structural edits are their own step.

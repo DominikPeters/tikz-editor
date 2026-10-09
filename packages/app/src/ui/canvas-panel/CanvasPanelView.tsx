@@ -839,6 +839,35 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </div>
           ))}
 
+          {canvasTextEdit.commandChip ? (
+            <div
+              className={css.commandChip}
+              style={{ left: canvasTextEdit.commandChip.left, top: canvasTextEdit.commandChip.top }}
+              data-testid="canvas-command-chip"
+              aria-live="polite"
+            >
+              <div className={css.commandChipName}>
+                <span>\{canvasTextEdit.commandChip.name}</span>
+                <span className={css.commandChipGhost}>{canvasTextEdit.commandChip.ghost}</span>
+              </div>
+              {canvasTextEdit.commandChip.candidates.length > 0 ? (
+                <ul className={css.commandChipList} role="listbox" aria-label="Command completions">
+                  {canvasTextEdit.commandChip.candidates.map((candidate) => (
+                    <li
+                      key={candidate.name}
+                      role="option"
+                      aria-selected={candidate.selected}
+                      className={candidate.selected ? css.commandChipOptionSelected : css.commandChipOption}
+                    >
+                      <span>\{candidate.name}</span>
+                      <span className={css.commandChipDetail}>{candidate.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
           {canvasTextEdit.scopeEditBorder ? (
             <div
               className={[

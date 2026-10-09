@@ -41,7 +41,7 @@ import type {
   TexMathUnsupportedItem,
   TexMathVarLimitCommand,
 } from "./ir.js";
-import { texMathCharacterDeclaration, texMathSymbolDeclaration } from "./symbol-definitions.js";
+import { texMathCharacterDeclaration, texMathSymbolCommandNames, texMathSymbolDeclaration } from "./symbol-definitions.js";
 import {
   parseSimpleTexInlineNodes,
   simpleTexTextBoxAlignment,
@@ -156,6 +156,23 @@ export type TexMathCommandFamily =
   | "text"
   | "modular"
   | "not";
+
+/**
+ * The named math symbols the parser knows (`alpha`, `cup`, `le`, the AMS
+ * symbols), without backslashes: a vocabulary for command completion.
+ */
+export function texMathNamedSymbolNames(): readonly string[] {
+  const names = new Set<string>(texMathSymbolCommandNames().map((name) => name.slice(1)));
+  for (const set of [ordinaryNamedSymbolCommands, binaryNamedSymbolCommands, relationNamedSymbolCommands,
+    openNamedSymbolCommands, closeNamedSymbolCommands, punctNamedSymbolCommands]) {
+    for (const name of set) {
+      if (/^[A-Za-z]+$/u.test(name)) {
+        names.add(name);
+      }
+    }
+  }
+  return [...names];
+}
 
 export function texMathCommandFamily(command: string): TexMathCommandFamily | null {
   const name = commandName(command);

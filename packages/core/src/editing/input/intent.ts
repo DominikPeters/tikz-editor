@@ -49,7 +49,9 @@ export type IntentBody =
   | { readonly type: "format"; readonly command: FormatCommand }
   | { readonly type: "color"; readonly color: string | null }
   | { readonly type: "undo" }
-  | { readonly type: "redo" };
+  | { readonly type: "redo" }
+  /** Esc while something transient is open (the command chip); the session itself handles Esc otherwise. */
+  | { readonly type: "escape" };
 
 export type Intent = IntentBody & {
   readonly origin: IntentOrigin;

@@ -15,11 +15,15 @@ import {
   abandonPlaceholder,
   deleteBackward,
   deleteForward,
+  commitCommand,
+  commitControlSymbol,
+  commitLeftDelimiter,
   deleteRange,
   enter,
   indentItems,
   joinBackward,
   joinForward,
+  optionalArgumentAhead,
   placeholderAt,
   tab,
   toggleList,
@@ -45,7 +49,9 @@ import {
   type VerticalGoal,
 } from "../transaction/index.js";
 import type { InputSurface } from "./adapter.js";
-import { NO_INTERACTION, type InteractionState } from "./interaction.js";
+import { chipCommitName } from "./chip.js";
+import { NO_INTERACTION, type ChipState, type InteractionState } from "./interaction.js";
+import type { CommandTable } from "../commands/table.js";
 import type { FormatCommand, Intent } from "./intent.js";
 import { logicalLineBoundary, nextWordBoundary, previousWordBoundary } from "./text-units.js";
 
@@ -89,6 +95,8 @@ export type IntentContext = {
   readonly positions: SelectionEnds | null;
   /** The interaction state the last transaction left, while buffer and selection are unchanged. */
   readonly interaction: InteractionState;
+  /** The scope's command table, for the command chip (with `structure`). */
+  readonly commands: CommandTable | null;
 };
 
 export type IntentResolution =
@@ -121,6 +129,7 @@ export function needsFreshLayout(intent: Intent, surface: InputSurface, _isScope
     case "deleteBackward":
     case "deleteForward":
     case "format":
+    case "escape":
     case "insertText":
     case "compose":
     case "cut":
@@ -160,6 +169,8 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
       return resolver.format(intent.command);
     case "color":
       return resolver.color(intent.color);
+    case "escape":
+      return resolver.escape();
     case "undo":
       return { kind: "history", direction: "undo" };
     case "redo":
@@ -249,16 +260,15 @@ class Resolver {
     switch (outcome.kind) {
       case "patch": {
         const structure = this.context.structure!;
-        const nextText = applyPatches(this.context.text, outcome.patches);
-        const nextView = structure(nextText);
         // After a structural edit, snap forward over a gap (`$ax‸ $` is
         // `$ax ‸$`), never back. Typed text keeps the caret right after
         // it: a space just typed at a paragraph's end is not a stop yet,
         // and a cell's `&` is not followed by its trailing newline.
         const run = typingRun ?? outcome.run;
-        const found = run === "insert" || outcome.exact ? null : nextView.stopAt(outcome.caret);
-        const stop = found && nextView.offset(found) >= outcome.caret ? found : null;
-        const caret = stop ? nextView.offset(stop) : outcome.caret;
+        const nextView = run === "insert" || outcome.exact ? null : structure(applyPatches(this.context.text, outcome.patches));
+        const found = nextView?.stopAt(outcome.caret) ?? null;
+        const stop = found && nextView!.offset(found) >= outcome.caret ? found : null;
+        const caret = stop ? nextView!.offset(stop) : outcome.caret;
         const focus = outcome.selectionEnd ?? caret;
         return this.transaction(
           outcome.patches,
@@ -338,7 +348,18 @@ class Resolver {
     if (!view || !keyboard) {
       return this.replaceSelection(text, typing);
     }
+    const chip = this.context.interaction.chip;
+    if (chip && this.context.commands) {
+      return this.chipCharacter(view, this.context.commands, chip, text);
+    }
     const raw = this.rawEnds(view);
+    if (text === "\\" && this.context.commands && !afterEscape(this.context.text, this.from)) {
+      // R4: `\` opens the command chip; the source is untouched until it commits.
+      const held = this.hasRange() ? this.offsetsOf(view, this.effectiveRange(view, raw)) : null;
+      const at = held ? held.from : this.hasRange() ? this.from : this.caretOffset(view);
+      // Placeholder braces stay recorded: a command typed into them replaces them.
+      return this.keepSelection({ ...this.context.interaction, chip: { name: "", at, selected: 0, held } });
+    }
     if (this.hasRange()) {
       const { start, end } = this.effectiveRange(view, raw);
       if (text === "$" && start.slot === end.slot && view.tree.slots[start.slot].mode === "text") {
@@ -390,9 +411,11 @@ class Resolver {
 
   compose(text: string, commit: boolean): IntentResolution {
     const range = this.context.composition ?? { from: this.from, to: this.to };
-    const caret = range.from + text.length;
+    // O4/K9: a committed `[` is content, never an optional argument of the command before it.
+    const insert = commit && text.startsWith("[") && this.view && optionalArgumentAhead(this.view, range.from) ? `{}${text}` : text;
+    const caret = range.from + insert.length;
     return this.transaction(
-      [{ from: range.from, to: range.to, insert: text }],
+      [{ from: range.from, to: range.to, insert }],
       { kind: "absolute", anchor: caret, focus: caret },
       { group: "composition", first: this.context.composition == null },
       { composition: commit ? null : { from: range.from, to: caret } }
@@ -402,6 +425,13 @@ class Resolver {
   delete(direction: "backward" | "forward", unit: "char" | "item" | "word" | "line", repeat: boolean): IntentResolution {
     const { text } = this.context;
     const view = this.view;
+    const chip = this.context.interaction.chip;
+    if (chip && view) {
+      // ⌫ shortens the name; on an empty chip, or with ⌦, the chip closes.
+      return direction === "backward" && chip.name !== ""
+        ? this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: chip.name.slice(0, -1), selected: 0 } })
+        : this.keepSelection(NO_INTERACTION);
+    }
     if (unit === "item" && view) {
       const raw = this.rawEnds(view);
       let outcome: EditOutcome;
@@ -457,6 +487,11 @@ class Resolver {
     if (!view) {
       return this.context.surface === "canvas" ? NONE : this.replaceSelection("\n", { group: "own-step" });
     }
+    const chip = this.context.interaction.chip;
+    if (chip && this.context.commands) {
+      // ⏎ accepts the highlighted completion, like ⇥ (V2); ␣ commits what was typed.
+      return this.commitChip(view, this.context.commands, chip, "structure", true);
+    }
     const key = soft ? "line-break" : "enter";
     const raw = this.rawEnds(view);
     if (!this.hasRange()) {
@@ -490,10 +525,148 @@ class Resolver {
     if (!view) {
       return NONE;
     }
+    const chip = this.context.interaction.chip;
+    if (chip && this.context.commands) {
+      // ⇥ accepts the highlighted completion (V2).
+      return this.commitChip(view, this.context.commands, chip, "structure", true);
+    }
     const { start, end } = this.hasRange()
       ? this.effectiveRange(view, this.rawEnds(view))
       : { start: this.caretPosition(view), end: this.caretPosition(view) };
     return this.outcome(view, tab(view, start, back, end));
+  }
+
+  /** Esc: closes the command chip without writing anything. */
+  escape(): IntentResolution {
+    return this.context.interaction.chip ? this.keepSelection(NO_INTERACTION) : NONE;
+  }
+
+  /** A transaction changing only the interaction state: buffer, selection and positions stay. */
+  private keepSelection(interaction: InteractionState): IntentResolution {
+    const { anchor, focus, positions } = this.context;
+    return this.transaction(
+      [],
+      { kind: "absolute", anchor, focus, positions: positions ?? undefined },
+      { group: "own-step" },
+      interaction === NO_INTERACTION ? {} : { interaction }
+    );
+  }
+
+  private offsetsOf(view: EditView, range: { start: Position; end: Position }): { from: number; to: number } | null {
+    // Only a selection within one slot can be wrapped as a whole.
+    return range.start.slot === range.end.slot ? { from: view.offset(range.start), to: view.offset(range.end) } : null;
+  }
+
+  /** The caret offset: at its recorded position, or exactly where it is. */
+  private caretOffset(view: EditView): number {
+    return this.context.positions ? view.offset(view.representative(this.rawEnds(view).focus)) : this.from;
+  }
+
+  /**
+   * A character typed while the chip is open (R4): letters extend the name;
+   * a first non-letter commits a control symbol (`\%`, `\\`, `\{` with
+   * its `\}`); ␣, `{` and `[` commit the command with its arguments;
+   * `\left` takes a delimiter and its closer; anything else commits the
+   * name as typed and is then typed itself.
+   */
+  private chipCharacter(view: EditView, commands: CommandTable, chip: ChipState, char: string): IntentResolution {
+    if (/^[A-Za-z]$/u.test(char)) {
+      return this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: chip.name + char, selected: 0 } });
+    }
+    const caret = view.positionAt(chip.at);
+    if (chip.name === "") {
+      const symbol = commitControlSymbol(view, caret, chip.at, char, chip.held);
+      if (!symbol) {
+        return this.keepSelection(NO_INTERACTION);
+      }
+      return this.commitOutcome(view, symbol.outcome, symbol.pending);
+    }
+    if (chip.name === "left") {
+      const pair = commitLeftDelimiter(chip.at, chip.held, char);
+      if (pair) {
+        return this.commitOutcome(view, pair);
+      }
+    }
+    if (char === " ") {
+      return this.commitChip(view, commands, chip, "space", false);
+    }
+    if (char === "\\") {
+      // The next command starts: commit this one as typed, open a new chip after it.
+      const committed = this.commitChip(view, commands, chip, "typed", false);
+      if (committed.kind !== "transaction" || committed.transaction.selection.kind !== "absolute") {
+        return committed;
+      }
+      const at = committed.transaction.selection.focus;
+      return { kind: "transaction", transaction: { ...committed.transaction, interaction: { chip: { name: "", at, selected: 0, held: null } } } };
+    }
+    if (char === "{" || char === "[") {
+      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
+      const schema = commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text");
+      const opens = char === "{"
+        ? schema?.args.some((arg) => arg.kind === "mandatory")
+        : schema?.args.find((arg) => arg.kind !== "overlay")?.kind === "optional";
+      if (opens) {
+        return this.commitChip(view, commands, chip, char === "{" ? "brace" : "bracket", false);
+      }
+    }
+    return this.commitChip(view, commands, chip, "typed", false, char);
+  }
+
+  /** Commits the chip; `then` is a character typed right after, in the same step. */
+  private commitChip(
+    view: EditView,
+    commands: CommandTable,
+    chip: ChipState,
+    key: "space" | "structure" | "brace" | "bracket" | "typed",
+    accept: boolean,
+    then?: string
+  ): IntentResolution {
+    const caret = view.positionAt(chip.at);
+    const mode = view.tree.slots[caret.slot].mode;
+    const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept);
+    const commit = commitCommand(view, commands, caret, chip.at, name, key, this.context.interaction, chip.held);
+    if (then == null || commit.outcome.kind !== "patch") {
+      return this.commitOutcome(view, commit.outcome, commit.pending);
+    }
+    // The character after the name, typed into the committed source.
+    const middle = applyPatches(this.context.text, commit.outcome.patches);
+    const middleView = this.context.structure!(middle);
+    const at = commit.outcome.caret;
+    const typed = typeCharacter(middleView, middleView.positionAt(at), then, { pending: commit.pending }, at);
+    if (typed.kind === "move") {
+      // `}` after `\pi` in `e^{i\pi`: the commit, then the caret steps out.
+      const caret = middleView.offset(typed.to);
+      return this.transaction(
+        commit.outcome.patches,
+        { kind: "absolute", anchor: caret, focus: caret },
+        { group: "own-step" },
+        typed.consumeOpen ? { interaction: { consumeOpen: caret } } : {}
+      );
+    }
+    if (typed.kind !== "patch") {
+      return this.commitOutcome(view, commit.outcome, commit.pending);
+    }
+    const final = applyPatches(middle, typed.patches);
+    return this.transaction(
+      replacementPatches(this.context.text, final),
+      { kind: "absolute", anchor: typed.caret, focus: typed.caret },
+      { group: "own-step" },
+      typed.placeholder != null ? { interaction: { placeholder: typed.placeholder } } : {}
+    );
+  }
+
+  /** A commit is one undo step (R12), whatever the chip took to type. */
+  private commitOutcome(view: EditView, outcome: EditOutcome, pending?: number): IntentResolution {
+    if (outcome.kind !== "patch") {
+      return this.outcome(view, outcome);
+    }
+    const focus = outcome.selectionEnd ?? outcome.caret;
+    return this.transaction(
+      outcome.patches,
+      { kind: "absolute", anchor: outcome.caret, focus },
+      { group: "own-step" },
+      pending != null ? { interaction: { pending } } : {}
+    );
   }
 
   /** The caret's position: the recorded one, or the one at its offset. */
@@ -506,6 +679,14 @@ class Resolver {
       return NONE;
     }
     const view = this.view;
+    const chip = this.context.interaction.chip;
+    if (view && chip && this.context.commands) {
+      if (motion.dir === "up" || motion.dir === "down") {
+        const selected = Math.max(0, chip.selected + (motion.dir === "up" ? -1 : 1));
+        return this.keepSelection({ ...this.context.interaction, chip: { ...chip, selected } });
+      }
+      return this.commitChip(view, this.context.commands, chip, "typed", false);
+    }
     if (view && motion.unit === "item" && (motion.dir === "left" || motion.dir === "right")) {
       return this.moveOnTree(view, motion.dir === "left" ? -1 : 1, motion.extend);
     }

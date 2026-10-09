@@ -23,6 +23,27 @@ export type InteractionState = {
    * consumed (R3 delimiter consumption). The offset is the caret's.
    */
   readonly consumeOpen?: number;
+  /** The command chip (R4), open while a command name is typed. */
+  readonly chip?: ChipState;
+  /**
+   * A command just committed whose optional argument the next keystroke
+   * may still open (`\\` then `[`, O4). The offset right after it.
+   */
+  readonly pending?: number;
+};
+
+/**
+ * The command chip: the name typed after `\`, outside the source until it
+ * is committed, so a half-typed command never reaches the renderer.
+ */
+export type ChipState = {
+  readonly name: string;
+  /** Where the command goes (buffer offset). */
+  readonly at: number;
+  /** The highlighted completion. */
+  readonly selected: number;
+  /** A selection the command will wrap or replace (R10). */
+  readonly held: { readonly from: number; readonly to: number } | null;
 };
 
 export const NO_INTERACTION: InteractionState = {};

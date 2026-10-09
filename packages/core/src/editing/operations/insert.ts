@@ -42,17 +42,23 @@ export function typeCharacter(
   if (char === "}") {
     return closeSlot(view, caret);
   }
+  if (char === "]") {
+    const closed = closeOptional(view, at);
+    if (closed) {
+      return closed;
+    }
+  }
   if (char === "{") {
     return { kind: "patch", patches: [{ from: at, to: at, insert: "{}" }], caret: at + 1, run: "insert" };
   }
-  return slot.mode === "math" ? typeInMath(view, caret, at, char) : typeInText(view, caret, at, char);
+  return slot.mode === "math" ? typeInMath(view, caret, at, char, state) : typeInText(view, caret, at, char, state);
 }
 
 /** Specials that destroy or break content when typed literally (R2): `%` comments out the line. */
 const ESCAPED: Readonly<Record<string, string>> = { "%": "\\%", "#": "\\#", "&": "\\&" };
 const ESCAPED_IN_TEXT: Readonly<Record<string, string>> = { ...ESCAPED, _: "\\_", "^": "\\^{}" };
 
-function typeInText(view: EditView, caret: Position, at: number, char: string): EditOutcome {
+function typeInText(view: EditView, caret: Position, at: number, char: string, state: InteractionState): EditOutcome {
   if (char === "&" && inAlignmentCell(view, caret.slot)) {
     return insert(at, char);
   }
@@ -64,13 +70,17 @@ function typeInText(view: EditView, caret: Position, at: number, char: string): 
     // `$$` would read as display math: the empty formula holds braces.
     return { kind: "patch", patches: [{ from: at, to: at, insert: "${}$" }], caret: at + 2, run: "insert", placeholder: at + 1 };
   }
+  if (char === "[" && state.pending === at) {
+    // O4: the command just committed takes its optional argument.
+    return { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: "insert" };
+  }
   if (char === "[" && optionalArgumentAhead(view, at)) {
     return insert(at, "{}[");
   }
-  return insert(at, terminated(view, caret, at, char, "text") + char);
+  return insert(at, terminated(view, at, char, "text") + char);
 }
 
-function typeInMath(view: EditView, caret: Position, at: number, char: string): EditOutcome {
+function typeInMath(view: EditView, caret: Position, at: number, char: string, state: InteractionState): EditOutcome {
   if (char === "&" && inAlignmentCell(view, caret.slot)) {
     return insert(at, char);
   }
@@ -90,7 +100,10 @@ function typeInMath(view: EditView, caret: Position, at: number, char: string): 
   if (char === "$") {
     return stepOverDollar(view, caret);
   }
-  return insertIntoUnbracedArgument(view, caret, char) ?? insert(at, terminated(view, caret, at, char, "math") + char);
+  if (char === "[" && state.pending === at) {
+    return { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: "insert" };
+  }
+  return insertIntoUnbracedArgument(view, caret, char) ?? insert(at, terminated(view, at, char, "math") + char);
 }
 
 function insert(at: number, text: string): EditOutcome {
@@ -99,17 +112,31 @@ function insert(at: number, text: string): EditOutcome {
 
 /**
  * R5: the terminator a control word right before the caret needs when a
- * letter follows (or, in text, a space): `\cup B`, `\LaTeX{} is`.
+ * letter follows (or, in text, a space): `\cup B`, `\LaTeX{} is`,
+ * `\mu^\top x`.
  */
-function terminated(view: EditView, caret: Position, at: number, char: string, mode: EditMode): string {
+function terminated(view: EditView, at: number, char: string, mode: EditMode): string {
   const needs = mode === "math" ? /^[A-Za-z@]$/u.test(char) : /^[A-Za-z@ ]$/u.test(char);
-  if (!needs || caret.index === 0) {
+  if (!needs || !endsWithControlWord(view.tree.text, at)) {
     return "";
   }
-  const { tree } = view;
-  const previous = tree.nodes[tree.slots[caret.slot].children[caret.index - 1]];
-  const source = tree.text.slice(previous.span.from, previous.span.to);
-  return previous.span.to === at && /^\\[A-Za-z@]+$/u.test(source) ? (mode === "math" ? " " : "{}") : "";
+  return mode === "math" ? " " : "{}";
+}
+
+/** Whether the source before an offset ends with a control word (`\alpha`, not the text after `\\`). */
+export function endsWithControlWord(text: string, at: number): boolean {
+  let start = at;
+  while (start > 0 && /[A-Za-z@]/u.test(text[start - 1])) {
+    start -= 1;
+  }
+  if (start === at) {
+    return false;
+  }
+  let slashes = 0;
+  while (start - slashes > 0 && text[start - slashes - 1] === "\\") {
+    slashes += 1;
+  }
+  return slashes % 2 === 1;
 }
 
 /** Whether a slot is an alignment cell, where `&` separates cells. */
@@ -122,7 +149,7 @@ function inAlignmentCell(view: EditView, slot: SlotId): boolean {
  * the command before it: right after `\item` without a label, or after
  * `\\` (both skip spaces before looking for `[`).
  */
-function optionalArgumentAhead(view: EditView, at: number): boolean {
+export function optionalArgumentAhead(view: EditView, at: number): boolean {
   const { tree } = view;
   let end = at;
   while (end > 0 && /\s/u.test(tree.text[end - 1])) {
@@ -166,6 +193,43 @@ function closeSlot(view: EditView, caret: Position): EditOutcome {
     }
   }
   return { kind: "move", to: { slot: owner.parent, index: childIndex(tree, owner.id) + 1 } };
+}
+
+/**
+ * `]` at the end of an optional argument (`\\\\[5pt‸]`, `\\sqrt[3‸]{x}`)
+ * steps over its closing bracket, into the next argument when one
+ * follows. Null elsewhere: `]` is then an ordinary character.
+ */
+function closeOptional(view: EditView, at: number): EditOutcome | null {
+  const { tree } = view;
+  if (tree.text[at] !== "]") {
+    return null;
+  }
+  const leaf = tree.nodes.find((node) => node.span.to === at + 1 && node.slots.length === 0 &&
+    /^\\[^[]*\[/u.test(tree.text.slice(node.span.from, node.span.to)));
+  if (leaf) {
+    // A command whose optional argument is part of it (`\\[5pt]`).
+    return { kind: "patch", patches: [], caret: at + 1, run: null, exact: true };
+  }
+  for (const node of tree.nodes) {
+    // The bracket is a delimiter of its own, or ends a value argument (`[5pt]`).
+    if (!node.delimiters.some((span) => span.to === at + 1)) {
+      continue;
+    }
+    const value = node.values.find((candidate) => candidate.span.to === at + 1);
+    const slot = node.slots.map((id) => tree.slots[id]).find((candidate) => candidate.contentSpan.to === at && candidate.presence === "present");
+    if (!value && !slot) {
+      continue;
+    }
+    const next = presentSlots(tree, node.id)
+      .filter((candidate) => candidate.contentSpan.from > at)
+      .sort((left, right) => left.contentSpan.from - right.contentSpan.from)[0];
+    if (next?.braced && /^\s*\{$/u.test(tree.text.slice(at + 1, next.contentSpan.from))) {
+      return { kind: "move", to: { slot: next.id, index: 0 }, consumeOpen: true };
+    }
+    return { kind: "patch", patches: [], caret: at + 1, run: null, exact: true };
+  }
+  return null;
 }
 
 /** `$` in math (R3): at the end of an inline formula, steps over its closing `$`; elsewhere nothing. */
