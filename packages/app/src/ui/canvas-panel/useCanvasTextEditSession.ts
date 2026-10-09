@@ -58,6 +58,19 @@ import {
   type IntentContext
 } from "@tikz-editor/core/editing/input/index";
 
+/** The lines the caret or selection is on, and where they start (viewport px). */
+function selectionBand(overlay: TextSelectionOverlay | null): { left: number; top: number; bottom: number } | null {
+  const boxes = overlay?.caret ? [overlay.caret] : overlay?.rects ?? [];
+  if (boxes.length === 0) {
+    return null;
+  }
+  return {
+    left: boxes[0].bounds.minX,
+    top: Math.min(...boxes.map((box) => box.bounds.minY)),
+    bottom: Math.max(...boxes.map((box) => box.bounds.maxY))
+  };
+}
+
 /** Where a popup below the caret goes, or below a selection's start when there is no caret (viewport px). */
 function belowSelection(overlay: TextSelectionOverlay | null): { left: number; top: number } | null {
   if (overlay?.caret) {
@@ -2442,6 +2455,7 @@ export function useCanvasTextEditSession(
     readonly span: { readonly from: number; readonly to: number };
     readonly left: number;
     readonly top: number;
+    readonly bottom: number;
   } | null>(null);
 
   const refocusCanvas = useCallback(() => {
@@ -2454,7 +2468,7 @@ export function useCanvasTextEditSession(
       return;
     }
     intentScheduler.flush();
-    setValueEditTarget({ text: session.text, span: outline.span, left: outline.left, top: outline.top - 26 });
+    setValueEditTarget({ text: session.text, span: outline.span, left: outline.left, top: outline.top, bottom: outline.top + outline.height });
   }, [intentScheduler]);
 
   /** The value editor (O8): for the command the chip is writing, or for the values opened from a tag. */
@@ -2464,7 +2478,7 @@ export function useCanvasTextEditSession(
     }
     const recorded = state.treeSelection;
     const picker = recorded?.text === textEditingSession.text ? recorded.interaction.picker : undefined;
-    const caret = belowSelection(textSelectionOverlay);
+    const caret = selectionBand(textSelectionOverlay);
     const view = canvasEditView(textEditingSession.text, editCommands);
     if (picker && caret) {
       const editor = valueEditorFields(editCommands, view, picker.at, picker.name, picker.key);
@@ -2487,7 +2501,8 @@ export function useCanvasTextEditSession(
         fields: editor.fields,
         initial: editor.fields.map((_, index) => (index === 0 ? picker.seed : "")),
         left: caret.left,
-        top: caret.top,
+        band: { top: caret.top, bottom: caret.bottom },
+        prefer: "below",
         problems: (values) => fieldProblems(editor.fields, values),
         onSubmit: (values, viaBrace) => {
           intentScheduler.submit({ type: "pickValues", values, viaBrace, origin: "keyboard", repeat: false });
@@ -2514,7 +2529,8 @@ export function useCanvasTextEditSession(
       fields,
       initial: tagged.values.map((value) => value.text),
       left: target.left,
-      top: target.top,
+      band: { top: target.top, bottom: target.bottom },
+      prefer: "above",
       problems: (values) => {
         const each = tagged.values.map((value, index) => valueProblem(value.kind, values[index], value.optional, true));
         if (each.some((problem) => problem != null)) {

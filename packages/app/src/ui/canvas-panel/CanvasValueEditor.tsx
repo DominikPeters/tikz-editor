@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ValueKind } from "@tikz-editor/core/editing/operations/index";
 import { BASIC_PICKER_COLORS } from "../../colors/color-palette";
 import { useProjectNamedColorSwatches } from "../../colors/project-named-colors";
@@ -27,14 +27,24 @@ export type CanvasValueEditorModel = {
   readonly parts: readonly ({ readonly type: "field"; readonly field: number } | { readonly type: "text"; readonly text: string })[];
   readonly fields: readonly CanvasValueEditorField[];
   readonly initial: readonly string[];
-  /** Viewport px: the editor's top left. */
+  /** Viewport px: the editor's left edge. */
   readonly left: number;
-  readonly top: number;
+  /**
+   * Viewport px: the lines the editor must leave visible (the construct
+   * whose values it edits, or the caret's or selection's lines). It goes
+   * above or below them, its colour picker on the same side.
+   */
+  readonly band: { readonly top: number; readonly bottom: number };
+  /** The side to take when both have room: above for a construct's tag, below the caret for a new command. */
+  readonly prefer: "above" | "below";
   /** Why the values cannot be written, by field; null when they can. */
   readonly problems: (values: readonly string[]) => readonly (string | null)[] | null;
   readonly onSubmit: (values: readonly string[], viaBrace: boolean) => void;
   readonly onCancel: () => void;
 };
+
+/** Space between the editor and the lines it keeps clear, px. */
+const GAP_PX = 4;
 
 const HINTS: Record<ValueKind, string> = {
   color: "colour",
@@ -67,7 +77,38 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
   const [focused, setFocused] = useState(0);
   const [problems, setProblems] = useState<readonly (string | null)[] | null>(null);
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
+  const root = useRef<HTMLDivElement | null>(null);
+  const [side, setSide] = useState(model.prefer);
+  const [left, setLeft] = useState(model.left);
   const namedColorSwatches = useProjectNamedColorSwatches();
+
+  // (In a colour model, `[rgb]`, the colour is numbers, which the picker does not write.)
+  const inModel = model.fields.some((field, index) => field.open === "[" && values[index].trim() !== "");
+  const showsPicker = model.fields[focused]?.kind === "color" && !inModel;
+
+  // Above or below the band, whichever has room for the editor as it now is (its colour picker
+  // comes and goes with the focused field), the preferred side when both or neither do; and
+  // inside the canvas horizontally.
+  useLayoutEffect(() => {
+    const element = root.current;
+    const container = element?.offsetParent;
+    if (!element || !(container instanceof HTMLElement)) {
+      return;
+    }
+    const height = element.offsetHeight;
+    const fits = (candidate: "above" | "below") => candidate === "above"
+      ? model.band.top - GAP_PX - height >= 0
+      : model.band.bottom + GAP_PX + height <= container.clientHeight;
+    const other = model.prefer === "above" ? "below" : "above";
+    const next = fits(model.prefer) || !fits(other) ? model.prefer : other;
+    if (next !== side) {
+      setSide(next);
+    }
+    const clamped = Math.max(GAP_PX, Math.min(model.left, container.clientWidth - element.offsetWidth - GAP_PX));
+    if (clamped !== left) {
+      setLeft(clamped);
+    }
+  }, [model.prefer, model.left, model.band.top, model.band.bottom, side, left, showsPicker]);
 
   useEffect(() => {
     const input = inputs.current[0];
@@ -116,14 +157,15 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
     }
   };
 
-  const colorField = model.fields[focused]?.kind === "color";
-  // (In a colour model, `[rgb]`, the colour is numbers, which the picker does not write.)
-  const model_ = model.fields.some((field, index) => field.open === "[" && values[index].trim() !== "");
   const problem = problems?.find((each) => each != null) ?? null;
   return (
     <div
-      className={css.valueEditor}
-      style={{ left: model.left, top: model.top }}
+      ref={root}
+      className={side === "above" ? css.valueEditorAbove : css.valueEditor}
+      style={side === "above"
+        ? { left, bottom: `calc(100% - ${model.band.top - GAP_PX}px)` }
+        : { left, top: model.band.bottom + GAP_PX }}
+      data-side={side}
       data-canvas-value-editor=""
       data-testid="canvas-value-editor"
       onPointerDown={(event) => { event.stopPropagation(); }}
@@ -164,7 +206,7 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
         })}
       </div>
       {problem ? <div className={css.valueEditorProblem} role="alert">{problem}</div> : null}
-      {colorField && !model_ ? (
+      {showsPicker ? (
         <div className={css.valueEditorColor}>
           <ColorPicker
             ariaLabel={`Colour of \\${model.command}`}

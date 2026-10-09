@@ -1082,6 +1082,10 @@ test("the value editor: a command's values are asked for before it is written, a
   await expect(textarea).toHaveValue(buffer);
   await expect(page.getByTestId("canvas-value-editor-field-0")).toBeFocused();
   await expect(editor.getByRole("button").first()).toBeVisible();
+  // The editor and its colour picker leave the selected word visible.
+  const apart = (a: { y: number; height: number } | null, b: { y: number; height: number } | null) =>
+    a != null && b != null && (a.y >= b.y + b.height || a.y + a.height <= b.y);
+  expect(apart(await editor.boundingBox(), await page.getByTestId("canvas-text-selection-rect").first().boundingBox())).toBe(true);
   await page.keyboard.type("red!60");
   await page.keyboard.press("Enter");
   await expect(editor).toHaveCount(0);
@@ -1094,6 +1098,9 @@ test("the value editor: a command's values are asked for before it is written, a
   await tag.click();
   const field = page.getByTestId("canvas-value-editor-field-0");
   await expect(field).toHaveValue("red!60");
+  // Opened from the tag, with its colour picker, it leaves the construct visible too.
+  await expect(editor.getByRole("button").first()).toBeVisible();
+  expect(apart(await editor.boundingBox(), await page.getByTestId("canvas-context-outline-focus").boundingBox())).toBe(true);
   await field.fill("blue");
   await page.keyboard.press("Enter");
   await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body \textcolor{blue}{typo}.`);
