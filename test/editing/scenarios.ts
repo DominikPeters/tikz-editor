@@ -22,7 +22,6 @@ export const characterisationScenarios: readonly Scenario[] = [
   { id: "list ⇥", title: "⇥ nests an item", body: itemize(R`\item First`, R`\item ‸Second`), keys: "⇥", expect: itemize(R`\item First`, R`\begin{itemize}`, R`\item ‸Second`, R`\end{itemize}`) },
   { id: "⇧⏎", title: "⇧⏎ inserts a line break", body: "One‸ two.", keys: "⇧⏎", expect: R`One \\ ‸two.` },
   { id: "prose ⏎", title: "⏎ in prose inserts a paragraph break", body: "One‸ two.", keys: "⏎", expect: "One\n\n‸two." },
-  { id: "math ⏎", title: "⏎ inside inline math is swallowed", body: "Let $a‸+b$ be.", keys: "⏎", expect: "Let $a‸+b$ be." },
   { id: "⌘B wraps", title: "⌘B wraps a selection", body: "Make ⟦this⟧ bold.", keys: "⌘B", expect: R`Make \textbf{⟦this⟧} bold.` },
   { id: "⌘B mid-run", title: "⌘B mid-run splits the run in place", body: R`\textbf{one ‸two}`, keys: "⌘B", expect: R`\textbf{one }‸\textbf{two}` },
   { id: "⇧→ in math", title: "⇧→ selects one symbol inside a formula", body: R`$a‸+b$`, keys: "⇧→", expect: R`$a⟦+⟧b$` },
@@ -158,6 +157,37 @@ export const inputRuleScenarios: readonly Scenario[] = [
   { id: "R5 text", title: "a letter after a control word gets {}", body: R`see \ldots‸`, keys: "x", expect: R`see \ldots{}x‸` },
   { id: "R5 text space", title: "a space after a control word gets {}", body: R`I use \LaTeX‸`, keys: "␣daily", expect: R`I use \LaTeX{} daily‸` },
   { id: "K9 \\\\", title: "[ after \\\\ is protected from its optional argument", body: R`a\\ ‸b`, keys: "[", expect: R`a\\ {}[‸b` },
+];
+
+/**
+ * The structural keys on the tree (step 5): ⏎, ⇧⏎, ⇥ and ⌫/⌦ at block
+ * edges, decided by ownership (O1) rather than read from the layout.
+ */
+export const structuralKeyScenarios: readonly Scenario[] = [
+  // ⏎ (O1, Z1, D1–D3).
+  { id: "⏎ item start", title: "⏎ at an item's start inserts an empty item above", body: itemize(R`\item ‸First one`), keys: "⏎", expect: itemize(R`\item `, R`\item ‸First one`) },
+  { id: "⏎ only item", title: "⏎ on the only, empty item removes the list", body: ["Before.", itemize(R`\item ‸`), "After."].join("\n"), keys: "⏎", expect: "Before.\n‸After." },
+  { id: "⏎ selection", title: "⏎ over a selection crossing items replaces it with an item break", body: itemize(R`\item First ⟦one`, R`\item Second two⟧`, R`\item Third`), keys: "⏎", expect: itemize(R`\item First`, R`\item ‸`, R`\item Third`) },
+  { id: "Z1 bold", title: "⏎ in a bold run splits the wrapper across the break", body: R`a \textbf{one‸ two}`, keys: "⏎", expect: "a \\textbf{one}\n\n\\textbf{‸ two}" },
+  { id: "Z1 item", title: "⏎ mid-formula in an item splits the formula across items", body: itemize(R`\item one $a‸+b$ two`), keys: "⏎", expect: itemize(R`\item one $a$`, R`\item $‸+b$ two`) },
+  { id: "Z1 formula end", title: "⏎ at a formula's end breaks after it", body: R`Let $a+b‸$ be.`, keys: "⏎", expect: "Let $a+b$\n\n‸be." },
+  { id: "⏎ title", title: "⏎ in a block title does nothing", body: R`\begin{block}{Ti‸tle} body \end{block}`, keys: "⏎", expect: R`\begin{block}{Ti‸tle} body \end{block}` },
+  { id: "D2", title: "⏎ at a row's end starts a new row", body: align(R`a &= b‸`), keys: "⏎ c", expect: align(R`a &= b \\`, "c‸") },
+  { id: "D3", title: "⏎ on the empty last row leaves the alignment", body: align(R`a &= b‸`), keys: "⏎ ⏎ x", expect: align(R`a &= b`, "") + "\nx‸" },
+  { id: "D1 ⏎", title: "⏎ in a display goes to the text after it", body: "\\[x‸\\]\nmore", keys: "⏎", expect: "\\[x\\]\n‸more" },
+  { id: "⇧⏎ math", title: "⇧⏎ in math does nothing", body: R`Let $a‸$ be.`, keys: "⇧⏎", expect: R`Let $a‸$ be.` },
+  // ⇥ (M8, D2).
+  { id: "M8 ⇥", title: "⇥ moves through a fraction's slots and out", body: R`$\frac{n‸}{}$`, keys: "⇥ 2 ⇥ +", expect: R`$\frac{n}{2}+‸$` },
+  { id: "⇧⇥ slot", title: "⇧⇥ moves back to the previous slot", body: R`$\frac{n}{‸2}$`, keys: "⇧⇥", expect: R`$\frac{n‸}{2}$` },
+  { id: "D2 ⇥", title: "⇥ at a row's last cell adds a cell", body: align(R`a &= b‸`), keys: "⇥ c", expect: align(R`a &= b & c‸`) },
+  { id: "D4 ⇥", title: "⇥ in a fixed-width array goes to the next row", body: R`$\begin{array}{ll} a & b‸ \\ c & d \end{array}$`, keys: "⇥ x", expect: R`$\begin{array}{ll} a & b \\ x‸c & d \end{array}$` },
+  { id: "⇧⇥ unnest", title: "⇧⇥ unnests an item", body: itemize(R`\item First`, R`\begin{itemize}`, R`\item ‸Second`, R`\end{itemize}`), keys: "⇧⇥", expect: itemize(R`\item First`, R`\item ‸Second`) },
+  // ⌫ / ⌦ at block edges.
+  { id: "⌫ paragraph", title: "⌫ at a paragraph's start joins it to the previous one", body: "One.\n\n‸Two.", keys: "⌫", expect: "One. ‸Two." },
+  { id: "⌦ paragraph", title: "⌦ at a paragraph's end joins the next one", body: "One.‸\n\nTwo.", keys: "⌦", expect: "One.‸ Two." },
+  { id: "⌫ first item", title: "⌫ at the first item's start does nothing", body: itemize(R`\item ‸First`, R`\item Second`), keys: "⌫", expect: itemize(R`\item ‸First`, R`\item Second`) },
+  { id: "⌦ item end", title: "⌦ at an item's end joins the next item", body: itemize(R`\item First‸`, R`\item Second`), keys: "⌦", expect: itemize(R`\item First‸ Second`) },
+  { id: "⌫ empty item", title: "⌫ in an empty item joins it to the previous one", body: itemize(R`\item First`, R`\item ‸`), keys: "⌫", expect: itemize(R`\item First‸`) },
 ];
 
 /**

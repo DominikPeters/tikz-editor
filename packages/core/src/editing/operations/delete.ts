@@ -14,7 +14,9 @@ export type EditOutcome =
   /**
    * Source patches; `caret` is a post-edit offset. `run` names the typing
    * run the edit joins. `placeholder`: the post-edit offset of
-   * editor-created braces the caret is put in (R6).
+   * editor-created braces the caret is put in (R6). `exact`: the caret
+   * stays at that offset, not snapped to a stop (a fresh line after a
+   * list). `selectionEnd`: the edit keeps a selection from `caret` to it.
    */
   | {
       readonly kind: "patch";
@@ -22,6 +24,8 @@ export type EditOutcome =
       readonly caret: number;
       readonly run: string | null;
       readonly placeholder?: number;
+      readonly exact?: boolean;
+      readonly selectionEnd?: number;
     }
   /** Select a construct first (R9: never delete more than one visible item unseen). */
   | { readonly kind: "select"; readonly anchor: Position; readonly focus: Position }
@@ -33,6 +37,9 @@ export type EditOutcome =
 
 const NONE: EditOutcome = { kind: "none" };
 const STRUCTURAL: EditOutcome = { kind: "structural" };
+
+/** Blocks with begin and end tokens: a range may not cut through them. */
+const BOUNDED_BLOCKS = new Set(["list", "container", "display", "alignment"]);
 
 /** Slots whose emptying removes them, rather than leaving a placeholder (O2 rule 3). */
 const REMOVABLE_ROLES = new Set(["sup", "sub", "index"]);
@@ -150,7 +157,8 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   if (role === "flow") {
     // Paragraph and item edges are structural; the edges of a display or
     // a block title stop the key rather than eat the block's delimiters.
-    return outcome(tree.nodes[owner].kind === "paragraph" ? STRUCTURAL : NONE);
+    const kind = tree.nodes[owner].kind;
+    return outcome(kind === "paragraph" || kind === "item" ? STRUCTURAL : NONE);
   }
   if (role === "transparent") {
     return isEmptySlot(view, slot)
@@ -346,7 +354,14 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
   const partial = tree.nodes.filter((node) =>
     node.span.from < to && node.span.to > from && !(node.span.from >= from && node.span.to <= to)
   );
-  const kept: Span[] = partial.flatMap((node) => node.delimiters.filter((span) => span.from < to && span.to > from));
+  // Half a list, display or environment cannot go; items starting inside
+  // the range join the item the range starts in (their `\item` goes).
+  if (partial.some((node) => BOUNDED_BLOCKS.has(node.kind) && node.delimiters.some((span) => span.from < to && span.to > from))) {
+    return NONE;
+  }
+  const kept: Span[] = partial
+    .filter((node) => !(node.kind === "item" && node.span.from >= from))
+    .flatMap((node) => node.delimiters.filter((span) => span.from < to && span.to > from));
   // Partly covered wrappers and slots that the range empties, innermost first.
   const removals: { span: Span; insert?: string }[] = [];
   for (const node of [...partial].sort((left, right) => (left.span.to - left.span.from) - (right.span.to - right.span.from))) {
