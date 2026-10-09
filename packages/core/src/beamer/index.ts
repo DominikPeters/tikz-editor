@@ -32,34 +32,18 @@ export {
   type BeamerCaretStop,
 } from "./caret-stops.js";
 export {
-  applyBeamerStructuralPatchToBuffer,
-  resolveCanvasAtomSelection,
   resolveCanvasRenderedMotion,
-  resolveCanvasStructuralDelete,
-  resolveCanvasStructuralEnter,
-  resolveCanvasStructuralTab,
   type CanvasBufferSelection,
   type CanvasMotion,
   type CanvasMotionResult,
-  type CanvasStructuralKeyOutcome,
   type CanvasVerticalGoal,
 } from "./canvas-keys.js";
 export {
   applyBeamerStructuralEdits,
-  beamerListItemAt,
   beamerObjectDeletionPatch,
   beamerObjectDuplicationPatch,
-  beamerStructuralBackspacePatch,
-  beamerStructuralDeletePatch,
-  beamerStructuralEnterPatch,
-  beamerStructuralLineBreakPatch,
-  beamerStructuralListTogglePatch,
-  beamerStructuralTabPatch,
-  type BeamerListItemContext,
   type BeamerObjectEditPatch,
   type BeamerStructuralEdit,
-  type BeamerStructuralKeyResult,
-  type BeamerStructuralPatch,
 } from "./structural-edit.js";
 export {
   applyDeckEditAction,

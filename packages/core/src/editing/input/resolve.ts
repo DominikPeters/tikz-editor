@@ -1,20 +1,9 @@
 import {
-  applyBeamerStructuralPatchToBuffer,
-  resolveCanvasAtomSelection,
   resolveCanvasRenderedMotion,
-  resolveCanvasStructuralDelete,
-  resolveCanvasStructuralEnter,
-  resolveCanvasStructuralTab,
   type CanvasBufferSelection,
   type CanvasMotionResult,
-  type CanvasStructuralKeyOutcome,
 } from "../../beamer/canvas-keys.js";
 import type { BeamerCaretDomain } from "../../beamer/caret-stops.js";
-import {
-  beamerStructuralListTogglePatch,
-  beamerStructuralTabPatch,
-  type BeamerStructuralPatch,
-} from "../../beamer/structural-edit.js";
 import {
   activeTextFormatWrapper,
   applyTextColorCommand,
@@ -27,7 +16,13 @@ import {
   deleteBackward,
   deleteForward,
   deleteRange,
+  enter,
+  indentItems,
+  joinBackward,
+  joinForward,
   placeholderAt,
+  tab,
+  toggleList,
   typeCharacter,
   type EditOutcome,
 } from "../operations/index.js";
@@ -117,17 +112,15 @@ const WRAP_COMMANDS: Partial<Record<FormatCommand, Exclude<TextFormatCommandName
  * Whether resolving the intent reads the rendered layout, so it must wait
  * until the layout reflects the current buffer (the revision protocol).
  */
-export function needsFreshLayout(intent: Intent, surface: InputSurface, isScopeSession: boolean): boolean {
+export function needsFreshLayout(intent: Intent, surface: InputSurface, _isScopeSession: boolean): boolean {
   switch (intent.type) {
     case "move":
+      return surface === "canvas";
     case "enter":
     case "tab":
-      return surface === "canvas";
     case "deleteBackward":
     case "deleteForward":
-      return surface === "canvas" && intent.unit === "item";
     case "format":
-      return isScopeSession && WRAP_COMMANDS[intent.command] === undefined;
     case "insertText":
     case "compose":
     case "cut":
@@ -160,9 +153,7 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
     case "enter":
       return resolver.enter(intent.soft);
     case "tab":
-      return context.surface === "canvas"
-        ? resolver.structural(resolveCanvasStructuralTab(context.domain, resolver.bufferSelection(), intent.back))
-        : NONE;
+      return resolver.tab(intent.back);
     case "move":
       return resolver.move(intent);
     case "format":
@@ -254,7 +245,7 @@ class Resolver {
    * caret snaps to the stop it names in the new buffer (`$ax‸ $` becomes
    * `$ax ‸$`), keeping that position for the next intent.
    */
-  private outcome(view: EditView, outcome: EditOutcome, typingRun?: string): IntentResolution | null {
+  private outcome(view: EditView, outcome: EditOutcome, typingRun?: string): IntentResolution {
     switch (outcome.kind) {
       case "patch": {
         const structure = this.context.structure!;
@@ -265,12 +256,13 @@ class Resolver {
         // it: a space just typed at a paragraph's end is not a stop yet,
         // and a cell's `&` is not followed by its trailing newline.
         const run = typingRun ?? outcome.run;
-        const found = run === "insert" ? null : nextView.stopAt(outcome.caret);
+        const found = run === "insert" || outcome.exact ? null : nextView.stopAt(outcome.caret);
         const stop = found && nextView.offset(found) >= outcome.caret ? found : null;
         const caret = stop ? nextView.offset(stop) : outcome.caret;
+        const focus = outcome.selectionEnd ?? caret;
         return this.transaction(
           outcome.patches,
-          { kind: "absolute", anchor: caret, focus: caret, positions: stop ? { anchor: stop, focus: stop } : undefined },
+          { kind: "absolute", anchor: caret, focus, positions: stop && focus === caret ? { anchor: stop, focus: stop } : undefined },
           run ? { group: "typing-run", run } : { group: "own-step" },
           outcome.placeholder != null ? { interaction: { placeholder: outcome.placeholder } } : {}
         );
@@ -290,9 +282,8 @@ class Resolver {
         );
       }
       case "none":
-        return NONE;
       case "structural":
-        return null;
+        return NONE;
     }
   }
 
@@ -354,9 +345,9 @@ class Resolver {
         const from = view.offset(start);
         const to = view.offset(end);
         const patches = [{ from, to: from, insert: "$" }, { from: to, to, insert: "$" }];
-        return this.outcome(view, { kind: "patch", patches, caret: to + 1, run: null }) ?? NONE;
+        return this.outcome(view, { kind: "patch", patches, caret: to + 1, run: null });
       }
-      return this.outcome(view, deleteRange(view, start, end, text), "insert") ?? NONE;
+      return this.outcome(view, deleteRange(view, start, end, text), "insert");
     }
     // Right after a backslash the user is typing a command name: literal.
     if ([...text].length !== 1 || afterEscape(this.context.text, this.from)) {
@@ -367,14 +358,14 @@ class Resolver {
     // position there gives the context.
     const caret = this.context.positions ? view.representative(raw.focus) : view.positionAt(this.from);
     const at = this.context.positions ? view.offset(caret) : this.from;
-    return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at)) ?? NONE;
+    return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at));
   }
 
   cut(): IntentResolution {
     const view = this.view;
     if (view && this.hasRange()) {
       const { start, end } = this.effectiveRange(view, this.rawEnds(view));
-      return this.outcome(view, deleteRange(view, start, end)) ?? NONE;
+      return this.outcome(view, deleteRange(view, start, end));
     }
     return this.hasRange() ? this.replaceSelection("", { group: "own-step" }) : NONE;
   }
@@ -424,21 +415,13 @@ class Resolver {
       } else {
         const caret = view.representative(raw.focus);
         outcome = direction === "backward" ? deleteBackward(view, caret) : deleteForward(view, caret);
+        if (outcome.kind === "structural") {
+          // A paragraph or item edge: join the neighbouring block.
+          const at = this.context.positions ? view.offset(caret) : this.from;
+          outcome = direction === "backward" ? joinBackward(view, caret, at) : joinForward(view, caret, at);
+        }
       }
-      const resolved = this.outcome(view, outcome);
-      if (resolved) {
-        return resolved;
-      }
-    }
-    if (unit === "item" && this.context.surface === "canvas") {
-      const structural = resolveCanvasStructuralDelete(this.context.domain, this.bufferSelection(), direction);
-      if (structural.kind !== "native") {
-        return this.structural(structural);
-      }
-      const atom = resolveCanvasAtomSelection(this.context.domain, this.bufferSelection(), direction);
-      if (atom) {
-        return this.selectMotionResult(atom);
-      }
+      return this.outcome(view, outcome);
     }
     if (this.hasRange()) {
       return this.deleteRange(this.from, this.to, { group: "own-step" });
@@ -461,17 +444,61 @@ class Resolver {
     }
   }
 
+  /**
+   * ⏎ / ⇧⏎. On the tree, the owner of the key decides (item split, new
+   * paragraph, row, leaving a display); over a selection, the selection is
+   * deleted first, in the same step.
+   */
   enter(soft: boolean): IntentResolution {
     if (this.context.editMode === "inline-typo") {
       return { kind: "close" };
     }
-    if (this.context.surface === "canvas") {
-      const structural = resolveCanvasStructuralEnter(this.context.domain, this.bufferSelection(), soft);
-      if (structural.kind !== "native") {
-        return this.structural(structural);
-      }
+    const view = this.view;
+    if (!view) {
+      return this.context.surface === "canvas" ? NONE : this.replaceSelection("\n", { group: "own-step" });
     }
-    return this.replaceSelection("\n", { group: "own-step" });
+    const key = soft ? "line-break" : "enter";
+    const raw = this.rawEnds(view);
+    if (!this.hasRange()) {
+      const caret = this.context.positions ? view.representative(raw.focus) : view.positionAt(this.from);
+      const at = this.context.positions ? view.offset(caret) : this.from;
+      return this.outcome(view, enter(view, caret, at, key));
+    }
+    // Delete, then break where the deletion left the caret: one step.
+    const { start, end } = this.effectiveRange(view, raw);
+    const deleted = deleteRange(view, start, end);
+    if (deleted.kind !== "patch") {
+      return NONE;
+    }
+    const middle = applyPatches(this.context.text, deleted.patches);
+    const middleView = this.context.structure!(middle);
+    const broken = enter(middleView, middleView.positionAt(deleted.caret), deleted.caret, key);
+    if (broken.kind !== "patch") {
+      return NONE;
+    }
+    const final = applyPatches(middle, broken.patches);
+    return this.transaction(
+      replacementPatches(this.context.text, final),
+      { kind: "absolute", anchor: broken.caret, focus: broken.caret },
+      { group: "own-step" }
+    );
+  }
+
+  /** ⇥ / ⇧⇥ on the canvas: the next slot or cell, or nesting the selected items. */
+  tab(back: boolean): IntentResolution {
+    const view = this.view;
+    if (!view) {
+      return NONE;
+    }
+    const { start, end } = this.hasRange()
+      ? this.effectiveRange(view, this.rawEnds(view))
+      : { start: this.caretPosition(view), end: this.caretPosition(view) };
+    return this.outcome(view, tab(view, start, back, end));
+  }
+
+  /** The caret's position: the recorded one, or the one at its offset. */
+  private caretPosition(view: EditView): Position {
+    return this.context.positions ? view.representative(this.rawEnds(view).focus) : view.positionAt(this.from);
   }
 
   move(motion: Extract<Intent, { type: "move" }>): IntentResolution {
@@ -531,41 +558,7 @@ class Resolver {
     if (extend) {
       return this.selectPositions(view, { anchor: raw.anchor, focus: next });
     }
-    return this.outcome(view, { kind: "move", to: next }) ?? NONE;
-  }
-
-  structural(outcome: CanvasStructuralKeyOutcome): IntentResolution {
-    switch (outcome.kind) {
-      case "native":
-      case "swallow":
-        return NONE;
-      case "patch":
-        return this.structuralPatch(outcome.patch);
-    }
-  }
-
-  /**
-   * A structural patch computed against the rendered domain. The staleness
-   * guard drops it when the buffer no longer holds the text it was
-   * computed against (layout fell behind and the caller ran it anyway).
-   */
-  private structuralPatch(patch: BeamerStructuralPatch): IntentResolution {
-    const { domain, bufferFrom, text } = this.context;
-    if (!domain) {
-      return NONE;
-    }
-    const applied = applyBeamerStructuralPatchToBuffer({ text, from: bufferFrom }, domain.source, patch);
-    if (!applied) {
-      return NONE;
-    }
-    const patches = patch.edits
-      .map((edit) => ({ from: edit.span.from - bufferFrom, to: edit.span.to - bufferFrom, insert: edit.insert }))
-      .sort((left, right) => left.from - right.from);
-    return this.transaction(
-      patches,
-      { kind: "absolute", anchor: applied.caretLocal, focus: applied.selectionEndLocal },
-      { group: "own-step" }
-    );
+    return this.outcome(view, { kind: "move", to: next });
   }
 
   private toggleResult(result: TextFormatToggleResult | null): IntentResolution {
@@ -602,19 +595,16 @@ class Resolver {
       }
       return this.toggleResult(toggleTextFormatCommand(this.context.text, this.from, this.to, wrap));
     }
-    const { domain, bufferFrom } = this.context;
-    if (!this.context.isScopeSession || !domain) {
+    // The list buttons work from either surface, on the tree.
+    const view = this.context.isScopeSession && this.context.structure ? this.currentView(this.context.structure) : null;
+    if (!view) {
       return NONE;
     }
-    const offset = bufferFrom + this.from;
-    const result =
-      command === "bullets" || command === "numbered"
-        ? beamerStructuralListTogglePatch(domain, offset, command === "bullets" ? "itemize" : "enumerate")
-        : beamerStructuralTabPatch(domain, offset, command === "indent" ? "nest" : "unnest", bufferFrom + this.to);
-    if (!result || result === "swallow") {
-      return NONE;
-    }
-    return this.structuralPatch(result);
+    const start = view.positionAt(this.from);
+    const outcome = command === "bullets" || command === "numbered"
+      ? toggleList(view, start, command === "bullets" ? "itemize" : "enumerate")
+      : indentItems(view, start, view.positionAt(this.to), command === "indent" ? "nest" : "unnest");
+    return this.outcome(view, outcome);
   }
 
   color(color: string | null): IntentResolution {

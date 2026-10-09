@@ -30,7 +30,8 @@ import {
   documentOffsetToTextarea,
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
-import { beamerListItemAt, type BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
+import type { BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
+import { listItemOf } from "@tikz-editor/core/editing/operations/index";
 import {
   createIntentScheduler,
   intentFromBeforeInput,
@@ -2072,25 +2073,23 @@ export function useCanvasTextEditSession(
       wrapItem("alert", "alert", "Alert", "A!", "alert")
     ];
     if (session.isScopeSession) {
-      const domain = resolveDeckCaretDomain(session.sourceId);
-      const offset =
-        session.sourceSpan.from +
-        Math.min(session.selectionStart, session.selectionEnd);
-      const listContext = domain ? beamerListItemAt(domain, offset) : null;
+      const view = canvasEditView(session.text, editCommands);
+      const caret = view.positionAt(Math.min(session.selectionStart, session.selectionEnd));
+      const listContext = listItemOf(view.tree, view.tree.slots[caret.slot].node);
       items.push(
         {
           id: "bullets",
           label: "Bulleted list",
           glyph: "•—",
           active: listContext?.list.environment === "itemize",
-          disabled: !domain
+          disabled: false
         },
         {
           id: "numbered",
           label: "Numbered list",
           glyph: "1—",
           active: listContext?.list.environment === "enumerate",
-          disabled: !domain
+          disabled: false
         },
         {
           id: "outdent",
@@ -2123,9 +2122,9 @@ export function useCanvasTextEditSession(
       onColor: handleTextFormatColor
     };
   }, [
+    editCommands,
     handleTextFormatColor,
     handleTextFormatCommand,
-    resolveDeckCaretDomain,
     textEditingSession
   ]);
 
