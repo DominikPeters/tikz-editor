@@ -11,11 +11,22 @@ import { mapThrough, PatchSet, slotOuterSpan, withTerminator } from "./source.js
  * resolver turns it into a transaction.
  */
 export type EditOutcome =
-  /** Source patches; `caret` is a post-edit offset. `run` names the typing run a one-character deletion joins. */
-  | { readonly kind: "patch"; readonly patches: readonly BufferPatch[]; readonly caret: number; readonly run: string | null }
+  /**
+   * Source patches; `caret` is a post-edit offset. `run` names the typing
+   * run the edit joins. `placeholder`: the post-edit offset of
+   * editor-created braces the caret is put in (R6).
+   */
+  | {
+      readonly kind: "patch";
+      readonly patches: readonly BufferPatch[];
+      readonly caret: number;
+      readonly run: string | null;
+      readonly placeholder?: number;
+    }
   /** Select a construct first (R9: never delete more than one visible item unseen). */
   | { readonly kind: "select"; readonly anchor: Position; readonly focus: Position }
-  | { readonly kind: "move"; readonly to: Position }
+  /** `consumeOpen`: the caret moved to an argument's start by `}`, so a `{` typed next is consumed (R3). */
+  | { readonly kind: "move"; readonly to: Position; readonly consumeOpen?: boolean }
   | { readonly kind: "none" }
   /** A flow edge (paragraph or item start/end): the structural keys decide. */
   | { readonly kind: "structural" };
@@ -218,11 +229,18 @@ function deleteItem(view: EditView, node: NodeId, direction: "backward" | "forwa
   return removeWithCleanup(view, span, cleanup, slot.mode, direction === "backward" ? "delete-backward" : "delete-forward");
 }
 
-/** Removes a whole node (an empty construct or wrapper), cleaning up its slot as for an item. */
+/**
+ * Removes a whole node (an empty construct or wrapper), cleaning up its
+ * slot as for an item. An inline formula left with nothing visible goes
+ * with it: `${‸}$` is removed whole, never left as `$$` (display math).
+ */
 function removeNode(view: EditView, node: NodeId): EditOutcome {
   const { tree } = view;
   const record = tree.nodes[node];
   const parent = record.parent == null ? null : tree.slots[record.parent];
+  if (parent && isDollarFormula(view, parent.node) && parent.children.every((child) => child === node || view.role(child) === "invisible")) {
+    return removeNode(view, parent.node);
+  }
   const cleanup = parent?.children.length === 1 ? emptiedSlotCleanup(view, parent.id, false) : null;
   return removeWithCleanup(view, record.span, cleanup, parent?.mode ?? "text", null);
 }
@@ -243,7 +261,14 @@ function removeWithCleanup(
     return finishDeletion(view, patches.delete(cleanup.span), cleanup.span.from, mode, run);
   }
   const raw = patches.replace(cleanup.span, cleanup.insert).patches();
-  return { kind: "patch", patches: raw, caret: mapThrough(raw, cleanup.span.from) + 1, run: null };
+  const placeholder = mapThrough(raw, cleanup.span.from);
+  return { kind: "patch", patches: raw, caret: placeholder + 1, run: null, placeholder };
+}
+
+/** An inline formula delimited by `$`: empty, it would read as `$$` (display math), so it holds `{}` instead. */
+export function isDollarFormula(view: EditView, node: NodeId): boolean {
+  const record = view.tree.nodes[node];
+  return record.kind === "formula" && view.tree.text[record.span.from] === "$";
 }
 
 /**
@@ -272,7 +297,7 @@ function emptiedSlotCleanup(
   if (throughScript && (record.role === "sup" || record.role === "sub")) {
     return { span: slotOuterSpan(tree, slot) };
   }
-  if (!record.braced && ARGUMENT_ROLES.has(record.role)) {
+  if ((!record.braced && ARGUMENT_ROLES.has(record.role)) || isDollarFormula(view, owner)) {
     return { span: record.contentSpan, insert: "{}" };
   }
   return null;
@@ -332,7 +357,8 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
       }
       if (view.role(node.id) === "transparent") {
         removals.push({ span: node.span });
-      } else if (!slot.braced && ARGUMENT_ROLES.has(slot.role)) {
+      } else if (((!slot.braced && ARGUMENT_ROLES.has(slot.role)) || isDollarFormula(view, node.id)) && !insert) {
+        // Typed text refills the slot; otherwise it holds placeholder braces.
         removals.push({ span: slot.contentSpan, insert: "{}" });
       }
     }
@@ -355,6 +381,12 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
   if (insert) {
     const patches = set.replace({ from: seam, to: seam }, insert).patches();
     return { kind: "patch", patches, caret: mapThrough(patches, seam) + insert.length, run: null };
+  }
+  const braces = removals.find((removal) => removal.insert != null && removal.span.from === seam);
+  if (braces) {
+    const patches = set.patches();
+    const placeholder = mapThrough(patches, seam);
+    return { kind: "patch", patches, caret: placeholder + 1, run: null, placeholder };
   }
   return finishDeletion(view, set, seam, tree.slots[start.slot].mode, null);
 }

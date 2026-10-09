@@ -5,6 +5,7 @@ import {
   burstScenarios,
   characterisationScenarios,
   contractScenarios,
+  inputRuleScenarios,
   treeEditingScenarios,
   undoScenarios,
 } from "./scenarios.js";
@@ -30,6 +31,15 @@ describe("canvas editing: the edit tree", () => {
   }
 });
 
+describe("canvas editing: input rules", () => {
+  for (const scenario of inputRuleScenarios) {
+    it(`${scenario.id}: ${scenario.title}`, async () => {
+      const { actual, expected } = await runScenario(eager, scenario);
+      expect(actual).toBe(expected);
+    });
+  }
+});
+
 describe("canvas editing: undo groups", () => {
   for (const scenario of undoScenarios) {
     it(`${scenario.id}: ${scenario.title}`, async () => {
@@ -46,7 +56,7 @@ describe("canvas editing: typing ahead of layout", () => {
       expect(actual).toBe(expected);
     });
   }
-  for (const scenario of [...burstScenarios, ...characterisationScenarios, ...treeEditingScenarios, ...undoScenarios]) {
+  for (const scenario of [...burstScenarios, ...characterisationScenarios, ...treeEditingScenarios, ...inputRuleScenarios, ...undoScenarios]) {
     it(`${scenario.id}: ${scenario.title} (no rendering between keys)`, async () => {
       const { actual, expected } = await runScenario(burst, scenario);
       expect(actual).toBe(expected);

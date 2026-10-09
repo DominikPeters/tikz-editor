@@ -63,6 +63,7 @@ import { resolveRectHitRegionContentBox } from "../coords/regions";
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
   reduceCanvasTextEdit,
+  interactionState,
   selectionPositions,
   type CanvasTextEditAction,
   type CanvasTextEditState
@@ -812,7 +813,8 @@ export function useCanvasTextEditSession(
         structure: session.isScopeSession
           ? (text, hidden) => canvasEditView(text, editCommandsRef.current, hidden)
           : null,
-        positions: selectionPositions(state, anchor, focus)
+        positions: selectionPositions(state, anchor, focus),
+        interaction: interactionState(state, anchor, focus)
       },
       intent
     );
@@ -1867,9 +1869,9 @@ export function useCanvasTextEditSession(
     const view = canvasEditView(textEditingSession.text, editCommands);
     const { selectionStart: start, selectionEnd: end } = textEditingSession;
     const recorded = state.treeSelection;
-    const matches = recorded?.text === textEditingSession.text &&
+    const matches = recorded?.text === textEditingSession.text && recorded.ends &&
       ((recorded.anchor === start && recorded.focus === end) || (recorded.anchor === end && recorded.focus === start));
-    return { view, position: matches ? recorded.ends.focus : view.positionAt(end) };
+    return { view, position: matches && recorded.ends ? recorded.ends.focus : view.positionAt(end) };
   }, [editCommands, state.treeSelection, textEditingSession]);
   const caretCrumbs = useMemo<readonly ContextCrumb[] | null>(
     () => (caretFocus ? caretContext(caretFocus.view, caretFocus.position) : null),

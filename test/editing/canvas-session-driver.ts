@@ -25,6 +25,7 @@ import type {
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
   reduceCanvasTextEdit,
+  interactionState,
   selectionPositions,
   type CanvasTextEditAction,
   type CanvasTextEditState,
@@ -226,6 +227,7 @@ class CanvasSession implements EditorSession {
         verticalGoal: state.verticalGoal,
         structure: (text, hidden) => this.views(text, this.commands, hidden),
         positions: selectionPositions(state, anchor, focus),
+        interaction: interactionState(state, anchor, focus),
       },
       intent
     );

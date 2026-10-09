@@ -1,4 +1,4 @@
-import { isCaretSlot, itemRole, type ItemRole } from "../ownership/kinds.js";
+import { isCaretSlot, isDeclarationGroup, isTerminatorGroup, itemRole, type ItemRole } from "../ownership/kinds.js";
 import { slotChain } from "../tree/navigate.js";
 import type { EditTree, NodeId, SlotId } from "../tree/types.js";
 import { createPositionIndex, positionOffset, type Position, type PositionIndex } from "./position.js";
@@ -11,7 +11,10 @@ import { createPositionIndex, positionOffset, type Position, type PositionIndex 
  * caret slots minus those that look identical to the stop before them:
  * - after an invisible item (`\label`, a comment): same place as before it;
  * - the start of a script's base: same place as before the scripted atom;
- * - inside a bare group's edges (`{}`, `{\bf x}`): same as just outside.
+ * - inside a bare group's edges (`{x}`): same as just outside; an empty
+ *   group is a stop unless it terminates a control word (`\LaTeX{}`). A
+ *   group opening with a declaration (`{\bf x}`) is a style wrapper, with
+ *   an inside start right after the declaration.
  *
  * A position that is not a stop is represented by the stop it looks like,
  * the nearest stop before it in document order.
@@ -90,13 +93,21 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
   const suppressed = (slot: SlotId, at: number): boolean => {
     const record = tree.slots[slot];
     const owner = tree.nodes[record.node];
+    if (owner.kind === "group" && isDeclarationGroup(tree, owner.id)) {
+      // `{\bf x}` is a style wrapper (P8): its inside starts after the
+      // declaration, and its end is a stop of its own.
+      return at === 0 || (at > 1 && role(record.children[at - 1]) === "invisible");
+    }
     if (at > 0 && role(record.children[at - 1]) === "invisible") {
       return true;
     }
     if (owner.kind === "scripted" && record.role === "base" && at === 0) {
       return true;
     }
-    return owner.kind === "group" && (at === 0 || at === record.children.length);
+    // A bare group's edges look like its outside; an empty one is a box
+    // to type into (`$a{‸}$`), unless it terminates a control word.
+    return owner.kind === "group" && (at === 0 || at === record.children.length) &&
+      (record.children.length > 0 || isTerminatorGroup(tree, owner.id));
   };
 
   const stops: Position[] = [];

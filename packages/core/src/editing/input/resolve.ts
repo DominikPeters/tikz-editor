@@ -23,11 +23,12 @@ import {
   type TextFormatToggleResult,
 } from "../../text/format-commands.js";
 import {
+  abandonPlaceholder,
   deleteBackward,
   deleteForward,
   deleteRange,
-  enterExistingScript,
-  insertIntoUnbracedArgument,
+  placeholderAt,
+  typeCharacter,
   type EditOutcome,
 } from "../operations/index.js";
 import {
@@ -49,6 +50,7 @@ import {
   type VerticalGoal,
 } from "../transaction/index.js";
 import type { InputSurface } from "./adapter.js";
+import { NO_INTERACTION, type InteractionState } from "./interaction.js";
 import type { FormatCommand, Intent } from "./intent.js";
 import { logicalLineBoundary, nextWordBoundary, previousWordBoundary } from "./text-units.js";
 
@@ -90,6 +92,8 @@ export type IntentContext = {
   readonly structure: ((text: string, hidden?: ReadonlySet<NodeId>) => EditView) | null;
   /** The raw selection ends as positions in the current buffer, when the caller still has them. */
   readonly positions: SelectionEnds | null;
+  /** The interaction state the last transaction left, while buffer and selection are unchanged. */
+  readonly interaction: InteractionState;
 };
 
 export type IntentResolution =
@@ -172,6 +176,15 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
   }
 }
 
+/** Whether an offset follows an unescaped backslash (an odd run of them). */
+function afterEscape(text: string, offset: number): boolean {
+  let start = offset;
+  while (start > 0 && text[start - 1] === "\\") {
+    start -= 1;
+  }
+  return (offset - start) % 2 === 1;
+}
+
 class Resolver {
   private readonly from: number;
   private readonly to: number;
@@ -208,13 +221,32 @@ class Resolver {
   }
 
   /** Selects by raw ends; the selection drawn is their promotion. */
-  private selectPositions(view: EditView, raw: SelectionEnds): IntentResolution {
+  private selectPositions(view: EditView, raw: SelectionEnds, interaction = NO_INTERACTION): IntentResolution {
     const effective = promoteSelection(view, raw);
     return this.transaction(
       [],
       { kind: "absolute", anchor: view.offset(effective.anchor), focus: view.offset(effective.focus), positions: raw },
-      { group: "own-step" }
+      { group: "own-step" },
+      interaction === NO_INTERACTION ? {} : { interaction }
     );
+  }
+
+  /**
+   * Moving the caret out of placeholder braces that are still empty
+   * removes what they were opened for: an empty script, an empty formula
+   * (M13, F1). Null when the move keeps the caret there, or nothing goes.
+   */
+  private leavePlaceholder(view: EditView, to: Position): EditOutcome | null {
+    const open = this.context.interaction.placeholder;
+    if (open == null) {
+      return null;
+    }
+    const placeholder = placeholderAt(view, open, this.from);
+    const target = view.offset(to);
+    if (!placeholder || (target > open && target <= open + 1)) {
+      return null;
+    }
+    return abandonPlaceholder(view, placeholder);
   }
 
   /**
@@ -228,19 +260,35 @@ class Resolver {
         const structure = this.context.structure!;
         const nextText = applyPatches(this.context.text, outcome.patches);
         const nextView = structure(nextText);
-        const stop = nextView.stopAt(outcome.caret);
-        const caret = stop ? nextView.offset(stop) : outcome.caret;
+        // After a structural edit, snap forward over a gap (`$ax‸ $` is
+        // `$ax ‸$`), never back. Typed text keeps the caret right after
+        // it: a space just typed at a paragraph's end is not a stop yet,
+        // and a cell's `&` is not followed by its trailing newline.
         const run = typingRun ?? outcome.run;
+        const found = run === "insert" ? null : nextView.stopAt(outcome.caret);
+        const stop = found && nextView.offset(found) >= outcome.caret ? found : null;
+        const caret = stop ? nextView.offset(stop) : outcome.caret;
         return this.transaction(
           outcome.patches,
           { kind: "absolute", anchor: caret, focus: caret, positions: stop ? { anchor: stop, focus: stop } : undefined },
-          run ? { group: "typing-run", run } : { group: "own-step" }
+          run ? { group: "typing-run", run } : { group: "own-step" },
+          outcome.placeholder != null ? { interaction: { placeholder: outcome.placeholder } } : {}
         );
       }
       case "select":
         return this.selectPositions(view, { anchor: outcome.anchor, focus: outcome.focus });
-      case "move":
-        return this.selectPositions(view, { anchor: outcome.to, focus: outcome.to });
+      case "move": {
+        const abandoned = this.leavePlaceholder(view, outcome.to);
+        if (abandoned) {
+          return this.outcome(view, abandoned);
+        }
+        const to = outcome.to;
+        return this.selectPositions(
+          view,
+          { anchor: to, focus: to },
+          outcome.consumeOpen ? { consumeOpen: view.offset(to) } : NO_INTERACTION
+        );
+      }
       case "none":
         return NONE;
       case "structural":
@@ -266,7 +314,7 @@ class Resolver {
     patches: readonly BufferPatch[],
     selection: TransactionSelection,
     undo: UndoGrouping,
-    extra: Pick<Transaction, "composition" | "verticalGoal"> = {}
+    extra: Pick<Transaction, "composition" | "verticalGoal" | "interaction"> = {}
   ): IntentResolution {
     return {
       kind: "transaction",
@@ -288,9 +336,10 @@ class Resolver {
   }
 
   /**
-   * Typed or inserted text. On the tree: typing over a selection removes it
-   * as a range deletion would (F6), `^`/`_` enter an existing script (K4),
-   * and typing into an unbraced argument adds its braces (R6).
+   * Typed or inserted text. On the tree, a typed character goes through
+   * the input rules (operations/insert.ts): escaping, pairing, scripts,
+   * terminators. Typing over a selection removes it as a range deletion
+   * would (F6), except that `$` wraps prose in a formula (M2).
    */
   insertText(text: string, keyboard: boolean): IntentResolution {
     const typing: UndoGrouping = keyboard ? { group: "typing-run", run: "insert" } : { group: "own-step" };
@@ -301,20 +350,24 @@ class Resolver {
     const raw = this.rawEnds(view);
     if (this.hasRange()) {
       const { start, end } = this.effectiveRange(view, raw);
+      if (text === "$" && start.slot === end.slot && view.tree.slots[start.slot].mode === "text") {
+        const from = view.offset(start);
+        const to = view.offset(end);
+        const patches = [{ from, to: from, insert: "$" }, { from: to, to, insert: "$" }];
+        return this.outcome(view, { kind: "patch", patches, caret: to + 1, run: null }) ?? NONE;
+      }
       return this.outcome(view, deleteRange(view, start, end, text), "insert") ?? NONE;
     }
-    const caret = view.representative(raw.focus);
-    if (text === "^" || text === "_") {
-      const entered = enterExistingScript(view, caret, text);
-      if (entered) {
-        return this.outcome(view, entered) ?? NONE;
-      }
+    // Right after a backslash the user is typing a command name: literal.
+    if ([...text].length !== 1 || afterEscape(this.context.text, this.from)) {
+      return this.replaceSelection(text, typing);
     }
-    const braced = insertIntoUnbracedArgument(view, caret, text);
-    if (braced) {
-      return this.outcome(view, braced, "insert") ?? NONE;
-    }
-    return this.replaceSelection(text, typing);
+    // Without recorded positions, text goes exactly at the caret offset
+    // (after a space TeX drops, inside a half-typed name), and the tree
+    // position there gives the context.
+    const caret = this.context.positions ? view.representative(raw.focus) : view.positionAt(this.from);
+    const at = this.context.positions ? view.offset(caret) : this.from;
+    return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at)) ?? NONE;
   }
 
   cut(): IntentResolution {
@@ -475,7 +528,10 @@ class Resolver {
       return this.selectPositions(view, { anchor: target, focus: target });
     }
     const next = view.step(raw.focus, direction) ?? view.representative(raw.focus);
-    return this.selectPositions(view, extend ? { anchor: raw.anchor, focus: next } : { anchor: next, focus: next });
+    if (extend) {
+      return this.selectPositions(view, { anchor: raw.anchor, focus: next });
+    }
+    return this.outcome(view, { kind: "move", to: next }) ?? NONE;
   }
 
   structural(outcome: CanvasStructuralKeyOutcome): IntentResolution {

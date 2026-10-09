@@ -98,3 +98,25 @@ export function isCaretSlot(tree: EditTree, slot: SlotId): boolean {
 export const ARGUMENT_ROLES: ReadonlySet<string> = new Set([
   "numerator", "denominator", "radicand", "index", "sup", "sub", "above", "below",
 ]);
+
+/** An empty group right after a control word (`\LaTeX{}`, R5): it only ends the name. */
+export function isTerminatorGroup(tree: EditTree, node: NodeId): boolean {
+  const record = tree.nodes[node];
+  if (record.kind !== "group" || record.parent == null) {
+    return false;
+  }
+  const siblings = tree.slots[record.parent].children;
+  const previous = siblings[siblings.indexOf(node) - 1];
+  if (previous == null) {
+    return false;
+  }
+  const span = tree.nodes[previous].span;
+  return span.to === record.span.from && /\\[A-Za-z@]+$/u.test(tree.text.slice(span.from, span.to));
+}
+
+/** A group whose content opens with a declaration (`{\bf x}`, `{\small …}`): a style wrapper (P8). */
+export function isDeclarationGroup(tree: EditTree, node: NodeId): boolean {
+  const record = tree.nodes[node];
+  const first = record.kind === "group" ? tree.slots[record.slots[0]].children[0] : undefined;
+  return first != null && tree.nodes[first].kind === "declaration";
+}
