@@ -384,7 +384,7 @@ function columnLimit(view: EditView, alignment: NodeId): number | null {
   const node = tree.nodes[alignment];
   const spec = node.values.find((value) => value.role === "spec");
   if (spec) {
-    const text = tree.text.slice(spec.contentSpan.from, spec.contentSpan.to).replace(/[@!>]\{[^}]*\}|<\{[^}]*\}|\{[^}]*\}/gu, "");
+    const text = expandRepeats(tree.text.slice(spec.contentSpan.from, spec.contentSpan.to)).replace(/[@!>]\{[^}]*\}|<\{[^}]*\}|\{[^}]*\}/gu, "");
     return (text.match(/[lcrpmbXS]/gu) ?? []).length || null;
   }
   if (node.command?.startsWith("alignat")) {
@@ -392,6 +392,23 @@ function columnLimit(view: EditView, alignment: NodeId): number | null {
     return Number.isFinite(count) ? 2 * count : null;
   }
   return node.command == null ? null : FIXED_COLUMNS.get(node.command.replace(/\*$/u, "")) ?? null;
+}
+
+/** A column spec with its repetitions written out: `*{2}{lr}` is `lrlr`. */
+function expandRepeats(spec: string): string {
+  const repeat = /\*\s*\{\s*(\d+)\s*\}\s*\{/u.exec(spec);
+  if (!repeat) {
+    return spec;
+  }
+  const open = repeat.index + repeat[0].length;
+  let depth = 1;
+  let close = open;
+  while (close < spec.length && depth > 0) {
+    depth += spec[close] === "{" ? 1 : spec[close] === "}" ? -1 : 0;
+    close += 1;
+  }
+  const body = spec.slice(open, close - 1);
+  return spec.slice(0, repeat.index) + expandRepeats(body.repeat(Math.min(Number(repeat[1]), 64))) + expandRepeats(spec.slice(close));
 }
 
 /** Alignments whose column count amsmath fixes (matrices: MaxMatrixCols). */
@@ -574,4 +591,27 @@ function patchOutcome(patch: StructuralPatch): EditOutcome {
     exact: true,
     selectionEnd: patch.selectionEnd,
   };
+}
+
+/** Whether a slot is in an alignment's rows (a cell, at any depth short of a formula). */
+export function inAlignment(view: EditView, slot: SlotId): boolean {
+  const { tree } = view;
+  for (let current: SlotId | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
+    if (tree.slots[current].role === "cell" || tree.nodes[tree.slots[current].node].kind === "alignment") {
+      return true;
+    }
+    if (tree.nodes[tree.slots[current].node].kind === "formula") {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Whether a slot is a list item's flow, or a paragraph in one. */
+export function inListFlow(view: EditView, slot: SlotId): boolean {
+  const { tree } = view;
+  const paragraph = tree.nodes[tree.slots[slot].node];
+  const flow = paragraph.kind === "paragraph" && paragraph.parent != null ? paragraph.parent : slot;
+  const kind = tree.nodes[tree.slots[flow].node].kind;
+  return (kind === "item" && tree.slots[flow].role === "flow") || kind === "list";
 }

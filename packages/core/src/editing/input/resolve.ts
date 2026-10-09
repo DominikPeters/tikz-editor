@@ -13,6 +13,8 @@ import {
 } from "../../text/format-commands.js";
 import {
   abandonPlaceholder,
+  breaksBoldMath,
+  inBoldMath,
   beforeMulticolumn,
   braceUnbracedArgument,
   rulesInsideRows,
@@ -22,7 +24,12 @@ import {
   commitCommand,
   commitControlSymbol,
   commitLeftDelimiter,
+  copyRange,
   deadBreaks,
+  inAlignment,
+  inListFlow,
+  pasteAt,
+  type ClipboardPayload,
   lineEndable,
   deleteRange,
   enter,
@@ -139,29 +146,6 @@ const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
 /** Table rules, which only start a table's rows. */
 const TABLE_RULES = new Set(["hline", "cline", "toprule", "midrule", "bottomrule", "cmidrule", "addlinespace", "specialrule"]);
 
-/** Whether a slot is in an alignment's rows (a cell, at any depth short of a formula). */
-function inAlignment(view: EditView, slot: number): boolean {
-  const { tree } = view;
-  for (let current: number | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
-    if (tree.slots[current].role === "cell" || tree.nodes[tree.slots[current].node].kind === "alignment") {
-      return true;
-    }
-    if (tree.nodes[tree.slots[current].node].kind === "formula") {
-      return false;
-    }
-  }
-  return false;
-}
-
-/** Whether a slot is a list item's flow, or a paragraph in one. */
-function inListFlow(view: EditView, slot: number): boolean {
-  const { tree } = view;
-  const paragraph = tree.nodes[tree.slots[slot].node];
-  const flow = paragraph.kind === "paragraph" && paragraph.parent != null ? paragraph.parent : slot;
-  const kind = tree.nodes[tree.slots[flow].node].kind;
-  return (kind === "item" && tree.slots[flow].role === "flow") || kind === "list";
-}
-
 /** Nodes a style wrapper may not cut through. */
 const CELL_AND_BLOCK_KINDS = new Set(["row", "paragraph", "item", "list", "alignment", "display", "container"]);
 
@@ -190,6 +174,7 @@ export function needsFreshLayout(intent: Intent, surface: InputSurface, _isScope
     case "insertText":
     case "compose":
     case "cut":
+    case "paste":
     case "color":
     case "undo":
     case "redo":
@@ -209,6 +194,11 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
         return NONE;
       }
       return resolver.insertText(intent.text, intent.origin === "keyboard");
+    case "paste":
+      if (context.editMode === "inline-typo" && /[\r\n]/u.test(intent.payload.plain)) {
+        return NONE;
+      }
+      return resolver.paste(intent.payload);
     case "compose":
       return resolver.compose(intent.text, intent.commit);
     case "deleteBackward":
@@ -234,6 +224,19 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
     case "redo":
       return context.interaction.chip ? resolver.escape() : { kind: "history", direction: "redo" };
   }
+}
+
+/** Whether a node is inside an environment of that name (kept as a node, or an atom holding it). */
+function insideEnvironment(view: EditView, node: NodeId, name: string): boolean {
+  const { tree } = view;
+  const { from, to } = tree.nodes[node].span;
+  return tree.nodes.some((candidate) => candidate.span.from < from && candidate.span.to > to &&
+    (candidate.command === name || tree.text.startsWith(`\\begin{${name}}`, candidate.span.from)));
+}
+
+/** What a copy (or cut) of the current selection writes to the clipboard (C3). */
+export function copySelection(context: IntentContext): ClipboardPayload | null {
+  return new Resolver(context).copy();
 }
 
 /** The position a caret at an offset is at: the outermost there (after `x^2‸`, outside the script). */
@@ -591,6 +594,51 @@ class Resolver {
     return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at, this.context.title));
   }
 
+  /**
+   * Paste (O6): over a selection, the selection goes first, as a range
+   * deletion would; then the payload is converted for where that left the
+   * caret. Without the tree, the plain text goes in as it is.
+   */
+  paste(payload: ClipboardPayload): IntentResolution {
+    const view = this.view;
+    if (!view) {
+      return this.replaceSelection(payload.plain, { group: "own-step" });
+    }
+    const { commands, title } = this.context;
+    if (!this.hasRange()) {
+      const caret = this.caretPosition(view);
+      const at = this.context.positions ? view.offset(caret) : this.from;
+      return this.outcome(view, pasteAt(view, caret, at, payload, commands, title));
+    }
+    const { start, end } = this.effectiveRange(view, this.rawEnds(view));
+    const deleted = deleteRange(view, start, end);
+    if (deleted.kind !== "patch") {
+      return NONE;
+    }
+    const middle = applyPatches(this.context.text, deleted.patches);
+    const middleView = this.context.structure!(middle);
+    const pasted = pasteAt(middleView, caretAt(middleView, deleted.caret), deleted.caret, payload, commands, title);
+    if (pasted.kind !== "patch") {
+      return NONE;
+    }
+    const caret = pasted.caret;
+    return this.transaction(
+      replacementPatches(this.context.text, applyPatches(middle, pasted.patches)),
+      { kind: "absolute", anchor: caret, focus: caret },
+      { group: "own-step" }
+    );
+  }
+
+  /** What a copy of the selection carries; null without a selection, or off the tree (the input's own copy then). */
+  copy(): ClipboardPayload | null {
+    const view = this.view;
+    if (!view || !this.hasRange()) {
+      return null;
+    }
+    const { start, end } = this.effectiveRange(view, this.rawEnds(view));
+    return copyRange(view, view.offset(start), view.offset(end), this.context.commands);
+  }
+
   cut(): IntentResolution {
     const view = this.view;
     if (view && this.hasRange()) {
@@ -873,7 +921,13 @@ class Resolver {
         return this.commitChip(view, commands, chip, "structure", false, char);
       }
     }
-    return this.commitChip(view, commands, chip, "typed", false, char);
+    // TeX would take the character as the argument (K2), but it belongs to the argument's mode
+    // (`_` after `$\textit` is text): it goes inside the braces, typed there.
+    const mode = view.tree.slots[caret.slot].mode === "math" ? "math" : "text";
+    const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, false);
+    const argument = commands.command(name, mode)?.args.find((arg) => arg.kind === "mandatory");
+    const crosses = argument?.rendered === true && argument.mode != null && argument.mode !== mode;
+    return this.commitChip(view, commands, chip, crosses ? "structure" : "typed", false, char);
   }
 
   /** `\right` and its delimiter typed at the closer `\left` brought: step over it (R3). */
@@ -923,6 +977,10 @@ class Resolver {
     }
     if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {
       // Outside a list, TeX has a "lonely \item".
+      return this.keepSelection(NO_INTERACTION);
+    }
+    if (inBoldMath(view, caret.slot) && breaksBoldMath(commands, name)) {
+      // `\bm` expands what it holds, and these do not survive it (LuaLaTeX loops).
       return this.keepSelection(NO_INTERACTION);
     }
     if (mode === "math" && (name === "left" || name === "right" || name === "middle")) {
@@ -1136,6 +1194,10 @@ class Resolver {
     const meet = startChain.find((slot) => endChain.includes(slot));
     const throughWrappers = (slots: number[]) => slots.slice(0, slots.indexOf(meet!)).every((slot) => view.role(tree.slots[slot].node) === "transparent");
     if (meet == null || !throughWrappers(startChain) || !throughWrappers(endChain)) {
+      return true;
+    }
+    // In `overprint`, `\\onslide` starts the next area: a box around it would hold half of two.
+    if (tree.nodes.some((node) => node.command === "onslide" && node.span.from >= from && node.span.to <= to && insideEnvironment(view, node.id, "overprint"))) {
       return true;
     }
     // Within one block or cell, the wrapper is fine; any such node the range reaches without containing it is not.

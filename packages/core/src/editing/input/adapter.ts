@@ -169,9 +169,9 @@ export function intentFromBeforeInput(inputType: string, data: string | null): I
     case "insertReplacementText":
       return make({ type: "insertText", text }, "menu");
     case "insertFromPaste":
-      return make({ type: "insertText", text }, "paste");
+      return make({ type: "paste", payload: { plain: text } }, "paste");
     case "insertFromDrop":
-      return make({ type: "insertText", text }, "pointer");
+      return make({ type: "paste", payload: { plain: text } }, "pointer");
     case "insertLineBreak":
       return make({ type: "enter", soft: true });
     case "insertParagraph":

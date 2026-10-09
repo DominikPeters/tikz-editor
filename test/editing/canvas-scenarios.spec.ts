@@ -8,6 +8,8 @@ import { applyPatches } from "../../packages/core/src/editing/transaction/index.
 import { canvasSessionDriver } from "./canvas-session-driver.js";
 import { KeystrokeSession } from "./fuzz/keystroke-session.js";
 import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
+
+const R = String.raw;
 import {
   burstScenarios,
   characterisationScenarios,
@@ -87,6 +89,60 @@ describe("canvas editing: source TeX accepts", () => {
       session.press(key);
     }
     expect(session.text).toBe(expected);
+  });
+});
+
+/**
+ * A paste: `‸` is where it goes; `⟦…⟧` (when present) is copied on the
+ * canvas first, otherwise `plain` is pasted from outside.
+ */
+function paste(body: string, plain?: string, options: { title?: boolean } = {}): string {
+  let text = "";
+  const marks = new Map<string, number>();
+  for (const char of body) {
+    if ("⟦⟧‸".includes(char)) {
+      marks.set(char, text.length);
+    } else {
+      text += char;
+    }
+  }
+  const caret = marks.get("‸")!;
+  const copy = marks.has("⟦") ? { from: marks.get("⟦")!, to: marks.get("⟧")! } : null;
+  const session = new KeystrokeSession(text, createCommandTable(), caret, caret, options.title ?? false);
+  if (copy) {
+    session.press({ kind: "select", anchor: copy.from, focus: copy.to });
+    session.press({ kind: "copy" });
+    session.press({ kind: "select", anchor: caret, focus: caret });
+  }
+  session.press({ kind: "paste", plain });
+  const { anchor, focus } = session.selection;
+  return anchor === focus ? `${session.text.slice(0, focus)}‸${session.text.slice(focus)}` : session.text;
+}
+
+describe("canvas editing: paste (O6)", () => {
+  it.each([
+    ["outside text in prose is literal (C1)", "a ‸ b", "Costs rose 50% at R&D", R`a Costs rose 50\% at R\&D‸ b`],
+    ["every TeX special is escaped in prose (C2)", "a ‸", "$x^2$ {y} ~_#", R`a \$x\^{}2\$ \{y\} \~{}\_\#‸`],
+    ["a backslash in prose is shown", "‸", "C:\\dir", R`C:\textbackslash{}dir‸`],
+    ["newlines in prose become spaces, blank lines paragraphs", "‸", "one\ntwo\n\nthree", "one two\n\nthree‸"],
+    ["blank lines in a style's argument become spaces", R`\textbf{‸}`, "one\n\ntwo", R`\textbf{one two‸}`],
+    ["blank lines in a title become spaces", "T‸", "one\n\ntwo", "Tone two‸", { title: true }],
+    ["math characters keep their meaning in math", R`$‸$`, "x^2 + y_i", R`$x^2 + y_i‸$`],
+    ["a script without a base is shown, not made", R`$‸$`, "^2 and _", R`$\text{\textasciicircum}2 and \_‸$`],
+    ["a second superscript on one base is shown", R`$‸$`, "x^2^3", R`$x^2\text{\textasciicircum}3‸$`],
+    ["a number as a script is braced", R`$‸$`, "x^10", R`$x^{10}‸$`],
+    ["breaking characters are escaped in math", R`$‸$`, "{a} % b & c $", R`$\{a\} \% b \& c \$‸$`],
+    ["a ] in an item label is braced", R`\begin{itemize}\item[‸] x\end{itemize}`, "a]", R`\begin{itemize}\item[a{]}‸] x\end{itemize}`],
+    ["a [ after \\item is not its label", R`\begin{itemize}\item ‸x\end{itemize}`, "[draft]", R`\begin{itemize}\item {}[draft]‸x\end{itemize}`],
+    ["a letter after a control word keeps it a word", R`\LaTeX‸`, "is", R`\LaTeX{}is‸`],
+    ["a formula fragment pasted into prose is a formula (Z3)", R`$⟦\lambda_i⟧$ and ‸`, undefined, R`$\lambda_i$ and $\lambda_i$‸`],
+    ["a whole formula pasted into math loses its delimiters", R`⟦$x$⟧ and $y+‸$`, undefined, R`$x$ and $y+x‸$`],
+    ["prose pasted into math is \\text", R`⟦word⟧ $x‸$`, undefined, R`word $x\text{word}‸$`],
+    ["a copy through a style keeps it whole", R`\textbf{a⟦b} c⟧ ‸`, undefined, R`\textbf{ab} c \textbf{b} c‸`],
+    ["items pasted outside a list fall back to their text", "\\begin{itemize}\n⟦\\item One\n\\item Two⟧\n\\end{itemize}\nx‸", undefined, "\\begin{itemize}\n\\item One\n\\item Two\n\\end{itemize}\nxOne Two‸"],
+    ["items pasted into a list stay items", "\\begin{itemize}\n⟦\\item One\n⟧\\item Two‸\n\\end{itemize}", undefined, "\\begin{itemize}\n\\item One\n\\item Two\\item One\n‸\n\\end{itemize}"],
+  ] as const)("%s", (_, body, plain, expected, options?: { readonly title?: boolean }) => {
+    expect(paste(body, plain, options)).toBe(expected);
   });
 });
 

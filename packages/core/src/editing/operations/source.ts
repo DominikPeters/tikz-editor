@@ -134,10 +134,13 @@ export function withTerminator(
  * What reads a `<` after it as an overlay specification, ending the text
  * before: `\item` (with its label if any), `\begin{…}` (beamer's
  * environments: `\begin{proposition}<2->`, and blocks after their title,
- * `\begin{block}{Title}<2->`), `\\`, and a closing brace, as beamer's
- * text commands take one after their argument too (`\emph{x}<2>`).
+ * `\begin{block}{Title}<2->`), `\\`, a closing brace, as beamer's text
+ * commands take one after their argument too (`\emph{x}<2>`), and the
+ * commands beamer gives a specification without arguments: page and frame
+ * breaks, `\onslide`, the slide transitions (checked with LuaLaTeX).
  */
-export const SPEC_READER_BEFORE = /(?:\\item(?:\[[^\]]*\])?|\\begin\{[^}]*\}(?:\{[^{}]*\})?|\\\\\*?(?:\[[^\]]*\])?|\})$/u;
+export const SPEC_READER_BEFORE =
+  /(?:\\item(?:\[[^\]]*\])?|\\begin\{[^}]*\}(?:\{[^{}]*\})?|\\\\\*?(?:\[[^\]]*\])?|\}|\\(?:no)?(?:frame|page)break|\\onslide[*+]?|\\trans[a-z]+|\\framezoom|\\animate)$/u;
 
 /**
  * K9 at a seam: when an edit leaves a `[` right after `\\\\` or `\\item`

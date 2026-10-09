@@ -3,7 +3,8 @@ import { capabilityChain, decideOwner } from "../ownership/keys.js";
 import type { InteractionState } from "../input/interaction.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
-import type { EditMode, Span } from "../tree/types.js";
+import { texMathCommandFamily } from "../../text/tex/math/parser.js";
+import type { EditMode, SlotId, Span } from "../tree/types.js";
 import type { EditOutcome } from "./delete.js";
 import { insideOptional, placeholderAt } from "./insert.js";
 import { PatchSet } from "./source.js";
@@ -198,6 +199,38 @@ export function lineEndable(view: EditView, caret: Position, at: number): boolea
   }
   const decision = decideOwner(capabilityChain(tree, "line-break", caret.slot));
   return decision.kind !== "stop" && tree.nodes[decision.node].kind !== "row" && inkOnLine(view, caret.slot, at);
+}
+
+/** Text commands that survive bold math (`\bm`, `\boldsymbol`): LR boxes, and colour without beamer's overlays. */
+const BOLD_MATH_TEXT = new Set(["text", "mbox", "textcolor", "colorbox", "underline"]);
+
+/** Whether a slot is inside `\bm{…}` or `\boldsymbol{…}`. */
+export function inBoldMath(view: EditView, slot: SlotId): boolean {
+  const { tree } = view;
+  for (let current: SlotId | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
+    const command = tree.nodes[tree.slots[current].node].command;
+    if (command === "bm" || command === "boldsymbol") {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a command breaks bold math: `\bm` expands its argument, which
+ * beamer's overlay-aware commands (its font commands, `\only`, `\color`),
+ * links, labels and notes do not survive. LuaLaTeX loops on most of them.
+ */
+export function breaksBoldMath(table: CommandTable, name: string): boolean {
+  if (BOLD_MATH_TEXT.has(name)) {
+    return false;
+  }
+  if (name === "operatorname" || texMathCommandFamily(`\\${name}`) === "text") {
+    return true;
+  }
+  const text = table.command(name, "text");
+  // (A user macro is the author's: their deck says whether it works there.)
+  return text != null && !text.userMacro && (text.args.some((arg) => arg.kind === "overlay") || ["link", "atom", "vertical", "overlay"].includes(text.category));
 }
 
 /** `\\`, `\%`, `\{`: a control symbol, committed as soon as its character is typed. */

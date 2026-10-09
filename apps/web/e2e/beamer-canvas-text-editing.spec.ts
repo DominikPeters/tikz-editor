@@ -984,6 +984,48 @@ test("canvas Tab and Shift+Tab indent selected list items and keep their selecti
   await expect.poll(() => readStoreSource(page)).toBe(nestedSource);
 });
 
+test("canvas copy and paste: a formula fragment becomes a formula in prose, outside text is literal", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const select = (from: number, to: number) => input.evaluate((element, [start, end]) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(start, end);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, [from, to] as const);
+  const from = buffer.indexOf("x + y");
+  await select(from, from + "x + y".length);
+  // Copy writes the rendered text and the source with its mode.
+  const copied = await input.evaluate((element) => {
+    const transfer = new DataTransfer();
+    element.dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: transfer }));
+    return { plain: transfer.getData("text/plain"), clip: transfer.getData("application/x-tikz-editor-clip+json") };
+  });
+  expect(copied.plain).toBe("x + y");
+  expect(JSON.parse(copied.clip)).toEqual({ source: "x + y", mode: "math", shape: "fragment" });
+
+  const paste = (data: Record<string, string>) => input.evaluate((element, entries) => {
+    const transfer = new DataTransfer();
+    for (const [type, value] of Object.entries(entries)) {
+      transfer.setData(type, value);
+    }
+    element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }));
+  }, data);
+  const caret = buffer.indexOf("Body typo") + "Body typo".length;
+  await select(caret, caret);
+  await paste({ "text/plain": copied.plain, "application/x-tikz-editor-clip+json": copied.clip });
+  await expect.poll(() => readStoreSource(page)).toContain("Body typo$x + y$.");
+
+  const after = caret + "$x + y$".length;
+  await select(after, after);
+  await paste({ "text/plain": " 50% & co" });
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body typo$x + y$ 50\% \& co.`);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect(textarea).toHaveValue(buffer);
+});
+
 test("the command chip completes a command at the caret and commits it in one undo step", async ({ page }) => {
   const textarea = await openScopeContaining(page, "Body typo.");
   const input = page.getByTestId("canvas-focus-input");

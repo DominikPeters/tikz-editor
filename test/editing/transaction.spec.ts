@@ -146,7 +146,7 @@ describe("input adapter", () => {
   });
 
   it("maps beforeinput types to intents with their origin", () => {
-    expect(intentFromBeforeInput("insertFromPaste", "x")).toMatchObject({ type: "insertText", origin: "paste" });
+    expect(intentFromBeforeInput("insertFromPaste", "x")).toMatchObject({ type: "paste", payload: { plain: "x" }, origin: "paste" });
     expect(intentFromBeforeInput("insertCompositionText", "か")).toMatchObject({ type: "compose", commit: false, origin: "composition" });
     expect(intentFromBeforeInput("deleteWordBackward", null)).toMatchObject({ type: "deleteBackward", unit: "word" });
     expect(intentFromBeforeInput("formatBold", null)).toBeNull();

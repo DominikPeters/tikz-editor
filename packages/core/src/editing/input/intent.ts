@@ -5,6 +5,8 @@
  * input types.
  */
 
+import type { ClipboardPayload } from "../operations/paste.js";
+
 export type IntentOrigin = "keyboard" | "composition" | "paste" | "menu" | "pointer";
 
 /** Toolbar and shortcut format commands. */
@@ -38,6 +40,8 @@ export type IntentBody =
   | { readonly type: "compose"; readonly text: string; readonly commit: boolean }
   | { readonly type: "deleteBackward" | "deleteForward"; readonly unit: DeleteUnit }
   | { readonly type: "cut" }
+  /** Pasted or dropped content: a canvas copy, or plain text from outside (O6). */
+  | { readonly type: "paste"; readonly payload: ClipboardPayload }
   | { readonly type: "enter"; readonly soft: boolean }
   | { readonly type: "tab"; readonly back: boolean }
   | {
