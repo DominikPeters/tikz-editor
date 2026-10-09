@@ -105,8 +105,26 @@ function unknownCommands(start: FuzzStart, text: string): string[] {
  */
 function valueArguments(start: FuzzStart, text: string): string[] {
   const tree = buildEditTree(text, { commands: start.commands });
-  return tree.nodes.flatMap((node) => node.values.map((value) =>
-    `${node.command ?? node.kind} ${value.role} ${text.slice(value.contentSpan.from, value.contentSpan.to).trim()}`));
+  return tree.nodes.flatMap((node) => {
+    const values = node.values.map((value) => `${node.command ?? node.kind} ${value.role} ${text.slice(value.contentSpan.from, value.contentSpan.to).trim()}`);
+    // A line break's spacing (`\\[2pt]`, opened empty by O4) is one too.
+    const spacing = node.kind === "break" ? /\[([^\]]*)\]$/u.exec(text.slice(node.span.from, node.span.to)) : null;
+    return spacing ? [...values, `break dimension ${spacing[1]}`] : values;
+  });
+}
+
+/** Whether a character is left outside the frame titles. */
+function hasText(start: FuzzStart, text: string): boolean {
+  const tree = buildEditTree(text, { commands: start.commands });
+  const inTitle = (id: number): boolean => {
+    for (let node = tree.nodes[id]; node.parent != null; node = tree.nodes[tree.slots[node.parent].node]) {
+      if (node.command === "frametitle" || node.command === "framesubtitle") {
+        return true;
+      }
+    }
+    return false;
+  };
+  return tree.nodes.some((node) => node.kind === "char" && !inTitle(node.id));
 }
 
 /** Whether `after` has a name `before` does not, as many times as it has it. */
@@ -123,10 +141,11 @@ function adds(before: readonly string[], after: readonly string[]): boolean {
 
 /**
  * Whether the end state is one TeX can judge: no new unknown commands or
- * value arguments, and a body left (an empty `[shrink]` frame divides by zero).
+ * value arguments, and some text left (beamer's `shrink` divides by the
+ * height of a frame's content).
  */
 function judgeable(start: FuzzStart, text: string): boolean {
-  if (text.trim() === "") {
+  if (!hasText(start, text)) {
     return false;
   }
   return !adds(unknownCommands(start, start.text), unknownCommands(start, text)) &&

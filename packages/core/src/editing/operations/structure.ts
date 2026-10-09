@@ -7,6 +7,7 @@ import type { EditOutcome } from "./delete.js";
 import {
   exitEmptyLastItemPatch,
   isBlank,
+  joinSeparator,
   lineIndentAt,
   listItemOf,
   listShapes,
@@ -36,8 +37,8 @@ import { mapThrough, PatchSet } from "./source.js";
 /** ⏎ (or ⇧⏎ as `line-break`) at a caret. */
 export function enter(view: EditView, caret: Position, at: number, key: "enter" | "line-break"): EditOutcome {
   const { tree } = view;
-  if (inValue(view, at)) {
-    // A file name, colour or URL edited in place has no lines or paragraphs.
+  if (inValue(view, at) || tree.nodes.some((node) => node.slots.length === 0 && node.span.from < at && at < node.span.to)) {
+    // A file name, colour or URL edited in place has no lines or paragraphs, nor has a command's own source (`\\[2pt]`).
     return { kind: "none" };
   }
   const tail = key === "enter" ? leaveAlignment(view, at) : null;
@@ -182,8 +183,14 @@ const LINE_STARTS = new Set(["paragraph", "item", "list", "row", "display", "con
 function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | "start" {
   const { tree } = view;
   const before = tree.slots[slot].children.filter((child) => tree.nodes[child].span.from < at);
+  let gapEnd = at;
   for (const child of before.reverse()) {
     const node = tree.nodes[child];
+    // A blank line between it and the caret starts a paragraph (the caret's position may still be in the one before).
+    if (/\n[ \t]*\n/u.test(tree.text.slice(node.span.to, gapEnd))) {
+      return "line";
+    }
+    gapEnd = node.span.from;
     // (A caption ends its paragraph: TeX is back between lines after it.)
     if (node.kind === "break" || node.kind === "vertical" || node.command === "caption") {
       return "line";
@@ -213,8 +220,16 @@ function inked(view: EditView, id: NodeId): boolean {
   if (view.role(id) === "invisible" || ["space", "break", "vertical", "declaration"].includes(node.kind)) {
     return false;
   }
-  return node.slots.length === 0 || node.slots.some((slot) => view.tree.slots[slot].children.some((child) => inked(view, child)));
+  const inSlot = (slot: SlotId) => view.tree.slots[slot].children.some((child) => inked(view, child));
+  if (node.kind === "overlay" && node.command != null && OVERLAY_ABSENT.has(node.command)) {
+    // Gone on the other slides (`\only`), or ink on every slide only if each branch has some (`\alt`).
+    return node.command !== "only" && node.slots.every((slot) => view.tree.slots[slot].presence !== "present" || inSlot(slot));
+  }
+  return node.slots.length === 0 || node.slots.some(inSlot);
 }
+
+/** Overlay commands whose content is absent, not just hidden, on some slides. */
+const OVERLAY_ABSENT = new Set(["only", "alt", "temporal"]);
 
 /** K9: a `\\` the break writes must not take a `[` after it as its optional argument. */
 function protectBreak(insert: string, text: string, after: number): string {
@@ -373,8 +388,15 @@ function columnLimit(view: EditView, alignment: NodeId): number | null {
     const count = Number.parseInt(tree.text.slice(node.values[0]?.contentSpan.from ?? 0, node.values[0]?.contentSpan.to ?? 0), 10);
     return Number.isFinite(count) ? 2 * count : null;
   }
-  return null;
+  return node.command == null ? null : FIXED_COLUMNS.get(node.command.replace(/\*$/u, "")) ?? null;
 }
+
+/** Alignments whose column count amsmath fixes (matrices: MaxMatrixCols). */
+const FIXED_COLUMNS: ReadonlyMap<string, number> = new Map([
+  ...["cases", "dcases", "rcases", "split"].map((name) => [name, 2] as const),
+  ...["gather", "gathered", "multline"].map((name) => [name, 1] as const),
+  ...["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "smallmatrix"].map((name) => [name, 10] as const),
+]);
 
 /** ⇥ / ⇧⇥ on the items from `start` to `end` (one list), or the toolbar indent buttons. */
 export function indentItems(view: EditView, start: Position, end: Position, direction: "nest" | "unnest"): EditOutcome {
@@ -384,9 +406,27 @@ export function indentItems(view: EditView, start: Position, end: Position, dire
   if (!first || first.list.node !== last?.list.node || last.index < first.index) {
     return { kind: "none" };
   }
+  if (direction === "nest" && !nestable(view, first.list.node)) {
+    return { kind: "none" };
+  }
   const caret = view.offset(start);
   const patch = nestItemsPatch(tree.text, listShapes(tree), first, last.index, direction, caret, view.offset(end));
   return patch ? patchOutcome(patch) : { kind: "none" };
+}
+
+/** Whether a list may hold one more of its kind: LaTeX nests four of each and six lists in all ("Too deeply nested"). */
+function nestable(view: EditView, list: NodeId): boolean {
+  const { tree } = view;
+  const kind = tree.nodes[list].command;
+  let same = 0;
+  let total = 0;
+  for (let node: NodeId | null = list; node != null; node = tree.nodes[node].parent == null ? null : tree.slots[tree.nodes[node].parent!].node) {
+    if (tree.nodes[node].kind === "list") {
+      total += 1;
+      same += tree.nodes[node].command === kind ? 1 : 0;
+    }
+  }
+  return same < 4 && total < 6;
 }
 
 /** The toolbar list buttons: rename, dissolve or create a list at the caret. */
@@ -440,7 +480,8 @@ export function joinBackward(view: EditView, caret: Position): EditOutcome {
   const previous = siblings[siblings.indexOf(block) - 1];
   if (previous != null && tree.nodes[previous].kind === "paragraph" && node.kind === "paragraph") {
     const from = trimmedEnd(tree.text, tree.nodes[previous].span);
-    return patchOutcome({ edits: [{ span: { from, to: node.span.from }, insert: " " }], caret: from + 1 });
+    const insert = joinSeparator(tree.text, from, " ");
+    return patchOutcome({ edits: [{ span: { from, to: node.span.from }, insert }], caret: from + insert.length });
   }
   const step = view.step(caret, -1);
   return step ? { kind: "move", to: step } : { kind: "none" };
@@ -468,7 +509,7 @@ export function joinForward(view: EditView, caret: Position): EditOutcome {
   const next = siblings[siblings.indexOf(block) + 1];
   if (next != null && tree.nodes[next].kind === "paragraph" && node.kind === "paragraph") {
     const from = trimmedEnd(tree.text, node.span);
-    return patchOutcome({ edits: [{ span: { from, to: tree.nodes[next].span.from }, insert: " " }], caret: from });
+    return patchOutcome({ edits: [{ span: { from, to: tree.nodes[next].span.from }, insert: joinSeparator(tree.text, from, " ") }], caret: from });
   }
   const step = view.step(caret, 1);
   return step ? { kind: "move", to: step } : { kind: "none" };

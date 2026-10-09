@@ -90,6 +90,22 @@ type Run = {
 };
 
 const NO_STOPS: ReadonlySet<Stop> = new Set();
+/** A TeX dimension: a factor and a unit or a length register (`2pt`, `-.5\\textwidth`). */
+const DIMEN = String.raw`\s*[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)?\s*(?:(?:true)?(?:pt|em|ex|cm|mm|in|bp|pc|dd|cc|sp|mu|px)\b|\\[A-Za-z@]+)`;
+const GLUE = String.raw`${DIMEN}(?:\s*(?:plus|minus)\s*[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)?\s*(?:fil+\b|(?:true)?(?:pt|em|ex|cm|mm|in|bp|pc|dd|cc|sp|mu)\b|\\[A-Za-z@]+))*`;
+
+/** The keyword syntax after TeX's rule, box and skip primitives. */
+const PRIMITIVE_SPECS: Readonly<Record<string, RegExp>> = {
+  vrule: new RegExp(String.raw`^(?:\s*(?:width|height|depth)${DIMEN})*`, "u"),
+  hrule: new RegExp(String.raw`^(?:\s*(?:width|height|depth)${DIMEN})*`, "u"),
+  hbox: new RegExp(String.raw`^(?:\s*(?:to|spread)${DIMEN})?`, "u"),
+  vbox: new RegExp(String.raw`^(?:\s*(?:to|spread)${DIMEN})?`, "u"),
+  vtop: new RegExp(String.raw`^(?:\s*(?:to|spread)${DIMEN})?`, "u"),
+  kern: new RegExp(`^${DIMEN}`, "u"),
+  hskip: new RegExp(`^${GLUE}`, "u"),
+  vskip: new RegExp(`^${GLUE}`, "u"),
+};
+
 const WORD_CHAR = /[A-Za-z@]/u;
 /**
  * Rules between alignment rows and the arguments each takes, in order:
@@ -595,6 +611,24 @@ class Binder {
         return this.verb(run, at, end);
       case "tikz":
         return this.inlineTikz(run, at, end);
+      case "vrule":
+      case "hrule":
+      case "hbox":
+      case "vbox":
+      case "vtop":
+      case "kern":
+      case "hskip":
+      case "vskip":
+      case "leaders":
+      case "cleaders":
+      case "xleaders": {
+        // TeX's keyword syntax (`\vrule width2pt`, `\hbox to3em{…}`, `\hskip 1em plus 1fil`) is part of
+        // the command, not text: a dimension edited as prose would no longer be one.
+        const specEnd = this.primitiveEnd(name, end, run.end);
+        this.leaf(run, name === "vskip" ? "vertical" : name.endsWith("skip") || name === "kern" ? "space" : "atom", at, specEnd, name);
+        run.skipSpace = specEnd === end;
+        return specEnd;
+      }
       case "item":
         this.diagnose("unknown-command", at, end, "\\item outside a list");
         this.leaf(run, "atom", at, end, name);
@@ -612,6 +646,31 @@ class Binder {
     const nodeEnd = this.nodes[node].span.to;
     run.skipSpace = isWord && nodeEnd === end;
     return nodeEnd;
+  }
+
+  /**
+   * Where a TeX primitive's own syntax ends: its keywords; a box's group
+   * too; for leaders, the box or rule and the glue they fill.
+   */
+  private primitiveEnd(name: string, end: number, limit: number): number {
+    if (name.endsWith("leaders")) {
+      const box = /^\s*\\(vrule|hrule|hbox|vbox|vtop)(?![A-Za-z@])/u.exec(this.text.slice(end, limit));
+      const boxEnd = box ? this.primitiveEnd(box[1], end + box[0].length, limit) : end;
+      const glue = /^\s*\\(?:[hv]fill|[hv]fil|[hv]ss|[hv]filneg)(?![A-Za-z@])|^\s*\\([hv]skip)(?![A-Za-z@])/u.exec(this.text.slice(boxEnd, limit));
+      if (!glue) {
+        return boxEnd;
+      }
+      const glueEnd = boxEnd + glue[0].length;
+      return glue[1] ? this.primitiveEnd(glue[1], glueEnd, limit) : glueEnd;
+    }
+    const specEnd = end + (PRIMITIVE_SPECS[name].exec(this.text.slice(end, limit))?.[0].length ?? 0);
+    if (name === "hbox" || name === "vbox" || name === "vtop") {
+      const open = /^\s*\{/u.exec(this.text.slice(specEnd, limit));
+      if (open) {
+        return this.groupEnd(specEnd + open[0].length - 1, limit).end;
+      }
+    }
+    return specEnd;
   }
 
   private stray(run: Run, at: number, end: number): number {

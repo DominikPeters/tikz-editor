@@ -98,7 +98,7 @@ describe("keystroke fuzzing catches broken operations", () => {
     ["no terminator", "content"],
     ["⌫ takes two", "content|balance"],
     ["range deletion ignores structure", "balance"],
-    ["item merge eats a word", "content"],
+    ["item merge eats a word", "content|balance"],
     ["lost undo step", "undo"],
   ])("%s → %s", (mutant, invariants) => {
     sabotage.mutant = mutant;

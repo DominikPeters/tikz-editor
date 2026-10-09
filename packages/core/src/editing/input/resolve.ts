@@ -122,7 +122,14 @@ export type IntentResolution =
 const NONE: IntentResolution = { kind: "none" };
 
 /** What `$` around a selection may not enclose (M2). */
-const WRAP_REFUSING_KINDS = new Set(["formula", "display", "alignment", "list", "container", "item", "paragraph", "vertical"]);
+const WRAP_REFUSING_KINDS = new Set(["formula", "display", "alignment", "list", "container", "item", "paragraph", "vertical", "break"]);
+
+/**
+ * Commands no commit can write whole: `\verb` takes its delimiter from
+ * the next character (and needs a fragile frame), and an environment
+ * needs its name and its `\end` (the environment chip, still to come).
+ */
+const UNCOMMITTABLE = new Set(["verb", "lstinline", "begin", "end"]);
 
 /** Commands that structure flow text, never written into math. */
 const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
@@ -362,7 +369,9 @@ class Resolver {
     undo: UndoGrouping,
     extra: Pick<Transaction, "composition" | "verticalGoal" | "interaction"> = {}
   ): IntentResolution {
-    const repaired = this.protectLeadingBracket(this.dropDeadBreaks(this.endRowsBeforeRules({ baseRevision: this.context.revision, patches, selection, undo, ...extra })));
+    const repaired = this.keepFinalLineEnd(this.protectLeadingBracket(this.dropDeadBreaks(
+      this.endRowsBeforeRules({ baseRevision: this.context.revision, patches, selection, undo, ...extra })
+    )));
     return { kind: "transaction", transaction: repaired };
   }
 
@@ -394,6 +403,22 @@ class Resolver {
   }
 
   /**
+   * A frame body that ended with a line end keeps it: a `[fragile]` frame
+   * finds its `\\end{frame}` only at the start of a line.
+   */
+  private keepFinalLineEnd(transaction: Transaction): Transaction {
+    const { text } = this.context;
+    if (!this.context.frameBody || transaction.patches.length === 0 || !text.endsWith("\n")) {
+      return transaction;
+    }
+    const applied = applyTransaction(text, transaction);
+    if (applied.text.endsWith("\n")) {
+      return transaction;
+    }
+    return { ...transaction, patches: replacementPatches(text, `${applied.text}\n`) };
+  }
+
+  /**
    * K9 at a frame body's start: a `[` an edit put first in the body (typed,
    * or left there by a deletion) would be the frame's options, so `\relax`
    * goes before it, which ends the header without adding a title as `{}` would.
@@ -419,8 +444,9 @@ class Resolver {
 
   /**
    * A line break an edit left with nothing before it on its line (`x \\`
-   * with the `x` deleted) goes too: TeX has no empty line to end. Breaks
-   * away from the edit are left as they are.
+   * with the `x` deleted, or a paragraph split right before it) goes too:
+   * TeX has no empty line to end. Breaks that were dead before are the
+   * source's own, and stay.
    */
   private dropDeadBreaks(transaction: Transaction): Transaction {
     const { structure, text } = this.context;
@@ -429,10 +455,10 @@ class Resolver {
     }
     const applied = applyTransaction(text, transaction);
     const dead = deadBreaks(structure(applied.text));
-    if (dead.length <= deadBreaks(structure(text)).length) {
+    if (dead.length === 0) {
       return transaction;
     }
-    // The edit's window in the new text, and the breaks it left dead: in it, or after it on the same line.
+    // The edit's window, from `start` to `end` in the new text; after it, offsets shift by the length change.
     let start = 0;
     while (start < text.length && start < applied.text.length && text[start] === applied.text[start]) {
       start += 1;
@@ -442,7 +468,13 @@ class Resolver {
       suffix += 1;
     }
     const end = applied.text.length - suffix;
-    const drop = dead.filter((span) => span.from >= start && (span.from <= end || /^[ \t]*$/u.test(applied.text.slice(end, span.from))));
+    const deadBefore = new Set(deadBreaks(structure(text)).map((span) => span.from));
+    const old = (offset: number) => (offset < start ? offset : offset >= end ? offset - (applied.text.length - text.length) : null);
+    // The breaks this edit left dead: written by it, or alive before it.
+    const drop = dead.filter((span) => {
+      const was = old(span.from);
+      return was == null || !deadBefore.has(was);
+    });
     if (drop.length === 0) {
       return transaction;
     }
@@ -490,6 +522,10 @@ class Resolver {
     const raw = this.rawEnds(view);
     if (text === "\\" && this.context.commands && !afterEscape(this.context.text, this.from)) {
       // R4: `\` opens the command chip; the source is untouched until it commits.
+      if (this.hasRange() && this.crossesStructure()) {
+        // As for ⌘B: a command cannot wrap a selection across cells, blocks or a title and its body.
+        return this.keepSelection(NO_INTERACTION);
+      }
       const held = this.hasRange() ? this.offsetsOf(view, this.effectiveRange(view, raw)) : null;
       const at = held ? held.from : this.hasRange() ? this.from : this.caretOffset(view);
       // Placeholder braces stay recorded: a command typed into them replaces them.
@@ -746,7 +782,7 @@ class Resolver {
     if (/^[A-Za-z]$/u.test(char)) {
       return this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: chip.name + char, selected: 0 } });
     }
-    const caret = view.positionAt(chip.at);
+    const caret = caretAt(view, chip.at);
     if (chip.name === "") {
       const symbol = commitControlSymbol(view, caret, chip.at, char, chip.held);
       if (!symbol) {
@@ -787,6 +823,12 @@ class Resolver {
       const at = committed.transaction.selection.focus;
       return { kind: "transaction", transaction: { ...committed.transaction, interaction: { chip: { name: "", at, selected: 0, held: null } } } };
     }
+    if (char === "<") {
+      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
+      if (commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text")?.args.some((arg) => arg.kind === "overlay")) {
+        return this.commitChip(view, commands, chip, "overlay", false);
+      }
+    }
     if (char === "{" || char === "[") {
       const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
       const schema = commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text");
@@ -819,7 +861,7 @@ class Resolver {
     view: EditView,
     commands: CommandTable,
     chip: ChipState,
-    key: "space" | "structure" | "brace" | "bracket" | "typed",
+    key: "space" | "structure" | "brace" | "bracket" | "overlay" | "typed",
     accept: boolean,
     then?: string
   ): IntentResolution {
@@ -827,11 +869,14 @@ class Resolver {
       // Nothing typed yet: the chip just closes.
       return this.keepSelection(NO_INTERACTION);
     }
-    const caret = view.positionAt(chip.at);
+    const caret = caretAt(view, chip.at);
     const mode = view.tree.slots[caret.slot].mode;
     const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept);
     if (mode === "math" && BLOCK_COMMANDS.has(name)) {
       // List and environment commands make no sense in a formula.
+      return this.keepSelection(NO_INTERACTION);
+    }
+    if (UNCOMMITTABLE.has(name)) {
       return this.keepSelection(NO_INTERACTION);
     }
     if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {

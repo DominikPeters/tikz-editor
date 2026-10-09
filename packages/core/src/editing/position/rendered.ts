@@ -29,10 +29,12 @@ export function hiddenNodes(tree: EditTree, rendered: RenderedStops, bufferFrom:
     }
     // An overlay is judged by its argument: the stop just before `\only`
     // sits at the overlay's own start.
+    // (Arguments still empty, `\only<2->{‸}` just typed, have nothing to hide nor any stop to show.)
     const spans = node.kind === "overlay"
       ? node.slots.map((slot) => tree.slots[slot]).filter((slot) => slot.presence === "present").map((slot) => slot.contentSpan)
+        .filter((span) => /\S/u.test(tree.text.slice(span.from, span.to)))
       : [node.span];
-    if (spans.every((span) => !hasOffsetIn(rendered.offsets, bufferFrom + span.from, bufferFrom + span.to))) {
+    if (spans.length > 0 && spans.every((span) => !hasOffsetIn(rendered.offsets, bufferFrom + span.from, bufferFrom + span.to))) {
       hidden.add(node.id);
     }
   }

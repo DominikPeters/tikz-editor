@@ -130,10 +130,14 @@ export function withTerminator(
   });
 }
 
+/** An `\item`, with its label if any, ending the text before. */
+export const ITEM_BEFORE = /\\item(?:\[[^\]]*\])?$/u;
+
 /**
  * K9 at a seam: when an edit leaves a `[` right after `\\\\` or `\\item`
  * (deleting what stood between), TeX would read it as their optional
- * argument; `{}` goes in between.
+ * argument, and a `<` after `\\item` as its overlay specification; `{}`
+ * goes in between.
  */
 export function withBracketGuard(original: string, patches: BufferPatch[], seam: number): BufferPatch[] {
   let after = "";
@@ -144,8 +148,10 @@ export function withBracketGuard(original: string, patches: BufferPatch[], seam:
   }
   after += original.slice(cursor);
   const before = after.slice(0, seam).replace(/\s+$/u, "");
-  const opens = /(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before);
-  if (!opens || !/^\s*\[/u.test(after.slice(seam))) {
+  const opens = /(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before) && /^\s*\[/u.test(after.slice(seam));
+  // (`\item` also reads a `<` after it, past its label, as an overlay specification.)
+  const spec = ITEM_BEFORE.test(before) && /^\s*</u.test(after.slice(seam));
+  if (!opens && !spec) {
     return patches;
   }
   let delta = 0;

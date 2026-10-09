@@ -5,7 +5,7 @@ import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import type { EditMode, Span } from "../tree/types.js";
 import type { EditOutcome } from "./delete.js";
-import { placeholderAt } from "./insert.js";
+import { insideOptional, placeholderAt } from "./insert.js";
 import { PatchSet } from "./source.js";
 import { inkOnLine } from "./structure.js";
 
@@ -20,6 +20,8 @@ import { inkOnLine } from "./structure.js";
  * - `brace` (`{`): as `structure`; a command without arguments is
  *   committed and the `{` opens a group after it.
  * - `bracket` (`[`): the optional first argument, opened (`\sqrt[‸]{}`, K9).
+ * - `overlay` (`<`): the overlay specification, opened (`\only<‸>{}`), for
+ *   a command that takes one.
  * - `typed`: just the name (another character ended the chip and is
  *   processed next).
  *
@@ -27,7 +29,7 @@ import { inkOnLine } from "./structure.js";
  * rendered argument (`\emph{⟦main idea⟧}`, `\frac{a}{‸}`); a command
  * without one replaces it.
  */
-export type CommitKey = "space" | "structure" | "brace" | "bracket" | "typed";
+export type CommitKey = "space" | "structure" | "brace" | "bracket" | "overlay" | "typed";
 
 export type CommandCommit = {
   readonly outcome: EditOutcome;
@@ -52,6 +54,13 @@ export function commitCommand(
   const optionalFirst = schema?.args.find((arg) => arg.kind !== "overlay")?.kind === "optional";
   const command = `\\${name}`;
 
+  if (key === "overlay" && schema?.args.some((arg) => arg.kind === "overlay")) {
+    // The specification goes right after the name; a held selection into the content, as for ␣.
+    const rest = held && mandatory.length > 0 ? commitCommand(view, table, caret, at, name, "structure", state, held).outcome : null;
+    const after = rest?.kind === "patch" && rest.patches.length === 1 ? rest.patches[0].insert.slice(command.length) : "{}".repeat(mandatory.length);
+    const range = held ?? { from: at, to: at };
+    return { outcome: edit(range, `${command}<>${after}`, range.from + command.length + 1) };
+  }
   if (held && mandatory.length > 0) {
     // The selection goes into an argument of its own mode only (not math into `\emph{…}`).
     const target = schema!.args.find((arg) => arg.kind === "mandatory" && arg.rendered);
@@ -167,8 +176,10 @@ export function commitAcrossModes(
   }
   const following = tree.text.slice(range.to, range.to + 1);
   const tail = inside == null && mode === "text" && !/^[ \t]$/u.test(following) ? " " : "";
-  const insert = open + inner + close + tail;
-  const caretAt = inside == null ? range.from + insert.length : range.from + open.length + inside;
+  // In an optional argument (an `\item` or `\bibitem` label), a `]` would end it: the whole goes in braces.
+  const [before, after] = inner.includes("]") && insideOptional(view, caret.slot) ? ["{", "}"] : ["", ""];
+  const insert = before + open + inner + close + after + tail;
+  const caretAt = inside == null ? range.from + insert.length : range.from + before.length + open.length + inside;
   return { outcome: edit(range, insert, caretAt) };
 }
 

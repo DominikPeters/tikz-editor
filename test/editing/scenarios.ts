@@ -241,6 +241,19 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "X8", title: "a command started inside another's argument gets the braces", body: R`$a‸$`, keys: R`\sqrt\alpha␣`, expect: R`$a\sqrt{\alpha‸}$` },
   { id: "X9", title: "⏎ in a table row closes and reopens the formula around the caret", body: tabular(R`$a‸b$ & c\\`), keys: "⏎", expect: tabular(R`$a$ \\`, R`$‸b$ & c\\`) },
   { id: "X10", title: "deleting what precedes a line break removes the break", body: "a\n\nx‸ \\\\ y", keys: "⌫", expect: "a\n\n‸  y" },
+  // Found in real decks (artifacts/beamer-construct-survey.md).
+  {
+    id: "C1 items", title: "joining items across a comment line keeps the text out of the comment",
+    body: itemize(R`\item Real item % note`, "% between", R`\item ‸Another`), keys: "⌫",
+    expect: itemize(R`\item Real item % note`, "% between", "‸Another"),
+  },
+  { id: "C1 paragraphs", title: "joining paragraphs after a comment keeps the text out of it", body: "First line. % tail\n\n‸Second", keys: "⌫", expect: "First line. % tail\n‸Second" },
+  { id: "C2", title: "^ before a script whose base is gone goes into that script", body: R`\(\mathbb R‸^n\)`, keys: "⌫ ^ 2", expect: R`\(^{2‸n}\)` },
+  { id: "C3", title: "\\verb is not committed from the chip", body: "Re‸fs", keys: R`\verb␣`, expect: "Re‸fs" },
+  { id: "C4", title: "< right after \\item is not its overlay specification", body: itemize(R`\item ‸text`), keys: "<", expect: itemize(R`\item {}<‸text`) },
+  { id: "C5", title: "an overlay specification typed after the chip is the command's", body: "a ‸ b", keys: R`\only<1->{x}`, expect: R`a \only<1->{x}‸ b` },
+  { id: "C6", title: "a body with nothing but spacing still takes typing", body: R`\vspace{1em}‸`, keys: "x", expect: R`\vspace{1em}x‸` },
+  { id: "C7", title: "typing before a command's unbraced argument braces it", body: R`T.\textbf‸(be`, keys: "^", expect: R`T.\textbf{\^{}‸(}be` },
 ];
 
 /**

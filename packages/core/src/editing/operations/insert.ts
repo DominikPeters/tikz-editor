@@ -6,7 +6,7 @@ import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, EditNode, EditSlot, NodeId, SlotId } from "../tree/types.js";
 import { isDollarFormula, type EditOutcome } from "./delete.js";
 import { braceUnbracedArgument, enterExistingScript } from "./script.js";
-import { PatchSet, slotOuterSpan, withTerminator } from "./source.js";
+import { ITEM_BEFORE, PatchSet, slotOuterSpan, withTerminator } from "./source.js";
 import { rowIsFull } from "./structure.js";
 
 /**
@@ -33,6 +33,12 @@ export function typeCharacter(
   }
   if (char === "{" && state.consumeOpen === at) {
     return { kind: "move", to: caret };
+  }
+  if (char === ">") {
+    const closed = closeOverlay(view, at);
+    if (closed) {
+      return closed;
+    }
   }
   if (char === "]") {
     const closed = closeOptional(view, at);
@@ -83,8 +89,8 @@ function braceWaitingArgument(view: EditView, at: number, typed: EditOutcome): E
     return typed;
   }
   const [patch] = typed.patches;
-  // One token, or a terminator that ends the command's name (R5).
-  if (patch.from !== at || patch.to !== at || /^(?:\\[A-Za-z]+|\\.|[^\\{}])$/u.test(patch.insert) || /^[{ ]/u.test(patch.insert)) {
+  // One token, or a terminator that ends the command's name (R5). (`~` and `'` are macros, not one token.)
+  if (patch.from !== at || patch.to !== at || /^(?:\\[A-Za-z]+|\\.|[^\\{}~'])$/u.test(patch.insert) || /^[{ ]/u.test(patch.insert)) {
     return typed;
   }
   if (!view.tree.diagnostics.some((diagnostic) => diagnostic.code === "missing-argument" && diagnostic.span.from === at && diagnostic.span.to === at)) {
@@ -106,6 +112,18 @@ function newRowFor(view: EditView, typed: EditOutcome, at: number, end: number):
     return typed;
   }
   return { ...typed, patches: [{ ...typed.patches[0], insert: `${typed.patches[0].insert} \\\\ ` }] };
+}
+
+/** Whether the caret is right after an atom with a superscript (`x^2‸`). */
+function afterSuperscript(view: EditView, caret: Position): boolean {
+  const { tree } = view;
+  const slot = tree.slots[caret.slot];
+  let at = caret.index;
+  while (at > 0 && view.role(slot.children[at - 1]) === "invisible") {
+    at -= 1;
+  }
+  const previous = at > 0 ? tree.nodes[slot.children[at - 1]] : null;
+  return previous?.kind === "scripted" && presentSlots(tree, previous.id).some((candidate) => candidate.role === "sup");
 }
 
 /** Specials that destroy or break content when typed literally (R2): `%` comments out the line. */
@@ -133,10 +151,18 @@ function typeInText(view: EditView, caret: Position, at: number, char: string, s
   if (char === "[" && (optionalArgumentAhead(view, at) || endsWithControlWord(view.tree.text, skipSpacesBack(view.tree.text, at)))) {
     return insert(at, "{}[");
   }
+  // Beamer's `\item` reads a `<` after it, past spaces and its label, as an overlay specification (F4).
+  if (char === "<" && ITEM_BEFORE.test(view.tree.text.slice(0, skipSpacesBack(view.tree.text, at)))) {
+    return insert(at, "{}<");
+  }
   return insert(at, terminated(view, at, char, "text") + char);
 }
 
 function typeInMath(view: EditView, caret: Position, at: number, char: string, state: InteractionState): EditOutcome {
+  if (char === "'" && afterSuperscript(view, caret)) {
+    // A prime is a superscript (`^\prime`): after `\lambda^\star` it would be a second one.
+    return insert(at, "{}'");
+  }
   if (char === "&" && inAlignmentCell(view, caret.slot)) {
     // A cell beyond the column count would be a TeX error (as D2 for ⇥).
     return rowIsFull(view, caret.slot) ? { kind: "none" } : insert(at, char);
@@ -270,8 +296,31 @@ function closeSlot(view: EditView, caret: Position): EditOutcome {
   return { kind: "move", to: { slot: owner.parent, index: childIndex(tree, owner.id) + 1 } };
 }
 
+/**
+ * `>` at the end of an overlay specification being typed (`\only<2-‸>{}`)
+ * steps over its `>`, into the argument after it, whose `{` a `{` typed
+ * next is then (as `}` does between arguments, R3). Null elsewhere.
+ */
+function closeOverlay(view: EditView, at: number): EditOutcome | null {
+  const { tree } = view;
+  if (tree.text[at] !== ">") {
+    return null;
+  }
+  const node = tree.nodes.find((candidate) => candidate.values.some((value) => value.role === "overlay" && value.contentSpan.to === at));
+  if (!node) {
+    return null;
+  }
+  const next = presentSlots(tree, node.id)
+    .filter((candidate) => candidate.contentSpan.from > at)
+    .sort((left, right) => left.contentSpan.from - right.contentSpan.from)[0];
+  if (next?.braced && /^\s*$/u.test(tree.text.slice(at + 1, slotOuterSpan(tree, next.id).from))) {
+    return { kind: "move", to: { slot: next.id, index: 0 }, consumeOpen: true };
+  }
+  return node.parent == null ? null : { kind: "move", to: { slot: node.parent, index: childIndex(tree, node.id) + 1 } };
+}
+
 /** Whether a slot lies inside an optional argument with no braces in between. */
-function insideOptional(view: EditView, slot: SlotId): boolean {
+export function insideOptional(view: EditView, slot: SlotId): boolean {
   const { tree } = view;
   for (let current: SlotId | null = slot; current != null;) {
     const record: EditSlot = tree.slots[current];

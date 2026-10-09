@@ -9,7 +9,8 @@ import { PatchSet } from "./source.js";
 /**
  * K4: `^` (or `_`) right after an atom that already has that script moves
  * into the script, at its end, instead of writing a double script. Also
- * from the end of the base. Null when there is no such script.
+ * from the end of the base, and from right before a script with no base
+ * left. Null when there is no such script.
  */
 export function enterExistingScript(view: EditView, caret: Position, marker: "^" | "_"): EditOutcome | null {
   const { tree } = view;
@@ -31,12 +32,25 @@ export function enterExistingScript(view: EditView, caret: Position, marker: "^"
       scripted = previous;
     }
   }
+  // Right before a script whose base is gone (`\(‸^n\)`, its `\mathbb R` deleted): into it, at its start.
+  let atStart = false;
+  const next = caret.index < slot.children.length ? slot.children[caret.index] : null;
+  if (scripted == null && next != null && tree.nodes[next].kind === "scripted") {
+    const base = presentSlots(tree, next).find((candidate) => candidate.role === "base");
+    if (!base || base.children.length === 0) {
+      scripted = next;
+      atStart = true;
+    }
+  }
   if (scripted == null) {
     return null;
   }
   const script = presentSlots(tree, scripted).find((candidate) => candidate.role === (marker === "^" ? "sup" : "sub"));
-  return script ? { kind: "move", to: { slot: script.id, index: script.children.length } } : null;
+  return script ? { kind: "move", to: { slot: script.id, index: atStart ? 0 : script.children.length } } : null;
 }
+
+/** Commands whose content is an argument (`\textbf x`, `\href{u} x`, `\only<2> x`). */
+const COMMAND_WRAPPERS: ReadonlySet<string> = new Set(["style", "link", "overlay", "text-in-math"]);
 
 /**
  * R6 for any edit at a caret in a single-token unbraced argument (`x_‸i`):
@@ -45,7 +59,9 @@ export function enterExistingScript(view: EditView, caret: Position, marker: "^"
  */
 export function braceUnbracedArgument(view: EditView, caret: Position, outcome: EditOutcome): EditOutcome {
   const slot = view.tree.slots[caret.slot];
-  if (outcome.kind !== "patch" || slot.braced || !ARGUMENT_ROLES.has(slot.role) || slot.children.length === 0) {
+  // (Also a text command's content: `\textbf(` typed into gives `\textbf{…(}`, F7.)
+  const argument = ARGUMENT_ROLES.has(slot.role) || (slot.role === "content" && COMMAND_WRAPPERS.has(view.tree.nodes[slot.node].kind));
+  if (outcome.kind !== "patch" || slot.braced || !argument || slot.children.length === 0) {
     return outcome;
   }
   const { from, to } = slot.contentSpan;
