@@ -1,5 +1,6 @@
 import type { CommandTable } from "../../../packages/core/src/editing/commands/index.js";
 import type { Intent } from "../../../packages/core/src/editing/input/index.js";
+import { valueEditorFields, type ValueField } from "../../../packages/core/src/editing/operations/index.js";
 import { itemRole } from "../../../packages/core/src/editing/ownership/kinds.js";
 import type { EditView } from "../../../packages/core/src/editing/position/index.js";
 import { formatMarkedSource, parseScenarioKeys } from "../../../packages/core/src/editing/testing/index.js";
@@ -107,6 +108,7 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
   [6, [
     "\\pause", "\\only", "\\alert", "\\textcolor", "\\vspace", "\\hfill", "\\newline", "\\url", "\\footnote", "\\hline",
     "\\small", "\\textit", "\\texttt", "\\cite", "\\label", "\\uncover", "\\medskip", "\\color", "\\mbox",
+    "\\href", "\\hspace", "\\ref", "\\colorbox",
   ]],
   [4, [
     "\\hat", "\\vec", "\\mathcal", "\\mathrm", "\\underbrace", "\\leq", "\\to", "\\cdot", "\\quad", "\\operatorname",
@@ -128,6 +130,8 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
   [6, ["@copy", "@copy", "@cut", "@paste", "@paste", "@paste-text"]],
   // Clicks at a slot's or block's edge, where most rules apply (item starts, slot ends).
   [5, ["@edge"]],
+  // Values already written, edited through their tag (O8).
+  [2, ["@setvalue"]],
   // A deletion right at a block's edge: joins, merges, labels.
   [4, ["@block ⌫", "@block ⌦", "@edge ⌫", "@edge ⌦", "@block ⏎", "@block ⇥"]],
 ];
@@ -144,7 +148,9 @@ function randomTokens(random: () => number): string[] {
     if (roll < 0) {
       const token = pick(random, tokens);
       const ending = /^\\[A-Za-z]+$/u.test(token) ? pick(random, CHIP_ENDINGS) : "";
-      return ending ? [token, ending] : token.split(" ");
+      // A commit may open the value editor (O8): mostly filled, the next token deciding otherwise.
+      const filled = ending && ending !== "Esc" && ending !== "⌫" && random() < 0.7 ? ["@pick"] : [];
+      return ending ? [token, ending, ...filled] : token.split(" ");
     }
   }
   return [FAMILIES[0][1][0]];
@@ -234,8 +240,125 @@ export const OUTSIDE_TEXTS = [
   "x",
 ] as const;
 
+/**
+ * Values the editor fills in that TeX accepts in a beamer frame, by the
+ * command and its field (null: none the fuzzer can give, so it cancels).
+ */
+function valueChoices(command: string, field: ValueField, model: boolean): readonly string[] | null {
+  switch (`${command}:${field.argument}`) {
+    case "multicolumn:0":
+      return ["1", "2"];
+    case "scalebox:0":
+      return ["1.5"];
+    case "rotatebox:1":
+      return ["90"];
+    case "setlength:0":
+    case "addtolength:0":
+      return ["\\parskip", "\\itemsep"];
+    case "includegraphics:2":
+      return ["example-image"];
+    case "footnote:2":
+      return ["A note.", "50\\% more"];
+    case "setbeamertemplate:0":
+      return ["navigation symbols"];
+    case "setbeamercolor:0":
+      return ["structure"];
+    case "setbeamercolor:1":
+      return ["fg=red"];
+    case "setbeamerfont:0":
+      return ["title"];
+    case "setbeamerfont:1":
+      return ["size=\\small"];
+    case "setbeamercovered:0":
+      return ["transparent"];
+  }
+  if (["newcommand", "renewcommand", "sideset", "substack", "genfrac", "emoji", "qrcode", "bibitem"].includes(command)) {
+    return null;
+  }
+  switch (field.kind) {
+    case "color":
+      return model ? ["0.2,0.4,0.6"] : ["red", "blue!50", "red!30!black", "teal"];
+    case "url":
+      return ["https://example.org", "https://example.org/a%20b#part", "https://example.org/~me/a_b"];
+    case "dimension":
+      return command === "hspace" || command === "vspace" ? ["1em", "-2pt", "\\fill", "1em plus 1fil"] : ["1em", "-2pt", "0.5\\textwidth", "3mm"];
+    case "label-key":
+      return ["sec:intro", "fig:a-1"];
+    case "overlay":
+      return ["", "2-", "+-", "1-3"];
+    case "options":
+      return command === "textcolor" || command === "color" || command === "colorbox" ? ["", "rgb"] : [""];
+    case "spec":
+      return ["c", "l"];
+    case "value":
+      // (Accents take a letter; other values mean something the fuzzer does not know.)
+      return field.optional ? [""] : ["c", "v", "u", "H", "r", "k", "b", "d", "t"].includes(command) ? ["o"] : null;
+  }
+}
+
+/** Values for the open value editor's fields, chosen by `seed`; null when the fuzzer has none. */
+function pickedValues(session: KeystrokeSession, seed: number): string[] | null {
+  const picker = session.picker();
+  const editor = picker ? valueEditorFields(session.commands, session.view(), picker.at, picker.name, picker.key) : null;
+  if (!picker || !editor) {
+    return null;
+  }
+  const random = createRandom(seed);
+  const values: string[] = [];
+  for (const field of editor.fields) {
+    const model = values.some((value, index) => editor.fields[index].open === "[" && value !== "");
+    const choices = valueChoices(picker.name, field, model && field.kind === "color");
+    if (!choices) {
+      return null;
+    }
+    values.push(pick(random, choices));
+  }
+  return values;
+}
+
+/** An edit of a value already written, chosen by `seed`: one the fuzzer has a valid replacement for. */
+function valueEdit(session: KeystrokeSession, seed: number): FuzzKey | null {
+  const { tree } = session.view();
+  const random = createRandom(seed);
+  // (Not overprint's `\onslide` specifications, which must not overlap: overlays are still to be designed.)
+  const overprint = (node: { span: { from: number; to: number } }) => tree.nodes.some((outer) => outer.span.from < node.span.from &&
+    outer.span.to > node.span.to && tree.text.startsWith("\\begin{overprint}", outer.span.from));
+  const candidates = tree.nodes.flatMap((node) => node.command == null || (node.command === "onslide" && overprint(node)) ? []
+    : node.values.map((value, index) => ({ node, value, index })));
+  if (candidates.length === 0) {
+    return null;
+  }
+  const { node, value } = pick(random, candidates);
+  const schema = session.commands.command(node.command!, tree.slots[node.parent ?? 0]?.mode === "math" ? "math" : "text");
+  const open = value.span.from < value.contentSpan.from ? tree.text[value.span.from] : "";
+  // The argument the value is: the first of its kind and delimiter.
+  const argument = schema?.args.findIndex((arg) => !arg.rendered && arg.role === value.role && (arg.kind === "mandatory") === (open !== "[" && open !== "<")) ?? -1;
+  const model = node.values.some((other) => tree.text[other.span.from] === "[" && other.span.to <= value.span.from);
+  const choices = valueChoices(node.command!, { argument, kind: value.role, optional: open === "[" || open === "<", open, close: "" }, model && value.role === "color");
+  if (!choices) {
+    return null;
+  }
+  return { kind: "setValues", edits: [{ span: value.contentSpan, text: pick(random, choices) }] };
+}
+
 /** The keys a token stands for. */
 function keysOf(token: string, session: KeystrokeSession, index: number): FuzzKey[] {
+  if (token === "@pick" || token === "@setvalue") {
+    return keysOf(`${token}:${hash(session.text) ^ index}`, session, index);
+  }
+  const valued = /^@(pick|setvalue):(-?\d+)$/u.exec(token);
+  if (valued) {
+    const seed = Number(valued[2]);
+    if (valued[1] === "setvalue") {
+      const edit = valueEdit(session, seed);
+      return edit ? [edit] : [];
+    }
+    const values = session.pickerOpen() ? pickedValues(session, seed) : null;
+    if (!session.pickerOpen()) {
+      return [];
+    }
+    return values ? [{ kind: "pick", values, viaBrace: seed % 2 === 0 }] : parseScenarioKeys("Esc");
+  }
   switch (token) {
     case "@copy":
     case "@cut":
@@ -338,6 +461,10 @@ function contentRule(intent: Intent | null, hadSelection: boolean, chipOpen: boo
   if (!intent) {
     return "unchanged";
   }
+  if (intent.type === "setValues") {
+    // A value edited through its tag, whatever it shows.
+    return "any";
+  }
   if (chipOpen) {
     // The chip commits on ␣, ⏎, ⇥, arrows and characters; letters, ⌫ and Esc only edit it.
     if (intent.type === "deleteBackward" || intent.type === "deleteForward" || intent.type === "escape") {
@@ -348,6 +475,7 @@ function contentRule(intent: Intent | null, hadSelection: boolean, chipOpen: boo
   switch (intent.type) {
     case "insertText":
     case "paste":
+    case "pickValues":
       return hadSelection ? "replaces-selection" : "adds";
     case "deleteBackward":
     case "deleteForward":
@@ -461,7 +589,7 @@ function checkStep(
     }
   }
   const interaction = session.interaction();
-  if (history && (interaction.chip || interaction.placeholder != null || interaction.pending != null)) {
+  if (history && (interaction.chip || interaction.picker || interaction.placeholder != null || interaction.pending != null)) {
     // O7: undo and redo restore source and selection, never editing state.
     return { invariant: "undo", message: "undo or redo brought back interaction state" };
   }
@@ -482,7 +610,16 @@ export type FuzzRun = {
   readonly states: readonly string[];
   /** Keys that changed the source. */
   readonly edits: number;
+  /** Values the value editor wrote (O8), as `writtenValues` lists them. */
+  readonly picked: readonly string[];
 };
+
+/** The values a buffer holds: `command role content`, one per value argument. */
+export function writtenValues(view: EditView): string[] {
+  const { tree } = view;
+  return tree.nodes.flatMap((node) =>
+    node.values.map((value) => `${node.command ?? node.kind} ${value.role} ${tree.text.slice(value.contentSpan.from, value.contentSpan.to).trim()}`));
+}
 
 /** Runs a case, checking every step, then undoes everything and redoes it. */
 export function runCase(fuzz: FuzzCase): FuzzRun {
@@ -492,15 +629,17 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
   const resolved: string[] = [];
   const states: string[] = [];
   let edits = 0;
+  const picked: string[] = [];
   const fail = (failure: Omit<FuzzFailure, "step" | "text">, step: number): FuzzRun =>
-    ({ failure: { ...failure, step, text: session.text }, tokens: resolved, finalText: session.text, states, edits });
+    ({ failure: { ...failure, step, text: session.text }, tokens: resolved, finalText: session.text, states, edits, picked });
   let diagnostics = diagnosticCounts(initial.tree);
   for (let index = 0; index < fuzz.tokens.length; index += 1) {
     const token = fuzz.tokens[index];
     const keysForToken = keysOf(token, session, index);
     const head = keysForToken[0];
     resolved.push(head?.kind === "select" ? (head.anchor === head.focus ? `@${head.anchor}` : `@${head.anchor}:${head.focus}`)
-      : head?.kind === "paste" && head.plain != null ? `@paste-text:${OUTSIDE_TEXTS.indexOf(head.plain as never)}` : token);
+      : head?.kind === "paste" && head.plain != null ? `@paste-text:${OUTSIDE_TEXTS.indexOf(head.plain as never)}`
+      : token === "@pick" || token === "@setvalue" ? `${token}:${hash(session.text) ^ index}` : token);
     for (const key of keysForToken) {
       const view = session.view();
       const { anchor, focus } = session.selection;
@@ -521,6 +660,13 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
       }
       if (session.text !== before.text) {
         edits += 1;
+        if (key.kind === "pick" || key.kind === "setValues") {
+          const left = writtenValues(view);
+          picked.push(...writtenValues(session.view()).filter((value) => {
+            const index = left.indexOf(value);
+            return index < 0 || left.splice(index, 1).length === 0;
+          }));
+        }
       }
       let broken: Omit<FuzzFailure, "step" | "text"> | null;
       try {
@@ -556,7 +702,7 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
   if (session.text !== newest) {
     return fail({ invariant: "undo", message: "redoing every step did not restore the newest state" }, -1);
   }
-  return { failure: null, tokens: resolved, finalText, states, edits };
+  return { failure: null, tokens: resolved, finalText, states, edits, picked };
 }
 
 /** Diagnostics allowed from here on: those of the start, and any the source already had. */

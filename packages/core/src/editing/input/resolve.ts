@@ -24,7 +24,12 @@ import {
   commitCommand,
   commitControlSymbol,
   commitLeftDelimiter,
+  isControlSymbol,
   copyRange,
+  commitWithValues,
+  editValues,
+  needsValues,
+  valueEditorFields,
   deadBreaks,
   inAlignment,
   inListFlow,
@@ -66,6 +71,7 @@ import {
 import type { InputSurface } from "./adapter.js";
 import { chipCommitName } from "./chip.js";
 import { NO_INTERACTION, type ChipState, type InteractionState } from "./interaction.js";
+import type { CommitKey } from "../operations/index.js";
 import type { CommandTable } from "../commands/table.js";
 import type { FormatCommand, Intent } from "./intent.js";
 import { logicalLineBoundary, nextWordBoundary, previousWordBoundary } from "./text-units.js";
@@ -137,8 +143,9 @@ const WRAP_REFUSING_KINDS = new Set(["formula", "display", "alignment", "list", 
  * Commands no commit can write whole: `\verb` takes its delimiter from
  * the next character (and needs a fragile frame), and an environment
  * needs its name and its `\end` (the environment chip, still to come).
+ * `\def` takes the macro it defines unbraced.
  */
-const UNCOMMITTABLE = new Set(["verb", "lstinline", "begin", "end"]);
+const UNCOMMITTABLE = new Set(["verb", "lstinline", "begin", "end", "def"]);
 
 /** Commands that structure flow text, never written into math. */
 const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
@@ -176,6 +183,8 @@ export function needsFreshLayout(intent: Intent, surface: InputSurface, _isScope
     case "cut":
     case "paste":
     case "color":
+    case "pickValues":
+    case "setValues":
     case "undo":
     case "redo":
       return false;
@@ -216,13 +225,17 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
       return resolver.format(intent.command);
     case "color":
       return resolver.color(intent.color);
+    case "pickValues":
+      return resolver.pickValues(intent.values, intent.viaBrace);
+    case "setValues":
+      return resolver.setValues(intent.edits);
     case "escape":
       return resolver.escape();
     case "undo":
-      // With the chip open, ⌘Z just closes it.
-      return context.interaction.chip ? resolver.escape() : { kind: "history", direction: "undo" };
+      // With the chip or the value editor open, ⌘Z just closes it.
+      return context.interaction.chip || context.interaction.picker ? resolver.escape() : { kind: "history", direction: "undo" };
     case "redo":
-      return context.interaction.chip ? resolver.escape() : { kind: "history", direction: "redo" };
+      return context.interaction.chip || context.interaction.picker ? resolver.escape() : { kind: "history", direction: "redo" };
   }
 }
 
@@ -821,7 +834,80 @@ class Resolver {
 
   /** Esc: closes the command chip without writing anything. */
   escape(): IntentResolution {
-    return this.context.interaction.chip ? this.keepSelection(NO_INTERACTION) : NONE;
+    return this.context.interaction.chip || this.context.interaction.picker ? this.keepSelection(NO_INTERACTION) : NONE;
+  }
+
+  /**
+   * The value editor's fields, filled (O8): the command it is open for,
+   * written whole, as one step. Values that cannot be written leave it
+   * open, writing nothing.
+   */
+  pickValues(values: readonly string[], viaBrace: boolean): IntentResolution {
+    const picker = this.context.interaction.picker;
+    const view = this.view;
+    const commands = this.context.commands;
+    const editor = picker && view && commands ? valueEditorFields(commands, view, picker.at, picker.name, picker.key) : null;
+    if (!picker || !view || !commands || !editor) {
+      return NONE;
+    }
+    const caret = caretAt(view, picker.at);
+    const written = braceUnbracedArgument(view, caret,
+      commitWithValues(view, commands, caret, picker.at, picker.name, picker.held, editor.fields, values));
+    if (written.kind !== "patch") {
+      return NONE;
+    }
+    const focus = written.selectionEnd ?? written.caret;
+    const applied = applyPatches(this.context.text, written.patches);
+    // Confirmed by `}` into an empty argument: a `{` typed next is that argument's own.
+    const consumeOpen = viaBrace && focus === written.caret && applied[written.caret - 1] === "{";
+    return this.transaction(
+      written.patches,
+      { kind: "absolute", anchor: written.caret, focus },
+      { group: "own-step" },
+      consumeOpen ? { interaction: { consumeOpen: written.caret } } : {}
+    );
+  }
+
+  /** Values already written, edited in place (O8): one step; the selection keeps its place. */
+  setValues(edits: readonly { readonly span: { readonly from: number; readonly to: number }; readonly text: string }[]): IntentResolution {
+    const view = this.view ?? this.context.structure?.(this.context.text) ?? null;
+    const patches = view ? editValues(view, edits) : null;
+    const { text, anchor, focus } = this.context;
+    if (!patches || patches.every((patch) => text.slice(patch.from, patch.to) === patch.insert)) {
+      return NONE;
+    }
+    const map = (offset: number) => {
+      let shift = 0;
+      for (const patch of patches) {
+        if (patch.to <= offset) {
+          shift += patch.insert.length - (patch.to - patch.from);
+        } else if (patch.from < offset) {
+          return patch.from + shift + patch.insert.length;
+        }
+      }
+      return offset + shift;
+    };
+    return this.transaction(patches, { kind: "absolute", anchor: map(anchor), focus: map(focus) }, { group: "own-step" });
+  }
+
+  /**
+   * Opens the value editor for a command that needs values (O8), in place
+   * of writing it with empty ones. A held selection goes into the content
+   * argument when the command has one (of the selection's mode); else the
+   * command replaces it, and it is what the first field starts with.
+   */
+  private openPicker(view: EditView, commands: CommandTable, chip: ChipState, name: string, key: CommitKey, then?: string): IntentResolution {
+    const mode = view.tree.slots[caretAt(view, chip.at).slot].mode === "math" ? "math" : "text";
+    const own = commands.command(name, mode);
+    const schema = own ?? commands.command(name, mode === "math" ? "text" : "math")!;
+    const target = schema.args.find((arg) => arg.kind === "mandatory" && arg.rendered);
+    if (chip.held && (!own || (target && (target.mode ?? mode) !== mode))) {
+      // A selection does not go into another mode, nor into a command of another mode.
+      return this.keepSelection(NO_INTERACTION);
+    }
+    const replaced = chip.held && !target ? this.context.text.slice(chip.held.from, chip.held.to) : "";
+    const seed = replaced + (then != null && !"{}$".includes(then) ? then : "");
+    return this.keepSelection({ picker: { name, at: chip.at, held: chip.held, key, seed } });
   }
 
   /** A transaction changing only the interaction state: buffer, selection and positions stay. */
@@ -857,6 +943,10 @@ class Resolver {
       return this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: chip.name + char, selected: 0 } });
     }
     const caret = caretAt(view, chip.at);
+    if (chip.name === "" && !isControlSymbol(char, view.tree.slots[caret.slot].mode)) {
+      // `\<` is no command: the chip closes, and the character is typed as itself.
+      return new Resolver({ ...this.context, interaction: NO_INTERACTION }).insertText(char, true);
+    }
     if (chip.name === "") {
       const symbol = commitControlSymbol(view, caret, chip.at, char, chip.held);
       if (!symbol) {
@@ -887,8 +977,12 @@ class Resolver {
       // The next command starts: commit this one, open a new chip after it. A command
       // that takes arguments gets its braces, with the new chip in the first, so the
       // source stays whole if that chip is never committed (`\\sqrt{\\te‸}`).
+      // (A command that needs values asks for them first, the `\\` starting the first.)
       const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
       const schema = commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text");
+      if (schema && needsValues(schema)) {
+        return this.commitChip(view, commands, chip, "typed", false, char);
+      }
       const takesArguments = schema?.args.some((arg) => arg.kind === "mandatory") ?? false;
       const committed = this.commitChip(view, commands, chip, takesArguments ? "structure" : "typed", false);
       if (committed.kind !== "transaction" || committed.transaction.selection.kind !== "absolute") {
@@ -989,6 +1083,12 @@ class Resolver {
       return name === "left"
         ? this.commitOutcome(view, commitLeftDelimiter(chip.at, chip.held, "(")!)
         : this.keepSelection(NO_INTERACTION);
+    }
+    const valued = commands.command(name, mode === "math" ? "math" : "text") ??
+      (mode === "math" && ["declaration", "vertical", "break", "overlay"].includes(commands.command(name, "text")?.category ?? "") ? null : commands.command(name, mode === "math" ? "text" : "math"));
+    if (valued && needsValues(valued) && !UNCOMMITTABLE.has(name)) {
+      // Never written with empty values (O8): the value editor asks for them first.
+      return this.openPicker(view, commands, chip, name, key, then);
     }
     const across = commitAcrossModes(view, commands, caret, chip.at, name, key, chip.held);
     if (across === "refused") {

@@ -92,7 +92,7 @@ type Run = {
 const NO_STOPS: ReadonlySet<Stop> = new Set();
 /** A TeX dimension: a factor and a unit or a length register (`2pt`, `-.5\\textwidth`). */
 const DIMEN = String.raw`\s*[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)?\s*(?:(?:true)?(?:pt|em|ex|cm|mm|in|bp|pc|dd|cc|sp|mu|px)\b|\\[A-Za-z@]+)`;
-const GLUE = String.raw`${DIMEN}(?:\s*(?:plus|minus)\s*[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)?\s*(?:fil+\b|(?:true)?(?:pt|em|ex|cm|mm|in|bp|pc|dd|cc|sp|mu)\b|\\[A-Za-z@]+))*`;
+export const GLUE = String.raw`${DIMEN}(?:\s*(?:plus|minus)\s*[-+]?\s*(?:\d+(?:\.\d*)?|\.\d+)?\s*(?:fil+\b|(?:true)?(?:pt|em|ex|cm|mm|in|bp|pc|dd|cc|sp|mu)\b|\\[A-Za-z@]+))*`;
 
 /** The keyword syntax after TeX's rule, box and skip primitives. */
 const PRIMITIVE_SPECS: Readonly<Record<string, RegExp>> = {

@@ -233,6 +233,21 @@ export function breaksBoldMath(table: CommandTable, name: string): boolean {
   return text != null && !text.userMacro && (text.args.some((arg) => arg.kind === "overlay") || ["link", "atom", "vertical", "overlay"].includes(text.category));
 }
 
+/**
+ * The control symbols LaTeX (with amsmath) defines in each mode, besides
+ * `\{`, `\}`, `\[`, `\(` and `\\`, which commit to pairs and breaks:
+ * `\<` or `\?` is undefined, and the accents (`\'`, `\^`) are text-only.
+ */
+const CONTROL_SYMBOLS: Readonly<Record<"text" | "math", string>> = {
+  text: "%$#&_ ,;:!'\"`^~=.-/@",
+  math: "%$#&_ ,;:!>|-/@*",
+};
+
+/** Whether `\` and a character is a control symbol the mode defines. */
+export function isControlSymbol(char: string, mode: EditMode): boolean {
+  return "{}[(\\".includes(char) || CONTROL_SYMBOLS[mode === "math" ? "math" : "text"].includes(char);
+}
+
 /** `\\`, `\%`, `\{`: a control symbol, committed as soon as its character is typed. */
 export function commitControlSymbol(view: EditView, caret: Position, at: number, char: string, held: Span | null): CommandCommit | null {
   const { tree } = view;
@@ -255,8 +270,8 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
       if (!lineEndable(view, caret, range.from)) {
         return null;
       }
-      // Before an existing `[`, the break must not take it as its spacing (K9).
-      if (/^\s*\[/u.test(tree.text.slice(range.to))) {
+      // Before an existing `[` or `*`, the break must not take it as its spacing or star (K9).
+      if (/^\s*[[*]/u.test(tree.text.slice(range.to))) {
         return { outcome: edit(range, "\\\\{}", range.from + 4) };
       }
       return { outcome: edit(range, "\\\\", range.from + 2), pending: range.from + 2 };

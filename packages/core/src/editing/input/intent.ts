@@ -6,6 +6,7 @@
  */
 
 import type { ClipboardPayload } from "../operations/paste.js";
+import type { Span } from "../tree/types.js";
 
 export type IntentOrigin = "keyboard" | "composition" | "paste" | "menu" | "pointer";
 
@@ -52,6 +53,14 @@ export type IntentBody =
     }
   | { readonly type: "format"; readonly command: FormatCommand }
   | { readonly type: "color"; readonly color: string | null }
+  /**
+   * The value editor's fields, filled (O8): writes the command it is open
+   * for. `viaBrace`: confirmed by a typed `}`, so a `{` typed next is the
+   * following argument's own brace.
+   */
+  | { readonly type: "pickValues"; readonly values: readonly string[]; readonly viaBrace: boolean }
+  /** Values already written, edited: each named by its content span (buffer-local). */
+  | { readonly type: "setValues"; readonly edits: readonly { readonly span: Span; readonly text: string }[] }
   | { readonly type: "undo" }
   | { readonly type: "redo" }
   /** Esc while something transient is open (the command chip); the session itself handles Esc otherwise. */

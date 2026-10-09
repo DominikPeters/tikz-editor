@@ -36,7 +36,11 @@ export type FuzzKey =
   /** ⌘C and ⌘X, into the session's own clipboard. */
   | { readonly kind: "copy" | "cut" }
   /** ⌘V: the session's clipboard, or text from outside. */
-  | { readonly kind: "paste"; readonly plain?: string };
+  | { readonly kind: "paste"; readonly plain?: string }
+  /** The value editor's fields filled and confirmed (⏎, or `}` with `viaBrace`). */
+  | { readonly kind: "pick"; readonly values: readonly string[]; readonly viaBrace?: boolean }
+  /** Values already written, edited through their tag. */
+  | { readonly kind: "setValues"; readonly edits: readonly { readonly span: { readonly from: number; readonly to: number }; readonly text: string }[] };
 
 export class KeystrokeSession {
   private machine: CanvasTextEditState = INITIAL_CANVAS_TEXT_EDIT_STATE;
@@ -47,7 +51,7 @@ export class KeystrokeSession {
 
   constructor(
     text: string,
-    private readonly commands: CommandTable,
+    readonly commands: CommandTable,
     anchor: number,
     focus = anchor,
     private readonly title = false,
@@ -136,6 +140,19 @@ export class KeystrokeSession {
         this.run(intent);
         return intent;
       }
+      case "pick": {
+        if (!this.pickerOpen()) {
+          return null;
+        }
+        const intent: Intent = { type: "pickValues", values: key.values, viaBrace: key.viaBrace ?? false, origin: "keyboard", repeat: false };
+        this.run(intent);
+        return intent;
+      }
+      case "setValues": {
+        const intent: Intent = { type: "setValues", edits: key.edits, origin: "pointer", repeat: false };
+        this.run(intent);
+        return intent;
+      }
       case "text": {
         const intent = intentFromBeforeInput("insertText", key.text)!;
         this.run(intent);
@@ -147,7 +164,7 @@ export class KeystrokeSession {
           this.run(decision.intent);
           return decision.intent;
         }
-        if (decision.kind === "escape" && this.chipOpen()) {
+        if (decision.kind === "escape" && (this.chipOpen() || this.pickerOpen())) {
           const intent: Intent = { type: "escape", origin: "keyboard", repeat: false };
           this.run(intent);
           return intent;
@@ -165,6 +182,15 @@ export class KeystrokeSession {
 
   chipOpen(): boolean {
     return this.interaction().chip != null;
+  }
+
+  /** The value editor, while it is open (O8). */
+  picker() {
+    return this.interaction().picker ?? null;
+  }
+
+  pickerOpen(): boolean {
+    return this.picker() != null;
   }
 
   private session() {

@@ -198,6 +198,10 @@ function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | 
     if (node.kind === "break" || node.kind === "vertical" || (node.command != null && ENDS_PARAGRAPH.has(node.command))) {
       return "line";
     }
+    // (In `overprint`, each `\onslide` starts a box of its own.)
+    if (node.command === "onslide" && inOverprint(view, child)) {
+      return "line";
+    }
     // The node around the caret: its own line so far, then (unless it starts a line) what is before it.
     const inner = node.slots.find((id) => tree.slots[id].contentSpan.from <= at && at <= tree.slots[id].contentSpan.to);
     if (inner != null) {
@@ -215,6 +219,14 @@ function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | 
     }
   }
   return "start";
+}
+
+/** Whether a node is inside an `overprint` environment. */
+function inOverprint(view: EditView, id: NodeId): boolean {
+  const { tree } = view;
+  const { from, to } = tree.nodes[id].span;
+  return tree.nodes.some((node) => node.span.from < from && node.span.to > to &&
+    (node.command === "overprint" || tree.text.startsWith("\\begin{overprint}", node.span.from)));
 }
 
 /** Whether a node puts anything on the page: a visible leaf, or a node with one inside. */
@@ -371,11 +383,24 @@ export function rowIsFull(view: EditView, cell: SlotId): boolean {
   if (columns == null) {
     return false;
   }
-  const used = presentSlots(tree, row).reduce((sum, slot) => {
+  return columnsUsed(view, row) >= columns;
+}
+
+/** The columns a row takes, `\multicolumn{n}` counting n. */
+function columnsUsed(view: EditView, row: NodeId): number {
+  const { tree } = view;
+  return presentSlots(tree, row).reduce((sum, slot) => {
     const spans = /^\s*\\multicolumn\s*\{\s*(\d+)\s*\}/u.exec(tree.text.slice(slot.contentSpan.from, slot.contentSpan.to));
     return sum + (spans ? Number(spans[1]) : 1);
   }, 0);
-  return used >= columns;
+}
+
+/** The most columns a row of an alignment takes. */
+export function widestRow(view: EditView, alignment: NodeId): number {
+  const { tree } = view;
+  return Math.max(0, ...tree.nodes
+    .filter((node) => node.kind === "row" && node.parent != null && tree.slots[node.parent].node === alignment)
+    .map((row) => columnsUsed(view, row.id)));
 }
 
 /** The fixed column count of an alignment (`array`/`tabular` specification, `alignat{n}`), or null. */
@@ -384,14 +409,19 @@ function columnLimit(view: EditView, alignment: NodeId): number | null {
   const node = tree.nodes[alignment];
   const spec = node.values.find((value) => value.role === "spec");
   if (spec) {
-    const text = expandRepeats(tree.text.slice(spec.contentSpan.from, spec.contentSpan.to)).replace(/[@!>]\{[^}]*\}|<\{[^}]*\}|\{[^}]*\}/gu, "");
-    return (text.match(/[lcrpmbXS]/gu) ?? []).length || null;
+    return specColumns(tree.text.slice(spec.contentSpan.from, spec.contentSpan.to));
   }
   if (node.command?.startsWith("alignat")) {
     const count = Number.parseInt(tree.text.slice(node.values[0]?.contentSpan.from ?? 0, node.values[0]?.contentSpan.to ?? 0), 10);
     return Number.isFinite(count) ? 2 * count : null;
   }
   return node.command == null ? null : FIXED_COLUMNS.get(node.command.replace(/\*$/u, "")) ?? null;
+}
+
+/** The columns a column specification makes (`lr`, `*{2}{lr}`, `|p{3cm}|c|`), or null when it names none. */
+export function specColumns(spec: string): number | null {
+  const text = expandRepeats(spec).replace(/[@!>]\{[^}]*\}|<\{[^}]*\}|\{[^}]*\}/gu, "");
+  return (text.match(/[lcrpmbXS]/gu) ?? []).length || null;
 }
 
 /** A column spec with its repetitions written out: `*{2}{lr}` is `lrlr`. */
