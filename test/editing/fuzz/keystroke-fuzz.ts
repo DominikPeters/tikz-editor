@@ -124,6 +124,8 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
   [2, ["⌘B", "⌘I"]],
   [1, ["⏸"]],
   [7, ["@click"]],
+  // The clipboard: copies of what is on the canvas, and text from outside.
+  [6, ["@copy", "@copy", "@cut", "@paste", "@paste", "@paste-text"]],
   // Clicks at a slot's or block's edge, where most rules apply (item starts, slot ends).
   [5, ["@edge"]],
   // A deletion right at a block's edge: joins, merges, labels.
@@ -205,8 +207,48 @@ function hash(text: string): number {
   return value >>> 0;
 }
 
+/**
+ * Text pasted from outside: specials, brackets the commands around may
+ * read, newlines and blank lines, scripts in and out of place.
+ */
+export const OUTSIDE_TEXTS = [
+  "Costs rose 50% at R&D",
+  "$x^2$ and \\alpha",
+  "a_b^c",
+  "{braces} [brackets] <angles>",
+  "line one\nline two",
+  "first part\n\nsecond part",
+  "~tilde # hash",
+  "x^10 + y_i'",
+  "]",
+  "[draft] note",
+  "<2-> later",
+  "\\\\",
+  "C:\\dir\\file",
+  "  spaced  ",
+  "f'(x)^2",
+  "e^ix",
+  "tab\tseparated",
+  "\n\n\n- dash\n",
+  "word",
+  "x",
+] as const;
+
 /** The keys a token stands for. */
 function keysOf(token: string, session: KeystrokeSession, index: number): FuzzKey[] {
+  switch (token) {
+    case "@copy":
+    case "@cut":
+      return [{ kind: token === "@copy" ? "copy" : "cut" }];
+    case "@paste":
+      return [{ kind: "paste" }];
+    case "@paste-text":
+      return [{ kind: "paste", plain: pick(createRandom(hash(session.text) ^ index), OUTSIDE_TEXTS) }];
+  }
+  const pasted = /^@paste-text:(\d+)$/u.exec(token);
+  if (pasted) {
+    return [{ kind: "paste", plain: OUTSIDE_TEXTS[Number(pasted[1]) % OUTSIDE_TEXTS.length] }];
+  }
   if (token.startsWith("@")) {
     return [resolveClick(token, session, index)];
   }
@@ -305,6 +347,7 @@ function contentRule(intent: Intent | null, hadSelection: boolean, chipOpen: boo
   }
   switch (intent.type) {
     case "insertText":
+    case "paste":
       return hadSelection ? "replaces-selection" : "adds";
     case "deleteBackward":
     case "deleteForward":
@@ -456,7 +499,8 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
     const token = fuzz.tokens[index];
     const keysForToken = keysOf(token, session, index);
     const head = keysForToken[0];
-    resolved.push(head?.kind === "select" ? (head.anchor === head.focus ? `@${head.anchor}` : `@${head.anchor}:${head.focus}`) : token);
+    resolved.push(head?.kind === "select" ? (head.anchor === head.focus ? `@${head.anchor}` : `@${head.anchor}:${head.focus}`)
+      : head?.kind === "paste" && head.plain != null ? `@paste-text:${OUTSIDE_TEXTS.indexOf(head.plain as never)}` : token);
     for (const key of keysForToken) {
       const view = session.view();
       const { anchor, focus } = session.selection;

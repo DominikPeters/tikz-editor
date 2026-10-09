@@ -1,10 +1,13 @@
 import {
+  copySelection,
   intentFromBeforeInput,
   interpretKeyDown,
   resolveIntent,
   type Intent,
+  type IntentContext,
 } from "../../../packages/core/src/editing/input/index.js";
 import type { CommandTable } from "../../../packages/core/src/editing/commands/index.js";
+import type { ClipboardPayload } from "../../../packages/core/src/editing/operations/index.js";
 import { createEditViewCache, promotedOffsets, type EditView } from "../../../packages/core/src/editing/position/index.js";
 import { applyTransaction, TYPING_RUN_PAUSE_MS } from "../../../packages/core/src/editing/transaction/index.js";
 import type { ScenarioKey } from "../../../packages/core/src/editing/testing/index.js";
@@ -27,13 +30,20 @@ import type { EditableTextTarget } from "../../../packages/app/src/ui/canvas-pan
  * Besides the scenario keys, a session takes clicks: a selection set
  * directly, as a pointer or the hidden input would.
  */
-export type FuzzKey = ScenarioKey | { readonly kind: "select"; readonly anchor: number; readonly focus: number };
+export type FuzzKey =
+  | ScenarioKey
+  | { readonly kind: "select"; readonly anchor: number; readonly focus: number }
+  /** ⌘C and ⌘X, into the session's own clipboard. */
+  | { readonly kind: "copy" | "cut" }
+  /** ⌘V: the session's clipboard, or text from outside. */
+  | { readonly kind: "paste"; readonly plain?: string };
 
 export class KeystrokeSession {
   private machine: CanvasTextEditState = INITIAL_CANVAS_TEXT_EDIT_STATE;
   private backward = false;
   private time = 0;
   private readonly views = createEditViewCache();
+  private clipboard: ClipboardPayload | null = null;
 
   constructor(
     text: string,
@@ -107,6 +117,25 @@ export class KeystrokeSession {
         this.backward = focus < anchor;
         return null;
       }
+      case "copy":
+      case "cut": {
+        this.clipboard = copySelection(this.context()) ?? this.clipboard;
+        if (key.kind === "copy") {
+          return null;
+        }
+        const intent: Intent = { type: "cut", origin: "menu", repeat: false };
+        this.run(intent);
+        return intent;
+      }
+      case "paste": {
+        const payload = key.plain != null ? { plain: key.plain } : this.clipboard;
+        if (!payload) {
+          return null;
+        }
+        const intent: Intent = { type: "paste", payload, origin: "paste", repeat: false };
+        this.run(intent);
+        return intent;
+      }
       case "text": {
         const intent = intentFromBeforeInput("insertText", key.text)!;
         this.run(intent);
@@ -150,32 +179,35 @@ export class KeystrokeSession {
     this.machine = reduceCanvasTextEdit(this.machine, action).state;
   }
 
-  private run(intent: Intent): void {
+  /** The resolver's view of the session, as the session hook builds it. */
+  private context(): IntentContext {
     const state = this.machine;
     const session = this.session();
     const { anchor, focus } = this.selection;
-    const resolution = resolveIntent(
-      {
-        surface: "canvas",
-        editMode: session.editMode,
-        isScopeSession: true,
-        revision: state.inputRevision,
-        text: session.text,
-        bufferFrom: 0,
-        anchor,
-        focus,
-        composition: null,
-        domain: null,
-        verticalGoal: state.verticalGoal,
-        structure: (text, hidden) => this.views(text, this.commands, hidden),
-        positions: selectionPositions(state, anchor, focus),
-        interaction: interactionState(state, anchor, focus),
-        commands: this.commands,
-        title: this.title,
-        frameBody: this.frameBody,
-      },
-      intent
-    );
+    return {
+      surface: "canvas",
+      editMode: session.editMode,
+      isScopeSession: true,
+      revision: state.inputRevision,
+      text: session.text,
+      bufferFrom: 0,
+      anchor,
+      focus,
+      composition: null,
+      domain: null,
+      verticalGoal: state.verticalGoal,
+      structure: (text, hidden) => this.views(text, this.commands, hidden),
+      positions: selectionPositions(state, anchor, focus),
+      interaction: interactionState(state, anchor, focus),
+      commands: this.commands,
+      title: this.title,
+      frameBody: this.frameBody,
+    };
+  }
+
+  private run(intent: Intent): void {
+    const session = this.session();
+    const resolution = resolveIntent(this.context(), intent);
     switch (resolution.kind) {
       case "transaction": {
         const applied = applyTransaction(session.text, resolution.transaction);

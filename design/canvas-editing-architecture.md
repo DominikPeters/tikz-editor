@@ -859,8 +859,13 @@ uses positions but deletion still uses raw source ranges.
      (`\mu^\top`, not `x^\ldots`); a closer right after a command gives it
      its braces; a typed overlay specification is the command's
      (`\only<2->{x}`).
-   - Beamer nests three lists; `cases` has two columns; `\multicolumn`
-     opens its cell; joins across a `%` comment keep text out of it.
+   - Beamer nests three lists; `cases` has two columns (`*{2}{lr}` counts
+     four); `\multicolumn` opens its cell; joins across a `%` comment keep
+     text out of it.
+   - Page and frame breaks, `\onslide` and the transitions read a `<`
+     after them too; in `overprint`, `\onslide` cannot be wrapped; inside
+     `\bm`, beamer's overlay-aware commands make LuaLaTeX loop, so the
+     chip refuses them there.
    The oracle skips what TeX cannot judge yet: unknown commands, value
    arguments left empty or edited in place (O8), commands waiting for an
    argument (K2).
@@ -878,6 +883,21 @@ uses positions but deletion still uses raw source ranges.
    - Overlays need a design from first principles (typing next to
      content hidden on the current step, specifications as values).
    - `\frame{…}` and `\slide{…}{…}`-style frames are not recognized.
+
+   **Paste and copy (O6), done.** A canvas copy carries balanced source
+   (wrappers and lists it cuts through are closed and reopened) with its
+   mode, under its own clipboard type, and the rendered text as
+   `text/plain`; the bar keeps the input's own clipboard. Paste converts
+   by destination: a formula fragment pasted into prose gets `$…$`, a
+   whole formula pasted into math loses its delimiters, prose pasted into
+   math gets `\text{…}`. Copied source that cannot stand where it goes
+   (paragraphs or lists where no paragraph goes, items outside a list,
+   rows and table rules, `\verb`, line breaks without a line) falls back
+   to its plain text. Outside text is literal: every special escaped in
+   prose; in math, characters keep their meaning, and a `^`/`_` stays a
+   script only with a base and an argument. The fuzzers paste canvas
+   copies and a set of outside texts. "Paste as TeX" (C2's pill) and Z3's
+   missing-macro hint are still to come.
 
 Parallel: engine recovery (T1–T7) against the interface above. It must
 land before the source lens is promoted as the main escape hatch.

@@ -31,9 +31,15 @@ import {
   documentSourceOffset
 } from "@tikz-editor/core/text/source-coordinates";
 import type { BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
-import { listItemOf } from "@tikz-editor/core/editing/operations/index";
+import {
+  CANVAS_CLIP_TYPE,
+  listItemOf,
+  type CanvasClip,
+  type ClipboardPayload
+} from "@tikz-editor/core/editing/operations/index";
 import {
   chipCandidates,
+  copySelection,
   createIntentScheduler,
   intentFromBeforeInput,
   interpretKeyDown,
@@ -42,7 +48,8 @@ import {
   SUPPORTED_BEFORE_INPUT_TYPES,
   type ChipCandidate,
   type InputSurface,
-  type Intent
+  type Intent,
+  type IntentContext
 } from "@tikz-editor/core/editing/input/index";
 
 /**
@@ -254,6 +261,19 @@ const LAYOUT_WAIT_TIMEOUT_MS = 200;
 const IS_FAIL_FAST = import.meta.env.DEV || import.meta.env.MODE === "test";
 
 /** The surface interpreting the keyboard: canvas only for canvas-focused scope sessions. */
+/** A canvas copy read back from the clipboard, if it is one (it may come from another window). */
+function readCanvasClip(data: DataTransfer): CanvasClip | undefined {
+  try {
+    const clip = JSON.parse(data.getData(CANVAS_CLIP_TYPE)) as Partial<CanvasClip>;
+    return typeof clip.source === "string" && (clip.mode === "text" || clip.mode === "math") &&
+      (clip.shape === "fragment" || clip.shape === "whole")
+      ? { source: clip.source, mode: clip.mode, shape: clip.shape }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function sessionSurface(state: CanvasTextEditState): InputSurface {
   return state.session?.isScopeSession && state.focusSurface === "canvas" ? "canvas" : "bar";
 }
@@ -720,7 +740,7 @@ export function useCanvasTextEditSession(
   const [textEditInactiveSelectionRects, setTextEditInactiveSelectionRects] = useState<
     { left: number; top: number; width: number; height: number }[] | null
   >(null);
-  const pendingTextEditPasteRef = useRef<string | null>(null);
+  const pendingTextEditPasteRef = useRef<ClipboardPayload | null>(null);
   const pendingTextEditInsertTextRef = useRef<string | null>(null);
   const previousContextKeyRef = useRef(contextKey);
   const sourceRevisionRef = useRef(sourceRevision);
@@ -815,12 +835,12 @@ export function useCanvasTextEditSession(
 
   const resolveDeckCaretDomainRef = useRef(resolveDeckCaretDomain);
 
-  /** Resolves one intent against the current session state and applies it. */
-  const runIntent = useCallback((intent: Intent) => {
+  /** What the resolver sees of the current session state. */
+  const currentIntentContext = useCallback((): IntentContext | null => {
     const state = stateRef.current;
     const session = state.session;
     if (!session) {
-      return;
+      return null;
     }
     const surface = sessionSurface(state);
     // The machine stores a normalized selection; its direction lives on the
@@ -829,30 +849,39 @@ export function useCanvasTextEditSession(
     const backward = input?.selectionDirection === "backward";
     const anchor = backward ? session.selectionEnd : session.selectionStart;
     const focus = backward ? session.selectionStart : session.selectionEnd;
+    return {
+      surface,
+      editMode: session.editMode,
+      isScopeSession: session.isScopeSession,
+      revision: state.inputRevision,
+      text: session.text,
+      bufferFrom: session.sourceSpan.from,
+      anchor,
+      focus,
+      composition: state.compositionRange
+        ? { from: state.compositionRange.start, to: state.compositionRange.end }
+        : null,
+      domain: session.isScopeSession ? resolveDeckCaretDomainRef.current(session.sourceId) : null,
+      verticalGoal: state.verticalGoal,
+      structure: session.isScopeSession
+        ? (text, hidden) => canvasEditView(text, editCommandsRef.current, hidden)
+        : null,
+      positions: selectionPositions(state, anchor, focus),
+      interaction: interactionState(state, anchor, focus),
+      commands: session.isScopeSession ? editCommandsRef.current : null,
+      title: session.sourceId.endsWith(":scope:title"),
+      frameBody: session.sourceId.endsWith(":scope:body"),
+    };
+  }, []);
+
+  /** Resolves one intent against the current session state and applies it. */
+  const runIntent = useCallback((intent: Intent) => {
+    const context = currentIntentContext();
+    if (!context) {
+      return;
+    }
     const resolution = resolveIntent(
-      {
-        surface,
-        editMode: session.editMode,
-        isScopeSession: session.isScopeSession,
-        revision: state.inputRevision,
-        text: session.text,
-        bufferFrom: session.sourceSpan.from,
-        anchor,
-        focus,
-        composition: state.compositionRange
-          ? { from: state.compositionRange.start, to: state.compositionRange.end }
-          : null,
-        domain: session.isScopeSession ? resolveDeckCaretDomainRef.current(session.sourceId) : null,
-        verticalGoal: state.verticalGoal,
-        structure: session.isScopeSession
-          ? (text, hidden) => canvasEditView(text, editCommandsRef.current, hidden)
-          : null,
-        positions: selectionPositions(state, anchor, focus),
-        interaction: interactionState(state, anchor, focus),
-        commands: session.isScopeSession ? editCommandsRef.current : null,
-        title: session.sourceId.endsWith(":scope:title"),
-        frameBody: session.sourceId.endsWith(":scope:body"),
-      },
+      context,
       intent
     );
     switch (resolution.kind) {
@@ -868,7 +897,7 @@ export function useCanvasTextEditSession(
       case "none":
         return;
     }
-  }, [commitTransaction, dispatchCanvasTextEditAction]);
+  }, [commitTransaction, currentIntentContext, dispatchCanvasTextEditAction]);
 
   const runIntentRef = useRef(runIntent);
   const layoutWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1389,9 +1418,12 @@ export function useCanvasTextEditSession(
   const submitTextareaInput = useCallback((
     inputType: string,
     data: string | null,
-    textarea: HTMLTextAreaElement
+    textarea: HTMLTextAreaElement,
+    payload: ClipboardPayload | null = null
   ): boolean => {
-    const intent = intentFromBeforeInput(inputType, data);
+    const native = intentFromBeforeInput(inputType, data);
+    // A paste carries the clipboard's canvas copy, which the input event cannot.
+    const intent = native?.type === "paste" && payload ? { ...native, payload } : native;
     if (!intent) {
       const message =
         `[canvas-text-edit] unsupported inputType "${inputType}". Supported: ${SUPPORTED_BEFORE_INPUT_TYPES.join(", ")}`;
@@ -1438,14 +1470,15 @@ export function useCanvasTextEditSession(
       if (inputType === "insertText" && data == null) {
         data = pendingTextEditInsertTextRef.current;
       }
+      const pasted = inputType === "insertFromPaste" ? pendingTextEditPasteRef.current : null;
       if (inputType === "insertFromPaste" && data == null) {
-        data = pendingTextEditPasteRef.current;
+        data = pasted?.plain ?? null;
       }
       if (inputType === "insertFromPaste") {
         pendingTextEditPasteRef.current = null;
       }
       pendingTextEditInsertTextRef.current = null;
-      if (submitTextareaInput(inputType, data, textarea)) {
+      if (submitTextareaInput(inputType, data, textarea, pasted)) {
         nativeEvent.preventDefault();
       }
     },
@@ -1461,17 +1494,42 @@ export function useCanvasTextEditSession(
     });
   }, [dispatchCanvasTextEditAction]);
 
-  const stopTextEditTextareaClipboardPropagation = useCallback(
-    (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
-      event.stopPropagation();
-    },
-    []
-  );
-
   const handleTextEditTextareaPaste = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
-    pendingTextEditPasteRef.current = event.clipboardData.getData("text/plain");
-  }, []);
+    const plain = event.clipboardData.getData("text/plain");
+    if (sessionSurface(stateRef.current) !== "canvas") {
+      // The bar pastes source as text, through the input's own paste.
+      pendingTextEditPasteRef.current = { plain };
+      return;
+    }
+    // The canvas converts what it pastes (O6), a canvas copy first.
+    const clip = readCanvasClip(event.clipboardData);
+    if (submitTextareaInput("insertFromPaste", plain, event.currentTarget, { plain, ...(clip ? { clip } : {}) })) {
+      event.preventDefault();
+    }
+  }, [submitTextareaInput]);
+
+  /**
+   * Copy and cut on the canvas (C3): `text/plain` gets the rendered text and
+   * the canvas type the balanced source. The bar keeps the input's own copy.
+   */
+  const handleTextEditTextareaCopy = useCallback((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    event.stopPropagation();
+    intentScheduler.flush();
+    const context = currentIntentContext();
+    const payload = context ? copySelection(context) : null;
+    if (!payload) {
+      return;
+    }
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", payload.plain);
+    if (payload.clip) {
+      event.clipboardData.setData(CANVAS_CLIP_TYPE, JSON.stringify(payload.clip));
+    }
+    if (event.type === "cut") {
+      intentScheduler.submit({ type: "cut", origin: "menu", repeat: false });
+    }
+  }, [currentIntentContext, intentScheduler]);
 
   const handleTextEditTextareaDrop = useCallback((event: ReactDragEvent<HTMLTextAreaElement>) => {
     event.preventDefault();
@@ -2194,8 +2252,8 @@ export function useCanvasTextEditSession(
       onPopupPointerDown: handleTextEditPopupPointerDown,
       onTextareaFocus: handleTextEditTextareaFocus,
       onTextareaSelect: handleTextEditTextareaSelect,
-      onTextareaCopy: stopTextEditTextareaClipboardPropagation,
-      onTextareaCut: stopTextEditTextareaClipboardPropagation,
+      onTextareaCopy: handleTextEditTextareaCopy,
+      onTextareaCut: handleTextEditTextareaCopy,
       onTextareaPaste: handleTextEditTextareaPaste,
       onTextareaDrop: handleTextEditTextareaDrop,
       onTextareaKeyDown: handleTextEditTextareaKeyDown
@@ -2203,12 +2261,12 @@ export function useCanvasTextEditSession(
   }, [
     canvasSurfaceFocused,
     handleTextEditPopupPointerDown,
+    handleTextEditTextareaCopy,
     handleTextEditTextareaDrop,
     handleTextEditTextareaFocus,
     handleTextEditTextareaKeyDown,
     handleTextEditTextareaPaste,
     handleTextEditTextareaSelect,
-    stopTextEditTextareaClipboardPropagation,
     textEditingSession,
     textEditCaretOverlay,
     textEditFocusSurface,
@@ -2233,17 +2291,17 @@ export function useCanvasTextEditSession(
       position: caret ? { left: caret.bounds.minX, top: caret.bounds.minY } : null,
       onKeyDown: handleCanvasFocusInputKeyDown,
       onSelect: handleTextEditTextareaSelect,
-      onCopy: stopTextEditTextareaClipboardPropagation,
-      onCut: stopTextEditTextareaClipboardPropagation,
+      onCopy: handleTextEditTextareaCopy,
+      onCut: handleTextEditTextareaCopy,
       onPaste: handleTextEditTextareaPaste,
       onDrop: handleTextEditTextareaDrop
     };
   }, [
     handleCanvasFocusInputKeyDown,
+    handleTextEditTextareaCopy,
     handleTextEditTextareaDrop,
     handleTextEditTextareaPaste,
     handleTextEditTextareaSelect,
-    stopTextEditTextareaClipboardPropagation,
     textEditingSession,
     textSelectionOverlay
   ]);

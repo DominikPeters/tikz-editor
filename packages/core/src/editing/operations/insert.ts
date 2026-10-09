@@ -76,7 +76,17 @@ export function typeCharacter(
     return { kind: "patch", patches: [{ from: at, to: at, insert: "{}" }], caret: at + 1, run: "insert" };
   }
   const typed = slot.mode === "math" ? typeInMath(view, caret, at, char, state) : typeInText(view, caret, at, char, state);
-  if (tree.nodes[slot.node].kind === "alignment") {
+  return placeInsertion(view, caret, at, typed);
+}
+
+/**
+ * What any insertion at the caret needs from the structure around it:
+ * between an alignment's rows it starts a row, and an argument it goes
+ * into gets braces (R6, K2).
+ */
+export function placeInsertion(view: EditView, caret: Position, at: number, typed: EditOutcome): EditOutcome {
+  const slot = view.tree.slots[caret.slot];
+  if (view.tree.nodes[slot.node].kind === "alignment") {
     return newRowFor(view, typed, at, slot.contentSpan.to);
   }
   // R6: whatever is typed into an unbraced argument (`\frac‸12`, then `^`) brings its braces.
@@ -131,7 +141,7 @@ export function beforeMulticolumn(view: EditView, caret: Position): boolean {
 }
 
 /** Whether the caret is right after an atom with a superscript (`x^2‸`). */
-function afterSuperscript(view: EditView, caret: Position): boolean {
+export function afterSuperscript(view: EditView, caret: Position): boolean {
   const { tree } = view;
   const slot = tree.slots[caret.slot];
   let at = caret.index;
@@ -226,7 +236,7 @@ function terminated(view: EditView, at: number, char: string, mode: EditMode): s
   return mode === "math" ? " " : "{}";
 }
 
-function skipSpacesBack(text: string, at: number): number {
+export function skipSpacesBack(text: string, at: number): number {
   let end = at;
   while (end > 0 && /\s/u.test(text[end - 1])) {
     end -= 1;

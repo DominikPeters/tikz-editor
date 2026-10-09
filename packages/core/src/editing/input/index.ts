@@ -20,6 +20,7 @@ export type {
 export { NO_INTERACTION, type ChipState, type InteractionState } from "./interaction.js";
 export { CHIP_CANDIDATE_LIMIT, chipCandidates, chipCommitName, type ChipCandidate } from "./chip.js";
 export {
+  copySelection,
   needsFreshLayout,
   resolveIntent,
   type IntentContext,
