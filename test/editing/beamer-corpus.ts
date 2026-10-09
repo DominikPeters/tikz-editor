@@ -18,6 +18,12 @@ export type CorpusScope = {
   /** The scope's source (a session buffer). */
   readonly text: string;
   readonly commands: CommandTable;
+  /** The deck the scope is in (absolute path), its source, and the scope's span there. */
+  readonly path: string;
+  readonly source: string;
+  readonly span: { readonly from: number; readonly to: number };
+  /** The spans of the deck's frames (the scope is in the one at `frameIndex`). */
+  readonly frames: readonly { readonly from: number; readonly to: number }[];
 };
 
 const FIXTURE_ROOT = path.resolve(__dirname, "../fixtures/beamer");
@@ -33,7 +39,7 @@ function texFiles(directory: string): string[] {
 function beamerCorpusFiles(): { file: string; name: string; source: string }[] {
   const extra = (process.env.EDIT_TREE_EXTRA_CORPUS ?? "").split(path.delimiter).filter(Boolean);
   return [...texFiles(FIXTURE_ROOT), ...extra]
-    .map((file) => ({ file, name: path.relative(FIXTURE_ROOT, file), source: fs.readFileSync(file, "utf8") }))
+    .map((file) => ({ file: path.resolve(file), name: path.relative(FIXTURE_ROOT, file), source: fs.readFileSync(file, "utf8") }))
     .filter(({ source }) => /\\documentclass(?:\[[^\]]*\])?\{beamer\}/u.test(source));
 }
 
@@ -49,7 +55,7 @@ export type RenderedCorpusScope = CorpusScope & {
  */
 export async function renderedBeamerCorpusScopes(): Promise<RenderedCorpusScope[]> {
   const scopes: RenderedCorpusScope[] = [];
-  for (const { name, source } of beamerCorpusFiles()) {
+  for (const { file, name, source } of beamerCorpusFiles()) {
     const prepared = prepareBeamerDocument(source);
     for (let frameIndex = 0; frameIndex < prepared.document.frames.length; frameIndex += 1) {
       const page = await prepared.renderFrame({ frameIndex, step: 1 });
@@ -70,6 +76,10 @@ export async function renderedBeamerCorpusScopes(): Promise<RenderedCorpusScope[
           kind: scope.kind,
           text: source.slice(scope.span.from, scope.span.to),
           commands,
+          path: file,
+          source,
+          span: scope.span,
+          frames: prepared.document.frames.map((frame) => frame.span),
           stops: domain.offsets
             .filter((offset) => offset >= scope.span.from && offset <= scope.span.to)
             .map((offset) => offset - scope.span.from),
@@ -88,13 +98,14 @@ export async function renderedBeamerCorpusScopes(): Promise<RenderedCorpusScope[
  */
 export function beamerCorpusScopes(): CorpusScope[] {
   const scopes: CorpusScope[] = [];
-  for (const { name, source } of beamerCorpusFiles()) {
+  for (const { file, name, source } of beamerCorpusFiles()) {
     const prepared = prepareBeamerDocument(source);
+    const frames = prepared.document.frames.map((frame) => frame.span);
     prepared.document.frames.forEach((frame, frameIndex) => {
       const environment = prepared.frameEditingEnvironment(frameIndex);
       const commands = createCommandTable(environment);
       const add = (kind: CorpusScope["kind"], from: number, to: number) => {
-        scopes.push({ file: name, frameIndex, kind, text: source.slice(from, to), commands });
+        scopes.push({ file: name, frameIndex, kind, text: source.slice(from, to), commands, path: file, source, span: { from, to }, frames });
       };
       if (frame.title) add("frame-title", frame.title.contentSpan.from, frame.title.contentSpan.to);
       add("frame-body", frame.bodySpan.from, frame.bodySpan.to);

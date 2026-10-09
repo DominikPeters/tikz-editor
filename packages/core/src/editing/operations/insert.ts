@@ -7,6 +7,7 @@ import type { EditMode, EditNode, EditSlot, NodeId, SlotId } from "../tree/types
 import { isDollarFormula, type EditOutcome } from "./delete.js";
 import { braceUnbracedArgument, enterExistingScript } from "./script.js";
 import { PatchSet, slotOuterSpan, withTerminator } from "./source.js";
+import { rowIsFull } from "./structure.js";
 
 /**
  * Input rules for a typed character (R2, R3, R5, R6, K3, K9): what one
@@ -22,7 +23,8 @@ export function typeCharacter(
   caret: Position,
   char: string,
   state: InteractionState,
-  at = view.offset(caret)
+  at = view.offset(caret),
+  title = false
 ): EditOutcome {
   const { tree } = view;
   const slot = tree.slots[caret.slot];
@@ -42,7 +44,8 @@ export function typeCharacter(
     const open = state.placeholder != null ? placeholderAt(view, state.placeholder, at) : null;
     // Placeholder braces are replaced, so they protect nothing: look from what holds them.
     const from = open ? tree.nodes[open.formula ?? tree.slots[open.slot!].node].parent : caret.slot;
-    if (from != null && insideOptional(view, from)) {
+    // A frame title is read as an optional argument too, on the continuation frames of `allowframebreaks`.
+    if (from != null && (title || insideOptional(view, from))) {
       return open
         ? { kind: "patch", patches: [{ from: open.open, to: open.open + 2, insert: "{]}" }], caret: open.open + 3, run: "insert" }
         : insert(at, "{]}");
@@ -67,7 +70,28 @@ export function typeCharacter(
     return newRowFor(view, typed, at, slot.contentSpan.to);
   }
   // R6: whatever is typed into an unbraced argument (`\frac‸12`, then `^`) brings its braces.
-  return braceUnbracedArgument(view, caret, typed);
+  return braceUnbracedArgument(view, caret, braceWaitingArgument(view, at, typed));
+}
+
+/**
+ * Right after a command still waiting for its argument, TeX takes one
+ * token (K2: `\frac1n`); an insertion of more (`\^{}` after the accent
+ * `\t`) goes in braces, as R6 has it, so that it is the argument whole.
+ */
+function braceWaitingArgument(view: EditView, at: number, typed: EditOutcome): EditOutcome {
+  if (typed.kind !== "patch" || typed.patches.length !== 1) {
+    return typed;
+  }
+  const [patch] = typed.patches;
+  // One token, or a terminator that ends the command's name (R5).
+  if (patch.from !== at || patch.to !== at || /^(?:\\[A-Za-z]+|\\.|[^\\{}])$/u.test(patch.insert) || /^[{ ]/u.test(patch.insert)) {
+    return typed;
+  }
+  if (!view.tree.diagnostics.some((diagnostic) => diagnostic.code === "missing-argument" && diagnostic.span.from === at && diagnostic.span.to === at)) {
+    return typed;
+  }
+  const shift = (offset: number | undefined) => (offset == null ? undefined : offset + 1);
+  return { ...typed, patches: [{ from: at, to: at, insert: `{${patch.insert}}` }], caret: typed.caret + 1, placeholder: shift(typed.placeholder) };
 }
 
 /**
@@ -90,7 +114,8 @@ const ESCAPED_IN_TEXT: Readonly<Record<string, string>> = { ...ESCAPED, _: "\\_"
 
 function typeInText(view: EditView, caret: Position, at: number, char: string, state: InteractionState): EditOutcome {
   if (char === "&" && inAlignmentCell(view, caret.slot)) {
-    return insert(at, char);
+    // A cell beyond the column count would be a TeX error (as D2 for ⇥).
+    return rowIsFull(view, caret.slot) ? { kind: "none" } : insert(at, char);
   }
   const escaped = ESCAPED_IN_TEXT[char];
   if (escaped) {
@@ -113,7 +138,8 @@ function typeInText(view: EditView, caret: Position, at: number, char: string, s
 
 function typeInMath(view: EditView, caret: Position, at: number, char: string, state: InteractionState): EditOutcome {
   if (char === "&" && inAlignmentCell(view, caret.slot)) {
-    return insert(at, char);
+    // A cell beyond the column count would be a TeX error (as D2 for ⇥).
+    return rowIsFull(view, caret.slot) ? { kind: "none" } : insert(at, char);
   }
   const escaped = ESCAPED[char];
   if (escaped) {
@@ -367,6 +393,10 @@ function fillPlaceholder(view: EditView, placeholder: Placeholder, char: string)
     return { kind: "move", to: view.positionAt(placeholder.open + 1) };
   }
   if (/^[\s{}^_$\\]$/u.test(char)) {
+    return null;
+  }
+  // `'` (a `^\prime`) and `~` are macros, not one token: a script or argument keeps its braces for them.
+  if (placeholder.formula == null && /^['~]$/u.test(char)) {
     return null;
   }
   const text = ESCAPED[char] ?? char;

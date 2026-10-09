@@ -17,9 +17,11 @@ import {
   rulesInsideRows,
   deleteBackward,
   deleteForward,
+  commitAcrossModes,
   commitCommand,
   commitControlSymbol,
   commitLeftDelimiter,
+  deadBreaks,
   deleteRange,
   enter,
   indentItems,
@@ -103,6 +105,11 @@ export type IntentContext = {
   readonly commands: CommandTable | null;
   /** The buffer is a title (a frame title): one line of text, with no paragraph breaks or lists. */
   readonly title?: boolean;
+  /**
+   * The buffer is a frame body: `\begin{frame}` before it reads a `[` at
+   * its start as the frame's options (and a group as its title).
+   */
+  readonly frameBody?: boolean;
 };
 
 export type IntentResolution =
@@ -119,6 +126,15 @@ const WRAP_REFUSING_KINDS = new Set(["formula", "display", "alignment", "list", 
 
 /** Commands that structure flow text, never written into math. */
 const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
+
+/** Whether a slot is a list item's flow, or a paragraph in one. */
+function inListFlow(view: EditView, slot: number): boolean {
+  const { tree } = view;
+  const paragraph = tree.nodes[tree.slots[slot].node];
+  const flow = paragraph.kind === "paragraph" && paragraph.parent != null ? paragraph.parent : slot;
+  const kind = tree.nodes[tree.slots[flow].node].kind;
+  return (kind === "item" && tree.slots[flow].role === "flow") || kind === "list";
+}
 
 /** Nodes a style wrapper may not cut through. */
 const CELL_AND_BLOCK_KINDS = new Set(["row", "paragraph", "item", "list", "alignment", "display", "container"]);
@@ -346,7 +362,7 @@ class Resolver {
     undo: UndoGrouping,
     extra: Pick<Transaction, "composition" | "verticalGoal" | "interaction"> = {}
   ): IntentResolution {
-    const repaired = this.endRowsBeforeRules({ baseRevision: this.context.revision, patches, selection, undo, ...extra });
+    const repaired = this.protectLeadingBracket(this.dropDeadBreaks(this.endRowsBeforeRules({ baseRevision: this.context.revision, patches, selection, undo, ...extra })));
     return { kind: "transaction", transaction: repaired };
   }
 
@@ -370,6 +386,71 @@ class Resolver {
       next = `${next.slice(0, at)}\\\\ ${next.slice(at)}`;
     }
     const shift = (offset: number) => offset + 3 * rules.filter((at) => at < offset).length;
+    return {
+      ...transaction,
+      patches: replacementPatches(text, next),
+      selection: { kind: "absolute", anchor: shift(applied.anchor), focus: shift(applied.focus) },
+    };
+  }
+
+  /**
+   * K9 at a frame body's start: a `[` an edit put first in the body (typed,
+   * or left there by a deletion) would be the frame's options, so `\relax`
+   * goes before it, which ends the header without adding a title as `{}` would.
+   */
+  private protectLeadingBracket(transaction: Transaction): Transaction {
+    const { text } = this.context;
+    if (!this.context.frameBody || transaction.patches.length === 0) {
+      return transaction;
+    }
+    const applied = applyTransaction(text, transaction);
+    const at = applied.text.length - applied.text.trimStart().length;
+    if (applied.text[at] !== "[" || text.trimStart().startsWith("[")) {
+      return transaction;
+    }
+    const next = `${applied.text.slice(0, at)}\\relax${applied.text.slice(at)}`;
+    const shift = (offset: number) => (offset >= at ? offset + "\\relax".length : offset);
+    return {
+      ...transaction,
+      patches: replacementPatches(text, next),
+      selection: { kind: "absolute", anchor: shift(applied.anchor), focus: shift(applied.focus) },
+    };
+  }
+
+  /**
+   * A line break an edit left with nothing before it on its line (`x \\`
+   * with the `x` deleted) goes too: TeX has no empty line to end. Breaks
+   * away from the edit are left as they are.
+   */
+  private dropDeadBreaks(transaction: Transaction): Transaction {
+    const { structure, text } = this.context;
+    if (!structure || !this.context.isScopeSession || transaction.patches.length === 0 || !text.includes("\\\\")) {
+      return transaction;
+    }
+    const applied = applyTransaction(text, transaction);
+    const dead = deadBreaks(structure(applied.text));
+    if (dead.length <= deadBreaks(structure(text)).length) {
+      return transaction;
+    }
+    // The edit's window in the new text, and the breaks it left dead: in it, or after it on the same line.
+    let start = 0;
+    while (start < text.length && start < applied.text.length && text[start] === applied.text[start]) {
+      start += 1;
+    }
+    let suffix = 0;
+    while (suffix < Math.min(text.length, applied.text.length) - start && text.at(-1 - suffix) === applied.text.at(-1 - suffix)) {
+      suffix += 1;
+    }
+    const end = applied.text.length - suffix;
+    const drop = dead.filter((span) => span.from >= start && (span.from <= end || /^[ \t]*$/u.test(applied.text.slice(end, span.from))));
+    if (drop.length === 0) {
+      return transaction;
+    }
+    let next = applied.text;
+    for (const span of [...drop].sort((left, right) => right.from - left.from)) {
+      next = next.slice(0, span.from) + next.slice(span.to);
+    }
+    const shift = (offset: number) => drop.reduce((moved, span) => moved - Math.max(0, Math.min(offset, span.to) - span.from), offset);
     return {
       ...transaction,
       patches: replacementPatches(text, next),
@@ -419,11 +500,15 @@ class Resolver {
       const from = view.offset(start);
       const to = view.offset(end);
       // Only plain inline text becomes a formula: not math, and not a table or list it contains.
-      const hasMath = view.tree.nodes.some((node) => WRAP_REFUSING_KINDS.has(node.kind) && node.span.from < to && node.span.to > from &&
-        (node.kind === "formula" || node.kind === "display" || !(node.span.from <= from && node.span.to >= to)));
+      // (A block may hold the selection, with room around it; one the selection reaches or is, it may not.)
+      const holds = (span: { from: number; to: number }) => span.from <= from && span.to >= to && (span.from < from || span.to > to);
+      const hasMath = view.tree.nodes.some((node) => node.span.from < to && node.span.to > from && (
+        (WRAP_REFUSING_KINDS.has(node.kind) && (node.kind === "formula" || node.kind === "display" || !holds(node.span))) ||
+        // An environment kept whole (an atom) is a block too.
+        (node.kind === "atom" && view.tree.text.startsWith("\\begin", node.span.from))));
       // (A `\\left` just before the closing `$` would take it as its delimiter.)
       const delimiterBefore = /\\(?:left|right|middle)\s*$/u.test(view.tree.text.slice(Math.max(0, to - 12), to));
-      if (text === "$" && start.slot === end.slot && view.tree.slots[start.slot].mode === "text" && !hasMath && !delimiterBefore) {
+      if (text === "$" && from < to && start.slot === end.slot && view.tree.slots[start.slot].mode === "text" && !hasMath && !delimiterBefore && !this.crossesStructure()) {
         const patches = [{ from, to: from, insert: "$" }, { from: to, to, insert: "$" }];
         return this.outcome(view, { kind: "patch", patches, caret: to + 1, run: null });
       }
@@ -441,7 +526,7 @@ class Resolver {
     // position there gives the context.
     const caret = this.caretPosition(view);
     const at = this.context.positions ? view.offset(caret) : this.from;
-    return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at));
+    return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at, this.context.title));
   }
 
   cut(): IntentResolution {
@@ -613,7 +698,7 @@ class Resolver {
     const middle = applyPatches(this.context.text, deleted.patches);
     const middleView = this.context.structure!(middle);
     const interaction = deleted.placeholder != null ? { placeholder: deleted.placeholder } : NO_INTERACTION;
-    const typed = typeCharacter(middleView, caretAt(middleView, deleted.caret), char, interaction, deleted.caret);
+    const typed = typeCharacter(middleView, caretAt(middleView, deleted.caret), char, interaction, deleted.caret, this.context.title);
     const final = typed.kind === "patch" ? applyPatches(middle, typed.patches) : middle;
     const caret = typed.kind === "patch" ? typed.caret : deleted.caret;
     return this.transaction(
@@ -678,12 +763,24 @@ class Resolver {
     if (chip.name === "right" && view.tree.slots[caret.slot].mode === "math") {
       return this.closeRight(view, chip, char);
     }
+    if (chip.name === "left" && view.tree.slots[caret.slot].mode === "text" && commitLeftDelimiter(chip.at, null, char)) {
+      // In prose, the pair starts a formula.
+      const pair = commitAcrossModes(view, commands, caret, chip.at, "left", "typed", chip.held, char);
+      if (pair && pair !== "refused") {
+        return this.commitOutcome(view, pair.outcome);
+      }
+    }
     if (char === " ") {
       return this.commitChip(view, commands, chip, "space", false);
     }
     if (char === "\\") {
-      // The next command starts: commit this one as typed, open a new chip after it.
-      const committed = this.commitChip(view, commands, chip, "typed", false);
+      // The next command starts: commit this one, open a new chip after it. A command
+      // that takes arguments gets its braces, with the new chip in the first, so the
+      // source stays whole if that chip is never committed (`\\sqrt{\\te‸}`).
+      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
+      const schema = commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text");
+      const takesArguments = schema?.args.some((arg) => arg.kind === "mandatory") ?? false;
+      const committed = this.commitChip(view, commands, chip, takesArguments ? "structure" : "typed", false);
       if (committed.kind !== "transaction" || committed.transaction.selection.kind !== "absolute") {
         return committed;
       }
@@ -737,6 +834,10 @@ class Resolver {
       // List and environment commands make no sense in a formula.
       return this.keepSelection(NO_INTERACTION);
     }
+    if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {
+      // Outside a list, TeX has a "lonely \item".
+      return this.keepSelection(NO_INTERACTION);
+    }
     if (mode === "math" && (name === "left" || name === "right" || name === "middle")) {
       // `\left` and `\right` only exist in pairs (K16, O5): `\left` brings
       // its `\right`; a lone `\right` or `\middle` writes nothing.
@@ -744,7 +845,11 @@ class Resolver {
         ? this.commitOutcome(view, commitLeftDelimiter(chip.at, chip.held, "(")!)
         : this.keepSelection(NO_INTERACTION);
     }
-    const committed = commitCommand(view, commands, caret, chip.at, name, key, this.context.interaction, chip.held);
+    const across = commitAcrossModes(view, commands, caret, chip.at, name, key, chip.held);
+    if (across === "refused") {
+      return this.keepSelection(NO_INTERACTION);
+    }
+    const committed = across ?? commitCommand(view, commands, caret, chip.at, name, key, this.context.interaction, chip.held);
     const commit = { ...committed, outcome: braceUnbracedArgument(view, caretAt(view, chip.at), committed.outcome) };
     if (then == null || commit.outcome.kind !== "patch") {
       return this.commitOutcome(view, commit.outcome, commit.pending);
@@ -753,7 +858,7 @@ class Resolver {
     const middle = applyPatches(this.context.text, commit.outcome.patches);
     const middleView = this.context.structure!(middle);
     const at = commit.outcome.caret;
-    const typed = typeCharacter(middleView, caretAt(middleView, at), then, { pending: commit.pending }, at);
+    const typed = typeCharacter(middleView, caretAt(middleView, at), then, { pending: commit.pending }, at, this.context.title);
     if (typed.kind === "move") {
       // `}` after `\pi` in `e^{i\pi`: the commit, then the caret steps out.
       const caret = middleView.offset(typed.to);

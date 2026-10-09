@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { beamerCorpusScopes } from "./beamer-corpus.js";
-import { runCampaign, type FuzzStart } from "./fuzz/keystroke-fuzz.js";
+import { corpusStarts, runCampaign } from "./fuzz/keystroke-fuzz.js";
 
 /**
  * Is the keystroke fuzzer able to find anything? Each test breaks one
@@ -90,12 +90,7 @@ vi.mock("../../packages/core/src/editing/transaction/history.js", async (importO
   };
 });
 
-const starts: FuzzStart[] = beamerCorpusScopes().map((scope) => ({
-  label: `${scope.file} frame ${scope.frameIndex + 1} ${scope.kind}`,
-  text: scope.text,
-  commands: scope.commands,
-  title: scope.kind === "frame-title",
-}));
+const starts = corpusStarts(beamerCorpusScopes());
 
 describe("keystroke fuzzing catches broken operations", () => {
   it.each([

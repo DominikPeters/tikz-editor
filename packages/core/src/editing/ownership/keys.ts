@@ -82,7 +82,8 @@ export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slo
   }
   if (WRAPPERS.has(record.kind)) {
     if (key === "line-break") {
-      return PASS;
+      // An LR box holds one line: TeX does not allow `\\` in it.
+      return record.command != null && LR_BOXES.has(record.command) ? barrier("⇧⏎ does nothing in a box") : PASS;
     }
     // Only a wrapper with a single text slot closes and reopens cleanly:
     // reopening `\alt<2>{During}{…}` would repeat its first branch.
@@ -106,6 +107,11 @@ export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slo
 }
 
 const WRAPPERS = new Set<EditNodeKind>(["style", "overlay", "link", "group"]);
+/** Commands whose content is set as a single line (an LR box). */
+const LR_BOXES = new Set([
+  "mbox", "fbox", "makebox", "framebox", "hbox", "text", "rotatebox", "scalebox", "resizebox", "reflectbox",
+  "raisebox", "colorbox", "fcolorbox", "underline", "textsuperscript", "textsubscript",
+]);
 const FLOW_CONTAINERS = new Set<EditNodeKind>(["list", "container", "alignment"]);
 
 /** The caret's chain, innermost first: each enclosing node with the slot of it the caret is in. */

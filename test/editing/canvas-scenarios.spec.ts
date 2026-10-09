@@ -6,6 +6,8 @@ import { createEditView } from "../../packages/core/src/editing/position/index.j
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { applyPatches } from "../../packages/core/src/editing/transaction/index.js";
 import { canvasSessionDriver } from "./canvas-session-driver.js";
+import { KeystrokeSession } from "./fuzz/keystroke-session.js";
+import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
 import {
   burstScenarios,
   characterisationScenarios,
@@ -13,6 +15,7 @@ import {
   contractScenarios,
   inputRuleScenarios,
   structuralKeyScenarios,
+  texValidityScenarios,
   treeEditingScenarios,
   undoScenarios,
 } from "./scenarios.js";
@@ -65,6 +68,27 @@ describe("canvas editing: the command chip", () => {
   }
 });
 
+describe("canvas editing: source TeX accepts", () => {
+  for (const scenario of texValidityScenarios) {
+    it(`${scenario.id}: ${scenario.title}`, async () => {
+      const { actual, expected } = await runScenario(eager, scenario);
+      expect(actual).toBe(expected);
+    });
+  }
+
+  // (The scenario documents give the frame a title; here the body follows `\begin{frame}` directly.)
+  it.each([
+    ["typed", "\nText", 1, ["["], "\n\\relax[Text"],
+    ["left by a deletion", "\nx[draft] Text", 2, ["⌫"], "\n\\relax[draft] Text"],
+  ])("X11: a [ %s at a frame body's start is not read as the frame's options", (_, body, caret, keys, expected) => {
+    const session = new KeystrokeSession(body, createCommandTable(), caret, caret, false, true);
+    for (const key of keys.flatMap((token) => parseScenarioKeys(token))) {
+      session.press(key);
+    }
+    expect(session.text).toBe(expected);
+  });
+});
+
 describe("canvas editing: undo groups", () => {
   for (const scenario of undoScenarios) {
     it(`${scenario.id}: ${scenario.title}`, async () => {
@@ -81,7 +105,7 @@ describe("canvas editing: typing ahead of layout", () => {
       expect(actual).toBe(expected);
     });
   }
-  for (const scenario of [...burstScenarios, ...characterisationScenarios, ...treeEditingScenarios, ...inputRuleScenarios, ...structuralKeyScenarios, ...chipScenarios, ...undoScenarios]) {
+  for (const scenario of [...burstScenarios, ...characterisationScenarios, ...treeEditingScenarios, ...inputRuleScenarios, ...structuralKeyScenarios, ...chipScenarios, ...texValidityScenarios, ...undoScenarios]) {
     it(`${scenario.id}: ${scenario.title} (no rendering between keys)`, async () => {
       const { actual, expected } = await runScenario(burst, scenario);
       expect(actual).toBe(expected);

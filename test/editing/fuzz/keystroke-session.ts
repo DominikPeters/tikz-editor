@@ -40,7 +40,8 @@ export class KeystrokeSession {
     private readonly commands: CommandTable,
     anchor: number,
     focus = anchor,
-    private readonly title = false
+    private readonly title = false,
+    private readonly frameBody = false
   ) {
     const target = {
       sourceId: "scope",
@@ -171,6 +172,7 @@ export class KeystrokeSession {
         interaction: interactionState(state, anchor, focus),
         commands: this.commands,
         title: this.title,
+        frameBody: this.frameBody,
       },
       intent
     );
