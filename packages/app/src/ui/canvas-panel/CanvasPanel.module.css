@@ -1340,8 +1340,13 @@
   opacity: 0.8;
 }
 
-/* The value editor (O8): a command in source form with a field per value. */
-.valueEditor {
+/* The value editor (O8): a command in source form with a field per value.
+   Above the lines it keeps clear, its colour picker goes on top, the
+   command next to them. */
+.valueEditor,
+.valueEditorAbove {
+  display: flex;
+  flex-direction: column;
   position: absolute;
   z-index: 7;
   font: 12px/20px var(--font-mono);
@@ -1391,8 +1396,17 @@
   color: var(--danger, #d33);
 }
 
+.valueEditorAbove {
+  flex-direction: column-reverse;
+}
+
 .valueEditorColor {
   border-top: 1px solid var(--border);
+}
+
+.valueEditorAbove .valueEditorColor {
+  border-top: none;
+  border-bottom: 1px solid var(--border);
 }
 
 /* A construct's values on its outline tag, clickable to edit them. */

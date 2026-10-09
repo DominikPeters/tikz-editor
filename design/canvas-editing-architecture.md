@@ -922,7 +922,9 @@ uses positions but deletion still uses raw source ranges.
    colour in its model; unbraced values (`\bigr)`) stay one token, and
    arguments TeX marks optional that a command cannot do without
    (`\temporal`'s slides, `\setbeamertemplate`'s option) are asked for and
-   kept. The fuzzer fills the editor and edits written values, and the TeX
+   kept. The editor goes above or below the lines it edits, whichever has
+   room, its colour picker on the same side, so the text stays visible.
+   The fuzzer fills the editor and edits written values, and the TeX
    oracle judges what it writes. Still open: a construct the caret cannot
    enter (`\hspace`) shows its tag only when selected; cells of
    `>{$}c<{$}` columns are math to TeX but text to the edit tree.
