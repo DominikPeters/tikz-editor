@@ -264,6 +264,9 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "X6 repeat", title: "a column spec's repetitions count (`*{2}{lr}` is four columns)", body: "\\begin{tabular}{*{2}{lr}}\nA & 1 & B & 2‸\\\\\n\\end{tabular}", keys: "&", expect: "\\begin{tabular}{*{2}{lr}}\nA & 1 & B & 2‸\\\\\n\\end{tabular}" },
   { id: "C16", title: "in overprint, a selection holding \\onslide is not wrapped", body: "\\begin{overprint}\n\\onslide<1>⟦Alpha.\n\\onslide<2>Be⟧ta.\n\\end{overprint}", keys: "⌘B", expect: "\\begin{overprint}\n\\onslide<1>⟦Alpha.\n\\onslide<2>Be⟧ta.\n\\end{overprint}" },
   { id: "C13", title: "< after a frame break is not its overlay specification", body: "Alpha.\n\\framebreak\n‸Beta.", keys: "<", expect: "Alpha.\n\\framebreak\n{}<‸Beta." },
+  { id: "C18", title: "in overprint, ⇧⏎ right after \\onslide has no line to end", body: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}", keys: "⇧⏎", expect: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}" },
+  { id: "C19", title: "\\ then a character that makes no control symbol types that character", body: "a‸ b", keys: "\\<", expect: "a<‸ b" },
+  { id: "C17", title: "a line break typed before a * does not take it as its star", body: "A page‸*", keys: "\\\\", expect: "A page\\\\{}‸*" },
 ];
 
 /**

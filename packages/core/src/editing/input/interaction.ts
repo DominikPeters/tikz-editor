@@ -1,3 +1,5 @@
+import type { CommitKey } from "../operations/command.js";
+
 /**
  * The session's non-source state between keystrokes
  * (design/canvas-editing-architecture.md, "Interaction state"). A
@@ -30,6 +32,8 @@ export type InteractionState = {
    * may still open (`\\` then `[`, O4). The offset right after it.
    */
   readonly pending?: number;
+  /** The value editor (O8), open for a command that is not written until its values are filled. */
+  readonly picker?: PickerState;
 };
 
 /**
@@ -44,6 +48,23 @@ export type ChipState = {
   readonly selected: number;
   /** A selection the command will wrap or replace (R10). */
   readonly held: { readonly from: number; readonly to: number } | null;
+};
+
+/**
+ * A command waiting for its values (O8): the chip committed it, and the
+ * value editor asks for them. Nothing is written until they are filled;
+ * Esc, or any other edit, closes it with nothing written.
+ */
+export type PickerState = {
+  readonly name: string;
+  /** Where the command goes (buffer offset). */
+  readonly at: number;
+  /** A selection the command will wrap, or replace when it has no content argument. */
+  readonly held: { readonly from: number; readonly to: number } | null;
+  /** The key that committed it: `[` and `<` add the argument they open to the fields. */
+  readonly key: CommitKey;
+  /** What the first field starts with: a character typed right after the name, or the selection it replaces. */
+  readonly seed: string;
 };
 
 export const NO_INTERACTION: InteractionState = {};

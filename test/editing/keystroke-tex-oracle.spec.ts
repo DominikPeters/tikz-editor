@@ -99,9 +99,10 @@ function unknownCommands(start: FuzzStart, text: string): string[] {
 
 /**
  * Value arguments (file names, colours, URLs, options, overlay specs) as
- * written. A new one is an in-place edit of a value, or one left empty
- * (`\includegraphics{}`, input O8's pickers are to finish): TeX judges
- * those by what they mean, not by how the editor wrote them.
+ * written. A new one is an in-place edit of a value, or one left empty,
+ * which TeX judges by what they mean, not by how the editor wrote them;
+ * unless the value editor wrote it (O8), from values the fuzzer knows TeX
+ * takes: then how the editor wrote it is what is judged.
  */
 function valueArguments(start: FuzzStart, text: string): string[] {
   const tree = buildEditTree(text, { commands: start.commands });
@@ -150,12 +151,12 @@ function adds(before: readonly string[], after: readonly string[]): boolean {
  * value arguments or commands waiting for an argument, and some text left (beamer's `shrink` divides by the
  * height of a frame's content).
  */
-function judgeable(start: FuzzStart, text: string): boolean {
+function judgeable(start: FuzzStart, text: string, picked: readonly string[]): boolean {
   if (!hasText(start, text)) {
     return false;
   }
   return !adds(unknownCommands(start, start.text), unknownCommands(start, text)) &&
-    !adds(valueArguments(start, start.text), valueArguments(start, text)) &&
+    !adds([...valueArguments(start, start.text), ...picked], valueArguments(start, text)) &&
     // A command still waiting for an argument (K2: `\frac1` before the `n`) is being typed.
     !adds(waitingCommands(start, start.text), waitingCommands(start, text));
 }
@@ -169,7 +170,7 @@ describe.skipIf(!ENABLED)("keystroke fuzzing against LuaLaTeX", () => {
       const fuzz = generateCase(random, starts, 24);
       const run = runCase(fuzz);
       // Contract failures are keystroke-fuzz.spec.ts's to report.
-      if (!run.failure && run.finalText !== fuzz.start.text && judgeable(fuzz.start, run.finalText)) {
+      if (!run.failure && run.finalText !== fuzz.start.text && judgeable(fuzz.start, run.finalText, run.picked)) {
         cases.push({ index, fuzz, run });
       }
     }
@@ -194,8 +195,7 @@ describe.skipIf(!ENABLED)("keystroke fuzzing against LuaLaTeX", () => {
       return describeTexFailure(entry.index, entry.fuzz, entry.run, step, entry.errors);
     }), JOBS);
     expect(reports.join("\n\n")).toBe("");
-    // Enough cases must reach a judgeable end state, or the run proves little. (Commands with
-    // values, `\url{}`, `\label{}`, are left empty until O8's pickers fill them, and skipped.)
+    // Enough cases must reach a judgeable end state, or the run proves little.
     expect(cases.length).toBeGreaterThan(CASES / 3);
   }, 3_600_000);
 });
