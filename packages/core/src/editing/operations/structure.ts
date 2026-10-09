@@ -93,7 +93,7 @@ function breakAt(view: EditView, at: number, slot: SlotId, text: string, transpa
   const collapse = transparent.length === 0;
   const from = collapse ? skipHorizontalBack(tree.text, at, bounds.from) : at;
   const to = collapse ? skipHorizontalForward(tree.text, at, bounds.to) : at;
-  const insert = closes + text + reopens;
+  const insert = closes + protectBreak(text, tree.text, to) + reopens;
   return patchOutcome({ edits: [{ span: { from, to }, insert }], caret: from + insert.length });
 }
 
@@ -137,6 +137,12 @@ function visibleOffsets(view: EditView, slot: SlotId): Span[] {
   return view.tree.slots[slot].children.filter((child) => view.role(child) !== "invisible").map((child) => view.tree.nodes[child].span);
 }
 
+/** K9: a `\\` the break writes must not take a `[` after it as its optional argument. */
+function protectBreak(insert: string, text: string, after: number): string {
+  const rest = text.slice(after).replace(/^\s*/u, "");
+  return insert.includes("\\\\") && rest.startsWith("[") ? insert.replace("\\\\", "\\\\{}") : insert;
+}
+
 /** ⏎ in a display (D1): to the text after it, or a fresh line below. */
 function leaveDisplay(view: EditView, display: NodeId): EditOutcome {
   const { tree } = view;
@@ -155,7 +161,7 @@ function newRow(view: EditView, row: NodeId, at: number): EditOutcome {
   const span = tree.nodes[row].span;
   const from = skipHorizontalBack(tree.text, at, span.from);
   const to = skipHorizontalForward(tree.text, at, span.to);
-  const insert = ` \\\\\n${lineIndentAt(tree.text, span.from)}`;
+  const insert = protectBreak(` \\\\\n${lineIndentAt(tree.text, span.from)}`, tree.text, to);
   return patchOutcome({ edits: [{ span: { from, to }, insert }], caret: from + insert.length });
 }
 
@@ -300,15 +306,21 @@ export function toggleList(view: EditView, caret: Position, environment: "itemiz
  * previous one; a paragraph joins the paragraph before it. After another
  * block (a list, a display) the caret moves to its end.
  */
-export function joinBackward(view: EditView, caret: Position, at: number): EditOutcome {
+export function joinBackward(view: EditView, caret: Position): EditOutcome {
   const { tree } = view;
   const block = blockAt(view, caret.slot);
   if (block == null) {
     return { kind: "none" };
   }
-  const context = listItemOf(tree, block);
+  const context = itemOfBlock(view, block);
   if (context && firstBlockOf(view, block)) {
-    const patch = mergeWithPreviousItemPatch(tree.text, context, Math.max(at, context.item.contentSpan.from));
+    // A labelled item is not merged away with its label: the caret goes into the label.
+    const label = itemLabel(view, context.item.node);
+    if (label) {
+      return { kind: "move", to: { slot: label.id, index: label.children.length } };
+    }
+    // From the item's start, even with the caret inside a wrapper there (`\item \textbf{‸x}`).
+    const patch = mergeWithPreviousItemPatch(tree.text, context, context.item.contentSpan.from);
     return patch ? patchOutcome(patch) : { kind: "none" };
   }
   const node = tree.nodes[block];
@@ -323,16 +335,20 @@ export function joinBackward(view: EditView, caret: Position, at: number): EditO
 }
 
 /** ⌦ at the end of a paragraph or an empty item: the mirror of joinBackward. */
-export function joinForward(view: EditView, caret: Position, at: number): EditOutcome {
+export function joinForward(view: EditView, caret: Position): EditOutcome {
   const { tree } = view;
   const block = blockAt(view, caret.slot);
   if (block == null) {
     return { kind: "none" };
   }
-  const context = listItemOf(tree, block);
+  const context = itemOfBlock(view, block);
   if (context && lastBlockOf(view, block)) {
-    const end = trimmedEnd(tree.text, { from: context.item.contentSpan.from, to: Math.max(at, context.item.contentSpan.from) });
-    const patch = mergeNextItemPatch(tree.text, context, Math.max(end, Math.min(at, context.item.contentSpan.to)));
+    const next = context.list.items[context.index + 1];
+    if (next && itemLabel(view, next.node)) {
+      return { kind: "none" };
+    }
+    // From the item's end, even with the caret inside a wrapper there (`\textit{+‸}`).
+    const patch = mergeNextItemPatch(tree.text, context, trimmedEnd(tree.text, context.item.contentSpan));
     return patch ? patchOutcome(patch) : { kind: "none" };
   }
   const node = tree.nodes[block];
@@ -344,6 +360,20 @@ export function joinForward(view: EditView, caret: Position, at: number): EditOu
   }
   const step = view.step(caret, 1);
   return step ? { kind: "move", to: step } : { kind: "none" };
+}
+
+/** The list item a block belongs to directly (the item itself, or a paragraph in its flow). */
+function itemOfBlock(view: EditView, block: NodeId) {
+  const { tree } = view;
+  const node = tree.nodes[block];
+  const owner = node.kind === "item" ? node : node.parent == null ? null : tree.nodes[tree.slots[node.parent].node];
+  return owner?.kind === "item" ? listItemOf(tree, owner.id) : null;
+}
+
+/** An item's present, non-empty label slot (`\item[Hessian]`), or null. */
+function itemLabel(view: EditView, item: NodeId) {
+  const label = presentSlots(view.tree, item).find((slot) => slot.role === "label");
+  return label && label.children.length > 0 ? label : null;
 }
 
 /** The paragraph, or the empty item, a caret slot belongs to. */

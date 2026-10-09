@@ -3,10 +3,10 @@ import { ARGUMENT_ROLES, isCaretSlot } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
-import type { EditMode, NodeId, SlotId } from "../tree/types.js";
+import type { EditMode, EditNode, EditSlot, NodeId, SlotId } from "../tree/types.js";
 import { isDollarFormula, type EditOutcome } from "./delete.js";
-import { enterExistingScript, insertIntoUnbracedArgument } from "./script.js";
-import { PatchSet, slotOuterSpan } from "./source.js";
+import { braceUnbracedArgument, enterExistingScript } from "./script.js";
+import { PatchSet, slotOuterSpan, withTerminator } from "./source.js";
 
 /**
  * Input rules for a typed character (R2, R3, R5, R6, K3, K9): what one
@@ -32,6 +32,22 @@ export function typeCharacter(
   if (char === "{" && state.consumeOpen === at) {
     return { kind: "move", to: caret };
   }
+  if (char === "]") {
+    const closed = closeOptional(view, at);
+    if (closed) {
+      return closed;
+    }
+    // Inside an optional argument, at any depth short of braces, a bare `]`
+    // would end it (LaTeX takes the first one, even inside `$…$`).
+    const open = state.placeholder != null ? placeholderAt(view, state.placeholder, at) : null;
+    // Placeholder braces are replaced, so they protect nothing: look from what holds them.
+    const from = open ? tree.nodes[open.formula ?? tree.slots[open.slot!].node].parent : caret.slot;
+    if (from != null && insideOptional(view, from)) {
+      return open
+        ? { kind: "patch", patches: [{ from: open.open, to: open.open + 2, insert: "{]}" }], caret: open.open + 3, run: "insert" }
+        : insert(at, "{]}");
+    }
+  }
   const placeholder = state.placeholder != null ? placeholderAt(view, state.placeholder, at) : null;
   if (placeholder) {
     const filled = fillPlaceholder(view, placeholder, char);
@@ -42,16 +58,30 @@ export function typeCharacter(
   if (char === "}") {
     return closeSlot(view, caret);
   }
-  if (char === "]") {
-    const closed = closeOptional(view, at);
-    if (closed) {
-      return closed;
-    }
-  }
+
   if (char === "{") {
     return { kind: "patch", patches: [{ from: at, to: at, insert: "{}" }], caret: at + 1, run: "insert" };
   }
-  return slot.mode === "math" ? typeInMath(view, caret, at, char, state) : typeInText(view, caret, at, char, state);
+  const typed = slot.mode === "math" ? typeInMath(view, caret, at, char, state) : typeInText(view, caret, at, char, state);
+  if (tree.nodes[slot.node].kind === "alignment") {
+    return newRowFor(view, typed, at, slot.contentSpan.to);
+  }
+  // R6: whatever is typed into an unbraced argument (`\frac‸12`, then `^`) brings its braces.
+  return braceUnbracedArgument(view, caret, typed);
+}
+
+/**
+ * Text typed between an alignment's rows (where deleted rows were) starts
+ * a row of its own: it ends with `\\` when rows or rules follow, so that
+ * a following `\hline` stays at a row's start (TeX rejects it elsewhere).
+ */
+function newRowFor(view: EditView, typed: EditOutcome, at: number, end: number): EditOutcome {
+  const rest = view.tree.text.slice(at, end);
+  if (typed.kind !== "patch" || typed.patches.length !== 1 || typed.patches[0].from !== at || typed.patches[0].to !== at ||
+    !/\S/u.test(rest) || /^\s*\\\\/u.test(rest)) {
+    return typed;
+  }
+  return { ...typed, patches: [{ ...typed.patches[0], insert: `${typed.patches[0].insert} \\\\ ` }] };
 }
 
 /** Specials that destroy or break content when typed literally (R2): `%` comments out the line. */
@@ -74,7 +104,8 @@ function typeInText(view: EditView, caret: Position, at: number, char: string, s
     // O4: the command just committed takes its optional argument.
     return { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: "insert" };
   }
-  if (char === "[" && optionalArgumentAhead(view, at)) {
+  // In prose any command may look for a `[` after it, past spaces (`\titlepage [`).
+  if (char === "[" && (optionalArgumentAhead(view, at) || endsWithControlWord(view.tree.text, skipSpacesBack(view.tree.text, at)))) {
     return insert(at, "{}[");
   }
   return insert(at, terminated(view, at, char, "text") + char);
@@ -103,7 +134,11 @@ function typeInMath(view: EditView, caret: Position, at: number, char: string, s
   if (char === "[" && state.pending === at) {
     return { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: "insert" };
   }
-  return insertIntoUnbracedArgument(view, caret, char) ?? insert(at, terminated(view, at, char, "math") + char);
+  // A row's `\\` reads a `[` after it as its spacing, also in math (K9).
+  if (char === "[" && optionalArgumentAhead(view, at)) {
+    return insert(at, "{}[");
+  }
+  return insert(at, terminated(view, at, char, "math") + char);
 }
 
 function insert(at: number, text: string): EditOutcome {
@@ -121,6 +156,14 @@ function terminated(view: EditView, at: number, char: string, mode: EditMode): s
     return "";
   }
   return mode === "math" ? " " : "{}";
+}
+
+function skipSpacesBack(text: string, at: number): number {
+  let end = at;
+  while (end > 0 && /\s/u.test(text[end - 1])) {
+    end -= 1;
+  }
+  return end;
 }
 
 /** Whether the source before an offset ends with a control word (`\alpha`, not the text after `\\`). */
@@ -154,6 +197,12 @@ export function optionalArgumentAhead(view: EditView, at: number): boolean {
   let end = at;
   while (end > 0 && /\s/u.test(tree.text[end - 1])) {
     end -= 1;
+  }
+  // `\begin{figure}[`: environments read a following `[` as their options;
+  // a row's `\\` takes `[` as its spacing as a line break does.
+  const before = tree.text.slice(Math.max(0, end - 40), end);
+  if (/\\begin\{[^{}]*\}$/u.test(before) || /(?:^|[^\\])(?:\\\\)*\\\\\*?$/u.test(before)) {
+    return true;
   }
   return tree.nodes.some((node) => {
     if (node.kind === "item") {
@@ -193,6 +242,24 @@ function closeSlot(view: EditView, caret: Position): EditOutcome {
     }
   }
   return { kind: "move", to: { slot: owner.parent, index: childIndex(tree, owner.id) + 1 } };
+}
+
+/** Whether a slot lies inside an optional argument with no braces in between. */
+function insideOptional(view: EditView, slot: SlotId): boolean {
+  const { tree } = view;
+  for (let current: SlotId | null = slot; current != null;) {
+    const record: EditSlot = tree.slots[current];
+    const closer = tree.text[record.contentSpan.to];
+    const owner: EditNode = tree.nodes[record.node];
+    if (closer === "]" && owner.delimiters.some((span) => span.from === record.contentSpan.to)) {
+      return true;
+    }
+    if (closer === "}" && (record.braced || owner.kind === "group")) {
+      return false;
+    }
+    current = owner.parent;
+  }
+  return false;
 }
 
 /**
@@ -324,6 +391,7 @@ export function abandonPlaceholder(view: EditView, placeholder: Placeholder): Ed
     }
     span = slotOuterSpan(tree, placeholder.slot!);
   }
-  const patches = new PatchSet().delete(span).patches();
+  // R5 at the seam: `\gamma_{}w` leaves `\gamma w`, not `\gammaw`.
+  const patches = withTerminator(tree.text, new PatchSet().delete(span).patches(), span.from, "math");
   return { kind: "patch", patches, caret: span.from, run: null };
 }

@@ -728,7 +728,8 @@ export function reduceCanvasTextEdit(
         ? undoStep(state.history, sessionSnapshot(session))
         : redoStep(state.history, sessionSnapshot(session));
       if (!step) {
-        return { state, effects: [] };
+        // Nothing to undo still ends any editing state (O7).
+        return { state: state.treeSelection ? { ...state, treeSelection: null } : state, effects: [] };
       }
       const reduced = applySessionTextUpdate(state, step.restore.text, step.restore.anchor, step.restore.focus);
       return {
@@ -736,7 +737,9 @@ export function reduceCanvasTextEdit(
           ...reduced.state,
           history: step.history,
           compositionRange: null,
-          verticalGoal: null
+          verticalGoal: null,
+          // O7: undo and redo restore source and selection, never editing state.
+          treeSelection: null
         },
         effects: reduced.effects
       };

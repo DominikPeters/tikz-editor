@@ -13,6 +13,8 @@ import {
 } from "../../text/format-commands.js";
 import {
   abandonPlaceholder,
+  braceUnbracedArgument,
+  rulesInsideRows,
   deleteBackward,
   deleteForward,
   commitCommand,
@@ -33,6 +35,7 @@ import {
 import {
   hiddenNodes,
   promoteSelection,
+  selectionEndsAt,
   type EditView,
   type Position,
   type SelectionEnds,
@@ -40,6 +43,7 @@ import {
 import type { NodeId } from "../tree/types.js";
 import {
   applyPatches,
+  applyTransaction,
   replacementPatches,
   type BufferPatch,
   type BufferRange,
@@ -97,6 +101,8 @@ export type IntentContext = {
   readonly interaction: InteractionState;
   /** The scope's command table, for the command chip (with `structure`). */
   readonly commands: CommandTable | null;
+  /** The buffer is a title (a frame title): one line of text, with no paragraph breaks or lists. */
+  readonly title?: boolean;
 };
 
 export type IntentResolution =
@@ -107,6 +113,15 @@ export type IntentResolution =
   | { readonly kind: "none" };
 
 const NONE: IntentResolution = { kind: "none" };
+
+/** What `$` around a selection may not enclose (M2). */
+const WRAP_REFUSING_KINDS = new Set(["formula", "display", "alignment", "list", "container", "item", "paragraph", "vertical"]);
+
+/** Commands that structure flow text, never written into math. */
+const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
+
+/** Nodes a style wrapper may not cut through. */
+const CELL_AND_BLOCK_KINDS = new Set(["row", "paragraph", "item", "list", "alignment", "display", "container"]);
 
 const WRAP_COMMANDS: Partial<Record<FormatCommand, Exclude<TextFormatCommandName, "textcolor">>> = {
   bold: "textbf",
@@ -172,10 +187,27 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
     case "escape":
       return resolver.escape();
     case "undo":
-      return { kind: "history", direction: "undo" };
+      // With the chip open, ⌘Z just closes it.
+      return context.interaction.chip ? resolver.escape() : { kind: "history", direction: "undo" };
     case "redo":
-      return { kind: "history", direction: "redo" };
+      return context.interaction.chip ? resolver.escape() : { kind: "history", direction: "redo" };
   }
+}
+
+/** The position a caret at an offset is at: the outermost there (after `x^2‸`, outside the script). */
+function caretAt(view: EditView, offset: number): Position {
+  return view.index.resolve(offset, "after") ?? view.positionAt(offset);
+}
+
+/**
+ * Whether an edit made a command name that was not there (R5: unwrapping
+ * `\\textbf{n}` after `\\frac` writes `\\fracn`). Format toggles from the
+ * text-level helper are refused when they would.
+ */
+function gluesControlWords(before: string, after: string): boolean {
+  const names = (text: string) => new Set([...text.matchAll(/\\([A-Za-z@]+)/gu)].map((match) => match[1]));
+  const known = names(before);
+  return [...names(after)].some((name) => !known.has(name) && !Object.values(WRAP_COMMANDS).includes(name as never) && name !== "textcolor");
 }
 
 /** Whether an offset follows an unescaped backslash (an odd run of them). */
@@ -208,10 +240,7 @@ class Resolver {
 
   /** The raw selection ends, from the caller or from the offsets. */
   private rawEnds(view: EditView): SelectionEnds {
-    return this.context.positions ?? {
-      anchor: view.positionAt(this.context.anchor),
-      focus: view.positionAt(this.context.focus),
-    };
+    return this.context.positions ?? selectionEndsAt(view, this.context.anchor, this.context.focus);
   }
 
   /** The promoted selection, start first. */
@@ -317,9 +346,34 @@ class Resolver {
     undo: UndoGrouping,
     extra: Pick<Transaction, "composition" | "verticalGoal" | "interaction"> = {}
   ): IntentResolution {
+    const repaired = this.endRowsBeforeRules({ baseRevision: this.context.revision, patches, selection, undo, ...extra });
+    return { kind: "transaction", transaction: repaired };
+  }
+
+  /**
+   * A table rule that an edit left inside a row (`\\alpha\\bottomrule`)
+   * gets the row break TeX needs before it: rules only start rows. Edits
+   * outside tables pass unchanged.
+   */
+  private endRowsBeforeRules(transaction: Transaction): Transaction {
+    const { structure, text } = this.context;
+    if (!structure || !this.context.isScopeSession || transaction.patches.length === 0 || !/\\(?:hline|cline|\w*rule|addlinespace)/u.test(text)) {
+      return transaction;
+    }
+    const applied = applyTransaction(text, transaction);
+    const rules = rulesInsideRows(structure(applied.text).tree);
+    if (rules.length === 0) {
+      return transaction;
+    }
+    let next = applied.text;
+    for (const at of [...rules].sort((left, right) => right - left)) {
+      next = `${next.slice(0, at)}\\\\ ${next.slice(at)}`;
+    }
+    const shift = (offset: number) => offset + 3 * rules.filter((at) => at < offset).length;
     return {
-      kind: "transaction",
-      transaction: { baseRevision: this.context.revision, patches, selection, undo, ...extra },
+      ...transaction,
+      patches: replacementPatches(text, next),
+      selection: { kind: "absolute", anchor: shift(applied.anchor), focus: shift(applied.focus) },
     };
   }
 
@@ -362,11 +416,19 @@ class Resolver {
     }
     if (this.hasRange()) {
       const { start, end } = this.effectiveRange(view, raw);
-      if (text === "$" && start.slot === end.slot && view.tree.slots[start.slot].mode === "text") {
-        const from = view.offset(start);
-        const to = view.offset(end);
+      const from = view.offset(start);
+      const to = view.offset(end);
+      // Only plain inline text becomes a formula: not math, and not a table or list it contains.
+      const hasMath = view.tree.nodes.some((node) => WRAP_REFUSING_KINDS.has(node.kind) && node.span.from < to && node.span.to > from &&
+        (node.kind === "formula" || node.kind === "display" || !(node.span.from <= from && node.span.to >= to)));
+      // (A `\\left` just before the closing `$` would take it as its delimiter.)
+      const delimiterBefore = /\\(?:left|right|middle)\s*$/u.test(view.tree.text.slice(Math.max(0, to - 12), to));
+      if (text === "$" && start.slot === end.slot && view.tree.slots[start.slot].mode === "text" && !hasMath && !delimiterBefore) {
         const patches = [{ from, to: from, insert: "$" }, { from: to, to, insert: "$" }];
         return this.outcome(view, { kind: "patch", patches, caret: to + 1, run: null });
+      }
+      if ([...text].length === 1) {
+        return this.replaceThenType(view, start, end, text);
       }
       return this.outcome(view, deleteRange(view, start, end, text), "insert");
     }
@@ -377,7 +439,7 @@ class Resolver {
     // Without recorded positions, text goes exactly at the caret offset
     // (after a space TeX drops, inside a half-typed name), and the tree
     // position there gives the context.
-    const caret = this.context.positions ? view.representative(raw.focus) : view.positionAt(this.from);
+    const caret = this.caretPosition(view);
     const at = this.context.positions ? view.offset(caret) : this.from;
     return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at));
   }
@@ -447,8 +509,7 @@ class Resolver {
         outcome = direction === "backward" ? deleteBackward(view, caret) : deleteForward(view, caret);
         if (outcome.kind === "structural") {
           // A paragraph or item edge: join the neighbouring block.
-          const at = this.context.positions ? view.offset(caret) : this.from;
-          outcome = direction === "backward" ? joinBackward(view, caret, at) : joinForward(view, caret, at);
+          outcome = direction === "backward" ? joinBackward(view, caret) : joinForward(view, caret);
         }
       }
       return this.outcome(view, outcome);
@@ -492,10 +553,13 @@ class Resolver {
       // ⏎ accepts the highlighted completion, like ⇥ (V2); ␣ commits what was typed.
       return this.commitChip(view, this.context.commands, chip, "structure", true);
     }
+    if (this.context.title) {
+      return NONE;
+    }
     const key = soft ? "line-break" : "enter";
     const raw = this.rawEnds(view);
     if (!this.hasRange()) {
-      const caret = this.context.positions ? view.representative(raw.focus) : view.positionAt(this.from);
+      const caret = this.caretPosition(view);
       const at = this.context.positions ? view.offset(caret) : this.from;
       return this.outcome(view, enter(view, caret, at, key));
     }
@@ -507,7 +571,7 @@ class Resolver {
     }
     const middle = applyPatches(this.context.text, deleted.patches);
     const middleView = this.context.structure!(middle);
-    const broken = enter(middleView, middleView.positionAt(deleted.caret), deleted.caret, key);
+    const broken = enter(middleView, caretAt(middleView, deleted.caret), deleted.caret, key);
     if (broken.kind !== "patch") {
       return NONE;
     }
@@ -534,6 +598,30 @@ class Resolver {
       ? this.effectiveRange(view, this.rawEnds(view))
       : { start: this.caretPosition(view), end: this.caretPosition(view) };
     return this.outcome(view, tab(view, start, back, end));
+  }
+
+  /**
+   * A character typed over a selection (F6): the selection goes as a range
+   * deletion would, then the character is typed where that left the caret,
+   * through the same input rules (`%` over a selection is `\%`), in one step.
+   */
+  private replaceThenType(view: EditView, start: Position, end: Position, char: string): IntentResolution {
+    const deleted = deleteRange(view, start, end);
+    if (deleted.kind !== "patch") {
+      return NONE;
+    }
+    const middle = applyPatches(this.context.text, deleted.patches);
+    const middleView = this.context.structure!(middle);
+    const interaction = deleted.placeholder != null ? { placeholder: deleted.placeholder } : NO_INTERACTION;
+    const typed = typeCharacter(middleView, caretAt(middleView, deleted.caret), char, interaction, deleted.caret);
+    const final = typed.kind === "patch" ? applyPatches(middle, typed.patches) : middle;
+    const caret = typed.kind === "patch" ? typed.caret : deleted.caret;
+    return this.transaction(
+      replacementPatches(this.context.text, final),
+      { kind: "absolute", anchor: caret, focus: caret },
+      { group: "typing-run", run: "insert" },
+      typed.kind === "patch" && typed.placeholder != null ? { interaction: { placeholder: typed.placeholder } } : {}
+    );
   }
 
   /** Esc: closes the command chip without writing anything. */
@@ -581,11 +669,14 @@ class Resolver {
       }
       return this.commitOutcome(view, symbol.outcome, symbol.pending);
     }
-    if (chip.name === "left") {
+    if (chip.name === "left" && view.tree.slots[caret.slot].mode === "math") {
       const pair = commitLeftDelimiter(chip.at, chip.held, char);
       if (pair) {
         return this.commitOutcome(view, pair);
       }
+    }
+    if (chip.name === "right" && view.tree.slots[caret.slot].mode === "math") {
+      return this.closeRight(view, chip, char);
     }
     if (char === " ") {
       return this.commitChip(view, commands, chip, "space", false);
@@ -612,6 +703,20 @@ class Resolver {
     return this.commitChip(view, commands, chip, "typed", false, char);
   }
 
+  /** `\right` and its delimiter typed at the closer `\left` brought: step over it (R3). */
+  private closeRight(view: EditView, chip: ChipState, char: string): IntentResolution {
+    const text = view.tree.text;
+    let at = chip.at;
+    while (/\s/u.test(text[at] ?? "")) {
+      at += 1;
+    }
+    if (!chip.held && text.startsWith(`\\right${char}`, at)) {
+      const caret = at + "\\right".length + char.length;
+      return this.transaction([], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
+    }
+    return this.keepSelection(NO_INTERACTION);
+  }
+
   /** Commits the chip; `then` is a character typed right after, in the same step. */
   private commitChip(
     view: EditView,
@@ -621,10 +726,26 @@ class Resolver {
     accept: boolean,
     then?: string
   ): IntentResolution {
+    if (chip.name === "") {
+      // Nothing typed yet: the chip just closes.
+      return this.keepSelection(NO_INTERACTION);
+    }
     const caret = view.positionAt(chip.at);
     const mode = view.tree.slots[caret.slot].mode;
     const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept);
-    const commit = commitCommand(view, commands, caret, chip.at, name, key, this.context.interaction, chip.held);
+    if (mode === "math" && BLOCK_COMMANDS.has(name)) {
+      // List and environment commands make no sense in a formula.
+      return this.keepSelection(NO_INTERACTION);
+    }
+    if (mode === "math" && (name === "left" || name === "right" || name === "middle")) {
+      // `\left` and `\right` only exist in pairs (K16, O5): `\left` brings
+      // its `\right`; a lone `\right` or `\middle` writes nothing.
+      return name === "left"
+        ? this.commitOutcome(view, commitLeftDelimiter(chip.at, chip.held, "(")!)
+        : this.keepSelection(NO_INTERACTION);
+    }
+    const committed = commitCommand(view, commands, caret, chip.at, name, key, this.context.interaction, chip.held);
+    const commit = { ...committed, outcome: braceUnbracedArgument(view, caretAt(view, chip.at), committed.outcome) };
     if (then == null || commit.outcome.kind !== "patch") {
       return this.commitOutcome(view, commit.outcome, commit.pending);
     }
@@ -632,7 +753,7 @@ class Resolver {
     const middle = applyPatches(this.context.text, commit.outcome.patches);
     const middleView = this.context.structure!(middle);
     const at = commit.outcome.caret;
-    const typed = typeCharacter(middleView, middleView.positionAt(at), then, { pending: commit.pending }, at);
+    const typed = typeCharacter(middleView, caretAt(middleView, at), then, { pending: commit.pending }, at);
     if (typed.kind === "move") {
       // `}` after `\pi` in `e^{i\pi`: the commit, then the caret steps out.
       const caret = middleView.offset(typed.to);
@@ -656,7 +777,9 @@ class Resolver {
   }
 
   /** A commit is one undo step (R12), whatever the chip took to type. */
-  private commitOutcome(view: EditView, outcome: EditOutcome, pending?: number): IntentResolution {
+  private commitOutcome(view: EditView, written: EditOutcome, pending?: number): IntentResolution {
+    const chip = this.context.interaction.chip;
+    const outcome = chip ? braceUnbracedArgument(view, caretAt(view, chip.at), written) : written;
     if (outcome.kind !== "patch") {
       return this.outcome(view, outcome);
     }
@@ -669,9 +792,13 @@ class Resolver {
     );
   }
 
-  /** The caret's position: the recorded one, or the one at its offset. */
+  /**
+   * The caret's position: the recorded one, or the one at its offset (the
+   * outermost there: after `x^2‸` the caret is outside the script), so
+   * that the position and the offset an edit uses always agree.
+   */
   private caretPosition(view: EditView): Position {
-    return this.context.positions ? view.representative(this.rawEnds(view).focus) : view.positionAt(this.from);
+    return this.context.positions ? view.representative(this.rawEnds(view).focus) : caretAt(view, this.from);
   }
 
   move(motion: Extract<Intent, { type: "move" }>): IntentResolution {
@@ -685,7 +812,8 @@ class Resolver {
         const selected = Math.max(0, chip.selected + (motion.dir === "up" ? -1 : 1));
         return this.keepSelection({ ...this.context.interaction, chip: { ...chip, selected } });
       }
-      return this.commitChip(view, this.context.commands, chip, "typed", false);
+      // Leaving the chip commits it, with its arguments: a bare `\\textbf` would take what follows.
+      return this.commitChip(view, this.context.commands, chip, "structure", false);
     }
     if (view && motion.unit === "item" && (motion.dir === "left" || motion.dir === "right")) {
       return this.moveOnTree(view, motion.dir === "left" ? -1 : 1, motion.extend);
@@ -743,7 +871,7 @@ class Resolver {
   }
 
   private toggleResult(result: TextFormatToggleResult | null): IntentResolution {
-    if (!result) {
+    if (!result || gluesControlWords(this.context.text, result.nextText) || this.changesConstructs(result.nextText)) {
       return NONE;
     }
     return this.transaction(
@@ -771,14 +899,15 @@ class Resolver {
     }
     const wrap = WRAP_COMMANDS[command];
     if (wrap) {
-      if (!this.formatAllowed(wrap)) {
+      if (!this.formatAllowed(wrap) || this.crossesStructure() || this.inUnbracedArgument() || this.inMath() ||
+        this.wrapperInsideConstruct(wrap)) {
         return NONE;
       }
       return this.toggleResult(toggleTextFormatCommand(this.context.text, this.from, this.to, wrap));
     }
-    // The list buttons work from either surface, on the tree.
+    // The list buttons work from either surface, on the tree (not in a title).
     const view = this.context.isScopeSession && this.context.structure ? this.currentView(this.context.structure) : null;
-    if (!view) {
+    if (!view || this.context.title) {
       return NONE;
     }
     const start = view.positionAt(this.from);
@@ -788,8 +917,114 @@ class Resolver {
     return this.outcome(view, outcome);
   }
 
+  /**
+   * Whether the selection cuts through block structure or an alignment
+   * row: wrapping it in `\textbf{…}` would swallow a cell's `&`, a row's
+   * `\\` or a paragraph break, which TeX rejects inside the argument.
+   */
+  private crossesStructure(): boolean {
+    const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
+    if (!view || !this.hasRange()) {
+      return false;
+    }
+    const { from, to } = this;
+    // The two ends must meet in one slot, or through style wrappers only
+    // (`a⟦b\\textbf{c⟧d}`): not across a title and a body, cells or blocks.
+    const { tree } = view;
+    const ends = selectionEndsAt(view, from, to);
+    const chain = (slot: number) => {
+      const slots = [slot];
+      for (let node = tree.slots[slot].node; tree.nodes[node].parent != null; node = tree.slots[tree.nodes[node].parent!].node) {
+        slots.push(tree.nodes[node].parent!);
+      }
+      return slots;
+    };
+    const startChain = chain(ends.anchor.slot);
+    const endChain = chain(ends.focus.slot);
+    const meet = startChain.find((slot) => endChain.includes(slot));
+    const throughWrappers = (slots: number[]) => slots.slice(0, slots.indexOf(meet!)).every((slot) => view.role(tree.slots[slot].node) === "transparent");
+    if (meet == null || !throughWrappers(startChain) || !throughWrappers(endChain)) {
+      return true;
+    }
+    // Within one block or cell, the wrapper is fine; any such node the range reaches without containing it is not.
+    return view.tree.nodes.some((node) =>
+      CELL_AND_BLOCK_KINDS.has(node.kind) &&
+      node.span.from < to && node.span.to > from &&
+      // A row's `&` and `\\` inside the range: cells are slots, not nodes.
+      (!(node.span.from <= from && node.span.to >= to) ||
+        (node.kind === "row" && node.delimiters.some((span) => span.from >= from && span.to <= to))));
+  }
+
+  /**
+   * Whether a text-level format toggle changed the source of a construct
+   * inside the selection (`\\footnote{\\textit{}}` losing its empty
+   * `\\textit{}`): it may add or remove wrappers around them, never inside.
+   */
+  private changesConstructs(next: string): boolean {
+    const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
+    if (!view) {
+      return false;
+    }
+    const { tree } = view;
+    return tree.nodes.some((node) =>
+      node.span.from >= this.from && node.span.to <= this.to && view.role(node.id) === "construct" &&
+      node.kind !== "formula" && !next.includes(tree.text.slice(node.span.from, node.span.to)));
+  }
+
+  /**
+   * Whether the selection holds the same wrapper inside another construct's
+   * argument (`\\frac{\\textbf{n}}{}`): the text-level toggle would unwrap it
+   * and break the construct's braces.
+   */
+  private wrapperInsideConstruct(name: string): boolean {
+    const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
+    if (!view || !this.hasRange()) {
+      return false;
+    }
+    const { tree } = view;
+    const { text } = tree;
+    // Every `\name{` in the selection must be a wrapper in the selected text
+    // itself, not inside another construct (or an atom's source).
+    for (let at = text.indexOf(`\\${name}`, this.from); at >= 0 && at < this.to; at = text.indexOf(`\\${name}`, at + 1)) {
+      const node = tree.nodes.find((candidate) => candidate.command === name && candidate.span.from === at);
+      if (!node) {
+        return true;
+      }
+      for (let parent = node.parent; parent != null; parent = tree.nodes[tree.slots[parent].node].parent) {
+        const owner = tree.nodes[tree.slots[parent].node];
+        if (owner.span.from <= this.from && owner.span.to >= this.to) {
+          break;
+        }
+        if (view.role(owner.id) === "construct") {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** M17: ⌘B and ⌘I do nothing in math (`\\mathbf` is an alphabet, not bold). */
+  private inMath(): boolean {
+    const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
+    return view?.tree.slots[view.positionAt(this.from).slot].mode === "math";
+  }
+
+  /** Whether the selection is the content of an unbraced argument (`\\textbf x`, `x^2`), which a wrapper cannot go into without braces. */
+  private inUnbracedArgument(): boolean {
+    const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
+    if (!view) {
+      return false;
+    }
+    return [this.from, this.to].some((offset) => {
+      const slot = view.tree.slots[view.positionAt(offset).slot];
+      const owner = view.tree.nodes[slot.node];
+      return !slot.braced && slot.role !== "flow" && owner.kind !== "formula" && owner.kind !== "paragraph" &&
+        owner.kind !== "group" && owner.kind !== "row" && owner.kind !== "display" && owner.kind !== "scope";
+    });
+  }
+
   color(color: string | null): IntentResolution {
-    if (this.context.composition || !this.formatAllowed("textcolor")) {
+    if (this.context.composition || !this.formatAllowed("textcolor") || this.crossesStructure()) {
       return NONE;
     }
     return this.toggleResult(applyTextColorCommand(this.context.text, this.from, this.to, color));

@@ -91,8 +91,15 @@ type Run = {
 
 const NO_STOPS: ReadonlySet<Stop> = new Set();
 const WORD_CHAR = /[A-Za-z@]/u;
-const RULE_COMMANDS = new Set([
-  "hline", "cline", "toprule", "midrule", "bottomrule", "cmidrule", "specialrule", "addlinespace", "noalign",
+/**
+ * Rules between alignment rows and the arguments each takes, in order:
+ * `[` an optional width, `(` a trim (`\cmidrule(lr)`), `{` a mandatory
+ * argument. `\toprule` takes no braced argument: a group after it is the
+ * next row's content.
+ */
+const RULE_COMMANDS = new Map<string, string>([
+  ["hline", ""], ["toprule", "["], ["midrule", "["], ["bottomrule", "["], ["addlinespace", "["],
+  ["cline", "{"], ["cmidrule", "[({"], ["specialrule", "{{{"], ["noalign", "{"],
 ]);
 const LEAF_KINDS: ReadonlySet<EditNodeKind> = new Set([
   "char", "symbol", "atom", "space", "invisible", "declaration", "vertical", "break",
@@ -281,11 +288,12 @@ class Binder {
   }
 
   /** The end of the group opened at `at` (after `}`), and whether it closed. */
+  /**
+   * The end of the group opened at `at`, by brace matching as TeX does
+   * (the syntax index's groups can pair braces across stray brackets,
+   * `s[{]}ame`, after its error recovery).
+   */
   private groupEnd(at: number, limit: number): { end: number; complete: boolean } {
-    const known = this.index.groupByStart.get(at);
-    if (known && known.complete && known.span.to <= limit) {
-      return { end: known.span.to, complete: true };
-    }
     return this.matchDelimited(at, limit, "{", "}");
   }
 
@@ -306,7 +314,9 @@ class Binder {
       } else if (char === "{" && open !== "{") {
         const inner = this.groupEnd(cursor, limit);
         cursor = inner.end - 1;
-      } else if (char === open) {
+      } else if (char === open && (open === "{" || cursor === at)) {
+        // As in LaTeX, `[` and `<` do not nest: an optional argument ends
+        // at the first `]` outside braces (`[Named r[esult]`).
         depth += 1;
       } else if (char === close) {
         depth -= 1;
@@ -697,7 +707,7 @@ class Binder {
   private bindCommand(run: Run, at: number, nameEnd: number, schema: CommandSchema): NodeId {
     const node = this.node(schema.node, run.mode, { from: at, to: nameEnd }, schema.name);
     let cursor = nameEnd;
-    if (schema.star && this.text[cursor] === "*") {
+    if (schema.star && (this.text[cursor] === "*" || (schema.name === "onslide" && this.text[cursor] === "+"))) {
       cursor += 1;
     }
     this.delimiter(node, at, cursor);
@@ -730,7 +740,7 @@ class Binder {
     let braced = false;
     if (arg.kind === "optional" || arg.kind === "overlay") {
       const [open, close] = arg.kind === "optional" ? ["[", "]"] : ["<", ">"];
-      if (text[start] === open) {
+      if (start < run.end && text[start] === open) {
         const match = this.matchDelimited(start, run.end, open, close);
         if (match.complete) {
           span = { from: start, to: match.end };
@@ -744,7 +754,9 @@ class Binder {
         }
         return cursor;
       }
-    } else if (text[start] === "{") {
+    } else if (start < run.end && text[start] === "{") {
+      // (Bounded by the run: an unbraced argument that is itself a command,
+      // `\textbf\textit{x}`, takes nothing beyond its own token.)
       const match = this.groupEnd(start, run.end);
       span = { from: start, to: match.end };
       content = { from: start + 1, to: match.complete ? match.end - 1 : match.end };
@@ -998,19 +1010,20 @@ class Binder {
       }
       if (text[cursor] === "\\") {
         const { name, end } = this.controlAt(cursor);
-        if (RULE_COMMANDS.has(name)) {
+        const shape = RULE_COMMANDS.get(name);
+        if (shape != null) {
           let ruleEnd = end;
-          for (;;) {
+          for (const opener of shape) {
             const next = this.skipSpaces(ruleEnd, to);
-            if (text[next] === "{" ) {
-              ruleEnd = this.groupEnd(next, to).end;
-            } else if (text[next] === "[" || text[next] === "(") {
-              const match = this.matchDelimited(next, to, text[next], text[next] === "[" ? "]" : ")");
-              if (!match.complete) break;
-              ruleEnd = match.end;
-            } else {
-              break;
+            if (text[next] !== opener) {
+              if (opener === "{") break;
+              continue;
             }
+            const match = opener === "{"
+              ? this.groupEnd(next, to)
+              : this.matchDelimited(next, to, opener, opener === "[" ? "]" : ")");
+            if (!match.complete) break;
+            ruleEnd = match.end;
           }
           this.attach(slot, this.node("invisible", mode, { from: cursor, to: ruleEnd }, name));
           cursor = ruleEnd;

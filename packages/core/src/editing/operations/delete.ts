@@ -4,7 +4,7 @@ import type { EditView } from "../position/view.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, NodeId, SlotId, Span } from "../tree/types.js";
 import type { BufferPatch } from "../transaction/transaction.js";
-import { mapThrough, PatchSet, slotOuterSpan, withTerminator } from "./source.js";
+import { mapThrough, PatchSet, slotOuterSpan, withBracketGuard, withTerminator } from "./source.js";
 
 /**
  * Deletion (R9, O2, O3, F5). Operations return what should happen; the
@@ -86,8 +86,18 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
         throughScript = true;
         continue;
       }
-      case "unit":
+      case "unit": {
+        // O3: a base that has scripts is not emptied from under them (they
+        // would re-attach to whatever precedes it); the scripted atom is
+        // selected first, as ⌦ does from before it.
+        if (record.role === "base" && record.children.every((other) => other === child || view.role(other) === "invisible")) {
+          const scripted = tree.nodes[owner];
+          const parent = scripted.parent!;
+          const index = childIndex(tree, owner);
+          return { kind: "select", anchor: { slot: parent, index: index + 1 }, focus: { slot: parent, index } };
+        }
         return deleteItem(view, child, "backward", throughScript);
+      }
       case "construct":
         return { kind: "select", anchor: { slot, index: at }, focus: { slot, index: at - 1 } };
       case "invisible":
@@ -157,7 +167,12 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   if (role === "flow") {
     // Paragraph and item edges are structural; the edges of a display or
     // a block title stop the key rather than eat the block's delimiters.
+    // An item's label edges are not block edges: ⌦ at its end goes into the item's text.
     const kind = tree.nodes[owner].kind;
+    if (kind === "item" && record.role === "label") {
+      const flow = presentSlots(tree, owner).find((candidate) => candidate.role === "flow");
+      return outcome(edge === "end" && flow ? { kind: "move", to: { slot: flow.id, index: 0 } } : NONE);
+    }
     return outcome(kind === "paragraph" || kind === "item" ? STRUCTURAL : NONE);
   }
   if (role === "transparent") {
@@ -331,7 +346,7 @@ function gapEnd(view: EditView, slot: SlotId, from: number): number {
 function finishDeletion(view: EditView, set: PatchSet, seam: number, mode: EditMode, run: string | null): EditOutcome {
   const raw = set.patches();
   const caret = mapThrough(raw, seam);
-  const patches = withTerminator(view.tree.text, raw, caret, mode);
+  const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
   const single = raw.length === 1 && raw[0].insert === "" && raw[0].to - raw[0].from === 1;
   return { kind: "patch", patches, caret, run: single ? run : null };
 }
@@ -359,6 +374,18 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
   if (partial.some((node) => BOUNDED_BLOCKS.has(node.kind) && node.delimiters.some((span) => span.from < to && span.to > from))) {
     return NONE;
   }
+  // Nor can an item's `\item[label]{key}` prefix be cut in half.
+  const cutsPrefix = partial.some((node) => {
+    if (node.kind !== "item") {
+      return false;
+    }
+    const flow = node.slots.map((slot) => tree.slots[slot]).find((slot) => slot.role === "flow");
+    const prefixEnd = flow?.contentSpan.from ?? node.span.to;
+    return [from, to].some((offset) => offset > node.span.from && offset < prefixEnd);
+  });
+  if (cutsPrefix) {
+    return NONE;
+  }
   const kept: Span[] = partial
     .filter((node) => !(node.kind === "item" && node.span.from >= from))
     .flatMap((node) => node.delimiters.filter((span) => span.from < to && span.to > from));
@@ -371,11 +398,33 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
         continue;
       }
       if (view.role(node.id) === "transparent") {
-        removals.push({ span: node.span });
+        // A wrapper goes when the range leaves it empty: all of its text
+        // slots (both branches of `\alt<2>{…}{…}`), not just one.
+        const empty = presentSlots(tree, node.id).every((other) =>
+          other.children.length === 0 || (other.contentSpan.from >= from && other.contentSpan.to <= to));
+        if (empty) {
+          removals.push({ span: node.span });
+        }
       } else if (((!slot.braced && ARGUMENT_ROLES.has(slot.role)) || isDollarFormula(view, node.id)) && !insert) {
         // Typed text refills the slot; otherwise it holds placeholder braces.
         removals.push({ span: slot.contentSpan, insert: "{}" });
       }
+    }
+  }
+  // An inline formula left with nothing visible holds placeholder braces,
+  // never `$$` (which reads as display math).
+  const covered = (span: Span) =>
+    (span.from >= from && span.to <= to) || removals.some((removal) => span.from >= removal.span.from && span.to <= removal.span.to);
+  for (const node of partial) {
+    const slot = isDollarFormula(view, node.id) ? tree.slots[node.slots[0]] : null;
+    if (slot && !insert && slot.children.length > 0 &&
+      slot.children.every((child) => view.role(child) === "invisible" && tree.nodes[child].kind !== "group" || covered(tree.nodes[child].span))) {
+      for (let index = removals.length - 1; index >= 0; index -= 1) {
+        if (removals[index].span.from >= slot.contentSpan.from && removals[index].span.to <= slot.contentSpan.to) {
+          removals.splice(index, 1);
+        }
+      }
+      removals.push({ span: slot.contentSpan, insert: "{}" });
     }
   }
   const set = new PatchSet();

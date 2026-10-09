@@ -129,3 +129,55 @@ export function withTerminator(
     return end === seam ? { ...patch, insert: patch.insert + terminator } : patch;
   });
 }
+
+/**
+ * K9 at a seam: when an edit leaves a `[` right after `\\\\` or `\\item`
+ * (deleting what stood between), TeX would read it as their optional
+ * argument; `{}` goes in between.
+ */
+export function withBracketGuard(original: string, patches: BufferPatch[], seam: number): BufferPatch[] {
+  let after = "";
+  let cursor = 0;
+  for (const patch of patches) {
+    after += original.slice(cursor, patch.from) + patch.insert;
+    cursor = patch.to;
+  }
+  after += original.slice(cursor);
+  const before = after.slice(0, seam).replace(/\s+$/u, "");
+  const opens = /(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before);
+  if (!opens || !/^\s*\[/u.test(after.slice(seam))) {
+    return patches;
+  }
+  let delta = 0;
+  return patches.map((patch) => {
+    const end = patch.from + delta + patch.insert.length;
+    delta += patch.insert.length - (patch.to - patch.from);
+    return end === seam ? { ...patch, insert: `${patch.insert}{}` } : patch;
+  });
+}
+
+/** Table rules, which may only start a row. */
+const RULE_COMMAND = /^\\(?:hline|cline|toprule|midrule|bottomrule|cmidrule|specialrule|addlinespace)(?![A-Za-z@])/u;
+
+/**
+ * Where an edit left a table rule inside a row's cell (`x\\hline`, typed
+ * or committed right before the rule): TeX only accepts rules at a row's
+ * start, so the row must end before it. The offsets of those rules.
+ */
+export function rulesInsideRows(tree: EditTree): number[] {
+  const offsets: number[] = [];
+  for (const node of tree.nodes) {
+    if (node.kind !== "row") {
+      continue;
+    }
+    for (const slot of node.slots) {
+      for (const child of tree.slots[slot].children) {
+        const span = tree.nodes[child].span;
+        if (RULE_COMMAND.test(tree.text.slice(span.from, span.to + 16))) {
+          offsets.push(span.from);
+        }
+      }
+    }
+  }
+  return offsets;
+}
