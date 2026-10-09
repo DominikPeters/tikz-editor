@@ -836,10 +836,48 @@ uses positions but deletion still uses raw source ranges.
    - Leaving a placeholder by clicking (only arrows remove it).
 
    Latency gate: typing median 51.1 ms, p95 56.1 ms. ⏎ and ⇥ no longer
-   wait for layout (median about 40 ms each).
+   wait for layout (median about 40 ms each). (Re-measured after the
+   TeX-validity work below: 52–55 ms in Chromium, run-to-run noise is
+   about ±3 ms; Firefox unchanged.)
+
+   **Source TeX accepts.** A keystroke fuzzer checks the contracts after
+   every key (`test/editing/keystroke-fuzz.spec.ts`), and an opt-in
+   LuaLaTeX oracle compiles its end states in their frames
+   (`keystroke-tex-oracle.spec.ts`). What the oracle found became rules:
+   - Wrong-mode commands: a math command typed in prose starts a formula
+     (`$\frac{‸}{}$`); a text command in math goes into `\text{…}`.
+   - Beamer reads `<` as an overlay specification after `\item`,
+     `\begin{…}` (and a block's title), `\\` and a text command's closing
+     brace, and `[`/`<` at a frame body's start: `{}` (or `\relax` at the
+     body's start) protects them, typed or left by a deletion.
+   - `\\`, ⇧⏎ and `\newline` need ink on their line (`\only` content does
+     not count), never in LR boxes or inline math; a `\\` an edit leaves
+     dead is removed.
+   - The chip refuses what no commit writes whole: `\verb`, `\begin`,
+     `\end`, `\item` outside a list, table rules outside a table.
+   - Commands as bare scripts only when TeX reads them as one token
+     (`\mu^\top`, not `x^\ldots`); a closer right after a command gives it
+     its braces; a typed overlay specification is the command's
+     (`\only<2->{x}`).
+   - Beamer nests three lists; `cases` has two columns; `\multicolumn`
+     opens its cell; joins across a `%` comment keep text out of it.
+   The oracle skips what TeX cannot judge yet: unknown commands, value
+   arguments left empty or edited in place (O8), commands waiting for an
+   argument (K2).
 6. **Breadth.** All node kinds, wrapping and pickers (R10, O8), paste and
    copy (O6), the frequent-styles list and variants, the remaining
    alignments and tables (D2–D4, K13), overlays (Z4).
+
+   A survey of real decks (about 6,600 frames) reorders this:
+   - User-defined environments occur in a third of the frames and are
+     opaque atoms today; macros that open and close environments
+     (`\BI…\EI`) in a tenth. Classifying `\newenvironment` bodies as K1
+     does for macros would open them to editing.
+   - The chip writes value arguments empty (`\url{}`, `\textcolor{}{…}`),
+     which TeX rejects until filled: O8's pickers are the fix.
+   - Overlays need a design from first principles (typing next to
+     content hidden on the current step, specifications as values).
+   - `\frame{…}` and `\slide{…}{…}`-style frames are not recognized.
 
 Parallel: engine recovery (T1–T7) against the interface above. It must
 land before the source lens is promoted as the main escape hatch.
