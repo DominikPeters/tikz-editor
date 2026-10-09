@@ -36,6 +36,10 @@ import { mapThrough, PatchSet } from "./source.js";
 /** ⏎ (or ⇧⏎ as `line-break`) at a caret. */
 export function enter(view: EditView, caret: Position, at: number, key: "enter" | "line-break"): EditOutcome {
   const { tree } = view;
+  if (inValue(view, at)) {
+    // A file name, colour or URL edited in place has no lines or paragraphs.
+    return { kind: "none" };
+  }
   const tail = key === "enter" ? leaveAlignment(view, at) : null;
   if (tail) {
     return tail;
@@ -57,7 +61,11 @@ export function enter(view: EditView, caret: Position, at: number, key: "enter" 
     }
     const owner = tree.nodes[decision.node];
     if (key === "line-break") {
-      return owner.kind === "row" ? newRow(view, decision.node, offset) : breakAt(view, offset, decision.slot, " \\\\ ");
+      if (owner.kind === "row") {
+        return rowBreak(view, position.slot, decision.node, offset);
+      }
+      // TeX has no empty line to end: a break needs ink on its line ("There's no line here to end").
+      return inkOnLine(view, decision.slot, offset) ? breakAt(view, offset, decision.slot, " \\\\ ") : { kind: "none" };
     }
     if (owner.kind === "item") {
       const context = listItemOf(tree, owner.id);
@@ -76,7 +84,7 @@ export function enter(view: EditView, caret: Position, at: number, key: "enter" 
     if (owner.kind === "display") {
       return leaveDisplay(view, owner.id);
     }
-    return owner.kind === "row" ? newRow(view, owner.id, offset) : { kind: "none" };
+    return owner.kind === "row" ? rowBreak(view, position.slot, owner.id, offset) : { kind: "none" };
   }
   return { kind: "none" };
 }
@@ -137,6 +145,77 @@ function visibleOffsets(view: EditView, slot: SlotId): Span[] {
   return view.tree.slots[slot].children.filter((child) => view.role(child) !== "invisible").map((child) => view.tree.nodes[child].span);
 }
 
+/** Whether something visible stands between the previous line break (or the start of the block) and `at`. */
+export function inkOnLine(view: EditView, slot: SlotId, at: number): boolean {
+  const { tree } = view;
+  // From the block the caret's line is in, so that ink before a wrapper around the caret counts.
+  let from = slot;
+  for (let node = tree.slots[from].node; !LINE_STARTS.has(tree.nodes[node].kind) && tree.nodes[node].parent != null; node = tree.slots[from].node) {
+    from = tree.nodes[node].parent!;
+  }
+  return lineBefore(view, from, at) === "ink";
+}
+
+/** The `\\` line breaks of prose with nothing visible before them on their line, which TeX rejects. */
+export function deadBreaks(view: EditView): Span[] {
+  const { tree } = view;
+  return tree.nodes
+    .filter((node) => {
+      if (node.kind !== "break" || node.parent == null) {
+        return false;
+      }
+      const slot = tree.slots[node.parent];
+      return slot.mode === "text" && slot.role !== "cell" && !inkOnLine(view, node.parent, node.span.from);
+    })
+    .map((node) => node.span);
+}
+
+/** Whether `at` is inside a value argument (a file name, colour, URL). */
+export function inValue(view: EditView, at: number): boolean {
+  return view.tree.nodes.some((node) => node.values.some((value) => value.contentSpan.from <= at && at <= value.contentSpan.to));
+}
+
+/** Blocks that start a line. */
+const LINE_STARTS = new Set(["paragraph", "item", "list", "row", "display", "container", "alignment"]);
+
+/** What comes first going back from `at` in `slot`: ink, a line end, or the slot's start. */
+function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | "start" {
+  const { tree } = view;
+  const before = tree.slots[slot].children.filter((child) => tree.nodes[child].span.from < at);
+  for (const child of before.reverse()) {
+    const node = tree.nodes[child];
+    // (A caption ends its paragraph: TeX is back between lines after it.)
+    if (node.kind === "break" || node.kind === "vertical" || node.command === "caption") {
+      return "line";
+    }
+    // The node around the caret: its own line so far, then (unless it starts a line) what is before it.
+    const inner = node.slots.find((id) => tree.slots[id].contentSpan.from <= at && at <= tree.slots[id].contentSpan.to);
+    if (inner != null) {
+      const found = lineBefore(view, inner, at);
+      if (found !== "start") {
+        return found;
+      }
+      if (LINE_STARTS.has(node.kind)) {
+        return "line";
+      }
+      continue;
+    }
+    if (inked(view, child)) {
+      return "ink";
+    }
+  }
+  return "start";
+}
+
+/** Whether a node puts anything on the page: a visible leaf, or a node with one inside. */
+function inked(view: EditView, id: NodeId): boolean {
+  const node = view.tree.nodes[id];
+  if (view.role(id) === "invisible" || ["space", "break", "vertical", "declaration"].includes(node.kind)) {
+    return false;
+  }
+  return node.slots.length === 0 || node.slots.some((slot) => view.tree.slots[slot].children.some((child) => inked(view, child)));
+}
+
 /** K9: a `\\` the break writes must not take a `[` after it as its optional argument. */
 function protectBreak(insert: string, text: string, after: number): string {
   const rest = text.slice(after).replace(/^\s*/u, "");
@@ -155,13 +234,31 @@ function leaveDisplay(view: EditView, display: NodeId): EditOutcome {
   return patchOutcome({ edits: [{ span: { from: node.span.to, to: node.span.to }, insert: "\n" }], caret: node.span.to + 1 });
 }
 
+/**
+ * A row break from the caret's slot: the wrappers and formula around the
+ * caret in its cell are closed and reopened, as an item split carries
+ * them (`$a$ \\\\ $b$`); with one that cannot be (a fraction), nothing.
+ */
+function rowBreak(view: EditView, slot: SlotId, row: NodeId, at: number): EditOutcome {
+  const chain = capabilityChain(view.tree, "enter", slot);
+  const inside = chain.slice(0, chain.findIndex((link) => link.node === row));
+  if (inside.some((link) => link.capability.kind !== "transparent")) {
+    return { kind: "none" };
+  }
+  return newRow(view, row, at, inside);
+}
+
 /** ⏎ in an alignment row (D2): a row break, the rest of the row moving to a new line with the same indent. */
-function newRow(view: EditView, row: NodeId, at: number): EditOutcome {
+function newRow(view: EditView, row: NodeId, at: number, transparent: readonly ChainLink[] = []): EditOutcome {
   const { tree } = view;
   const span = tree.nodes[row].span;
-  const from = skipHorizontalBack(tree.text, at, span.from);
-  const to = skipHorizontalForward(tree.text, at, span.to);
-  const insert = protectBreak(` \\\\\n${lineIndentAt(tree.text, span.from)}`, tree.text, to);
+  const { closes, reopens } = carried(view, transparent);
+  const collapse = transparent.length === 0;
+  const from = collapse ? skipHorizontalBack(tree.text, at, span.from) : at;
+  const to = collapse ? skipHorizontalForward(tree.text, at, span.to) : at;
+  const lineBreak = ` \\\\\n${lineIndentAt(tree.text, span.from)}`;
+  // (What is reopened after the break never starts with `[`.)
+  const insert = closes + (reopens ? lineBreak : protectBreak(lineBreak, tree.text, to)) + reopens;
   return patchOutcome({ edits: [{ span: { from, to }, insert }], caret: from + insert.length });
 }
 
@@ -234,8 +331,7 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
   }
   const rows = tree.slots[tree.nodes[row].parent!].children.filter((child) => tree.nodes[child].kind === "row");
   const neighbour = rows[rows.indexOf(row) + (back ? -1 : 1)];
-  const columns = columnLimit(view, tree.slots[tree.nodes[row].parent!].node);
-  if (back || (columns != null && cells.length >= columns)) {
+  if (back || rowIsFull(view, cell)) {
     if (neighbour == null) {
       return { kind: "none" };
     }
@@ -246,6 +342,22 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
   const end = trimmedEnd(tree.text, cells[at].contentSpan);
   const insert = end > cells[at].contentSpan.from ? " & " : "& ";
   return patchOutcome({ edits: [{ span: { from: end, to: end }, insert }], caret: end + insert.length });
+}
+
+/** Whether the row of `cell` has all the columns its alignment fixes (`\multicolumn{n}` counting n), so `&` cannot add one. */
+export function rowIsFull(view: EditView, cell: SlotId): boolean {
+  const { tree } = view;
+  const row = tree.slots[cell].node;
+  const parent = tree.nodes[row].parent;
+  const columns = parent == null ? null : columnLimit(view, tree.slots[parent].node);
+  if (columns == null) {
+    return false;
+  }
+  const used = presentSlots(tree, row).reduce((sum, slot) => {
+    const spans = /^\s*\\multicolumn\s*\{\s*(\d+)\s*\}/u.exec(tree.text.slice(slot.contentSpan.from, slot.contentSpan.to));
+    return sum + (spans ? Number(spans[1]) : 1);
+  }, 0);
+  return used >= columns;
 }
 
 /** The fixed column count of an alignment (`array`/`tabular` specification, `alignat{n}`), or null. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { beamerCorpusScopes } from "./beamer-corpus.js";
-import { runCampaign, type FuzzStart } from "./fuzz/keystroke-fuzz.js";
+import { corpusStarts, runCampaign } from "./fuzz/keystroke-fuzz.js";
 
 /**
  * Random keystrokes on every scope of the Beamer fixtures, checked after
@@ -10,12 +10,7 @@ import { runCampaign, type FuzzStart } from "./fuzz/keystroke-fuzz.js";
 const CASES = Number(process.env.KEYSTROKE_FUZZ_CASES ?? 150);
 const SEED = Number(process.env.KEYSTROKE_FUZZ_SEED ?? 20261009);
 
-export const fuzzStarts: FuzzStart[] = beamerCorpusScopes().map((scope) => ({
-  label: `${scope.file} frame ${scope.frameIndex + 1} ${scope.kind}`,
-  text: scope.text,
-  commands: scope.commands,
-  title: scope.kind === "frame-title",
-}));
+const fuzzStarts = corpusStarts(beamerCorpusScopes());
 
 describe("keystroke fuzzing", () => {
   it(`keeps the editing contracts over ${CASES} random key sequences`, () => {

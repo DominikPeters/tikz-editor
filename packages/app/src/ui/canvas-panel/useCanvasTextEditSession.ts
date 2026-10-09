@@ -850,7 +850,8 @@ export function useCanvasTextEditSession(
         positions: selectionPositions(state, anchor, focus),
         interaction: interactionState(state, anchor, focus),
         commands: session.isScopeSession ? editCommandsRef.current : null,
-        title: session.sourceId.endsWith(":scope:title")
+        title: session.sourceId.endsWith(":scope:title"),
+        frameBody: session.sourceId.endsWith(":scope:body"),
       },
       intent
     );

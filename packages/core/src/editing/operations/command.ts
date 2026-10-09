@@ -1,4 +1,5 @@
 import type { CommandSchema, CommandTable } from "../commands/table.js";
+import { capabilityChain, decideOwner } from "../ownership/keys.js";
 import type { InteractionState } from "../input/interaction.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
@@ -6,6 +7,7 @@ import type { EditMode, Span } from "../tree/types.js";
 import type { EditOutcome } from "./delete.js";
 import { placeholderAt } from "./insert.js";
 import { PatchSet } from "./source.js";
+import { inkOnLine } from "./structure.js";
 
 /**
  * Committing a command from the chip (R4): what `\name` plus the key that
@@ -87,17 +89,87 @@ export function commitCommand(
   const tail = key === "space" && mode !== "math" ? textSpaceTail(schema, following) : letterTerminator(following, mode);
   const text = command + tail;
   if (placeholder && tail.trim() === "" && (mandatory.length === 0 || key === "typed")) {
+    // A symbol TeX reads as one token replaces the braces (M12: `\mu^\top`); anything else
+    // (`\ldots`, `\sum`, `\bf`, a user macro) keeps them, the caret leaving them after a
+    // command without arguments as after a single character (R6: `x^{\ldots}‸`).
     const span = { from: placeholder.open, to: placeholder.open + 2 };
-    const patches = new PatchSet().replace(span, text).patches();
+    const bare = mandatory.length === 0 && schema?.category === "symbol" && !MULTI_TOKEN_SYMBOLS.has(name);
+    const insert = bare ? text : `{${command}}`;
+    const patches = new PatchSet().replace(span, insert).patches();
+    const inside = span.from + (bare ? 0 : 1) + command.length;
     return {
-      outcome: { kind: "patch", patches, caret: span.from + text.length, run: null },
-      pending: optionalFirst ? span.from + command.length : undefined,
+      outcome: { kind: "patch", patches, caret: mandatory.length === 0 ? span.from + insert.length : inside, run: null },
+      pending: optionalFirst ? inside : undefined,
     };
   }
   return {
     outcome: edit(range, text, range.from + text.length),
     pending: optionalFirst && key === "typed" ? range.from + command.length : undefined,
   };
+}
+
+/**
+ * A command that only exists in the other mode. A math command committed
+ * in prose starts a formula: `$\frac{‸}{}$`, `$\left(‸\right)$`, and
+ * `$\alpha$ ` after ␣, which leaves it (any other key stays inside, where
+ * the character typed with it goes). A text command in math goes into
+ * `\text{…}` (`\text{\LaTeX}`); a declaration, break, vertical or overlay
+ * command has no place in a formula and writes nothing ("refused"), as
+ * `\right` and `\middle` without their `\left` in prose.
+ *
+ * Null when the command is known where it is typed, or nowhere (an
+ * unknown command is committed as it is).
+ */
+export function commitAcrossModes(
+  view: EditView,
+  table: CommandTable,
+  caret: Position,
+  at: number,
+  name: string,
+  key: CommitKey,
+  held: Span | null,
+  delimiter = "("
+): CommandCommit | "refused" | null {
+  const { tree } = view;
+  const mode = tree.slots[caret.slot].mode;
+  if (mode === "verbatim" || table.command(name, mode)) {
+    return null;
+  }
+  const schema = table.command(name, mode === "math" ? "text" : "math");
+  if (!schema) {
+    return null;
+  }
+  if (mode === "math" ? ["declaration", "vertical", "break", "overlay"].includes(schema.category) : name === "right" || name === "middle") {
+    return "refused";
+  }
+  const mandatory = schema.args.filter((arg) => arg.kind === "mandatory").length;
+  if (held && mandatory > 0) {
+    // A selection of one mode does not go into an argument of the other.
+    return "refused";
+  }
+  const range = held ?? { from: at, to: at };
+  const [open, close] = mode === "math" ? ["\\text{", "}"] : ["$", "$"];
+  const command = `\\${name}`;
+  let inner = command;
+  // Where the caret goes in `inner`; null: after the whole.
+  let inside: number | null = null;
+  if (name === "left") {
+    inner = `\\left${delimiter}\\right${DELIMITER_PAIRS[delimiter] ?? ")"}`;
+    inside = `\\left${delimiter}`.length;
+  } else if (key === "bracket" && schema.args.find((arg) => arg.kind !== "overlay")?.kind === "optional") {
+    inner = `${command}[]${"{}".repeat(mandatory)}`;
+    inside = command.length + 1;
+  } else if (mandatory > 0) {
+    inner = command + "{}".repeat(mandatory);
+    inside = command.length + 1;
+  } else if (mode === "text" && key !== "space") {
+    inside = command.length;
+  }
+  const following = tree.text.slice(range.to, range.to + 1);
+  const tail = inside == null && mode === "text" && !/^[ \t]$/u.test(following) ? " " : "";
+  const insert = open + inner + close + tail;
+  const caretAt = inside == null ? range.from + insert.length : range.from + open.length + inside;
+  return { outcome: edit(range, insert, caretAt) };
 }
 
 /** `\\`, `\%`, `\{`: a control symbol, committed as soon as its character is typed. */
@@ -119,6 +191,14 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
     case "(":
       return mode === "math" ? null : { outcome: edit(range, "\\(\\)", range.from + 2) };
     case "\\": {
+      // As ⇧⏎ (structure.ts): a row's own cell ends the row; elsewhere TeX needs a line to end, which
+      // formulas, displays, titles and boxes do not have, nor a line with nothing on it yet.
+      if (tree.slots[caret.slot].role !== "cell") {
+        const decision = decideOwner(capabilityChain(tree, "line-break", caret.slot));
+        if (decision.kind === "stop" || tree.nodes[decision.node].kind === "row" || !inkOnLine(view, caret.slot, range.from)) {
+          return null;
+        }
+      }
       // Before an existing `[`, the break must not take it as its spacing (K9).
       if (/^\s*\[/u.test(tree.text.slice(range.to))) {
         return { outcome: edit(range, "\\\\{}", range.from + 4) };
@@ -146,6 +226,17 @@ export function commitLeftDelimiter(at: number, held: Span | null, opener: strin
 }
 
 const TEXT_ACCENTS = new Set(["^", "'", "`", "\"", "~", "=", "."]);
+
+/**
+ * Math symbols that are macros of several tokens in LaTeX (with amsmath,
+ * as beamer loads it), so a script cannot take one bare: `x^\ldots` is
+ * "Missing { inserted". Found by compiling `x^\name` for every symbol;
+ * test/editing/keystroke-tex-oracle.spec.ts checks the list against TeX.
+ */
+export const MULTI_TOKEN_SYMBOLS: ReadonlySet<string> = new Set([
+  "ldots", "cdots", "vdots", "ddots", "dots", "pmod", "bmod", "mod", "notin", "iff", "impliedby", "implies",
+  "longrightarrow", "Longrightarrow", "dasharrow", "dashleftarrow", "dashrightarrow", "Join", "colon",
+]);
 
 const DELIMITER_PAIRS: Readonly<Record<string, string>> = { "(": ")", "[": "]", "|": "|", ".": "." };
 

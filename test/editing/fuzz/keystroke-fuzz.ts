@@ -5,7 +5,8 @@ import type { EditView } from "../../../packages/core/src/editing/position/index
 import { formatMarkedSource, parseScenarioKeys } from "../../../packages/core/src/editing/testing/index.js";
 import { checkEditTree } from "../../../packages/core/src/editing/tree/invariants.js";
 import { isLeaf } from "../../../packages/core/src/editing/tree/navigate.js";
-import type { EditTree, EditTreeDiagnosticCode } from "../../../packages/core/src/editing/tree/types.js";
+import type { EditTree, EditTreeDiagnosticCode, Span } from "../../../packages/core/src/editing/tree/types.js";
+import type { CorpusScope } from "../beamer-corpus.js";
 import { KeystrokeSession, type FuzzKey } from "./keystroke-session.js";
 
 /**
@@ -26,7 +27,30 @@ export type FuzzStart = {
   readonly commands: CommandTable;
   /** A frame title: one line, no paragraph breaks. */
   readonly title?: boolean;
+  /** A frame body, right after `\begin{frame}` and its header. */
+  readonly frameBody?: boolean;
+  /** The deck the buffer is a scope of, to compile edited states in (see tex-oracle.ts). */
+  readonly deck?: {
+    readonly path: string;
+    readonly source: string;
+    readonly span: Span;
+    /** The deck's frames, and the one the buffer is in. */
+    readonly frames: readonly Span[];
+    readonly frame: number;
+  };
 };
+
+/** Fuzz starts from corpus scopes. */
+export function corpusStarts(scopes: readonly CorpusScope[]): FuzzStart[] {
+  return scopes.map((scope) => ({
+    label: `${scope.file} frame ${scope.frameIndex + 1} ${scope.kind}`,
+    text: scope.text,
+    commands: scope.commands,
+    title: scope.kind === "frame-title",
+    frameBody: scope.kind === "frame-body",
+    deck: { path: scope.path, source: scope.source, span: scope.span, frames: scope.frames, frame: scope.frameIndex },
+  }));
+}
 
 export type FuzzCase = {
   readonly start: FuzzStart;
@@ -398,6 +422,8 @@ export type FuzzRun = {
   /** The tokens with clicks resolved, for replay. */
   readonly tokens: readonly string[];
   readonly finalText: string;
+  /** The buffer after each token. */
+  readonly states: readonly string[];
   /** Keys that changed the source. */
   readonly edits: number;
 };
@@ -405,12 +431,13 @@ export type FuzzRun = {
 /** Runs a case, checking every step, then undoes everything and redoes it. */
 export function runCase(fuzz: FuzzCase): FuzzRun {
   const { start } = fuzz;
-  const session = new KeystrokeSession(start.text, start.commands, fuzz.anchor, fuzz.focus, start.title);
+  const session = new KeystrokeSession(start.text, start.commands, fuzz.anchor, fuzz.focus, start.title, start.frameBody);
   const initial = session.view();
   const resolved: string[] = [];
+  const states: string[] = [];
   let edits = 0;
   const fail = (failure: Omit<FuzzFailure, "step" | "text">, step: number): FuzzRun =>
-    ({ failure: { ...failure, step, text: session.text }, tokens: resolved, finalText: session.text, edits });
+    ({ failure: { ...failure, step, text: session.text }, tokens: resolved, finalText: session.text, states, edits });
   let diagnostics = diagnosticCounts(initial.tree);
   for (let index = 0; index < fuzz.tokens.length; index += 1) {
     const token = fuzz.tokens[index];
@@ -451,6 +478,7 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
         diagnostics = mergeCounts(diagnostics, diagnosticCounts(session.view().tree));
       }
     }
+    states.push(session.text);
   }
   const finalText = session.text;
   // Redo all the way reaches the newest state; undo all the way returns the start; redo again returns the newest.
@@ -471,7 +499,7 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
   if (session.text !== newest) {
     return fail({ invariant: "undo", message: "redoing every step did not restore the newest state" }, -1);
   }
-  return { failure: null, tokens: resolved, finalText, edits };
+  return { failure: null, tokens: resolved, finalText, states, edits };
 }
 
 /** Diagnostics allowed from here on: those of the start, and any the source already had. */

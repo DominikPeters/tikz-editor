@@ -98,6 +98,8 @@ const TEXT_COMMANDS = new Map<string, Entry>([
   ["textcolor", { category: "style", node: "style", args: [overlay, value("options", "optional"), value("color"), content("text")] }],
   ["colorbox", { category: "style", node: "style", args: [value("options", "optional"), value("color"), content("text")] }],
   ["fcolorbox", { category: "style", node: "style", args: [value("color"), value("color"), content("text")] }],
+  // Ends what reads ahead (a frame header looking for `[`), and sets nothing.
+  ["relax", { category: "symbol", node: "invisible", args: [] }],
   ...entries([...SIMPLE_TEX_FONT_DECLARATION_NAMES, "tiny", "scriptsize", "footnotesize", "small", "normalsize",
     "large", "Large", "LARGE", "huge", "Huge", "centering", "raggedright", "raggedleft", "noindent"], {
     category: "declaration",
@@ -105,6 +107,10 @@ const TEXT_COMMANDS = new Map<string, Entry>([
     args: [],
   }),
   ["color", { category: "declaration", node: "declaration", args: [overlay, value("options", "optional"), value("color")] }],
+  // Beamer settings in a frame body: values, not text (`\setbeamertemplate{caption}[numbered]`).
+  ["setbeamertemplate", { category: "declaration", node: "declaration", args: [value("value"), value("options", "optional")] }],
+  ...entries(["setbeamercolor", "setbeamerfont"], { category: "declaration", node: "declaration", args: [value("value"), value("options")] }),
+  ["setbeamercovered", { category: "declaration", node: "declaration", args: [value("options")] }],
   ["onslide", { category: "declaration", node: "declaration", args: [overlay], star: true }],
   ...entries(["only", "uncover", "visible", "invisible"], { category: "overlay", node: "overlay", args: [overlay, content("text")] }),
   ["alt", { category: "overlay", node: "overlay", args: [overlay, content("text"), content("text")] }],
@@ -196,6 +202,10 @@ const MATH_COMMANDS = new Map<string, Entry>([
 ]);
 
 function mathFamilyEntry(name: string): Entry | null {
+  if (name === "\\emph") {
+    // LaTeX's \emph is a text font switch: in math, "\itshape invalid in math mode".
+    return null;
+  }
   const family = texMathCommandFamily(name);
   switch (family) {
     case null:

@@ -218,6 +218,31 @@ export const chipScenarios: readonly Scenario[] = [
   { id: "R12 chip", title: "a chip commit is one undo step", body: R`$a‸$`, keys: R`\alpha␣ ⌘Z`, expect: R`$a‸$` },
 ];
 
+const tabular = (...rows: string[]) => ["\\begin{tabular}{ll}", ...rows, "\\end{tabular}"].join("\n");
+
+/**
+ * Edits the LaTeX oracle (test/editing/keystroke-tex-oracle.spec.ts)
+ * found TeX rejecting: what the editor writes instead.
+ */
+export const texValidityScenarios: readonly Scenario[] = [
+  { id: "X2 frac", title: "a math command in prose starts a formula", body: "Let ‸ be", keys: R`\frac␣1 ⇥ 2`, expect: R`Let $\frac{1}{2‸}$ be` },
+  { id: "X2 alpha", title: "a math symbol committed with ␣ in prose is a formula of its own", body: "Let ‸be", keys: R`\alpha␣`, expect: R`Let $\alpha$ ‸be` },
+  { id: "X2 left", title: "\\left( in prose starts a formula with the pair", body: "a ‸ b", keys: R`\left(x`, expect: R`a $\left(x‸\right)$ b` },
+  { id: "X3", title: "a text command in math goes into \\text", body: R`$a‸$`, keys: R`\LaTeX␣`, expect: R`$a\text{\LaTeX}‸$` },
+  { id: "X3 emph", title: "\\emph is a text command, not a math one", body: R`$a‸$`, keys: R`\emph␣x`, expect: R`$a\text{\emph{x‸}}$` },
+  { id: "X4", title: "\\item outside a list writes nothing", body: "a‸ b", keys: R`\item␣`, expect: "a‸ b" },
+  { id: "X5", title: "⇧⏎ needs something on its line", body: "a‸ b", keys: "⇧⏎ ⇧⏎", expect: R`a \\ ‸b` },
+  { id: "X5 chip", title: "\\\\ typed needs something on its line too", body: "a‸ b", keys: R`⇧⏎ \\`, expect: R`a \\ ‸b` },
+  { id: "X5 box", title: "⇧⏎ does nothing in an LR box", body: R`a \mbox{b‸c} d`, keys: "⇧⏎", expect: R`a \mbox{b‸c} d` },
+  { id: "X5 math", title: "\\\\ does nothing in inline math", body: R`$a‸$`, keys: R`\\`, expect: R`$a‸$` },
+  { id: "X6", title: "& in a row with all its columns writes nothing", body: tabular(R`a & b‸\\`), keys: "&", expect: tabular(R`a & b‸\\`) },
+  { id: "X7 prime", title: "' in an empty script keeps its braces", body: R`$x‸$`, keys: R`^'`, expect: R`$x^{'‸}$` },
+  { id: "X7 ldots", title: "a symbol that is a macro keeps the script's braces", body: R`$x‸$`, keys: R`^\ldots␣+`, expect: R`$x^{\ldots}+‸$` },
+  { id: "X8", title: "a command started inside another's argument gets the braces", body: R`$a‸$`, keys: R`\sqrt\alpha␣`, expect: R`$a\sqrt{\alpha‸}$` },
+  { id: "X9", title: "⏎ in a table row closes and reopens the formula around the caret", body: tabular(R`$a‸b$ & c\\`), keys: "⏎", expect: tabular(R`$a$ \\`, R`$‸b$ & c\\`) },
+  { id: "X10", title: "deleting what precedes a line break removes the break", body: "a\n\nx‸ \\\\ y", keys: "⌫", expect: "a\n\n‸  y" },
+];
+
 /**
  * Undo grouping (architecture "Transactions"): a typing run is one step;
  * it ends at a pause, a caret move, or a switch between typing and
