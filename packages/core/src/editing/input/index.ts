@@ -17,6 +17,7 @@ export type {
   IntentType,
   MoveUnit,
 } from "./intent.js";
+export { NO_INTERACTION, type InteractionState } from "./interaction.js";
 export {
   needsFreshLayout,
   resolveIntent,

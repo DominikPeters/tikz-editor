@@ -7,12 +7,14 @@ import {
   recordTransaction,
   redoStep,
   undoStep,
+  type AppliedTransaction,
   type HistorySnapshot,
   type Transaction,
   type UndoHistory,
   type VerticalGoal
 } from "@tikz-editor/core/editing/transaction/index";
 import type { SelectionEnds } from "@tikz-editor/core/editing/position/index";
+import { NO_INTERACTION, type InteractionState } from "@tikz-editor/core/editing/input/index";
 
 import type { EditableTextTarget, TextEditingSession, TextSelectionOverlay } from "./types";
 import { clamp } from "./geometry";
@@ -69,8 +71,28 @@ export type CanvasTreeSelection = {
   readonly text: string;
   readonly anchor: number;
   readonly focus: number;
-  readonly ends: SelectionEnds;
+  readonly ends: SelectionEnds | null;
+  readonly interaction: InteractionState;
 };
+
+/** The transaction's record, when it leaves positions or interaction state to keep. */
+function treeSelectionAfter(transaction: Transaction, applied: AppliedTransaction): CanvasTreeSelection | null {
+  const ends = transaction.selection.kind === "absolute" ? transaction.selection.positions ?? null : null;
+  const interaction = transaction.interaction ?? NO_INTERACTION;
+  if (!ends && interaction === NO_INTERACTION) {
+    return null;
+  }
+  return { text: applied.text, anchor: applied.anchor, focus: applied.focus, ends, interaction };
+}
+
+/** The record, while buffer and selection are still the ones it was made for. */
+function currentTreeSelection(state: CanvasTextEditState, anchor: number, focus: number): CanvasTreeSelection | null {
+  const recorded = state.treeSelection;
+  if (!recorded || recorded.text !== state.session?.text) {
+    return null;
+  }
+  return recorded.anchor === anchor && recorded.focus === focus ? recorded : null;
+}
 
 /**
  * The raw selection ends for the current buffer and selection, or null
@@ -78,12 +100,12 @@ export type CanvasTreeSelection = {
  * (typing, a click, undo): the caller then resolves positions from offsets.
  */
 export function selectionPositions(state: CanvasTextEditState, anchor: number, focus: number): SelectionEnds | null {
-  const recorded = state.treeSelection;
-  const session = state.session;
-  if (!recorded || recorded.text !== session?.text) {
-    return null;
-  }
-  return recorded.anchor === anchor && recorded.focus === focus ? recorded.ends : null;
+  return currentTreeSelection(state, anchor, focus)?.ends ?? null;
+}
+
+/** The interaction state the last transaction left, or none once buffer or selection changed otherwise. */
+export function interactionState(state: CanvasTextEditState, anchor: number, focus: number): InteractionState {
+  return currentTreeSelection(state, anchor, focus)?.interaction ?? NO_INTERACTION;
 }
 
 export type CanvasTextEditAction =
@@ -665,9 +687,7 @@ export function reduceCanvasTextEdit(
         ? { start: transaction.composition.from, end: transaction.composition.to }
         : null;
       const verticalGoal = transaction.verticalGoal ?? null;
-      const treeSelection = transaction.selection.kind === "absolute" && transaction.selection.positions
-        ? { text: applied.text, anchor: applied.anchor, focus: applied.focus, ends: transaction.selection.positions }
-        : null;
+      const treeSelection = treeSelectionAfter(transaction, applied);
       if (applied.text === session.text) {
         const selection = normalizeSelection(session.text.length, applied.anchor, applied.focus);
         return {

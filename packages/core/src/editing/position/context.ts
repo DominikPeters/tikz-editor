@@ -1,3 +1,4 @@
+import { isDeclarationGroup } from "../ownership/kinds.js";
 import { slotChain } from "../tree/navigate.js";
 import type { EditNode, NodeId, SlotId, Span } from "../tree/types.js";
 import type { Position } from "./position.js";
@@ -56,6 +57,9 @@ export function caretContext(view: EditView, position: Position): ContextCrumb[]
 const UNNAMED_KINDS = new Set<EditNode["kind"]>(["scope", "paragraph", "group", "scripted", "row"]);
 
 function nodeLabel(view: EditView, node: EditNode): string | null {
+  if (node.kind === "group" && isDeclarationGroup(view.tree, node.id)) {
+    return view.tree.nodes[view.tree.slots[node.slots[0]].children[0]].command ?? null;
+  }
   if (UNNAMED_KINDS.has(node.kind)) {
     return null;
   }

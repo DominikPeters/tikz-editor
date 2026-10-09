@@ -1,3 +1,4 @@
+import type { InteractionState } from "../input/interaction.js";
 import type { SelectionEnds } from "../position/selection.js";
 
 /**
@@ -74,6 +75,8 @@ export type Transaction = {
   readonly composition?: BufferRange | null;
   /** Vertical-motion goal afterwards; absent means cleared. */
   readonly verticalGoal?: VerticalGoal | null;
+  /** The interaction state afterwards (input/interaction.ts); absent means none. */
+  readonly interaction?: InteractionState;
 };
 
 export function assertDisjointPatches(patches: readonly BufferPatch[], length: number): void {

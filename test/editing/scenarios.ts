@@ -25,8 +25,6 @@ export const characterisationScenarios: readonly Scenario[] = [
   { id: "math ⏎", title: "⏎ inside inline math is swallowed", body: "Let $a‸+b$ be.", keys: "⏎", expect: "Let $a‸+b$ be." },
   { id: "⌘B wraps", title: "⌘B wraps a selection", body: "Make ⟦this⟧ bold.", keys: "⌘B", expect: R`Make \textbf{⟦this⟧} bold.` },
   { id: "⌘B mid-run", title: "⌘B mid-run splits the run in place", body: R`\textbf{one ‸two}`, keys: "⌘B", expect: R`\textbf{one }‸\textbf{two}` },
-  { id: "% (bug)", title: "% is inserted raw (a comment)", body: "Up by 5‸ overall.", keys: "%", expect: "Up by 5%‸ overall." },
-  { id: "$ (bug)", title: "$ is not paired", body: "Let ‸ be.", keys: "$x", expect: "Let $x‸ be." },
   { id: "⇧→ in math", title: "⇧→ selects one symbol inside a formula", body: R`$a‸+b$`, keys: "⇧→", expect: R`$a⟦+⟧b$` },
   { id: "↓", title: "↓ moves to the nearest x on the next rendered row", body: itemize(R`\item Alpha beta‸ gamma`, R`\item Delta epsilon zeta`), keys: "↓", expect: itemize(R`\item Alpha beta gamma`, R`\item Delta epsil‸on zeta`) },
   { id: "Home", title: "Home goes to the row start", body: "One two‸ three.", keys: "Home", expect: "‸One two three." },
@@ -126,6 +124,40 @@ export const treeEditingScenarios: readonly Scenario[] = [
   // Scripts (K4).
   { id: "K4 _", title: "a second _ enters the existing subscript", body: R`$x_1 ‸+1$`, keys: "_2", expect: R`$x_{12‸} +1$` },
   { id: "K4 missing", title: "^ after a subscript adds the missing superscript", body: R`$x_1‸$`, keys: "^2", expect: R`$x_1^2‸$` },
+];
+
+/**
+ * Input rules (step 5): what a typed character writes, by context.
+ */
+export const inputRuleScenarios: readonly Scenario[] = [
+  // Escaping (R2).
+  { id: "R2 &", title: "& in prose is escaped", body: "R‸", keys: "&D", expect: R`R\&D‸` },
+  { id: "R2 _", title: "_ in prose is escaped", body: "file‸", keys: "_name", expect: R`file\_name‸` },
+  { id: "R2 ^", title: "^ in prose is a circumflex", body: "PO.‸", keys: "^", expect: R`PO.\^{}‸` },
+  { id: "R2 % math", title: "% in math is escaped too", body: R`$a‸$`, keys: "%", expect: R`$a\%‸$` },
+  { id: "R2 & cell", title: "& in an alignment cell separates cells", body: align(R`a ‸`), keys: "&=", expect: align(R`a &=‸`) },
+  // Formulas and braces (R3, M2).
+  { id: "R3 $ ⌫", title: "⌫ right after $ removes the empty formula", body: "Let ‸ be.", keys: "$ ⌫", expect: "Let ‸ be." },
+  { id: "R3 $ →", title: "leaving an empty formula removes it", body: "Let ‸ be.", keys: "$ →", expect: "Let ‸ be." },
+  { id: "R3 $ emptied", title: "emptying a formula leaves a placeholder that typing fills", body: R`Let $x‸$ be.`, keys: "⌫ y", expect: R`Let $y‸$ be.` },
+  { id: "R3 $ mid-formula", title: "$ in the middle of a formula does nothing", body: R`$a‸+b$`, keys: "$", expect: R`$a‸+b$` },
+  { id: "R3 $ in \\text", title: "$ inside \\text{} opens a nested formula", body: R`$\text{if ‸}$`, keys: "$x$", expect: R`$\text{if $x$‸}$` },
+  { id: "M2", title: "$ wraps selected prose in a formula", body: "Let ⟦x⟧ be", keys: "$", expect: "Let $x‸$ be" },
+  { id: "R3 {", title: "{ opens a group with its closer", body: R`$a‸$`, keys: "{b", expect: R`$a{b‸}$` },
+  { id: "R3 } group", title: "} at the end of a group steps out of it", body: R`a {\bf x‸} y`, keys: "}", expect: R`a {\bf x}‸ y` },
+  { id: "R3 } frac", title: "typed TeX \\frac{n}{2} steps through the slots", body: R`$\frac{n‸}{}$`, keys: "}{2}", expect: R`$\frac{n}{2}‸$` },
+  { id: "R3 } mid-slot", title: "} in the middle of a slot does nothing", body: R`$\frac{n‸m}{2}$`, keys: "}", expect: R`$\frac{n‸m}{2}$` },
+  // Scripts (R6, M13).
+  { id: "R6 x^2+1", title: "a script takes one token, then the caret leaves it", body: R`$a‸$`, keys: "x^2+1", expect: R`$ax^2+1‸$` },
+  { id: "R6 group", title: "{ first makes the script a group that stays open", body: R`$a‸$`, keys: "e^{i}+", expect: R`$ae^{i}+‸$` },
+  { id: "R6 ^ ⌫", title: "⌫ right after ^ removes the empty script", body: R`$x‸$`, keys: "^ ⌫", expect: R`$x‸$` },
+  { id: "R6 ^ →", title: "leaving an empty script removes it", body: R`$x ‸y$`, keys: "^ →", expect: R`$x ‸y$` },
+  { id: "M13", title: "retyping an emptied unbraced limit keeps it unbraced", body: R`$\sum_{i=1}^m‸$`, keys: "← ⌫ p", expect: R`$\sum_{i=1}^p‸$` },
+  // Terminators (R5) and optional arguments (K9).
+  { id: "R5 math", title: "a letter after a control word gets a space", body: R`$\alpha‸$`, keys: "x", expect: R`$\alpha x‸$` },
+  { id: "R5 text", title: "a letter after a control word gets {}", body: R`see \ldots‸`, keys: "x", expect: R`see \ldots{}x‸` },
+  { id: "R5 text space", title: "a space after a control word gets {}", body: R`I use \LaTeX‸`, keys: "␣daily", expect: R`I use \LaTeX{} daily‸` },
+  { id: "K9 \\\\", title: "[ after \\\\ is protected from its optional argument", body: R`a\\ ‸b`, keys: "[", expect: R`a\\ {}[‸b` },
 ];
 
 /**
