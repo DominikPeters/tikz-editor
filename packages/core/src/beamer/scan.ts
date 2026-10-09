@@ -1,4 +1,3 @@
-import { scanBeamerEnvironmentAliases } from "./environment-aliases.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { formatDocumentRootId } from "../document/root-id.js";
@@ -569,12 +568,6 @@ function scanPreamble(
     metadata,
     atBeginSectionSpans,
     theoremDeclarations,
-    environmentAliases: scanBeamerEnvironmentAliases(
-      context,
-      controls,
-      span.to,
-      macroDefinitions.map((definition) => definition.span)
-    ),
     theoremTemplate: scanBeamerTheoremTemplate(
       context,
       span,

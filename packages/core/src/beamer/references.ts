@@ -51,8 +51,6 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   footnotes?: BeamerFootnoteIndex;
   continuationBreaks?: BeamerContinuationBreaks;
   theme?: ResolvedBeamerTheme;
-  /** User environments that are a list under another name, by name (environment-aliases.ts). */
-  environmentAliases?: ReadonlyMap<string, string>;
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];
 };

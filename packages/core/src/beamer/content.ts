@@ -41,7 +41,6 @@ import {
 } from "./theorems.js";
 import type { BeamerTheoremTemplateVariant } from "./types.js";
 import { parseTcolorboxOptions } from "./tcolorbox.js";
-import { beamerEnvironmentAliasMap } from "./environment-aliases.js";
 
 const LIST_ENVIRONMENTS = new Set([
   "itemize",
@@ -59,22 +58,6 @@ const PROOF_ENVIRONMENTS = new Map<string, string>([
   ["Beweis", "Beweis"],
 ]);
 
-/**
- * The syntax context, with the document's environment aliases: a user
- * environment that is a list under another name is that list here
- * (environment-aliases.ts), as its boundaries are read.
- */
-type ContentContext = BeamerSyntaxContext & { readonly aliases: ReadonlyMap<string, string> };
-
-function resolveAlias<T extends BeamerEnvironmentBoundary | undefined>(context: ContentContext, boundary: T): T {
-  const target = boundary && context.aliases.get(boundary.name);
-  return target ? { ...boundary, name: target } : boundary;
-}
-
-function environmentsIn(context: ContentContext, span: Span): BeamerEnvironmentBoundary[] {
-  return beamerEnvironmentBoundariesIn(context, span).map((boundary) => resolveAlias(context, boundary));
-}
-
 function isProofEnvironment(name: string): boolean {
   return PROOF_ENVIRONMENTS.has(name);
 }
@@ -89,12 +72,9 @@ export function parseBeamerFrameBody(
   params: ParseBeamerFrameBodyParams
 ): BeamerFrameBodyIr {
   const { source, frame } = params;
-  const context: ContentContext = {
-    ...beamerSyntaxContext(source, params.syntax),
-    aliases: beamerEnvironmentAliasMap(params.document?.preamble.environmentAliases ?? []),
-  };
+  const context = beamerSyntaxContext(source, params.syntax);
   const diagnostics: Diagnostic[] = [];
-  const tokens = environmentsIn(context, frame.bodySpan);
+  const tokens = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
   const theoremOccurrences =
     params.theoremOccurrences ??
     (params.document
@@ -228,7 +208,7 @@ export function parseBeamerFrameBody(
 }
 
 function parseTheorem(params: {
-  context: ContentContext;
+  context: BeamerSyntaxContext;
   ownerId: string;
   begin: BeamerEnvironmentBoundary;
   end: BeamerEnvironmentBoundary;
@@ -343,7 +323,7 @@ function parseTheorem(params: {
 }
 
 function splitStandaloneFrameCommands(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
@@ -368,7 +348,7 @@ function splitStandaloneFrameCommands(
  * as body text.
  */
 function stripFrameTitleCommands(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
   const { source } = context;
@@ -422,7 +402,7 @@ function stripFrameTitleCommands(
  * chunk, which the frontend supports, and the surrounding prose survives.
  */
 function splitVerticalFillCommands(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
   const { source } = context;
@@ -513,7 +493,7 @@ function hasBalancedBraces(source: string, span: Span): boolean {
 }
 
 function splitTitlePageCommands(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
@@ -568,7 +548,7 @@ function splitTitlePageCommands(
 }
 
 function splitStandaloneVerticalSpaces(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   frameId: string,
   children: readonly BeamerFrameBodyNode[]
 ): BeamerFrameBodyNode[] {
@@ -596,7 +576,7 @@ function splitStandaloneVerticalSpaces(
 }
 
 function standaloneVerticalSpaceNodes(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   frameId: string,
   span: Span,
   firstIndex: number
@@ -618,7 +598,7 @@ function standaloneVerticalSpaceNodes(
 }
 
 function verticalSpaceNode(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   command: { name: string; from: number; to: number; starred: boolean },
   limit: number,
   id: string
@@ -643,7 +623,7 @@ function isIgnorableFrameSource(source: string, span: Span): boolean {
 
 function frameTikzFlowNode(params: {
   source: string;
-  context: ContentContext;
+  context: BeamerSyntaxContext;
   frameId: string;
   begin: BeamerEnvironmentBoundary;
   end: BeamerEnvironmentBoundary;
@@ -691,7 +671,7 @@ function frameTikzFlowNode(params: {
 }
 
 function parseBlock(params: {
-  context: ContentContext;
+  context: BeamerSyntaxContext;
   ownerId: string;
   begin: BeamerEnvironmentBoundary;
   end: BeamerEnvironmentBoundary;
@@ -716,7 +696,7 @@ function parseBlock(params: {
     if (setup) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-setup",
       span: { from: setup.from, to: setup.to }, message: "Global tcolorbox style declarations are not supported in this preview." });
     const lowerPart = beamerControlSequencesIn(context, bodySpan).find(command => ["tcblower", "tcbsubtitle"].includes(command.name));
-    const nestedBox = environmentsIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)));
+    const nestedBox = beamerEnvironmentBoundariesIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)));
     if (lowerPart || nestedBox) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-content",
       span: nestedBox?.span ?? { from: lowerPart!.from, to: lowerPart!.to }, message: "Lower, subtitle and nested package boxes are not supported in this tcolorbox preview." });
     diagnostics.push(...parsed.diagnostics);
@@ -781,13 +761,13 @@ function parseBlock(params: {
 
 /** Keep an unsupported block child local without swallowing supported siblings. */
 function parseBlockLeafContent(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   bodySpan: Span,
   ownerId: string,
   overlays: BeamerOverlayModel,
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
 ): BeamerLeafFlowNode[] {
-  const tokens = environmentsIn(context, bodySpan);
+  const tokens = beamerEnvironmentBoundariesIn(context, bodySpan);
   const children: BeamerLeafFlowNode[] = [];
   let cursor = bodySpan.from;
   for (let index = 0; index < tokens.length; index += 1) {
@@ -811,7 +791,7 @@ function parseBlockLeafContent(
 }
 
 function parseColumns(params: {
-  context: ContentContext;
+  context: BeamerSyntaxContext;
   frameId: string;
   begin: BeamerEnvironmentBoundary;
   end: BeamerEnvironmentBoundary;
@@ -1000,7 +980,7 @@ function splitTopLevelOptions(value: string): string[] {
 }
 
 function parseColumnFlow(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   frameId: string,
   columnIndex: number,
   bodySpan: Span,
@@ -1169,11 +1149,11 @@ function parseColumnFlow(
 }
 
 function scanTikzRootsInSpan(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   frameId: string,
   span: Span
 ) {
-  const tokens = environmentsIn(context, span);
+  const tokens = beamerEnvironmentBoundariesIn(context, span);
   const roots: Array<{
     kind: "tikzpicture";
     id: string;
@@ -1254,7 +1234,7 @@ function trimSpan(source: string, span: Span): Span {
 }
 
 function isInsideNativeTextFlow(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   offset: number,
   overlays: BeamerOverlayModel
 ): boolean {
@@ -1277,7 +1257,7 @@ function isInsideNativeTextFlow(
     }
     // Keep nested failures inside supported paragraph containers in their own frontend.
     if (node.name === "Environment" && node.from < offset) {
-      const boundary = resolveAlias(context, context.syntax.environmentBoundaryByStart.get(node.from));
+      const boundary = context.syntax.environmentBoundaryByStart.get(node.from);
       if (
         boundary &&
         (LIST_ENVIRONMENTS.has(boundary.name) || [
@@ -1298,7 +1278,7 @@ function isInsideNativeTextFlow(
 }
 
 function findUnsupportedEnvironmentEndIndex(
-  context: ContentContext,
+  context: BeamerSyntaxContext,
   tokens: readonly BeamerEnvironmentBoundary[],
   index: number,
   overlays: BeamerOverlayModel,
@@ -1324,8 +1304,6 @@ function findUnsupportedEnvironmentEndIndex(
       "thebibliography",
     ].includes(begin.name) ||
     BLOCK_ENVIRONMENTS.has(begin.name as BeamerBlockEnvironment) ||
-    // (Lists, also under a user's alias, are the text frontend's.)
-    LIST_ENVIRONMENTS.has(begin.name) ||
     isProofEnvironment(begin.name) ||
     theoremOccurrences.has(begin.span.from) ||
     isInsideNativeTextFlow(context, begin.span.from, overlays)
