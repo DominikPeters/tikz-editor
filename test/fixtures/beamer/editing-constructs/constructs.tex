@@ -6,6 +6,13 @@
 \newcommand{\highlight}[1]{\textcolor{red}{#1}}
 \newcommand{\remark}[2][Note]{\textbf{#1:} #2}
 \DeclareMathOperator*{\argmin}{arg\,min}
+\newenvironment{spacedlist}{\itemize\addtolength{\itemsep}{6pt}}{\enditemize}
+\newenvironment{steps}{%
+  \begin{enumerate}
+  \setlength{\itemsep}{0pt}
+}{
+  \end{enumerate}
+}
 \begin{document}
 
 \begin{frame}{Line breaks}
@@ -254,6 +261,17 @@ $\argmin_x f(x)$.
     \end{itemize}
   \end{enumerate}
 \end{enumerate}
+\end{frame}
+
+\begin{frame}{User lists}
+\begin{spacedlist}
+  \item Alpha with space.
+  \item Beta, then a nested one:
+  \begin{steps}
+    \item Gamma.
+    \item Delta.
+  \end{steps}
+\end{spacedlist}
 \end{frame}
 
 \begin{frame}

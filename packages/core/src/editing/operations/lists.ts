@@ -44,12 +44,13 @@ export type StructuralPatch = {
 
 const shapes = new WeakMap<EditTree, readonly ListShape[]>();
 
-/** The tree's closed `itemize`/`enumerate`/`description` lists, in source order. */
+/** The tree's closed `itemize`/`enumerate`/`description` lists (by any name), in source order. */
 export function listShapes(tree: EditTree): readonly ListShape[] {
   let found = shapes.get(tree);
   if (!found) {
     found = tree.nodes.flatMap((node) => {
-      if (node.kind !== "list" || !node.command || !LIST_ENVIRONMENTS.has(node.command)) {
+      // (Also a user's environment that is a list: it keeps its name.)
+      if (node.kind !== "list" || !node.command || node.command === "thebibliography") {
         return [];
       }
       const begin = node.delimiters[0];
@@ -94,8 +95,6 @@ export function listShapes(tree: EditTree): readonly ListShape[] {
   }
   return found;
 }
-
-const LIST_ENVIRONMENTS = new Set(["itemize", "enumerate", "description"]);
 
 /** The innermost list item holding a node, with its list. */
 export function listItemOf(tree: EditTree, node: NodeId): ListContext | null {
