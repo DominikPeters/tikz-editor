@@ -6,7 +6,7 @@ import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, EditNode, EditSlot, NodeId, SlotId } from "../tree/types.js";
 import { isDollarFormula, type EditOutcome } from "./delete.js";
 import { braceUnbracedArgument, enterExistingScript } from "./script.js";
-import { PatchSet, SPEC_READER_BEFORE, slotOuterSpan, withTerminator } from "./source.js";
+import { OPTION_READER_BEFORE, PatchSet, SPEC_READER_BEFORE, slotOuterSpan, withTerminator } from "./source.js";
 import { rowIsFull } from "./structure.js";
 
 /**
@@ -174,7 +174,9 @@ function typeInText(view: EditView, caret: Position, at: number, char: string, s
     return { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: "insert" };
   }
   // In prose any command may look for a `[` after it, past spaces (`\titlepage [`).
-  if (char === "[" && (optionalArgumentAhead(view, at) || endsWithControlWord(view.tree.text, skipSpacesBack(view.tree.text, at)))) {
+  // (And an environment's opening, or `\item`, past its overlay specification.)
+  if (char === "[" && (optionalArgumentAhead(view, at) || endsWithControlWord(view.tree.text, skipSpacesBack(view.tree.text, at)) ||
+    OPTION_READER_BEFORE.test(view.tree.text.slice(0, skipSpacesBack(view.tree.text, at))))) {
     return insert(at, "{}[");
   }
   // Beamer's `\item` and environments read a `<` after them, past spaces, as an overlay specification (F4).

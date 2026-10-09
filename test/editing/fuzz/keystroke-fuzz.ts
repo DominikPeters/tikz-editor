@@ -48,7 +48,8 @@ export function corpusStarts(scopes: readonly CorpusScope[]): FuzzStart[] {
     text: scope.text,
     commands: scope.commands,
     title: scope.kind === "frame-title",
-    frameBody: scope.kind === "frame-body",
+    // (A column body's start is read by `\begin{column}{width}` before it, as a frame body's by `\begin{frame}`.)
+    frameBody: scope.kind === "frame-body" || scope.kind === "column",
     deck: { path: scope.path, source: scope.source, span: scope.span, frames: scope.frames, frame: scope.frameIndex },
   }));
 }
