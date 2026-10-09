@@ -266,6 +266,7 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "C13", title: "< after a frame break is not its overlay specification", body: "Alpha.\n\\framebreak\n‸Beta.", keys: "<", expect: "Alpha.\n\\framebreak\n{}<‸Beta." },
   { id: "C18", title: "in overprint, ⇧⏎ right after \\onslide has no line to end", body: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}", keys: "⇧⏎", expect: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}" },
   { id: "C19", title: "\\ then a character that makes no control symbol types that character", body: "a‸ b", keys: "\\<", expect: "a<‸ b" },
+  { id: "C20", title: "[ after an environment's overlay specification is not its optional argument", body: "\\begin{lemma}<2->\n‸Text.\n\\end{lemma}", keys: "[", expect: "\\begin{lemma}<2->\n{}[‸Text.\n\\end{lemma}" },
   { id: "C17", title: "a line break typed before a * does not take it as its star", body: "A page‸*", keys: "\\\\", expect: "A page\\\\{}‸*" },
 ];
 

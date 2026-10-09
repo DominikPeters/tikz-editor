@@ -143,6 +143,14 @@ export const SPEC_READER_BEFORE =
   /(?:\\item(?:\[[^\]]*\])?|\\begin\{[^}]*\}(?:\{[^{}]*\})?|\\\\\*?(?:\[[^\]]*\])?|\}|\\(?:no)?(?:frame|page)break|\\onslide[*+]?|\\trans[a-z]+|\\framezoom|\\animate)$/u;
 
 /**
+ * What reads a `[` after it as an optional argument, besides a command
+ * name: an environment's opening (`\begin{lemma}[Name]`), also after its
+ * overlay specification (`\begin{lemma}<2->[Name]`), and `\item` after
+ * its specification (`\item<2->[label]`).
+ */
+export const OPTION_READER_BEFORE = /(?:\\begin\{[^}]*\}|\\item)(?:<[^<>]*>)?$/u;
+
+/**
  * K9 at a seam: when an edit leaves a `[` right after `\\\\` or `\\item`
  * (deleting what stood between), TeX would read it as their optional
  * argument, and a `<` after `\\item` or `\\begin{…}` as an overlay
@@ -157,7 +165,7 @@ export function withBracketGuard(original: string, patches: BufferPatch[], seam:
   }
   after += original.slice(cursor);
   const before = after.slice(0, seam).replace(/\s+$/u, "");
-  const opens = /(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before) && /^\s*\[/u.test(after.slice(seam));
+  const opens = (/(?:^|[^\\])(?:\\\\)*(?:\\\\\*?|\\item)$/u.test(before) || OPTION_READER_BEFORE.test(before)) && /^\s*\[/u.test(after.slice(seam));
   // (`\item` also reads a `<` after it, past its label, as an overlay specification.)
   const spec = SPEC_READER_BEFORE.test(before) && /^\s*</u.test(after.slice(seam));
   if (!opens && !spec) {
