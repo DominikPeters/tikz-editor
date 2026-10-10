@@ -117,7 +117,7 @@ describe("dock layout recovery", () => {
     expect(getDockLayoutHandle()!.getModel().getNodeById("figure-navigator")).toBeTruthy();
     await act(async () => { getDockLayoutHandle()!.togglePanel("builds"); });
     const deckModel = getDockLayoutHandle()!.getModel();
-    await act(async () => { dispatch({ type: "SET_ACTIVE_ROOT", rootId: "beamer-frame:0:tikz:0" }); });
+    await act(async () => { dispatch({ type: "SET_ACTIVE_ROOT", rootId: "frame:0:tikzpicture:0" }); });
     expect(getDockLayoutHandle()!.getModel()).toBe(deckModel);
     await act(async () => { dispatch({ type: "SWITCH_DOCUMENT", documentId: tikzId }); });
     expect(useEditorStore.getState().showSourcePanel).toBe(false);

@@ -107,6 +107,7 @@ export const FEATURE_IDS = [
   // Manual entries and stock Beamer templates, verified against LuaLaTeX.
   "beamer_manual_bibliography",
   "beamer_footnotes",
+  "beamer_speaker_notes",
   "beamer_float_captions",
   "beamer_frame_continuations",
   "render_pipeline"
