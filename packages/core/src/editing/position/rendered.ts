@@ -1,4 +1,5 @@
-import type { EditTree, NodeId } from "../tree/types.js";
+import type { EditTree, NodeId, SlotId, Span } from "../tree/types.js";
+import type { EditViewOptions } from "./view.js";
 
 /** What the rendered layout of a scope publishes about caret stops (document offsets). */
 export type RenderedStops = {
@@ -6,39 +7,49 @@ export type RenderedStops = {
   readonly source: string;
   /** Rendered caret-stop offsets, sorted. */
   readonly offsets: readonly number[];
+  /** Overlay visibility published by the renderer; empty arguments have no caret offsets. */
+  readonly overlayBranches?: readonly { readonly span: Span; readonly visible: boolean }[];
 };
 
 /** Kinds whose content can be hidden on a step: overlays, and paragraphs or displays after `\pause`. */
 const HIDEABLE = new Set(["overlay", "paragraph", "display"]);
 
 /**
- * The nodes of a scope's tree that the layout does not show on the current
- * step: an overlay or a block with visible content but not a single
- * rendered caret stop inside it. Null when the layout was rendered from
- * other source than the buffer (it would misplace them): callers then show
- * everything, as a stale layout cannot say what is hidden.
+ * Visibility in the scope's tree on the current step. Overlay arguments
+ * use the renderer's branch facts, including empty branches. Missing
+ * facts, and paragraphs or displays after a pause, fall back to rendered
+ * caret stops. Null for an older buffer: stale spans cannot identify what
+ * the current source hides.
  */
-export function hiddenNodes(tree: EditTree, rendered: RenderedStops, bufferFrom: number): ReadonlySet<NodeId> | null {
+export function renderedVisibility(tree: EditTree, rendered: RenderedStops, bufferFrom: number): Required<EditViewOptions> | null {
   if (rendered.source.slice(bufferFrom, bufferFrom + tree.text.length) !== tree.text) {
     return null;
   }
   const hidden = new Set<NodeId>();
+  const hiddenSlots = new Set<SlotId>();
+  const branches = new Map(rendered.overlayBranches?.map((branch) => [`${branch.span.from}:${branch.span.to}`, branch.visible]));
   for (const node of tree.nodes) {
     if (!HIDEABLE.has(node.kind) || !/\S/u.test(tree.text.slice(node.span.from, node.span.to))) {
       continue;
     }
-    // An overlay is judged by its argument: the stop just before `\only`
-    // sits at the overlay's own start.
-    // (Arguments still empty, `\only<2->{‸}` just typed, have nothing to hide nor any stop to show.)
-    const spans = node.kind === "overlay"
-      ? node.slots.map((slot) => tree.slots[slot]).filter((slot) => slot.presence === "present").map((slot) => slot.contentSpan)
-        .filter((span) => /\S/u.test(tree.text.slice(span.from, span.to)))
-      : [node.span];
-    if (spans.length > 0 && spans.every((span) => !hasOffsetIn(rendered.offsets, bufferFrom + span.from, bufferFrom + span.to))) {
+    // Test arguments separately: a visible branch does not make its siblings visible.
+    // With no renderer fact yet, a newly typed empty argument remains editable.
+    if (node.kind === "overlay") {
+      const slots = node.slots.map((slot) => tree.slots[slot]).filter((slot) => slot.presence === "present");
+      for (const slot of slots) {
+        const { from, to } = slot.contentSpan;
+        const visible = branches.get(`${bufferFrom + from}:${bufferFrom + to}`);
+        if (visible === false || (visible == null && /\S/u.test(tree.text.slice(from, to)) &&
+          !hasOffsetIn(rendered.offsets, bufferFrom + from, bufferFrom + to))) {
+          hiddenSlots.add(slot.id);
+        }
+      }
+      if (slots.length > 0 && slots.every((slot) => hiddenSlots.has(slot.id))) hidden.add(node.id);
+    } else if (!hasOffsetIn(rendered.offsets, bufferFrom + node.span.from, bufferFrom + node.span.to)) {
       hidden.add(node.id);
     }
   }
-  return hidden;
+  return { hidden, hiddenSlots };
 }
 
 /** Whether a sorted offset list has an entry in [from, to]. */

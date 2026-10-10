@@ -158,7 +158,7 @@ export class KeystrokeSession {
         this.run(intent);
         return intent;
       }
-      default: {
+      case "key": {
         const decision = interpretKeyDown({ ...key, composing: false }, "canvas");
         if (decision.kind === "intent") {
           this.run(decision.intent);
@@ -222,7 +222,7 @@ export class KeystrokeSession {
       composition: null,
       domain: null,
       verticalGoal: state.verticalGoal,
-      structure: (text, hidden) => this.views(text, this.commands, hidden),
+      structure: (text, visibility) => this.views(text, this.commands, visibility),
       positions: selectionPositions(state, anchor, focus),
       interaction: interactionState(state, anchor, focus),
       commands: this.commands,

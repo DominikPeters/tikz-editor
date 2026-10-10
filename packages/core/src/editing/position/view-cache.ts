@@ -1,9 +1,9 @@
 import type { CommandTable } from "../commands/table.js";
 import { buildEditTree } from "../tree/build.js";
-import type { EditTree, NodeId } from "../tree/types.js";
-import { createEditView, type EditView } from "./view.js";
+import type { EditTree } from "../tree/types.js";
+import { createEditView, type EditView, type EditViewOptions } from "./view.js";
 
-export type EditViewCache = (text: string, commands: CommandTable, hidden?: ReadonlySet<NodeId>) => EditView;
+export type EditViewCache = (text: string, commands: CommandTable, visibility?: EditViewOptions) => EditView;
 
 /**
  * The edit view of a buffer text, built once per text and command table
@@ -14,8 +14,9 @@ export type EditViewCache = (text: string, commands: CommandTable, hidden?: Read
  */
 export function createEditViewCache(size = 4): EditViewCache {
   const entries: { text: string; commands: CommandTable; hiddenKey: string; view: EditView }[] = [];
-  return (text, commands, hidden) => {
-    const hiddenKey = hidden ? [...hidden].sort((left, right) => left - right).join(",") : "";
+  return (text, commands, visibility) => {
+    const ids = (set: ReadonlySet<number> | undefined) => set ? [...set].sort((left, right) => left - right).join(",") : "";
+    const hiddenKey = `${ids(visibility?.hidden)}|${ids(visibility?.hiddenSlots)}`;
     const index = entries.findIndex((entry) =>
       entry.text === text && entry.commands === commands && entry.hiddenKey === hiddenKey
     );
@@ -26,7 +27,7 @@ export function createEditViewCache(size = 4): EditViewCache {
     }
     const tree: EditTree = entries.find((entry) => entry.text === text && entry.commands === commands)?.view.tree ??
       buildEditTree(text, { commands });
-    const view = createEditView(tree, { hidden });
+    const view = createEditView(tree, visibility);
     entries.unshift({ text, commands, hiddenKey, view });
     entries.length = Math.min(entries.length, size);
     return view;

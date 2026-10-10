@@ -313,7 +313,7 @@ function closeSlot(view: EditView, caret: Position): EditOutcome {
     return { kind: "none" };
   }
   const next = presentSlots(tree, owner.id)
-    .filter((candidate) => candidate.contentSpan.from > slot.contentSpan.to)
+    .filter((candidate) => !view.hiddenSlots.has(candidate.id) && candidate.contentSpan.from > slot.contentSpan.to)
     .sort((left, right) => left.contentSpan.from - right.contentSpan.from)[0];
   if (next && ARGUMENT_ROLES.has(next.role) && next.braced) {
     const nextOuter = slotOuterSpan(tree, next.id);

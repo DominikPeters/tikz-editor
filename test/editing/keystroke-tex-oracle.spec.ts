@@ -5,6 +5,8 @@ import { formatMarkedSource } from "../../packages/core/src/editing/testing/inde
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { createCommandTable } from "../../packages/core/src/editing/commands/table.js";
 import { MULTI_TOKEN_SYMBOLS } from "../../packages/core/src/editing/operations/command.js";
+import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
+import { KeystrokeSession } from "./fuzz/keystroke-session.js";
 import { beamerCorpusScopes } from "./beamer-corpus.js";
 import { corpusStarts, createRandom, generateCase, runCase, type FuzzCase, type FuzzRun, type FuzzStart } from "./fuzz/keystroke-fuzz.js";
 import { compileDeck, errorKey, lualatexAvailable, newErrors, oneFrameDeck, pooled, type Compilation, type TexError } from "./fuzz/tex-oracle.js";
@@ -201,6 +203,28 @@ describe.skipIf(!ENABLED)("keystroke fuzzing against LuaLaTeX", () => {
 });
 
 describe.skipIf(!ENABLED)("TeX facts the editing rules rely on", () => {
+  it("compiles math arguments and edited delimiter boundaries from the review regressions", async () => {
+    const commands = createCommandTable();
+    const bodies: string[] = [];
+    for (const name of ["pmod", "mod"]) {
+      const target = new KeystrokeSession("$a+b$", commands, 2);
+      for (const key of parseScenarioKeys(`\\${name} ⇥ n }`)) target.press(key);
+      bodies.push(target.text);
+    }
+    const delimiters = "$\\bigl(x\\bigr)y$";
+    const target = new KeystrokeSession(delimiters, commands, 1);
+    target.press({ kind: "setValues", edits: ["(", ")"].map((char, index) => ({
+      span: { from: delimiters.indexOf(char), to: delimiters.indexOf(char) + 1 },
+      text: index === 0 ? "\\langle" : "\\rangle",
+    })) });
+    bodies.push(target.text, "$\\frac% numerator\n{a}% denominator\n{b}$");
+    const source = "\\documentclass{beamer}\n\\begin{document}\n" +
+      bodies.map((body) => `\\begin{frame}\n${body}\n\\end{frame}\n`).join("") + "\\end{document}\n";
+    const compiled = await compileDeck(source, path.join(os.tmpdir(), "editing-review.tex"));
+    expect(compiled.timedOut).toBe(false);
+    expect(compiled.errors).toEqual([]);
+  });
+
   it("knows which math symbols a script cannot take bare", async () => {
     const table = createCommandTable();
     const symbols = table.names("math").filter((name) => {

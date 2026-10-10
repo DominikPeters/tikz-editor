@@ -340,7 +340,8 @@ export function tab(view: EditView, caret: Position, back: boolean, selectionEnd
 
 function nextSlot(view: EditView, owner: NodeId, slot: SlotId, back: boolean): EditOutcome {
   const { tree } = view;
-  const slots = presentSlots(tree, owner).sort((left, right) => left.contentSpan.from - right.contentSpan.from);
+  const slots = presentSlots(tree, owner).filter((candidate) => !view.hiddenSlots.has(candidate.id))
+    .sort((left, right) => left.contentSpan.from - right.contentSpan.from);
   const target = slots[slots.findIndex((candidate) => candidate.id === slot) + (back ? -1 : 1)];
   if (target) {
     return { kind: "move", to: { slot: target.id, index: back ? target.children.length : 0 } };

@@ -928,6 +928,10 @@ async function renderBeamerFrameStep(params: {
     graphics,
     spacing,
     embeddedTikz,
+    overlayBranches: bodyIr.overlays.commands.flatMap((command) => command.branches.map((branch) => ({
+      span: branch.contentSpan,
+      visible: resolveBeamerOverlaySpanVisibility(bodyIr.overlays, branch.contentSpan, step) === "visible",
+    }))),
     editScopes: collectBeamerEditScopes(
       frame,
       bodyIr,

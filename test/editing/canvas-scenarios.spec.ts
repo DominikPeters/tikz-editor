@@ -8,6 +8,7 @@ import { applyPatches } from "../../packages/core/src/editing/transaction/index.
 import { canvasSessionDriver } from "./canvas-session-driver.js";
 import { KeystrokeSession } from "./fuzz/keystroke-session.js";
 import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
+import { copyRange } from "../../packages/core/src/editing/operations/index.js";
 
 const R = String.raw;
 import {
@@ -143,6 +144,20 @@ describe("canvas editing: paste (O6)", () => {
     ["items pasted into a list stay items", "\\begin{itemize}\n⟦\\item One\n⟧\\item Two‸\n\\end{itemize}", undefined, "\\begin{itemize}\n\\item One\n\\item Two\\item One\n‸\n\\end{itemize}"],
   ] as const)("%s", (_, body, plain, expected, options?: { readonly title?: boolean }) => {
     expect(paste(body, plain, options)).toBe(expected);
+  });
+});
+
+describe("canvas editing: plain-text copy", () => {
+  it.each([
+    [R`Stra\ss e \copyright{}`, "Straße ©"],
+    [R`Fran\c cais caf\'{e} \v{s}`, "Français café š"],
+    [R`\ae{} \OE{} \o{} \AA{} \textbullet{} \S{} \P{}`, "æ Œ ø Å • § ¶"],
+    [R`\textbar{} \textasciitilde{} \textasciicircum{} \textquoteleft{} \textquoteright{}`, "| ~ ^ ‘ ’"],
+  ])("preserves the visible symbols of %s", (source, expected) => {
+    const commands = createCommandTable();
+    const payload = copyRange(createEditView(buildEditTree(source, { commands })), 0, source.length, commands);
+    expect(payload?.plain).toBe(expected);
+    expect(payload?.clip?.source).toBe(source);
   });
 });
 

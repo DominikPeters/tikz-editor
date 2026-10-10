@@ -19,8 +19,8 @@ import { createPositionIndex, positionOffset, type Position, type PositionIndex 
  * A position that is not a stop is represented by the stop it looks like,
  * the nearest stop before it in document order.
  *
- * `hidden` nodes are what the rendered layout does not show (overlay
- * content on another step, paragraphs after `\pause`): they count as
+ * `hidden` nodes and `hiddenSlots` are what the rendered layout does not
+ * show (inactive overlay arguments, paragraphs after `\pause`): they count as
  * invisible items, so motion and deletion pass over them. So do spaces at
  * a paragraph's start or end (around invisibles only), which TeX drops:
  * `text\n\pause` ends with "text".
@@ -29,6 +29,7 @@ export type EditView = {
   readonly tree: EditTree;
   readonly index: PositionIndex;
   readonly hidden: ReadonlySet<NodeId>;
+  readonly hiddenSlots: ReadonlySet<SlotId>;
   /** The node's role for motion and deletion: its kind's, or invisible when hidden. */
   role(node: NodeId): ItemRole;
   /** Caret stops in document order. */
@@ -60,6 +61,7 @@ const key = (position: Position) => `${position.slot}:${position.index}`;
 
 export type EditViewOptions = {
   readonly hidden?: ReadonlySet<NodeId>;
+  readonly hiddenSlots?: ReadonlySet<SlotId>;
 };
 
 const NO_HIDDEN: ReadonlySet<NodeId> = new Set();
@@ -67,7 +69,14 @@ const NO_HIDDEN: ReadonlySet<NodeId> = new Set();
 export function createEditView(tree: EditTree, options: EditViewOptions = {}): EditView {
   const index = createPositionIndex(tree);
   const hidden = options.hidden ?? NO_HIDDEN;
-  const baseRole = (node: NodeId): ItemRole => (hidden.has(node) ? "invisible" : itemRole(tree, node));
+  const hiddenSlots = options.hiddenSlots ?? NO_HIDDEN;
+  const hiddenDescendants = new Set(hidden);
+  const hideNode = (node: NodeId) => {
+    hiddenDescendants.add(node);
+    for (const slot of tree.nodes[node].slots) for (const child of tree.slots[slot].children) hideNode(child);
+  };
+  for (const slot of hiddenSlots) for (const child of tree.slots[slot].children) hideNode(child);
+  const baseRole = (node: NodeId): ItemRole => (hiddenDescendants.has(node) ? "invisible" : itemRole(tree, node));
   const droppedSpaces = paragraphEdgeSpaces(tree, baseRole);
   const role = (node: NodeId): ItemRole => (droppedSpaces.has(node) ? "invisible" : baseRole(node));
   const ranks = new Map<string, number>();
@@ -113,11 +122,11 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
   const stops: Position[] = [];
   const stopRanks: number[] = [];
   const visitNode = (node: NodeId) => {
-    if (hidden.has(node)) {
+    if (hiddenDescendants.has(node)) {
       return;
     }
     for (const slot of tree.nodes[node].slots) {
-      if (tree.slots[slot].presence === "present") {
+      if (tree.slots[slot].presence === "present" && !hiddenSlots.has(slot)) {
         visitSlot(slot);
       }
     }
@@ -169,7 +178,8 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
   const view: EditView = {
     tree,
     index,
-    hidden,
+    hidden: hiddenDescendants,
+    hiddenSlots,
     role,
     stops,
     rank,

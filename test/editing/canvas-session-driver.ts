@@ -152,7 +152,8 @@ class CanvasSession implements EditorSession {
           }
           this.scheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
           break;
-        default:
+        case "focusBar":
+        case "native":
           throw new Error(`canvas-session driver: ${decision.kind} key not modelled: ${JSON.stringify(key)}`);
       }
     }
@@ -207,7 +208,7 @@ class CanvasSession implements EditorSession {
     );
     return {
       source,
-      domain: paragraphs.length ? buildBeamerCaretStopDomain({ paragraphs, source }) : null,
+      domain: paragraphs.length ? buildBeamerCaretStopDomain({ paragraphs, source, overlayBranches: page.layout.overlayBranches }) : null,
     };
   }
 
@@ -232,7 +233,7 @@ class CanvasSession implements EditorSession {
           : null,
         domain: this.layout?.domain ?? null,
         verticalGoal: state.verticalGoal,
-        structure: (text, hidden) => this.views(text, this.commands, hidden),
+        structure: (text, visibility) => this.views(text, this.commands, visibility),
         positions: selectionPositions(state, anchor, focus),
         interaction: interactionState(state, anchor, focus),
         commands: this.commands,

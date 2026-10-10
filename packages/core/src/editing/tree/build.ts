@@ -344,10 +344,27 @@ class Binder {
     return { end: limit, complete: false };
   }
 
+  /**
+   * TeX ignores comments, including their line end, while looking for an
+   * argument; the next line starts afresh, so a blank line right after a
+   * comment is a paragraph end all the same.
+   */
   private skipSpaces(at: number, limit: number): number {
     let cursor = at;
     let newlines = 0;
-    while (cursor < limit && /[ \t\r\n]/u.test(this.text[cursor])) {
+    while (cursor < limit) {
+      if (this.text[cursor] === "%") {
+        cursor = Math.min(this.commentEnd(cursor), limit);
+        if (cursor < limit && this.text[cursor] === "\r") cursor += 1;
+        if (cursor < limit && this.text[cursor] === "\n") {
+          cursor += 1;
+          newlines = 1;
+        }
+        continue;
+      }
+      if (!/[ \t\r\n]/u.test(this.text[cursor])) {
+        break;
+      }
       if (this.text[cursor] === "\n") {
         newlines += 1;
         if (newlines > 1) {
@@ -823,7 +840,7 @@ class Binder {
       if (!match.complete) {
         this.diagnose("unclosed-group", start, match.end, "Unclosed argument");
       }
-    } else if (start < run.end && !this.atStop(run, start) && !"}$&".includes(text[start]) &&
+    } else if (start < run.end && !this.atStop(run, start) && !"}$&%".includes(text[start]) &&
       !(text[start] === "\\" && this.isControl(start, "\\"))) {
       // TeX's undelimited argument: exactly one token (\frac1n, x^2).
       const end = this.tokenEnd(start);

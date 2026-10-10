@@ -892,7 +892,7 @@ export function useCanvasTextEditSession(
       domain: session.isScopeSession ? resolveDeckCaretDomainRef.current(session.sourceId) : null,
       verticalGoal: state.verticalGoal,
       structure: session.isScopeSession
-        ? (text, hidden) => canvasEditView(text, editCommandsRef.current, hidden)
+        ? (text, visibility) => canvasEditView(text, editCommandsRef.current, visibility)
         : null,
       positions: selectionPositions(state, anchor, focus),
       interaction: interactionState(state, anchor, focus),

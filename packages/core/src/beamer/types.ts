@@ -448,6 +448,8 @@ export type BeamerFrameLayout = {
   graphics: BeamerGraphicsLayout[];
   spacing: BeamerSpacingLayout[];
   embeddedTikz: BeamerEmbeddedTikzLayout[];
+  /** Source-owned overlay arguments and their visibility on this step, including empty branches. */
+  overlayBranches?: readonly { readonly span: Span; readonly visible: boolean }[];
   editScopes: BeamerEditScope[];
 };
 

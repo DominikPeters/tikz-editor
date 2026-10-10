@@ -1636,10 +1636,11 @@ export const CanvasPanel = memo(function CanvasPanel({
   // was rendered from (not the newer store source), which is how a session
   // tells whether the layout has caught up with its buffer.
   const layoutSource = snapshot.source;
+  const layoutOverlayBranches = snapshot.deck?.activeFrame?.layout.overlayBranches;
   const deckCaretDomainCache = useMemo(
     () => new Map<string, BeamerCaretDomain | null>(),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cache identity tracks the layout inputs
-    [deckEditing, layoutSource]
+    [deckEditing, layoutSource, layoutOverlayBranches]
   );
   const resolveDeckCaretDomain = useCallback((scopeId: string): BeamerCaretDomain | null => {
     const cached = deckCaretDomainCache.get(scopeId);
@@ -1655,11 +1656,11 @@ export const CanvasPanel = memo(function CanvasPanel({
       .map((ref) => deckEditing.paragraphById.get(ref.paragraphId))
       .filter((paragraph): paragraph is NonNullable<typeof paragraph> => paragraph != null);
     const domain = paragraphs.length
-      ? buildBeamerCaretStopDomain({ paragraphs, source: layoutSource })
+      ? buildBeamerCaretStopDomain({ paragraphs, source: layoutSource, overlayBranches: layoutOverlayBranches })
       : null;
     deckCaretDomainCache.set(scopeId, domain);
     return domain;
-  }, [deckCaretDomainCache, deckEditing, layoutSource]);
+  }, [deckCaretDomainCache, deckEditing, layoutSource, layoutOverlayBranches]);
 
   useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;

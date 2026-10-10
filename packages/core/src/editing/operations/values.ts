@@ -7,6 +7,7 @@ import type { CommitKey } from "./command.js";
 import type { EditOutcome } from "./delete.js";
 import { insideOptional } from "./insert.js";
 import { specColumns, widestRow } from "./structure.js";
+import { withTerminator } from "./source.js";
 
 /**
  * Value arguments (O8): colours, URLs, lengths, keys and the like, which
@@ -279,7 +280,8 @@ export function writtenValueAt(view: EditView, span: Span): WrittenValue | null 
  */
 export function editValues(view: EditView, edits: readonly { readonly span: Span; readonly text: string }[]): { from: number; to: number; insert: string }[] | null {
   const { text } = view.tree;
-  const patches: { from: number; to: number; insert: string }[] = [];
+  let patches: { from: number; to: number; insert: string }[] = [];
+  const modes = new Map<number, EditNode["mode"]>();
   const touched = new Set<EditNode>();
   for (const edit of edits) {
     const written = writtenValueAt(view, edit.span);
@@ -299,6 +301,7 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
       : open === "" && !/^(?:\\[A-Za-z@]+|\\.|[^\\{}\s])$/u.test(source)
         ? { from: value.span.from, to: value.span.to, insert: `{${source}}` }
         : { from: value.contentSpan.from, to: value.contentSpan.to, insert: source });
+    modes.set(patches.at(-1)!.from, node.mode);
   }
   // A colour is an xcolor expression unless a model (`[rgb]`) stands before it, as the edits leave them.
   const final = (value: EditValue) => edits.find((edit) => edit.span.from === value.contentSpan.from && edit.span.to === value.contentSpan.to)?.text.trim() ??
@@ -314,7 +317,15 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
       return null;
     }
   }
-  return patches.sort((left, right) => left.from - right.from);
+  patches.sort((left, right) => left.from - right.from);
+  let delta = 0;
+  for (let index = 0; index < patches.length; index += 1) {
+    const patch = patches[index];
+    const seam = patch.from + delta + patch.insert.length;
+    patches = withTerminator(text, patches, seam, modes.get(patch.from)!);
+    delta += patches[index].insert.length - (patch.to - patch.from);
+  }
+  return patches;
 }
 
 /** The command a value editor at `at` is open for, as the mode there reads it, and its fields. */

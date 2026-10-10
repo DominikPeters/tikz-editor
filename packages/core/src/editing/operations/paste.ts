@@ -3,6 +3,7 @@ import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import { buildEditTree } from "../tree/build.js";
 import type { EditMode, EditNodeKind, EditTree, NodeId, SlotId } from "../tree/types.js";
+import { parseSimpleTexInlineNodes, type SimpleTexInlineNode } from "../../text/tex/ir.js";
 import { breaksBoldMath, inBoldMath, lineEndable } from "./command.js";
 import type { EditOutcome } from "./delete.js";
 import {
@@ -114,7 +115,38 @@ const PLAIN_SYMBOLS: Readonly<Record<string, string>> = {
   "\\%": "%", "\\&": "&", "\\#": "#", "\\$": "$", "\\_": "_", "\\{": "{", "\\}": "}",
   "\\textbackslash": "\\", "\\ldots": "…", "\\dots": "…", "\\textendash": "–", "\\textemdash": "—",
   "\\LaTeX": "LaTeX", "\\TeX": "TeX", "\\,": " ", "\\ ": " ", "\\quad": " ", "\\qquad": " ",
+  "\\textbar": "|", "\\textasciitilde": "~", "\\textasciicircum": "^",
+  "\\S": "§", "\\P": "¶", "\\copyright": "©", "\\dag": "†", "\\ddag": "‡", "\\textbullet": "•",
+  "\\textquoteleft": "‘", "\\textquoteright": "’", "\\i": "ı", "\\j": "ȷ",
 };
+
+/** Text nodes as plain text; null at anything else, which the text frontend did not decode. */
+function decodedText(nodes: readonly SimpleTexInlineNode[]): string | null {
+  let text = "";
+  for (const node of nodes) {
+    if (node.kind === "text") {
+      text += node.text;
+    } else if (node.kind === "space") {
+      text += " ";
+    } else if (node.kind === "group") {
+      const content = decodedText(node.children);
+      if (content == null) {
+        return null;
+      }
+      text += content;
+    } else if (node.kind !== "comment") {
+      return null;
+    }
+  }
+  return text;
+}
+
+/** A symbol's plain text: letters and accents as the text frontend decodes them (`\ss`, `\'{e}`), else its source. */
+function symbolText(source: string): string {
+  const parsed = parseSimpleTexInlineNodes(source);
+  return (parsed.unsupportedCommand ? null : decodedText(parsed.nodes)) ??
+    PLAIN_SYMBOLS[source.replace(/\{\}$/u, "")] ?? source;
+}
 
 /** Leaves by their plain text: as written (null), fixed, or nothing (hidden syntax). */
 const LEAF_TEXT: Partial<Record<EditNodeKind, string | null>> = {
@@ -147,7 +179,7 @@ function plainText(view: EditView, from: number, to: number): string {
       return;
     }
     if (record.kind === "symbol") {
-      parts.push(PLAIN_SYMBOLS[source.replace(/\{\}$/u, "")] ?? "");
+      parts.push(symbolText(source));
       return;
     }
     if ((record.kind === "paragraph" || record.kind === "item") && parts.length > 0 && !/\n$/u.test(parts.at(-1)!)) {
