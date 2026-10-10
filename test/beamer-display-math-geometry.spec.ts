@@ -59,7 +59,13 @@ describe("caret and selection geometry around commands and big operators", () =>
   const at = (needle: string, from = 0) => start + formula.indexOf(needle, from);
   let display: BeamerParagraphLayout;
   let box: Extract<ReturnType<typeof flattenPositionedTexVListItems>[number]["item"], { kind: "display-math" }>["box"];
-  let params: Parameters<typeof getKnuthPlassPointFromOffset>[1] & { sourceCoordinateSpace: "document" };
+  let params: {
+    paragraphId: string;
+    sourceCoordinateSpace: "document";
+    sourceText: string;
+    sourceTextStartOffset: ReturnType<typeof documentSourceOffset>;
+    containerElement: Element;
+  };
   let context: unknown;
 
   beforeAll(async () => {

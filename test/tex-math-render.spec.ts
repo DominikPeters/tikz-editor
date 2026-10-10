@@ -1927,8 +1927,8 @@ describe("TeX math SVG rendering", () => {
 
   it("returns null for unsupported formulas instead of approximate SVG", () => {
     const provider = createTexDerivedInlineMathBoxProvider();
-    const source = String.raw`$\unknown{x}$`;
-    const content = String.raw`\unknown{x}`;
+    const source = String.raw`$\not\unknown$`;
+    const content = String.raw`\not\unknown`;
     const box = provider.getInlineMathBox({
       source,
       content,

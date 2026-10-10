@@ -1053,7 +1053,7 @@ describe("TeX vlist lowering", () => {
   });
 
   it("uses explicit placeholders for unsupported display math formulas", () => {
-    const source = String.raw`\[\unknown{x}\]`;
+    const source = String.raw`\[\not\unknown\]`;
     const parsed = parseSimpleTexParagraphIr(source);
     const vlist = lowerSimpleTexBlockItemsToVList(parsed.items, {
       mathBoxProvider: createTexDerivedInlineMathBoxProvider(),

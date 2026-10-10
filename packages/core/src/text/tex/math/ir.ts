@@ -28,6 +28,8 @@ export type TexMathDiagnosticCode =
   | "duplicate-script"
   | "empty-script"
   | "extra-alignment-tab"
+  /** The formula ends mid-construct, as while it is typed (T3): what is missing is left empty. */
+  | "incomplete-input"
   | "invalid-environment-nesting"
   | "invalid-environment-argument"
   | "invalid-math-style"
