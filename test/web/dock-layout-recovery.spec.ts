@@ -104,6 +104,30 @@ describe("dock layout recovery", () => {
     expect(storage.get(DOCK_KEY)).toBe(raw);
   });
 
+  it("remembers separate document-kind layouts and keeps a deck layout for nested drawings", async () => {
+    await mount();
+    const dispatch = useEditorStore.getState().dispatch;
+    const tikzId = useEditorStore.getState().activeDocumentId;
+    await act(async () => { getDockLayoutHandle()!.togglePanel("source"); });
+    expect(useEditorStore.getState().showSourcePanel).toBe(false);
+    await act(async () => { dispatch({ type: "NEW_DOCUMENT", source: String.raw`\documentclass{beamer}\begin{document}\begin{frame}Hello\begin{tikzpicture}\end{tikzpicture}\end{frame}\end{document}` }); });
+    const beamerId = useEditorStore.getState().activeDocumentId;
+    expect(useEditorStore.getState().showSourcePanel).toBe(true);
+    expect(getDockLayoutHandle()!.getModel().getNodeById("builds")).toBeTruthy();
+    expect(getDockLayoutHandle()!.getModel().getNodeById("figure-navigator")).toBeTruthy();
+    await act(async () => { getDockLayoutHandle()!.togglePanel("builds"); });
+    const deckModel = getDockLayoutHandle()!.getModel();
+    await act(async () => { dispatch({ type: "SET_ACTIVE_ROOT", rootId: "beamer-frame:0:tikz:0" }); });
+    expect(getDockLayoutHandle()!.getModel()).toBe(deckModel);
+    await act(async () => { dispatch({ type: "SWITCH_DOCUMENT", documentId: tikzId }); });
+    expect(useEditorStore.getState().showSourcePanel).toBe(false);
+    expect(getDockLayoutHandle()!.getModel().getNodeById("builds")).toBeUndefined();
+    await act(async () => { dispatch({ type: "SWITCH_DOCUMENT", documentId: beamerId }); });
+    expect(useEditorStore.getState().showSourcePanel).toBe(true);
+    expect(getDockLayoutHandle()!.getModel().getNodeById("builds")).toBeUndefined();
+    expect(storage.has("tikz-editor:dock-layout:beamer")).toBe(true);
+  });
+
   it("recovers malformed user-workspace apply and persists the recovered model", async () => {
     storage.set(DOCK_KEY, JSON.stringify(LAYOUT_PRESETS.canvasOnly()));
     await mount();

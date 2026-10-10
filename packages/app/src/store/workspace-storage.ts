@@ -3,6 +3,7 @@ import type { DocumentFileRef, ExternalChangeStatus, FileRevision } from "./type
 import { normalizeWorkspaceTabOrder, WORKSPACE_VERSION, type WorkspaceSeed } from "./workspace-state";
 import type { IJsonModel } from "flexlayout-react";
 import { isDockLayoutJson } from "../ui/dock-layout-validation";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
 
 const WORKSPACE_STORAGE_KEY = "tikz-editor:workspace";
 const DOCK_LAYOUT_STORAGE_KEY = "tikz-editor:dock-layout";
@@ -227,9 +228,14 @@ export function saveWorkspace(state: {
 
 // ── Dock layout persistence ───────────────────────────────────────────────────
 
-export function loadDockLayout(): IJsonModel | null {
+function dockLayoutKey(kind: DocumentKind): string {
+  // Preserve existing diagram layouts without migrating or overwriting them.
+  return kind === "tikz" ? DOCK_LAYOUT_STORAGE_KEY : `${DOCK_LAYOUT_STORAGE_KEY}:beamer`;
+}
+
+export function loadDockLayout(kind: DocumentKind = "tikz"): IJsonModel | null {
   try {
-    const raw = getActiveEditorPlatform().persistence.load(DOCK_LAYOUT_STORAGE_KEY);
+    const raw = getActiveEditorPlatform().persistence.load(dockLayoutKey(kind));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     return isDockLayoutJson(parsed) ? parsed : null;
@@ -239,9 +245,9 @@ export function loadDockLayout(): IJsonModel | null {
   }
 }
 
-export function saveDockLayout(json: IJsonModel): void {
+export function saveDockLayout(json: IJsonModel, kind: DocumentKind = "tikz"): void {
   try {
-    getActiveEditorPlatform().persistence.save(DOCK_LAYOUT_STORAGE_KEY, JSON.stringify(json));
+    getActiveEditorPlatform().persistence.save(dockLayoutKey(kind), JSON.stringify(json));
   } catch (error) {
     logStorageDebug("Failed to save dock layout.", error);
   }
