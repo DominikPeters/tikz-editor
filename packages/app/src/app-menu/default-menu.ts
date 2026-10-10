@@ -11,6 +11,7 @@ export const APP_MENU_DEFINITION = [
         label: "New",
         accelerator: "CmdOrCtrl+N"
       },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.NEW_BEAMER_DOCUMENT, label: "New Beamer Presentation" },
       {
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.OPEN_DOCUMENT,
@@ -598,6 +599,27 @@ export const APP_MENU_DEFINITION = [
         label: "Developer Panel",
         accelerator: "CmdOrCtrl+Shift+D"
       }
+    ]
+  },
+  {
+    id: "present",
+    label: "Present",
+    items: [
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_CURRENT, label: "From Current Slide", accelerator: "CmdOrCtrl+Enter" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_BEGINNING, label: "From Beginning", accelerator: "CmdOrCtrl+Shift+Enter" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_WINDOW, label: "Present in a Window" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_REHEARSE, label: "Rehearse" },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_OPTIONS, label: "Presentation Options…" },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_SHOW_PRESENTER, label: "Show Presenter View" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_RESTORE_OUTPUT, label: "Show Audience Window" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_SWAP_DISPLAYS, label: "Swap Displays", platforms: ["desktop"] },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_BLACK, label: "Black Screen" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_WHITE, label: "White Screen" },
+      { kind: "separator" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.PRESENT_END, label: "End Presentation" },
     ]
   },
   {

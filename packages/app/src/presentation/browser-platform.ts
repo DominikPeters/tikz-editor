@@ -63,6 +63,7 @@ export function createBrowserPresentationApi(): PlatformPresentationApi {
       resolve({
         close() { closing = true; window.clearInterval(timer); audience?.close(); presenter?.close(); },
         showPresenter() { openPresenter(); },
+        closeView(role) { if (role === "presenter") presenter?.close(); else audience?.close(); window.focus(); },
         recoverOutput() { openAudience(); audienceWasOpen = true; },
         swapDisplays() { audience?.focus(); },
       });

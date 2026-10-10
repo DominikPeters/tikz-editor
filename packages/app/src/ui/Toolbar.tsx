@@ -20,6 +20,8 @@ import popupCss from "./ToolbarToolPopup.module.css";
 import type { ToolMode } from "../store/types";
 import { isMacLikePlatform } from "./key-labels";
 import css from "./Toolbar.module.css";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { NewSlideButton, PresentationToolbar } from "../presentation/PresentationToolbar";
 
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   id: option.value,
@@ -28,13 +30,15 @@ const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
 }));
 
 type ToolbarProps = {
+  onPresentationOptions: () => void;
   updateChip?: {
     version: string;
     onClick: () => void;
   } | null;
 };
 
-export function Toolbar({ updateChip = null }: ToolbarProps) {
+export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarProps) {
+  const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz");
   const toolMode = useEditorStore((s) => s.toolMode);
   const bucketFillColor = useEditorStore((s) => s.bucketFillColor);
   const selectedAddShape = useEditorStore((s) => s.selectedAddShape);
@@ -54,6 +58,9 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
   const isDesktop = getActiveEditorPlatform().id.startsWith("desktop");
   const isMacDesktop = isDesktop && isMacLikePlatform();
   const showAppTitle = !isDesktop;
+  useEffect(() => {
+    if (!drawingSurface && toolMode !== "select" && toolMode !== "magnify") dispatch({ type: "SET_TOOL_MODE", mode: "select" });
+  }, [drawingSurface, toolMode, dispatch]);
 
   // Close popup when tool mode changes (unless it's a popup that can be used independently)
   useEffect(() => {
@@ -352,7 +359,8 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
       ) : null}
 
       <div className={css.group}>
-        {TOOL_BUTTONS.flatMap((toolDef) => {
+        <NewSlideButton />
+        {TOOL_BUTTONS.filter(tool => drawingSurface || tool.mode === "select" || tool.mode === "magnify").flatMap((toolDef) => {
           const separator = toolDef.separatorBefore ? <div key={`sep-${toolDef.mode}`} className={css.separator} /> : null;
           // Special handling for bucket and shape buttons
           let button;
@@ -369,6 +377,7 @@ export function Toolbar({ updateChip = null }: ToolbarProps) {
         })}
       </div>
       <div className={css.spacer} />
+      <PresentationToolbar onOptions={onPresentationOptions} />
       {updateChip ? (
         <RenderedTooltip content={`Install update ${updateChip.version}`}>
           <button

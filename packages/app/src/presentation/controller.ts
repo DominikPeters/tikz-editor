@@ -67,11 +67,12 @@ export class PresentationController {
     return last <= lastSteps ? { frame, step: last, continuation: 1 } : { frame, step: 1, continuation: last - lastSteps + 1 };
   }
 
-  private async commit(cursor: PresentationCursor, generation: number, signal: AbortSignal): Promise<void> {
-    const page = await this.renderer.page(cursor, signal);
+  private async commit(cursor: PresentationCursor, generation: number, signal: AbortSignal, metadata: Partial<PresentationSnapshot> = {}, renderFrom = this.renderer): Promise<void> {
+    const page = await renderFrom.page(cursor, signal);
     signal.throwIfAborted();
     if (generation !== this.generation || this.snapshot.ended) return;
-    this.update({ current: page, next: null, error: null });
+    this.renderer = renderFrom;
+    this.update({ ...metadata, current: page, next: null, error: null });
     this.previewWork.abort();
     this.previewWork = new AbortController();
     const previewSignal = this.previewWork.signal;
@@ -103,21 +104,21 @@ export class PresentationController {
     return this.queue;
   }
 
-  async replace(renderer: PresentationRenderer, cursor: PresentationCursor, title: string): Promise<void> {
-    if (this.snapshot.ended) return;
+  async replace(renderer: PresentationRenderer, cursor: PresentationCursor, title: string): Promise<boolean> {
+    if (this.snapshot.ended) return false;
+    if (!renderer.frames.length) { this.setError("There are no slides in this document. The last valid slide is still displayed."); return false; }
     const generation = this.supersede();
-    this.renderer = renderer;
-    this.update({ frames: renderer.frames, revision: this.snapshot.revision + 1, thumbnails: {}, title });
+    const revision = this.snapshot.revision + 1;
     const signal = this.work.signal;
     const frame = Math.max(0, Math.min(cursor.frame, renderer.frames.length - 1));
-    if (!renderer.frames.length) { this.setError("There are no slides in this document. The last valid slide is still displayed."); return; }
     this.queue = (async () => {
       const count = await renderer.pageCount(frame, signal);
       const steps = renderer.frames[frame].steps;
       const target = { frame, step: Math.min(cursor.step, steps), continuation: Math.min(cursor.continuation, Math.max(1, count - steps + 1)) };
-      await this.commit(target, generation, signal);
+      await this.commit(target, generation, signal, { frames: renderer.frames, revision, thumbnails: {}, title }, renderer);
     })().catch(error => { this.renderError(error, signal); });
     await this.queue;
+    return !signal.aborted && generation === this.generation && this.snapshot.revision === revision;
   }
 
   navigate(type: "next" | "previous" | "next-frame" | "previous-frame"): Promise<void> {
@@ -147,8 +148,10 @@ export class PresentationController {
       const page = await this.renderer.page(first(frame), signal);
       if (generation !== this.generation || signal.aborted) return;
       // Keep published previews bounded too; a long filmstrip requests its visible region.
-      const entries = Object.entries(this.snapshot.thumbnails).slice(-31);
-      this.update({ thumbnails: { ...Object.fromEntries(entries), [frame]: page.svg } });
+      const entries: Array<[string, string]> = [...Object.entries(this.snapshot.thumbnails).filter(([index]) => Number(index) !== frame).slice(-31), [String(frame), page.svg]];
+      let bytes = entries.reduce((sum, entry) => sum + entry[1].length * 2, 0);
+      while (bytes > 8 * 1024 * 1024 && entries.length) bytes -= entries.shift()![1].length * 2;
+      this.update({ thumbnails: Object.fromEntries(entries) });
     } catch { /* The live page reports failures; thumbnails are best effort. */ }
   }
   command(command: PresentationCommand): Promise<void> {
@@ -160,6 +163,7 @@ export class PresentationController {
       case "timer": this.timer(command.action); break;
       case "stop": this.stop(); break;
       case "show-presenter": case "recover-output": case "swap-displays": break;
+      case "close-view": break;
     }
     return Promise.resolve();
   }

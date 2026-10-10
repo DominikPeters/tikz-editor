@@ -35,4 +35,10 @@ describe("Beamer speaker notes", () => {
 Hello\note{\pause\begin{itemize}\item<9> Secret\end{itemize}}\end{frame}\end{document}`);
     expect(prepared.frameStepCount(0)).toBe(1);
   });
+
+  it("also removes notes introduced by a user macro from audience text", async () => {
+    const prepared = prepareBeamerDocument(String.raw`\documentclass{beamer}\newcommand{\reminder}{\note{PRIVATE MACRO NOTE}}\begin{document}\begin{frame}Public\reminder\end{frame}\end{document}`);
+    const page = await prepared.renderFrame();
+    expect(page.svg.svg).not.toMatch(/PRIVATE|MACRO NOTE/);
+  });
 });

@@ -83,4 +83,14 @@ describe("presentation session", () => {
     expect(controller.getSnapshot().timer.runningSince).not.toBeNull();
     controller.stop();
   });
+
+  it("retains both the last valid deck and navigation when an edit temporarily removes all frames", async () => {
+    const controller = session();
+    await controller.jump(0);
+    expect(await controller.replace(renderer([]), { frame: 0, step: 1, continuation: 1 }, "Broken source")).toBe(false);
+    expect(controller.getSnapshot().frames).toHaveLength(2);
+    await controller.navigate("next");
+    expect(controller.getSnapshot().current?.cursor.step).toBe(2);
+    controller.stop();
+  });
 });

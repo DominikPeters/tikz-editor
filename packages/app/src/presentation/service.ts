@@ -38,6 +38,9 @@ export class PresentationService {
   private revision = 0;
   private updateTimer: ReturnType<typeof setTimeout> | null = null;
   private observedDocument: DocumentSession | null = null;
+  private launchCommands: PresentationCommand[] = [];
+  private outputNeedsSelection = false;
+  private cleaningUp: Promise<void> | null = null;
   getState = (): ServiceState => this.state;
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private update(patch: Partial<ServiceState>): void { this.state = { ...this.state, ...patch }; for (const listener of this.listeners) listener(); }
@@ -53,13 +56,13 @@ export class PresentationService {
     if (message.sessionId !== this.controller?.getSnapshot().sessionId) return;
     if (message.type === "hello") {
       if (message.role === "presenter") this.controller.setPresenterVisible(true);
-      if (message.role === "audience") this.controller.setOutputAvailable(true);
+      if (message.role === "audience" && !this.outputNeedsSelection) this.controller.setOutputAvailable(true);
       this.publish();
     } else if (message.type === "command") this.command(message.command);
     else if (message.type === "focus") this.update({ focus: message.role });
     else if (message.type === "closed") {
       if (message.role === "presenter") this.controller.setPresenterVisible(false);
-      else this.controller.setOutputAvailable(false);
+      else { this.outputNeedsSelection = true; this.controller.setOutputAvailable(false); }
     }
   };
 
@@ -72,21 +75,26 @@ export class PresentationService {
     const controller = new PresentationController({ sessionId, documentId: document.id, title: document.title, renderer: emptyRenderer,
       budgetMs: options.countdownMinutes == null ? null : options.countdownMinutes * 60_000 });
     this.controller = controller; this.api = api; this.observedDocument = document;
+    this.outputNeedsSelection = false;
     this.unsubscribeController = controller.subscribe(this.publish);
     this.update({ snapshot: controller.getSnapshot(), error: null });
     const connection = api.connect(sessionId, this.receive);
-    const opening = api.open(sessionId, options, () => { controller.setOutputAvailable(false); });
+    const opening = api.open(sessionId, options, () => { if (this.controller === controller) { this.outputNeedsSelection = true; controller.setOutputAvailable(false); } });
     // Attach rejection handlers immediately; either native operation can fail first.
     try {
       const [transport, windows] = await Promise.all([connection, opening]);
       if (this.controller !== controller) { transport.close(); await windows.close(); return; }
       this.transport = transport; this.windows = windows;
+      await this.cleaningUp;
+      if (this.controller !== controller) return;
       controller.setOutputAvailable(options.mode !== "rehearse");
       void api.keepAwake?.(true).catch(error => { console.info("[tikz-editor] Couldn’t prevent display sleep", error); });
       const renderer = await BeamerPresentationRenderer.create(document.source, document.fileRef);
       if (this.controller !== controller) return;
       this.renderer = renderer;
       await controller.replace(renderer, { frame, step: 1, continuation: 1 }, document.title);
+      for (const command of this.launchCommands) this.command(command);
+      this.launchCommands = [];
       this.unsubscribe = useEditorStore.subscribe(state => {
         const current = state.documents[document.id];
         if (!current) { void this.stop(); return; }
@@ -126,8 +134,8 @@ export class PresentationService {
       if (revision !== this.revision || this.controller !== controller) return;
       const cursor = controller.getSnapshot().current?.cursor ?? { frame: 0, step: 1, continuation: 1 };
       const mapped = remapPresentationCursor(previous, next, cursor);
-      this.renderer = next;
-      await controller.replace(next, mapped, doc.title);
+      const committed = await controller.replace(next, mapped, doc.title);
+      if (committed && revision === this.revision && this.controller === controller) this.renderer = next;
     } catch (error) {
       if (revision === this.revision && this.controller === controller) {
         console.info("[tikz-editor] Couldn’t update presentation source", error);
@@ -140,14 +148,24 @@ export class PresentationService {
     const controller = this.controller;
     if (!controller) return;
     if (command.type === "stop") { void this.stop(); return; }
+    if (command.type === "close-view") { void Promise.resolve(this.windows?.closeView(command.role)).then(this.focusEditor).catch(error => { controller.setError(error instanceof Error ? error.message : "Couldn’t close the presentation window."); }); return; }
+    if (!this.renderer && ["next", "previous", "next-frame", "previous-frame", "jump"].includes(command.type)) {
+      if (command.type === "jump") this.launchCommands = [];
+      if (command.type === "next" && !controller.getSnapshot().timer.started) controller.timer("start");
+      this.launchCommands.push(command);
+      return;
+    }
     if (command.type === "show-presenter" || command.type === "recover-output" || command.type === "swap-displays") {
       const action = command.type === "show-presenter" ? this.windows?.showPresenter() : command.type === "recover-output" ? this.windows?.recoverOutput(null) : this.windows?.swapDisplays();
-      void Promise.resolve(action).catch(error => { controller.setError(error instanceof Error ? error.message : "Couldn’t change presentation windows."); });
+      void Promise.resolve(action).then(result => {
+        if (command.type === "recover-output") { this.outputNeedsSelection = false; controller.setOutputAvailable(true); }
+        if (command.type === "swap-displays" && result) savePresentationOptions({ ...loadPresentationOptions(), ...result });
+      }).catch(error => { controller.setError(error instanceof Error ? error.message : "Couldn’t change presentation windows."); });
       return;
     }
     void controller.command(command);
   };
-  async recoverOutput(displayId: string | null): Promise<void> { await this.windows?.recoverOutput(displayId); }
+  async recoverOutput(displayId: string | null): Promise<void> { await this.windows?.recoverOutput(displayId); this.outputNeedsSelection = false; this.controller?.setOutputAvailable(true); }
   async stop(): Promise<void> {
     const controller = this.controller;
     if (!controller) return;
@@ -157,11 +175,18 @@ export class PresentationService {
     this.revision++;
     if (this.updateTimer) clearTimeout(this.updateTimer);
     this.updateTimer = null;
+    this.launchCommands = [];
     const transport = this.transport, windows = this.windows, api = this.api;
     this.controller = null; this.renderer = null; this.transport = null; this.windows = null; this.api = null;
     this.update({ snapshot: null, focus: "editor" });
-    try { await windows?.close(); }
-    finally { transport?.close(); await api?.keepAwake?.(false); }
+    const cleanup = (async () => {
+      try { await windows?.close(); }
+      catch (error) { console.info("[tikz-editor] Couldn’t close a presentation window", error); }
+      finally { transport?.close(); await api?.keepAwake?.(false).catch(error => { console.info("[tikz-editor] Couldn’t release presentation power assertion", error); }); }
+    })();
+    this.cleaningUp = cleanup;
+    await cleanup;
+    if (this.cleaningUp === cleanup) this.cleaningUp = null;
   }
 }
 export const presentationService = new PresentationService();

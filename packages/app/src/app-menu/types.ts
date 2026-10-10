@@ -1,5 +1,17 @@
 export const APP_MENU_COMMAND_IDS = {
   NEW_DOCUMENT: "file.new-document",
+  NEW_BEAMER_DOCUMENT: "file.new-beamer-document",
+  PRESENT_CURRENT: "present.current",
+  PRESENT_BEGINNING: "present.beginning",
+  PRESENT_WINDOW: "present.window",
+  PRESENT_REHEARSE: "present.rehearse",
+  PRESENT_OPTIONS: "present.options",
+  PRESENT_SHOW_PRESENTER: "present.show-presenter",
+  PRESENT_RESTORE_OUTPUT: "present.restore-output",
+  PRESENT_SWAP_DISPLAYS: "present.swap-displays",
+  PRESENT_BLACK: "present.black",
+  PRESENT_WHITE: "present.white",
+  PRESENT_END: "present.end",
   OPEN_DOCUMENT: "file.open-document",
   OPEN_FROM_ARXIV: "file.open-from-arxiv",
   IMPORT_IPE: "file.import-ipe",
@@ -162,7 +174,7 @@ export type AppMenuItem =
   | AppMenuRecentFilesItem
   | AppMenuWorkspaceListItem;
 
-export type AppMenuSectionId = "file" | "edit" | "path" | "insert" | "view" | "help";
+export type AppMenuSectionId = "file" | "edit" | "path" | "insert" | "view" | "present" | "help";
 
 export type AppMenuSection = {
   id: AppMenuSectionId;

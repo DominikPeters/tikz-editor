@@ -57,8 +57,8 @@ export function createActiveDocumentAssetWatchOwner(files: PlatformFileApi) {
     })();
   }
   return {
-    update(params: { source: string; documentFileRef?: DocumentFileRef | null }): void {
-      if (ownedState.owner === owner) enqueue(documentGraphicsWatchPaths(params));
+    update(params: { source: string; documentFileRef?: DocumentFileRef | null; additionalDocuments?: readonly { source: string; documentFileRef?: DocumentFileRef | null }[] }): void {
+      if (ownedState.owner === owner) enqueue([...new Set([params, ...(params.additionalDocuments ?? [])].flatMap(documentGraphicsWatchPaths))]);
     },
     dispose(): void {
       if (ownedState.owner !== owner) return;
@@ -72,6 +72,7 @@ export function useActiveDocumentAssetWatches(params: {
   files: PlatformFileApi | undefined;
   source: string;
   documentFileRef: DocumentFileRef | null;
+  additionalDocuments?: readonly { source: string; documentFileRef?: DocumentFileRef | null }[];
 }): void {
   const ownerRef = useRef<ReturnType<typeof createActiveDocumentAssetWatchOwner> | null>(null);
   useEffect(() => {
@@ -84,6 +85,6 @@ export function useActiveDocumentAssetWatches(params: {
     };
   }, [params.files]);
   useEffect(() => {
-    ownerRef.current?.update({ source: params.source, documentFileRef: params.documentFileRef });
-  }, [params.files, params.source, params.documentFileRef]);
+    ownerRef.current?.update({ source: params.source, documentFileRef: params.documentFileRef, additionalDocuments: params.additionalDocuments });
+  }, [params.files, params.source, params.documentFileRef, params.additionalDocuments]);
 }
