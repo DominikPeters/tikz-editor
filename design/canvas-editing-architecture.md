@@ -957,9 +957,14 @@ clear of it; what is typed is written over the span as it stands, with
 none of the canvas's input rules or repairs, re-rendering live; the
 canvas caret follows the lens's; Esc closes it keeping what it wrote, ⏎
 closes it once the source is balanced (⇧⏎ breaks the line), ⌘Z undoes
-(and closes it); its edits are one undo step. Still open: T3 (partial
-math such as `x^{2` or `\frac{1}{` falls back to source for its formula),
-T4 (a `%` typed in the lens silently comments out the rest of the line),
+(and closes it); its edits are one undo step. Partial math (T3): a
+formula that ends mid-construct lays out as math, what is missing left
+empty as TeX's own recovery does (`x^`, `x^{2`, `\frac{1}{`, `\left(`
+with no `\right`; warnings `incomplete-input`), and an unknown command,
+half-typed (`\fr`) or not, shows as its source in place with the
+arguments after it, marked `data-tex-literal` as prose's literal runs
+are, instead of the whole formula falling back to source. A formula
+that is wrong mid-way (a stray `}`) still falls back. Still open: T4 (a `%` typed in the lens silently comments out the rest of the line),
 the lens opened automatically on a scope that no longer parses, and a
 recovery badge on the frame thumbnail.
 

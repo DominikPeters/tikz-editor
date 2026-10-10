@@ -122,7 +122,7 @@ describe("simple TeX literal runs", () => {
   });
 
   it("contains a math span with a parse error as a literal run instead of failing the node", () => {
-    const source = String.raw`before $\frac{a}{b$ after`;
+    const source = String.raw`before $a}b$ after`;
     const result = layoutSimpleTexParagraph(source, {
       paragraphId: "tex:literal-math-error",
       width: 300,
@@ -135,7 +135,7 @@ describe("simple TeX literal runs", () => {
     expect(literalSegments.length).toBeGreaterThan(0);
     expect(literalSegments.every((segment) => segment.literal?.reason === "math-error")).toBe(true);
     const literalText = literalSegments.map((segment) => segment.text).join("");
-    expect(literalText).toBe(String.raw`$\frac{a}{b$`);
+    expect(literalText).toBe(String.raw`$a}b$`);
     const plainTexts = segments
       .filter((segment) => segment.kind === "text" && !segment.literal)
       .map((segment) => segment.text);
@@ -143,7 +143,7 @@ describe("simple TeX literal runs", () => {
     expect(plainTexts).toContain("after");
   });
 
-  it("contains math with unknown commands as literal runs (no silent atom drops)", () => {
+  it("shows an unknown command in math as its source, in place, the rest as math (no silent atom drops)", () => {
     for (const source of [
       String.raw`x $\unknowncmd + y$ z`,
       String.raw`x $\frac{\unknowncmd}{b}$ z`,
@@ -158,20 +158,13 @@ describe("simple TeX literal runs", () => {
       });
       expect(result.supported).toBe(true);
       const segments = result.report?.lines.flatMap((line) => line.segments) ?? [];
-      const literalText = segments
-        .filter((segment) => segment.literal)
-        .map((segment) => segment.text)
-        .join(" ");
-      const mathSegments = segments.filter((segment) => segment.kind === "math");
-      // Either the whole span is contained as a literal run, or it rendered as
-      // math — but the unknown command must never silently vanish.
-      if (mathSegments.length > 0) {
-        throw new Error(
-          `Expected literal containment for ${source}, got math segments: ` +
-          mathSegments.map((segment) => segment.text).join(", ")
-        );
-      }
-      expect(literalText.replaceAll(" ", "")).toContain("\\unknowncmd");
+      const math = segments.filter((segment) => segment.kind === "math");
+      expect(math, source).toHaveLength(1);
+      const command = source.indexOf("\\unknowncmd");
+      // Each of its characters is marked, as literal runs in prose are.
+      const marked = [...(math[0].mathSvgBody ?? "").matchAll(/data-tex-literal="unsupported-command" data-source-start="(\d+)"/gu)]
+        .map((match) => Number(match[1]));
+      expect(marked).toEqual(Array.from({ length: "\\unknowncmd".length }, (_, index) => command + index));
     }
   });
 

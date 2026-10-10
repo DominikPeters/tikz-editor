@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { layoutTexMathList } from "../packages/core/src/text/tex/math/layout.js";
 import {
   parseTexMathDisplayBody,
   parseTexMath,
@@ -3746,7 +3747,8 @@ describe("TeX math parser", () => {
   it("keeps parsing unsupported commands and reports diagnostics with spans", () => {
     const result = parseTexMath(String.raw`x+\unknown{y}`);
 
-    expect(result.list.items).toHaveLength(4);
+    // The unknown command, with the argument it presumably takes, is shown as its source.
+    expect(result.list.items).toHaveLength(3);
     expect(result.diagnostics).toEqual([
       {
         severity: "warning",
@@ -3757,18 +3759,29 @@ describe("TeX math parser", () => {
     ]);
     expect(result.list.items[2]).toMatchObject({
       kind: "atom",
-      nucleus: { kind: "unsupported", command: String.raw`\unknown` },
+      nucleus: { kind: "text", text: String.raw`\unknown{y}`, nodes: [{ kind: "literal", text: String.raw`\unknown{y}`, sourceStart: 2, sourceEnd: 13 }] },
     });
+  });
+
+  it.each([
+    String.raw`x^`, String.raw`x^{2`, String.raw`\frac`, String.raw`\frac{1}{`, String.raw`\sqrt{y`,
+    String.raw`\left( x`, String.raw`\left`, String.raw`\left( x\right`,
+  ])("reads a formula still being typed as math, what is missing left empty (T3): %s", (source) => {
+    const result = parseTexMath(source);
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("incomplete-input");
+    expect(layoutTexMathList(result.list).supported).toBe(true);
   });
 
   it("reports malformed scripts and groups without throwing", () => {
     const result = parseTexMath(String.raw`^2 + \frac{x`);
 
     expect(result.list.items.length).toBeGreaterThan(0);
+    // (The fraction is still being typed: its open numerator and missing denominator are recovered.)
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "missing-script-target",
-      "missing-group",
-      "missing-group",
+      "incomplete-input",
+      "incomplete-input",
     ]);
   });
 

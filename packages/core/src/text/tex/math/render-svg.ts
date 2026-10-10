@@ -170,7 +170,12 @@ function renderMathGlyphPath(
   const scale = (font.atPt / 10) * TEX_MATH_SVG_UNITS_PER_PT;
   const x = translateTexHBoxX(originX, item.x);
   const y = translateTexHBoxY(originY, item.y);
+  // Source shown as it is (an unknown command) is marked as prose's literal runs are.
+  const literal = item.literal
+    ? `<g data-tex-literal="${escapeXmlAttribute(item.literal)}" data-source-start="${item.sourceSpan.start}" data-source-end="${item.sourceSpan.end}">`
+    : "";
   return [
+    literal,
     `<path data-tex-font="${escapeXmlAttribute(font.id)}"`,
     ` data-tex-glyph="${item.code}"`,
     ` data-source-start="${item.sourceSpan.start}"`,
@@ -181,6 +186,7 @@ function renderMathGlyphPath(
     ` d="${d}"`,
     ` transform="translate(${formatSvgNumber(x * TEX_MATH_SVG_UNITS_PER_PT)} ${formatSvgNumber(y * TEX_MATH_SVG_UNITS_PER_PT)}) scale(${formatSvgNumber(scale)})"`,
     ` data-tex-font-at-pt="${formatSvgNumber(font.atPt)}" />`,
+    literal ? "</g>" : "",
   ].join("");
 }
 

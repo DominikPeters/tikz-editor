@@ -35,13 +35,14 @@ Alpha
     expect(frames.every(frame => !("selected" in frame))).toBe(true);
   });
 
-  it("shortlists a silent display-math fallback even when paragraph literals and diagnostics are empty", async () => {
+  it("shortlists source painted in display math even when paragraph literals and diagnostics are empty", async () => {
     const source = String.raw`\documentclass{beamer}\begin{document}
 \begin{frame}\[\CorpusReviewUnknownMacro{x}=y\]\end{frame}\end{document}`;
     const render = await prepareBeamerDocument(source).renderFrame({ frameIndex: 0, step: 1 });
     const signals = beamerReviewSignals(render);
     expect(signals.literalSegments).toBe(0);
-    expect(signals.paintedFallbacks).toContainEqual(expect.objectContaining({ reason: "display-math-unsupported" }));
+    // (The unknown macro is shown as its source inside the formula.)
+    expect(signals.paintedFallbacks).toContainEqual(expect.objectContaining({ reason: "unsupported-command" }));
     expect(signals.flags).toContain("painted-literal-fallback");
     expect(signals.flags).toContain("paint-fallback-without-diagnostic");
     const clean = await prepareBeamerDocument(source.replaceAll("\\CorpusReviewUnknownMacro", "\\boldsymbol")).renderFrame({ frameIndex: 0, step: 1 });

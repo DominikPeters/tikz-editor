@@ -4338,7 +4338,7 @@ describe("TeX math hlist layout", () => {
   });
 
   it("reports unsupported constructs instead of producing approximate layout", () => {
-    for (const source of [String.raw`\unknown{x}`, String.raw`\left\unknown x\right)`]) {
+    for (const source of [String.raw`\not\unknown`, String.raw`\left\unknown x\right)`]) {
       const parsed = parseTexMath(source);
       expect(parsed.diagnostics).toMatchObject([
         {

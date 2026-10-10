@@ -2224,7 +2224,10 @@ export function texMBoxHListFromLayoutItems(params: {
         sourceEnd: item.sourceEnd,
       });
       for (const shapedItem of shaped.items) {
-        const layoutItem = texTextShapedItemToMBoxItem(shapedItem, item.font, cursor);
+        const shapedLayoutItem = texTextShapedItemToMBoxItem(shapedItem, item.font, cursor);
+        const layoutItem = item.literal && shapedLayoutItem.kind === "glyph"
+          ? { ...shapedLayoutItem, literal: item.literal.reason }
+          : shapedLayoutItem;
         items.push(layoutItem);
         cursor = texHBoxLocalX(roundTexPt(cursor + layoutItem.width));
         if (layoutItem.kind === "glyph") {

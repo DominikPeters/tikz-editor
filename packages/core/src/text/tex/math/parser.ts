@@ -718,15 +718,27 @@ class TexMathParser {
         `Unsupported math command ${token.text}.`,
         token.sourceSpan
       );
+      // Shown as its source in place, with the arguments that follow it, as in prose, so
+      // the rest stays math: a command half-typed in the source (`\fr`), or one no engine knows (T1, T3).
+      const literal = this.consumeUnknownArguments(token);
       return this.maybeParseScripts({
         kind: "atom",
         atomClass: "ord",
         nucleus: {
-          kind: "unsupported",
-          command: token.text,
-          sourceSpan: token.sourceSpan,
+          kind: "text",
+          text: literal.text,
+          nodes: [{
+            kind: "literal",
+            text: literal.text,
+            reason: "unsupported-command",
+            detail: token.text,
+            sourceStart: literal.sourceSpan.start,
+            sourceEnd: literal.sourceSpan.end,
+          }],
+          textSourceSpan: literal.sourceSpan,
+          sourceSpan: literal.sourceSpan,
         },
-        sourceSpan: token.sourceSpan,
+        sourceSpan: literal.sourceSpan,
       }, allowScripts);
     }
     if (token.kind === "group-open") {
@@ -2189,6 +2201,10 @@ class TexMathParser {
     if (rightCommand?.kind === "command" && commandName(rightCommand.text) === "right") {
       this.advance();
       rightDelimiter = this.parseDelimiter(rightCommand.sourceSpan, "\\right delimiter");
+    } else if (!rightCommand && leftDelimiter) {
+      // Still being typed: closed by an invisible `\right.` where the formula ends.
+      this.addIncomplete("\\left is closed where the formula ends.", leftCommand.sourceSpan);
+      rightDelimiter = { delimiter: ".", sourceSpan: this.emptyAtEnd().sourceSpan };
     } else {
       this.addDiagnostic(
         "error",
@@ -2279,12 +2295,17 @@ class TexMathParser {
   ): { delimiter: TexMathDelimiter; sourceSpan: TexMathSourceSpan } | null {
     this.skipSpaces();
     const token = this.peek();
-    if (!token || token.kind === "space" || token.kind === "group-close" || token.kind === "subscript" || token.kind === "superscript") {
+    if (!token) {
+      // Still being typed: an invisible delimiter, `\left.`, until it is.
+      this.addIncomplete(`The ${label} is still missing.`, fallbackSpan);
+      return { delimiter: ".", sourceSpan: this.emptyAtEnd().sourceSpan };
+    }
+    if (token.kind === "space" || token.kind === "group-close" || token.kind === "subscript" || token.kind === "superscript") {
       this.addDiagnostic(
         "error",
         "missing-delimiter",
         `Expected a ${label}.`,
-        token?.sourceSpan ?? fallbackSpan
+        token.sourceSpan
       );
       return null;
     }
@@ -4307,7 +4328,12 @@ class TexMathParser {
   ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
     this.skipSpaces();
     const next = this.peek();
-    if (next?.kind !== "group-open") {
+    if (!next) {
+      this.addIncomplete(`The ${label} is still empty.`, fallbackSpan);
+      const list = this.emptyAtEnd();
+      return { list, sourceSpan: list.sourceSpan };
+    }
+    if (next.kind !== "group-open") {
       this.addDiagnostic(
         "error",
         "missing-group",
@@ -4778,12 +4804,17 @@ class TexMathParser {
   ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
     this.skipSpaces();
     const next = this.peek();
-    if (!next || next.kind === "group-close" || next.kind === "subscript" || next.kind === "superscript") {
+    if (!next) {
+      this.addIncomplete(`The ${label} is still empty.`, fallbackSpan);
+      const list = this.emptyAtEnd();
+      return { list, sourceSpan: list.sourceSpan };
+    }
+    if (next.kind === "group-close" || next.kind === "subscript" || next.kind === "superscript") {
       this.addDiagnostic(
         "error",
         "missing-group",
         `Expected a math atom or braced ${label}.`,
-        next?.sourceSpan ?? fallbackSpan
+        next.sourceSpan
       );
       return null;
     }
@@ -4931,7 +4962,12 @@ class TexMathParser {
   private parseScriptArgument(operatorSpan: TexMathSourceSpan): TexMathScript | null {
     this.skipSpaces();
     const next = this.peek();
-    if (!next || next.kind === "group-close" || next.kind === "subscript" || next.kind === "superscript") {
+    if (!next) {
+      this.addIncomplete("The script is still empty.", operatorSpan);
+      const list = this.emptyAtEnd();
+      return { list, sourceSpan: spanUnion(operatorSpan, list.sourceSpan) };
+    }
+    if (next.kind === "group-close" || next.kind === "subscript" || next.kind === "superscript") {
       this.addDiagnostic(
         "error",
         "empty-script",
@@ -5047,6 +5083,10 @@ class TexMathParser {
     if (token?.kind === "group-close") {
       return this.advance();
     }
+    if (this.isAtEnd()) {
+      this.addIncomplete("A group left open closes where the formula ends.", openSpan);
+      return null;
+    }
     this.addDiagnostic(
       "error",
       "missing-group",
@@ -5054,6 +5094,62 @@ class TexMathParser {
       openSpan
     );
     return null;
+  }
+
+  /**
+   * An unknown command's source with the braced and bracketed arguments
+   * right after it, which it presumably takes (`\mathchoice{a}{b}{c}{d}`),
+   * as prose shows an unknown command's.
+   */
+  private consumeUnknownArguments(command: TexMathToken): { text: string; sourceSpan: TexMathSourceSpan } {
+    let text = command.text;
+    let end = command.sourceSpan.end;
+    for (;;) {
+      let cursor = this.index;
+      let spaces = "";
+      while (this.tokens[cursor]?.kind === "space") {
+        spaces += this.tokens[cursor].text;
+        cursor += 1;
+      }
+      const open = this.tokens[cursor];
+      const bracket = open?.kind === "character" && open.text === "[";
+      if (open?.kind !== "group-open" && !bracket) {
+        break;
+      }
+      let depth = 0;
+      let argument = "";
+      for (; cursor < this.tokens.length; cursor += 1) {
+        const token = this.tokens[cursor];
+        argument += token.text;
+        depth += token.kind === "group-open" ? 1 : token.kind === "group-close" ? -1 : 0;
+        if (bracket ? depth === 0 && token.kind === "character" && token.text === "]" : depth === 0) {
+          break;
+        }
+      }
+      if (cursor >= this.tokens.length) {
+        // An argument still open where the formula ends: it is the command's too.
+        cursor = this.tokens.length - 1;
+      }
+      text += spaces + argument;
+      end = this.tokens[cursor].sourceSpan.end;
+      this.index = cursor + 1;
+    }
+    return { text, sourceSpan: { start: command.sourceSpan.start, end } };
+  }
+
+  /**
+   * Partial math (T3): a formula that ends mid-construct (`\frac{1}{`,
+   * `x^`, `\left(` with no `\right`) is being typed, so what is missing
+   * is left empty, as TeX's own recovery inserts it, and it lays out as
+   * math rather than falling back to source.
+   */
+  private addIncomplete(message: string, sourceSpan: TexMathSourceSpan): void {
+    this.addDiagnostic("warning", "incomplete-input", message, sourceSpan);
+  }
+
+  /** An empty list where the formula ends. */
+  private emptyAtEnd(): TexMathList {
+    return emptyList(this.sourceOffset + this.sourceLength);
   }
 
   private addDiagnostic(

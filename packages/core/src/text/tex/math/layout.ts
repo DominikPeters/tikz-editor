@@ -122,6 +122,8 @@ export interface TexMathGlyphLayoutItem {
   readonly sourceCharacterSpans?: readonly TexMathSourceSpan[];
   /** Optional glyph-local paint for styled prose embedded in an LR box. */
   readonly color?: string;
+  /** Source shown as it is (an unknown command), by why: the SVG marks it as prose's literal runs are. */
+  readonly literal?: string;
 }
 
 export interface TexMathGlueLayoutItem {
