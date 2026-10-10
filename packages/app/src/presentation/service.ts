@@ -1,0 +1,167 @@
+import { getActiveEditorPlatform } from "../platform/current";
+import { useEditorStore } from "../store/store";
+import type { DocumentSession } from "../store/types";
+import { createBrowserPresentationApi } from "./browser-platform";
+import { PresentationController } from "./controller";
+import { BeamerPresentationRenderer, remapPresentationCursor } from "./renderer";
+import type { PlatformPresentationApi, PresentationCommand, PresentationMessage, PresentationOptions, PresentationSnapshot, PresentationTransport, PresentationWindows } from "./types";
+
+const OPTIONS_KEY = "tikz-editor:presentation-options";
+const DEFAULT_OPTIONS: PresentationOptions = { mode: "display", audienceDisplay: null, presenterDisplay: null, showPresenter: true, countdownMinutes: null };
+export function loadPresentationOptions(): PresentationOptions {
+  try {
+    const raw = getActiveEditorPlatform().persistence.load(OPTIONS_KEY);
+    const saved = raw ? JSON.parse(raw) as Partial<PresentationOptions> : {};
+    return { mode: saved.mode === "window" || saved.mode === "rehearse" ? saved.mode : "display",
+      audienceDisplay: typeof saved.audienceDisplay === "string" ? saved.audienceDisplay : null,
+      presenterDisplay: typeof saved.presenterDisplay === "string" ? saved.presenterDisplay : null,
+      showPresenter: typeof saved.showPresenter === "boolean" ? saved.showPresenter : true,
+      countdownMinutes: typeof saved.countdownMinutes === "number" && saved.countdownMinutes > 0 && saved.countdownMinutes <= 1440 ? saved.countdownMinutes : null };
+  } catch { return { ...DEFAULT_OPTIONS }; }
+}
+export function savePresentationOptions(options: PresentationOptions): void {
+  try { getActiveEditorPlatform().persistence.save(OPTIONS_KEY, JSON.stringify(options)); }
+  catch { /* Presenting does not depend on writable preferences. */ }
+}
+
+type ServiceState = { snapshot: PresentationSnapshot | null; focus: "editor" | "audience" | "presenter"; error: string | null };
+export class PresentationService {
+  private state: ServiceState = { snapshot: null, focus: "editor", error: null };
+  private listeners = new Set<() => void>();
+  private controller: PresentationController | null = null;
+  private renderer: BeamerPresentationRenderer | null = null;
+  private transport: PresentationTransport | null = null;
+  private windows: PresentationWindows | null = null;
+  private api: PlatformPresentationApi | null = null;
+  private unsubscribe: (() => void) | null = null;
+  private unsubscribeController: (() => void) | null = null;
+  private revision = 0;
+  private updateTimer: ReturnType<typeof setTimeout> | null = null;
+  private observedDocument: DocumentSession | null = null;
+  getState = (): ServiceState => this.state;
+  subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  private update(patch: Partial<ServiceState>): void { this.state = { ...this.state, ...patch }; for (const listener of this.listeners) listener(); }
+  clearError = (): void => { this.update({ error: null }); };
+  focusEditor = (): void => { this.update({ focus: "editor" }); };
+  private publish = (): void => {
+    const snapshot = this.controller?.getSnapshot();
+    if (!snapshot) return;
+    this.update({ snapshot });
+    void this.transport?.send({ type: "snapshot", sessionId: snapshot.sessionId, snapshot });
+  };
+  private receive = (message: PresentationMessage): void => {
+    if (message.sessionId !== this.controller?.getSnapshot().sessionId) return;
+    if (message.type === "hello") {
+      if (message.role === "presenter") this.controller.setPresenterVisible(true);
+      if (message.role === "audience") this.controller.setOutputAvailable(true);
+      this.publish();
+    } else if (message.type === "command") this.command(message.command);
+    else if (message.type === "focus") this.update({ focus: message.role });
+    else if (message.type === "closed") {
+      if (message.role === "presenter") this.controller.setPresenterVisible(false);
+      else this.controller.setOutputAvailable(false);
+    }
+  };
+
+  async start(document: DocumentSession, options: PresentationOptions, frame: number): Promise<void> {
+    if (this.controller) return;
+    savePresentationOptions(options);
+    const api = getActiveEditorPlatform().presentation ?? createBrowserPresentationApi();
+    const sessionId = crypto.randomUUID();
+    const emptyRenderer = { frames: [], page: () => Promise.reject(new Error("No document")), pageCount: () => Promise.resolve(0) };
+    const controller = new PresentationController({ sessionId, documentId: document.id, title: document.title, renderer: emptyRenderer,
+      budgetMs: options.countdownMinutes == null ? null : options.countdownMinutes * 60_000 });
+    this.controller = controller; this.api = api; this.observedDocument = document;
+    this.unsubscribeController = controller.subscribe(this.publish);
+    this.update({ snapshot: controller.getSnapshot(), error: null });
+    const connection = api.connect(sessionId, this.receive);
+    const opening = api.open(sessionId, options, () => { controller.setOutputAvailable(false); });
+    // Attach rejection handlers immediately; either native operation can fail first.
+    try {
+      const [transport, windows] = await Promise.all([connection, opening]);
+      if (this.controller !== controller) { transport.close(); await windows.close(); return; }
+      this.transport = transport; this.windows = windows;
+      controller.setOutputAvailable(options.mode !== "rehearse");
+      void api.keepAwake?.(true).catch(error => { console.info("[tikz-editor] Couldn’t prevent display sleep", error); });
+      const renderer = await BeamerPresentationRenderer.create(document.source, document.fileRef);
+      if (this.controller !== controller) return;
+      this.renderer = renderer;
+      await controller.replace(renderer, { frame, step: 1, continuation: 1 }, document.title);
+      this.unsubscribe = useEditorStore.subscribe(state => {
+        const current = state.documents[document.id];
+        if (!current) { void this.stop(); return; }
+        controller.setTitle(current.title);
+        if (current.source !== this.observedDocument?.source || current.fileRef !== this.observedDocument?.fileRef) {
+          this.observedDocument = current;
+          this.refresh();
+        }
+      });
+      // Edits made while windows/assets were opening are adopted too.
+      const current = useEditorStore.getState().documents[document.id];
+      if (current && current.source !== document.source) { this.observedDocument = current; this.refresh(); }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Couldn’t start the presentation.";
+      // Collect handles even when the other operation rejects, then release them.
+      const resources = await Promise.allSettled([connection, opening]);
+      if (resources[0].status === "fulfilled") resources[0].value.close();
+      if (resources[1].status === "fulfilled") await resources[1].value.close();
+      await this.stop();
+      this.update({ error: message });
+    }
+  }
+
+  refresh = (): void => {
+    if (!this.controller) return;
+    this.revision++;
+    if (this.updateTimer) clearTimeout(this.updateTimer);
+    const revision = this.revision;
+    this.updateTimer = setTimeout(() => { this.updateTimer = null; void this.replaceDocument(revision); }, 120);
+  };
+  private async replaceDocument(revision: number): Promise<void> {
+    const controller = this.controller, previous = this.renderer;
+    const doc = controller ? useEditorStore.getState().documents[controller.getSnapshot().documentId] : null;
+    if (!controller || !previous || !doc) return;
+    try {
+      const next = await BeamerPresentationRenderer.create(doc.source, doc.fileRef);
+      if (revision !== this.revision || this.controller !== controller) return;
+      const cursor = controller.getSnapshot().current?.cursor ?? { frame: 0, step: 1, continuation: 1 };
+      const mapped = remapPresentationCursor(previous, next, cursor);
+      this.renderer = next;
+      await controller.replace(next, mapped, doc.title);
+    } catch (error) {
+      if (revision === this.revision && this.controller === controller) {
+        console.info("[tikz-editor] Couldn’t update presentation source", error);
+        controller.setError("Couldn’t update the slides. The last valid slide is still displayed.");
+      }
+    }
+  }
+
+  command = (command: PresentationCommand): void => {
+    const controller = this.controller;
+    if (!controller) return;
+    if (command.type === "stop") { void this.stop(); return; }
+    if (command.type === "show-presenter" || command.type === "recover-output" || command.type === "swap-displays") {
+      const action = command.type === "show-presenter" ? this.windows?.showPresenter() : command.type === "recover-output" ? this.windows?.recoverOutput(null) : this.windows?.swapDisplays();
+      void Promise.resolve(action).catch(error => { controller.setError(error instanceof Error ? error.message : "Couldn’t change presentation windows."); });
+      return;
+    }
+    void controller.command(command);
+  };
+  async recoverOutput(displayId: string | null): Promise<void> { await this.windows?.recoverOutput(displayId); }
+  async stop(): Promise<void> {
+    const controller = this.controller;
+    if (!controller) return;
+    controller.stop();
+    this.unsubscribe?.(); this.unsubscribe = null;
+    this.unsubscribeController?.(); this.unsubscribeController = null;
+    this.revision++;
+    if (this.updateTimer) clearTimeout(this.updateTimer);
+    this.updateTimer = null;
+    const transport = this.transport, windows = this.windows, api = this.api;
+    this.controller = null; this.renderer = null; this.transport = null; this.windows = null; this.api = null;
+    this.update({ snapshot: null, focus: "editor" });
+    try { await windows?.close(); }
+    finally { transport?.close(); await api?.keepAwake?.(false); }
+  }
+}
+export const presentationService = new PresentationService();

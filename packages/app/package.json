@@ -41,6 +41,10 @@
     "./workspace": {
       "types": "./src/ui/workspace-apply.ts",
       "import": "./src/ui/workspace-apply.ts"
+    },
+    "./presentation": {
+      "types": "./src/presentation/index.ts",
+      "import": "./src/presentation/index.ts"
     }
   },
   "dependencies": {
