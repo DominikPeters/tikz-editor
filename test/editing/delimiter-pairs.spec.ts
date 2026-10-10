@@ -49,11 +49,14 @@ describe("delimiter pairs around what is written", () => {
     press(target, String.raw`\left(`);
     expect(marked(target)).toBe(String.raw`$f+\left(‸\right)\lambda_i\nabla g_i(x^\star)+h$`);
     expect(target.pendingCloser).toBe(target.selection.focus);
-    // Item by item: `\lambda_i`, `\nabla`, `g_i`, then the plain `(`, `x^\star`, `)`.
+    // Item by item: `\lambda_i`, `\nabla`, `g_i`, then the plain `(x^\star)` as one.
     press(target, "→ → →");
     expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i‸\right)(x^\star)+h$`);
-    press(target, "→ → →");
+    press(target, "→");
     expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)‸\right)+h$`);
+    press(target, "←");
+    expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i‸\right)(x^\star)+h$`);
+    press(target, "→");
     press(target, "⇥");
     expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)\right)‸+h$`);
     expect(target.pendingCloser).toBeUndefined();
@@ -72,6 +75,8 @@ describe("delimiter pairs around what is written", () => {
     ["Esc accepts it where it stands", String.raw`$a‸+b$`, String.raw`\left( → Esc`, String.raw`$a\left(+‸\right)b$`, false],
     ["⌫ in the empty pair removes it", String.raw`$a‸+b$`, String.raw`\left( ⌫`, String.raw`$a‸+b$`, false],
     ["into a construct it never goes", String.raw`$a‸\frac{1}{2}+b$`, String.raw`\left( →`, String.raw`$a\left(\frac{1}{2}‸\right)+b$`, true],
+    ["a plain (…) goes over as one, nested ones too", String.raw`$‸f(g(x),[y])+1$`, String.raw`\left( → →`, String.raw`$\left(f(g(x),[y])‸\right)+1$`, true],
+    ["an unmatched ( goes over alone", String.raw`$‸(a+b$`, String.raw`\left( →`, String.raw`$\left((‸\right)a+b$`, true],
     ["a control word left behind keeps apart", String.raw`$\alpha‸x+b$`, String.raw`\left( →`, String.raw`$\alpha\left(x‸\right)+b$`, true],
     ["a named delimiter", String.raw`$a‸$`, String.raw`\left\langle␣x`, String.raw`$a\left\langle x‸\right\rangle$`, true],
     ["a control-symbol delimiter", String.raw`$a‸$`, String.raw`\left\{x`, String.raw`$a\left\{x‸\right\}$`, true],

@@ -183,7 +183,9 @@ describe.skipIf(!ENABLED)("keystroke fuzzing against LuaLaTeX", () => {
       const fuzz = generateCase(random, starts, 24);
       const run = runCase(fuzz);
       // Contract failures are keystroke-fuzz.spec.ts's to report.
-      if (!run.failure && run.finalText !== fuzz.start.text && judgeable(fuzz.start, run.finalText, run.picked)) {
+      // The source lens writes raw source (R13): TeX judges the canvas's edits, not what was typed in it.
+      const lensed = run.tokens.some((token) => token.startsWith("@lens"));
+      if (!run.failure && !lensed && run.finalText !== fuzz.start.text && judgeable(fuzz.start, run.finalText, run.picked)) {
         cases.push({ index, fuzz, run });
       }
     }

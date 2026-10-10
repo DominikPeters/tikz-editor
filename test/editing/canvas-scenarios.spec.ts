@@ -140,6 +140,7 @@ describe("canvas editing: paste (O6)", () => {
     ["a whole formula pasted into math loses its delimiters", R`⟦$x$⟧ and $y+‸$`, undefined, R`$x$ and $y+x‸$`],
     ["prose pasted into math is \\text", R`⟦word⟧ $x‸$`, undefined, R`word $x\text{word}‸$`],
     ["a copy through a style keeps it whole", R`\textbf{a⟦b} c⟧ ‸`, undefined, R`\textbf{ab} c \textbf{b} c‸`],
+    ["a caption's words are copied without the caption", R`\caption{A ⟦long⟧ title} and ‸`, undefined, R`\caption{A long title} and long‸`],
     ["items pasted outside a list fall back to their text", "\\begin{itemize}\n⟦\\item One\n\\item Two⟧\n\\end{itemize}\nx‸", undefined, "\\begin{itemize}\n\\item One\n\\item Two\n\\end{itemize}\nxOne Two‸"],
     ["items pasted into a list stay items", "\\begin{itemize}\n⟦\\item One\n⟧\\item Two‸\n\\end{itemize}", undefined, "\\begin{itemize}\n\\item One\n\\item Two\\item One\n‸\n\\end{itemize}"],
   ] as const)("%s", (_, body, plain, expected, options?: { readonly title?: boolean }) => {

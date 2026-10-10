@@ -1242,10 +1242,9 @@ Intro $f+g(x)+h$ word.
   await expect.poll(() => readStoreSource(page)).toBe(source.replace("$f+g(x)", String.raw`$f+\left(\right)g(x)`));
   await expect(hint).toContainText(String.raw`\right)`);
 
-  // `g`, `(`, `x`, `)`: the `\right)` goes along over what is already written.
-  for (let step = 0; step < 4; step += 1) {
-    await page.keyboard.press("ArrowRight");
-  }
+  // `g`, then `(x)` as one: the `\right)` goes along over what is already written.
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
   const wrapped = source.replace("$f+g(x)+h$", String.raw`$f+\left(g(x)\right)+h$`);
   await expect.poll(() => readStoreSource(page)).toBe(wrapped);
   await expect(hint).toBeVisible();

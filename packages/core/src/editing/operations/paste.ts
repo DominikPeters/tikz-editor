@@ -52,6 +52,9 @@ const UNBALANCED = new Set(["unclosed-group", "unclosed-math", "unclosed-environ
 /** Constructs a copy reopens and closes when it starts or ends inside them. */
 const CARRIED_KINDS = new Set(["list", "item"]);
 
+/** Wrappers that are no formatting: a fragment of their text is copied without them (a caption's words do not make a caption). */
+const UNCARRIED_COMMANDS = new Set(["caption"]);
+
 /**
  * The payload of a copy of `from`–`to` (a promoted selection): source with
  * the wrappers and lists it cuts through completed, and its plain text.
@@ -62,7 +65,8 @@ export function copyRange(view: EditView, from: number, to: number, commands: Co
     return null;
   }
   const text = tree.text;
-  const carried = (node: NodeId) => CARRIED_KINDS.has(tree.nodes[node].kind) || view.role(node) === "transparent";
+  const carried = (node: NodeId) => CARRIED_KINDS.has(tree.nodes[node].kind) ||
+    (view.role(node) === "transparent" && !UNCARRIED_COMMANDS.has(tree.nodes[node].command ?? ""));
   const slotAround = (node: NodeId, offset: number) => tree.nodes[node].slots
     .map((slot) => tree.slots[slot])
     .find((slot) => slot.presence === "present" && slot.contentSpan.from <= offset && offset <= slot.contentSpan.to);

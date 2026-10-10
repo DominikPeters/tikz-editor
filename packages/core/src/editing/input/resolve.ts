@@ -64,7 +64,7 @@ import {
   type Position,
   type SelectionEnds,
 } from "../position/index.js";
-import type { EditNode, NodeId } from "../tree/types.js";
+import type { EditNode, NodeId, SlotId } from "../tree/types.js";
 import {
   applyPatches,
   applyTransaction,
@@ -158,6 +158,20 @@ const UNCOMMITTABLE = new Set(["verb", "lstinline", "begin", "end", "def"]);
 
 /** Commands that structure flow text, never written into math. */
 const BLOCK_COMMANDS = new Set(["item", "begin", "end", "par", "bibitem"]);
+
+/** Overlay commands that fail inside `\operatorname` ("Limit controls must follow a math operator"); `\only` and `\alt` do not. */
+const UNCOVERING = new Set(["uncover", "visible", "invisible"]);
+
+/** Whether a slot is inside an argument of a command of that name. */
+function insideCommand(view: EditView, slot: SlotId, command: string): boolean {
+  const { tree } = view;
+  for (let current: SlotId | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
+    if (tree.nodes[tree.slots[current].node].command === command) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Table rules, which only start a table's rows. */
 const TABLE_RULES = new Set(["hline", "cline", "toprule", "midrule", "bottomrule", "cmidrule", "addlinespace", "specialrule"]);
@@ -255,6 +269,35 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
     case "redo":
       return context.interaction.chip || context.interaction.picker ? resolver.escape() : { kind: "history", direction: "redo" };
   }
+}
+
+/**
+ * Next to an offset in a slot, a plain `(` (or `[`) with its match later in
+ * the same slot: the offset after the match. Backward, from a `)` before
+ * the offset: the offset of its `(`. Null when there is none.
+ */
+function matchingPlainBracket(view: EditView, slot: SlotId, at: number, forward: boolean): number | null {
+  const { tree } = view;
+  const children = tree.slots[slot].children.map((id) => tree.nodes[id]);
+  const glyph = (node: EditNode) => tree.text.slice(node.span.from, node.span.to);
+  const start = forward
+    ? children.findIndex((node) => node.span.from >= at)
+    : children.length - 1 - [...children].reverse().findIndex((node) => node.span.to <= at);
+  const first = children[start];
+  const pairs: Readonly<Record<string, string>> = forward ? { "(": ")", "[": "]" } : { ")": "(", "]": "[" };
+  const close = first ? pairs[glyph(first)] : undefined;
+  if (!first || close == null) {
+    return null;
+  }
+  let depth = 0;
+  for (let index = start; index >= 0 && index < children.length; index += forward ? 1 : -1) {
+    const text = glyph(children[index]);
+    depth += text === glyph(first) ? 1 : text === close ? -1 : 0;
+    if (depth === 0) {
+      return forward ? children[index].span.to : children[index].span.from;
+    }
+  }
+  return null;
 }
 
 /**
@@ -1409,7 +1452,11 @@ class Resolver {
       const word = alphanumericWordEdge(unwrapped, at, forward);
       target = forward ? stops.find((stop) => stop >= word) ?? stops.at(-1) : [...stops].reverse().find((stop) => stop <= word) ?? stops[0];
     } else {
-      target = forward ? stops.find((stop) => stop > at) : [...stops].reverse().find((stop) => stop < at);
+      // A plain `(…)` or `[…]` already written goes over as one: `g_i(x^\star)` is `g_i` and then its parentheses.
+      const group = matchingPlainBracket(loose, content, at, forward);
+      target = group != null
+        ? (forward ? stops.find((stop) => stop >= group) : [...stops].reverse().find((stop) => stop <= group))
+        : forward ? stops.find((stop) => stop > at) : [...stops].reverse().find((stop) => stop < at);
     }
     if (target == null || target === at) {
       if (forward) {
@@ -1525,6 +1572,10 @@ class Resolver {
     }
     if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {
       // Outside a list, TeX has a "lonely \item".
+      return this.keepSelection(NO_INTERACTION);
+    }
+    if (UNCOVERING.has(name) && insideCommand(view, caret.slot, "operatorname")) {
+      // beamer's `\uncover` family is set with `\limits`, which an operator's name has no operator for.
       return this.keepSelection(NO_INTERACTION);
     }
     if (inBoldMath(view, caret.slot) && breaksBoldMath(commands, name)) {
