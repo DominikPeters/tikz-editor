@@ -207,6 +207,8 @@ export interface TexMathChildHListLayoutItem {
   readonly sourceSpan: TexMathSourceSpan;
   /** Optional paint inherited by this child only. */
   readonly color?: string;
+  /** The size its characters are set at, where known (see TexMathHList). */
+  readonly atPt?: TexLength;
   readonly items: readonly TexMathHListItem[];
   readonly multlineShove?: "left" | "right";
   readonly intertextsBefore?: readonly TexMathAlignedIntertext[];
@@ -215,6 +217,8 @@ export interface TexMathChildHListLayoutItem {
 export interface TexMathHList {
   readonly kind: "math-hlist";
   readonly style: TexMathStyle;
+  /** The size its style sets characters at, where known: a caret in it is that tall even when it is empty. */
+  readonly atPt?: TexLength;
   readonly width: TexLength;
   readonly height: TexLength;
   readonly depth: TexLength;
@@ -704,6 +708,7 @@ function layoutTexMathListContents(list: TexMathList, options: TexMathLayoutOpti
   const hlist = mathHList({
     kind: "math-hlist",
     style,
+    atPt: texLength(fontProfile.resolveMathStyleAtPt(style, baseAtPt)),
     width: roundTexPt(cursor),
     height: roundTexPt(height),
     depth: roundTexPt(depth),
@@ -7656,6 +7661,7 @@ function childHList(
     height: hlist.height,
     depth: hlist.depth,
     sourceSpan,
+    ...(hlist.atPt !== undefined ? { atPt: hlist.atPt } : {}),
     items: hlist.items,
   });
 }

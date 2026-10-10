@@ -123,3 +123,37 @@ describe("caret and selection geometry around commands and big operators", () =>
     }
   });
 });
+
+describe("the caret in a script just opened", () => {
+  it.each([String.raw`a+\sum^{}_j\nu_j`, String.raw`a+\sum_j^{}\nu_j`])("stands where a big operator's limit goes, a script line tall: %s", async (formula) => {
+    const source = `\\documentclass{beamer}\n\\begin{document}\n\\begin{frame}{T}\nText\n\\[ ${formula} \\]\n\\end{frame}\n\\end{document}\n`;
+    const start = source.indexOf(formula);
+    const frame = await renderBeamerFrame(source, { frameIndex: 0 });
+    const find = (candidate: BeamerParagraphLayout) => flattenPositionedTexVListItems(candidate.vlistLayout.items).find((item) => item.item.kind === "display-math");
+    const display = frame.layout.paragraphs.find((candidate) => find(candidate))!;
+    const item = find(display)!.item;
+    if (item.kind !== "display-math") throw new Error("Expected the display.");
+    const context = createTextLayoutContext({
+      getParagraphReports: () => [display.report],
+      getVListLayouts: () => [{ paragraphId: display.paragraphId, layout: display.vlistLayout }],
+      getVListLayout: () => display.vlistLayout,
+    });
+    const params = {
+      paragraphId: display.paragraphId, sourceCoordinateSpace: "document" as const,
+      sourceText: source.slice(display.sourceSpan.from, display.sourceSpan.to),
+      sourceTextStartOffset: documentSourceOffset(display.sourceSpan.from),
+      containerElement: { tagName: "g", getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) } as unknown as Element,
+    };
+    const caret = async (offset: number) => {
+      const point = await getKnuthPlassPointFromOffset(context, { ...params, offset: documentSourceOffset(start + offset) });
+      return { x: point.clientPoint!.x, top: Math.min(point.caretTop!.y, point.caretBottom!.y), bottom: Math.max(point.caretTop!.y, point.caretBottom!.y) };
+    };
+    const sum = await caret(formula.indexOf(String.raw`\sum`));
+    const inside = await caret(formula.indexOf("^{") + 2);
+    const subscript = await caret(formula.indexOf("_j") + 1);
+    // Above the operator, not through it, and as tall as the caret in its subscript.
+    expect(inside.bottom).toBeLessThanOrEqual(sum.top + 1e-6);
+    expect(inside.bottom - inside.top).toBeCloseTo(subscript.bottom - subscript.top, 6);
+    expect(inside.x).toBeGreaterThan(sum.x);
+  });
+});

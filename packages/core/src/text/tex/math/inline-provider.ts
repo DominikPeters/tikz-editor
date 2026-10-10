@@ -640,6 +640,17 @@ function addMathItemCaretMapEntries(
         item.sourceSpan,
         50
       ));
+      if (item.items.length === 0 && item.atPt !== undefined && mathConstructBoundaryHListRoles.has(item.role)) {
+        // An empty script (`\sum^{‸}` just typed): the caret inside it stands where its
+        // contents go, a line of its own size tall.
+        const caretExtent = {
+          top: texHBoxY(roundTexPt(y - item.atPt * 0.75)),
+          bottom: texHBoxY(roundTexPt(y + item.atPt * 0.25)),
+        };
+        for (let offset = item.sourceSpan.start + 1; offset < item.sourceSpan.end; offset += 1) {
+          addEntry({ ...mathCaretEntry(offset, x, y, item.height, item.depth, hitBounds, kind, item.sourceSpan, 60), caretExtent });
+        }
+      }
       addMathItemCaretMapEntries(item.items, x, y, fontProfile, addEntry);
       continue;
     }
