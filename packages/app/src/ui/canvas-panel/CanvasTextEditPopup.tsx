@@ -14,6 +14,8 @@ import type { TextEditingSession } from "./types";
 import css from "./CanvasPanel.module.css";
 import type { CanvasContextOutline } from "./useCanvasContextOutlines";
 import type { CanvasValueEditorModel } from "./CanvasValueEditor";
+import type { CanvasSourceLensModel } from "./CanvasSourceLens";
+import type { CanvasRecoveryGhost } from "./useCanvasRecoveryGhosts";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -140,6 +142,20 @@ export type CanvasTextEditViewModel = {
   valueEditor: CanvasValueEditorModel | null;
   /** Opens the value editor for the values on an outline's tag. */
   onEditValues: (outline: CanvasContextOutline) => void;
+  /** The source lens (R13), while it is open. */
+  sourceLens: CanvasSourceLensModel | null;
+  /** Closers recovery put in virtually (T2), drawn faintly where they belong. */
+  recoveryGhosts: readonly CanvasRecoveryGhost[];
+  /** The quick fix for them (T6). */
+  recoveryFix: CanvasRecoveryFixModel | null;
+};
+
+/** The pill that writes the missing closers in (T6), viewport px. */
+export type CanvasRecoveryFixModel = {
+  readonly label: string;
+  readonly left: number;
+  readonly top: number;
+  readonly onApply: () => void;
 };
 
 const GLYPH_CLASS_NAMES: Record<

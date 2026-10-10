@@ -488,7 +488,10 @@ function contentRule(intent: Intent | null, hadSelection: boolean, chipOpen: boo
     case "undo":
     case "redo":
     case "compose":
+    case "setLensText":
+    case "insertClosers":
       return "any";
+    case "openLens":
     case "tab":
     case "move":
     case "format":

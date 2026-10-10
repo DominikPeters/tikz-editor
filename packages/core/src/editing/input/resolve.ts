@@ -28,6 +28,8 @@ import {
   copyRange,
   commitWithValues,
   editValues,
+  lensEdit,
+  lensSpan,
   needsValues,
   valueEditorFields,
   deadBreaks,
@@ -186,6 +188,9 @@ export function needsFreshLayout(intent: Intent, surface: InputSurface, _isScope
     case "color":
     case "pickValues":
     case "setValues":
+    case "openLens":
+    case "setLensText":
+    case "insertClosers":
     case "undo":
     case "redo":
       return false;
@@ -230,6 +235,12 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
       return resolver.pickValues(intent.values, intent.viaBrace);
     case "setValues":
       return resolver.setValues(intent.edits);
+    case "openLens":
+      return resolver.openLens();
+    case "setLensText":
+      return resolver.setLensText(intent.text, intent.caret);
+    case "insertClosers":
+      return resolver.insertClosers(intent.closers);
     case "escape":
       return resolver.escape();
     case "undo":
@@ -834,9 +845,74 @@ class Resolver {
     );
   }
 
-  /** Esc: closes the command chip without writing anything. */
+  /** Esc: closes the command chip, value editor or lens; what the lens wrote stays. */
   escape(): IntentResolution {
-    return this.context.interaction.chip || this.context.interaction.picker ? this.keepSelection(NO_INTERACTION) : NONE;
+    const { chip, picker, lens } = this.context.interaction;
+    return chip || picker || lens ? this.keepSelection(NO_INTERACTION) : NONE;
+  }
+
+  /** ⌘E: the source lens (R13) on the selection, or on the innermost construct around the caret. */
+  openLens(): IntentResolution {
+    const view = this.view;
+    if (!view) {
+      return NONE;
+    }
+    return this.keepSelection({ lens: { span: lensSpan(view, this.context.anchor, this.context.focus) } });
+  }
+
+  /**
+   * The lens's text after an edit, written over its span as typed: the
+   * lens is a literal surface, so none of the canvas's input rules or
+   * repairs apply. The canvas caret follows the lens's.
+   */
+  setLensText(next: string, caret: number): IntentResolution {
+    const lens = this.context.interaction.lens;
+    if (!lens) {
+      return NONE;
+    }
+    const { patch, span } = lensEdit(this.context.text, lens.span, next);
+    const offset = span.from + Math.max(0, Math.min(caret, next.length));
+    return {
+      kind: "transaction",
+      transaction: {
+        baseRevision: this.context.revision,
+        patches: patch ? [patch] : [],
+        selection: { kind: "absolute", anchor: offset, focus: offset },
+        undo: { group: "typing-run", run: "lens" },
+        interaction: { lens: { span } },
+      },
+    };
+  }
+
+  /** The quick fix (T6): the closers recovery put in virtually, written in, as one step. */
+  insertClosers(closers: readonly { readonly at: number; readonly text: string }[]): IntentResolution {
+    const { text } = this.context;
+    const patches = closers
+      .filter((closer) => closer.at >= 0 && closer.at <= text.length)
+      .map((closer) => ({ from: closer.at, to: closer.at, insert: closer.text }))
+      .sort((left, right) => left.from - right.from);
+    if (patches.length === 0) {
+      return NONE;
+    }
+    // Closers at one offset go in innermost first, as the recovery lists them outermost first.
+    const merged: BufferPatch[] = [];
+    for (const patch of patches) {
+      const last = merged.at(-1);
+      if (last?.from === patch.from) {
+        merged[merged.length - 1] = { ...last, insert: patch.insert + last.insert };
+      } else {
+        merged.push(patch);
+      }
+    }
+    return {
+      kind: "transaction",
+      transaction: {
+        baseRevision: this.context.revision,
+        patches: merged,
+        selection: { kind: "mapped", anchor: { offset: this.context.anchor, assoc: -1 }, focus: { offset: this.context.focus, assoc: -1 } },
+        undo: { group: "own-step" },
+      },
+    };
   }
 
   /**

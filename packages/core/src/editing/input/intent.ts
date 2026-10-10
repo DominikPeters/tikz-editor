@@ -61,9 +61,15 @@ export type IntentBody =
   | { readonly type: "pickValues"; readonly values: readonly string[]; readonly viaBrace: boolean }
   /** Values already written, edited: each named by its content span (buffer-local). */
   | { readonly type: "setValues"; readonly edits: readonly { readonly span: Span; readonly text: string }[] }
+  /** ⌘E: the source lens (R13), on the innermost construct around the caret or the selection. */
+  | { readonly type: "openLens" }
+  /** The lens's text after an edit, and its caret there: written over the lens span. */
+  | { readonly type: "setLensText"; readonly text: string; readonly caret: number }
+  /** Write the closers recovery put in virtually (T6), at buffer-local offsets. */
+  | { readonly type: "insertClosers"; readonly closers: readonly { readonly at: number; readonly text: string }[] }
   | { readonly type: "undo" }
   | { readonly type: "redo" }
-  /** Esc while something transient is open (the command chip); the session itself handles Esc otherwise. */
+  /** Esc while something transient is open (the command chip, value editor or lens); the session itself handles Esc otherwise. */
   | { readonly type: "escape" };
 
 export type Intent = IntentBody & {

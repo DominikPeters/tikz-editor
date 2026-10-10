@@ -34,6 +34,17 @@ export type InteractionState = {
   readonly pending?: number;
   /** The value editor (O8), open for a command that is not written until its values are filled. */
   readonly picker?: PickerState;
+  /** The source lens (R13), open on a span of the buffer. */
+  readonly lens?: LensState;
+};
+
+/**
+ * The source lens: raw source of a span edited in place. Its edits carry
+ * it on with the span they leave; Esc, or any other edit, closes it.
+ */
+export type LensState = {
+  /** The span it edits (buffer offsets). */
+  readonly span: { readonly from: number; readonly to: number };
 };
 
 /**

@@ -43,6 +43,8 @@ import {
   type ClipboardPayload
 } from "@tikz-editor/core/editing/operations/index";
 import type { CanvasValueEditorModel } from "./CanvasValueEditor";
+import type { CanvasSourceLensModel } from "./CanvasSourceLens";
+import { missingClosers, useCanvasRecoveryGhosts } from "./useCanvasRecoveryGhosts";
 import {
   chipCandidates,
   copySelection,
@@ -139,6 +141,7 @@ import {
 import type {
   CanvasCommandChipModel,
   CanvasFocusInputModel,
+  CanvasRecoveryFixModel,
   CanvasScopeEditBorder,
   CanvasTextEditPopupModel,
   CanvasTextEditViewModel,
@@ -1619,6 +1622,11 @@ export function useCanvasTextEditSession(
         intentScheduler.submit(decision.intent);
         return;
       case "focusBar":
+        // ⌘E: the source lens in a scope session (R13); the docked bar elsewhere.
+        if (surface === "canvas" && stateRef.current.session?.isScopeSession) {
+          intentScheduler.submit({ type: "openLens", origin: "keyboard", repeat: false });
+          return;
+        }
         intentScheduler.flush();
         dispatchCanvasTextEditAction({ type: "focus_surface", surface: "bar" });
         return;
@@ -1637,8 +1645,9 @@ export function useCanvasTextEditSession(
           return;
         }
         // An open command chip closes first, writing nothing (R4).
-        if ((stateRef.current.treeSelection?.interaction.chip || stateRef.current.treeSelection?.interaction.picker) &&
-          stateRef.current.treeSelection.text === session?.text) {
+        const interaction = stateRef.current.treeSelection?.interaction;
+        if ((interaction?.chip || interaction?.picker || interaction?.lens) &&
+          stateRef.current.treeSelection?.text === session?.text) {
           intentScheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
           return;
         }
@@ -1713,9 +1722,10 @@ export function useCanvasTextEditSession(
       return;
     }
     const activeInput = canvasSurfaceFocused ? canvasInput : textarea;
-    // (The value editor's fields keep the keyboard while it is open.)
-    const inValueEditor = document.activeElement instanceof HTMLElement && document.activeElement.closest("[data-canvas-value-editor]") != null;
-    if (activeInput && document.activeElement !== activeInput && !inValueEditor) {
+    // (The value editor's fields and the source lens keep the keyboard while they are open.)
+    const inOverlayInput = document.activeElement instanceof HTMLElement &&
+      document.activeElement.closest("[data-canvas-value-editor], [data-canvas-source-lens]") != null;
+    if (activeInput && document.activeElement !== activeInput && !inOverlayInput) {
       activeInput.focus({ preventScroll: true });
     }
     const start = clamp(textEditingSession.selectionStart, 0, textEditingSession.text.length);
@@ -2554,6 +2564,82 @@ export function useCanvasTextEditSession(
     };
   }, [editCommands, intentScheduler, refocusCanvas, state.treeSelection, textEditFocusSurface, textEditingSession, textSelectionOverlay, valueEditTarget]);
 
+  /** Where the open lens sits: fixed when it opens, so it does not follow the caret it moves. */
+  const lensPlacementRef = useRef<{ key: string; left: number; band: { top: number; bottom: number } } | null>(null);
+
+  /** The source lens (R13), while one is open on the buffer as it now is. */
+  const sourceLens = useMemo<CanvasSourceLensModel | null>(() => {
+    const recorded = state.treeSelection;
+    const lens = textEditingSession?.isScopeSession && recorded?.text === textEditingSession.text ? recorded.interaction.lens : undefined;
+    if (!textEditingSession || !lens) {
+      lensPlacementRef.current = null;
+      return null;
+    }
+    const key = `lens:${lens.span.from}`;
+    if (lensPlacementRef.current?.key !== key) {
+      // Clear of the construct it opens on (its focus outline), else of the caret's lines.
+      const outline = contextOutlines.find((each) => each.span.from === lens.span.from && each.span.to === lens.span.to);
+      const caret = selectionBand(textSelectionOverlay);
+      const place = outline
+        ? { left: outline.left, band: { top: outline.top, bottom: outline.top + outline.height } }
+        : caret ? { left: caret.left, band: { top: caret.top, bottom: caret.bottom } } : null;
+      if (!place) {
+        return null;
+      }
+      lensPlacementRef.current = { key, ...place };
+    }
+    const { left, band } = lensPlacementRef.current;
+    const caret = Math.max(0, Math.min(textEditingSession.selectionEnd - lens.span.from, lens.span.to - lens.span.from));
+    return {
+      key,
+      initial: textEditingSession.text.slice(lens.span.from, lens.span.to),
+      caret,
+      left,
+      band,
+      onChange: (text, at) => {
+        intentScheduler.submit({ type: "setLensText", text, caret: at, origin: "keyboard", repeat: false });
+      },
+      onClose: () => {
+        intentScheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
+        refocusCanvas();
+      },
+      onHistory: (direction) => {
+        intentScheduler.submit({ type: direction, origin: "keyboard", repeat: false });
+        refocusCanvas();
+      }
+    };
+  }, [contextOutlines, intentScheduler, refocusCanvas, state.treeSelection, textEditingSession, textSelectionOverlay]);
+
+  const recoveryGhosts = useCanvasRecoveryGhosts({
+    session: textEditFocusSurface === "canvas" ? textEditingSession : null,
+    renderedSource: snapshot.source,
+    source,
+    textLayoutContext,
+    canvasTransform,
+    viewportRef,
+    resolveTarget: (session) => resolveEditableTextTargetById(session.sourceId, session.sceneTextId),
+    resolveContainer: resolveRenderedMathTextElement
+  });
+
+  /** The quick fix (T6): once the lens is closed, the missing closers written in with one click. */
+  const recoveryFix = useMemo<CanvasRecoveryFixModel | null>(() => {
+    const first = recoveryGhosts[0];
+    if (!first || sourceLens || !textEditingSession) {
+      return null;
+    }
+    const closers = missingClosers(textEditingSession);
+    const label = [...new Set(closers.map((closer) => closer.text))].join(" ");
+    return {
+      label: `Insert missing ${label}`,
+      left: first.left,
+      top: first.top + first.height + 4,
+      onApply: () => {
+        intentScheduler.submit({ type: "insertClosers", closers, origin: "pointer", repeat: false });
+        refocusCanvas();
+      }
+    };
+  }, [intentScheduler, recoveryGhosts, refocusCanvas, sourceLens, textEditingSession]);
+
   const view = useMemo<CanvasTextEditViewModel>(
     () => ({
       session: textEditingSession,
@@ -2564,9 +2650,13 @@ export function useCanvasTextEditSession(
       contextOutlines,
       commandChip,
       valueEditor,
-      onEditValues: handleEditValues
+      onEditValues: handleEditValues,
+      sourceLens,
+      recoveryGhosts,
+      recoveryFix
     }),
-    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, popup, scopeEditBorder, textEditFocusSurface, textEditingSession, valueEditor]
+    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, popup, recoveryFix, recoveryGhosts, scopeEditBorder, sourceLens,
+      textEditFocusSurface, textEditingSession, valueEditor]
   );
 
   return {

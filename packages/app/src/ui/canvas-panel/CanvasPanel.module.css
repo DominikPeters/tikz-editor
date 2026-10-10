@@ -1409,6 +1409,72 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The source lens (R13): a construct's raw source, edited in place. */
+.sourceLens {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  z-index: 7;
+  width: min(480px, calc(100% - 8px));
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.sourceLensField {
+  padding: 3px 6px;
+  font: 12px/18px var(--font-mono);
+  color: inherit;
+  white-space: pre-wrap;
+  resize: none;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.sourceLensHint,
+.sourceLensProblem {
+  padding: 1px 6px 2px;
+  font: 11px/16px var(--font-ui);
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+.sourceLensProblem {
+  color: var(--danger, #d33);
+}
+
+/* A closer TeX recovery put in virtually (T2): faint, where it belongs. */
+.recoveryGhost {
+  position: absolute;
+  z-index: 6;
+  font-family: var(--font-mono);
+  color: var(--danger, #d33);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* The quick fix that writes the missing closers in (T6). */
+.recoveryFix {
+  position: absolute;
+  z-index: 7;
+  padding: 1px 8px;
+  font: 11px/16px var(--font-ui);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 14%);
+}
+
+.recoveryFix:hover {
+  border-color: var(--accent);
+}
+
 /* A construct's values on its outline tag, clickable to edit them. */
 .contextOutlineValueTag {
   pointer-events: auto;

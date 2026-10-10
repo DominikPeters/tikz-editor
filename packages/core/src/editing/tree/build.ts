@@ -6,6 +6,7 @@ import {
   type TexSyntaxIndex,
   type TexSyntaxMatchedEnvironment,
 } from "../../text/tex/syntax-index.js";
+import { scanTexRecovery, texVirtualCloserAt } from "../../text/tex/recovery.js";
 import {
   createCommandTable,
   type ArgSchema,
@@ -303,14 +304,20 @@ class Binder {
     return end;
   }
 
-  /** The end of the group opened at `at` (after `}`), and whether it closed. */
   /**
-   * The end of the group opened at `at`, by brace matching as TeX does
-   * (the syntax index's groups can pair braces across stray brackets,
-   * `s[{]}ame`, after its error recovery).
+   * The end of the group opened at `at` (after `}`), by brace matching as
+   * TeX does (the syntax index's groups can pair braces across stray
+   * brackets, `s[{]}ame`, after its error recovery), and whether it
+   * closed. One left open ends where recovery closes it, as the renderer
+   * does (T2): at the end of its paragraph or item.
    */
   private groupEnd(at: number, limit: number): { end: number; complete: boolean } {
-    return this.matchDelimited(at, limit, "{", "}");
+    const match = this.matchDelimited(at, limit, "{", "}");
+    if (match.complete) {
+      return match;
+    }
+    const closer = texVirtualCloserAt(scanTexRecovery(this.text), at);
+    return closer?.kind === "group" && closer.at <= limit ? { end: closer.at, complete: false } : match;
   }
 
   private matchDelimited(
