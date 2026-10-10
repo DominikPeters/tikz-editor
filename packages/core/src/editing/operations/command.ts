@@ -299,14 +299,14 @@ export function commitLeftDelimiter(text: string, at: number, held: Span | null,
   const open = `\\left${opener}`;
   if (!held) {
     // Its `\right` is written with it, pending (M14): it follows the caret until accepted.
-    return edit({ from: at, to: at }, `${open}\\right${closer}`, at + open.length);
+    return edit({ from: at, to: at }, apart(`${open}\\right${closer}`, text, at), at + open.length);
   }
   const range = held;
   const selected = text.slice(range.from, range.to);
   const caret = range.from + open.length;
   return {
     kind: "patch",
-    patches: [{ from: range.from, to: range.to, insert: `${open}${selected}\\right${closer}` }],
+    patches: [{ from: range.from, to: range.to, insert: apart(`${open}${selected}\\right${closer}`, text, range.to) }],
     caret,
     run: null,
     exact: true,
@@ -333,12 +333,21 @@ export const MULTI_TOKEN_SYMBOLS: ReadonlySet<string> = new Set([
 const DELIMITER_PAIRS: Readonly<Record<string, string>> = {
   "(": ")", "[": "]", "|": "|", ".": ".", "<": ">", "\\{": "\\}", "\\lbrace": "\\rbrace", "\\langle": "\\rangle",
   "\\lvert": "\\rvert", "\\lVert": "\\rVert", "\\lfloor": "\\rfloor", "\\lceil": "\\rceil", "\\lgroup": "\\rgroup",
-  "\\|": "\\|", "\\vert": "\\vert", "\\Vert": "\\Vert",
+  "\\|": "\\|", "\\vert": "\\vert", "\\Vert": "\\Vert", "\\lbrack": "\\rbrack",
 };
 
 /** The delimiter a `\right` takes to match a `\left` one (`\langle` → `\rangle`); null for none. */
 export function matchingRightDelimiter(opener: string): string | null {
   return DELIMITER_PAIRS[opener] ?? null;
+}
+
+/**
+ * Text written before `at` that ends with a control word gets a space if
+ * a letter follows there, which would otherwise run into its name
+ * (`\right\rangle` before `r` is not `\rangler`).
+ */
+export function apart(insert: string, text: string, at: number): string {
+  return /\\[A-Za-z]+$/u.test(insert) && /^[A-Za-z]/u.test(text.slice(at)) ? `${insert} ` : insert;
 }
 
 /** Whether `\left` or `\right` takes this as its delimiter: `(`, `\}`, `\rangle`, `.`. */

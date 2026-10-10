@@ -76,6 +76,9 @@ describe("delimiter pairs around what is written", () => {
     ["a named delimiter", String.raw`$a‸$`, String.raw`\left\langle␣x`, String.raw`$a\left\langle x‸\right\rangle$`, true],
     ["a control-symbol delimiter", String.raw`$a‸$`, String.raw`\left\{x`, String.raw`$a\left\{x‸\right\}$`, true],
     ["in prose, the pair starts a formula", "a ‸ b", String.raw`\left(x ⇥ y`, String.raw`a $\left(x\right)y‸$ b`, false],
+    ["a named delimiter kept apart from a letter after it", String.raw`$lat‸r$`, String.raw`\left\langle␣`, String.raw`$lat\left\langle‸\right\rangle r$`, true],
+    ["in an optional argument, ] is written \rbrack, which does not end it", String.raw`\begin{thebibliography}{9}\bibitem[A‸B]{k} x\end{thebibliography}`,
+      String.raw`\left(\right]`, String.raw`\begin{thebibliography}{9}\bibitem[A$\left(\right\rbrack‸$B]{k} x\end{thebibliography}`, false],
   ])("a pending \right: %s", (_name, start, keys, expected, pending) => {
     const target = session(start);
     press(target, keys);

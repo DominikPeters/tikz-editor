@@ -124,6 +124,13 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
   [14, ["←", "→", "⇧←", "⇧→"]],
   [3, ["Esc"]],
   [4, ["⌘Z", "⇧⌘Z"]],
+  // Delimiters around what is written (M14): a pair with its \right pending, taken along, accepted or closed.
+  [5, ["\\left(", "\\left[", "\\left\\{", "\\left|", "\\left\\langle␣", "\\right)", "\\right]", ")", "]", "|"]],
+  // ⌘←/⌘→ read the rendered rows but with a \right pending, which they take along to the slot's edge.
+  [4, ["⌥→", "⌥←", "\\left( ⌘→", "\\left( → ⌘←", "→ → →"]],
+  // The source lens (R13), edited as raw source, and the fix for what that leaves unbalanced (T6).
+  // (⏎ in the lens is the lens field's own key, which this harness does not model: Esc closes it.)
+  [3, ["⌘E @lens", "⌘E @lens @lens Esc", "⌘E @lens Esc", "@fix"]],
   [2, ["⌘B", "⌘I"]],
   [1, ["⏸"]],
   [7, ["@click"]],
@@ -342,10 +349,36 @@ function valueEdit(session: KeystrokeSession, seed: number): FuzzKey | null {
   return { kind: "setValues", edits: [{ span: value.contentSpan, text: pick(random, choices) }] };
 }
 
+/** What the lens is fed: its text with one character typed or deleted, as raw source (it repairs nothing). */
+const LENS_CHARACTERS = ["}", "{", "$", "\\", "x", "%", " ", "^", "\\]", "\\right)"];
+
+function lensEdit(text: string, seed: number): FuzzKey {
+  const random = createRandom(seed);
+  const at = Math.floor(random() * (text.length + 1));
+  if (text.length > 0 && random() < 0.4) {
+    const from = Math.min(at, text.length - 1);
+    return { kind: "lensText", text: text.slice(0, from) + text.slice(from + 1), caret: from };
+  }
+  const typed = pick(random, LENS_CHARACTERS);
+  return { kind: "lensText", text: text.slice(0, at) + typed + text.slice(at), caret: at + typed.length };
+}
+
 /** The keys a token stands for. */
 function keysOf(token: string, session: KeystrokeSession, index: number): FuzzKey[] {
+  const keys = tokenKeys(token, session, index);
+  // The lens holds the keyboard until it is left: Esc first, as a user would.
+  return session.lens() && !token.startsWith("@lens") && token !== "Esc" && token !== "⌘E" && keys.length > 0
+    ? [...parseScenarioKeys("Esc"), ...keys]
+    : keys;
+}
+
+function tokenKeys(token: string, session: KeystrokeSession, index: number): FuzzKey[] {
+  if ((token === "⌘←" || token === "⌘→") && session.pendingCloser == null) {
+    // These read the rendered rows, which this harness does not have; with a `\right` pending they take it along.
+    return [];
+  }
   if (token === "@pick" || token === "@setvalue") {
-    return keysOf(`${token}:${hash(session.text) ^ index}`, session, index);
+    return tokenKeys(`${token}:${hash(session.text) ^ index}`, session, index);
   }
   const valued = /^@(pick|setvalue):(-?\d+)$/u.exec(token);
   if (valued) {
@@ -360,7 +393,17 @@ function keysOf(token: string, session: KeystrokeSession, index: number): FuzzKe
     }
     return values ? [{ kind: "pick", values, viaBrace: seed % 2 === 0 }] : parseScenarioKeys("Esc");
   }
+  const lensed = /^@lens:(-?\d+)$/u.exec(token);
+  if (token === "@lens") {
+    return tokenKeys(`@lens:${hash(session.text) ^ index}`, session, index);
+  }
+  if (lensed) {
+    const lens = session.lens();
+    return lens ? [lensEdit(session.text.slice(lens.span.from, lens.span.to), Number(lensed[1]))] : [];
+  }
   switch (token) {
+    case "@fix":
+      return [{ kind: "fixClosers" }];
     case "@copy":
     case "@cut":
       return [{ kind: token === "@copy" ? "copy" : "cut" }];
@@ -549,7 +592,13 @@ function checkStep(
     chipOpen: boolean;
     /** Where commands miss an argument (the offset after them). */
     missing: number[];
-  }
+  },
+  /**
+   * The lens has written raw source (R13), which may be broken: from there
+   * on what the canvas keeps balanced or visible is not defined, so only
+   * the tree, the caret and the interaction state are checked.
+   */
+  lensBroke = false
 ): Omit<FuzzFailure, "step" | "text"> | null {
   const view = session.view();
   const { tree } = view;
@@ -558,7 +607,7 @@ function checkStep(
     return { invariant: "tree", message: structural.slice(0, 3).join("; ") };
   }
   const history = intent?.type === "undo" || intent?.type === "redo";
-  if (!history) {
+  if (!history && !lensBroke) {
     const counts = diagnosticCounts(tree);
     for (const [code, count] of counts) {
       if (count > (before.diagnostics.get(code) ?? 0)) {
@@ -593,12 +642,20 @@ function checkStep(
     }
   }
   const interaction = session.interaction();
-  if (history && (interaction.chip || interaction.picker || interaction.placeholder != null || interaction.pending != null)) {
+  // (With the chip open, ⌘Z only closes it: a pending `\right` stays pending.)
+  if (history && (interaction.chip || interaction.picker || interaction.placeholder != null || interaction.pending != null ||
+    (interaction.pendingCloser != null && !before.chipOpen))) {
     // O7: undo and redo restore source and selection, never editing state.
     return { invariant: "undo", message: "undo or redo brought back interaction state" };
   }
   if (interaction.placeholder != null && session.text.slice(interaction.placeholder, interaction.placeholder + 2) !== "{}") {
     return { invariant: "interaction", message: `placeholder at ${interaction.placeholder} is not {}` };
+  }
+  // A pending `\right` (M14) is always right after the caret, with nothing selected, and closes a pair.
+  const closer = interaction.pendingCloser;
+  if (closer != null && (anchor !== closer || focus !== closer ||
+    !tree.nodes.some((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.delimiters[1].from === closer))) {
+    return { invariant: "interaction", message: `pending \\right at ${closer} is not a pair's \\right at the caret (${anchor}:${focus})` };
   }
   return null;
 }
@@ -637,13 +694,14 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
   const fail = (failure: Omit<FuzzFailure, "step" | "text">, step: number): FuzzRun =>
     ({ failure: { ...failure, step, text: session.text }, tokens: resolved, finalText: session.text, states, edits, picked });
   let diagnostics = diagnosticCounts(initial.tree);
+  let lensBroke = false;
   for (let index = 0; index < fuzz.tokens.length; index += 1) {
     const token = fuzz.tokens[index];
     const keysForToken = keysOf(token, session, index);
     const head = keysForToken[0];
     resolved.push(head?.kind === "select" ? (head.anchor === head.focus ? `@${head.anchor}` : `@${head.anchor}:${head.focus}`)
       : head?.kind === "paste" && head.plain != null ? `@paste-text:${OUTSIDE_TEXTS.indexOf(head.plain as never)}`
-      : token === "@pick" || token === "@setvalue" ? `${token}:${hash(session.text) ^ index}` : token);
+      : token === "@pick" || token === "@setvalue" || token === "@lens" ? `${token}:${hash(session.text) ^ index}` : token);
     for (const key of keysForToken) {
       const view = session.view();
       const { anchor, focus } = session.selection;
@@ -674,7 +732,11 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
       }
       let broken: Omit<FuzzFailure, "step" | "text"> | null;
       try {
-        broken = checkStep(session, intent, before);
+        if (intent?.type === "setLensText") {
+          // A raw edit may break the source without a diagnostic to show it (a `%` commenting out the line's rest).
+          lensBroke = true;
+        }
+        broken = checkStep(session, intent, before, lensBroke);
       } catch (error) {
         broken = { invariant: "exception", message: error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error) };
       }
