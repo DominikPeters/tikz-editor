@@ -651,10 +651,17 @@ function addMathItemCaretMapEntries(
       const hitBounds = mathItemCaretHitBounds(item, originX, originY, fontProfile);
       const caretY = texHBoxY(roundTexPt(Math.min(Math.max(y, hitBounds.yStart), hitBounds.yEnd)));
       const characterSpans = mathGlyphSourceCharacterSpans(item) ?? [item.sourceSpan];
-      const caretExtent = {
-        top: texHBoxY(roundTexPt(y - item.atPt * 0.75)),
-        bottom: texHBoxY(roundTexPt(y + item.atPt * 0.25)),
-      };
+      // A caret is a text line's height around the glyph's baseline, unless the glyph
+      // hangs from it (big operators and delimiters are set from their top): then its ink.
+      const hangs = y <= hitBounds.yStart;
+      const caretExtent = hangs
+        ? { top: hitBounds.yStart, bottom: hitBounds.yEnd }
+        : {
+          top: texHBoxY(roundTexPt(y - item.atPt * 0.75)),
+          bottom: texHBoxY(roundTexPt(y + item.atPt * 0.25)),
+        };
+      // One glyph for a command (`\nabla`): its name holds no caret position, only its two ends.
+      const command = characterSpans.length === 1 && item.sourceSpan.end - item.sourceSpan.start > 1;
       const addGlyphEntry = (entry: TexMathCaretEntry) => { addEntry({ ...entry, caretExtent }); };
       characterSpans.forEach((span, index) => {
         const xStart = texHBoxX(roundTexPt(x + item.width * index / characterSpans.length));
@@ -668,6 +675,13 @@ function addMathItemCaretMapEntries(
           addLinearMathCaretMapEntries({ ...geometry, sourceStart: previous.end, sourceEnd: span.start,
             xStart, xEnd: xStart, kind: "group-boundary",
             sourceSpan: { start: previous.end, end: span.start }, priority: 50 });
+        }
+        if (command) {
+          for (const [offset, at] of [[span.start, xStart], [span.end, xEnd]] as const) {
+            addLinearMathCaretMapEntries({ ...geometry, sourceStart: offset, sourceEnd: offset,
+              xStart: at, xEnd: at, kind: "glyph-boundary", sourceSpan: span, priority: 100 });
+          }
+          return;
         }
         addLinearMathCaretMapEntries({ ...geometry, sourceStart: span.start, sourceEnd: span.end,
           xStart, xEnd, kind: "glyph-boundary", sourceSpan: span, priority: 100 });
