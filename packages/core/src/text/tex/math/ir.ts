@@ -428,6 +428,8 @@ export interface TexMathLeftRightNucleus {
   readonly body: TexMathList;
   readonly leftDelimiterSourceSpan: TexMathSourceSpan;
   readonly rightDelimiterSourceSpan: TexMathSourceSpan;
+  /** No `\right` yet (still being typed): closed where the formula ends, its delimiters at their natural size. */
+  readonly open?: true;
   readonly sourceSpan: TexMathSourceSpan;
 }
 

@@ -2198,6 +2198,7 @@ class TexMathParser {
     const body = this.parseList({ stopAtGroupClose: false, stopAtRight: true });
     const rightCommand = this.peek();
     let rightDelimiter: { delimiter: TexMathDelimiter; sourceSpan: TexMathSourceSpan } | null = null;
+    let open = false;
     if (rightCommand?.kind === "command" && commandName(rightCommand.text) === "right") {
       this.advance();
       rightDelimiter = this.parseDelimiter(rightCommand.sourceSpan, "\\right delimiter");
@@ -2205,6 +2206,7 @@ class TexMathParser {
       // Still being typed: closed by an invisible `\right.` where the formula ends.
       this.addIncomplete("\\left is closed where the formula ends.", leftCommand.sourceSpan);
       rightDelimiter = { delimiter: ".", sourceSpan: this.emptyAtEnd().sourceSpan };
+      open = true;
     } else {
       this.addDiagnostic(
         "error",
@@ -2238,6 +2240,7 @@ class TexMathParser {
         body,
         leftDelimiterSourceSpan: fallbackSpan,
         rightDelimiterSourceSpan: rightDelimiter.sourceSpan,
+        ...(open ? { open: true as const } : {}),
         sourceSpan,
       },
       sourceSpan,

@@ -68,6 +68,7 @@ import {
   replacementPatches,
   type BufferPatch,
   type BufferRange,
+  type MappedPosition,
   type Transaction,
   type TransactionSelection,
   type UndoGrouping,
@@ -686,6 +687,42 @@ class Resolver {
     );
   }
 
+  /**
+   * Removes a `\left…\right` pair's delimiters (and its `\middle`s, which
+   * need the pair), keeping its content. Scripted, the content is braced
+   * so the script stays on all of it; an emptied `$…$` keeps `{}`.
+   */
+  private unwrapDelimiters(view: EditView, id: NodeId, direction: "backward" | "forward"): IntentResolution {
+    const { text, nodes, slots } = view.tree;
+    const node = nodes[id];
+    const [left, right] = node.delimiters;
+    const content = slots[node.slots[0]];
+    const middles = content.children.map((child) => nodes[child]).filter((child) => child.command === "middle");
+    const scripted = /^\s*[_^']/u.test(text.slice(right.to));
+    const parent = node.parent == null ? null : slots[node.parent];
+    const emptied = text.slice(content.contentSpan.from, content.contentSpan.to).trim() === "" && parent != null &&
+      isDollarFormula(view, parent.node) &&
+      (text.slice(parent.contentSpan.from, node.span.from) + text.slice(node.span.to, parent.contentSpan.to)).trim() === "";
+    if (emptied) {
+      const brace = parent.contentSpan.from;
+      return this.outcome(view, { kind: "patch", patches: [{ from: brace, to: parent.contentSpan.to, insert: "{}" }], caret: brace + 1, run: null, placeholder: brace });
+    }
+    // A control word left next to a letter would read as one longer name (`\alpha\left(x` → `\alpha x`).
+    const removal = (from: number, to: number, insert: string): BufferPatch =>
+      ({ from, to, insert: insert === "" && /\\[A-Za-z]+$/u.test(text.slice(0, from)) && /^[A-Za-z]/u.test(text.slice(to)) ? " " : insert });
+    const patches: BufferPatch[] = [
+      removal(left.from, left.to, scripted ? "{" : ""),
+      ...middles.map((middle) => {
+        const delimiter = text.slice(middle.span.from + "\\middle".length, middle.span.to).trim();
+        return removal(middle.span.from, middle.span.to, delimiter === "." ? "" : delimiter);
+      }),
+      removal(right.from, right.to, scripted ? "}" : ""),
+    ];
+    // The caret stays at the content's edge it was at.
+    const at: MappedPosition = direction === "backward" ? { offset: left.from + 1, assoc: 1 } : { offset: right.from + 1, assoc: -1 };
+    return this.transaction(patches, { kind: "mapped", anchor: at, focus: at }, { group: "own-step" });
+  }
+
   private deleteRange(from: number, to: number, undo: UndoGrouping): IntentResolution {
     if (from < 0 || to <= from) {
       return NONE;
@@ -743,6 +780,13 @@ class Resolver {
             return this.outcome(view, { kind: "patch", patches: [{ from: brace, to: slot.contentSpan.to, insert: "{}" }], caret: brace + 1, run: null, placeholder: brace });
           }
           return this.deleteRange(from, to, { group: "own-step" });
+        }
+        // ⌫ just inside a pair's `\left(` (or ⌦ just inside its `\right)`) unwraps it, keeping
+        // what it enclosed: there is no way to delete one delimiter of a pair alone (M14).
+        const pair = view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 &&
+          (direction === "backward" ? node.delimiters[0].to === offset : node.delimiters[1].from === offset));
+        if (pair) {
+          return this.unwrapDelimiters(view, pair.id, direction);
         }
         const caret = view.representative(raw.focus);
         outcome = direction === "backward" ? deleteBackward(view, caret) : deleteForward(view, caret);

@@ -4136,6 +4136,17 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("keeps a \\left with no \\right yet at its natural size, not grown over the rest of the formula", () => {
+    // TeX's recovery closes it with `\right.` at the end; that would size it to the `\sum` it is not meant to enclose.
+    const parsed = parseTexMath(String.raw`\displaystyle\left(x+\sum_{i=1}^m y_i`);
+    expect(parsed.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["incomplete-input"]);
+    const open = layoutTexMathList(parsed.list);
+    expect(open.supported).toBe(true);
+    expect(open.hlist?.items[0]).toMatchObject({ kind: "glyph", fontId: "cmr10", code: 40, y: 0 });
+    const closed = layout(String.raw`\displaystyle\left(x+\sum_{i=1}^m y_i\right)`);
+    expect(closed.hlist?.items[0]).toMatchObject({ kind: "glyph", fontId: "cmex10" });
+  });
+
   it("lays out left-right delimiter groups with TeX delimiter sizing", () => {
     const simple = layout(String.raw`\left(x\right)`);
     expect(simple.supported).toBe(true);

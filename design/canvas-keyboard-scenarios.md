@@ -547,17 +547,22 @@ R9.*
 
 **M14 Delimiters.** `\left(` (the chip commits on `(`) is written alone:
 `$a\left(‸$`. Until its `\right` is typed, the formula renders as TeX's
-recovery does, the delimiter running to the formula's end, and the
-canvas draws the missing `)` there as a ghost, with "Insert missing
-\right)" to write it in. `\right)` (or `\right]`: the one typed is the
+recovery does, the delimiter running to the formula's end, except that
+the `(` keeps its natural size rather than growing over whatever follows
+(a `\sum` it is not meant to enclose); the canvas draws the missing `)`
+at the end as a ghost, with "Insert missing \right)" to write it in. `\right)` (or `\right]`: the one typed is the
 one written) typed anywhere after it in the same slot closes the
 innermost open `\left` there, as one step. So delimiters go around what
 is already written by typing them where they belong: `\left(` before it,
 `\right)` after it. `⌫` after an open `\left(` (or `⌦` before it) deletes
-it alone, never what follows it. Once closed, the pair is a construct:
-`⌫` at the start inside steps out to the left (R9, as for every slot);
-removing both delimiters while keeping the content is **Unwrap**; `⌫`
-from outside selects the whole group. `\right)` typed after a closed
+it alone, never what follows it. Once closed, the pair is a construct.
+**Unwrap:** `⌫` just inside its `\left(` (or `⌦` just inside its
+`\right)`) removes both delimiters, and any `\middle`, keeping the
+content, as one step: one delimiter of a pair cannot go alone, and
+stepping out (R9's rule for slots) would leave no way to remove them.
+Followed by a script, the content is braced (`\left(a+b\right)^2` →
+`{a+b}^2`) so the script stays on all of it. `⌫` from outside selects
+the whole group. `\right)` typed after a closed
 pair in the same slot moves its `\right` there, extending it. With a
 selection, `\left(` wraps it in the whole pair, which stays selected.
 *R9, T2.* (Revised 2026-10-10, from use: auto-pairing `\left(\right)`

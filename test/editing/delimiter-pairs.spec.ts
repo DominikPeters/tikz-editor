@@ -105,4 +105,19 @@ describe("delimiter pairs around what is written", () => {
     press(target, keys);
     expect(marked(target)).toBe(expected);
   });
+
+  it.each([
+    ["⌫ just inside \left(", String.raw`$f+\left(‸g(x)+h\right)=0$`, "⌫", String.raw`$f+‸g(x)+h=0$`],
+    ["⌦ just inside \right)", String.raw`$f+\left(g(x)+h‸\right)=0$`, "⌦", String.raw`$f+g(x)+h‸=0$`],
+    ["scripted: braced, so the script stays on all of it", String.raw`$\left(‸a+b\right)^2$`, "⌫", "${‸a+b}^2$"],
+    ["with \middle", String.raw`$\left\{‸x \middle| x>0\right\}$`, "⌫", String.raw`$‸x | x>0$`],
+    ["keeping command names apart", String.raw`$\alpha\left(‸x\right)y$`, "⌫", String.raw`$\alpha ‸xy$`],
+    ["the formula's only content", String.raw`a $\left(‸\right)$ b`, "⌫", "a ${‸}$ b"],
+  ])("unwraps a closed pair, keeping what it encloses: %s", (_name, start, keys, expected) => {
+    const target = session(start);
+    press(target, keys);
+    expect(marked(target)).toBe(expected);
+    press(target, "⌘Z");
+    expect(marked(target)).toBe(start);
+  });
 });
