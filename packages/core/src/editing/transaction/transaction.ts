@@ -57,7 +57,9 @@ export type TransactionSelection =
 export type UndoGrouping =
   | { readonly group: "own-step" }
   | { readonly group: "typing-run"; readonly run: string }
-  | { readonly group: "composition"; readonly first: boolean };
+  | { readonly group: "composition"; readonly first: boolean }
+  /** Part of the step before it, whatever that was (a pending `\right` taken along after its pair was written). */
+  | { readonly group: "amend" };
 
 export type BufferRange = { readonly from: number; readonly to: number };
 

@@ -24,7 +24,8 @@ import {
   commitCommand,
   commitControlSymbol,
   commitLeftDelimiter,
-  DELIMITER_CHARACTERS,
+  isDelimiter,
+  matchingRightDelimiter,
   isControlSymbol,
   copyRange,
   commitWithValues,
@@ -61,7 +62,7 @@ import {
   type Position,
   type SelectionEnds,
 } from "../position/index.js";
-import type { NodeId } from "../tree/types.js";
+import type { EditNode, NodeId } from "../tree/types.js";
 import {
   applyPatches,
   applyTransaction,
@@ -254,6 +255,61 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
   }
 }
 
+/**
+ * The next (or previous) end of a run of letters and digits, past what is
+ * not one, as ⌥→ moves in a native field: in `+bc+d`, after `bc`.
+ */
+function alphanumericWordEdge(text: string, offset: number, forward: boolean): number {
+  const word = (char: string | undefined) => char != null && /[\p{L}\p{N}]/u.test(char);
+  let index = offset;
+  const step = forward ? 1 : -1;
+  const at = () => text[forward ? index : index - 1];
+  const inside = () => (forward ? index < text.length : index > 0);
+  while (inside() && !word(at())) {
+    index += step;
+  }
+  while (inside() && word(at())) {
+    index += step;
+  }
+  return index;
+}
+
+/** The `\right` token (with its delimiter) of the pair whose `\right` starts at an offset: a pending one (M14). */
+export function pendingCloserSpan(view: EditView, at: number): { readonly from: number; readonly to: number } | null {
+  return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.delimiters[1].from === at)?.delimiters[1] ?? null;
+}
+
+/** Where a transaction leaves the caret, if that is right before a `\right` with nothing selected. */
+function pendingCloserAfter(text: string, transaction: Transaction): number | null {
+  const applied = applyTransaction(text, transaction);
+  return applied.anchor === applied.focus && applied.text.startsWith("\\right", applied.focus) ? applied.focus : null;
+}
+
+/**
+ * Whether a character typed at a pending `\right` (M14) is its delimiter
+ * closing the pair, not one of its contents: `)` at `\right)`, unless a
+ * plain `(` typed inside is still open (`\left(f(x‸\right)`); `|` at
+ * `\right|` unless one inside is unmatched.
+ */
+function closesPending(text: string, pair: EditNode, char: string): boolean {
+  const token = pair.delimiters[1];
+  if (text.slice(token.from, token.to) !== `\\right${char}`) {
+    return false;
+  }
+  const inside = text.slice(pair.delimiters[0].to, token.from);
+  const count = (needle: string) => inside.split(needle).length - 1;
+  switch (char) {
+    case ")":
+      return count("(") <= count(")");
+    case "]":
+      return count("[") <= count("]");
+    case "|":
+      return count("|") % 2 === 0;
+    default:
+      return true;
+  }
+}
+
 /** Whether a node is inside an environment of that name (kept as a node, or an atom holding it). */
 function insideEnvironment(view: EditView, node: NodeId, name: string): boolean {
   const { tree } = view;
@@ -423,8 +479,25 @@ class Resolver {
     const repaired = this.keepFinalLineEnd(this.protectLeadingBracket(this.dropDeadBreaks(
       this.endRowsBeforeRules({ baseRevision: this.context.revision, patches, selection, undo, ...extra })
     )));
-    return { kind: "transaction", transaction: repaired };
+    return { kind: "transaction", transaction: this.carryPendingCloser(repaired) };
   }
+
+  /**
+   * A pending `\right` (M14) stays pending through an edit that leaves the
+   * caret right before a `\right`: typing in front of it, a command
+   * committed there, the chip opening and closing. An edit that accepts
+   * it says so (`acceptsCloser`), or leaves the caret elsewhere.
+   */
+  private carryPendingCloser(transaction: Transaction): Transaction {
+    if (this.context.interaction.pendingCloser == null || this.acceptsCloser || transaction.interaction?.pendingCloser != null) {
+      return transaction;
+    }
+    const at = pendingCloserAfter(this.context.text, transaction);
+    return at == null ? transaction : { ...transaction, interaction: { ...(transaction.interaction ?? NO_INTERACTION), pendingCloser: at } };
+  }
+
+  /** Set by an intent that accepts a pending `\right` where it stands (⇥, Esc). */
+  private acceptsCloser = false;
 
   /**
    * A table rule that an edit left inside a row (`\\alpha\\bottomrule`)
@@ -575,6 +648,11 @@ class Resolver {
     const chip = this.context.interaction.chip;
     if (chip && this.context.commands) {
       return this.chipCharacter(view, this.context.commands, chip, text);
+    }
+    const pair = this.pendingPair(view);
+    if (pair && closesPending(this.context.text, pair, text)) {
+      // Its delimiter typed at a pending `\right` accepts it (M14).
+      return this.acceptCloser(pair, true);
     }
     const raw = this.rawEnds(view);
     if (text === "\\" && this.context.commands && !afterEscape(this.context.text, this.from)) {
@@ -877,6 +955,11 @@ class Resolver {
       // ⇥ accepts the highlighted completion (V2).
       return this.commitChip(view, this.context.commands, chip, "structure", true);
     }
+    const pair = this.pendingPair(view);
+    if (pair && !back) {
+      // ⇥ accepts a pending `\right` (M14).
+      return this.acceptCloser(pair, true);
+    }
     const { start, end } = this.hasRange()
       ? this.effectiveRange(view, this.rawEnds(view))
       : { start: this.caretPosition(view), end: this.caretPosition(view) };
@@ -910,7 +993,12 @@ class Resolver {
   /** Esc: closes the command chip, value editor or lens; what the lens wrote stays. */
   escape(): IntentResolution {
     const { chip, picker, lens } = this.context.interaction;
-    return chip || picker || lens ? this.keepSelection(NO_INTERACTION) : NONE;
+    if (chip || picker || lens) {
+      return this.keepSelection(NO_INTERACTION);
+    }
+    const pair = this.view ? this.pendingPair(this.view) : null;
+    // A pending `\right` (M14) is accepted where it stands.
+    return pair ? this.acceptCloser(pair, false) : NONE;
   }
 
   /** ⌘E: the source lens (R13) on the selection, or on the innermost construct around the caret. */
@@ -1094,20 +1182,22 @@ class Resolver {
       }
       return this.commitOutcome(view, symbol.outcome, symbol.pending);
     }
-    if (chip.name === "left" && view.tree.slots[caret.slot].mode === "math") {
-      const pair = commitLeftDelimiter(view.tree.text, chip.at, chip.held, char);
-      if (pair) {
-        return this.commitOutcome(view, pair);
+    const delimiterChip = /^(left|right)(?:\\([A-Za-z]*))?$/u.exec(chip.name);
+    if (delimiterChip) {
+      const [, side, named] = delimiterChip;
+      if (named == null && char === "\\") {
+        // The delimiter is a command (`\left\{`, `\left\langle`): the chip goes on to its name.
+        return this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: `${chip.name}\\`, selected: 0 } });
       }
-    }
-    if (chip.name === "right" && view.tree.slots[caret.slot].mode === "math") {
-      return this.closeRight(view, chip, char);
-    }
-    if (chip.name === "left" && view.tree.slots[caret.slot].mode === "text" && commitLeftDelimiter(view.tree.text, chip.at, null, char)) {
-      // In prose, the pair starts a formula.
-      const pair = commitAcrossModes(view, commands, caret, chip.at, "left", "typed", chip.held, char);
-      if (pair && pair !== "refused") {
-        return this.commitOutcome(view, pair.outcome);
+      // A named delimiter ends at a non-letter, which is then typed (a space is just its end).
+      const delimiter = named == null ? char : `\\${named === "" ? char : named}`;
+      const committed = this.commitDelimiter(view, commands, caret, chip, side, delimiter);
+      if (committed) {
+        return named ? this.thenType(committed, char === " " ? null : char) : committed;
+      }
+      if (named != null) {
+        // `\left\foo`: no delimiter; nothing is written.
+        return this.keepSelection(NO_INTERACTION);
       }
     }
     if (char === " ") {
@@ -1165,6 +1255,165 @@ class Resolver {
   }
 
   /**
+   * `\left` or `\right` with its delimiter (M14). `\left` writes its pair
+   * with the `\right` pending, or around a held selection, which it wraps;
+   * in prose the pair starts a formula. `\right` closes, steps over or
+   * moves one (closeRight). Null: not a delimiter for that side.
+   */
+  private commitDelimiter(
+    view: EditView,
+    commands: CommandTable,
+    caret: Position,
+    chip: ChipState,
+    side: string,
+    delimiter: string
+  ): IntentResolution | null {
+    const mode = view.tree.slots[caret.slot].mode;
+    if (side === "right") {
+      return mode === "math" && isDelimiter(delimiter) ? this.closeRight(view, chip, delimiter) : null;
+    }
+    if (matchingRightDelimiter(delimiter) == null) {
+      return null;
+    }
+    let written: EditOutcome | null;
+    if (mode === "math") {
+      written = commitLeftDelimiter(view.tree.text, chip.at, chip.held, delimiter);
+    } else {
+      const pair = commitAcrossModes(view, commands, caret, chip.at, "left", "typed", chip.held, delimiter);
+      if (pair === "refused") {
+        return this.keepSelection(NO_INTERACTION);
+      }
+      written = pair?.outcome ?? null;
+    }
+    if (!written) {
+      return null;
+    }
+    const committed = this.commitOutcome(view, written);
+    return chip.held ? committed : this.withPendingCloser(committed);
+  }
+
+  /** A transaction leaving the caret right before a `\right`, with that `\right` pending (M14). */
+  private withPendingCloser(resolution: IntentResolution): IntentResolution {
+    if (resolution.kind !== "transaction") {
+      return resolution;
+    }
+    const at = pendingCloserAfter(this.context.text, resolution.transaction);
+    return at == null ? resolution : {
+      ...resolution,
+      transaction: { ...resolution.transaction, interaction: { ...(resolution.transaction.interaction ?? NO_INTERACTION), pendingCloser: at } },
+    };
+  }
+
+  /**
+   * A character typed right after a commit, in the same step: what it
+   * types is resolved against the committed buffer.
+   */
+  private thenType(committed: IntentResolution, char: string | null): IntentResolution {
+    if (char == null || committed.kind !== "transaction") {
+      return committed;
+    }
+    const applied = applyTransaction(this.context.text, committed.transaction);
+    const next = new Resolver({
+      ...this.context,
+      text: applied.text,
+      anchor: applied.anchor,
+      focus: applied.focus,
+      positions: null,
+      interaction: committed.transaction.interaction ?? NO_INTERACTION,
+    }).insertText(char, true);
+    if (next.kind !== "transaction") {
+      return committed;
+    }
+    const final = applyTransaction(applied.text, next.transaction);
+    return {
+      kind: "transaction",
+      transaction: {
+        ...next.transaction,
+        baseRevision: this.context.revision,
+        patches: replacementPatches(this.context.text, final.text),
+        selection: { kind: "absolute", anchor: final.anchor, focus: final.focus },
+        undo: { group: "own-step" },
+      },
+    };
+  }
+
+  /** The pending `\right` (M14), as written (`\right)`): the chip offers it first. */
+  private pendingCloserText(view: EditView): string | null {
+    const at = this.context.interaction.pendingCloser;
+    const token = at == null ? null : pendingCloserSpan(view, at);
+    return token ? view.tree.text.slice(token.from, token.to) : null;
+  }
+
+  /** The pending `\right` (M14) the caret is right before, with nothing selected: its pair's node. */
+  private pendingPair(view: EditView): EditNode | null {
+    const at = this.context.interaction.pendingCloser;
+    if (at == null || this.hasRange() || this.from !== at) {
+      return null;
+    }
+    return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.delimiters[1].from === at) ?? null;
+  }
+
+  /** Accepts the pending `\right` (M14): the caret steps past it, or stays put (Esc). */
+  private acceptCloser(pair: EditNode, stepPast: boolean): IntentResolution {
+    this.acceptsCloser = true;
+    const caret = stepPast ? pair.delimiters[1].to : this.from;
+    return this.transaction([], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
+  }
+
+  /**
+   * ←/→ with a `\right` pending (M14) take it along, over what is already
+   * written in the pair's own slot: by caret stop, by word (⌥) or to the
+   * end (⌘), never into a construct (its stops are in its own slots) and
+   * never back past its `\left`. At the end there is nothing more to
+   * enclose: → accepts it and steps past; ← at the start accepts it and
+   * moves on as usual. The moves join the step that wrote the pair.
+   */
+  private movePendingCloser(view: EditView, pair: EditNode, motion: Extract<Intent, { type: "move" }>): IntentResolution {
+    const { text } = this.context;
+    const token = pair.delimiters[1];
+    const closer = text.slice(token.from, token.to);
+    const unwrapped = text.slice(0, token.from) + text.slice(token.to);
+    const loose = this.context.structure!(unwrapped);
+    // Without the `\right`, the `\left` runs on to its slot's end (or to a `\right` further on): its content's stops are where the `\right` may go.
+    const open = loose.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters[0]?.from === pair.delimiters[0].from);
+    if (!open) {
+      return this.acceptCloser(pair, motion.dir === "right");
+    }
+    const content = open.slots[0];
+    const stops = [...new Set(loose.stops.filter((stop) => stop.slot === content).map((stop) => loose.offset(stop)))].sort((a, b) => a - b);
+    const at = token.from;
+    const forward = motion.dir === "right";
+    let target: number | undefined;
+    if (motion.unit === "edge" || motion.unit === "scope") {
+      target = forward ? stops.at(-1) : stops[0];
+    } else if (motion.unit === "word") {
+      const word = alphanumericWordEdge(unwrapped, at, forward);
+      target = forward ? stops.find((stop) => stop >= word) ?? stops.at(-1) : [...stops].reverse().find((stop) => stop <= word) ?? stops[0];
+    } else {
+      target = forward ? stops.find((stop) => stop > at) : [...stops].reverse().find((stop) => stop < at);
+    }
+    if (target == null || target === at) {
+      if (forward) {
+        return this.acceptCloser(pair, true);
+      }
+      this.acceptsCloser = true;
+      return new Resolver({ ...this.context, interaction: NO_INTERACTION }).move(motion);
+    }
+    // A control word must not run into a letter where the `\right` leaves or lands (`\alpha\right)x`, `\right\rangle x`).
+    const leaving = /\\[A-Za-z]+$/u.test(text.slice(0, token.from)) && /^[A-Za-z]/u.test(text.slice(token.to)) ? " " : "";
+    const landing = target > at ? target + (token.to - token.from) : target;
+    const spaced = /[A-Za-z]$/u.test(closer) && /^[A-Za-z]/u.test(text.slice(landing)) ? " " : "";
+    const removal = { from: token.from, to: token.to, insert: leaving };
+    const insertion = { from: landing, to: landing, insert: closer + spaced };
+    const patches = target > at ? [removal, insertion] : [insertion, removal];
+    return this.withPendingCloser(this.transaction(patches, {
+      kind: "mapped",
+      anchor: { offset: landing, assoc: -1 },
+      focus: { offset: landing, assoc: -1 },
+    }, { group: "amend" }));
+  }
+
+  /**
    * `\right` and its delimiter. In a `\left` still open, it closes it
    * here: `\left(` typed before what is to be wrapped and `\right)` typed
    * after it wrap it (M14). At a `\right` already there, it steps over it
@@ -1178,9 +1427,15 @@ class Resolver {
     while (/\s/u.test(text[at] ?? "")) {
       at += 1;
     }
-    if (!chip.held && text.startsWith(`\\right${char}`, at)) {
-      const caret = at + "\\right".length + char.length;
-      return this.transaction([], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
+    const here = view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters[1]?.from === at)?.delimiters[1];
+    if (!chip.held && here) {
+      // At a `\right` (the one pending, say): this is it, with the delimiter typed.
+      const insert = `\\right${char}`;
+      if (text.slice(here.from, here.to) === insert) {
+        return this.transaction([], { kind: "absolute", anchor: here.to, focus: here.to }, { group: "own-step" });
+      }
+      const caret = here.from + insert.length;
+      return this.transaction([{ from: here.from, to: here.to, insert }], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
     }
     const { tree } = view;
     const slot = tree.slots[caretAt(view, chip.at).slot];
@@ -1194,7 +1449,7 @@ class Resolver {
           (content.id === slot.id || (node.span.to === chip.at && slot.children.includes(node.id)));
       })
       .sort((left, right) => (left.span.to - left.span.from) - (right.span.to - right.span.from))[0];
-    if (!chip.held && DELIMITER_CHARACTERS.has(char) && open) {
+    if (!chip.held && isDelimiter(char) && open) {
       const insert = `\\right${char}`;
       return this.transaction(
         [{ from: chip.at, to: chip.at, insert }],
@@ -1202,7 +1457,7 @@ class Resolver {
         { group: "own-step" }
       );
     }
-    const pair = chip.held || !DELIMITER_CHARACTERS.has(char) ? undefined : slot.children
+    const pair = chip.held || !isDelimiter(char) ? undefined : slot.children
       .map((id) => tree.nodes[id])
       .filter((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.span.to <= chip.at)
       .at(-1);
@@ -1234,7 +1489,7 @@ class Resolver {
     }
     const caret = caretAt(view, chip.at);
     const mode = view.tree.slots[caret.slot].mode;
-    const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept);
+    const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept, this.pendingCloserText(view));
     if (mode === "math" && BLOCK_COMMANDS.has(name)) {
       // List and environment commands make no sense in a formula.
       return this.keepSelection(NO_INTERACTION);
@@ -1258,12 +1513,17 @@ class Resolver {
       // `\bm` expands what it holds, and these do not survive it (LuaLaTeX loops).
       return this.keepSelection(NO_INTERACTION);
     }
-    if (mode === "math" && (name === "left" || name === "right" || name === "middle")) {
-      // `\left` and `\right` only exist in pairs (K16, O5): `\left` brings
-      // its `\right`; a lone `\right` or `\middle` writes nothing.
-      return name === "left"
-        ? this.commitOutcome(view, commitLeftDelimiter(view.tree.text, chip.at, chip.held, "(")!)
-        : this.keepSelection(NO_INTERACTION);
+    const delimited = /^(left|right)([^A-Za-z].*)?$/su.exec(name);
+    if (delimited && (mode === "math" || delimited[2] != null)) {
+      // `\left` and `\right` only exist in pairs (K16, O5): `\left` brings its
+      // `\right` (a completion names the delimiter, `\left(`; bare, it is `(`);
+      // a `\right` closes or steps over one (a bare one, or `\middle`, writes nothing).
+      const [, side, given] = delimited;
+      const delimiter = given ?? (side === "left" ? "(" : "");
+      return this.commitDelimiter(view, commands, caret, chip, side, delimiter) ?? this.keepSelection(NO_INTERACTION);
+    }
+    if (mode === "math" && name === "middle") {
+      return this.keepSelection(NO_INTERACTION);
     }
     const valued = commands.command(name, mode === "math" ? "math" : "text") ??
       (mode === "math" && ["declaration", "vertical", "break", "overlay"].includes(commands.command(name, "text")?.category ?? "") ? null : commands.command(name, mode === "math" ? "text" : "math"));
@@ -1346,13 +1606,24 @@ class Resolver {
       // Leaving the chip commits it, with its arguments: a bare `\\textbf` would take what follows.
       return this.commitChip(view, this.context.commands, chip, "structure", false);
     }
+    const pair = view && this.context.structure && !motion.extend && (motion.dir === "left" || motion.dir === "right") ? this.pendingPair(view) : null;
+    if (view && pair) {
+      return this.movePendingCloser(view, pair, motion);
+    }
+    const { unit } = motion;
+    if (unit === "word") {
+      // (⌥←/⌥→ are native but with a `\right` pending; should one arrive anyway, it moves by source word.)
+      const { text, anchor, focus } = this.context;
+      const next = motion.dir === "left" || motion.dir === "up" ? previousWordBoundary(text, focus) : nextWordBoundary(text, focus);
+      return motion.extend ? this.select(anchor, next) : this.select(next, next);
+    }
     if (view && motion.unit === "item" && (motion.dir === "left" || motion.dir === "right")) {
       return this.moveOnTree(view, motion.dir === "left" ? -1 : 1, motion.extend);
     }
     const rendered = resolveCanvasRenderedMotion(
       this.context.domain,
       this.bufferSelection(),
-      motion,
+      { ...motion, unit },
       this.context.verticalGoal
     );
     if (rendered) {
@@ -1362,7 +1633,7 @@ class Resolver {
     const { text, anchor, focus } = this.context;
     const backward = motion.dir === "left" || motion.dir === "up";
     let next: number;
-    switch (motion.unit) {
+    switch (unit) {
       case "item":
         if (!motion.extend && this.hasRange()) {
           next = backward ? this.from : this.to;

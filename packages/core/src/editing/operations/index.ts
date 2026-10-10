@@ -3,7 +3,7 @@ export { abandonPlaceholder, beforeMulticolumn, optionalArgumentAhead, placehold
 export { braceUnbracedArgument, enterExistingScript, insertIntoUnbracedArgument } from "./script.js";
 export { deadBreaks, enter, inAlignment, inListFlow, indentItems, joinBackward, joinForward, tab, toggleList } from "./structure.js";
 export { listItemOf, listShapes, type ItemShape, type ListContext, type ListShape } from "./lists.js";
-export { breaksBoldMath, inBoldMath, commitAcrossModes, commitCommand, commitControlSymbol, isControlSymbol, lineEndable, commitLeftDelimiter, DELIMITER_CHARACTERS, type CommandCommit, type CommitKey } from "./command.js";
+export { breaksBoldMath, inBoldMath, commitAcrossModes, commitCommand, commitControlSymbol, isControlSymbol, lineEndable, commitLeftDelimiter, DELIMITER_CHARACTERS, isDelimiter, matchingRightDelimiter, type CommandCommit, type CommitKey } from "./command.js";
 export { rulesInsideRows } from "./source.js";
 export { CANVAS_CLIP_TYPE, copyRange, pasteAt, type CanvasClip, type ClipboardPayload } from "./paste.js";
 export { commitWithValues, editValues, fieldProblems, needsValues, valueFields, valueProblem, valueSource, taggedValues, valueEditorFields, writtenValueAt, type TaggedValue, type ValueField, type ValueKind, type WrittenValue } from "./values.js";
