@@ -109,7 +109,10 @@ export function remapPresentationCursor(previous: BeamerPresentationRenderer, ne
   const oldFrames = previous.prepared.document.frames, newFrames = next.prepared.document.frames;
   const old = oldFrames[cursor.frame];
   if (!old || !newFrames.length) return { ...cursor, frame: Math.max(0, Math.min(cursor.frame, newFrames.length - 1)) };
-  const exact = newFrames.findIndex(frame => next.source.slice(frame.span.from, frame.span.to) === previous.source.slice(old.span.from, old.span.to));
+  const oldText = previous.source.slice(old.span.from, old.span.to);
+  const occurrence = oldFrames.slice(0, cursor.frame).filter(frame => previous.source.slice(frame.span.from, frame.span.to) === oldText).length;
+  const matches = newFrames.map((frame, index) => next.source.slice(frame.span.from, frame.span.to) === oldText ? index : -1).filter(index => index >= 0);
+  const exact = matches[Math.min(occurrence, matches.length - 1)] ?? -1;
   const labeled = old.options?.label ? newFrames.findIndex(frame => frame.options?.label === old.options?.label) : -1;
   let frame = labeled >= 0 ? labeled : exact;
   if (frame < 0) {
@@ -120,7 +123,7 @@ export function remapPresentationCursor(previous: BeamerPresentationRenderer, ne
     const oldChangedEnd = previous.source.length - suffix;
     const shiftedStart = old.span.from >= oldChangedEnd ? old.span.from + next.source.length - previous.source.length : old.span.from;
     if (!(prefix <= old.span.from && oldChangedEnd >= old.span.to)) frame = newFrames.findIndex(candidate => candidate.span.from <= shiftedStart && candidate.span.to > shiftedStart);
-    if (frame < 0) frame = Math.min(cursor.frame, newFrames.length - 1);
+    if (frame < 0) return { frame: Math.min(cursor.frame, newFrames.length - 1), step: 1, continuation: 1 };
   }
   return { ...cursor, frame };
 }

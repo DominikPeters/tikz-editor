@@ -25,7 +25,8 @@ export type PresentationCommand =
   | { type: "next" | "previous" | "next-frame" | "previous-frame" | "stop" | "show-presenter" | "recover-output" | "swap-displays" }
   | { type: "jump" | "thumbnail"; frame: number }
   | { type: "blank"; value: PresentationSnapshot["blank"] }
-  | { type: "timer"; action: "start" | "pause" | "reset" };
+  | { type: "timer"; action: "start" | "pause" | "reset" }
+  | { type: "close-view"; role: PresentationRole };
 export type PresentationMessage =
   | { type: "hello"; sessionId: string; role: PresentationRole }
   | { type: "snapshot"; sessionId: string; snapshot: PresentationSnapshot }
@@ -47,8 +48,9 @@ export type PresentationOptions = {
 export type PresentationWindows = {
   close(): Promise<void> | void;
   showPresenter(): Promise<void> | void;
+  closeView(role: PresentationRole): Promise<void> | void;
   recoverOutput(displayId?: string | null): Promise<void> | void;
-  swapDisplays(): Promise<void> | void;
+  swapDisplays(): Promise<{ audienceDisplay: string; presenterDisplay: string } | void> | void;
 };
 export type PlatformPresentationApi = {
   displays(): Promise<PresentationDisplay[]>;
@@ -73,5 +75,6 @@ export function isPresentationMessage(value: unknown, sessionId: string): value 
   if (command.type === "jump" || command.type === "thumbnail") return Number.isSafeInteger(command.frame) && command.frame >= 0;
   if (command.type === "blank") return ["none", "black", "white"].includes(command.value);
   if (command.type === "timer") return ["start", "pause", "reset"].includes(command.action);
+  if (command.type === "close-view") return command.role === "audience" || command.role === "presenter";
   return ["next", "previous", "next-frame", "previous-frame", "stop", "show-presenter", "recover-output", "swap-displays"].includes(command.type);
 }

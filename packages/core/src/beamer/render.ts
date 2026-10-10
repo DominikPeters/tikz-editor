@@ -3662,6 +3662,7 @@ function layoutParagraph(params: {
       `Beamer class ${command} size`
     );
   }
+  mapped = projectBeamerSpeakerNotes(mapped);
   mapped = projectBeamerFootnotes(mapped, params.references.footnotes, {
     ...params.font,
     sizePt: namedSize?.sizePt ?? params.font.sizePt,

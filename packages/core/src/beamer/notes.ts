@@ -72,7 +72,7 @@ export function beamerSpeakerNotes(document: BeamerDocumentModel, commands: read
   const prose = selected.filter(note => note.option !== "item").map(note => {
     const environment = outside && ["enumerate", "itemize"].includes(note.option) ? note.option : null;
     return environment ? `\\begin{${environment}}${note.text}\\end{${environment}}` : note.text;
-  }).join("\n");
+  }).join("");
   const items = selected.filter(note => note.option === "item").map(note => `\\item ${note.text}`).join("\n");
-  return [before, prose, items ? `\\begin{enumerate}${items}\\end{enumerate}` : "", after].filter(Boolean).join("\n");
+  return [before, prose, items ? `\\begin{enumerate}${items}\\end{enumerate}` : "", after].filter(Boolean).join("");
 }

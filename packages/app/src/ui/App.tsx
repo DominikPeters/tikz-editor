@@ -1,10 +1,11 @@
 import { useDeferredPropertyCleanup } from "./useDeferredPropertyCleanup";
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   APP_MENU_COMMAND_IDS,
   APP_MENU_DEFINITION,
   filterAppMenuDefinitionForTarget,
+  appMenuForDocument,
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
@@ -54,6 +55,11 @@ import { useDocumentFileOperations } from "./useDocumentFileOperations";
 import type { DocumentFileRef } from "../store/types";
 import { createArxivVirtualFileName, type ArxivPaperSession, type ArxivTikzCandidate } from "../arxiv-source";
 import "./selection.css";
+import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { PresentationWindow } from "../presentation/PresentationWindow";
+import { PresentationOptionsModal } from "../presentation/PresentationOptionsModal";
+import { presentationService } from "../presentation/service";
+import presentationCss from "../presentation/PresentationControls.module.css";
 
 const DevPanel = lazy(async () => {
   const mod = await import("./DevPanel");
@@ -217,7 +223,19 @@ function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string 
 }
 
 export function App() {
+  const query = new URLSearchParams(window.location.search);
+  const role = query.get("presentation"), sessionId = query.get("session");
+  if ((role === "audience" || role === "presenter") && sessionId) return <PresentationWindow role={role} sessionId={sessionId} />;
+  return <EditorApp />;
+}
+
+function EditorApp() {
   useDeferredPropertyCleanup();
+  const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
+  const [showPresentationOptions, setShowPresentationOptions] = useState(false);
+  const handlePresentationOptions = useCallback(() => { setShowPresentationOptions(true); }, []);
+  const presentationDocument = useEditorStore(s => presentation.snapshot ? s.documents[presentation.snapshot.documentId] : null);
+  const presentationAssets = useMemo(() => presentationDocument ? [{ source: presentationDocument.source, documentFileRef: presentationDocument.fileRef }] : [], [presentationDocument]);
   const {
     source,
     sourceRevision,
@@ -279,11 +297,12 @@ export function App() {
   })));
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
-  const navigatorMenuLabel = useEditorStore(s => s.documentKind === "beamer" ? "Slides Panel" : "Figures Panel");
-  const menuDefinition = useMemo(() => filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget).map(section => ({
-    ...section, items: section.items.map(item => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL
-      ? { ...item, label: navigatorMenuLabel } : item),
-  })), [menuTarget, navigatorMenuLabel]);
+  const documentKind = useEditorStore(s => s.documentKind);
+  const nestedDrawing = parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz";
+  const presenting = !!presentation.snapshot;
+  const menuDefinition = useMemo(() => appMenuForDocument(filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), {
+    kind: documentKind, nestedDrawing, presenting, focus: presentation.focus
+  }), [menuTarget, documentKind, nestedDrawing, presenting, presentation.focus]);
   const [showOpenExampleModal, setShowOpenExampleModal] = useState(false);
   const [showOpenFromArxivModal, setShowOpenFromArxivModal] = useState(false);
   const [openFromArxivSession, setOpenFromArxivSession] = useState<ArxivPaperSession>({
@@ -505,6 +524,7 @@ export function App() {
   }, []);
 
   const commandRuntime = useEditorCommandRuntime({
+    onPresentationOptions: handlePresentationOptions,
     onOpenExample: handleOpenExampleCommand,
     onOpenFromArxiv: handleOpenFromArxivCommand,
     onOpenSvgExport: handleOpenSvgExportCommand,
@@ -679,7 +699,15 @@ export function App() {
     };
   }, [applyLinkedReadDecision]);
 
-  useActiveDocumentAssetWatches({ files: platform.files, source, documentFileRef: activeDocumentFileRef });
+  useActiveDocumentAssetWatches({ files: platform.files, source, documentFileRef: activeDocumentFileRef, additionalDocuments: presentationAssets });
+  useEffect(() => { presentationService.refresh(); }, [imageAssetRefreshToken]);
+  useEffect(() => {
+    let disposed = false, unbind: (() => void) | undefined;
+    void platform.presentation?.onFocus?.(presentationService.focusEditor).then(value => { if (disposed) value(); else unbind = value; });
+    const close = () => { void presentationService.stop(); };
+    window.addEventListener("pagehide", close);
+    return () => { disposed = true; unbind?.(); window.removeEventListener("pagehide", close); };
+  }, [platform.presentation]);
 
   useEffect(() => {
     const bind = getActiveEditorPlatform().files?.bindLocalAssetChange;
@@ -1564,6 +1592,10 @@ export function App() {
       const runtime = commandRuntimeRef.current;
       const currentToolMode = toolModeRef.current;
       const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && key === "enter") {
+        if (runtime.runCommand(e.shiftKey ? APP_MENU_COMMAND_IDS.PRESENT_BEGINNING : APP_MENU_COMMAND_IDS.PRESENT_CURRENT, "shortcut")) e.preventDefault();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && key === "f") {
         if (runtime.runCommand(APP_MENU_COMMAND_IDS.FORMAT_TIKZ, "shortcut")) {
           e.preventDefault();
@@ -1757,6 +1789,8 @@ export function App() {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const shortcutMode = toolModeFromShortcut(key);
         if (shortcutMode) {
+          const state = useEditorStore.getState();
+          if (state.documentKind === "beamer" && parseDocumentRootId(state.activeRootId ?? "")?.kind !== "beamer-frame-tikz" && shortcutMode !== "select" && shortcutMode !== "magnify") return;
           dispatch({ type: "SET_TOOL_MODE", mode: shortcutMode });
           e.preventDefault();
           return;
@@ -1955,6 +1989,7 @@ export function App() {
         />
       )}
       <Toolbar
+        onPresentationOptions={handlePresentationOptions}
         updateChip={
           availableUpdate && !showUpdateModal && !updateDismissedForSession
             ? {
@@ -1972,6 +2007,9 @@ export function App() {
           requestCloseIntent({ kind: "close-document", documentId });
         }}
       />
+      {presentation.error ? <div className={presentationCss.feedback} role="alert"><span>{presentation.error}</span><button type="button" onClick={handlePresentationOptions}>Presentation Options…</button><button type="button" onClick={presentationService.clearError}>Dismiss</button></div> : null}
+      {presentation.snapshot && !presentation.snapshot.outputAvailable ? <div className={presentationCss.feedback} role="status"><span>Audience output is closed.</span><button type="button" onClick={handlePresentationOptions}>Choose Audience Output…</button></div> : null}
+      {showPresentationOptions ? <PresentationOptionsModal active={presenting} onClose={() => { setShowPresentationOptions(false); }} /> : null}
       <div className={css.body}>
         <DockLayout
           repeatPreviewModel={repeatPreviewModel}

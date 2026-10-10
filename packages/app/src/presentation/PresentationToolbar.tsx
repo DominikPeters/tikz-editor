@@ -1,0 +1,66 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import { parseDocumentRootId, formatDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { editBeamerSlides } from "@tikz-editor/core/beamer";
+import { useEditorStore } from "../store/store";
+import { launchPresentation } from "./launch";
+import { presentationService } from "./service";
+import css from "./PresentationControls.module.css";
+
+export function NewSlideButton() {
+  const kind = useEditorStore(state => state.documentKind);
+  const locked = useEditorStore(state => !!state.documents[state.activeDocumentId]?.assistantLockReason);
+  if (kind !== "beamer") return null;
+  return <button type="button" className={css.newSlide} disabled={locked} onClick={() => {
+    const state = useEditorStore.getState(), root = parseDocumentRootId(state.activeRootId ?? "");
+    const frameId = root?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: root.frameIndex }) : state.activeRootId;
+    const edit = { kind: "insert" as const, destination: frameId ? { kind: "after" as const, frameId } : { kind: "end" as const } };
+    if (editBeamerSlides(state.source, edit)) state.dispatch({ type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision, edit });
+  }}>＋ New Slide</button>;
+}
+
+export function PresentationToolbar({ onOptions }: { onOptions: () => void }) {
+  const kind = useEditorStore(state => state.documentKind);
+  const { snapshot } = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const close = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); ref.current?.querySelector<HTMLButtonElement>('[aria-label="Presentation actions"]')?.focus(); } };
+    window.addEventListener("pointerdown", close); window.addEventListener("keydown", escape);
+    return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("keydown", escape); };
+  }, [open]);
+  if (kind !== "beamer" && !snapshot) return null;
+  const action = (run: () => void) => () => { setOpen(false); run(); };
+  return <div ref={ref} className={css.toolbarControls}>
+    {snapshot ? <span className={css.presenting} title={snapshot.title}>Presenting: {snapshot.title}</span> : null}
+    <div className={css.split}>
+      <button type="button" data-testid="present-button" onClick={() => { setOpen(false); if (snapshot) presentationService.command({ type: "show-presenter" }); else launchPresentation("current"); }}>{snapshot ? "Presenter View" : "▶ Present"}</button>
+      <button type="button" aria-label="Presentation actions" aria-haspopup="menu" aria-expanded={open} onClick={() => { const rect = ref.current?.getBoundingClientRect(); if (rect) setMenuPosition({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) }); setOpen(value => !value); }}>▾</button>
+    </div>
+    {open ? createPortal(<div ref={menuRef} className={css.menu} style={{ position: "fixed", ...menuPosition }} role="menu" aria-label="Presentation actions" onKeyDown={event => {
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+      const index = items.indexOf(event.target as HTMLButtonElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      items[next]?.focus();
+    }}>
+      {snapshot ? <>
+        <button type="button" role="menuitem" onClick={action(() => { presentationService.command({ type: "show-presenter" }); })}>Show Presenter View</button>
+        <button type="button" role="menuitem" onClick={action(onOptions)}>Audience Display…</button>
+        <button type="button" role="menuitem" onClick={action(() => { presentationService.command({ type: "stop" }); })}>End Presentation</button>
+      </> : <>
+        <button type="button" role="menuitem" onClick={action(() => { launchPresentation("beginning"); })}>From Beginning</button>
+        <button type="button" role="menuitem" onClick={action(() => { launchPresentation("current"); })}>From Current Slide</button>
+        <button type="button" role="menuitem" onClick={action(() => { launchPresentation("current", "window"); })}>Present in a Window</button>
+        <button type="button" role="menuitem" onClick={action(() => { launchPresentation("current", "rehearse"); })}>Rehearse</button>
+        <button type="button" role="menuitem" onClick={action(onOptions)}>Presentation Options…</button>
+      </>}
+    </div>, document.body) : null}
+  </div>;
+}
