@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
+import { readTexFontData } from "./lib/tex-font-data.mjs";
 import { escapeTexText, runTexOracleDocument } from "./lib/tex-oracle.mjs";
 
 const fontId = "cmr10";
@@ -10,18 +9,8 @@ const fontId = "cmr10";
 const fixtures = process.argv.slice(2).length > 0
   ? process.argv.slice(2)
   : ["office", "fluff", "AV", "To", "--", "---", "``", "''"];
-const generatedPath = resolve(
-  process.cwd(),
-  "packages/core/src/text/tex/fonts/data/computer-modern-ot1.generated.ts"
-);
-
 function loadGeneratedFonts() {
-  const source = readFileSync(generatedPath, "utf8");
-  const match = /export const COMPUTER_MODERN_OT1_FONTS(?:\s*:[^=]+)?\s*=\s*(?<json>[\s\S]+?)\n};/.exec(source);
-  if (!match?.groups?.json) {
-    throw new Error(`Could not extract generated font table from ${generatedPath}`);
-  }
-  return JSON.parse(`${match.groups.json}\n}`);
+  return readTexFontData();
 }
 
 function ruleKey(left, right) {
