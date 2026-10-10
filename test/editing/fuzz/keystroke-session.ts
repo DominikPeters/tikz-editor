@@ -11,6 +11,7 @@ import type { ClipboardPayload } from "../../../packages/core/src/editing/operat
 import { createEditViewCache, promotedOffsets, type EditView } from "../../../packages/core/src/editing/position/index.js";
 import { applyTransaction, TYPING_RUN_PAUSE_MS } from "../../../packages/core/src/editing/transaction/index.js";
 import type { ScenarioKey } from "../../../packages/core/src/editing/testing/index.js";
+import { scanTexRecovery } from "../../../packages/core/src/text/tex/recovery.js";
 import {
   INITIAL_CANVAS_TEXT_EDIT_STATE,
   interactionState,
@@ -40,7 +41,11 @@ export type FuzzKey =
   /** The value editor's fields filled and confirmed (⏎, or `}` with `viaBrace`). */
   | { readonly kind: "pick"; readonly values: readonly string[]; readonly viaBrace?: boolean }
   /** Values already written, edited through their tag. */
-  | { readonly kind: "setValues"; readonly edits: readonly { readonly span: { readonly from: number; readonly to: number }; readonly text: string }[] };
+  | { readonly kind: "setValues"; readonly edits: readonly { readonly span: { readonly from: number; readonly to: number }; readonly text: string }[] }
+  /** The source lens's text after an edit, with its caret (the lens opens with ⌘E). */
+  | { readonly kind: "lensText"; readonly text: string; readonly caret: number }
+  /** The quick fix: the closers recovery puts in virtually, written in. */
+  | { readonly kind: "fixClosers" };
 
 export class KeystrokeSession {
   private machine: CanvasTextEditState = INITIAL_CANVAS_TEXT_EDIT_STATE;
@@ -153,6 +158,23 @@ export class KeystrokeSession {
         this.run(intent);
         return intent;
       }
+      case "lensText": {
+        if (!this.lens()) {
+          return null;
+        }
+        const intent: Intent = { type: "setLensText", text: key.text, caret: key.caret, origin: "keyboard", repeat: false };
+        this.run(intent);
+        return intent;
+      }
+      case "fixClosers": {
+        const closers = scanTexRecovery(this.text).closers.map((closer) => ({ at: closer.at, text: closer.closer }));
+        if (closers.length === 0) {
+          return null;
+        }
+        const intent: Intent = { type: "insertClosers", closers, origin: "pointer", repeat: false };
+        this.run(intent);
+        return intent;
+      }
       case "text": {
         const intent = intentFromBeforeInput("insertText", key.text)!;
         this.run(intent);
@@ -164,7 +186,13 @@ export class KeystrokeSession {
           this.run(decision.intent);
           return decision.intent;
         }
-        if (decision.kind === "escape" && (this.chipOpen() || this.pickerOpen())) {
+        if (decision.kind === "focusBar") {
+          // ⌘E in a scope session: the source lens.
+          const intent: Intent = { type: "openLens", origin: "keyboard", repeat: false };
+          this.run(intent);
+          return intent;
+        }
+        if (decision.kind === "escape" && (this.chipOpen() || this.pickerOpen() || this.lens() != null)) {
           const intent: Intent = { type: "escape", origin: "keyboard", repeat: false };
           this.run(intent);
           return intent;
@@ -191,6 +219,11 @@ export class KeystrokeSession {
 
   pickerOpen(): boolean {
     return this.picker() != null;
+  }
+
+  /** The source lens, while it is open. */
+  lens() {
+    return this.interaction().lens ?? null;
   }
 
   private session() {

@@ -798,6 +798,9 @@ fragile/verbatim frame (expected: frame fallback, no session).
 ## Settled Stage 2 decisions (2026-07-31)
 
 - Focus-switch chord: **Cmd+E in / Esc out**, as assumed; no F2 binding.
+  *Superseded 2026-10-10:* in scope sessions ⌘E opens the source lens
+  (R13, `design/canvas-keyboard-scenarios.md`); the bar takes focus when
+  clicked, and Esc still walks back. Node sessions keep ⌘E for the bar.
 - Double-click on canvas text keeps its **word-select** meaning; it is not
   a focus switch.
 - Structural Enter splits paragraphs by inserting a **blank line**, also

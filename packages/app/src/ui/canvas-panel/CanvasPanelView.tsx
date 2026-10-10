@@ -10,6 +10,7 @@ import {
   type RefObject
 } from "react";
 import { CanvasValueEditor } from "./CanvasValueEditor";
+import { CanvasSourceLens } from "./CanvasSourceLens";
 import { valueTagText } from "./canvas-value-tag";
 import type { AppMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
@@ -854,6 +855,35 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
 
           {canvasTextEdit.valueEditor ? (
             <CanvasValueEditor key={canvasTextEdit.valueEditor.key} model={canvasTextEdit.valueEditor} />
+          ) : null}
+
+          {canvasTextEdit.recoveryGhosts.map((ghost) => (
+            <span
+              key={`${ghost.at}:${ghost.text}:${ghost.left}`}
+              className={css.recoveryGhost}
+              style={{ left: ghost.left, top: ghost.top, height: ghost.height, fontSize: ghost.height * 0.8, lineHeight: `${ghost.height}px` }}
+              data-testid="canvas-recovery-ghost"
+              aria-hidden="true"
+            >
+              {ghost.text}
+            </span>
+          ))}
+
+          {canvasTextEdit.recoveryFix ? (
+            <button
+              type="button"
+              className={css.recoveryFix}
+              style={{ left: canvasTextEdit.recoveryFix.left, top: canvasTextEdit.recoveryFix.top }}
+              data-testid="canvas-recovery-fix"
+              onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); }}
+              onClick={canvasTextEdit.recoveryFix.onApply}
+            >
+              {canvasTextEdit.recoveryFix.label}
+            </button>
+          ) : null}
+
+          {canvasTextEdit.sourceLens ? (
+            <CanvasSourceLens key={canvasTextEdit.sourceLens.key} model={canvasTextEdit.sourceLens} />
           ) : null}
 
           {canvasTextEdit.commandChip ? (

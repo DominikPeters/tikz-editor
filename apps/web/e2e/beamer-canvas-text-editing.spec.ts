@@ -318,7 +318,7 @@ test("keeps structure stable through transiently invalid source and supports str
   ]);
 });
 
-test("canvas focus: types on the slide, Cmd+E and Esc walk the surfaces, indication follows", async ({ page }) => {
+test("canvas focus: types on the slide, focusing the bar and Esc walk the surfaces, indication follows", async ({ page }) => {
   const textarea = await openScopeContaining(page, "Body typo.");
   const hiddenInput = page.getByTestId("canvas-focus-input");
   const popup = page.getByTestId("canvas-text-edit-popup");
@@ -354,8 +354,9 @@ test("canvas focus: types on the slide, Cmd+E and Esc walk the surfaces, indicat
     .poll(async () => page.getByTestId("canvas-text-edit-inactive-selection-rect").count())
     .toBeGreaterThan(0);
 
-  // Cmd+E hands the keyboard to the bar at the same caret.
-  await page.keyboard.press(`${PRIMARY_MOD}+e`);
+  // Focusing the bar hands it the keyboard at the same caret. (Cmd+E opens the source lens
+  // on the canvas instead; see the source lens test.)
+  await textarea.focus();
   await expect(textarea).toBeFocused();
   await expect(popup).toHaveAttribute("data-text-edit-focus", "bar");
   await expect(page.getByTestId("canvas-text-edit-inactive-selection-rect")).toHaveCount(0);
@@ -1161,4 +1162,58 @@ test("the value editor: a command's values are asked for before it is written, a
   await expect(editor).toHaveCount(0);
   await expect(textarea).toHaveValue(before);
   await expect(input).toBeFocused();
+});
+
+test("the source lens: ⌘E opens a construct's source, edits render live, Esc keeps them; a missing closer shows its ghost and a fix", async ({ page }) => {
+  const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{T}
+Intro \textbf{bold} word.
+
+Next line.
+\end{frame}
+\end{document}`;
+  await setSource(page, source);
+  const textarea = await openScopeContaining(page, "Intro");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const caret = buffer.indexOf("bold") + 2;
+  await input.evaluate((element, offset) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(offset, offset);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, caret);
+
+  await page.keyboard.press(`${PRIMARY_MOD}+e`);
+  const lens = page.getByTestId("canvas-source-lens");
+  const field = page.getByTestId("canvas-source-lens-field");
+  await expect(lens).toBeVisible();
+  await expect(field).toHaveValue(String.raw`\textbf{bold}`);
+  await expect(field).toBeFocused();
+
+  // Deleting the brace: the source changes as typed, the rest of the paragraph turns bold,
+  // and the ghost shows where the brace is missing.
+  await page.keyboard.press("End");
+  await page.keyboard.press("Backspace");
+  const unbalanced = source.replace(String.raw`\textbf{bold}`, String.raw`\textbf{bold`);
+  await expect.poll(() => readStoreSource(page)).toBe(unbalanced);
+  await expect(lens).toContainText("Missing }");
+  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveCount(1);
+  await expect(page.getByTestId("canvas-recovery-fix")).toHaveCount(0);
+
+  // Esc keeps what the lens wrote; the fix then writes the brace where the ghost is.
+  await page.keyboard.press("Escape");
+  await expect(lens).toHaveCount(0);
+  await expect(input).toBeFocused();
+  expect(await readStoreSource(page)).toBe(unbalanced);
+  await page.getByTestId("canvas-recovery-fix").click();
+  await expect.poll(() => readStoreSource(page)).toBe(source.replace(String.raw`\textbf{bold} word.`, String.raw`\textbf{bold word.}`));
+  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveCount(0);
+
+  // The lens's text is one undo step, as is the fix.
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(unbalanced);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(source);
 });

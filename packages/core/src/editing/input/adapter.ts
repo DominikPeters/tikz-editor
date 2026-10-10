@@ -28,7 +28,7 @@ export type KeyDownDecision =
   | { readonly kind: "intent"; readonly intent: Intent }
   /** Session lifecycle: step out one level. */
   | { readonly kind: "escape" }
-  /** Session lifecycle: hand the keyboard to the docked bar (⌘E). */
+  /** ⌘E: the source lens in a scope session (R13); elsewhere, the keyboard to the docked bar. */
   | { readonly kind: "focusBar" }
   /** Consume the key without effect (e.g. Tab must not leave the session). */
   | { readonly kind: "block" }

@@ -49,6 +49,15 @@ describe("edit tree binding", () => {
     })).toEqual(contents);
   });
 
+  it("ends an unclosed argument where recovery closes it, as the renderer does", () => {
+    const source = "A \\emph{an open\n\\begin{itemize}\n\\item x\n\\end{itemize}";
+    const built = tree(source);
+    const emph = built.nodes.find((node) => node.command === "emph")!;
+    expect(source.slice(emph.span.from, emph.span.to)).toBe("\\emph{an open");
+    expect(built.nodes.some((node) => node.kind === "list")).toBe(true);
+    expect(built.diagnostics.map((diagnostic) => diagnostic.code)).toContain("unclosed-group");
+  });
+
   it("stops at a blank line after a comment, a paragraph end to TeX", () => {
     const built = tree("\\textbf% content\n\n{x}");
     expect(printEditTree(built)).toBe(`(scope (paragraph (style:textbf) %) (paragraph (group "x")))`);

@@ -929,8 +929,39 @@ uses positions but deletion still uses raw source ranges.
    enter (`\hspace`) shows its tag only when selected; cells of
    `>{$}c<{$}` columns are math to TeX but text to the edit tree.
 
-Parallel: engine recovery (T1–T7) against the interface above. It must
-land before the source lens is promoted as the main escape hatch.
+**Recovery and the source lens (T1, T2, T5, T6, R13), done.** The text
+engine recovers from unbalanced source the way TeX does, but keeps the
+damage in the run being edited: `text/tex/recovery.ts` scans a text for
+openers with no closer and closers with no opener. A group is closed at
+the end of its paragraph or item, or before an environment that follows
+it in prose; math at the end of its paragraph or item, or where the group
+around it ends. An opener with nothing in its run (a lone `$`) and a
+stray closer stay literal source. The fragment parser reads the text
+with those characters masked (`*`, same length, so offsets hold), so its
+own error recovery cannot spread: an unclosed `\textbf{` or `$` in one
+item leaves the list around it intact, where before the whole list fell
+back to source. The IR's group, font, colour and math scanners take the
+recovered extent; the edit tree's binder ends an unclosed group at the
+same place, so outlines agree with the render. Each frame reports the
+recovery per edit scope (`layout.recovery`, and warnings
+`tex-missing-closer` and `tex-unmatched-delimiter`). Valid source needs
+no recovery: the corpus decks, macro definitions (`\newcommand{\BI}{\begin{itemize}}`),
+column insertions (`>{$}c<{$}`) and `$` in `\text{…}` in math are checked.
+The canvas draws each missing closer as a faint ghost where it belongs,
+and offers "Insert missing }" once the lens is closed, which writes them
+in as one step (during the session rather than when it ends, as T6 had
+it: the ghosts show where they go). The source lens: ⌘E opens the raw
+source of the innermost outlined construct around the caret, or the
+selection, or the item or paragraph in plain prose, in a field placed
+clear of it; what is typed is written over the span as it stands, with
+none of the canvas's input rules or repairs, re-rendering live; the
+canvas caret follows the lens's; Esc closes it keeping what it wrote, ⏎
+closes it once the source is balanced (⇧⏎ breaks the line), ⌘Z undoes
+(and closes it); its edits are one undo step. Still open: T3 (partial
+math such as `x^{2` or `\frac{1}{` falls back to source for its formula),
+T4 (a `%` typed in the lens silently comments out the rest of the line),
+the lens opened automatically on a scope that no longer parses, and a
+recovery badge on the frame thumbnail.
 
 ## Risks and open questions
 
