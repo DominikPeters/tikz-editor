@@ -337,7 +337,8 @@ function remapLineMathCaretEntryReport<Space extends SourceCoordinateSpace>(
   const { sourceStartRaw: _sourceStartRaw, sourceEndRaw: _sourceEndRaw, ...rest } = entry;
   return {
     ...rest,
-    sourceOffsetRaw: mapInputOffset(sourceMap, entry.sourceOffsetRaw),
+    sourceOffsetRaw: documentSourceOffset(mapCaretEntryOffset(sourceMap, entry.sourceOffsetRaw,
+      entry.sourceStartRaw == null || entry.sourceEndRaw == null ? null : { start: entry.sourceStartRaw, end: entry.sourceEndRaw }, sourceSpan)),
     ...(sourceSpan ? {
       sourceStartRaw: documentSourceOffset(sourceSpan.start),
       sourceEndRaw: documentSourceOffset(sourceSpan.end),
@@ -481,7 +482,7 @@ function remapTexHitMap(hitMap: TexHitMap, sourceMap: TextSourceMap): TexHitMap 
               : null;
             return {
               ...entry,
-              sourceOffset: mapInputOffset(sourceMap, entry.sourceOffset),
+              sourceOffset: mapCaretEntryOffset(sourceMap, entry.sourceOffset, entry.sourceSpan ?? null, entrySpan),
               ...(entrySpan ? { sourceSpan: entrySpan } : {}),
             };
           }),
@@ -506,6 +507,23 @@ function remapTexHitMap(hitMap: TexHitMap, sourceMap: TextSourceMap): TexHitMap 
   };
 }
 
+/**
+ * A caret entry's offset in the source. Every position inside a macro's
+ * expansion maps to the invocation's start, so an entry at the end of its
+ * item maps with the item's end instead: the caret after `\act` (expanded
+ * to `\mathcal{A}`) is at its end.
+ */
+function mapCaretEntryOffset(
+  sourceMap: TextSourceMap,
+  offset: number,
+  span: { readonly start: number; readonly end: number } | null,
+  mappedSpan: { readonly start: number; readonly end: number } | null
+): number {
+  return span && mappedSpan && span.end > span.start && offset === span.end
+    ? mappedSpan.end
+    : mapInputOffset(sourceMap, offset);
+}
+
 function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox {
   const sourceSpan = mapInputSpan(sourceMap, box.sourceStart, box.sourceEnd);
   const contentSpan = mapInputSpan(sourceMap, box.contentStart, box.contentEnd);
@@ -528,7 +546,7 @@ function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox 
               : null;
             return {
               ...entry,
-              sourceOffset: mapInputOffset(sourceMap, entry.sourceOffset),
+              sourceOffset: mapCaretEntryOffset(sourceMap, entry.sourceOffset, entry.sourceSpan ?? null, entrySpan),
               ...(entrySpan ? { sourceSpan: { start: entrySpan.start, end: entrySpan.end } } : {})
             };
           }),
