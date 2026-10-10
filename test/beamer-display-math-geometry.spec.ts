@@ -110,6 +110,17 @@ describe("caret and selection geometry around commands and big operators", () =>
     expect(maxX - minX).toBeCloseTo(nabla.x - lambda.x, 6);
   });
 
+  it("draws the caret after a macro (\\act, expanded to \\mathcal{A}) at the macro's end, its level's height", async () => {
+    const caret = async (offset: number) => {
+      const point = await getKnuthPlassPointFromOffset(context, { ...params, offset: documentSourceOffset(offset) });
+      return { x: point.clientPoint!.x, height: Math.abs(point.caretBottom!.y - point.caretTop!.y) };
+    };
+    const before = await caret(at(String.raw`\act}`));
+    const after = await caret(at(String.raw`\act}`) + String.raw`\act`.length);
+    expect(after.x).toBeGreaterThan(before.x);
+    expect(after.height).toBeCloseTo(before.height, 6);
+  });
+
   it("draws the caret at a big operator over the operator, not above it", async () => {
     for (const offset of [at(String.raw`\sum_{`), at(String.raw`\sum_j`)]) {
       const sum = box.caretMap!.entries.find((entry) => entry.sourceOffset === offset && entry.kind === "glyph-boundary" && entry.sourceSpan?.start === offset)!;
