@@ -166,8 +166,9 @@ export function commitAcrossModes(
   // Where the caret goes in `inner`; null: after the whole.
   let inside: number | null = null;
   if (name === "left") {
-    inner = `\\left${delimiter}\\right${DELIMITER_PAIRS[delimiter] ?? ")"}`;
-    inside = `\\left${delimiter}`.length;
+    // (Its `\right` is typed where it goes, as in math: M14.)
+    inner = `\\left${delimiter}`;
+    inside = inner.length;
   } else if (key === "bracket" && schema.args.find((arg) => arg.kind !== "overlay")?.kind === "optional") {
     inner = `${command}[]${"{}".repeat(mandatory)}`;
     inside = command.length + 1;
@@ -286,16 +287,21 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
 }
 
 /**
- * `\left` and a delimiter: the pair, with its closer (R3, M14), around a
- * held selection, which stays selected inside.
+ * `\left` and a delimiter (M14). Alone: its `\right` is typed where it
+ * goes, after what it encloses, and until then the canvas shows where TeX
+ * would close it (a ghost at the formula's end). Around a held selection:
+ * the pair, the selection selected inside.
  */
 export function commitLeftDelimiter(text: string, at: number, held: Span | null, opener: string): EditOutcome | null {
   const closer = DELIMITER_PAIRS[opener];
   if (closer == null) {
     return null;
   }
-  const range = held ?? { from: at, to: at };
   const open = `\\left${opener}`;
+  if (!held) {
+    return edit({ from: at, to: at }, open, at + open.length);
+  }
+  const range = held;
   const selected = text.slice(range.from, range.to);
   const caret = range.from + open.length;
   return {

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createCommandTable } from "../../packages/core/src/editing/commands/index.js";
 import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
+import { scanTexRecovery } from "../../packages/core/src/text/tex/recovery.js";
 import { KeystrokeSession, type FuzzKey } from "./fuzz/keystroke-session.js";
 
 /**
- * `\left` and `\right` around what is already written: `\left(` brings
- * its `\right)`, so typing `\right)` further on extends the pair to there
- * (TeX has no `\right` without a `\left`); a selection is wrapped whole.
+ * `\left` and `\right` around what is already written (M14): `\left(`
+ * is written alone and `\right)` typed after what it encloses closes it;
+ * a pair already closed extends to where `\right)` is typed (TeX has no
+ * `\right` without a `\left`); a selection is wrapped in the whole pair.
  */
 const commands = createCommandTable();
 
@@ -39,35 +41,50 @@ const after = (target: KeystrokeSession, needle: string): FuzzKey => {
 };
 
 describe("delimiter pairs around what is written", () => {
-  it("extends the pair \\left( brought to where \\right) is typed, as one step", () => {
+  it("writes \left( alone, closed by \right) typed after what it wraps, as TeX's recovery shows", () => {
     const target = session(String.raw`$f+‸\lambda_i\nabla g_i(x^\star)+h$`);
     press(target, String.raw`\left(`);
-    expect(marked(target)).toBe(String.raw`$f+\left(‸\right)\lambda_i\nabla g_i(x^\star)+h$`);
+    expect(marked(target)).toBe(String.raw`$f+\left(‸\lambda_i\nabla g_i(x^\star)+h$`);
+    // Until then, its `\right` is missing where the formula ends: the canvas draws it there.
+    expect(scanTexRecovery(target.text).closers).toMatchObject([{ kind: "delimiter", closer: String.raw`\right)`, at: target.text.length - 1 }]);
     press(target, after(target, String.raw`(x^\star)`), String.raw`\right)`);
     expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)\right)‸+h$`);
+    expect(scanTexRecovery(target.text).closers).toEqual([]);
     press(target, "⌘Z");
-    expect(target.text).toBe(String.raw`$f+\left(\right)\lambda_i\nabla g_i(x^\star)+h$`);
+    expect(target.text).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)+h$`);
   });
 
-  it("takes the delimiter typed: \\left( … \\right] is a pair too", () => {
+  it("closes a \left( just typed at once, empty", () => {
+    const target = session(String.raw`$a‸$`);
+    press(target, String.raw`\left(\right)`);
+    expect(marked(target)).toBe(String.raw`$a\left(\right)‸$`);
+  });
+
+  it("takes the delimiter typed: \left( … \right] is a pair too", () => {
+    const target = session(String.raw`$\left(a+b‸$`);
+    press(target, String.raw`\right]`);
+    expect(marked(target)).toBe(String.raw`$\left(a+b\right]‸$`);
+  });
+
+  it("closes only in the \left's own slot, never inside a script in it", () => {
+    const target = session(String.raw`$\left(x^{2‸}$`);
+    press(target, String.raw`\right)`);
+    expect(target.text).toBe(String.raw`$\left(x^{2}$`);
+  });
+
+  it("extends a pair already closed to where \right) is typed", () => {
     const target = session(String.raw`$\left(\right)a+b‸$`);
     press(target, String.raw`\right]`);
     expect(marked(target)).toBe(String.raw`$\left(a+b\right]‸$`);
   });
 
-  it("extends only a pair in the same formula slot, never across a script", () => {
-    const target = session(String.raw`$\left(\right)x^{2‸}$`);
-    press(target, String.raw`\right)`);
-    expect(target.text).toBe(String.raw`$\left(\right)x^{2}$`);
-  });
-
-  it("still steps over the \\right that \\left brought", () => {
+  it("still steps over a \right already there", () => {
     const target = session(String.raw`$\left(a‸\right)+b$`);
     press(target, String.raw`\right)`);
     expect(marked(target)).toBe(String.raw`$\left(a\right)‸+b$`);
   });
 
-  it("wraps a selection, which stays selected", () => {
+  it("wraps a selection in the whole pair, the selection kept", () => {
     const target = session(String.raw`$f+⟦\lambda_i g_i(x)⟧+h$`);
     press(target, String.raw`\left(`);
     expect(marked(target)).toBe(String.raw`$f+\left(⟦\lambda_i g_i(x)⟧\right)+h$`);
@@ -77,5 +94,15 @@ describe("delimiter pairs around what is written", () => {
     const target = session("Some ⟦words⟧ here.");
     press(target, String.raw`\left(`);
     expect(target.text).toBe("Some words here.");
+  });
+
+  it.each([
+    ["⌫ after it", String.raw`$a\left(‸ b+c$`, "⌫", String.raw`$a‸ b+c$`],
+    ["⌦ before it", String.raw`$a‸\left( b+c$`, "⌦", String.raw`$a‸ b+c$`],
+    ["the formula's only content", String.raw`a $\left(‸$ b`, "⌫", "a ${‸}$ b"],
+  ])("deletes a \left( still open alone, never what follows it: %s", (_name, start, keys, expected) => {
+    const target = session(start);
+    press(target, keys);
+    expect(marked(target)).toBe(expected);
   });
 });

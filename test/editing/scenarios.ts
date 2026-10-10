@@ -215,7 +215,7 @@ export const chipScenarios: readonly Scenario[] = [
   { id: "K2", title: "\\frac12 stays unbraced", body: R`$a‸$`, keys: R`\frac12`, expect: R`$a\frac12‸$` },
   { id: "M12", title: "a command in a script closes it; R5 spaces the next letter", body: R`$f‸$`, keys: R`+\mu^\top␣x`, expect: R`$f+\mu^\top x‸$` },
   { id: "K3", title: "\\{ pairs with \\}, which is stepped over", body: R`$N = ‸$`, keys: R`\{1\}`, expect: R`$N = \{1\}‸$` },
-  { id: "M14", title: "\\left( adds its \\right)", body: R`$a‸$`, keys: R`\left(x`, expect: R`$a\left(x‸\right)$` },
+  { id: "M14", title: "\\left( waits for its \\right)", body: R`$a‸$`, keys: R`\left(x\right)`, expect: R`$a\left(x\right)‸$` },
   { id: "O4", title: "[ right after \\\\ opens its optional argument", body: "a‸ b", keys: R`\\[5pt]`, expect: R`a\\[5pt]‸ b` },
   { id: "K9 sqrt", title: "[ while typing \\sqrt opens the root index", body: R`$a‸$`, keys: R`\sqrt[3]x`, expect: R`$a\sqrt[3]{x‸}$` },
   { id: "V2 ⇥", title: "⇥ accepts the highlighted completion", body: R`$A‸$`, keys: R`\setm ⇥ B`, expect: R`$A\setminus B‸$` },
@@ -236,7 +236,7 @@ const tabular = (...rows: string[]) => ["\\begin{tabular}{ll}", ...rows, "\\end{
 export const texValidityScenarios: readonly Scenario[] = [
   { id: "X2 frac", title: "a math command in prose starts a formula", body: "Let ‸ be", keys: R`\frac␣1 ⇥ 2`, expect: R`Let $\frac{1}{2‸}$ be` },
   { id: "X2 alpha", title: "a math symbol committed with ␣ in prose is a formula of its own", body: "Let ‸be", keys: R`\alpha␣`, expect: R`Let $\alpha$ ‸be` },
-  { id: "X2 left", title: "\\left( in prose starts a formula with the pair", body: "a ‸ b", keys: R`\left(x`, expect: R`a $\left(x‸\right)$ b` },
+  { id: "X2 left", title: "\\left( in prose starts a formula", body: "a ‸ b", keys: R`\left(x`, expect: R`a $\left(x‸$ b` },
   { id: "X3", title: "a text command in math goes into \\text", body: R`$a‸$`, keys: R`\LaTeX␣`, expect: R`$a\text{\LaTeX}‸$` },
   { id: "X3 emph", title: "\\emph is a text command, not a math one", body: R`$a‸$`, keys: R`\emph␣x`, expect: R`$a\text{\emph{x‸}}$` },
   { id: "X4", title: "\\item outside a list writes nothing", body: "a‸ b", keys: R`\item␣`, expect: "a‸ b" },

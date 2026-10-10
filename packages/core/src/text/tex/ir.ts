@@ -1387,7 +1387,7 @@ function scanSimpleTexIrNodes(
     }
     // A formula left open while editing ends where its run does (T2).
     const virtualCloser = recovery.closers.length > 0 ? texVirtualCloserAt(recovery, index) : null;
-    if (virtualCloser && virtualCloser.kind !== "group") {
+    if (virtualCloser && (virtualCloser.kind === "math" || virtualCloser.kind === "display")) {
       nodes.push(offsetSimpleTexMathSyntax(recoveredSimpleTexMathNode(text, virtualCloser), sourceOffset));
       index = virtualCloser.at;
       continue;

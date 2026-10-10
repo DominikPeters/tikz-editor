@@ -815,32 +815,51 @@ export function useCanvasTextEditSession(
     }
   }, [dispatch]);
 
+  /** Both DOM inputs set to a buffer state, value and selection. */
+  const writeInputs = useCallback((state: { readonly text: string; readonly anchor: number; readonly focus: number }) => {
+    const start = Math.min(state.anchor, state.focus);
+    const end = Math.max(state.anchor, state.focus);
+    const direction = state.focus < state.anchor ? "backward" : "forward";
+    for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
+      if (input) {
+        if (input.value !== state.text) {
+          input.value = state.text;
+        }
+        input.setSelectionRange(start, end, direction);
+      }
+    }
+  }, []);
+
   /**
    * Applies a transaction. Unless an IME composition owns the DOM inputs,
    * both inputs are written before dispatching so a queued selectionchange
    * cannot echo a stale offset back into the machine.
    */
-  const commitTransaction = useCallback((transaction: Transaction, writeInputs: boolean) => {
+  const commitTransaction = useCallback((transaction: Transaction, syncInputs: boolean) => {
     const session = stateRef.current.session;
     if (!session) {
       return;
     }
-    if (writeInputs) {
-      const applied = applyTransaction(session.text, transaction);
-      const start = Math.min(applied.anchor, applied.focus);
-      const end = Math.max(applied.anchor, applied.focus);
-      const direction = applied.focus < applied.anchor ? "backward" : "forward";
-      for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
-        if (input) {
-          if (input.value !== applied.text) {
-            input.value = applied.text;
-          }
-          input.setSelectionRange(start, end, direction);
-        }
-      }
+    if (syncInputs) {
+      writeInputs(applyTransaction(session.text, transaction));
     }
     dispatchCanvasTextEditAction({ type: "apply_transaction", transaction, time: performance.now() });
-  }, [dispatchCanvasTextEditAction]);
+  }, [dispatchCanvasTextEditAction, writeInputs]);
+
+  /**
+   * Undo and redo, inputs first as for a transaction: a value written
+   * after the dispatch puts the inputs' caret at its end, which their
+   * selection events would then report back over the restored one.
+   */
+  const stepHistory = useCallback((direction: "undo" | "redo") => {
+    const { history } = stateRef.current;
+    const steps = direction === "undo" ? history.undo : history.redo;
+    const restore = steps[steps.length - 1];
+    if (restore && stateRef.current.session) {
+      writeInputs(restore);
+    }
+    dispatchCanvasTextEditAction({ type: "history", direction });
+  }, [dispatchCanvasTextEditAction, writeInputs]);
 
   /**
    * Pointer-resolved selections arrive asynchronously (hit-testing awaits the
@@ -920,7 +939,7 @@ export function useCanvasTextEditSession(
         commitTransaction(resolution.transaction, intent.type !== "compose");
         return;
       case "history":
-        dispatchCanvasTextEditAction({ type: "history", direction: resolution.direction });
+        stepHistory(resolution.direction);
         return;
       case "close":
         dispatchCanvasTextEditAction({ type: "session_close" });
@@ -928,7 +947,7 @@ export function useCanvasTextEditSession(
       case "none":
         return;
     }
-  }, [commitTransaction, currentIntentContext, dispatchCanvasTextEditAction]);
+  }, [commitTransaction, currentIntentContext, dispatchCanvasTextEditAction, stepHistory]);
 
   const runIntentRef = useRef(runIntent);
   const layoutWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

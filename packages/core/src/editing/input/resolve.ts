@@ -40,6 +40,7 @@ import {
   type ClipboardPayload,
   lineEndable,
   deleteRange,
+  isDollarFormula,
   enter,
   indentItems,
   joinBackward,
@@ -727,6 +728,22 @@ class Resolver {
         const { start, end } = this.effectiveRange(view, raw);
         outcome = deleteRange(view, start, end);
       } else {
+        // A `\left` still open is one token, not a construct around what follows it (which
+        // runs on to the formula's end until its `\right` is typed): it goes alone (M14).
+        const offset = this.caretOffset(view);
+        const open = view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 1 &&
+          (direction === "backward" ? node.delimiters[0].to === offset : node.delimiters[0].from === offset));
+        if (open) {
+          const { from, to } = open.delimiters[0];
+          const slot = open.parent == null ? null : view.tree.slots[open.parent];
+          // The formula's only content: it holds `{}`, never `$$`, as any emptied `$…$` does.
+          if (slot && isDollarFormula(view, slot.node) &&
+            (text.slice(slot.contentSpan.from, from) + text.slice(to, slot.contentSpan.to)).trim() === "") {
+            const brace = slot.contentSpan.from;
+            return this.outcome(view, { kind: "patch", patches: [{ from: brace, to: slot.contentSpan.to, insert: "{}" }], caret: brace + 1, run: null, placeholder: brace });
+          }
+          return this.deleteRange(from, to, { group: "own-step" });
+        }
         const caret = view.representative(raw.focus);
         outcome = direction === "backward" ? deleteBackward(view, caret) : deleteForward(view, caret);
         if (outcome.kind === "structural") {
@@ -1104,11 +1121,12 @@ class Resolver {
   }
 
   /**
-   * `\right` and its delimiter. At the closer `\left` brought, it steps
-   * over it (R3). After a pair, further on in the same formula, it extends
-   * the pair to here: its `\right` moves (TeX has no `\right` without a
-   * `\left`), so `\left(` typed before what is to be wrapped and `\right)`
-   * typed after it wrap it. Elsewhere it writes nothing.
+   * `\right` and its delimiter. In a `\left` still open, it closes it
+   * here: `\left(` typed before what is to be wrapped and `\right)` typed
+   * after it wrap it (M14). At a `\right` already there, it steps over it
+   * (R3). After a pair, further on in the same formula, it extends the
+   * pair to here: its `\right` moves (TeX has no `\right` without a
+   * `\left`). Elsewhere it writes nothing.
    */
   private closeRight(view: EditView, chip: ChipState, char: string): IntentResolution {
     const text = view.tree.text;
@@ -1121,7 +1139,26 @@ class Resolver {
       return this.transaction([], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
     }
     const { tree } = view;
-    const pair = chip.held || !DELIMITER_CHARACTERS.has(char) ? undefined : tree.slots[caretAt(view, chip.at).slot].children
+    const slot = tree.slots[caretAt(view, chip.at).slot];
+    // The innermost `\left` still open whose contents the caret is in (or at the end of, with nothing
+    // in it yet), in its own slot: not inside a script or argument within it.
+    const open = tree.nodes
+      .filter((node) => node.kind === "delimited" && node.delimiters.length === 1)
+      .filter((node) => {
+        const content = tree.slots[node.slots[0]];
+        return content.contentSpan.from <= chip.at && chip.at <= content.contentSpan.to &&
+          (content.id === slot.id || (node.span.to === chip.at && slot.children.includes(node.id)));
+      })
+      .sort((left, right) => (left.span.to - left.span.from) - (right.span.to - right.span.from))[0];
+    if (!chip.held && DELIMITER_CHARACTERS.has(char) && open) {
+      const insert = `\\right${char}`;
+      return this.transaction(
+        [{ from: chip.at, to: chip.at, insert }],
+        { kind: "absolute", anchor: chip.at + insert.length, focus: chip.at + insert.length },
+        { group: "own-step" }
+      );
+    }
+    const pair = chip.held || !DELIMITER_CHARACTERS.has(char) ? undefined : slot.children
       .map((id) => tree.nodes[id])
       .filter((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.span.to <= chip.at)
       .at(-1);

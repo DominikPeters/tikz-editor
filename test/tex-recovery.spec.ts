@@ -26,6 +26,7 @@ describe("TeX recovery", () => {
     String.raw`\verb|{$| and \begin{verbatim}{ $ \end{verbatim}`,
     String.raw`$\left\{ \begin{array}{cc} a & b \end{array} \right.$`,
     String.raw`\begin{tabular}{>{$}c<{$}l} x & y \end{tabular}`,
+    String.raw`$\left( a \middle| b \right) + \left. c \right|_0$ and \left( in prose`,
   ])("needs none for valid source: %s", (text) => {
     expect(scanTexRecovery(text)).toEqual({ closers: [], strays: [] });
   });
@@ -44,6 +45,13 @@ describe("TeX recovery", () => {
     ["\\textbf{a $b} c", "\\textbf{a $b⟨$⟩} c"],
     // An environment's end closes what is open in it.
     ["\\begin{block}{T} a {b\n\\end{block} c", "\\begin{block}{T} a {b⟨}⟩\n\\end{block} c"],
+    // A `\\left` with no `\\right` is closed where its formula or group ends, as TeX does;
+    // even one just typed, with nothing in it yet.
+    ["$a \\left( b + c$ d", "$a \\left( b + c⟨\\right)⟩$ d"],
+    ["$a\\left($", "$a\\left(⟨\\right)⟩$"],
+    ["${\\left[ a} b$", "${\\left[ a⟨\\right]⟩} b$"],
+    ["$\\left\\langle x\\right\\rangle + \\left\\langle y$", "$\\left\\langle x\\right\\rangle + \\left\\langle y⟨\\right\\rangle⟩$"],
+    ["$a \\right) b$", "$a ⟪\\right)⟫ b$"],
     // Strays.
     ["Intro } with", "Intro ⟪}⟫ with"],
     ["a \\) b \\] c", "a ⟪\\)⟫ b ⟪\\]⟫ c"],
@@ -58,6 +66,11 @@ describe("TeX recovery", () => {
 
   it("leaves a half-typed environment name alone", () => {
     expect(recovered("a \\begin{it b")).toBe("a \\begin{it b");
+  });
+
+  it("leaves \\left and \\right to the math parser, unmasked", () => {
+    const text = "$\\left( a \\right) \\right] b$";
+    expect(maskTexRecovery(text, scanTexRecovery(text))).toBe(text);
   });
 
   it("masks openers and strays for the parser, keeping offsets", () => {

@@ -17,11 +17,11 @@ import type { Span } from "../../ast/types.js";
 export type TexVirtualCloser = {
   /** The opener: `{`, `$`, `$$`, `\(` or `\[`. */
   readonly opener: Span;
-  readonly kind: "group" | "math" | "display";
+  readonly kind: "group" | "math" | "display" | "delimiter";
   /** Where the closer is missing: the end of the run's content, before trailing spaces. */
   readonly at: number;
-  /** The closer that is missing. */
-  readonly closer: "}" | "$" | "$$" | "\\)" | "\\]";
+  /** The closer that is missing: `}`, `$`, `$$`, `\\)`, `\\]`, or a `\\left`'s `\\right` (`\\right)`). */
+  readonly closer: string;
 };
 
 export type TexRecovery = {
@@ -36,7 +36,15 @@ type Frame =
   | { readonly kind: "env"; readonly name: string }
   // A `text` group is in text mode inside math (`\text{… $k$ …}`): its `$` opens a formula of its own.
   | { readonly kind: "group"; readonly opener: Span; readonly text: boolean; runEnd: number | null }
-  | { readonly kind: "math"; readonly opener: Span; readonly closer: "$" | "$$" | "\\)" | "\\]" };
+  | { readonly kind: "math"; readonly opener: Span; readonly closer: "$" | "$$" | "\\)" | "\\]" }
+  // `\left(` in math, until its `\right`.
+  | { readonly kind: "delimiter"; readonly opener: Span; readonly closer: string };
+
+/** The `\right` delimiter that matches a `\left` one. */
+const MATCHING_DELIMITERS: Readonly<Record<string, string>> = {
+  "(": ")", "[": "]", "\\{": "\\}", "\\lbrace": "\\rbrace", "\\langle": "\\rangle", "<": ">", "\\lvert": "\\rvert",
+  "\\lVert": "\\rVert", "\\lfloor": "\\rfloor", "\\lceil": "\\rceil", "\\lgroup": "\\rgroup",
+};
 
 /** Environments whose body TeX does not read as tokens. */
 const OPAQUE_ENVIRONMENTS = new Set(["verbatim", "verbatim*", "Verbatim", "BVerbatim", "semiverbatim", "lstlisting", "minted", "alltt", "comment"]);
@@ -92,7 +100,10 @@ function scan(text: string): TexRecovery {
       return;
     }
     const end = frame.kind === "group" ? frame.runEnd ?? trimmed(at, frame.opener.to) : trimmed(at, frame.opener.to);
-    if (end === frame.opener.to) {
+    if (frame.kind === "delimiter") {
+      // (Even with nothing in it yet: `\left(` just typed shows where its `\right` would go.)
+      closers.push({ opener: frame.opener, kind: "delimiter", at: end, closer: frame.closer });
+    } else if (end === frame.opener.to) {
       strays.push(frame.opener);
     } else if (frame.kind === "group") {
       closers.push({ opener: frame.opener, kind: "group", at: end, closer: "}" });
@@ -254,6 +265,27 @@ function scan(text: string): TexRecovery {
         index = cursor;
         continue;
       }
+      if ((name === "left" || name === "right") && nearest((frame) => frame.kind === "math") >= 0) {
+        // `\left` and `\right` pair up within a formula, as TeX's error recovery closes
+        // a `\left` with an invisible `\right.` where the formula or group it is in ends.
+        const delimiter = /^\s*(\\[A-Za-z]+|\\.|[^\s\\{}])/u.exec(text.slice(end, end + 40));
+        const delimiterEnd = delimiter ? end + delimiter[0].length : end;
+        const span = { from: index, to: delimiterEnd };
+        if (name === "left") {
+          const opener = delimiter?.[1] ?? ".";
+          stack.push({ kind: "delimiter", opener: span, closer: `\\right${MATCHING_DELIMITERS[opener] ?? (opener === "|" || opener === "\\|" ? opener : ".")}` });
+        } else {
+          const open = nearest((frame) => frame.kind === "delimiter");
+          if (open >= 0) {
+            popTo(open + 1, index);
+            stack.pop();
+          } else {
+            strays.push(span);
+          }
+        }
+        index = delimiterEnd;
+        continue;
+      }
       if (name === "item" || name === "par") {
         runEnds(index);
       } else if (name === "verb") {
@@ -352,10 +384,13 @@ function scan(text: string): TexRecovery {
  * would join the whitespace around them).
  */
 export function maskTexRecovery(text: string, recovery: TexRecovery): string {
-  if (recovery.closers.length === 0 && recovery.strays.length === 0) {
+  // (`\left` and `\right` are the math parser's to recover, which it does: they stay.)
+  const spans = [...recovery.closers.filter((closer) => closer.kind !== "delimiter").map((closer) => closer.opener), ...recovery.strays]
+    .filter((span) => !text.startsWith("\\left", span.from) && !text.startsWith("\\right", span.from))
+    .sort((left, right) => left.from - right.from);
+  if (spans.length === 0) {
     return text;
   }
-  const spans = [...recovery.closers.map((closer) => closer.opener), ...recovery.strays].sort((left, right) => left.from - right.from);
   let masked = "";
   let cursor = 0;
   for (const span of spans) {
