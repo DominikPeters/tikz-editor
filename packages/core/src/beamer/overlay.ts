@@ -18,6 +18,7 @@ import type {
   BeamerDelimitedSourceValue,
   BeamerFrameModel,
 } from "./types.js";
+import { scanBeamerNoteCommands } from "./notes.js";
 
 export type BeamerOverlayInterval = {
   readonly from: number;
@@ -153,10 +154,11 @@ export function scanBeamerFrameOverlays(
   // Frame title arguments are stored before the body but executed when the
   // frame-title box is built. Their overlays can create pages even when the
   // body itself has no overlay commands.
+  const privateBodies = scanBeamerNoteCommands(source, context.syntax).map(note => note.bodySpan);
   const controls = beamerControlSequencesIn(context, {
     from: frame.headerSpan.from,
     to: frame.bodySpan.to,
-  });
+  }).filter(command => !privateBodies.some(span => command.from >= span.from && command.from < span.to));
   const listRanges = beamerListRanges(context, frame.bodySpan);
   const itemControls = controls.filter((command) => command.name === "item" || command.name === "bibitem");
   const listLabelSpans = itemControls.flatMap((command) => {
@@ -179,6 +181,13 @@ export function scanBeamerFrameOverlays(
   const declarations: Array<{ from: number; syntaxTo: number; kind: BeamerOverlayCommandKind; spec: BeamerDelimitedSourceValue }> = [];
 
   for (const command of controls) {
+    if (command.name === "note") {
+      const firstOverlay = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+      const optional = beamerOptionalArgumentAfter(context, firstOverlay?.span.to ?? command.to, frame.bodySpan.to);
+      const rawSpec = firstOverlay ?? beamerOverlayArgumentAfter(context, optional?.span.to ?? command.to, frame.bodySpan.to);
+      if (rawSpec) pending.push({ kind: "reference", sourceOrder: command.from, rawSpec });
+      continue;
+    }
     if (command.name === "frametitle" || command.name === "framesubtitle") {
       const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
       if (rawSpec) {

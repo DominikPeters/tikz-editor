@@ -758,6 +758,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_references"],
     notes: "Beamer document renderer supports manual thebibliography/bibitem entries, numeric/custom citation labels, multi-key cite with an optional note, and citation navigation. Stock bibliography markers (default/article, text, book, online, triangle), label widths, hanging indentation, entry colors and newblock spacing are checked against LuaLaTeX. Arbitrary bibliography template/font/color redefinitions and BibTeX/biblatex processing are not implemented."
   },
+  beamer_speaker_notes: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["beamer_speaker_notes"],
+    notes: "Literal standard note commands are excluded from audience output and exposed separately for the presenter. Supports overlay specifications, accumulated prose and [item] entries, the final outside-frame note, and unscoped AtBeginNote/AtEndNote hooks. Custom note macros, scoped hooks and note-page PDF templates are not implemented.",
+  },
   beamer_footnotes: {
     parser: "partial",
     semantic: "not-applicable",

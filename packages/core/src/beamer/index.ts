@@ -80,6 +80,7 @@ export {
   type PreparedBeamerDocument,
 } from "./render.js";
 export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
+export { scanBeamerNoteCommands, beamerSpeakerNotes, type BeamerNoteCommand } from "./notes.js";
 export {
   activeBeamerTheoremDeclarations,
   resolveBeamerTheoremCounterSeed,

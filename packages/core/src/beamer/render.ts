@@ -98,6 +98,7 @@ import {
 } from "./overlay.js";
 import { scanBeamerDocumentWithSyntax } from "./scan.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
+import { beamerSpeakerNotes, projectBeamerSpeakerNotes, scanBeamerNoteCommands, type BeamerNoteCommand } from "./notes.js";
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type { NodeTextColorResolver } from "../text/types.js";
 import {
@@ -270,6 +271,7 @@ function beamerListLayoutProfile(
  * topology, and theorem counters.
  */
 type BeamerRenderContext = {
+  readonly noteCommands: readonly BeamerNoteCommand[];
   readonly source: string;
   readonly syntax: TexSyntaxIndex;
   readonly document: BeamerDocumentModel;
@@ -286,9 +288,10 @@ function createBeamerRenderContext(
   source: string,
   options: PrepareBeamerDocumentOptions = {}
 ): BeamerRenderContext {
+  const noteCommands = scanBeamerNoteCommands(source);
   const syntaxContext = createBeamerSyntaxContext(
     source,
-    options.structuralMasks,
+    [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)],
     {
       previousTree: options.previousSyntaxTree,
       patches: options.syntaxPatches,
@@ -302,6 +305,7 @@ function createBeamerRenderContext(
     return [frame.id, frame.options?.allowFrameBreaks == null ? overlays : { ...overlays, stepCount: 1 }] as const;
   }));
   return {
+    noteCommands,
     source,
     syntax: syntaxContext.syntax,
     document,
@@ -344,6 +348,8 @@ export type PreparedBeamerDocument = {
   readonly syntaxTree: TexSyntaxIndex["tree"];
   /** Overlay step count for one frame, without rendering it. */
   frameStepCount(frameIndex: number): number;
+  /** Presenter-only standard Beamer note source for this overlay build. */
+  speakerNotes(frameIndex: number, step: number): string;
   /**
    * The interpretation environment for editing a frame: the user macros
    * in effect at it, and the theorem-like environment names declared
@@ -449,6 +455,7 @@ export function prepareBeamerDocument(
     frameStepCount: (frameIndex) => {
       return context.overlaysByFrameId.get(requireFrame(frameIndex).id)!.stepCount;
     },
+    speakerNotes: (frameIndex, step) => beamerSpeakerNotes(context.document, context.noteCommands, frameIndex, step, context.overlaysByFrameId.get(requireFrame(frameIndex).id)!),
     frameEditingEnvironment: (frameIndex) => {
       const frame = requireFrame(frameIndex);
       return {
@@ -3609,6 +3616,7 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
+  params = { ...params, mapped: projectBeamerSpeakerNotes(params.mapped) };
   // A size declaration preceding the list is an ambient font selection,
   // not an empty paragraph (and must apply to its generated labels too).
   const leadingSize = activeBeamerNamedSize(params.mapped.text, params.references.theme);
