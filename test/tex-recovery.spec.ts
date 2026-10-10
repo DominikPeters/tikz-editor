@@ -80,6 +80,13 @@ describe("TeX recovery", () => {
     expect(masked).toHaveLength(text.length);
   });
 
+  it("never closes inside a comment: the spaces a comment ends with are its own", () => {
+    const text = "Normal {`%}theorem \n";
+    const [closer] = scanTexRecovery(text).closers;
+    expect(closer).toMatchObject({ kind: "group", closer: "}" });
+    expect(closer.at).toBe(text.indexOf("\n"));
+  });
+
   it("needs none for any scope of the corpus decks", () => {
     const needing = beamerCorpusScopes()
       .filter((scope) => {

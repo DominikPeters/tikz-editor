@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import * as path from "node:path";
+import { scanTexRecovery } from "../../packages/core/src/text/tex/recovery.js";
 import { describe, expect, it } from "vitest";
 import { formatMarkedSource } from "../../packages/core/src/editing/testing/index.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
@@ -136,6 +137,12 @@ function hasText(start: FuzzStart, text: string): boolean {
   return tree.nodes.some((node) => node.kind === "char" && !inTitle(node.id));
 }
 
+/** What recovery closes or drops, by kind: the canvas never writes these; the lens may. */
+function recoveryIssues(text: string): string[] {
+  const recovery = scanTexRecovery(text);
+  return [...recovery.closers.map((closer) => `missing ${closer.closer}`), ...recovery.strays.map((span) => `stray ${text.slice(span.from, span.to)}`)];
+}
+
 /** Whether `after` has a name `before` does not, as many times as it has it. */
 function adds(before: readonly string[], after: readonly string[]): boolean {
   const left = [...before];
@@ -155,6 +162,10 @@ function adds(before: readonly string[], after: readonly string[]): boolean {
  */
 function judgeable(start: FuzzStart, text: string, picked: readonly string[]): boolean {
   if (!hasText(start, text)) {
+    return false;
+  }
+  // The source lens writes raw source (R13): what it leaves unbalanced is TeX's error by design.
+  if (adds(recoveryIssues(start.text), recoveryIssues(text))) {
     return false;
   }
   return !adds(unknownCommands(start, start.text), unknownCommands(start, text)) &&

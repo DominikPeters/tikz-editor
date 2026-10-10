@@ -23,6 +23,8 @@ import {
   commitAcrossModes,
   commitCommand,
   commitControlSymbol,
+  apart,
+  insideOptional,
   commitLeftDelimiter,
   isDelimiter,
   matchingRightDelimiter,
@@ -279,10 +281,17 @@ export function pendingCloserSpan(view: EditView, at: number): { readonly from: 
   return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.delimiters[1].from === at)?.delimiters[1] ?? null;
 }
 
-/** Where a transaction leaves the caret, if that is right before a `\right` with nothing selected. */
-function pendingCloserAfter(text: string, transaction: Transaction): number | null {
-  const applied = applyTransaction(text, transaction);
-  return applied.anchor === applied.focus && applied.text.startsWith("\\right", applied.focus) ? applied.focus : null;
+/**
+ * Where a transaction leaves the caret, if that is right before a pair's
+ * `\right` with nothing selected (not one in a comment, or in source the
+ * tree does not read).
+ */
+function pendingCloserAfter(context: IntentContext, transaction: Transaction): number | null {
+  const applied = applyTransaction(context.text, transaction);
+  if (applied.anchor !== applied.focus || !applied.text.startsWith("\\right", applied.focus) || !context.structure) {
+    return null;
+  }
+  return pendingCloserSpan(context.structure(applied.text), applied.focus) ? applied.focus : null;
 }
 
 /**
@@ -492,7 +501,7 @@ class Resolver {
     if (this.context.interaction.pendingCloser == null || this.acceptsCloser || transaction.interaction?.pendingCloser != null) {
       return transaction;
     }
-    const at = pendingCloserAfter(this.context.text, transaction);
+    const at = pendingCloserAfter(this.context, transaction);
     return at == null ? transaction : { ...transaction, interaction: { ...(transaction.interaction ?? NO_INTERACTION), pendingCloser: at } };
   }
 
@@ -993,6 +1002,13 @@ class Resolver {
   /** Esc: closes the command chip, value editor or lens; what the lens wrote stays. */
   escape(): IntentResolution {
     const { chip, picker, lens } = this.context.interaction;
+    if (lens && this.view && !this.hasRange()) {
+      // The lens's caret may be anywhere in the source (`\‸\newpage`); the canvas's is on a stop.
+      const stop = this.view.offset(this.view.positionAt(this.from));
+      if (stop !== this.from) {
+        return this.transaction([], { kind: "absolute", anchor: stop, focus: stop }, { group: "own-step" });
+      }
+    }
     if (chip || picker || lens) {
       return this.keepSelection(NO_INTERACTION);
     }
@@ -1269,17 +1285,20 @@ class Resolver {
     delimiter: string
   ): IntentResolution | null {
     const mode = view.tree.slots[caret.slot].mode;
+    // A bare `]` would end the optional argument it is in (`\bibitem[A$\right]$`): the bracket by name.
+    const bracketed = this.context.title === true || insideOptional(view, caret.slot);
+    const named = bracketed && delimiter === "]" ? "\\rbrack" : bracketed && delimiter === "[" ? "\\lbrack" : delimiter;
     if (side === "right") {
-      return mode === "math" && isDelimiter(delimiter) ? this.closeRight(view, chip, delimiter) : null;
+      return mode === "math" && isDelimiter(named) ? this.closeRight(view, chip, named) : null;
     }
-    if (matchingRightDelimiter(delimiter) == null) {
+    if (matchingRightDelimiter(named) == null) {
       return null;
     }
     let written: EditOutcome | null;
     if (mode === "math") {
-      written = commitLeftDelimiter(view.tree.text, chip.at, chip.held, delimiter);
+      written = commitLeftDelimiter(view.tree.text, chip.at, chip.held, named);
     } else {
-      const pair = commitAcrossModes(view, commands, caret, chip.at, "left", "typed", chip.held, delimiter);
+      const pair = commitAcrossModes(view, commands, caret, chip.at, "left", "typed", chip.held, named);
       if (pair === "refused") {
         return this.keepSelection(NO_INTERACTION);
       }
@@ -1297,7 +1316,7 @@ class Resolver {
     if (resolution.kind !== "transaction") {
       return resolution;
     }
-    const at = pendingCloserAfter(this.context.text, resolution.transaction);
+    const at = pendingCloserAfter(this.context, resolution.transaction);
     return at == null ? resolution : {
       ...resolution,
       transaction: { ...resolution.transaction, interaction: { ...(resolution.transaction.interaction ?? NO_INTERACTION), pendingCloser: at } },
@@ -1402,9 +1421,8 @@ class Resolver {
     // A control word must not run into a letter where the `\right` leaves or lands (`\alpha\right)x`, `\right\rangle x`).
     const leaving = /\\[A-Za-z]+$/u.test(text.slice(0, token.from)) && /^[A-Za-z]/u.test(text.slice(token.to)) ? " " : "";
     const landing = target > at ? target + (token.to - token.from) : target;
-    const spaced = /[A-Za-z]$/u.test(closer) && /^[A-Za-z]/u.test(text.slice(landing)) ? " " : "";
     const removal = { from: token.from, to: token.to, insert: leaving };
-    const insertion = { from: landing, to: landing, insert: closer + spaced };
+    const insertion = { from: landing, to: landing, insert: apart(closer, text, landing) };
     const patches = target > at ? [removal, insertion] : [insertion, removal];
     return this.withPendingCloser(this.transaction(patches, {
       kind: "mapped",
@@ -1435,7 +1453,7 @@ class Resolver {
         return this.transaction([], { kind: "absolute", anchor: here.to, focus: here.to }, { group: "own-step" });
       }
       const caret = here.from + insert.length;
-      return this.transaction([{ from: here.from, to: here.to, insert }], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
+      return this.transaction([{ from: here.from, to: here.to, insert: apart(insert, text, here.to) }], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
     }
     const { tree } = view;
     const slot = tree.slots[caretAt(view, chip.at).slot];
@@ -1452,7 +1470,7 @@ class Resolver {
     if (!chip.held && isDelimiter(char) && open) {
       const insert = `\\right${char}`;
       return this.transaction(
-        [{ from: chip.at, to: chip.at, insert }],
+        [{ from: chip.at, to: chip.at, insert: apart(insert, text, chip.at) }],
         { kind: "absolute", anchor: chip.at + insert.length, focus: chip.at + insert.length },
         { group: "own-step" }
       );
@@ -1468,7 +1486,7 @@ class Resolver {
     const insert = `\\right${char}`;
     const caret = chip.at - (closer.to - closer.from) + insert.length;
     return this.transaction(
-      [{ from: closer.from, to: closer.to, insert: "" }, { from: chip.at, to: chip.at, insert }],
+      [{ from: closer.from, to: closer.to, insert: "" }, { from: chip.at, to: chip.at, insert: apart(insert, text, chip.at) }],
       { kind: "absolute", anchor: caret, focus: caret },
       { group: "own-step" }
     );

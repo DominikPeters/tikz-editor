@@ -85,13 +85,16 @@ function scan(text: string): TexRecovery {
   const strays: Span[] = [];
   const stack: Frame[] = [];
 
-  /** The run's content ends before trailing spaces, but never before the opener. */
+  /** Comments seen so far: a closer never goes inside one (the spaces they end with are theirs). */
+  const comments: Span[] = [];
+  /** The run's content ends before trailing spaces, but never before the opener, nor inside a comment. */
   const trimmed = (at: number, floor: number) => {
     let end = at;
     while (end > floor && /\s/u.test(text[end - 1])) {
       end -= 1;
     }
-    return end;
+    const comment = comments.find((span) => span.from < end && end < span.to);
+    return comment ? comment.to : end;
   };
   // An opener with nothing in its run (a lone `$`, `\textbf{` at the end) has nothing to
   // render closed: it stays a stray, shown as source.
@@ -175,6 +178,7 @@ function scan(text: string): TexRecovery {
     const char = text[index];
     if (char === "%") {
       const end = text.indexOf("\n", index);
+      comments.push({ from: index, to: end < 0 ? text.length : end });
       index = end < 0 ? text.length : end;
       continue;
     }

@@ -88,4 +88,17 @@ describe("the quick fix for recovered source (T6)", () => {
     press(target, "⌘Z");
     expect(target.text).toBe("A \\textbf{bo $x and more.\n\nNext.");
   });
+
+  it("puts the canvas caret back on a stop when it closes, never inside a command the lens left it in", () => {
+    const target = session("Alpha.‸\\newpage Beta.");
+    press(target, "⌘E");
+    const lens = target.lens()!;
+    const text = target.text.slice(lens.span.from, lens.span.to);
+    const at = text.indexOf("\\newpage");
+    // A `\` typed before `\newpage`: the lens's caret is inside the `\\` it made.
+    press(target, { kind: "lensText", text: `${text.slice(0, at)}\\${text.slice(at)}`, caret: at + 1 });
+    press(target, "Esc", "[");
+    expect(target.text).not.toContain("\\[");
+  });
 });
+
