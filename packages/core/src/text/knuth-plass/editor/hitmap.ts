@@ -3693,15 +3693,14 @@ function mathSelectionLocalBoxesForRange(
   }
   const startEntry = bestMathCaretEntryForOffset(line.mathCaretEntries, startStop.offset);
   const endEntry = bestMathCaretEntryForOffset(line.mathCaretEntries, endStop.offset);
+  // The selected items' boxes, and the carets at the range's ends: an end caret's own item
+  // (the `\nabla` after `\lambda_i`) can lie outside the range.
   return mathSelectionEntryRowGroups(visibleEntries).map((group) => {
-    const rowEntries = [
-      ...group.entries,
-      ...(startEntry && mathCaretEntryOverlapsRow(startEntry, group) ? [startEntry] : []),
-      ...(endEntry && mathCaretEntryOverlapsRow(endEntry, group) ? [endEntry] : []),
-    ];
+    const ends = [startEntry, endEntry].filter((entry): entry is MathCaretEntry =>
+      entry != null && mathCaretEntryOverlapsRow(entry, group));
     return {
-      xStart: lineReportCoord(Math.min(...rowEntries.map((entry) => entry.hitBounds.xStart))),
-      xEnd: lineReportCoord(Math.max(...rowEntries.map((entry) => entry.hitBounds.xEnd))),
+      xStart: lineReportCoord(Math.min(...group.entries.map((entry) => entry.hitBounds.xStart), ...ends.map((entry) => entry.x))),
+      xEnd: lineReportCoord(Math.max(...group.entries.map((entry) => entry.hitBounds.xEnd), ...ends.map((entry) => entry.x))),
       yStart: group.yStart,
       yEnd: group.yEnd,
     };
