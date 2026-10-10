@@ -66,7 +66,7 @@ export {
   type BeamerObjectListItemContext,
   type BeamerObjectNode,
 } from "./object-index.js";
-export { collectBeamerEditScopes, resolveBeamerEditScopeAt } from "./edit-scopes.js";
+export { collectBeamerEditScopes, collectBeamerRecovery, resolveBeamerEditScopeAt } from "./edit-scopes.js";
 export {
   beamerOverlaySpecContains,
   projectBeamerOverlayText,

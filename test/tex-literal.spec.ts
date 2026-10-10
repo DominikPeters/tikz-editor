@@ -50,11 +50,19 @@ describe("simple TeX literal runs", () => {
     expect(ir.unsupportedCommand).toBe(false);
   });
 
-  it("parses stray braces and dollars as malformed-input literals", () => {
-    const ir = parseSimpleTexParagraphIr("a } b { c $ d");
+  it("parses stray closers and empty openers as malformed-input literals", () => {
+    const ir = parseSimpleTexParagraphIr("a } b {\n\nc $");
     const literals = literalNodes(ir.nodes);
     expect(literals.map((node) => node.text)).toEqual(["}", "{", "$"]);
     expect(literals.every((node) => node.reason === "malformed-input")).toBe(true);
+  });
+
+  it("closes an unclosed brace or dollar where its run ends, keeping the rest", () => {
+    const ir = parseSimpleTexParagraphIr("a } b { c $ d");
+    expect(literalNodes(ir.nodes).map((node) => node.text)).toEqual(["}"]);
+    const group = ir.nodes.find((node) => node.kind === "group");
+    expect(group).toMatchObject({ sourceStart: 6, sourceEnd: 13, contentStart: 7, contentEnd: 13 });
+    expect(group?.kind === "group" && group.children.map((child) => child.kind)).toContain("math");
   });
 
   it("no longer reports a fallback reason for unknown commands or direct characters", () => {

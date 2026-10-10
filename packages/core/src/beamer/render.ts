@@ -63,7 +63,7 @@ import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidt
 import { beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
 import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
-import { collectBeamerEditScopes } from "./edit-scopes.js";
+import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
 import { emitEmbeddedTikz } from "./embedded-tikz.js";
 import {
   leadingBeamerTrivlistAdjustment,
@@ -909,6 +909,9 @@ async function renderBeamerFrameStep(params: {
     );
     item.rootId = child?.id;
   }
+  const editScopes = collectBeamerEditScopes(frame, bodyIr, document.preamble.metadata);
+  const recovery = collectBeamerRecovery(source, editScopes);
+  diagnostics.push(...beamerRecoveryDiagnostics(recovery));
   const layout: BeamerFrameLayout = {
     coordinateSystem: {
       unit: "tex-pt",
@@ -932,11 +935,8 @@ async function renderBeamerFrameStep(params: {
       span: branch.contentSpan,
       visible: resolveBeamerOverlaySpanVisibility(bodyIr.overlays, branch.contentSpan, step) === "visible",
     }))),
-    editScopes: collectBeamerEditScopes(
-      frame,
-      bodyIr,
-      document.preamble.metadata
-    ),
+    editScopes,
+    ...(recovery.closers.length > 0 || recovery.strays.length > 0 ? { recovery } : {}),
   };
 
   params.work?.options.signal?.throwIfAborted();

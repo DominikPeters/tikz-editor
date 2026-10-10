@@ -8,6 +8,9 @@ export const beamerBenchMathProfile = createBeamerTexMathFontProfile({
   family: "sans", series: "medium", shape: "upright", sizePt: 11, lineHeightPt: 13.2,
 });
 
+/** The prefixes of `$x^{2}+\frac{1}{n}$`, by length - 1, that render as native math. */
+const TYPED_FORMULA_NATIVE = new Set([1, 5, 6, 17, 18]);
+
 export function textBenchRequest(text: string, options: Partial<NodeTextMeasureRequest> = {}): NodeTextMeasureRequest {
   return {
     text, textWidthPt: null, fontStyle: "normal", fontWeight: "normal",
@@ -176,8 +179,10 @@ export const TEXT_ENGINE_BENCH_CASES: readonly TextEngineBenchCase[] = [
       const formula = String.raw`$x^{2}+\frac{1}{n}$`;
       return Array.from({ length: formula.length }, (_, index) => ({
         request: textBenchRequest(`Formula ${token}: ` + formula.slice(0, index + 1)),
-        expected: index === formula.length - 1 ? "native" as const : "literal" as const,
-        requiredSvg: index === formula.length - 1 ? mathSvg : ['data-tex-literal="malformed-input"'],
+        // A formula left open renders as math up to its end (TeX recovery), except where the
+        // math parser cannot read its content yet (a `^` or a group still empty, a half command).
+        expected: TYPED_FORMULA_NATIVE.has(index) ? "native" as const : "literal" as const,
+        requiredSvg: TYPED_FORMULA_NATIVE.has(index) ? mathSvg : [index === 0 ? 'data-tex-literal="malformed-input"' : 'data-tex-literal="math-error"'],
       }));
     },
   },
