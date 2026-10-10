@@ -33,6 +33,47 @@ describe("edit tree binding", () => {
     );
   });
 
+  it.each([
+    ["$\\frac% numerator\n{a}% denominator\r\n{b}$", "fraction", ["a", "b"]],
+    ["$\\sqrt% index\n[3]% radicand\n{x}$", "radical", ["3", "x"]],
+    ["$x^% exponent\n% continued\n2$", "scripted", ["x", "2"]],
+    ["\\textbf% content\n{x}", "style", ["x"]],
+    ["\\begin{block}% title\n{T}Body\\end{block}", "container", ["T", "Body"]],
+  ] as const)("binds arguments past TeX comments: %s", (source, kind, contents) => {
+    const built = tree(source);
+    expect(built.diagnostics).toEqual([]);
+    const node = built.nodes.find((candidate) => candidate.kind === kind)!;
+    expect(node.slots.map((slot) => {
+      const span = built.slots[slot].contentSpan;
+      return source.slice(span.from, span.to);
+    })).toEqual(contents);
+  });
+
+  it("stops at a blank line after a comment, a paragraph end to TeX", () => {
+    const built = tree("\\textbf% content\n\n{x}");
+    expect(printEditTree(built)).toBe(`(scope (paragraph (style:textbf) %) (paragraph (group "x")))`);
+    expect(built.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["missing-argument"]);
+  });
+
+  it("keeps a comment at a missing argument within its enclosing slot", () => {
+    const built = tree("$\\frac% no argument\n$");
+    expect(built.diagnostics.map((diagnostic) => diagnostic.code)).toContain("missing-argument");
+  });
+
+  it("binds the argument shapes of named math families", () => {
+    const built = tree(R`$a\pmod{n}+\mod m+\underset{a}{b}+\makebox[1cm][l]{x}+\framebox[2cm][r]{y}$`);
+    expect(built.diagnostics).toEqual([]);
+    const shapes = built.nodes.filter((node) => ["pmod", "mod", "underset", "makebox", "framebox"].includes(node.command ?? ""))
+      .map((node) => ({ command: node.command, slots: node.slots.map((slot) => built.slots[slot].role), values: node.values.map((value) => value.role) }));
+    expect(shapes).toEqual([
+      { command: "pmod", slots: ["content"], values: [] },
+      { command: "mod", slots: ["content"], values: [] },
+      { command: "underset", slots: ["below", "base"], values: [] },
+      { command: "makebox", slots: ["content"], values: ["dimension", "value"] },
+      { command: "framebox", slots: ["content"], values: ["dimension", "value"] },
+    ]);
+  });
+
   it("binds nothing beyond an unbraced argument that is itself a command", () => {
     expect(printEditTree(tree(R`a{\textbf\textit{[}} b`))).toBe(
       `(scope (paragraph "a" (group (style:textbf (style:textit)) (group "[")) ␣ "b"))`

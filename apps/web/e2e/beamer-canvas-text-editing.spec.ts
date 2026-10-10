@@ -1026,6 +1026,48 @@ test("canvas copy and paste: a formula fragment becomes a formula in prose, outs
   await expect(textarea).toHaveValue(buffer);
 });
 
+for (const step of [1, 2]) {
+  test(`canvas editing uses only the displayed alt branch on step ${step} and preserves copied symbols`, async ({ page }) => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{T}
+Prefix \alt<2>{first}{second} suffix.
+Stra\ss e caf\'{e}
+\end{frame}
+\end{document}`;
+    await setSource(page, source);
+    if (step === 2) await page.getByRole("button", { name: "Next overlay step", exact: true }).click();
+    const textarea = await openScopeContaining(page, "Prefix");
+    const input = page.getByTestId("canvas-focus-input");
+    const buffer = await textarea.inputValue();
+    const select = (start: number, end = start) => input.evaluate((element, range) => {
+      const field = element as HTMLTextAreaElement;
+      field.focus();
+      field.setSelectionRange(range.start, range.end);
+      field.dispatchEvent(new Event("select", { bubbles: true }));
+    }, { start, end });
+    await select(buffer.indexOf("Prefix") + "Prefix".length);
+    for (let press = 0; press < 3; press += 1) await page.keyboard.press("ArrowRight");
+    await page.keyboard.type("X");
+    const word = step === 1 ? "second" : "first";
+    const edited = source.replace(word, `${word[0]}X${word.slice(1)}`);
+    await expect.poll(() => readStoreSource(page)).toBe(edited);
+    await page.keyboard.press("Backspace");
+    await expect.poll(() => readStoreSource(page)).toBe(source);
+
+    const copiedSource = String.raw`Stra\ss e caf\'{e}`;
+    const start = buffer.indexOf(copiedSource);
+    await select(start, start + copiedSource.length);
+    const copied = await input.evaluate((element) => {
+      const transfer = new DataTransfer();
+      element.dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: transfer }));
+      return { plain: transfer.getData("text/plain"), clip: transfer.getData("application/x-tikz-editor-clip+json") };
+    });
+    expect(copied.plain).toBe("Straße café");
+    expect(JSON.parse(copied.clip).source).toBe(copiedSource);
+  });
+}
+
 test("the command chip completes a command at the caret and commits it in one undo step", async ({ page }) => {
   const textarea = await openScopeContaining(page, "Body typo.");
   const input = page.getByTestId("canvas-focus-input");

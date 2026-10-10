@@ -158,6 +158,16 @@ describe("value checks", () => {
     expect(target.text).toBe("$\\bigl(x\\bigr\\rangle=0$");
   });
 
+  it("terminates edited control words, maps the caret, and undoes both delimiter edits together", () => {
+    const text = "$\\bigl(x\\bigr)y$";
+    const target = session(`${text.slice(0, -1)}‸$`);
+    const span = (char: string) => ({ from: text.indexOf(char), to: text.indexOf(char) + 1 });
+    press(target, { kind: "setValues", edits: [{ span: span("("), text: "\\langle" }, { span: span(")"), text: "\\rangle" }] });
+    expect(marked(target)).toBe("$\\bigl\\langle x\\bigr\\rangle y‸$");
+    press(target, "⌘Z");
+    expect(marked(target)).toBe(`${text.slice(0, -1)}‸$`);
+  });
+
   it("asks for \\temporal's slides, which it cannot do without, and keeps them", () => {
     const target = session("A ‸.");
     press(target, "\\temporal␣");

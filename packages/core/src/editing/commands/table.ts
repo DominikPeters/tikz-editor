@@ -121,7 +121,7 @@ const TEXT_COMMANDS = new Map<string, Entry>([
   ...entries(["ref", "eqref", "pageref", "autoref", "label"], { category: "atom", node: "atom", args: [value("label-key")] }),
   ["footnote", { category: "atom", node: "atom", args: [overlay, value("options", "optional"), value("value")] }],
   ["includegraphics", { category: "atom", node: "atom", args: [overlay, value("options", "optional"), value("value")], star: true }],
-  ...entries(["ldots", "dots", "textbackslash", "LaTeX", "TeX", "today", "textbar", "textasciitilde", "S", "P",
+  ...entries(["ldots", "dots", "textbackslash", "LaTeX", "TeX", "today", "textbar", "textasciitilde", "textasciicircum", "S", "P",
     "copyright", "dag", "ddag", "textbullet", "textendash", "textemdash", "textquoteleft", "textquoteright",
     "ss", "ae", "AE", "oe", "OE", "o", "O", "aa", "AA", "i", "j", "l", "L"], {
     category: "symbol",
@@ -205,11 +205,11 @@ const MATH_COMMANDS = new Map<string, Entry>([
 ]);
 
 function mathFamilyEntry(name: string): Entry | null {
-  if (name === "\\emph") {
+  if (name === "emph") {
     // LaTeX's \emph is a text font switch: in math, "\itshape invalid in math mode".
     return null;
   }
-  const family = texMathCommandFamily(name);
+  const family = texMathCommandFamily(`\\${name}`);
   switch (family) {
     case null:
       return null;
@@ -218,7 +218,7 @@ function mathFamilyEntry(name: string): Entry | null {
     case "not":
       return { category: "symbol", node: "symbol", args: [] };
     case "modular":
-      return name === "pmod"
+      return name !== "bmod"
         ? { category: "operator", node: "operator", args: [content()] }
         : { category: "symbol", node: "symbol", args: [] };
     case "big-delimiter":
@@ -421,7 +421,7 @@ export function createCommandTable(
       }
       const isWord = /^[A-Za-z@]+$/u.test(name);
       const entry = mode === "math"
-        ? MATH_COMMANDS.get(name) ?? mathFamilyEntry(`\\${name}`) ??
+        ? MATH_COMMANDS.get(name) ?? mathFamilyEntry(name) ??
           (isWord ? null : { category: "symbol", node: "symbol", args: [] })
         : TEXT_COMMANDS.get(name) ?? (isWord ? null : textControlSymbol(name));
       return entry ? { name, ...entry } : null;

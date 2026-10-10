@@ -49,10 +49,11 @@ import {
   type EditOutcome,
 } from "../operations/index.js";
 import {
-  hiddenNodes,
+  renderedVisibility,
   promoteSelection,
   selectionEndsAt,
   type EditView,
+  type EditViewOptions,
   type Position,
   type SelectionEnds,
 } from "../position/index.js";
@@ -111,7 +112,7 @@ export type IntentContext = {
    * tree-backed editing on the canvas of a scope session; null keeps
    * source-character semantics.
    */
-  readonly structure: ((text: string, hidden?: ReadonlySet<NodeId>) => EditView) | null;
+  readonly structure: ((text: string, visibility?: EditViewOptions) => EditView) | null;
   /** The raw selection ends as positions in the current buffer, when the caller still has them. */
   readonly positions: SelectionEnds | null;
   /** The interaction state the last transaction left, while buffer and selection are unchanged. */
@@ -292,8 +293,9 @@ class Resolver {
   /** The current buffer's view, minus what the rendered layout hides on this step. */
   private currentView(structure: NonNullable<IntentContext["structure"]>): EditView {
     const view = structure(this.context.text);
-    const hidden = this.context.domain ? hiddenNodes(view.tree, this.context.domain, this.context.bufferFrom) : null;
-    return hidden && hidden.size > 0 ? structure(this.context.text, hidden) : view;
+    const visibility = this.context.domain ? renderedVisibility(view.tree, this.context.domain, this.context.bufferFrom) : null;
+    return visibility && (visibility.hidden.size > 0 || visibility.hiddenSlots.size > 0)
+      ? structure(this.context.text, visibility) : view;
   }
 
   /** The raw selection ends, from the caller or from the offsets. */

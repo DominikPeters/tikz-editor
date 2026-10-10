@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { createCommandTable, type CommandTable } from "@tikz-editor/core/editing/commands/index";
-import { createEditViewCache, type EditView } from "@tikz-editor/core/editing/position/index";
+import { createEditViewCache, type EditView, type EditViewOptions } from "@tikz-editor/core/editing/position/index";
 import { checkEditTree, type EditTree } from "@tikz-editor/core/editing/tree/index";
 import type { DeckActiveFrame } from "../../compute";
 
@@ -55,8 +55,8 @@ export function useEditCommands(environment: EditingEnvironment | null): Command
 }
 
 /** The edit view of a buffer text (cached). Dev and test builds check the tree's invariants. */
-export function canvasEditView(text: string, commands: CommandTable, hidden?: ReadonlySet<number>): EditView {
-  const view = editViews(text, commands, hidden);
+export function canvasEditView(text: string, commands: CommandTable, visibility?: EditViewOptions): EditView {
+  const view = editViews(text, commands, visibility);
   if (IS_CHECKED && !checkedTrees.has(view.tree)) {
     checkedTrees.add(view.tree);
     reportEditTreeViolations(view.tree);

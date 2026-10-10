@@ -180,8 +180,10 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
       ? outcome(removeNode(view, owner))
       : { kind: "walk-out" };
   }
-  const slots = presentSlots(tree, owner);
-  if (slots.every((candidate) => isEmptySlot(view, candidate.id))) {
+  const allSlots = presentSlots(tree, owner);
+  const slots = allSlots.filter((candidate) => !view.hiddenSlots.has(candidate.id));
+  const hiddenContent = allSlots.some((candidate) => view.hiddenSlots.has(candidate.id) && candidate.children.length > 0);
+  if (!hiddenContent && slots.every((candidate) => isEmptySlot(view, candidate.id))) {
     return outcome(removeNode(view, owner));
   }
   if (isEmptySlot(view, slot) && REMOVABLE_ROLES.has(record.role)) {

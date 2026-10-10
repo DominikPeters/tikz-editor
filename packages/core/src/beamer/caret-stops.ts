@@ -1,6 +1,6 @@
 import type { Span } from "../ast/types.js";
 import { getKnuthPlassParagraphCaretStops } from "../text/knuth-plass/index.js";
-import type { BeamerListTopology, BeamerParagraphLayout } from "./types.js";
+import type { BeamerFrameLayout, BeamerListTopology, BeamerParagraphLayout } from "./types.js";
 import { transformBeamerPoint } from "./frame-shrink.js";
 
 /**
@@ -48,6 +48,7 @@ export type BeamerCaretDomain = {
   readonly mathSpans: readonly Span[];
   /** Per-paragraph role and span, for structural-key context checks. */
   readonly paragraphs: readonly BeamerCaretDomainParagraph[];
+  readonly overlayBranches?: BeamerFrameLayout["overlayBranches"];
 };
 
 type MutableRow = {
@@ -60,6 +61,7 @@ type MutableRow = {
 export function buildBeamerCaretStopDomain(args: {
   paragraphs: readonly BeamerParagraphLayout[];
   source: string;
+  overlayBranches?: BeamerFrameLayout["overlayBranches"];
 }): BeamerCaretDomain {
   const rows: MutableRow[] = [];
   const offsetSet = new Set<number>();
@@ -185,6 +187,7 @@ export function buildBeamerCaretStopDomain(args: {
 
   return {
     source: args.source,
+    overlayBranches: args.overlayBranches,
     rows,
     offsets: [...offsetSet].sort((left, right) => left - right),
     atomSpans: [...atomByRange.values()].sort((left, right) => left.from - right.from),
