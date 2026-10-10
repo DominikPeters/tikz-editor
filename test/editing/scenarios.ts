@@ -270,6 +270,7 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "C12", title: "\\operatorname holds math", body: R`$\operatorname{‸}$`, keys: R`\cup␣`, expect: R`$\operatorname{\cup‸}$` },
   { id: "C14", title: "a character typed after a text command's name in math is text", body: R`$x‸$`, keys: R`\textit_`, expect: R`$x\textit{\_‸}$` },
   { id: "C15", title: "beamer's overlay-aware commands are not committed into \\bm", body: R`\[\bm{E‸}\]`, keys: R`\only␣ \textbf␣ \mathrm␣`, expect: R`\[\bm{E\mathrm{‸}}\]` },
+  { id: "C21", title: "\\uncover is not committed into \\operatorname (LuaLaTeX: limit controls)", body: R`$\operatorname{‸}$`, keys: R`\uncover␣ \only␣`, expect: R`$\operatorname{\only{‸}}$` },
   { id: "X6 repeat", title: "a column spec's repetitions count (`*{2}{lr}` is four columns)", body: "\\begin{tabular}{*{2}{lr}}\nA & 1 & B & 2‸\\\\\n\\end{tabular}", keys: "&", expect: "\\begin{tabular}{*{2}{lr}}\nA & 1 & B & 2‸\\\\\n\\end{tabular}" },
   { id: "C16", title: "in overprint, a selection holding \\onslide is not wrapped", body: "\\begin{overprint}\n\\onslide<1>⟦Alpha.\n\\onslide<2>Be⟧ta.\n\\end{overprint}", keys: "⌘B", expect: "\\begin{overprint}\n\\onslide<1>⟦Alpha.\n\\onslide<2>Be⟧ta.\n\\end{overprint}" },
   { id: "C13", title: "< after a frame break is not its overlay specification", body: "Alpha.\n\\framebreak\n‸Beta.", keys: "<", expect: "Alpha.\n\\framebreak\n{}<‸Beta." },
