@@ -865,7 +865,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               data-testid="canvas-recovery-ghost"
               aria-hidden="true"
             >
-              {ghost.text}
+              {ghost.glyph}
             </span>
           ))}
 

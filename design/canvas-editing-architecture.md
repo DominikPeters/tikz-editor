@@ -948,8 +948,10 @@ recovery per edit scope (`layout.recovery`, and warnings
 no recovery: the corpus decks, macro definitions (`\newcommand{\BI}{\begin{itemize}}`),
 column insertions (`>{$}c<{$}`) and `$` in `\text{…}` in math are checked.
 The canvas draws each missing closer as a faint ghost where it belongs,
-and offers "Insert missing }" once the lens is closed, which writes them
-in as one step (during the session rather than when it ends, as T6 had
+(an unclosed `\left(` as the delimiter its `\right)` would draw, at the
+formula's end; recovery tracks `\left`/`\right` but leaves them to the
+math parser, unmasked), and offers "Insert missing }" once the lens is
+closed, which writes them in as one step (during the session rather than when it ends, as T6 had
 it: the ghosts show where they go). The source lens: ⌘E opens the raw
 source of the innermost outlined construct around the caret, or the
 selection, or the item or paragraph in plain prose, in a field placed

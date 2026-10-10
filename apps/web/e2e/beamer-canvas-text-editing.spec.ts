@@ -1217,3 +1217,49 @@ Next line.
   await page.keyboard.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(source);
 });
+
+test("\\left( waits for its \\right): a ghost delimiter at the formula's end until it is typed; undo puts the caret back", async ({ page }) => {
+  const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{T}
+Intro $f+g(x)+h$ word.
+\end{frame}
+\end{document}`;
+  await setSource(page, source);
+  const textarea = await openScopeContaining(page, "Intro");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const placeCaret = (offset: number) => input.evaluate((element, at) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(at, at);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, offset);
+
+  await placeCaret(buffer.indexOf("g(x)"));
+  await page.keyboard.type(String.raw`\left(`);
+  const open = source.replace("$f+g(x)", String.raw`$f+\left(g(x)`);
+  await expect.poll(() => readStoreSource(page)).toBe(open);
+  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveText(")");
+
+  await placeCaret((await textarea.inputValue()).indexOf("g(x)") + "g(x)".length);
+  await page.keyboard.type(String.raw`\right)`);
+  await expect.poll(() => readStoreSource(page)).toBe(open.replace("g(x)+h", String.raw`g(x)\right)+h`));
+  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveCount(0);
+
+  // Undo restores the caret the edit started from.
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(open);
+  await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart))
+    .toBe((await textarea.inputValue()).indexOf("g(x)") + "g(x)".length);
+  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveCount(1);
+
+  // Likewise for a typing run in prose.
+  const word = (await textarea.inputValue()).indexOf("word");
+  await placeCaret(word);
+  await page.keyboard.type("xyz");
+  await expect.poll(() => readStoreSource(page)).toBe(open.replace("word", "xyzword"));
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(open);
+  await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart)).toBe(word);
+});

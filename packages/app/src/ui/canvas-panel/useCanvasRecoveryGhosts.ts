@@ -10,8 +10,10 @@ import type { EditableTextTarget, TextEditingSession } from "./types";
  * would need it: `\textbf{bo` shows bold "bo" and a ghost `}` after it.
  */
 export type CanvasRecoveryGhost = {
-  /** The missing closer: `}`, `$`, `\]`. */
+  /** The missing closer: `}`, `$`, `\]`, `\right)`. */
   readonly text: string;
+  /** What is drawn: the closer, or for a `\right` the delimiter it draws. */
+  readonly glyph: string;
   /** Buffer-local offset it belongs at. */
   readonly at: number;
   /** Viewport px: the caret's place there. */
@@ -19,6 +21,21 @@ export type CanvasRecoveryGhost = {
   readonly top: number;
   readonly height: number;
 };
+
+/** Delimiters a `\right` names by command, as the glyph they draw. */
+const DELIMITER_GLYPHS: Readonly<Record<string, string>> = {
+  "\\}": "}", "\\rbrace": "}", "\\rangle": "⟩", "\\rvert": "|", "\\rVert": "‖", "\\|": "‖",
+  "\\rfloor": "⌋", "\\rceil": "⌉", ".": ""
+};
+
+/** How a missing closer is drawn: `\right)` as the `)` TeX would draw there. */
+function closerGlyph(closer: string): string {
+  if (!closer.startsWith("\\right")) {
+    return closer;
+  }
+  const delimiter = closer.slice("\\right".length);
+  return DELIMITER_GLYPHS[delimiter] ?? delimiter;
+}
 
 /** The closers the session's buffer is missing (buffer-local), innermost last as recovery lists them. */
 export function missingClosers(session: TextEditingSession | null): readonly { readonly at: number; readonly text: string }[] {
@@ -85,11 +102,13 @@ export function useCanvasRecoveryGhosts(args: {
         }
         const top = point.caretTop && point.caretBottom ? Math.min(point.caretTop.y, point.caretBottom.y) : point.clientPoint.y - 8;
         const bottom = point.caretTop && point.caretBottom ? Math.max(point.caretTop.y, point.caretBottom.y) : point.clientPoint.y + 4;
+        const glyph = closerGlyph(closer.text);
         const before = atOffset.get(closer.at) ?? 0;
-        atOffset.set(closer.at, before + closer.text.length);
+        atOffset.set(closer.at, before + glyph.length);
         const height = bottom - top;
         result.push({
           text: closer.text,
+          glyph,
           at: closer.at,
           left: point.clientPoint.x - viewportRect.left + 1 + before * height * 0.45,
           top: top - viewportRect.top,

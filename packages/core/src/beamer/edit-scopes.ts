@@ -127,7 +127,7 @@ export function beamerRecoveryDiagnostics(recovery: BeamerRecovery): Diagnostic[
     ...recovery.closers.map((closer): Diagnostic => ({
       severity: "warning",
       code: "tex-missing-closer",
-      message: `Missing ${closer.closer}: closed where its ${closer.kind === "group" ? "paragraph" : "formula's paragraph"} ends`,
+      message: `Missing ${closer.closer}: closed where its ${closer.kind === "group" ? "paragraph" : closer.kind === "delimiter" ? "formula" : "formula's paragraph"} ends`,
       span: { from: closer.opener.from, to: closer.at },
     })),
     ...recovery.strays.map((stray): Diagnostic => ({

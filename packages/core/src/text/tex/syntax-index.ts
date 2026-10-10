@@ -155,7 +155,8 @@ export function getRecoveredTexSyntaxIndex(
   parser: LRParser
 ): TexSyntaxIndex {
   const recovery = scanTexRecovery(source);
-  if (recovery === NO_TEX_RECOVERY) {
+  const parseSource = recovery === NO_TEX_RECOVERY ? source : maskTexRecovery(source, recovery);
+  if (parseSource === source) {
     return getTexSyntaxIndex(source, parser);
   }
   let parserCache = recoveredIndexCache.get(parser);
@@ -167,9 +168,7 @@ export function getRecoveredTexSyntaxIndex(
   if (cached) {
     return cached;
   }
-  const index = buildTexSyntaxIndex(source, parser, {
-    parseSource: maskTexRecovery(source, recovery),
-  });
+  const index = buildTexSyntaxIndex(source, parser, { parseSource });
   parserCache.set(source, index);
   if (parserCache.size > SYNTAX_INDEX_CACHE_LIMIT) {
     const oldest = parserCache.keys().next().value;

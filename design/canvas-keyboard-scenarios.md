@@ -152,7 +152,7 @@ ones it relies on.
   Nothing is escaped in verbatim-like slots (`\url{…}`). In alignment
   environments, `&` separates cells.
 - **R3 Auto-pair openers and step over closers.** `$` → `$‸$`, `{` → `{‸}`,
-  `\[` → display block, `\left(` → `\left(‸\right)`. Typing the closer
+  `\[` → display block. (`\left(` is written alone, M14.) Typing the closer
   right at its auto-inserted twin steps over it. `⌫` on an empty pair
   removes both. The source stays balanced at every keystroke. `\{` pairs
   with `\}` (K3). `(`, `[` and `\bigl(` do not auto-pair (K16).
@@ -545,17 +545,24 @@ Typing `p` → `^p`; no braces are added, because it is still one token. If
 the caret leaves while the slot is still empty, the `^` is removed. *R6,
 R9.*
 
-**M14 Delimiters.** `\left(` (the chip commits on `(`) → `\left(‸\right)`.
-Type the content, then `→` leaves. `⌫` at the start inside steps out to
-the left (R9, as for every slot); removing both delimiters while keeping
-the content is **Unwrap**. `⌫` from outside selects the whole group.
-*R3, R9.*
-To put delimiters around what is already written: `\left(` before it
-brings `\left(‸\right)`, and `\right)` typed after it, in the same slot,
-moves that pair's `\right` there (one step; the delimiter typed is the
-one written, `\right]` too), since TeX has no `\right` without a
-`\left`. Or select it and type `\left(`: the pair wraps the selection,
-which stays selected. (Added 2026-10-10, from use.)
+**M14 Delimiters.** `\left(` (the chip commits on `(`) is written alone:
+`$a\left(‸$`. Until its `\right` is typed, the formula renders as TeX's
+recovery does, the delimiter running to the formula's end, and the
+canvas draws the missing `)` there as a ghost, with "Insert missing
+\right)" to write it in. `\right)` (or `\right]`: the one typed is the
+one written) typed anywhere after it in the same slot closes the
+innermost open `\left` there, as one step. So delimiters go around what
+is already written by typing them where they belong: `\left(` before it,
+`\right)` after it. `⌫` after an open `\left(` (or `⌦` before it) deletes
+it alone, never what follows it. Once closed, the pair is a construct:
+`⌫` at the start inside steps out to the left (R9, as for every slot);
+removing both delimiters while keeping the content is **Unwrap**; `⌫`
+from outside selects the whole group. `\right)` typed after a closed
+pair in the same slot moves its `\right` there, extending it. With a
+selection, `\left(` wraps it in the whole pair, which stays selected.
+*R9, T2.* (Revised 2026-10-10, from use: auto-pairing `\left(\right)`
+made wrapping what is already written impossible, and closing the pair
+by moving it was not discoverable.)
 
 **M15 Text inside math.** `$x‸$` · keys `\text␣ if 50% ` →
 `$x\text{ if 50\% }‸$`. Inside the `\text` slot, prose rules apply:
@@ -926,8 +933,9 @@ which shows the fallback is not principled yet.
 ### Which states can the canvas itself produce?
 
 Few, by construction:
-- R3's auto-pairing means `{`, `$`, `\{`, `\left(` and `\begin` never
-  leave an unclosed opener.
+- R3's auto-pairing means `{`, `$`, `\{` and `\begin` never leave an
+  unclosed opener. (`\left(` does, on purpose, until its `\right` is
+  typed: M14.)
 - Invisible syntax is not an item (R7), so `⌫` cannot delete a lone `}` or
   half of `\]`.
 - R2 escapes `%` and `&`, and K9's hygiene protects `[`.
