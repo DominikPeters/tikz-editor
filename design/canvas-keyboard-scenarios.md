@@ -550,6 +550,12 @@ Type the content, then `→` leaves. `⌫` at the start inside steps out to
 the left (R9, as for every slot); removing both delimiters while keeping
 the content is **Unwrap**. `⌫` from outside selects the whole group.
 *R3, R9.*
+To put delimiters around what is already written: `\left(` before it
+brings `\left(‸\right)`, and `\right)` typed after it, in the same slot,
+moves that pair's `\right` there (one step; the delimiter typed is the
+one written, `\right]` too), since TeX has no `\right` without a
+`\left`. Or select it and type `\left(`: the pair wraps the selection,
+which stays selected. (Added 2026-10-10, from use.)
 
 **M15 Text inside math.** `$x‸$` · keys `\text␣ if 50% ` →
 `$x\text{ if 50\% }‸$`. Inside the `\text` slot, prose rules apply:

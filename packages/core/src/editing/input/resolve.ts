@@ -24,6 +24,7 @@ import {
   commitCommand,
   commitControlSymbol,
   commitLeftDelimiter,
+  DELIMITER_CHARACTERS,
   isControlSymbol,
   copyRange,
   commitWithValues,
@@ -1033,7 +1034,7 @@ class Resolver {
       return this.commitOutcome(view, symbol.outcome, symbol.pending);
     }
     if (chip.name === "left" && view.tree.slots[caret.slot].mode === "math") {
-      const pair = commitLeftDelimiter(chip.at, chip.held, char);
+      const pair = commitLeftDelimiter(view.tree.text, chip.at, chip.held, char);
       if (pair) {
         return this.commitOutcome(view, pair);
       }
@@ -1041,7 +1042,7 @@ class Resolver {
     if (chip.name === "right" && view.tree.slots[caret.slot].mode === "math") {
       return this.closeRight(view, chip, char);
     }
-    if (chip.name === "left" && view.tree.slots[caret.slot].mode === "text" && commitLeftDelimiter(chip.at, null, char)) {
+    if (chip.name === "left" && view.tree.slots[caret.slot].mode === "text" && commitLeftDelimiter(view.tree.text, chip.at, null, char)) {
       // In prose, the pair starts a formula.
       const pair = commitAcrossModes(view, commands, caret, chip.at, "left", "typed", chip.held, char);
       if (pair && pair !== "refused") {
@@ -1102,7 +1103,13 @@ class Resolver {
     return this.commitChip(view, commands, chip, crosses ? "structure" : "typed", false, char);
   }
 
-  /** `\right` and its delimiter typed at the closer `\left` brought: step over it (R3). */
+  /**
+   * `\right` and its delimiter. At the closer `\left` brought, it steps
+   * over it (R3). After a pair, further on in the same formula, it extends
+   * the pair to here: its `\right` moves (TeX has no `\right` without a
+   * `\left`), so `\left(` typed before what is to be wrapped and `\right)`
+   * typed after it wrap it. Elsewhere it writes nothing.
+   */
   private closeRight(view: EditView, chip: ChipState, char: string): IntentResolution {
     const text = view.tree.text;
     let at = chip.at;
@@ -1113,7 +1120,22 @@ class Resolver {
       const caret = at + "\\right".length + char.length;
       return this.transaction([], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
     }
-    return this.keepSelection(NO_INTERACTION);
+    const { tree } = view;
+    const pair = chip.held || !DELIMITER_CHARACTERS.has(char) ? undefined : tree.slots[caretAt(view, chip.at).slot].children
+      .map((id) => tree.nodes[id])
+      .filter((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.span.to <= chip.at)
+      .at(-1);
+    if (!pair) {
+      return this.keepSelection(NO_INTERACTION);
+    }
+    const closer = pair.delimiters[1];
+    const insert = `\\right${char}`;
+    const caret = chip.at - (closer.to - closer.from) + insert.length;
+    return this.transaction(
+      [{ from: closer.from, to: closer.to, insert: "" }, { from: chip.at, to: chip.at, insert }],
+      { kind: "absolute", anchor: caret, focus: caret },
+      { group: "own-step" }
+    );
   }
 
   /** Commits the chip; `then` is a character typed right after, in the same step. */
@@ -1159,7 +1181,7 @@ class Resolver {
       // `\left` and `\right` only exist in pairs (K16, O5): `\left` brings
       // its `\right`; a lone `\right` or `\middle` writes nothing.
       return name === "left"
-        ? this.commitOutcome(view, commitLeftDelimiter(chip.at, chip.held, "(")!)
+        ? this.commitOutcome(view, commitLeftDelimiter(view.tree.text, chip.at, chip.held, "(")!)
         : this.keepSelection(NO_INTERACTION);
     }
     const valued = commands.command(name, mode === "math" ? "math" : "text") ??
@@ -1358,8 +1380,9 @@ class Resolver {
     const { from, to } = this;
     // The two ends must meet in one slot, or through style wrappers only
     // (`a⟦b\\textbf{c⟧d}`): not across a title and a body, cells or blocks.
+    // (Judged on the selection as drawn: its promotion takes a construct an end is in, `\lambda_i`, whole.)
     const { tree } = view;
-    const ends = selectionEndsAt(view, from, to);
+    const ends = promoteSelection(view, selectionEndsAt(view, from, to));
     const chain = (slot: number) => {
       const slots = [slot];
       for (let node = tree.slots[slot].node; tree.nodes[node].parent != null; node = tree.slots[tree.nodes[node].parent!].node) {

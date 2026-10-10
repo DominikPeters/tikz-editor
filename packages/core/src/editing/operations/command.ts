@@ -155,7 +155,7 @@ export function commitAcrossModes(
     return "refused";
   }
   const mandatory = schema.args.filter((arg) => arg.kind === "mandatory").length;
-  if (held && mandatory > 0) {
+  if (held && (mandatory > 0 || name === "left")) {
     // A selection of one mode does not go into an argument of the other.
     return "refused";
   }
@@ -285,16 +285,31 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
   }
 }
 
-/** `\left` and a delimiter: the pair, with its closer (R3, M14). */
-export function commitLeftDelimiter(at: number, held: Span | null, opener: string): EditOutcome | null {
+/**
+ * `\left` and a delimiter: the pair, with its closer (R3, M14), around a
+ * held selection, which stays selected inside.
+ */
+export function commitLeftDelimiter(text: string, at: number, held: Span | null, opener: string): EditOutcome | null {
   const closer = DELIMITER_PAIRS[opener];
   if (closer == null) {
     return null;
   }
   const range = held ?? { from: at, to: at };
   const open = `\\left${opener}`;
-  return edit(range, `${open}\\right${closer}`, range.from + open.length);
+  const selected = text.slice(range.from, range.to);
+  const caret = range.from + open.length;
+  return {
+    kind: "patch",
+    patches: [{ from: range.from, to: range.to, insert: `${open}${selected}\\right${closer}` }],
+    caret,
+    run: null,
+    exact: true,
+    ...(selected ? { selectionEnd: caret + selected.length } : {}),
+  };
 }
+
+/** Characters that are delimiters after `\left` and `\right`. */
+export const DELIMITER_CHARACTERS = new Set(["(", ")", "[", "]", "|", ".", "/"]);
 
 const TEXT_ACCENTS = new Set(["^", "'", "`", "\"", "~", "=", "."]);
 
