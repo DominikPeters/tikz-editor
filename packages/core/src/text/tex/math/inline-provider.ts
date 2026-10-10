@@ -640,14 +640,17 @@ function addMathItemCaretMapEntries(
         item.sourceSpan,
         50
       ));
-      if (item.items.length === 0 && item.atPt !== undefined && mathConstructBoundaryHListRoles.has(item.role)) {
-        // An empty script (`\sum^{‸}` just typed): the caret inside it stands where its
-        // contents go, a line of its own size tall.
+      if (item.items.length === 0 && item.atPt !== undefined && (mathConstructBoundaryHListRoles.has(item.role) || item.role === "nucleus")) {
+        // An empty script or argument (`\sum^{‸}` just typed, `\frac{‸}{2}`, `\sqrt{‸}`): the caret
+        // inside it stands where its contents go, a line of its own size tall.
         const caretExtent = {
           top: texHBoxY(roundTexPt(y - item.atPt * 0.75)),
           bottom: texHBoxY(roundTexPt(y + item.atPt * 0.25)),
         };
-        for (let offset = item.sourceSpan.start + 1; offset < item.sourceSpan.end; offset += 1) {
+        // (A script's span holds its braces; an argument's is its empty content, one offset.)
+        const { start, end } = item.sourceSpan;
+        const [first, last] = start === end ? [start, end] : [start + 1, end - 1];
+        for (let offset = first; offset <= last; offset += 1) {
           addEntry({ ...mathCaretEntry(offset, x, y, item.height, item.depth, hitBounds, kind, item.sourceSpan, 60), caretExtent });
         }
       }

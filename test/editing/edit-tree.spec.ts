@@ -6,6 +6,7 @@ import { printEditTree } from "../../packages/core/src/editing/tree/print.js";
 import {
   caretContext,
   createEditView,
+  emptyMathSlots,
   createPositionIndex,
   positionOffset,
 } from "../../packages/core/src/editing/position/index.js";
@@ -160,6 +161,27 @@ describe("caret context", () => {
   it("tells the inside of a construct's edge from the outside (R8)", () => {
     expect(path(R`\textbf{a‸} b`)).toBe(R`\textbf*`);
     expect(path(R`\textbf{a}‸ b`)).toBe("");
+  });
+});
+
+describe("empty slots of math (V3)", () => {
+  const empty = (text: string) => {
+    const view = createEditView(tree(text));
+    return emptyMathSlots(view).map((slot) => `${view.tree.slots[slot.slot].role}${slot.centered ? "*" : ""}@${slot.at}`);
+  };
+
+  it.each([
+    [R`$\frac{}{}$`, ["numerator*@7", "denominator*@9"]],
+    [R`$x^{}+y_{}$`, ["sup@4", "sub@9"]],
+    ["a ${}$ b", ["content@4"]],
+    [R`$\left(\right)$`, ["content@7"]],
+    [R`$\sqrt{}$`, ["radicand@7"]],
+  ])("shows a placeholder where %s puts its content", (text, expected) => {
+    expect(empty(text)).toEqual(expected);
+  });
+
+  it.each([R`$a&{}=b$`, R`$\text{}$`, R`\textbf{}`, R`$\frac12$`])("not for an empty atom, text, or what is filled: %s", (text) => {
+    expect(empty(text)).toEqual([]);
   });
 });
 

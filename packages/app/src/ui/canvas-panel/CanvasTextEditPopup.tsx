@@ -17,6 +17,7 @@ import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 import type { CanvasSourceLensModel } from "./CanvasSourceLens";
 import type { CanvasRecoveryGhost } from "./useCanvasRecoveryGhosts";
 import type { CanvasPendingCloser } from "./useCanvasPendingCloser";
+import type { CanvasSlotPlaceholder } from "./useCanvasSlotPlaceholders";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -151,6 +152,8 @@ export type CanvasTextEditViewModel = {
   recoveryFix: CanvasRecoveryFixModel | null;
   /** A `\right` not yet accepted (M14): the hint for accepting it. */
   pendingCloser: CanvasPendingCloser | null;
+  /** Boxes where empty math slots put their content (V3). */
+  slotPlaceholders: readonly CanvasSlotPlaceholder[];
 };
 
 /** The pill that writes the missing closers in (T6), viewport px. */

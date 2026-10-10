@@ -46,6 +46,7 @@ import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 import type { CanvasSourceLensModel } from "./CanvasSourceLens";
 import { missingClosers, useCanvasRecoveryGhosts } from "./useCanvasRecoveryGhosts";
 import { useCanvasPendingCloser } from "./useCanvasPendingCloser";
+import { useCanvasSlotPlaceholders } from "./useCanvasSlotPlaceholders";
 import {
   chipCandidates,
   copySelection,
@@ -2681,6 +2682,18 @@ export function useCanvasTextEditSession(
     resolveContainer: resolveRenderedMathTextElement
   });
 
+  const slotPlaceholders = useCanvasSlotPlaceholders({
+    session: textEditFocusSurface === "canvas" ? textEditingSession : null,
+    commands: editCommands,
+    renderedSource: snapshot.source,
+    source,
+    textLayoutContext,
+    canvasTransform,
+    viewportRef,
+    resolveTarget: (session) => resolveEditableTextTargetById(session.sourceId, session.sceneTextId),
+    resolveContainer: resolveRenderedMathTextElement
+  });
+
   /** The quick fix (T6): once the lens is closed, the missing closers written in with one click. */
   const recoveryFix = useMemo<CanvasRecoveryFixModel | null>(() => {
     const first = recoveryGhosts[0];
@@ -2714,9 +2727,10 @@ export function useCanvasTextEditSession(
       sourceLens,
       recoveryGhosts,
       recoveryFix,
-      pendingCloser
+      pendingCloser,
+      slotPlaceholders
     }),
-    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, sourceLens,
+    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, slotPlaceholders, sourceLens,
       textEditFocusSurface, textEditingSession, valueEditor]
   );
 

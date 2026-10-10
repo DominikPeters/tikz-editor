@@ -882,6 +882,16 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </button>
           ) : null}
 
+          {canvasTextEdit.slotPlaceholders.map((box) => (
+            <span
+              key={box.key}
+              className={css.slotPlaceholder}
+              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+              data-testid="canvas-slot-placeholder"
+              aria-hidden="true"
+            />
+          ))}
+
           {canvasTextEdit.pendingCloser ? (
             <div
               className={css.pendingCloserHint}
