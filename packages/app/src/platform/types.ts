@@ -1,6 +1,7 @@
 import type { LinkedTextReadResult, LinkedTextWriteResult } from "../linked-file-sync.js";
 import type { DocumentFileRef, FileRevision } from "../store/types.js";
 import type { AppMenuCommandId, AppMenuDefinition, AppMenuItem } from "../app-menu/index.js";
+import type { PlatformPresentationApi } from "../presentation/types.js";
 
 export type MenuCommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
 
@@ -340,6 +341,7 @@ export type EditorPlatform = {
   assistant?: AssistantApi;
   updates?: PlatformUpdateApi;
   latex?: PlatformLatex;
+  presentation?: PlatformPresentationApi;
 };
 
 export type PlatformLatex = {

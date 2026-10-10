@@ -6,6 +6,7 @@ import type {
 import type { DocumentFileRef, FileRevision } from "@tikz-editor/app/store/types";
 import { revisionForText, revisionsMatch, type LinkedTextReadResult, type LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
 import { resolvePlatformStorage, type StorageLike } from "@tikz-editor/app/platform/storage";
+import { createBrowserPresentationApi } from "@tikz-editor/app/presentation";
 
 type ClipboardLike = {
   readText?: () => Promise<string>;
@@ -558,6 +559,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
 
   return {
     id: mergedEnv.id ?? "web",
+    presentation: createBrowserPresentationApi(),
     persistence: {
       load: (key) => storage?.getItem(key) ?? null,
       save: (key, value) => {
