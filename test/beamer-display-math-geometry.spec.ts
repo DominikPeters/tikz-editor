@@ -168,3 +168,37 @@ describe("the caret in a script just opened", () => {
     expect(inside.x).toBeGreaterThan(sum.x);
   });
 });
+
+describe("the caret in an empty argument", () => {
+  it.each([
+    ["a numerator, above the bar at the numerator's size", String.raw`a+\frac{}{2}+b`, String.raw`\frac{`, "2"],
+    ["a radicand, at the text size", String.raw`a+\sqrt{}+b`, String.raw`\sqrt{`, "b"],
+    ["an empty pair of braces in a formula", String.raw`a+{}+b`, "+{", "b"],
+  ])("stands where its contents go, a line of their size tall: %s", async (_name, formula, before, reference) => {
+    const source = `\\documentclass{beamer}\n\\begin{document}\n\\begin{frame}{T}\nText\n\\[ ${formula} \\]\n\\end{frame}\n\\end{document}\n`;
+    const start = source.indexOf(formula);
+    const frame = await renderBeamerFrame(source, { frameIndex: 0 });
+    const find = (candidate: BeamerParagraphLayout) => flattenPositionedTexVListItems(candidate.vlistLayout.items).find((item) => item.item.kind === "display-math");
+    const display = frame.layout.paragraphs.find((candidate) => find(candidate))!;
+    const context = createTextLayoutContext({
+      getParagraphReports: () => [display.report],
+      getVListLayouts: () => [{ paragraphId: display.paragraphId, layout: display.vlistLayout }],
+      getVListLayout: () => display.vlistLayout,
+    });
+    const params = {
+      paragraphId: display.paragraphId, sourceCoordinateSpace: "document" as const,
+      sourceText: source.slice(display.sourceSpan.from, display.sourceSpan.to),
+      sourceTextStartOffset: documentSourceOffset(display.sourceSpan.from),
+      containerElement: { tagName: "g", getScreenCTM: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }) } as unknown as Element,
+    };
+    const caret = async (offset: number) => {
+      const point = await getKnuthPlassPointFromOffset(context, { ...params, offset: documentSourceOffset(start + offset) });
+      return { top: Math.min(point.caretTop!.y, point.caretBottom!.y), bottom: Math.max(point.caretTop!.y, point.caretBottom!.y) };
+    };
+    const inside = await caret(formula.indexOf(before) + before.length);
+    const beside = await caret(formula.indexOf(reference) + 1);
+    // Not a degenerate point, nor the whole line: as tall as the caret by the text of its size.
+    expect(inside.bottom - inside.top).toBeCloseTo(beside.bottom - beside.top, 6);
+  });
+});
+

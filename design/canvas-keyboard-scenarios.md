@@ -553,7 +553,8 @@ and kept right after the caret. While it is pending:
 - what is typed goes in front of it;
 - `→` takes it along over what is already written, one caret stop of the
   pair's own slot at a time (a construct is one stop: it never goes into a
-  `\frac`); `⌥→` by word, `⌘→` to the slot's end; `←` takes it back, never
+  `\frac`; a plain `(…)` or `[…]` already written is one step too, so
+  `g_i(x^\star)` is two); `⌥→` by word, `⌘→` to the slot's end; `←` takes it back, never
   past its `\left`. At the slot's end `→` accepts it and steps past; at the
   start `←` accepts it and moves on;
 - `⇥` accepts it, the caret after it; so does typing its delimiter, `)`,
@@ -1057,7 +1058,12 @@ options that are awkward today.
   `\right` are offered with their delimiters (`\left(`, `\left[`,
   `\left\{`, `\left|`), and a pending `\right` (M14) first.
 - **V3 Ghost slots.** Empty slots are dotted placeholder boxes (Word,
-  TeXmacs, MathQuill). When a construct is the focus, *optional* rendered
+  TeXmacs, MathQuill). (Done for present slots, 2026-10-11: an empty
+  argument or script of math, `${}$`, an empty `\left(\right)` show a
+  dashed box at the caret's place in them, of their size, during the
+  session; drawn over the layout rather than taking space in it, so the
+  slide is set as TeX sets it. Not for a bare `{}` atom. Absent optional
+  slots below are still to do.) When a construct is the focus, *optional* rendered
   slots that are absent also show as faint ghost boxes: the root index of
   `\sqrt`, a missing superscript or subscript, an item label in
   `description`. Clicking or typing into one creates it. This makes
