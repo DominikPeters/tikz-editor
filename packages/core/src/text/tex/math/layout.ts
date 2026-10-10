@@ -5767,7 +5767,9 @@ function layoutLeftRightNucleus(
   if (!rawBody) {
     return null;
   }
-  const targetHeight = leftRightDelimiterTarget(rawBody.height, rawBody.depth, axis);
+  // An open `\left` (no `\right` typed yet) would grow over the rest of the
+  // formula, which it is not meant to enclose: it keeps its natural size.
+  const targetHeight = nucleus.open ? 0 : leftRightDelimiterTarget(rawBody.height, rawBody.depth, axis);
   const body = expandMiddleDelimitersInHList(
     rawBody,
     fontProfile,
