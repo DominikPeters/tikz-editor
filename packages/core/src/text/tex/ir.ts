@@ -23,7 +23,9 @@ import {
   type TexHBoxOffsetY,
   type TexLength,
 } from "./coordinates.js";
+import { scanTexRecovery, texVirtualCloserAt, type TexVirtualCloser } from "./recovery.js";
 import {
+  getRecoveredTexSyntaxIndex,
   getTexSyntaxIndex,
   matchTexSyntaxEnvironments,
   type TexSyntaxIndex,
@@ -1318,7 +1320,7 @@ function scanSimpleTexIrNodes(
   resolveColorAlias?: ColorAliasResolver
 ): { nodes: readonly SimpleTexNode[]; unsupportedCommand: boolean } {
   const nodes: SimpleTexNode[] = [];
-  const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  const syntax = getRecoveredTexSyntaxIndex(text, texFragmentParser);
   const matchedEnvironments = [...matchTexSyntaxEnvironments(syntax).values()];
   const matchedEnvironmentBoundaryStarts = new Set(
     matchedEnvironments.flatMap((environment) => [
@@ -1327,6 +1329,7 @@ function scanSimpleTexIrNodes(
     ])
   );
   const mathSyntaxByStart = simpleTexMathNodes(syntax);
+  const recovery = scanTexRecovery(text);
   let unsupportedCommand = false;
   let index = 0;
 
@@ -1380,6 +1383,13 @@ function scanSimpleTexIrNodes(
     if (mathSyntax) {
       nodes.push(offsetSimpleTexMathSyntax(mathSyntax, sourceOffset));
       index = mathSyntax.sourceEnd;
+      continue;
+    }
+    // A formula left open while editing ends where its run does (T2).
+    const virtualCloser = recovery.closers.length > 0 ? texVirtualCloserAt(recovery, index) : null;
+    if (virtualCloser && virtualCloser.kind !== "group") {
+      nodes.push(offsetSimpleTexMathSyntax(recoveredSimpleTexMathNode(text, virtualCloser), sourceOffset));
+      index = virtualCloser.at;
       continue;
     }
 
@@ -1695,7 +1705,7 @@ function scanSimpleTexIrNodes(
         if (group.blockChildren) {
           nodes.push({ kind: "style-declaration", text: "{", sizeScope: { boundary: "begin", name: "" }, sourceStart, sourceEnd: sourceStart + 1 },
             ...group.blockChildren,
-            { kind: "style-declaration", text: "}", sizeScope: { boundary: "end", name: "" }, sourceStart: sourceOffset + group.end - 1, sourceEnd: sourceOffset + group.end });
+            { kind: "style-declaration", text: "}", sizeScope: { boundary: "end", name: "" }, sourceStart: group.node.contentEnd, sourceEnd: sourceOffset + group.end });
         } else nodes.push(group.node);
         unsupportedCommand ||= group.unsupportedCommand;
         index = group.end;
@@ -2002,6 +2012,15 @@ function simpleTexMathNodeFromSyntax(
   };
 }
 
+/** A formula with no closer: its content runs to the virtual closer. */
+function recoveredSimpleTexMathNode(text: string, closer: TexVirtualCloser): SimpleTexMathNode | SimpleTexDisplayMathNode {
+  const { opener, at } = closer;
+  const content = { content: text.slice(opener.to, at), contentStart: opener.to, contentEnd: at, sourceStart: opener.from, sourceEnd: at, text: text.slice(opener.from, at) };
+  return closer.kind === "display"
+    ? { kind: "display-math", delimiter: closer.closer === "$$" ? "double-dollar" : "bracket", ...content }
+    : { kind: "math", delimiter: closer.closer === "$" ? "dollar" : "paren", ...content };
+}
+
 function offsetSimpleTexMathSyntax(
   node: SimpleTexMathNode | SimpleTexDisplayMathNode,
   sourceOffset: number
@@ -2058,7 +2077,7 @@ function scanSimpleTexColorBoxCommand(
   if (!firstColor) return null;
   const secondColor = command.name === "fcolorbox" ? scanColorArgument() : null;
   if (command.name === "fcolorbox" && !secondColor) return null;
-  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor, true);
   if (!contentArgument) return null;
   const childScan = scanSimpleTexIrNodes(
     contentArgument.content,
@@ -2139,7 +2158,7 @@ function scanSimpleTexProseControl(
   readonly unsupportedCommand: boolean;
 } | null {
   const sourceStart = sourceOffset + start;
-  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+  const command = getRecoveredTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
     start
   );
   const commandEnd = command?.commandSpan.to ?? start;
@@ -2659,7 +2678,7 @@ function scanSimpleTexBoxEnvironment(
   end: number;
   unsupportedCommand: boolean;
 } | null {
-  const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  const syntax = getRecoveredTexSyntaxIndex(text, texFragmentParser);
   const environment = matchTexSyntaxEnvironments(syntax).get(start);
   if (environment?.name !== "minipage") {
     return null;
@@ -2973,13 +2992,14 @@ function scanSimpleTexFontCommand(
   if (text[groupStart] !== "{") {
     return null;
   }
-  const groupEnd = findBalancedSimpleTexGroupEnd(text, groupStart);
-  if (groupEnd === null) {
+  const extent = findSimpleTexGroupExtent(text, groupStart);
+  if (extent === null) {
     return null;
   }
 
+  const groupEnd = extent.end;
   const contentStart = groupStart + 1;
-  const contentEnd = groupEnd - 1;
+  const contentEnd = extent.contentEnd;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
     sourceOffset + contentStart,
@@ -3581,9 +3601,11 @@ function scanSimpleTexOptionalBracketArgument(
   };
 }
 
+/** A braced argument; with `recover`, a content argument left open while editing (T2) counts too. */
 function scanSimpleTexRequiredGroupArgument(
   text: string,
-  start: number
+  start: number,
+  recover = false
 ): {
   readonly content: string;
   readonly contentStart: number;
@@ -3591,12 +3613,14 @@ function scanSimpleTexRequiredGroupArgument(
   readonly end: number;
 } | null {
   if (text[start] !== "{") return null;
-  const end = findBalancedSimpleTexGroupEnd(text, start);
+  const extent = recover ? findSimpleTexGroupExtent(text, start) : null;
+  const end = extent?.end ?? findBalancedSimpleTexGroupEnd(text, start);
   if (end === null) return null;
+  const contentEnd = extent?.contentEnd ?? end - 1;
   return {
-    content: text.slice(start + 1, end - 1),
+    content: text.slice(start + 1, contentEnd),
     contentStart: start + 1,
-    contentEnd: end - 1,
+    contentEnd,
     end,
   };
 }
@@ -3891,7 +3915,7 @@ function scanSimpleTexColorCommand(
   const colorArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
   if (!colorArgument) return null;
   cursor = skipSimpleTexControlWordSpaces(text, colorArgument.end);
-  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor, true);
   if (!contentArgument) return null;
   const color = normalizeSimpleTexColor(colorArgument.content, model, resolveColorAlias);
   if (!color) return null;
@@ -3945,7 +3969,7 @@ function scanSimpleTexAlertCommand(
     if (specEnd === -1 || (nextBrace !== -1 && nextBrace < specEnd)) return null;
     cursor = skipSimpleTexControlWordSpaces(text, specEnd + 1);
   }
-  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor);
+  const contentArgument = scanSimpleTexRequiredGroupArgument(text, cursor, true);
   if (!contentArgument) return null;
   const childScan = scanSimpleTexIrNodes(
     contentArgument.content,
@@ -4010,7 +4034,7 @@ function scanSimpleTexAccentCommand(
   start: number,
   sourceOffset: number
 ): { readonly node: SimpleTexTextNode; readonly end: number } | null {
-  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+  const command = getRecoveredTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
     start
   );
   if (!command) {
@@ -4077,13 +4101,14 @@ function scanSimpleTexGroup(
   end: number;
   unsupportedCommand: boolean;
 } | null {
-  const groupEnd = findBalancedSimpleTexGroupEnd(text, start);
-  if (groupEnd === null) {
+  const extent = findSimpleTexGroupExtent(text, start);
+  if (extent === null) {
     return null;
   }
 
+  const groupEnd = extent.end;
   const contentStart = start + 1;
-  const contentEnd = groupEnd - 1;
+  const contentEnd = extent.contentEnd;
   const childScan = scanSimpleTexIrNodes(
     text.slice(contentStart, contentEnd),
     sourceOffset + contentStart,
@@ -4111,11 +4136,21 @@ function scanSimpleTexGroup(
   };
 }
 
+/**
+ * A group's extent: to its closing brace, or, for one left open while
+ * editing, to where its run ends (T2), its content up to there.
+ */
+function findSimpleTexGroupExtent(text: string, start: number): { readonly end: number; readonly contentEnd: number } | null {
+  const end = findBalancedSimpleTexGroupEnd(text, start);
+  if (end !== null) {
+    return { end, contentEnd: end - 1 };
+  }
+  const closer = texVirtualCloserAt(scanTexRecovery(text), start);
+  return closer?.kind === "group" ? { end: closer.at, contentEnd: closer.at } : null;
+}
+
 function findBalancedSimpleTexGroupEnd(text: string, start: number): number | null {
-  const argument = getTexSyntaxIndex(
-    text,
-    texFragmentParser
-  ).groupByStart.get(start);
+  const argument = getRecoveredTexSyntaxIndex(text, texFragmentParser).groupByStart.get(start);
   return argument?.complete ? argument.span.to : null;
 }
 
@@ -4123,19 +4158,13 @@ function findBalancedSimpleTexOptionalArgumentEnd(
   text: string,
   start: number
 ): number | null {
-  const argument = getTexSyntaxIndex(
-    text,
-    texFragmentParser
-  ).optionalArgumentByStart.get(start);
+  const argument = getRecoveredTexSyntaxIndex(text, texFragmentParser).optionalArgumentByStart.get(start);
   return argument?.complete ? argument.span.to : null;
 }
 
 function skipSimpleTexControlWordSpaces(text: string, start: number): number {
   let index = start;
-  const triviaEndByStart = getTexSyntaxIndex(
-    text,
-    texFragmentParser
-  ).triviaEndByStart;
+  const triviaEndByStart = getRecoveredTexSyntaxIndex(text, texFragmentParser).triviaEndByStart;
   for (
     let triviaEnd = triviaEndByStart.get(index);
     triviaEnd !== undefined;
@@ -4150,7 +4179,7 @@ export function scanSimpleTexLineBreak(
   text: string,
   start: number
 ): { end: number; lineLeading?: string; priority?: 0 | 1 | 2 | 3 | 4 } | null {
-  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+  const command = getRecoveredTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
     start
   );
   if (!command) {
@@ -4235,7 +4264,7 @@ function scanSimpleTexAlignmentCommand(
 }
 
 function scanSimpleTexControlWord(text: string, start: number, word: string): number | null {
-  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+  const command = getRecoveredTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
     start
   );
   return command?.kind === "word" && command.name === word
@@ -4244,7 +4273,7 @@ function scanSimpleTexControlWord(text: string, start: number, word: string): nu
 }
 
 function scanUnsupportedControlSequenceEnd(text: string, start: number): number {
-  const command = getTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
+  const command = getRecoveredTexSyntaxIndex(text, texFragmentParser).controlByStart.get(
     start
   );
   if (!command) {

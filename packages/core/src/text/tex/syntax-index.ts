@@ -2,6 +2,7 @@ import { TreeFragment, type SyntaxNodeRef, type Tree } from "@lezer/common";
 import type { LRParser } from "@lezer/lr";
 
 import type { Span } from "../../ast/types.js";
+import { maskTexRecovery, NO_TEX_RECOVERY, scanTexRecovery } from "./recovery.js";
 
 const SYNTAX_INDEX_CACHE_LIMIT = 128;
 const OPAQUE_ENVIRONMENT_NAMES = [
@@ -130,6 +131,45 @@ export function getTexSyntaxIndex(
     return cached;
   }
   const index = buildTexSyntaxIndex(source, parser);
+  parserCache.set(source, index);
+  if (parserCache.size > SYNTAX_INDEX_CACHE_LIMIT) {
+    const oldest = parserCache.keys().next().value;
+    if (oldest !== undefined) {
+      parserCache.delete(oldest);
+    }
+  }
+  return index;
+}
+
+const recoveredIndexCache = new WeakMap<LRParser, Map<string, TexSyntaxIndex>>();
+
+/**
+ * The syntax index of `source` with its unbalanced openers and closers
+ * masked out of the parse (T1), so that the parser's own error recovery
+ * cannot spread past the construct being edited: `\textbf{bo` in one
+ * item leaves the list around it intact. Balanced source parses as with
+ * `getTexSyntaxIndex`.
+ */
+export function getRecoveredTexSyntaxIndex(
+  source: string,
+  parser: LRParser
+): TexSyntaxIndex {
+  const recovery = scanTexRecovery(source);
+  if (recovery === NO_TEX_RECOVERY) {
+    return getTexSyntaxIndex(source, parser);
+  }
+  let parserCache = recoveredIndexCache.get(parser);
+  if (!parserCache) {
+    parserCache = new Map();
+    recoveredIndexCache.set(parser, parserCache);
+  }
+  const cached = parserCache.get(source);
+  if (cached) {
+    return cached;
+  }
+  const index = buildTexSyntaxIndex(source, parser, {
+    parseSource: maskTexRecovery(source, recovery),
+  });
   parserCache.set(source, index);
   if (parserCache.size > SYNTAX_INDEX_CACHE_LIMIT) {
     const oldest = parserCache.keys().next().value;

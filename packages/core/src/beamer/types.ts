@@ -5,6 +5,7 @@ import type {
   Span,
 } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
+import type { TexVirtualCloser } from "../text/tex/recovery.js";
 import type { BeamerLinkRegion } from "./references.js";
 import type {
   DocumentGraphicsAsset,
@@ -451,6 +452,16 @@ export type BeamerFrameLayout = {
   /** Source-owned overlay arguments and their visibility on this step, including empty branches. */
   overlayBranches?: readonly { readonly span: Span; readonly visible: boolean }[];
   editScopes: BeamerEditScope[];
+  /** What TeX recovery closed or dropped in the edit scopes; absent when the source is balanced. */
+  recovery?: BeamerRecovery;
+};
+
+/** Recovery from unbalanced source (T5), in document coordinates. */
+export type BeamerRecovery = {
+  /** Openers closed virtually where their run ends. */
+  readonly closers: readonly TexVirtualCloser[];
+  /** Closers with no opener, and openers with nothing to close, shown as source. */
+  readonly strays: readonly Span[];
 };
 
 export type BeamerFrameSvgResult = {

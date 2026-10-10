@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Tree } from "@lezer/common";
 import { parseTexSyntax } from "@tikz-editor/lezer-tex";
 import { parseSimpleTexParagraphIr } from "../packages/core/src/text/tex/ir.js";
+import { scanTexRecovery } from "../packages/core/src/text/tex/recovery.js";
 
 function syntaxErrors(tree: Tree) {
   const errors: { from: number; to: number }[] = [];
@@ -40,11 +41,16 @@ describe("AMS intertext uses a text-mode argument", () => {
     }
   });
 
-  it.each([
-    String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x$ holds c&=d\end{align*} Beta`,
-    String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x holds}c&=d\end{align*} Beta`,
-  ])("marks malformed intertext recovery explicitly: %s", source => {
+  it("marks malformed intertext recovery explicitly", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x$ holds c&=d\end{align*} Beta`;
     expect(syntaxErrors(parseTexSyntax(source, { top: "TexFragment" })).length).toBeGreaterThan(0);
     expect(parseSimpleTexParagraphIr(source).items.some(item => item.kind === "display-math")).toBe(false);
+  });
+
+  it("keeps the display around intertext missing its closing $, which recovery reports", () => {
+    const source = String.raw`Alpha \begin{align*}a&=b\\\intertext{where $x holds}c&=d\end{align*} Beta`;
+    expect(syntaxErrors(parseTexSyntax(source, { top: "TexFragment" })).length).toBeGreaterThan(0);
+    expect(scanTexRecovery(source).closers).toMatchObject([{ closer: "$", at: source.indexOf("}c&") }]);
+    expect(parseSimpleTexParagraphIr(source).items.some(item => item.kind === "display-math")).toBe(true);
   });
 });
