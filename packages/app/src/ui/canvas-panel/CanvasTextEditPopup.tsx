@@ -16,6 +16,7 @@ import type { CanvasContextOutline } from "./useCanvasContextOutlines";
 import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 import type { CanvasSourceLensModel } from "./CanvasSourceLens";
 import type { CanvasRecoveryGhost } from "./useCanvasRecoveryGhosts";
+import type { CanvasPendingCloser } from "./useCanvasPendingCloser";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -148,6 +149,8 @@ export type CanvasTextEditViewModel = {
   recoveryGhosts: readonly CanvasRecoveryGhost[];
   /** The quick fix for them (T6). */
   recoveryFix: CanvasRecoveryFixModel | null;
+  /** A `\right` not yet accepted (M14): the hint for accepting it. */
+  pendingCloser: CanvasPendingCloser | null;
 };
 
 /** The pill that writes the missing closers in (T6), viewport px. */

@@ -236,7 +236,7 @@ const tabular = (...rows: string[]) => ["\\begin{tabular}{ll}", ...rows, "\\end{
 export const texValidityScenarios: readonly Scenario[] = [
   { id: "X2 frac", title: "a math command in prose starts a formula", body: "Let ‸ be", keys: R`\frac␣1 ⇥ 2`, expect: R`Let $\frac{1}{2‸}$ be` },
   { id: "X2 alpha", title: "a math symbol committed with ␣ in prose is a formula of its own", body: "Let ‸be", keys: R`\alpha␣`, expect: R`Let $\alpha$ ‸be` },
-  { id: "X2 left", title: "\\left( in prose starts a formula", body: "a ‸ b", keys: R`\left(x`, expect: R`a $\left(x‸$ b` },
+  { id: "X2 left", title: "\\left( in prose starts a formula with the pair", body: "a ‸ b", keys: R`\left(x`, expect: R`a $\left(x‸\right)$ b` },
   { id: "X3", title: "a text command in math goes into \\text", body: R`$a‸$`, keys: R`\LaTeX␣`, expect: R`$a\text{\LaTeX}‸$` },
   { id: "X3 emph", title: "\\emph is a text command, not a math one", body: R`$a‸$`, keys: R`\emph␣x`, expect: R`$a\text{\emph{x‸}}$` },
   { id: "X4", title: "\\item outside a list writes nothing", body: "a‸ b", keys: R`\item␣`, expect: "a‸ b" },

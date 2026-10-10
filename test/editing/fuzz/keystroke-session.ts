@@ -181,7 +181,7 @@ export class KeystrokeSession {
         return intent;
       }
       case "key": {
-        const decision = interpretKeyDown({ ...key, composing: false }, "canvas");
+        const decision = interpretKeyDown({ ...key, composing: false }, "canvas", this.pendingCloser != null);
         if (decision.kind === "intent") {
           this.run(decision.intent);
           return decision.intent;
@@ -192,7 +192,7 @@ export class KeystrokeSession {
           this.run(intent);
           return intent;
         }
-        if (decision.kind === "escape" && (this.chipOpen() || this.pickerOpen() || this.lens() != null)) {
+        if (decision.kind === "escape" && (this.chipOpen() || this.pickerOpen() || this.lens() != null || this.pendingCloser != null)) {
           const intent: Intent = { type: "escape", origin: "keyboard", repeat: false };
           this.run(intent);
           return intent;
@@ -206,6 +206,11 @@ export class KeystrokeSession {
   interaction() {
     const { anchor, focus } = this.selection;
     return interactionState(this.machine, anchor, focus);
+  }
+
+  /** A `\right` written with its `\left` and not yet accepted (M14): its offset. */
+  get pendingCloser(): number | undefined {
+    return this.interaction().pendingCloser;
   }
 
   chipOpen(): boolean {

@@ -56,14 +56,35 @@ export function caretContext(view: EditView, position: Position): ContextCrumb[]
 /** Nodes the path leaves out: the scope itself, paragraphs, bare groups, and scripted atoms (their slots are named). */
 const UNNAMED_KINDS = new Set<EditNode["kind"]>(["scope", "paragraph", "group", "scripted", "row"]);
 
+/**
+ * A construct's name in the path: a command as written, with its
+ * backslash (`\\frac`, `\\textbf`, `\\item`); a `\\left…\\right` pair by its
+ * delimiters (`\\left( … \\right)`); an environment by its name (`itemize`);
+ * a formula as `math`. Slot names (`sup`) are no commands and stay bare.
+ */
 function nodeLabel(view: EditView, node: EditNode): string | null {
+  const { text } = view.tree;
   if (node.kind === "group" && isDeclarationGroup(view.tree, node.id)) {
-    return view.tree.nodes[view.tree.slots[node.slots[0]].children[0]].command ?? null;
+    const declaration = view.tree.nodes[view.tree.slots[node.slots[0]].children[0]];
+    return declaration.command == null ? null : commandLabel(text, declaration);
   }
   if (UNNAMED_KINDS.has(node.kind)) {
     return null;
   }
-  return node.command ?? KIND_LABELS[node.kind] ?? (view.role(node.id) === "flow" ? null : node.kind);
+  if (node.kind === "delimited") {
+    const [left, right] = node.delimiters.map((span) => text.slice(span.from, span.to));
+    return right == null ? `${left} …` : `${left} … ${right}`;
+  }
+  if (node.command != null) {
+    return commandLabel(text, node);
+  }
+  return KIND_LABELS[node.kind] ?? (view.role(node.id) === "flow" ? null : node.kind);
+}
+
+/** `\\name` for a command written as one; an environment's name bare. */
+function commandLabel(text: string, node: EditNode): string {
+  const command = node.command!;
+  return text.startsWith(`\\${command}`, node.span.from) ? `\\${command}` : command;
 }
 
 function isOutlined(view: EditView, node: EditNode): boolean {

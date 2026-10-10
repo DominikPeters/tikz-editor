@@ -1475,6 +1475,36 @@
   border-color: var(--accent);
 }
 
+/* How to accept a pending \right (M14): "tab \right)" below its faint glyph. */
+.pendingCloserHint {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 1px 6px;
+  font: 11px/16px var(--font-ui);
+  color: var(--text-muted, var(--text));
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 14%);
+}
+
+.pendingCloserHint kbd {
+  padding: 0 4px;
+  font: 10px/14px var(--font-ui);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+.pendingCloserHint code {
+  font-family: var(--font-mono);
+}
+
 /* A construct's values on its outline tag, clickable to edit them. */
 .contextOutlineValueTag {
   pointer-events: auto;

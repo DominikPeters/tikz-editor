@@ -152,7 +152,8 @@ ones it relies on.
   Nothing is escaped in verbatim-like slots (`\url{…}`). In alignment
   environments, `&` separates cells.
 - **R3 Auto-pair openers and step over closers.** `$` → `$‸$`, `{` → `{‸}`,
-  `\[` → display block. (`\left(` is written alone, M14.) Typing the closer
+  `\[` → display block, `\left(` → `\left(‸\right)` (its `\right)` pending,
+  M14). Typing the closer
   right at its auto-inserted twin steps over it. `⌫` on an empty pair
   removes both. The source stays balanced at every keystroke. `\{` pairs
   with `\}` (K3). `(`, `[` and `\bigl(` do not auto-pair (K16).
@@ -545,29 +546,44 @@ Typing `p` → `^p`; no braces are added, because it is still one token. If
 the caret leaves while the slot is still empty, the `^` is removed. *R6,
 R9.*
 
-**M14 Delimiters.** `\left(` (the chip commits on `(`) is written alone:
-`$a\left(‸$`. Until its `\right` is typed, the formula renders as TeX's
-recovery does, the delimiter running to the formula's end, except that
-the `(` keeps its natural size rather than growing over whatever follows
-(a `\sum` it is not meant to enclose); the canvas draws the missing `)`
-at the end as a ghost, with "Insert missing \right)" to write it in. `\right)` (or `\right]`: the one typed is the
-one written) typed anywhere after it in the same slot closes the
-innermost open `\left` there, as one step. So delimiters go around what
-is already written by typing them where they belong: `\left(` before it,
-`\right)` after it. `⌫` after an open `\left(` (or `⌦` before it) deletes
-it alone, never what follows it. Once closed, the pair is a construct.
+**M14 Delimiters.** `\left(` (the chip commits on `(`; `\left\{`,
+`\left\langle␣` the same) writes its pair, `$a\left(‸\right)$`, with the
+`\right)` *pending*: drawn faint, with <kbd>tab</kbd> `\right)` below it,
+and kept right after the caret. While it is pending:
+- what is typed goes in front of it;
+- `→` takes it along over what is already written, one caret stop of the
+  pair's own slot at a time (a construct is one stop: it never goes into a
+  `\frac`); `⌥→` by word, `⌘→` to the slot's end; `←` takes it back, never
+  past its `\left`. At the slot's end `→` accepts it and steps past; at the
+  start `←` accepts it and moves on;
+- `⇥` accepts it, the caret after it; so does typing its delimiter, `)`,
+  unless a plain `(` typed inside is still open (`\left(f(x‸`), and so
+  does typing `\right)`; `\right]` typed there makes it `\right]`;
+- Esc, a click, ↑/↓, or any edit that leaves the caret elsewhere accepts
+  it where it stands;
+- `⌫` in the still empty pair removes it; `⌦` at it unwraps (below);
+- the chip offers it first: `\r` → `\right)`.
+So delimiters go around what is already written by typing `\left(`
+before it and `→` over it, then `⇥`. The pair and its moves are one undo
+step. Once accepted the pair is a construct.
 **Unwrap:** `⌫` just inside its `\left(` (or `⌦` just inside its
 `\right)`) removes both delimiters, and any `\middle`, keeping the
 content, as one step: one delimiter of a pair cannot go alone, and
 stepping out (R9's rule for slots) would leave no way to remove them.
 Followed by a script, the content is braced (`\left(a+b\right)^2` →
 `{a+b}^2`) so the script stays on all of it. `⌫` from outside selects
-the whole group. `\right)` typed after a closed
-pair in the same slot moves its `\right` there, extending it. With a
-selection, `\left(` wraps it in the whole pair, which stays selected.
-*R9, T2.* (Revised 2026-10-10, from use: auto-pairing `\left(\right)`
-made wrapping what is already written impossible, and closing the pair
-by moving it was not discoverable.)
+the whole group. `\right)` typed after a closed pair in the same slot
+moves its `\right` there, extending it. With a selection, `\left(` wraps
+it in the whole pair, which stays selected.
+A `\left` without its `\right` (from the source lens, or a file) renders
+as TeX's recovery does, the delimiter running to the formula's end but at
+its natural size (not grown over a `\sum` it is not meant to enclose);
+the canvas draws the missing `)` there as a ghost, with "Insert missing
+\right)"; `\right)` typed after it in the same slot closes it, and `⌫`
+after it deletes it alone. *R9, T2.* (Revised 2026-10-11, from use:
+auto-pairing `\left(\right)` made wrapping what is already written
+impossible; a lone `\left(` with its ghost at the formula's end was not
+intuitive; the pending `\right` follows the caret instead.)
 
 **M15 Text inside math.** `$x‸$` · keys `\text␣ if 50% ` →
 `$x\text{ if 50\% }‸$`. Inside the `\text` slot, prose rules apply:
@@ -1037,7 +1053,9 @@ options that are awkward today.
 - **V2 Ghost completion in the command chip.** `\setm` shows `inus` in
   ghost text, with a preview of ∖ in a small popover listing the other
   candidates. `⇥` accepts. Environment names after `\begin` work the same
-  way, as do preamble macros, previewed with their rendering.
+  way, as do preamble macros, previewed with their rendering. `\left` and
+  `\right` are offered with their delimiters (`\left(`, `\left[`,
+  `\left\{`, `\left|`), and a pending `\right` (M14) first.
 - **V3 Ghost slots.** Empty slots are dotted placeholder boxes (Word,
   TeXmacs, MathQuill). When a construct is the focus, *optional* rendered
   slots that are absent also show as faint ghost boxes: the root index of
@@ -1075,8 +1093,11 @@ options that are awkward today.
 - **V10 Recovery ghosts.** Faint ghost closers, struck-through swallowed
   text and the end-of-session quick-fix pill (T2, T4, T6).
 - **V11 Context breadcrumb** (added after review). The status bar always
-  shows the caret's full context path, e.g. `frame › itemize › item ›
-  math › sub`, or `… › textbf › ee` for nested wrappers. It is the
+  shows the caret's full context path, e.g. `frame › itemize › \item ›
+  math › sub`, or `… › \textbf › \ee` for nested wrappers. Commands carry
+  their backslash, which tells them from slot names (`sub`, `denominator`)
+  and environments (`itemize`); a pair is named by its delimiters,
+  `\left( … \right)`. The outline's tag uses the same names. It is the
   accessible, always-legible counterpart to outlines and caret shape. Those
   are fragile at slide zoom, in tiny scripts, and with nested identical
   wrappers or runs that span several lines. Each crumb is clickable and

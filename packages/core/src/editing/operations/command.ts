@@ -166,9 +166,9 @@ export function commitAcrossModes(
   // Where the caret goes in `inner`; null: after the whole.
   let inside: number | null = null;
   if (name === "left") {
-    // (Its `\right` is typed where it goes, as in math: M14.)
-    inner = `\\left${delimiter}`;
-    inside = inner.length;
+    // With its `\right`, pending, as in math (M14).
+    inner = `\\left${delimiter}\\right${matchingRightDelimiter(delimiter ?? "") ?? "."}`;
+    inside = `\\left${delimiter}`.length;
   } else if (key === "bracket" && schema.args.find((arg) => arg.kind !== "overlay")?.kind === "optional") {
     inner = `${command}[]${"{}".repeat(mandatory)}`;
     inside = command.length + 1;
@@ -287,19 +287,19 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
 }
 
 /**
- * `\left` and a delimiter (M14). Alone: its `\right` is typed where it
- * goes, after what it encloses, and until then the canvas shows where TeX
- * would close it (a ghost at the formula's end). Around a held selection:
- * the pair, the selection selected inside.
+ * `\left` and a delimiter (M14), with its `\right`: alone, the caret
+ * between them, the `\right` pending (the resolver takes it along until
+ * it is accepted); around a held selection, the selection selected inside.
  */
 export function commitLeftDelimiter(text: string, at: number, held: Span | null, opener: string): EditOutcome | null {
-  const closer = DELIMITER_PAIRS[opener];
+  const closer = matchingRightDelimiter(opener);
   if (closer == null) {
     return null;
   }
   const open = `\\left${opener}`;
   if (!held) {
-    return edit({ from: at, to: at }, open, at + open.length);
+    // Its `\right` is written with it, pending (M14): it follows the caret until accepted.
+    return edit({ from: at, to: at }, `${open}\\right${closer}`, at + open.length);
   }
   const range = held;
   const selected = text.slice(range.from, range.to);
@@ -330,7 +330,21 @@ export const MULTI_TOKEN_SYMBOLS: ReadonlySet<string> = new Set([
   "longrightarrow", "Longrightarrow", "dasharrow", "dashleftarrow", "dashrightarrow", "Join", "colon",
 ]);
 
-const DELIMITER_PAIRS: Readonly<Record<string, string>> = { "(": ")", "[": "]", "|": "|", ".": "." };
+const DELIMITER_PAIRS: Readonly<Record<string, string>> = {
+  "(": ")", "[": "]", "|": "|", ".": ".", "<": ">", "\\{": "\\}", "\\lbrace": "\\rbrace", "\\langle": "\\rangle",
+  "\\lvert": "\\rvert", "\\lVert": "\\rVert", "\\lfloor": "\\rfloor", "\\lceil": "\\rceil", "\\lgroup": "\\rgroup",
+  "\\|": "\\|", "\\vert": "\\vert", "\\Vert": "\\Vert",
+};
+
+/** The delimiter a `\right` takes to match a `\left` one (`\langle` → `\rangle`); null for none. */
+export function matchingRightDelimiter(opener: string): string | null {
+  return DELIMITER_PAIRS[opener] ?? null;
+}
+
+/** Whether `\left` or `\right` takes this as its delimiter: `(`, `\}`, `\rangle`, `.`. */
+export function isDelimiter(delimiter: string): boolean {
+  return DELIMITER_CHARACTERS.has(delimiter) || delimiter in DELIMITER_PAIRS || Object.values(DELIMITER_PAIRS).includes(delimiter);
+}
 
 /**
  * Wraps a held selection into the command's first rendered argument:

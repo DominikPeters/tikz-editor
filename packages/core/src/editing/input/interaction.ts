@@ -36,6 +36,15 @@ export type InteractionState = {
   readonly picker?: PickerState;
   /** The source lens (R13), open on a span of the buffer. */
   readonly lens?: LensState;
+  /**
+   * A `\right` written with its `\left` and not yet accepted (M14): drawn
+   * faint, it stays at the caret, which is right before it. Typing goes
+   * in front of it; ←/→ (⌥ by word, ⌘ to the end) take it along over
+   * what is already written; ⇥, Esc, typing its delimiter or `\right`, or
+   * anything that moves the caret elsewhere accepts it where it stands.
+   * The offset is the `\right`'s, which is the caret's.
+   */
+  readonly pendingCloser?: number;
 };
 
 /**

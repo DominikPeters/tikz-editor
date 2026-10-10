@@ -400,6 +400,10 @@ covered by a test. Examples:
   by any other intent, and only a non-repeat Backspace consumes it.
 - `pendingCommand` ends on any intent other than a keyboard-origin `[` or
   `{`.
+- `pendingCloser` (M14: the offset of a `\right` written with its `\left`,
+  not yet accepted) is carried through any transaction that leaves the
+  caret, collapsed, right before a `\right`, unless the intent accepts it
+  (⇥, Esc); ←/→ move it, joining the previous undo step (`amend`).
 
 ### Ownership, operations, and why this avoids the spaghetti
 
@@ -948,9 +952,9 @@ recovery per edit scope (`layout.recovery`, and warnings
 no recovery: the corpus decks, macro definitions (`\newcommand{\BI}{\begin{itemize}}`),
 column insertions (`>{$}c<{$}`) and `$` in `\text{…}` in math are checked.
 The canvas draws each missing closer as a faint ghost where it belongs,
-(an unclosed `\left(` as the delimiter its `\right)` would draw, at the
-formula's end; recovery tracks `\left`/`\right` but leaves them to the
-math parser, unmasked), and offers "Insert missing }" once the lens is
+(an unclosed `\left(`, which the canvas itself no longer writes, as the
+delimiter its `\right)` would draw, at the formula's end; recovery tracks
+`\left`/`\right` but leaves them to the math parser, unmasked), and offers "Insert missing }" once the lens is
 closed, which writes them in as one step (during the session rather than when it ends, as T6 had
 it: the ghosts show where they go). The source lens: ⌘E opens the raw
 source of the innermost outlined construct around the caret, or the

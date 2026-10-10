@@ -31,9 +31,10 @@ export type DeleteUnit = "char" | "item" | "word" | "line";
 /**
  * Motion units: `item` for ←/→, `line` for ↑/↓ (rendered rows), `edge`
  * for row edges (Home/End, ⌘←/⌘→), `scope` for the session's first/last
- * position (⌘↑/⌘↓).
+ * position (⌘↑/⌘↓), `word` for ⌥←/⌥→ while a `\right` is pending
+ * (otherwise ⌥←/⌥→ stay native).
  */
-export type MoveUnit = "item" | "line" | "edge" | "scope";
+export type MoveUnit = "item" | "line" | "edge" | "scope" | "word";
 
 export type IntentBody =
   | { readonly type: "insertText"; readonly text: string }

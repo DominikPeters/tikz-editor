@@ -45,6 +45,7 @@ import {
 import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 import type { CanvasSourceLensModel } from "./CanvasSourceLens";
 import { missingClosers, useCanvasRecoveryGhosts } from "./useCanvasRecoveryGhosts";
+import { useCanvasPendingCloser } from "./useCanvasPendingCloser";
 import {
   chipCandidates,
   copySelection,
@@ -52,12 +53,15 @@ import {
   intentFromBeforeInput,
   interpretKeyDown,
   needsFreshLayout,
+  NO_INTERACTION,
+  pendingCloserSpan,
   resolveIntent,
   SUPPORTED_BEFORE_INPUT_TYPES,
   type ChipCandidate,
   type InputSurface,
   type Intent,
-  type IntentContext
+  type IntentContext,
+  type InteractionState
 } from "@tikz-editor/core/editing/input/index";
 
 /** The lines the caret or selection is on, and where they start (viewport px). */
@@ -292,6 +296,16 @@ const LAYOUT_WAIT_TIMEOUT_MS = 200;
 const IS_FAIL_FAST = import.meta.env.DEV || import.meta.env.MODE === "test";
 
 /** The surface interpreting the keyboard: canvas only for canvas-focused scope sessions. */
+/** The interaction state the next intent will see, whichever way the selection was made. */
+function currentInteraction(state: CanvasTextEditState): InteractionState {
+  const session = state.session;
+  if (!session) {
+    return NO_INTERACTION;
+  }
+  const forward = interactionState(state, session.selectionStart, session.selectionEnd);
+  return forward !== NO_INTERACTION ? forward : interactionState(state, session.selectionEnd, session.selectionStart);
+}
+
 /** A canvas copy read back from the clipboard, if it is one (it may come from another window). */
 function readCanvasClip(data: DataTransfer): CanvasClip | undefined {
   try {
@@ -1613,7 +1627,9 @@ export function useCanvasTextEditSession(
         repeat: event.repeat,
         composing: event.nativeEvent.isComposing
       },
-      surface
+      surface,
+      // ⌥←/⌥→ take a pending `\right` along (M14).
+      currentInteraction(stateRef.current).pendingCloser != null
     );
     if (decision.kind === "native") {
       const modified = event.ctrlKey || event.metaKey || event.altKey;
@@ -1663,10 +1679,9 @@ export function useCanvasTextEditSession(
           );
           return;
         }
-        // An open command chip closes first, writing nothing (R4).
-        const interaction = stateRef.current.treeSelection?.interaction;
-        if ((interaction?.chip || interaction?.picker || interaction?.lens) &&
-          stateRef.current.treeSelection?.text === session?.text) {
+        // An open command chip closes first, writing nothing (R4); a pending `\right` is accepted (M14).
+        const interaction = currentInteraction(stateRef.current);
+        if (interaction.chip || interaction.picker || interaction.lens || interaction.pendingCloser != null) {
           intentScheduler.submit({ type: "escape", origin: "keyboard", repeat: false });
           return;
         }
@@ -2462,7 +2477,11 @@ export function useCanvasTextEditSession(
     }
     const view = canvasEditView(textEditingSession.text, editCommands);
     const mode = view.tree.slots[view.positionAt(chip.at).slot].mode;
-    const candidates = chipCandidates(editCommands, mode, chip.name, textEditingSession.text);
+    // A pending `\right` (M14) is offered first.
+    const pending = recorded.interaction.pendingCloser;
+    const closerSpan = pending == null ? null : pendingCloserSpan(view, pending);
+    const closer = closerSpan ? textEditingSession.text.slice(closerSpan.from, closerSpan.to) : null;
+    const candidates = chipCandidates(editCommands, mode, chip.name, textEditingSession.text, closer);
     const selected = Math.min(chip.selected, candidates.length - 1);
     const highlighted = candidates[selected]?.name ?? "";
     return {
@@ -2640,6 +2659,28 @@ export function useCanvasTextEditSession(
     resolveContainer: resolveRenderedMathTextElement
   });
 
+  /** A `\right` written with its `\left` and not yet accepted (M14): its span in the buffer. */
+  const pendingCloserToken = useMemo(() => {
+    const recorded = state.treeSelection;
+    const at = recorded?.interaction.pendingCloser;
+    if (at == null || textEditFocusSurface !== "canvas" || !textEditingSession?.isScopeSession || recorded?.text !== textEditingSession.text) {
+      return null;
+    }
+    return pendingCloserSpan(canvasEditView(textEditingSession.text, editCommands), at);
+  }, [editCommands, state.treeSelection, textEditFocusSurface, textEditingSession]);
+
+  const pendingCloser = useCanvasPendingCloser({
+    session: textEditFocusSurface === "canvas" ? textEditingSession : null,
+    closer: pendingCloserToken,
+    renderedSource: snapshot.source,
+    source,
+    textLayoutContext,
+    canvasTransform,
+    viewportRef,
+    resolveTarget: (session) => resolveEditableTextTargetById(session.sourceId, session.sceneTextId),
+    resolveContainer: resolveRenderedMathTextElement
+  });
+
   /** The quick fix (T6): once the lens is closed, the missing closers written in with one click. */
   const recoveryFix = useMemo<CanvasRecoveryFixModel | null>(() => {
     const first = recoveryGhosts[0];
@@ -2672,9 +2713,10 @@ export function useCanvasTextEditSession(
       onEditValues: handleEditValues,
       sourceLens,
       recoveryGhosts,
-      recoveryFix
+      recoveryFix,
+      pendingCloser
     }),
-    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, popup, recoveryFix, recoveryGhosts, scopeEditBorder, sourceLens,
+    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, sourceLens,
       textEditFocusSurface, textEditingSession, valueEditor]
   );
 

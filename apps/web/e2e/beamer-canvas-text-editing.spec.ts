@@ -1218,7 +1218,7 @@ Next line.
   await expect.poll(() => readStoreSource(page)).toBe(source);
 });
 
-test("\\left( waits for its \\right): a ghost delimiter at the formula's end until it is typed; undo puts the caret back", async ({ page }) => {
+test("\\left( writes its \\right) pending: drawn faint with a hint, the arrows take it along, ⇥ accepts it; undo puts the caret back", async ({ page }) => {
   const source = String.raw`\documentclass{beamer}
 \begin{document}
 \begin{frame}{T}
@@ -1235,31 +1235,36 @@ Intro $f+g(x)+h$ word.
     field.setSelectionRange(at, at);
     field.dispatchEvent(new Event("select", { bubbles: true }));
   }, offset);
+  const hint = page.getByTestId("canvas-pending-closer-hint");
 
   await placeCaret(buffer.indexOf("g(x)"));
   await page.keyboard.type(String.raw`\left(`);
-  const open = source.replace("$f+g(x)", String.raw`$f+\left(g(x)`);
-  await expect.poll(() => readStoreSource(page)).toBe(open);
-  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveText(")");
+  await expect.poll(() => readStoreSource(page)).toBe(source.replace("$f+g(x)", String.raw`$f+\left(\right)g(x)`));
+  await expect(hint).toContainText(String.raw`\right)`);
 
-  await placeCaret((await textarea.inputValue()).indexOf("g(x)") + "g(x)".length);
-  await page.keyboard.type(String.raw`\right)`);
-  await expect.poll(() => readStoreSource(page)).toBe(open.replace("g(x)+h", String.raw`g(x)\right)+h`));
-  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveCount(0);
-
-  // Undo restores the caret the edit started from.
-  await page.keyboard.press(`${PRIMARY_MOD}+z`);
-  await expect.poll(() => readStoreSource(page)).toBe(open);
+  // `g`, `(`, `x`, `)`: the `\right)` goes along over what is already written.
+  for (let step = 0; step < 4; step += 1) {
+    await page.keyboard.press("ArrowRight");
+  }
+  const wrapped = source.replace("$f+g(x)+h$", String.raw`$f+\left(g(x)\right)+h$`);
+  await expect.poll(() => readStoreSource(page)).toBe(wrapped);
+  await expect(hint).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(hint).toHaveCount(0);
   await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart))
-    .toBe((await textarea.inputValue()).indexOf("g(x)") + "g(x)".length);
-  await expect(page.getByTestId("canvas-recovery-ghost")).toHaveCount(1);
+    .toBe((await textarea.inputValue()).indexOf(String.raw`\right)`) + String.raw`\right)`.length);
+
+  // The pair and its moves are one step; undo restores the caret the edit started from.
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toBe(source);
+  await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart)).toBe(buffer.indexOf("g(x)"));
 
   // Likewise for a typing run in prose.
-  const word = (await textarea.inputValue()).indexOf("word");
+  const word = buffer.indexOf("word");
   await placeCaret(word);
   await page.keyboard.type("xyz");
-  await expect.poll(() => readStoreSource(page)).toBe(open.replace("word", "xyzword"));
+  await expect.poll(() => readStoreSource(page)).toBe(source.replace("word", "xyzword"));
   await page.keyboard.press(`${PRIMARY_MOD}+z`);
-  await expect.poll(() => readStoreSource(page)).toBe(open);
+  await expect.poll(() => readStoreSource(page)).toBe(source);
   await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart)).toBe(word);
 });

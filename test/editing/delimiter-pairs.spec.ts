@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { createCommandTable } from "../../packages/core/src/editing/commands/index.js";
+import { chipCandidates } from "../../packages/core/src/editing/input/chip.js";
 import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
 import { scanTexRecovery } from "../../packages/core/src/text/tex/recovery.js";
 import { KeystrokeSession, type FuzzKey } from "./fuzz/keystroke-session.js";
 
 /**
  * `\left` and `\right` around what is already written (M14): `\left(`
- * is written alone and `\right)` typed after what it encloses closes it;
- * a pair already closed extends to where `\right)` is typed (TeX has no
- * `\right` without a `\left`); a selection is wrapped in the whole pair.
+ * writes its pair with the `\right)` pending, taken along by the arrows
+ * until accepted; a `\left` without its `\right` (from the source lens,
+ * or a file) is closed by `\right)` typed after it; a pair already closed
+ * extends to where `\right)` is typed (TeX has no `\right` without a
+ * `\left`); a selection is wrapped in the whole pair.
  */
 const commands = createCommandTable();
 
@@ -41,17 +44,49 @@ const after = (target: KeystrokeSession, needle: string): FuzzKey => {
 };
 
 describe("delimiter pairs around what is written", () => {
-  it("writes \left( alone, closed by \right) typed after what it wraps, as TeX's recovery shows", () => {
+  it("writes \left( with its \right) pending: → takes it along over what is written, ⇥ accepts it, one undo step", () => {
     const target = session(String.raw`$f+‸\lambda_i\nabla g_i(x^\star)+h$`);
     press(target, String.raw`\left(`);
-    expect(marked(target)).toBe(String.raw`$f+\left(‸\lambda_i\nabla g_i(x^\star)+h$`);
-    // Until then, its `\right` is missing where the formula ends: the canvas draws it there.
-    expect(scanTexRecovery(target.text).closers).toMatchObject([{ kind: "delimiter", closer: String.raw`\right)`, at: target.text.length - 1 }]);
-    press(target, after(target, String.raw`(x^\star)`), String.raw`\right)`);
+    expect(marked(target)).toBe(String.raw`$f+\left(‸\right)\lambda_i\nabla g_i(x^\star)+h$`);
+    expect(target.pendingCloser).toBe(target.selection.focus);
+    // Item by item: `\lambda_i`, `\nabla`, `g_i`, then the plain `(`, `x^\star`, `)`.
+    press(target, "→ → →");
+    expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i‸\right)(x^\star)+h$`);
+    press(target, "→ → →");
+    expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)‸\right)+h$`);
+    press(target, "⇥");
     expect(marked(target)).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)\right)‸+h$`);
-    expect(scanTexRecovery(target.text).closers).toEqual([]);
+    expect(target.pendingCloser).toBeUndefined();
     press(target, "⌘Z");
-    expect(target.text).toBe(String.raw`$f+\left(\lambda_i\nabla g_i(x^\star)+h$`);
+    expect(target.text).toBe(String.raw`$f+\lambda_i\nabla g_i(x^\star)+h$`);
+  });
+
+  it.each([
+    ["typing goes in front of it", String.raw`$a‸$`, String.raw`\left(x+1`, String.raw`$a\left(x+1‸\right)$`, true],
+    ["its delimiter typed accepts it", String.raw`$a‸$`, String.raw`\left(x+1)=0`, String.raw`$a\left(x+1\right)=0‸$`, false],
+    ["unless a ( typed inside is open", String.raw`$a‸$`, String.raw`\left(f(x)`, String.raw`$a\left(f(x)‸\right)$`, true],
+    ["\right] typed there replaces it", String.raw`$a‸$`, String.raw`\left(x\right]`, String.raw`$a\left(x\right]‸$`, false],
+    ["⌘→ takes it to the end", String.raw`$a‸+b=c$`, String.raw`\left( ⌘→`, String.raw`$a\left(+b=c‸\right)$`, true],
+    ["→ at the end accepts it", String.raw`$a‸+b$`, String.raw`\left( → → →`, String.raw`$a\left(+b\right)‸$`, false],
+    ["← takes it back", String.raw`$a‸+b$`, String.raw`\left( → → ←`, String.raw`$a\left(+‸\right)b$`, true],
+    ["Esc accepts it where it stands", String.raw`$a‸+b$`, String.raw`\left( → Esc`, String.raw`$a\left(+‸\right)b$`, false],
+    ["⌫ in the empty pair removes it", String.raw`$a‸+b$`, String.raw`\left( ⌫`, String.raw`$a‸+b$`, false],
+    ["into a construct it never goes", String.raw`$a‸\frac{1}{2}+b$`, String.raw`\left( →`, String.raw`$a\left(\frac{1}{2}‸\right)+b$`, true],
+    ["a control word left behind keeps apart", String.raw`$\alpha‸x+b$`, String.raw`\left( →`, String.raw`$\alpha\left(x‸\right)+b$`, true],
+    ["a named delimiter", String.raw`$a‸$`, String.raw`\left\langle␣x`, String.raw`$a\left\langle x‸\right\rangle$`, true],
+    ["a control-symbol delimiter", String.raw`$a‸$`, String.raw`\left\{x`, String.raw`$a\left\{x‸\right\}$`, true],
+    ["in prose, the pair starts a formula", "a ‸ b", String.raw`\left(x ⇥ y`, String.raw`a $\left(x\right)y‸$ b`, false],
+  ])("a pending \right: %s", (_name, start, keys, expected, pending) => {
+    const target = session(start);
+    press(target, keys);
+    expect(marked(target)).toBe(expected);
+    expect(target.pendingCloser != null).toBe(pending);
+  });
+
+  it("⌥→ takes it along by word", () => {
+    const target = session(String.raw`$a‸+bc+d$`);
+    press(target, String.raw`\left(`, "⌥→");
+    expect(marked(target)).toBe(String.raw`$a\left(+bc‸\right)+d$`);
   });
 
   it("closes a \left( just typed at once, empty", () => {
@@ -119,5 +154,39 @@ describe("delimiter pairs around what is written", () => {
     expect(marked(target)).toBe(expected);
     press(target, "⌘Z");
     expect(marked(target)).toBe(start);
+  });
+});
+
+describe("the chip offers \left and \right with their delimiters", () => {
+  const names = (prefix: string, closer?: string) => chipCandidates(commands, "math", prefix, "", closer).map((candidate) => candidate.name);
+
+  it("lists \left(, \left[, \left\{ and \left| in place of a bare \left", () => {
+    expect(names("left")).toEqual(expect.arrayContaining(["left(", "left[", String.raw`left\{`, "left|"]));
+    expect(names("left")).not.toContain("left");
+    expect(names("left").slice(0, 4)).toEqual(["left(", "left[", String.raw`left\{`, "left|"]);
+  });
+
+  it("offers a pending \right first, from its first letter", () => {
+    expect(names("r", String.raw`\right]`)[0]).toBe("right]");
+    expect(names("r")[0]).not.toBe("right]");
+  });
+
+  it("commits the completion accepted with its delimiter, the pair pending", () => {
+    const target = session(String.raw`$a‸$`);
+    press(target, String.raw`\lef ⇥`);
+    expect(marked(target)).toBe(String.raw`$a\left(‸\right)$`);
+    expect(target.pendingCloser).toBe(target.selection.focus);
+  });
+
+  it("accepts the pending \right offered first", () => {
+    const target = session(String.raw`$a‸$`);
+    press(target, String.raw`\left[x\r ⇥`);
+    expect(marked(target)).toBe(String.raw`$a\left[x\right]‸$`);
+  });
+
+  it("still commits \leftarrow and \rightarrow as themselves", () => {
+    const target = session(String.raw`$a‸$`);
+    press(target, String.raw`\leftarrow␣\rightarrow␣`);
+    expect(target.text).toBe(String.raw`$a\leftarrow\rightarrow$`);
   });
 });

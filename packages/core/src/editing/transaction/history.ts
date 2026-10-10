@@ -58,6 +58,9 @@ export function recordTransaction(
     case "composition":
       merges = !grouping.first && history.undo.length > 0;
       break;
+    case "amend":
+      merges = history.undo.length > 0;
+      break;
   }
   if (merges) {
     return { undo: history.undo, redo: [], openRun };

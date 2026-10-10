@@ -882,6 +882,18 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             </button>
           ) : null}
 
+          {canvasTextEdit.pendingCloser ? (
+            <div
+              className={css.pendingCloserHint}
+              style={{ left: canvasTextEdit.pendingCloser.left, top: canvasTextEdit.pendingCloser.top }}
+              data-testid="canvas-pending-closer-hint"
+              aria-hidden="true"
+            >
+              <kbd>tab</kbd>
+              <code>{canvasTextEdit.pendingCloser.closer}</code>
+            </div>
+          ) : null}
+
           {canvasTextEdit.sourceLens ? (
             <CanvasSourceLens key={canvasTextEdit.sourceLens.key} model={canvasTextEdit.sourceLens} />
           ) : null}

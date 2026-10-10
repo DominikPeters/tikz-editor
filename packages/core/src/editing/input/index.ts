@@ -23,6 +23,7 @@ export {
   copySelection,
   needsFreshLayout,
   resolveIntent,
+  pendingCloserSpan,
   type IntentContext,
   type IntentResolution,
 } from "./resolve.js";

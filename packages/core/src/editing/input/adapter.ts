@@ -40,7 +40,11 @@ const BLOCK: KeyDownDecision = { kind: "block" };
 
 const FORMAT_SHORTCUTS = { b: "bold", i: "italic", u: "underline" } as const;
 
-export function interpretKeyDown(stroke: KeyStroke, surface: InputSurface): KeyDownDecision {
+/**
+ * `pendingCloser`: a `\right` is pending (M14), so ⌥←/⌥→ take it along by
+ * word instead of moving natively.
+ */
+export function interpretKeyDown(stroke: KeyStroke, surface: InputSurface, pendingCloser = false): KeyDownDecision {
   if (stroke.composing) {
     return NATIVE;
   }
@@ -87,6 +91,9 @@ export function interpretKeyDown(stroke: KeyStroke, surface: InputSurface): KeyD
       return intent({ type: key === "Backspace" ? "deleteBackward" : "deleteForward", unit: "item" });
     case "ArrowLeft":
     case "ArrowRight":
+      if (alt && pendingCloser && surface === "canvas" && !primary) {
+        return intent({ type: "move", dir: key === "ArrowLeft" ? "left" : "right", unit: "word", extend: shift });
+      }
       if (alt) {
         return NATIVE;
       }
