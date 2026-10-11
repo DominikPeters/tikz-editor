@@ -1,6 +1,8 @@
 import { RiArrowDownSLine, RiAspectRatioLine, RiGridLine } from "@remixicon/react";
 import { useEffect, useSyncExternalStore } from "react";
 import { useEditorStore } from "../store/store";
+import { launchPresentation } from "../presentation/launch";
+import { presentationService } from "../presentation/service";
 import type { CanvasDragKind, ToolMode } from "../store/types";
 import { getModifierKeyLabels, type ModifierKeyLabels } from "./key-labels";
 import { useFrameTimingStats } from "./useFrameTimingStats";
@@ -27,6 +29,8 @@ const MAX_ZOOM_PERCENT = 400;
 
 export function StatusBar() {
   const snapshot = useEditorStore((s) => s.snapshot);
+  const documentKind = useEditorStore((s) => s.documentKind);
+  const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
   const activeRootId = useEditorStore((s) => s.activeRootId);
   const currentDocument = useEditorStore((s) => s.documents[s.activeDocumentId] ?? null);
   const canvasTransform = useEditorStore((s) => s.canvasTransform);
@@ -301,6 +305,25 @@ export function StatusBar() {
             <RiAspectRatioLine size={15} aria-hidden="true" />
           </button>
         </RenderedTooltip>
+
+        {documentKind === "beamer" ? (
+          <RenderedTooltip content={presentation.snapshot ? "Show Presenter View" : "Present from Current Slide"}>
+            <button
+              type="button"
+              className={css.iconButton}
+              data-testid="status-present-button"
+              aria-label={presentation.snapshot ? "Show Presenter View" : "Present from Current Slide"}
+              onClick={() => {
+                if (presentation.snapshot) presentationService.command({ type: "show-presenter" });
+                else launchPresentation("current");
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2 3h16M3.5 3v9.5a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V3M10 14.5V18M6.5 18h7" />
+              </svg>
+            </button>
+          </RenderedTooltip>
+        ) : null}
 
         <input
           className={css.zoomSlider}
