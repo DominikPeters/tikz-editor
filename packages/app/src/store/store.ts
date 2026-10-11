@@ -42,7 +42,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
     }
     if (shouldSaveWorkspace(state, next)) {
       const workspaceState = workspaceStateFromEditorState(next);
-      if (shouldDebounceWorkspaceSave(action, state, next)) {
+      if (shouldDebounceWorkspaceSave(action)) {
         scheduleWorkspaceSave(workspaceState);
       } else {
         persistWorkspaceNow(workspaceState);
@@ -62,21 +62,12 @@ function shouldSaveWorkspace(previous: EditorState, next: EditorState): boolean 
   );
 }
 
-function shouldDebounceWorkspaceSave(action: EditorAction, previous: EditorState, next: EditorState): boolean {
-  if (action.type === "CODE_EDITED" || action.type === "SET_SOURCE_TRANSIENT") {
-    return true;
-  }
-  if (action.type === "APPLY_EDIT_ACTION") {
-    return (
-      action.recordInHistory === false ||
-      action.parseOptions?.propertyWriteMode === "drag-frame" ||
-      previous.activeCanvasDragKind != null ||
-      next.activeCanvasDragKind != null ||
-      previous.activeSourceScrubSourceId != null ||
-      next.activeSourceScrubSourceId != null
-    );
-  }
-  return false;
+// Source edits save after a pause: the workspace payload holds every tab's
+// source (several copies each), and a commit can follow another within a
+// second. Unload flushes a pending save; tab and document changes save at once.
+function shouldDebounceWorkspaceSave(action: EditorAction): boolean {
+  return action.type === "CODE_EDITED" || action.type === "SET_SOURCE_TRANSIENT" ||
+    action.type === "APPLY_EDIT_ACTION" || action.type === "UNDO" || action.type === "REDO";
 }
 
 function persistedDocumentsChanged(
