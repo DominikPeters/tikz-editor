@@ -26,7 +26,9 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   worker: {
-    format: "es"
+    format: "es",
+    // As Vite sets for the app, so chunks shared with workers (font outlines) are emitted once.
+    rollupOptions: { output: { generatedCode: "es2015" } }
   },
   optimizeDeps: {
     exclude: ["mathlive"]
