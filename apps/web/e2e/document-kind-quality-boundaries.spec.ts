@@ -12,21 +12,21 @@ test("body edits retain deck mode and declaration edits switch the root navigato
 \end{document}`;
   await setSource(page, source);
   const navigator = page.getByTestId("figure-navigator");
-  await expect(navigator.getByRole("button", { name: "First", exact: true })).toBeVisible();
+  await expect(navigator.getByRole("button", { name: "1. First", exact: true })).toBeVisible();
   const edited = source.replace("(1,0)", "(1.5,0)");
   await setSource(page, edited);
-  await expect(navigator.getByRole("button", { name: "Second", exact: true })).toBeVisible();
+  await expect(navigator.getByRole("button", { name: "2. Second", exact: true })).toBeVisible();
   await expectSourceCanvasConsistency(page, { assertNoPendingRequest: true });
   const article = edited.replace("{beamer}", "{article}");
   await setSource(page, article);
-  await expect(navigator.getByRole("button", { name: "Figure 1", exact: true })).toBeVisible();
-  await expect(navigator.getByRole("button", { name: "Figure 2", exact: true })).toBeVisible();
+  await expect(navigator.getByRole("button", { name: /^Figure 1\b/u })).toBeVisible();
+  await expect(navigator.getByRole("button", { name: /^Figure 2\b/u })).toBeVisible();
   // Mode changes retire the old root selection. Choose a current root before
   // checking the source-owned rendered scene.
-  await navigator.getByRole("button", { name: "Figure 1", exact: true }).click();
+  await navigator.getByRole("button", { name: /^Figure 1\b/u }).click();
   await expectSourceCanvasConsistency(page, { minSceneSourceIds: 1, assertNoPendingRequest: true });
   await setSource(page, edited);
-  await expect(navigator.getByRole("button", { name: "First", exact: true })).toBeVisible();
-  await navigator.getByRole("button", { name: "First", exact: true }).click();
+  await expect(navigator.getByRole("button", { name: "1. First", exact: true })).toBeVisible();
+  await navigator.getByRole("button", { name: "1. First", exact: true }).click();
   await expectSourceCanvasConsistency(page, { assertNoPendingRequest: true });
 });
