@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { launchPresentation, NEW_BEAMER_SOURCE } from "../presentation/launch";
 import { presentationService } from "../presentation/service";
 import { documentKindForSource } from "../store/workspace-state";
+import type { DocumentKind } from "@tikz-editor/core/document/kind";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../app-menu";
 import { getDockLayoutHandle } from "./DockLayout";
@@ -87,6 +88,7 @@ export type CommandBindings = Record<AppMenuCommandId, CommandBinding>;
 type Dispatch = (action: EditorAction) => void;
 
 type RuntimeInput = {
+  documentKind?: DocumentKind;
   presentation?: { active: boolean; presenterVisible: boolean; blank: "none" | "black" | "white"; focus: "editor" | "audience" | "presenter" };
   onPresentationOptions?: () => void;
   source: string;
@@ -415,18 +417,19 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   const bindings: CommandBindings = {
-    [APP_MENU_COMMAND_IDS.PRESENT_CURRENT]: { enabled: documentKindForSource(source) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current"); } },
-    [APP_MENU_COMMAND_IDS.PRESENT_BEGINNING]: { enabled: documentKindForSource(source) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("beginning"); } },
-    [APP_MENU_COMMAND_IDS.PRESENT_WINDOW]: { enabled: documentKindForSource(source) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "window"); } },
-    [APP_MENU_COMMAND_IDS.PRESENT_REHEARSE]: { enabled: documentKindForSource(source) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "rehearse"); } },
-    [APP_MENU_COMMAND_IDS.PRESENT_OPTIONS]: { enabled: !!input.onPresentationOptions && (documentKindForSource(source) === "beamer" || !!input.presentation?.active), run: () => { input.onPresentationOptions?.(); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_CURRENT]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_BEGINNING]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("beginning"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_WINDOW]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "window"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_REHEARSE]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "rehearse"); } },
+    [APP_MENU_COMMAND_IDS.PRESENT_OPTIONS]: { enabled: !!input.onPresentationOptions && ((input.documentKind ?? documentKindForSource(source)) === "beamer" || !!input.presentation?.active), run: () => { input.onPresentationOptions?.(); } },
     [APP_MENU_COMMAND_IDS.PRESENT_SHOW_PRESENTER]: { enabled: !!input.presentation?.active, run: () => { presentationService.command({ type: "show-presenter" }); } },
     [APP_MENU_COMMAND_IDS.PRESENT_RESTORE_OUTPUT]: { enabled: !!input.presentation?.active, run: () => { presentationService.command({ type: "recover-output" }); } },
     [APP_MENU_COMMAND_IDS.PRESENT_SWAP_DISPLAYS]: { enabled: !!input.presentation?.active && !!input.presentation.presenterVisible && getActiveEditorPlatform().id.startsWith("desktop"), run: () => { presentationService.command({ type: "swap-displays" }); } },
     [APP_MENU_COMMAND_IDS.PRESENT_BLACK]: { enabled: !!input.presentation?.active, checked: input.presentation?.blank === "black", run: () => { presentationService.command({ type: "blank", value: input.presentation?.blank === "black" ? "none" : "black" }); } },
     [APP_MENU_COMMAND_IDS.PRESENT_WHITE]: { enabled: !!input.presentation?.active, checked: input.presentation?.blank === "white", run: () => { presentationService.command({ type: "blank", value: input.presentation?.blank === "white" ? "none" : "white" }); } },
     [APP_MENU_COMMAND_IDS.PRESENT_END]: { enabled: !!input.presentation?.active, run: () => { presentationService.command({ type: "stop" }); } },
-    [APP_MENU_COMMAND_IDS.NEW_BEAMER_DOCUMENT]: { enabled: true, run: () => { dispatch({ type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE, title: "Untitled Presentation" }); } },
+    [APP_MENU_COMMAND_IDS.NEW_BEAMER_DOCUMENT]: { enabled: true, run: () => { dispatch({ type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE }); } },
+    [APP_MENU_COMMAND_IDS.NEW_TIKZ_DOCUMENT]: { enabled: true, run: () => { dispatch({ type: "NEW_DOCUMENT" }); } },
     // Canvas overlay commands bind to the source object captured when its menu opens.
     [APP_MENU_COMMAND_IDS.OVERLAY_NEXT]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.OVERLAY_FROM]: { enabled: false, run: () => {} },
@@ -436,7 +439,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.OVERLAY_REMOVE]: { enabled: false, run: () => {} },
     [APP_MENU_COMMAND_IDS.NEW_DOCUMENT]: {
       enabled: true,
-      run: () => { dispatch({ type: "NEW_DOCUMENT" }); }
+      run: () => { dispatch((input.documentKind ?? documentKindForSource(source)) === "beamer" ? { type: "NEW_DOCUMENT", source: NEW_BEAMER_SOURCE } : { type: "NEW_DOCUMENT" }); }
     },
     [APP_MENU_COMMAND_IDS.OPEN_DOCUMENT]: {
       enabled: canOpen,
@@ -1106,7 +1109,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     }
   };
 
-  if (input.presentation?.focus && input.presentation.focus !== "editor") {
+  if (getActiveEditorPlatform().menu?.usesNativeMenuBar && input.presentation?.focus && input.presentation.focus !== "editor") {
     for (const [id, binding] of Object.entries(bindings)) {
       if (!id.startsWith("present.") && !id.startsWith("help.") && id !== APP_MENU_COMMAND_IDS.QUIT_APP && id !== APP_MENU_COMMAND_IDS.OPEN_SETTINGS) binding.enabled = false;
     }
@@ -1156,6 +1159,7 @@ export function useEditorCommandRuntime(
 ): EditorCommandRuntime {
   const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
   const source = useEditorStore((s) => s.source);
+  const documentKind = useEditorStore(s => s.documentKind);
   const activeRootId = useEditorStore((s) => s.activeRootId);
   const sourceRevision = useEditorStore((s) => s.sourceRevision);
   const snapshot = useEditorStore((s) => s.snapshot);
@@ -1217,6 +1221,7 @@ export function useEditorCommandRuntime(
   return useMemo(
     () =>
       createEditorCommandRuntime({
+        documentKind,
         presentation: { active: !!presentation.snapshot, presenterVisible: presentation.snapshot?.presenterVisible ?? false, blank: presentation.snapshot?.blank ?? "none", focus: presentation.focus },
         onPresentationOptions: options.onPresentationOptions,
         source: effectiveCommandInputs.source,
@@ -1277,6 +1282,7 @@ export function useEditorCommandRuntime(
         onOpenManageWorkspaces: options.onOpenManageWorkspaces
       }),
     [
+      documentKind,
       presentation,
       options.onPresentationOptions,
       effectiveCommandInputs,

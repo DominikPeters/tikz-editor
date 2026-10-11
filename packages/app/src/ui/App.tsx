@@ -56,7 +56,7 @@ import type { DocumentFileRef } from "../store/types";
 import { createArxivVirtualFileName, type ArxivPaperSession, type ArxivTikzCandidate } from "../arxiv-source";
 import "./selection.css";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
-import { PresentationWindow } from "../presentation/PresentationWindow";
+import { PresentationWindow, PresentationDisplayIdentifier } from "../presentation/PresentationWindow";
 import { PresentationOptionsModal } from "../presentation/PresentationOptionsModal";
 import { presentationService } from "../presentation/service";
 import presentationCss from "../presentation/PresentationControls.module.css";
@@ -225,6 +225,8 @@ function linkedFilePathKey(fileRef: DocumentFileRef | null | undefined): string 
 export function App() {
   const query = new URLSearchParams(window.location.search);
   const role = query.get("presentation"), sessionId = query.get("session");
+  const identifier = query.get("identify-display");
+  if (identifier && /^[1-9]\d{0,2}$/u.test(identifier)) return <PresentationDisplayIdentifier number={identifier} name={query.get("display-name") ?? "Display"} />;
   if ((role === "audience" || role === "presenter") && sessionId) return <PresentationWindow role={role} sessionId={sessionId} />;
   return <EditorApp />;
 }
@@ -300,9 +302,10 @@ function EditorApp() {
   const documentKind = useEditorStore(s => s.documentKind);
   const nestedDrawing = parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz";
   const presenting = !!presentation.snapshot;
+  const menuFocus = platform.menu?.usesNativeMenuBar ? presentation.focus : "editor";
   const menuDefinition = useMemo(() => appMenuForDocument(filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), {
-    kind: documentKind, nestedDrawing, presenting, focus: presentation.focus
-  }), [menuTarget, documentKind, nestedDrawing, presenting, presentation.focus]);
+    kind: documentKind, nestedDrawing, presenting, focus: menuFocus
+  }), [menuTarget, documentKind, nestedDrawing, presenting, menuFocus]);
   const [showOpenExampleModal, setShowOpenExampleModal] = useState(false);
   const [showOpenFromArxivModal, setShowOpenFromArxivModal] = useState(false);
   const [openFromArxivSession, setOpenFromArxivSession] = useState<ArxivPaperSession>({
@@ -1978,6 +1981,7 @@ function EditorApp() {
     <div
       className={css.app}
       style={appStyle}
+      onPointerDownCapture={presentationService.focusEditor}
       onDragOver={onAppDragOver}
       onDragLeave={onAppDragLeave}
       onDrop={(e) => { void onAppDrop(e); }}

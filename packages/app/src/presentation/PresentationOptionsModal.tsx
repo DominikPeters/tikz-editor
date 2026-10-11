@@ -14,6 +14,7 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
   const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState<"current" | "beginning">("current");
   const desktop = getActiveEditorPlatform().id.startsWith("desktop");
+  const showPresenter = options.mode === "rehearse" || (options.showPresenter ?? (!desktop || options.mode === "window" || displays.length > 1));
   useEffect(() => {
     let disposed = false;
     void getActiveEditorPlatform().presentation?.displays().then(value => {
@@ -23,6 +24,10 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
       if (previous.audienceDisplay && !value.some(display => display.id === previous.audienceDisplay)) {
         setError("The previous audience display isn’t connected. Choose a display below.");
         setOptions(current => ({ ...current, audienceDisplay: null }));
+      }
+      if (previous.presenterDisplay && !value.some(display => display.id === previous.presenterDisplay)) {
+        setError("The previous presenter display isn’t connected. Choose a display below.");
+        setOptions(current => ({ ...current, presenterDisplay: null }));
       }
     }).catch(() => { if (!disposed) setError("Couldn’t read the connected displays."); });
     return () => { disposed = true; };
@@ -42,12 +47,15 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
         <label>Present<select aria-label="Presentation mode" value={options.mode} onChange={event => { patch({ mode: event.target.value as PresentationOptions["mode"] }); }}><option value="display">On a Display</option><option value="window">In a Window</option><option value="rehearse">Rehearse</option></select></label>
       </> : null}
       {desktop && (active || options.mode !== "rehearse") ? <label>Audience display<select aria-label="Audience display" value={options.audienceDisplay ?? ""} onChange={event => { patch({ audienceDisplay: event.target.value || null }); setError(null); }}>
-        <option value="">Default Display</option>{displays.map(display => <option key={display.id} value={display.id}>{display.name}{display.primary ? " (Main)" : ""} · {display.width} × {display.height}</option>)}
+        <option value="">Default Display</option>{displays.map((display, index) => <option key={display.id} value={display.id}>{index + 1}. {display.name}{display.primary ? " (Main)" : ""} · {display.width} × {display.height}</option>)}
       </select></label> : null}
+      {desktop && getActiveEditorPlatform().presentation?.identifyDisplays ? <button type="button" onClick={() => {
+        void getActiveEditorPlatform().presentation?.identifyDisplays?.().catch(error_ => { setError(error_ instanceof Error ? error_.message : "Couldn’t identify the displays."); });
+      }}>Identify Displays</button> : null}
       {!desktop && options.mode === "display" ? <p>Move the audience window to your display, then enter fullscreen there.</p> : null}
       {!active ? <>
-        <label className={css.checkbox}><input type="checkbox" checked={options.showPresenter} onChange={event => { patch({ showPresenter: event.target.checked }); }} disabled={options.mode === "rehearse"} />Show Presenter View</label>
-        {desktop && options.showPresenter ? <label>Presenter display<select value={options.presenterDisplay ?? ""} onChange={event => { patch({ presenterDisplay: event.target.value || null }); }}><option value="">Main Display</option>{displays.map(display => <option key={display.id} value={display.id}>{display.name}</option>)}</select></label> : null}
+        <label className={css.checkbox}><input type="checkbox" checked={showPresenter} onChange={event => { patch({ showPresenter: event.target.checked }); }} disabled={options.mode === "rehearse"} />Show Presenter View</label>
+        {desktop && showPresenter ? <label>Presenter display<select value={options.presenterDisplay ?? ""} onChange={event => { patch({ presenterDisplay: event.target.value || null }); }}><option value="">Main Display</option>{displays.map((display, index) => <option key={display.id} value={display.id}>{index + 1}. {display.name}</option>)}</select></label> : null}
         <label>Countdown budget (minutes)<input type="number" min="1" max="1440" aria-label="Countdown budget" placeholder="Optional" value={options.countdownMinutes ?? ""} onChange={event => { patch({ countdownMinutes: event.target.value ? Math.max(1, Math.min(1440, Number(event.target.value))) : null }); }} /></label>
       </> : null}
       <div className={css.actions}><button type="button" onClick={onClose}>Cancel</button><button type="submit">{active ? "Show Audience Output" : options.mode === "rehearse" ? "Rehearse" : "Start Presentation"}</button></div>

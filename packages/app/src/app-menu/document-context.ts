@@ -3,7 +3,12 @@ import { APP_MENU_COMMAND_IDS as IDS, type AppMenuCommandId, type AppMenuDefinit
 const LAUNCH_COMMANDS: readonly AppMenuCommandId[] = [IDS.PRESENT_CURRENT, IDS.PRESENT_BEGINNING, IDS.PRESENT_WINDOW, IDS.PRESENT_REHEARSE];
 
 function trim(items: AppMenuItem[]): AppMenuItem[] {
-  return items.filter((item, index) => item.kind !== "separator" || (index > 0 && index < items.length - 1 && items[index - 1].kind !== "separator"));
+  const result: AppMenuItem[] = [];
+  for (const item of items) {
+    if (item.kind !== "separator" || (result.length && result.at(-1)?.kind !== "separator")) result.push(item);
+  }
+  while (result.at(-1)?.kind === "separator") result.pop();
+  return result;
 }
 /** Document commands follow the tab; drawing tools follow its active editing surface. */
 export function appMenuForDocument(definition: AppMenuDefinition, context: { kind: DocumentKind; nestedDrawing: boolean; presenting: boolean; focus?: "editor" | "audience" | "presenter" }): AppMenuDefinition {
@@ -13,6 +18,9 @@ export function appMenuForDocument(definition: AppMenuDefinition, context: { kin
     if (section.id === "path" && !drawing) return [];
     const items = section.items.flatMap<AppMenuItem>(item => {
       if (item.kind !== "command") return [item];
+      if (item.commandId === IDS.NEW_BEAMER_DOCUMENT && deck) return [];
+      if (item.commandId === IDS.NEW_TIKZ_DOCUMENT && !deck) return [];
+      if (item.commandId === IDS.NEW_DOCUMENT) return [{ ...item, label: deck ? "New Beamer Presentation" : "New TikZ Drawing" }];
       if (section.id === "present") {
         const launch = LAUNCH_COMMANDS.includes(item.commandId);
         if (launch ? !deck || context.presenting : item.commandId !== IDS.PRESENT_OPTIONS && !context.presenting) return [];

@@ -40,8 +40,8 @@ export class PresentationController {
     this.snapshot = { ...this.snapshot, ...patch, sequence: this.snapshot.sequence + 1 };
     for (const listener of this.listeners) listener();
   }
-  setOutputAvailable(value: boolean): void { this.update({ outputAvailable: value }); }
-  setPresenterVisible(value: boolean): void { this.update({ presenterVisible: value }); }
+  setOutputAvailable(value: boolean): void { if (value !== this.snapshot.outputAvailable) this.update({ outputAvailable: value }); }
+  setPresenterVisible(value: boolean): void { if (value !== this.snapshot.presenterVisible) this.update({ presenterVisible: value }); }
   setError(error: string | null): void { this.update({ error }); }
   setTitle(title: string): void { if (title !== this.snapshot.title) this.update({ title }); }
 

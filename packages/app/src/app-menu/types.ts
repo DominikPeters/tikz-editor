@@ -1,6 +1,7 @@
 export const APP_MENU_COMMAND_IDS = {
   NEW_DOCUMENT: "file.new-document",
   NEW_BEAMER_DOCUMENT: "file.new-beamer-document",
+  NEW_TIKZ_DOCUMENT: "file.new-tikz-document",
   PRESENT_CURRENT: "present.current",
   PRESENT_BEGINNING: "present.beginning",
   PRESENT_WINDOW: "present.window",
