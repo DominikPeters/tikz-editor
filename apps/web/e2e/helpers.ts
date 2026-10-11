@@ -9,10 +9,11 @@ export function tabSwitchButtons(page: Page): Locator {
 export async function resetStorageBeforeNavigation(page: Page): Promise<void> {
   await page.addInitScript(() => {
     try {
-      if (!window.name.includes("__pw_storage_cleared__")) {
+      // sessionStorage survives reloads; Firefox can reset window.name.
+      if (sessionStorage.getItem("__pw_storage_cleared__") !== "1") {
         localStorage.clear();
         sessionStorage.clear();
-        window.name += "__pw_storage_cleared__";
+        sessionStorage.setItem("__pw_storage_cleared__", "1");
       }
     } catch {
       // ignore storage reset failures
