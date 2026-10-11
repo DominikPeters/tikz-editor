@@ -3,7 +3,6 @@ import { editorReducer, makeInitialState, DEFAULT_SOURCE } from "../packages/app
 import type { EditorAction, EditorState, HistoryEntry } from "../packages/app/src/store/types.js";
 import type { TikzFigureInventoryItem } from "../packages/core/src/ast/types.js";
 import { computeSnapshot, makeEmptySnapshot } from "../packages/app/src/compute.js";
-import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "../packages/core/src/edit/actions.js";
 import type { WorldPoint } from "../packages/core/src/coords/points.js";
 import type { EditHandle } from "../packages/core/src/semantic/types.js";
 import { identityMatrix } from "../packages/core/src/semantic/transform.js";
@@ -1312,15 +1311,6 @@ describe("editorReducer – branch edge cases", () => {
       expect(state.history[state.historyIndex]?.kind).toBe(expectedHistoryKind);
     }
 
-    const cleanupNoop = editorReducer(state, {
-      type: "APPLY_EDIT_ACTION",
-      action: { kind: "cleanupPropertyWrites" },
-      precomputedResult: {
-        kind: "unsupported",
-        reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-      }
-    } as unknown as EditorAction);
-    expect(cleanupNoop).toBe(state);
   });
 
   it("covers selection and UI no-op branches", () => {

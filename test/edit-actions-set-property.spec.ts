@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEditAction, PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "../packages/core/src/edit/actions.js";
+import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { makeStyleSourceTargetId, TIKZPICTURE_GLOBAL_TARGET_ID } from "../packages/core/src/edit/property-target.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
@@ -722,118 +722,23 @@ describe("applyEditAction – setProperty", () => {
     }
   });
 
-  it("cleans existing conservative paint writes on drag-end cleanup", () => {
+  it("cleans paint commands inside scopes", () => {
     const source = String.raw`\begin{tikzpicture}
-  \draw[draw=none, fill=red] (0,0) rectangle (1,1);
-\end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites"
-    });
-
-    expect(result.kind).toBe("success");
-    if (result.kind === "success") {
-      expect(result.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
-      expect(result.newSource).not.toContain("draw=none");
-    }
-  });
-
-  it("limits targeted paint cleanup to requested element ids", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \draw[draw=none, fill=red] (0,0) rectangle (1,1);
-  \draw[draw=none, fill=blue] (2,0) rectangle (3,1);
-\end{tikzpicture}`;
-    const result = applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites",
-      elementIds: ["path:0"]
-    });
-
-    expect(result.kind).toBe("success");
-    if (result.kind === "success") {
-      expect(result.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
-      expect(result.newSource).toContain("\\draw[draw=none, fill=blue] (2,0) rectangle (3,1);");
-    }
-  });
-
-  it("reports no-op cleanup for empty targets and already idiomatic paint", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \fill[red] (0,0) rectangle (1,1);
-\end{tikzpicture}`;
-
-    expect(applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites",
-      elementIds: ["  "]
-    })).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-    expect(applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites"
-    })).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-  });
-
-  it("cleans paint commands inside scopes and disabled filldraw combinations", () => {
-    const nestedSource = String.raw`\begin{tikzpicture}
   \begin{scope}
-    \draw[draw=none, fill=red] (0,0) rectangle (1,1);
+    \draw[fill=red] (0,0) rectangle (1,1);
   \end{scope}
 \end{tikzpicture}`;
-    const nested = applyEditAction(nestedSource, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(nested.kind).toBe("success");
-    if (nested.kind !== "success") {
-      throw new Error("Expected nested cleanup to succeed");
-    }
-    expect(nested.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
-
-    const bothDisabled = applyEditAction(String.raw`\begin{tikzpicture}
-  \filldraw[draw=false, fill=false] (0,0) rectangle (1,1);
-\end{tikzpicture}`, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(bothDisabled).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-
-    const fillOnlyFilldraw = applyEditAction(String.raw`\begin{tikzpicture}
-  \filldraw[draw=false, fill=red] (0,0) rectangle (1,1);
-\end{tikzpicture}`, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(fillOnlyFilldraw).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-
-    const drawOnlyFilldraw = applyEditAction(String.raw`\begin{tikzpicture}
-  \filldraw[draw=blue, fill=false] (0,0) rectangle (1,1);
-\end{tikzpicture}`, [], {
-      kind: "cleanupPropertyWrites"
-    });
-    expect(drawOnlyFilldraw).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-  });
-
-  it("skips cosmetic drag-end paint cleanup for large sources without conservative paint tokens", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \filldraw[fill=blue!20] (0,0) rectangle (1,1);
-${Array.from({ length: 5000 }, (_, index) => `  % large document filler ${index}`).join("\n")}
-\end{tikzpicture}`;
     const result = applyEditAction(source, [], {
-      kind: "cleanupPropertyWrites",
-      elementIds: ["path:0"]
+      kind: "setProperty",
+      elementId: "path:1",
+      level: "command",
+      key: "draw",
+      value: "none"
     });
-
-    expect(result).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.newSource).toContain("\\fill[red] (0,0) rectangle (1,1);");
+    }
   });
 
   it("omits local default-equivalent properties when certified", () => {

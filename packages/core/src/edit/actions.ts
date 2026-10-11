@@ -62,11 +62,7 @@ import {
   applyRotateElementAction,
   type RotateElementAction
 } from "./actions/rotate-element.js";
-import {
-  applyPlannedSetPropertyAction,
-  cleanupIdiomaticPropertyWrites,
-  PROPERTY_WRITE_CLEANUP_NOOP_REASON
-} from "./property-write-planner.js";
+import { applyPlannedSetPropertyAction } from "./property-write-planner.js";
 import { applyGroupElementsAction, applyUngroupElementsAction } from "./actions/group-ungroup-actions.js";
 import { applyRepeatElementsAction } from "./actions/repeat.js";
 import {
@@ -110,7 +106,6 @@ export type { ElementTemplate } from "./element-templates.js";
 export type ReorderDirection = "sendToBack" | "sendBackward" | "bringForward" | "bringToFront";
 export { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 export { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
-export { PROPERTY_WRITE_CLEANUP_NOOP_REASON };
 export type { MoveElementsBaseline };
 
 export type SetPropertyEditAction = {
@@ -145,7 +140,6 @@ export type EditAction =
   | RotateElementAction
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
-  | { kind: "cleanupPropertyWrites"; elementIds?: string[] }
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
   | { kind: "deleteElement"; elementId: string }
   | { kind: "deleteElements"; elementIds: string[] }
@@ -310,14 +304,14 @@ export function applyEditAction(
       case "distributeElements":
         return applyDistributeElementsAction(source, action, parseOptions, geometry);
       case "setProperty":
-        return applySetProperty(source, action, parseOptions);
+        return applySetProperty(source, action, parseOptions, geometry);
       case "setProperties": {
         let nextSource = source;
         const steps: SourcePatch[][] = [];
         const changedSourceIds = new Set<string>();
         const skippedHandles: string[] = [];
         for (const property of action.actions) {
-          const result = applySetProperty(nextSource, property, parseOptions);
+          const result = applySetProperty(nextSource, property, parseOptions, geometry);
           if (result.kind === "unsupported" && result.reason === "setProperty would not change the source.") continue;
           if (result.kind !== "success" && result.kind !== "partial") return result;
           const normalized = normalizeResultPatches(nextSource, result);
@@ -338,8 +332,6 @@ export function applyEditAction(
         return applyUpdateNodeText(source, action, parseOptions);
       case "setFigureBounds":
         return applySetFigureBoundsAction(source, action, parseOptions);
-      case "cleanupPropertyWrites":
-        return cleanupIdiomaticPropertyWrites(source, { ...parseOptions, propertyWriteMode: "drag-end" }, action.elementIds);
       case "addElement":
         return applyAddElement(source, action.template, action.at, parseOptions);
       case "deleteElement":
@@ -401,7 +393,7 @@ export function applyEditAction(
   ) ? { kind: "success" as const, newSource: source, patches: [] } : rawResult;
   if (geometry && (result.kind === "success" || result.kind === "partial") && (
     result.identityMoves || ["moveHandle", "connectHandle", "moveElement", "moveElements", "resizeElement", "rotateElement",
-      "setProperty", "setProperties", "alignElements", "distributeElements", "updateNodeText", "cleanupPropertyWrites", "movePathAttachedNode"].includes(action.kind)
+      "setProperty", "setProperties", "alignElements", "distributeElements", "updateNodeText", "movePathAttachedNode"].includes(action.kind)
   )) {
     const baselineResult = normalizeResultPatches(source, result);
     if (baselineResult.kind === "success" || baselineResult.kind === "partial") {
@@ -1131,9 +1123,10 @@ function normalizeNodeNameCandidate(raw: string | undefined): string | null {
 function applySetProperty(
   source: string,
   action: Extract<EditAction, { kind: "setProperty" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  geometry?: EditGeometrySession
 ): EditActionResult {
-  return applyPlannedSetPropertyAction(source, action, parseOptions);
+  return applyPlannedSetPropertyAction(source, action, parseOptions, geometry);
 }
 
 function applyUpdateNodeText(

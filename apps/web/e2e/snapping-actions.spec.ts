@@ -123,7 +123,7 @@ test("endpoint targets keep their identity when connecting to an anonymous node 
   await expect.poll(() => readSource(page)).toBe(source);
 });
 
-test("deferred paint cleanup completes and shares the gesture's undo step", async ({ page }) => {
+test("a drag rewrites only coordinates, leaving existing paint options alone, in one undo step", async ({ page }) => {
   const source = String.raw`\begin{tikzpicture}\draw (0,3) rectangle (2,1);\draw[draw=none,fill=red] (3,2) rectangle (5,1);\end{tikzpicture}`;
   await load(page, source);
   const initial = await start(page, "path:1");
@@ -131,7 +131,7 @@ test("deferred paint cleanup completes and shares the gesture's undo step", asyn
   await event(page, "pointermove", final);
   await expectSourceCanvasConsistency(page);
   await event(page, "pointerup", final);
-  await expect.poll(() => readSource(page), { timeout: 20_000 }).toContain(String.raw`\fill[red] (3,3) rectangle (5,1)`);
+  await expect.poll(() => readSource(page)).toContain(String.raw`\draw[draw=none,fill=red] (3,3) rectangle (5,1)`);
   await expectSourceCanvasConsistency(page, { assertNoActiveCanvasDrag: true });
   await openMenuCommand(page, "edit", "edit.undo");
   await expect.poll(() => readSource(page)).toBe(source);

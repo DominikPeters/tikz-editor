@@ -1,7 +1,6 @@
 import { deckPageDerived } from "../../deck-page-derived-cache";
 import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit } from "../../edit-execution";
-import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { buildSelectionRects } from "../builds-panel/build-selection";
 import {
@@ -22,7 +21,6 @@ import { worldPoint as makeWorldPoint,pt,px,svgBounds,viewportPoint } from "@tik
 import {
 ADORNMENT_EDIT_NOOP_REASON,
 PATH_ATTACHED_NODE_EDIT_NOOP_REASON,
-PROPERTY_WRITE_CLEANUP_NOOP_REASON,
 preflightPositionNodeRelativeToAction,
 type EditAction,
 type EditActionResult
@@ -1808,9 +1806,6 @@ export const CanvasPanel = memo(function CanvasPanel({
         if (action.kind === "movePathAttachedNode" && result.reason === PATH_ATTACHED_NODE_EDIT_NOOP_REASON) {
           return { sourceChanged: false };
         }
-        if (action.kind === "cleanupPropertyWrites" && result.reason === PROPERTY_WRITE_CLEANUP_NOOP_REASON) {
-          return { sourceChanged: false };
-        }
         setWarning(result.reason);
       } else {
         setWarning(result.message);
@@ -3187,14 +3182,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     dispatch({ type: "SELECT", id: selectedId, additive: false });
   }, [dispatch, snapshot.scene, snapshot.source, source]);
 
-  const schedulePropertyCleanup = useCallback<SchedulePropertyCleanup>((cleanupSource, elementIds, historyMergeKey) => {
-    dispatch({ type: "QUEUE_PROPERTY_CLEANUP", documentId: activeDocumentId, historyMergeKey,
-      task: { source: cleanupSource, elementIds, activeFigureId: editParseOptions.activeFigureId,
-        nestedFigureSpan: nestedFigureSpan ? { from: nestedFigureSpan.from, to: nestedFigureSpan.to + cleanupSource.length - source.length } : null }
-    });
-  }, [activeDocumentId, dispatch, editParseOptions.activeFigureId, nestedFigureSpan, source.length]);
   const dragControllerConfig = useMemo(() => ({
-    schedulePropertyCleanup,
     applyActionWithFeedback,
     dispatch,
     dispatchCanvasTransform,
@@ -3236,7 +3224,6 @@ export const CanvasPanel = memo(function CanvasPanel({
     creationFillColor,
     onSnapFeedback: performSnapHapticFeedback
   }), [
-    schedulePropertyCleanup,
     applyActionWithFeedback,
     appendFreehandSamplePoint,
     commitPathToolSegment,

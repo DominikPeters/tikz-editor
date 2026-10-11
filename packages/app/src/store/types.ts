@@ -11,7 +11,6 @@ import type {
   AssistantTurnStatus
 } from "../platform/types";
 import type { DocumentKind } from "@tikz-editor/core/document/kind";
-import type { DeferredPropertyCleanup, PropertyCleanupTask } from "../property-cleanup-request";
 
 export type ToolMode =
   | "select"
@@ -142,7 +141,6 @@ export type DocumentSession = {
   nextEditingIdentityId?: number;
   pendingIdentityMoves?: IdentityMove[];
   editingTargetsStale?: boolean;
-  pendingPropertyCleanup?: DeferredPropertyCleanup;
   id: string;
   title: string;
   source: string;
@@ -433,7 +431,7 @@ export type EditorAction =
       historyMergeKey?: string;
       parseOptions?: {
         indentSize?: 2 | 4;
-        propertyWriteMode?: "commit" | "preview" | "drag-frame" | "drag-end";
+        propertyWriteMode?: "commit" | "preview" | "drag-frame";
       };
       /** False for transient UI previews that should not affect undo/redo history. */
       recordInHistory?: boolean;
@@ -474,12 +472,6 @@ export type EditorAction =
         elementId: string;
         span: { from: number; to: number };
       };
-    }
-  | {
-      type: "QUEUE_PROPERTY_CLEANUP";
-      documentId: string;
-      task: PropertyCleanupTask;
-      historyMergeKey: string;
     }
   | {
       type: "SET_SOURCE_TRANSIENT";
