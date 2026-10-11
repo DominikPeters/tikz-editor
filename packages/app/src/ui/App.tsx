@@ -1,4 +1,3 @@
-import { useDeferredPropertyCleanup } from "./useDeferredPropertyCleanup";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -233,7 +232,6 @@ export function App() {
 }
 
 function EditorApp() {
-  useDeferredPropertyCleanup();
   const presentation = useSyncExternalStore(presentationService.subscribe, presentationService.getState);
   const [showPresentationOptions, setShowPresentationOptions] = useState(false);
   const handlePresentationOptions = useCallback(() => { setShowPresentationOptions(true); }, []);

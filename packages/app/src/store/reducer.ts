@@ -1,6 +1,5 @@
 import { reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
-import { executeDocumentEdit, resolveNestedEditSpan } from "../edit-execution";
-import { PROPERTY_WRITE_CLEANUP_NOOP_REASON } from "@tikz-editor/core/edit/actions";
+import { executeDocumentEdit } from "../edit-execution";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
 import { editBeamerSlides, isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
@@ -850,9 +849,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
 
       if (result.kind !== "success" && result.kind !== "partial") {
-        if (action.action.kind === "cleanupPropertyWrites" && result.kind === "unsupported" && result.reason === PROPERTY_WRITE_CLEANUP_NOOP_REASON) {
-          return state;
-        }
         const message =
           result.kind === "unsupported"
             ? `Edit action skipped: ${result.reason}`
@@ -863,7 +859,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
       const editingTargetsStale = ![
         "moveElement", "moveElements", "moveHandle", "resizeElement", "rotateElement", "setProperty", "setProperties",
-        "alignElements", "distributeElements", "updateNodeText", "cleanupPropertyWrites", "movePathAttachedNode"
+        "alignElements", "distributeElements", "updateNodeText", "movePathAttachedNode"
       ].includes(action.action.kind);
       const actionWarning = result.kind === "partial" ? result.reason : null;
       const incrementalChangedSourceIds =
@@ -948,7 +944,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         action.action.kind === "moveHandle" || action.action.kind === "connectHandle" || action.action.kind === "moveAdornment" ? "move-handle" :
         action.action.kind === "splitPath" || action.action.kind === "joinPaths" || action.action.kind === "toggleClosedPath" ||
         action.action.kind === "deletePathPoint" || action.action.kind === "setPathPointKind" ? "path-edit" :
-        action.action.kind === "setProperty" || action.action.kind === "setProperties" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" || action.action.kind === "cleanupPropertyWrites" ||
+        action.action.kind === "setProperty" || action.action.kind === "setProperties" || action.action.kind === "rotateElement" || action.action.kind === "updateNodeText" ||
         action.action.kind === "positionNodeRelativeTo" || action.action.kind === "convertNodePositionToAbsolute" ? "set-property" :
         action.action.kind === "alignElements" ? "align" :
         action.action.kind === "distributeElements" ? "distribute" :
@@ -965,20 +961,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const properties = action.action.kind === "setProperty" ? [action.action]
         : action.action.kind === "setProperties" ? action.action.actions : undefined;
       const mergeKey = action.historyMergeKey ?? (properties ? `property:${documentId}:${activeDoc.sourceRevision + 1}` : undefined);
-      const pendingPropertyCleanup = properties && mergeKey ? {
-        source: result.newSource, originalSource: activeDoc.source, properties,
-        elementIds: [...new Set(properties.map(property => property.elementId))],
-        activeFigureId: nestedTikzRootActive ? activeDoc.snapshot.parseResult?.activeFigureId : activeDoc.activeRootId ?? undefined,
-        nestedFigureSpan: nestedTikzRootActive ? resolveNestedEditSpan({ ...activeDoc, documentId }) : null,
-        sourceRevision: activeDoc.sourceRevision + 1, historyMergeKey: mergeKey
-      } : undefined;
       const lastIndex = truncated.length - 1;
       const lastEntry = truncated.at(lastIndex);
 
       if (
         mergeKey &&
         lastEntry?.mergeKey === mergeKey &&
-        (lastEntry.kind === historyKind || action.action.kind === "cleanupPropertyWrites")
+        lastEntry.kind === historyKind
       ) {
         const nextHistory = [...truncated];
         nextHistory[lastIndex] = {
@@ -993,7 +982,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           source: result.newSource,
           pendingIdentityMoves: result.identityMoves,
           editingTargetsStale,
-          pendingPropertyCleanup,
           sourceRevision: doc.sourceRevision + 1,
           lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: incrementalChangedSourceIds,
@@ -1031,7 +1019,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         source: result.newSource,
         pendingIdentityMoves: result.identityMoves,
         editingTargetsStale,
-        pendingPropertyCleanup,
         sourceRevision: doc.sourceRevision + 1,
         lastSourceChangeOrigin: "edit-command",
         lastEditChangedSourceIds: incrementalChangedSourceIds,
@@ -1206,13 +1193,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         history,
         historyIndex,
         dirty: applied.source !== doc.savedSource
-      }));
-      break;
-    }
-
-    case "QUEUE_PROPERTY_CLEANUP": {
-      workspace = updateDocument(workspace, action.documentId, doc => doc.source !== action.task.source ? doc : ({
-        ...doc, pendingPropertyCleanup: { ...action.task, sourceRevision: doc.sourceRevision, historyMergeKey: action.historyMergeKey }
       }));
       break;
     }

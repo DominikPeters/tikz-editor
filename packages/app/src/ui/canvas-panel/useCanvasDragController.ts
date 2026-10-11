@@ -115,7 +115,6 @@ function makeWorldVector(x: number, y: number): WorldVector {
 export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   const {
     applyActionWithFeedback,
-    schedulePropertyCleanup,
     dispatch,
     dispatchCanvasTransform,
     logSnapDebug,
@@ -1357,7 +1356,6 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
         return;
       }
 
-      const cleanupElementIds = propertyCleanupElementIdsForDrag(drag);
       if ("latestSource" in drag && drag.editSession) {
         const preview = previewsRef.current.get(drag);
         const finalSource = drag.latestSource;
@@ -1373,9 +1371,6 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           }
         }
         previewsRef.current.delete(drag);
-      }
-      if ("historyMergeKey" in drag && drag.didEdit && cleanupElementIds.length > 0) {
-        schedulePropertyCleanup(drag.latestSource, cleanupElementIds, drag.historyMergeKey);
       }
 
       setNodeAnchorOverlay(null);
@@ -1442,7 +1437,6 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
   }, [
     applyActionWithFeedback,
     cancelGesture,
-    schedulePropertyCleanup,
     creationFillColor,
     creationStrokeColor,
     dispatch,
@@ -1541,25 +1535,6 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     };
   }, [dragRef, setDragState, setSnapLines, setDragTooltip]);
   return cancelGesture;
-}
-
-function propertyCleanupElementIdsForDrag(drag: DragState): string[] {
-  switch (drag.kind) {
-    case "element":
-      return drag.elementIds;
-    case "resize":
-    case "rotate":
-      return [drag.elementId];
-    case "handle":
-      return [drag.sourceId];
-    case "tool-create":
-    case "pan":
-    case "marquee":
-    case "tool-bezier-bend":
-    case "tool-path-segment":
-    case "tool-freehand":
-      return [];
-  }
 }
 
 function snapGridResizeWorldPoint(point: WorldPoint, config: GridResizeSnapConfig): WorldPoint {

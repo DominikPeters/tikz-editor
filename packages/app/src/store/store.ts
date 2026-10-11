@@ -70,7 +70,6 @@ function shouldDebounceWorkspaceSave(action: EditorAction, previous: EditorState
     return (
       action.recordInHistory === false ||
       action.parseOptions?.propertyWriteMode === "drag-frame" ||
-      action.parseOptions?.propertyWriteMode === "drag-end" ||
       previous.activeCanvasDragKind != null ||
       next.activeCanvasDragKind != null ||
       previous.activeSourceScrubSourceId != null ||

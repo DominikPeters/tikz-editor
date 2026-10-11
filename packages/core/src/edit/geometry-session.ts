@@ -1,4 +1,5 @@
 import type { ParseTikzResult } from "../parser/index.js";
+import type { Statement } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
 import type { FrameTransform } from "../coords/transforms.js";
 import type { EvaluateOptions, SceneElement } from "../semantic/types.js";
@@ -24,6 +25,8 @@ export type EditGeometrySession = EditGeometrySnapshot & {
   boundsBySource: ReturnType<typeof collectSourceWorldBounds>;
   prepare: (sourceId: string) => void;
   measure: (source: string, sourceId: string) => SceneElement[];
+  /** The elements of `sourceId`'s statement alone, evaluated even for the snapshot's own source. */
+  measureStatement: (source: string, sourceId: string, parsed?: ParseTikzResult) => SceneElement[];
   parentFrame: (sourceId: string) => FrameTransform | undefined;
   optionFrame: (sourceId: string, entries?: readonly OptionEntry[], includeScopeFinalOptions?: boolean) => FrameTransform | undefined;
 };
@@ -40,17 +43,17 @@ export function createEditGeometrySession(
   parseOptions: EditParseOptions = {}
 ): EditGeometrySession {
   let boundsBySource: EditGeometrySession["boundsBySource"] | undefined;
-  const evaluators = new Map<number, (source: string) => SceneElement[]>();
+  const evaluators = new Map<number, (source: string, parsed?: ParseTikzResult) => SceneElement[]>();
   const frames = new Map<number, StatementFrameResolver>();
   const statementIndex = (sourceId: string): number | undefined => {
     const direct = snapshot.semantic.sourceStatementFirstIndexBySourceId[sourceId];
     if (direct != null) return direct;
-    const ref = snapshot.semantic.editHandles.find(handle => handle.sourceRef.sourceId === sourceId)?.sourceRef
-      ?? snapshot.semantic.scene.elements.find(element => element.sourceRef.sourceId === sourceId)?.sourceRef;
-    if (!ref) return;
-    const owner = snapshot.parsed.figure.body.find(statement =>
-      statement.span.from <= ref.sourceSpan.from && statement.span.to >= ref.sourceSpan.to);
-    return owner ? snapshot.semantic.sourceStatementFirstIndexBySourceId[owner.id] : undefined;
+    const span = snapshot.semantic.editHandles.find(handle => handle.sourceRef.sourceId === sourceId)?.sourceRef.sourceSpan
+      ?? snapshot.semantic.scene.elements.find(element => element.sourceRef.sourceId === sourceId)?.sourceRef.sourceSpan
+      ?? findSpanById(snapshot.parsed.figure.body, sourceId);
+    if (!span) return;
+    const owner = innermostStatementId(snapshot.parsed.figure.body, span, snapshot.semantic.sourceStatementFirstIndexBySourceId);
+    return owner ? snapshot.semantic.sourceStatementFirstIndexBySourceId[owner] : undefined;
   };
   const prepare = (sourceId: string) => {
     const index = statementIndex(sourceId);
@@ -70,13 +73,13 @@ export function createEditGeometrySession(
     const prefix = snapshot.source.slice(0, sourceSpan.from);
     const suffix = snapshot.source.slice(sourceSpan.to);
     const cache = new Map<string, SceneElement[]>();
-    evaluators.set(index, (source) => {
+    evaluators.set(index, (source, prepared) => {
       const cached = cache.get(source);
       if (cached) return cached;
       if (!source.startsWith(prefix) || !source.endsWith(suffix) || source.length < prefix.length + suffix.length) {
         throw new Error("Prepared geometry cannot measure edits outside its statement.");
       }
-      const parsed = parseTikzForEdit(source, { ...parseOptions, analysisSession: null, analysisView: null });
+      const parsed = prepared?.source === source ? prepared : parseTikzForEdit(source, { ...parseOptions, analysisSession: null, analysisView: null });
       const run = createSemanticEvaluationRun(parsed.figure, source, evaluateOptions);
       run.captureGeometryCheckpoints = false;
       if (run.expandedFigureBody[index]?.id !== statement.id) {
@@ -115,8 +118,45 @@ export function createEditGeometrySession(
     },
     measure(source, sourceId) {
       if (source === snapshot.source) return snapshot.semantic.scene.elements;
+      return this.measureStatement(source, sourceId);
+    },
+    measureStatement(source, sourceId, parsed) {
       prepare(sourceId);
-      return evaluators.get(statementIndex(sourceId)!)!(source);
+      return evaluators.get(statementIndex(sourceId)!)!(source, parsed);
     }
   };
+}
+
+type Span = { from: number; to: number };
+
+/** The span of the AST node with this id (a path item such as a node, for instance). */
+function findSpanById(value: unknown, id: string): Span | undefined {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const span = findSpanById(entry, id);
+      if (span) return span;
+    }
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const node = value as { id?: unknown; span?: Span };
+  if (node.id === id && node.span) return node.span;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key !== "span" && entry && typeof entry === "object") {
+      const span = findSpanById(entry, id);
+      if (span) return span;
+    }
+  }
+}
+
+function innermostStatementId(
+  statements: readonly Statement[],
+  span: Span,
+  indexById: Readonly<Record<string, number>>
+): string | undefined {
+  for (const statement of statements) {
+    if (statement.span.from > span.from || statement.span.to < span.to) continue;
+    const nested = statement.kind === "Scope" ? innermostStatementId(statement.body, span, indexById) : undefined;
+    return nested ?? (indexById[statement.id] != null ? statement.id : undefined);
+  }
 }

@@ -15,7 +15,7 @@ export type EditParseOptions = {
   sourceFingerprint?: string;
 };
 
-export type PropertyWriteInteractionMode = "commit" | "preview" | "drag-frame" | "drag-end";
+export type PropertyWriteInteractionMode = "commit" | "preview" | "drag-frame";
 
 export function parseTikzForEdit(source: string, options: EditParseOptions = {}): ParseTikzResult {
   incrementProfilingCounter("parseTikzForEditCalls");

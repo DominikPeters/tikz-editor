@@ -49,12 +49,6 @@ export function executeDocumentEdit(
   }
   const editSource = span ? maskSourceOutsideSpan(source, span) : source;
   const parseOptions = buildEditParseOptions({ ...context, source: editSource, activeRootId: span ? snapshot.activeRootId : activeRootId, analysis: "none", overrides: options.parseOptions });
-  // Source cleanup is certified asynchronously after the edit. Core callers
-  // outside the app can still request synchronous commit certification.
-  if ((action.kind === "setProperty" || action.kind === "setProperties") &&
-      (parseOptions.propertyWriteMode == null || parseOptions.propertyWriteMode === "commit")) {
-    parseOptions.propertyWriteMode = "drag-frame";
-  }
   const evaluateOptions = { ...options.evaluateOptions, sourceFingerprint: parseOptions.sourceFingerprint };
   const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.activeRootId === parseOptions.activeFigureId;
   const geometry = options.geometry ?? (snapshotMatchesRoot && snapshot.source === source && snapshot.parseResult && snapshot.semanticResult

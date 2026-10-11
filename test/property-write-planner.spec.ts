@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPlannedSetPropertyAction,
-  cleanupIdiomaticPropertyWrites,
-  planPropertyWrite,
-  PROPERTY_WRITE_CLEANUP_NOOP_REASON
+  planPropertyWrite
 } from "../packages/core/src/edit/property-write-planner.js";
 import {
   buildArrowTipSetPropertyMutation,
@@ -651,32 +649,6 @@ describe("property write planner", () => {
     );
   });
 
-  it("exercises disabled draw/fill cleanup rewrites for each paint command target", () => {
-    const invisibleDraw = cleanupIdiomaticPropertyWrites(String.raw`\begin{tikzpicture}
-  \draw[draw=false, fill=false] (0,0) rectangle (1,1);
-\end{tikzpicture}`);
-    expect(invisibleDraw).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-
-    const fillOnly = cleanupIdiomaticPropertyWrites(String.raw`\begin{tikzpicture}
-  \draw[draw=false, fill=red] (0,0) rectangle (1,1);
-\end{tikzpicture}`);
-    expect(fillOnly).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-
-    const drawOnly = cleanupIdiomaticPropertyWrites(String.raw`\begin{tikzpicture}
-  \filldraw[draw=blue, fill=false] (0,0) rectangle (1,1);
-\end{tikzpicture}`);
-    expect(drawOnly).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
-  });
-
   it("does not try paint-command cleanup for non-paint path commands", () => {
     const source = String.raw`\begin{tikzpicture}
   \clip[draw=none] (0,0) rectangle (1,1);
@@ -692,32 +664,5 @@ describe("property write planner", () => {
     });
 
     expect(plan.selected).toEqual(plan.conservative);
-  });
-
-  it("handles bare draw and fill flags while considering paint cleanup", () => {
-    for (const source of [
-      String.raw`\begin{tikzpicture}
-  \path[draw] (0,0) -- (1,0);
-\end{tikzpicture}`,
-      String.raw`\begin{tikzpicture}
-  \path[fill] (0,0) rectangle (1,1);
-\end{tikzpicture}`
-    ]) {
-      expect(cleanupIdiomaticPropertyWrites(source)).toEqual({
-        kind: "unsupported",
-        reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-      });
-    }
-  });
-
-  it("treats whitespace-only targeted cleanup as a no-op", () => {
-    const source = String.raw`\begin{tikzpicture}
-  \draw[red] (0,0) -- (1,0);
-\end{tikzpicture}`;
-
-    expect(cleanupIdiomaticPropertyWrites(source, {}, [" ", "\t"])).toEqual({
-      kind: "unsupported",
-      reason: PROPERTY_WRITE_CLEANUP_NOOP_REASON
-    });
   });
 });

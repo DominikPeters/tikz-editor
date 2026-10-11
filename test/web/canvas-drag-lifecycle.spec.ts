@@ -39,7 +39,7 @@ describe("canvas drag ownership and cancellation", () => {
   let cancel: () => void;
   const setToolDraft = vi.fn(), setBezierDraft = vi.fn(), setSegmentDraft = vi.fn(), setFreehandDraft = vi.fn();
   const setPendingBezier = vi.fn(), setCursor = vi.fn(), setSnapLines = vi.fn(), setPreview = vi.fn();
-  const commitSegment = vi.fn(), finalizeFreehand = vi.fn(), cleanup = vi.fn();
+  const commitSegment = vi.fn(), finalizeFreehand = vi.fn();
   const noop = () => {};
   const state = () => useEditorStore.getState();
   const dispatch = (action: EditorAction) => { useEditorStore.setState(editorReducer(state(), action)); };
@@ -78,7 +78,7 @@ describe("canvas drag ownership and cancellation", () => {
     selectedRef.current = current.selectedElementIds;
     svgRef.current = current.snapshot.svg;
     cancel = useCanvasDragController({
-      schedulePropertyCleanup: cleanup, applyActionWithFeedback: apply, dispatch, dispatchCanvasTransform: noop,
+      applyActionWithFeedback: apply, dispatch, dispatchCanvasTransform: noop,
       logSnapDebug: noop, queueSelectionForAddedElement: noop, snapshotSource: current.snapshot.source, source: current.source,
       snapshotScene: current.snapshot.scene, snapshotEditHandles: current.snapshot.editHandles,
       nodeAnchorTargets: [], matrixCellAnchorHints: [], svgResult: current.snapshot.svg,
@@ -136,7 +136,7 @@ describe("canvas drag ownership and cancellation", () => {
     dragRef = { current: null }; surfaceRef = { current: null }; selectedRef = { current: new Set() };
     useEditorStore.setState({ ...makeInitialState(), dispatch });
     dispatch({ type: "CODE_EDITED", source: BASE }); ready(); dispatch({ type: "SELECT", id: "path:0", additive: false });
-    for (const mock of [setToolDraft, setBezierDraft, setSegmentDraft, setFreehandDraft, setPendingBezier, setCursor, setSnapLines, setPreview, commitSegment, finalizeFreehand, cleanup]) mock.mockClear();
+    for (const mock of [setToolDraft, setBezierDraft, setSegmentDraft, setFreehandDraft, setPendingBezier, setCursor, setSnapLines, setPreview, commitSegment, finalizeFreehand]) mock.mockClear();
     root = createRoot(document.createElement("div"));
     await act(async () => root.render(React.createElement(Harness)));
   });

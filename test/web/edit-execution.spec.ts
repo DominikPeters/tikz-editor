@@ -2,8 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { computeSnapshot } from "../../packages/app/src/compute.js";
 import { editorReducer, makeInitialState } from "../../packages/app/src/store/reducer.js";
 import { executeDocumentEdit } from "../../packages/app/src/edit-execution.js";
-import { certifyPropertyCleanup } from "../../packages/app/src/property-cleanup.js";
-import { applyEditAction, type EditAction } from "../../packages/core/src/edit/actions.js";
+import { type EditAction } from "../../packages/core/src/edit/actions.js";
 import * as evaluator from "../../packages/core/src/semantic/evaluate.js";
 import { applySourcePatches } from "../../packages/core/src/edit/source-patches.js";
 
@@ -23,36 +22,20 @@ async function setup(input = source, activeRootId = "figure:0") {
 }
 afterEach(() => vi.restoreAllMocks());
 
-it("batches property edits into one revision and undo step, with cleanup outside dispatch", async () => {
-  const { state, documentId } = await setup();
+it("batches property edits into one revision and undo step, with cleanup in the same edit", async () => {
+  const { state } = await setup();
   const action: EditAction = { kind: "setProperties", actions: [
     { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "none" },
     { kind: "setProperty", elementId: "path:1", level: "command", key: "draw", value: "none" }
   ] };
-  const evaluate = vi.spyOn(evaluator, "evaluateTikzFigure");
   const edited = editorReducer(state, { type: "APPLY_EDIT_ACTION", action });
-  expect(evaluate).not.toHaveBeenCalled();
   expect(edited.sourceRevision).toBe(state.sourceRevision + 1);
   expect(edited.history).toHaveLength(1);
-  expect(edited.source.match(/draw=none/g)).toHaveLength(2);
-  const task = edited.documents[documentId].pendingPropertyCleanup!;
-  expect(task).toBeDefined();
-  const cleanup = certifyPropertyCleanup(task);
-  expect(cleanup?.kind).toBe("success");
-  if (!cleanup || cleanup.kind !== "success") throw new Error("Expected certified cleanup");
-  const expected = applyEditAction(source, state.snapshot.editHandles, action);
-  if (expected.kind !== "success") throw new Error("Expected property edit");
-  expect(cleanup.newSource).toBe(expected.newSource);
-  const cleanupAction = { type: "APPLY_EDIT_ACTION" as const, documentId,
-    action: { kind: "cleanupPropertyWrites" as const, elementIds: task.elementIds },
-    precomputedSource: task.source, precomputedResult: cleanup, historyMergeKey: task.historyMergeKey,
-    expectedDocumentRevision: { documentId, sourceRevision: task.sourceRevision } };
-  const cleaned = editorReducer(edited, cleanupAction);
-  expect(cleaned.history).toHaveLength(1);
-  expect(editorReducer(cleaned, { type: "UNDO" }).source).toBe(source);
-  expect(editorReducer(editorReducer(cleaned, { type: "UNDO" }), { type: "REDO" }).source).toBe(cleaned.source);
-  const changed = editorReducer(edited, { type: "CODE_EDITED", source: edited.source + "% external" });
-  expect(editorReducer(changed, cleanupAction)).toBe(changed);
+  expect(edited.source).not.toContain("draw=none");
+  expect(edited.source).toContain(String.raw`\path (0,3) rectangle (2,1);`);
+  expect(edited.source).toContain(String.raw`\path (3,2) rectangle (5,1);`);
+  expect(editorReducer(edited, { type: "UNDO" }).source).toBe(source);
+  expect(editorReducer(editorReducer(edited, { type: "UNDO" }), { type: "REDO" }).source).toBe(edited.source);
 });
 
 it("does not partially apply a batch with an invalid target", async () => {
@@ -104,17 +87,11 @@ Before
 \begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}
 After
 \end{frame}\end{document}`;
-  const { state, documentId } = await setup(nestedSource, "frame:0:tikzpicture:0");
+  const { state } = await setup(nestedSource, "frame:0:tikzpicture:0");
   const edited = editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "none" } });
-  const task = edited.documents[documentId].pendingPropertyCleanup;
-  expect(task).toBeDefined();
-  if (!task) throw new Error("Expected nested cleanup");
-  const cleanup = certifyPropertyCleanup(task);
-  expect(cleanup?.kind).toBe("success");
-  if (!cleanup || cleanup.kind !== "success") throw new Error("Expected nested cleanup result");
-  expect(cleanup.newSource).toContain("Before"); expect(cleanup.newSource).toContain("After");
-  expect(cleanup.newSource).toContain(String.raw`\path (0,0)--(1,1);`);
-  expect(applySourcePatches(edited.source, cleanup.patches)).toMatchObject({ kind: "success", source: cleanup.newSource });
+  expect(edited.source).toContain("Before"); expect(edited.source).toContain("After");
+  expect(edited.source).toContain(String.raw`\path (0,0)--(1,1);`);
+  expect(applySourcePatches(state.source, edited.lastEditPatches ?? [])).toMatchObject({ kind: "success", source: edited.source });
 });
 
 it("keeps attached-node drags incremental beyond both path endpoints", async () => {

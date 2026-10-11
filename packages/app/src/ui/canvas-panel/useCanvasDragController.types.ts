@@ -1,4 +1,3 @@
-import type { SchedulePropertyCleanup } from "../useDeferredPropertyCleanup";
 import type { ApplyActionWithFeedbackFn } from "./types";
 import type { SnapLine } from "@tikz-editor/core/edit/snapping";
 import type { EditHandle, NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";
@@ -22,7 +21,6 @@ import type { WorldPoint } from "../coords/types";
 import type { EditorAction } from "../../store/types";
 
 export type UseCanvasDragControllerParams = {
-  schedulePropertyCleanup: SchedulePropertyCleanup;
   applyActionWithFeedback: ApplyActionWithFeedbackFn;
   dispatch: (action: EditorAction) => void;
   dispatchCanvasTransform: (transform: { translateX: number; translateY: number; scale: number }) => void;

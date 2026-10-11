@@ -15,7 +15,6 @@ vi.mock("../../packages/app/src/ui/editor-command-runtime", () => ({ useEditorCo
 vi.mock("../../packages/app/src/ui/compute-scheduler", () => ({
   createSingleFlightScheduler: () => ({ schedule: vi.fn(), invalidate: vi.fn(), dispose: vi.fn() })
 }));
-vi.mock("../../packages/app/src/ui/useDeferredPropertyCleanup", () => ({ useDeferredPropertyCleanup: () => {} }));
 vi.mock("../../packages/app/src/ui/AppMenuBar", () => ({ AppMenuBar: () => null }));
 vi.mock("../../packages/app/src/ui/Toolbar", () => ({ Toolbar: () => null }));
 vi.mock("../../packages/app/src/ui/TabStrip", () => ({ TabStrip: () => null }));
