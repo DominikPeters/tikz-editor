@@ -8,7 +8,7 @@ import {
   setSource
 } from "./helpers";
 
-const UNSUPPORTED_ENVIRONMENT = String.raw`\begin{tcolorbox}Unrendered content\end{tcolorbox}`;
+const UNSUPPORTED_ENVIRONMENT = String.raw`\begin{unknown}Unrendered content\end{unknown}`;
 const SOURCE = String.raw`\documentclass{beamer}
 \begin{document}
 \begin{frame}{Source cards}
