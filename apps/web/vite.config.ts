@@ -12,7 +12,12 @@ export default defineConfig(({ command }) => ({
     "import.meta.env.TIKZ_EDITOR_VERSION": JSON.stringify(process.env.npm_package_version ?? "0.1.0")
   },
   worker: {
-    format: "es"
+    format: "es",
+    rollupOptions: {
+      // As Vite sets for the app: chunks both bundles share (font outlines)
+      // then come out identical, so the browser downloads each once.
+      output: { generatedCode: "es2015" }
+    }
   },
   build: {
     rollupOptions: {
