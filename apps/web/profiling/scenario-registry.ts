@@ -2,6 +2,12 @@ import type { ProfilingScenarioManifest } from "./framework";
 
 export const PROFILING_SCENARIOS: ProfilingScenarioManifest[] = [
   {
+    id: "scale",
+    category: "canvas-edit",
+    description: "Open, select all, hover, zoom, pan, commit, undo, type and memory on pictures of 100 and 500 statements, a long paper with an image and a 40-frame deck.",
+    specPath: "profiling/profile-scale.spec.ts"
+  },
+  {
     id: "actions",
     category: "actions",
     description: "Menu and keyboard action profiling for editor commands.",
