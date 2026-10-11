@@ -1,4 +1,5 @@
 mod assistant;
+mod presentation;
 mod update_preferences;
 
 use assistant::{
@@ -3049,12 +3050,39 @@ pub fn run() {
 
     builder
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                let _ = window.app_handle().emit_to(
+                    "main",
+                    "presentation-focused-window",
+                    window.label(),
+                );
+            }
+            if window.label().starts_with("presentation-")
+                && matches!(
+                    event,
+                    tauri::WindowEvent::Moved(_) | tauri::WindowEvent::ScaleFactorChanged { .. }
+                )
+            {
+                let _ = window
+                    .app_handle()
+                    .emit("presentation-displays-changed", ());
+            }
+            if window.label() == "main" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    presentation::close_for_controller(window.app_handle());
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.emit("desktop-window-close-request", ());
             }
         })
         .invoke_handler(tauri::generate_handler![
+            presentation::desktop_presentation_keep_awake,
+            presentation::desktop_prepare_presentation_window,
             update_preferences::desktop_get_automatic_update_checks,
             update_preferences::desktop_set_automatic_update_checks,
             update_preferences::desktop_reset_automatic_update_checks,
@@ -3108,6 +3136,9 @@ pub fn run() {
             desktop_assistant_logout
         ])
         .setup(|app| {
+            app.manage(presentation::PresentationPowerState::default());
+            #[cfg(target_os = "macos")]
+            presentation::install_display_observer(app.handle().clone());
             let handle = app.handle().clone();
             app.on_menu_event(move |_app, event| {
                 let raw_id = event.id().0.as_ref();

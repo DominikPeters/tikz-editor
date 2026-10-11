@@ -33,7 +33,7 @@ rfd = { version = "0.15", features = ["common-controls-v6"] }
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 url = "2.5"
 tempfile = "3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "sync"] }
 notify = "8.2"
 flate2 = "1.1"
 tar = "0.4"

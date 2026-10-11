@@ -12,6 +12,7 @@ export const APP_MENU_DEFINITION = [
         accelerator: "CmdOrCtrl+N"
       },
       { kind: "command", commandId: APP_MENU_COMMAND_IDS.NEW_BEAMER_DOCUMENT, label: "New Beamer Presentation" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.NEW_TIKZ_DOCUMENT, label: "New TikZ Drawing" },
       {
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.OPEN_DOCUMENT,

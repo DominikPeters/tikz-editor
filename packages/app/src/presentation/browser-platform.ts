@@ -47,7 +47,7 @@ export function createBrowserPresentationApi(): PlatformPresentationApi {
       };
       // Reserve windows while the launch click still has browser user activation.
       if (options.mode !== "rehearse") openAudience();
-      if (options.showPresenter || options.mode === "rehearse") {
+      if (options.showPresenter !== false || options.mode === "rehearse") {
         try { openPresenter(); }
         catch (error) {
           if (options.mode === "rehearse") throw error;

@@ -2,9 +2,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { setActiveEditorPlatform } from "@tikz-editor/app/platform/current";
 import { createDesktopPlatformAdapter } from "./platform/desktop-platform";
+import { createDesktopPresentationWindowPlatform } from "./platform/presentation";
 
 async function bootstrap() {
-  setActiveEditorPlatform(createDesktopPlatformAdapter());
+  const role = new URLSearchParams(window.location.search).get("presentation");
+  const identify = new URLSearchParams(window.location.search).has("identify-display");
+  setActiveEditorPlatform(role === "audience" || role === "presenter" || identify ? createDesktopPresentationWindowPlatform() : createDesktopPlatformAdapter());
   const { App } = await import("@tikz-editor/app");
 
   createRoot(document.getElementById("root")!).render(

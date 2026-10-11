@@ -1,4 +1,5 @@
 import type { AppMenuCommandId } from "@tikz-editor/app/app-menu";
+import { createDesktopPresentationApi } from "./presentation";
 import type { LinkedTextReadResult, LinkedTextWriteResult } from "@tikz-editor/app/linked-file-sync";
 import type { EditorPlatform, MenuCommandHandler } from "@tikz-editor/app/platform/types";
 import { resolvePlatformStorage, type StorageLike } from "@tikz-editor/app/platform/storage";
@@ -234,6 +235,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
 
   return {
     id: "desktop-tauri",
+    presentation: createDesktopPresentationApi(),
     persistence: {
       load: (key) => storage.getItem(key),
       save: (key, value) => {

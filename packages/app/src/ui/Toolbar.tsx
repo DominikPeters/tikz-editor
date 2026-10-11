@@ -38,6 +38,7 @@ type ToolbarProps = {
 };
 
 export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarProps) {
+  const documentId = useEditorStore(s => s.activeDocumentId);
   const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz");
   const toolMode = useEditorStore((s) => s.toolMode);
   const bucketFillColor = useEditorStore((s) => s.bucketFillColor);
@@ -61,6 +62,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
   useEffect(() => {
     if (!drawingSurface && toolMode !== "select" && toolMode !== "magnify") dispatch({ type: "SET_TOOL_MODE", mode: "select" });
   }, [drawingSurface, toolMode, dispatch]);
+  useEffect(() => { setOpenPopupMode(null); }, [documentId]);
 
   // Close popup when tool mode changes (unless it's a popup that can be used independently)
   useEffect(() => {

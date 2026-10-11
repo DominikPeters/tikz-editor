@@ -6,10 +6,16 @@ import { presentationElapsed } from "./controller";
 import { presentationKeyCommand } from "./keyboard";
 import type { PresentationCommand, PresentationCursor, PresentationRole, PresentationSnapshot, PresentationTransport } from "./types";
 import css from "./PresentationWindow.module.css";
+import { usePresentationSvg } from "./svg";
 
 function Slide({ svg, cursor, label }: { svg: string | null; cursor?: PresentationCursor; label: string }) {
+  const markup = usePresentationSvg(svg);
   return <div className={css.slide} role="img" aria-label={label} data-frame={cursor?.frame} data-step={cursor?.step} data-continuation={cursor?.continuation}
-    dangerouslySetInnerHTML={{ __html: svg ?? "" }} />;
+    dangerouslySetInnerHTML={{ __html: markup }} />;
+}
+function SpeakerNotes({ svg }: { svg: string }) { const markup = usePresentationSvg(svg); return <div dangerouslySetInnerHTML={{ __html: markup }} />; }
+export function PresentationDisplayIdentifier({ number, name }: { number: string; name: string }) {
+  return <main className={css.identifier}><strong>{number}</strong><span>{name}</span></main>;
 }
 function formatTime(milliseconds: number): string {
   const seconds = Math.floor(Math.abs(milliseconds) / 1000), minutes = Math.floor(seconds / 60);
@@ -73,6 +79,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
   const [controlsVisible, setControlsVisible] = useState(!getActiveEditorPlatform().id.startsWith("desktop"));
   const [arrangement, setArrangement] = useState(loadArrangement);
+  const audienceRoot = useRef<HTMLElement | null>(null);
   const scheme = useSettingsStore(s => s.settings.general.colorScheme);
   const transport = useRef<PresentationTransport | null>(null);
   const snapshotRef = useRef(snapshot);
@@ -83,7 +90,10 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   const send = useCallback((command: PresentationCommand) => {
     void Promise.resolve(transport.current?.send({ type: "command", sessionId, command })).catch(() => {});
   }, [sessionId]);
-  const enterFullscreen = () => { void apiRef.current.enterFullscreen?.().catch(() => { setError("Use the browser’s fullscreen control to fill this display."); }); };
+  const enterFullscreen = () => {
+    void apiRef.current.enterFullscreen?.().then(() => { audienceRoot.current?.focus({ preventScroll: true }); }).catch(() => { setError("Couldn’t enter fullscreen. Use the window’s fullscreen control."); });
+  };
+  useEffect(() => { if (role === "audience") audienceRoot.current?.focus({ preventScroll: true }); }, [role]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -96,18 +106,23 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
     const api = apiRef.current;
     let unbindFocus: (() => void) | undefined;
     let channel: PresentationTransport | undefined;
-    const hello = () => { void Promise.resolve(channel?.send({ type: "hello", sessionId, role })).catch(() => {}); };
+    const hello = () => { void Promise.resolve(channel?.send({ type: "hello", sessionId, role, sequence: snapshotRef.current?.sequence ?? -1 })).catch(() => {}); };
     void api.connect(sessionId, message => {
-      if (disposed || message.type !== "snapshot") return;
+      if (disposed) return;
+      if (message.type === "alive") { lastSeen.current = Date.now(); setError(null); return; }
+      if (message.type !== "snapshot") return;
       if (message.snapshot.sequence < (snapshotRef.current?.sequence ?? -1)) return;
       lastSeen.current = Date.now(); setError(null); setSnapshot(message.snapshot);
       document.title = `${message.snapshot.title} — ${role === "presenter" ? "Presenter" : "Presentation"}`;
     }).then(value => {
       if (disposed) { value.close(); return; }
       channel = value; transport.current = value; hello();
-      if (document.hasFocus()) void Promise.resolve(channel.send({ type: "focus", sessionId, role })).catch(() => {});
+      if (!getActiveEditorPlatform().id.startsWith("desktop") && document.hasFocus()) void Promise.resolve(channel.send({ type: "focus", sessionId, role })).catch(() => {});
     }).catch(() => { if (!disposed) setError("This presentation is no longer available."); });
-    const focus = () => { void Promise.resolve(channel?.send({ type: "focus", sessionId, role })).catch(() => {}); hello(); };
+    const focus = () => {
+      if (!getActiveEditorPlatform().id.startsWith("desktop") && document.hasFocus()) void Promise.resolve(channel?.send({ type: "focus", sessionId, role })).catch(() => {});
+      hello();
+    };
     void api.onFocus?.(focus).then(unbind => { if (disposed) unbind(); else unbindFocus = unbind; });
     const timer = window.setInterval(() => {
       if (snapshotRef.current?.ended) return;
@@ -139,7 +154,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable=true], [role=separator]")) return;
       if (target?.closest("button") && (event.key === " " || event.key === "Enter")) return;
-      if (role === "audience" && (event.key === "f" || event.key === "F")) { event.preventDefault(); enterFullscreen(); return; }
+      if (role === "audience" && !event.ctrlKey && !event.metaKey && !event.altKey && (event.key === "f" || event.key === "F")) { event.preventDefault(); enterFullscreen(); return; }
       const command = presentationKeyCommand(event, snapshotRef.current);
       if (command) { event.preventDefault(); send(command); }
     };
@@ -151,7 +166,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
     catch { /* Layout changes work without persistent storage. */ }
   }, [arrangement]);
 
-  if (role === "audience") return <main className={css.audience} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
+  if (role === "audience") return <main ref={audienceRoot} tabIndex={0} className={css.audience} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
     onPointerMove={() => { setControlsVisible(true); if (hideControls.current) clearTimeout(hideControls.current); hideControls.current = setTimeout(() => { setControlsVisible(false); }, 1800); }}
     onClick={event => { if (!(event.target as Element).closest("button,a") && !snapshot?.ended) send({ type: "next" }); }}>
     {snapshot?.blank === "none" && !snapshot.ended ? <Slide svg={snapshot.current?.svg ?? null} cursor={snapshot.current?.cursor} label="Audience slide" /> : null}
@@ -194,7 +209,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       </div>
       <Splitter label="Resize slide previews and notes" value={100 - arrangement.notesRatio} onChange={ratio => { setArrangement(value => ({ ...value, notesRatio: 100 - ratio })); }} />
       <section className={css.notes}><h2>Speaker Notes</h2><div className={css.notesContent}>
-        {current?.notesSvg ? <div dangerouslySetInnerHTML={{ __html: current.notesSvg }} /> : <span className={css.empty}>No speaker notes for this build.</span>}
+        {current?.notesSvg ? <SpeakerNotes svg={current.notesSvg} /> : <span className={css.empty}>No speaker notes for this build.</span>}
       </div></section>
     </div>
     <div className={css.controls}>

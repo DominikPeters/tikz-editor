@@ -10,6 +10,9 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-title",
     "core:window:allow-set-theme",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-available-monitors",
+    "core:window:allow-primary-monitor",
     "clipboard-x:default"
   ]
 }

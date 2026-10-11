@@ -28,7 +28,8 @@ export type PresentationCommand =
   | { type: "timer"; action: "start" | "pause" | "reset" }
   | { type: "close-view"; role: PresentationRole };
 export type PresentationMessage =
-  | { type: "hello"; sessionId: string; role: PresentationRole }
+  | { type: "hello"; sessionId: string; role: PresentationRole; sequence?: number }
+  | { type: "alive"; sessionId: string; sequence: number }
   | { type: "snapshot"; sessionId: string; snapshot: PresentationSnapshot }
   | { type: "command"; sessionId: string; command: PresentationCommand }
   | { type: "closed"; sessionId: string; role: PresentationRole }
@@ -42,7 +43,7 @@ export type PresentationOptions = {
   mode: PresentationMode;
   audienceDisplay: string | null;
   presenterDisplay: string | null;
-  showPresenter: boolean;
+  showPresenter: boolean | null;
   countdownMinutes: number | null;
 };
 export type PresentationWindows = {
@@ -54,6 +55,7 @@ export type PresentationWindows = {
 };
 export type PlatformPresentationApi = {
   displays(): Promise<PresentationDisplay[]>;
+  identifyDisplays?(): Promise<void>;
   connect(sessionId: string, receive: (message: PresentationMessage) => void): Promise<PresentationTransport>;
   /** Browser implementations reserve popups synchronously before their first await. */
   open(sessionId: string, options: PresentationOptions, onOutputLost: () => void): Promise<PresentationWindows>;
@@ -67,7 +69,8 @@ export function isPresentationMessage(value: unknown, sessionId: string): value 
   if (!value || typeof value !== "object") return false;
   const message = value as Partial<PresentationMessage>;
   if (message.sessionId !== sessionId) return false;
-  if (message.type === "hello" || message.type === "closed") return message.role === "audience" || message.role === "presenter";
+  if (message.type === "hello" || message.type === "closed") return (message.role === "audience" || message.role === "presenter") && (message.type !== "hello" || message.sequence === undefined || Number.isSafeInteger(message.sequence));
+  if (message.type === "alive") return Number.isSafeInteger(message.sequence);
   if (message.type === "focus") return ["editor", "audience", "presenter"].includes(message.role ?? "");
   if (message.type === "snapshot") return !!message.snapshot && message.snapshot.sessionId === sessionId && Number.isSafeInteger(message.snapshot.sequence);
   if (message.type !== "command" || !message.command || typeof message.command !== "object") return false;
