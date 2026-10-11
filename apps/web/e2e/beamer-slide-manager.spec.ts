@@ -29,7 +29,7 @@ async function dock(page: Page, width: number) {
   await setSource(page, SOURCE);
   await page.evaluate(slideWidth => {
     const tab = (id: string, name: string) => ({ type: "tab", id, component: id, name });
-    localStorage.setItem("tikz-editor:dock-layout", JSON.stringify({
+    localStorage.setItem("tikz-editor:dock-layout:beamer", JSON.stringify({
       global: {}, borders: [], layout: { type: "row", children: [
         { type: "tabset", weight: slideWidth, children: [tab("figure-navigator", "Slides")] },
         { type: "tabset", weight: 100 - slideWidth, children: [tab("canvas", "Canvas")] }
@@ -224,6 +224,8 @@ test("uses a grid in a wide panel and ignores a drag after the source changes", 
 });
 
 test("reorders with a native pointer drag and keeps the moved slide active", async ({ page }) => {
+  // Both cards in view: scrolling to the target during a native drag cancels it.
+  await page.setViewportSize({ width: 1280, height: 1200 });
   await gotoApp(page); await setSource(page, SOURCE); await dock(page, 18);
   await card(page, "D").click();
   await card(page, "D").dragTo(card(page, "A"), { targetPosition: { x: 30, y: 3 } });
