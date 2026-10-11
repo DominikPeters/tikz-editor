@@ -39,6 +39,8 @@ function Harness(props: {
   graphicsPreviewBundleKey?: string | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
+  refreshDelayMs?: number;
+  contextRefreshDelayMs?: number;
   externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
   onUpdate: (value: ReadonlyMap<string, string>) => void;
 }) {
@@ -47,7 +49,8 @@ function Harness(props: {
     graphicsPreviewBundleKey: props.graphicsPreviewBundleKey,
     priorityFigureIds: props.priorityFigureIds,
     maxToRender: props.maxToRender ?? 4,
-    refreshDelayMs: 0,
+    refreshDelayMs: props.refreshDelayMs ?? 0,
+    contextRefreshDelayMs: props.contextRefreshDelayMs,
     externalThumbnail: props.externalThumbnail
   });
 
@@ -476,6 +479,56 @@ describe("useFigureThumbnails", () => {
     expect(vi.mocked(requestThumbnail)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(requestThumbnail).mock.calls[1]?.[0].figureSignature)
       .not.toBe(firstSignature);
+  });
+
+  it("re-renders an edited frame after a pause and the other frames once the document is quiet", async () => {
+    vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
+      type: "result", ok: true, requestId: request.requestId, groupId: request.groupId,
+      figureId: request.figureId, figureSignature: request.figureSignature, svg: "<svg/>"
+    }));
+    const frames = (first: string) => [`\\begin{frame}${first}\\end{frame}`, "\\begin{frame}Two\\end{frame}"];
+    const deck = (first: string) => {
+      const [a, b] = frames(first);
+      const source = `\\documentclass{beamer}${a}${b}`;
+      const from = source.indexOf(a);
+      return {
+        source,
+        figures: [
+          { id: "frame:0", span: { from, to: from + a.length }, deckFrameIndex: 0 },
+          { id: "frame:1", span: { from: from + a.length, to: from + a.length + b.length }, deckFrameIndex: 1 }
+        ]
+      };
+    };
+    const renderDeck = async (first: string) => {
+      await act(async () => {
+        root.render(createElement(Harness, { ...deck(first), documentKey: "deck", refreshDelayMs: 300, contextRefreshDelayMs: 2000, onUpdate: () => undefined }));
+        await flushMicrotasks();
+      });
+    };
+    const advance = async (ms: number) => {
+      await act(async () => {
+        vi.advanceTimersByTime(ms);
+        await flushMicrotasks();
+      });
+    };
+    const requestedFrames = () => vi.mocked(requestThumbnail).mock.calls.map(([request]) => request.figureId);
+
+    await renderDeck("One");
+    await advance(0);
+    await waitForCondition(() => requestedFrames().length >= 2, 5);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:1"]);
+
+    await renderDeck("One edited");
+    await advance(100);
+    await renderDeck("One edited again");
+    await advance(200);
+    expect(requestedFrames()).toHaveLength(2);
+    await advance(150);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:1", "frame:0"]);
+
+    await advance(2000);
+    await waitForCondition(() => requestedFrames().length >= 5, 5);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:1", "frame:0", "frame:0", "frame:1"]);
   });
 
   it("isolates thumbnail cache entries by document", async () => {

@@ -5,6 +5,8 @@ export class BoundedLru<K, V> {
   constructor(readonly maxEntries: number, readonly maxBytes: number) {}
   get size(): number { return this.entries.size; }
   get retainedBytes(): number { return this.bytes; }
+  has(key: K): boolean { return this.entries.has(key); }
+  clear(): void { this.entries.clear(); this.bytes = 0; }
   get(key: K): V | undefined {
     const entry = this.entries.get(key);
     if (!entry) return;
