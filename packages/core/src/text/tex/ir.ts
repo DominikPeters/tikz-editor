@@ -1,6 +1,6 @@
 import { parseTexTabular, tabularGroup } from "./tabular/parser.js";
 import type { TexTabular, TexTabularAssignmentFont, TexTabularRegisters } from "./tabular/types.js";
-import type { SyntaxNodeRef } from "@lezer/common";
+import { TreeFragment, type SyntaxNode, type SyntaxNodeRef, type Tree } from "@lezer/common";
 import { freezeTexCacheValue, TexWeightedLruCache } from "./cache.js";
 import {
   beamerDocumentParser,
@@ -1126,20 +1126,64 @@ export function analyzeSimpleTexResources(
   // Resource discovery is a document-level superset operation: Beamer's
   // overlay-qualified \includegraphics form must remain discoverable while
   // all actual command and argument boundaries still come from the CST.
-  const tree = getTexSyntaxIndex(text, beamerDocumentParser).tree;
-  tree.iterate({
-    enter(node) {
-      if (node.name !== "IncludeGraphicsCommand") {
-        return;
-      }
-      const graphicsNode = simpleTexGraphicsNodeFromSyntax(text, node);
-      if (graphicsNode) {
-        graphics.push(simpleTexGraphicsResourceFromNode(graphicsNode));
-      }
-      return false;
-    },
-  });
+  if (text.length < LARGE_RESOURCE_TEXT) {
+    getTexSyntaxIndex(text, beamerDocumentParser).tree.iterate({
+      enter(node) {
+        if (node.name !== "IncludeGraphicsCommand") {
+          return;
+        }
+        const graphicsNode = simpleTexGraphicsNodeFromSyntax(text, node);
+        if (graphicsNode) {
+          graphics.push(simpleTexGraphicsResourceFromNode(graphicsNode));
+        }
+        return false;
+      },
+    });
+    return { graphics };
+  }
+  // Documents are rescanned on every edit (and drag frame), and a full parse of
+  // a long paper takes ~100 ms: reparse from the previous document's tree, and
+  // visit the tree only where the command's name occurs.
+  const tree = resourceDocumentTree(text);
+  let coveredTo = -1;
+  for (let at = text.indexOf("\\includegraphics"); at >= 0; at = text.indexOf("\\includegraphics", at + 1)) {
+    if (at < coveredTo) continue;
+    let node: SyntaxNode | null = tree.resolveInner(at, 1);
+    while (node && !(node.name === "IncludeGraphicsCommand" && node.from === at)) {
+      node = node.from === at ? node.parent : null;
+    }
+    if (!node) continue;
+    coveredTo = node.to;
+    const graphicsNode = simpleTexGraphicsNodeFromSyntax(text, node);
+    if (graphicsNode) {
+      graphics.push(simpleTexGraphicsResourceFromNode(graphicsNode));
+    }
+  }
   return { graphics };
+}
+
+const LARGE_RESOURCE_TEXT = 4096;
+let lastResourceDocument: { readonly text: string; readonly tree: Tree } | null = null;
+
+function resourceDocumentTree(text: string): Tree {
+  const previous = lastResourceDocument;
+  if (previous?.text === text) return previous.tree;
+  let fragments: readonly TreeFragment[] | undefined;
+  if (previous) {
+    let from = 0;
+    const limit = Math.min(previous.text.length, text.length);
+    while (from < limit && previous.text.charCodeAt(from) === text.charCodeAt(from)) from++;
+    let toA = previous.text.length;
+    let toB = text.length;
+    while (toA > from && toB > from && previous.text.charCodeAt(toA - 1) === text.charCodeAt(toB - 1)) {
+      toA--;
+      toB--;
+    }
+    fragments = TreeFragment.applyChanges(TreeFragment.addTree(previous.tree), [{ fromA: from, toA, fromB: from, toB }]);
+  }
+  const tree = beamerDocumentParser.parse(text, fragments);
+  lastResourceDocument = { text, tree };
+  return tree;
 }
 
 function simpleTexGraphicsNodeFromSyntax(

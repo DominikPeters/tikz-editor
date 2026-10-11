@@ -390,6 +390,31 @@ describe("simple TeX paragraph IR", () => {
     ]);
   });
 
+  it("finds the same graphics in long documents across a series of edits", () => {
+    const body = String.raw`% \includegraphics{ignored.pdf}
+\begin{verbatim}
+\includegraphics{verbatim.pdf}
+\end{verbatim}
+\node {A \includegraphics[page={2}]{fig.pdf}};
+\only<2->{\includegraphics<3->[width=24pt,page=2]{shown.pdf}}
+\includegraphics[width=\includegraphics]{odd.pdf} \includegraphicsx{not.pdf}
+`;
+    // Comment padding past the long-document threshold keeps every offset.
+    const padded = (text: string) => `${text}\n${"% padding line\n".repeat(400)}`;
+    const edits = [
+      body,
+      body.replace("fig.pdf", "figure.pdf"),
+      body.replace("% \\includegraphics", "\\includegraphics"),
+      body.replace("\\begin{verbatim}", ""),
+      `\\includegraphics{first.pdf}\n${body}`,
+      body.replace("{shown.pdf}}", "{shown.pdf}"),
+    ];
+    for (const text of edits) {
+      expect(text.length).toBeLessThan(4096);
+      expect(analyzeSimpleTexResources(padded(text)).graphics).toEqual(analyzeSimpleTexResources(text).graphics);
+    }
+  });
+
   it("parses phantom and smash commands as inline dimension boxes", () => {
     const parsed = parseSimpleTexParagraphIr(
       String.raw`A\phantom{b}B\hphantom{c}C\vphantom{g}D\smash{\textit{x}}E`
