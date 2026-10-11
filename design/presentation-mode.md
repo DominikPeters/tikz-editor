@@ -13,6 +13,13 @@ window, and rehearsal. Rehearsal opens the presenter without audience output.
 New tabs inherit the active document kind; File also offers the other kind.
 Drawing tools remain available inside embedded TikZ pictures.
 
+Presentation controls reuse the editor's toolbar/split-button and app-menu styles.
+Options use the shared Modal header, body, footer, and action buttons together
+with the Settings dialog's grouped rows and input styles. Presenter controls use
+the same secondary buttons, selectors, and slide cards as the editor. All chrome
+text follows the UI font-size preference, including popup menus and auxiliary
+windows; slide content keeps its authored typography.
+
 TikZ and Beamer have separate remembered panel arrangements. Nested diagrams use
 their parent deck's arrangement. A running presentation keeps its controls when
 the editor switches to another document.

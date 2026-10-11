@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getActiveEditorPlatform } from "../platform/current";
 import { Modal } from "../ui/Modal";
+import settingsCss from "../ui/SettingsModal.module.css";
 import { launchPresentation } from "./launch";
 import { loadPresentationOptions, presentationService, savePresentationOptions } from "./service";
 import type { PresentationDisplay, PresentationOptions } from "./types";
@@ -40,25 +41,69 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
         void presentationService.recoverOutput(options.audienceDisplay).then(onClose).catch(error_ => { setError(error_ instanceof Error ? error_.message : "Couldn’t restore the audience output."); });
       } else { onClose(); launchPresentation(from, undefined, options); }
     }}>
-      <h2 id="presentation-options-title">Presentation Options</h2>
-      {error ? <p role="status">{error}</p> : null}
-      {!active ? <>
-        <label>Start from<select value={from} onChange={event => { setFrom(event.target.value as "current" | "beginning"); }}><option value="current">Current Slide</option><option value="beginning">Beginning</option></select></label>
-        <label>Present<select aria-label="Presentation mode" value={options.mode} onChange={event => { patch({ mode: event.target.value as PresentationOptions["mode"] }); }}><option value="display">On a Display</option><option value="window">In a Window</option><option value="rehearse">Rehearse</option></select></label>
-      </> : null}
-      {desktop && (active || options.mode !== "rehearse") ? <label>Audience display<select aria-label="Audience display" value={options.audienceDisplay ?? ""} onChange={event => { patch({ audienceDisplay: event.target.value || null }); setError(null); }}>
-        <option value="">Default Display</option>{displays.map((display, index) => <option key={display.id} value={display.id}>{index + 1}. {display.name}{display.primary ? " (Main)" : ""} · {display.width} × {display.height}</option>)}
-      </select></label> : null}
-      {desktop && getActiveEditorPlatform().presentation?.identifyDisplays ? <button type="button" onClick={() => {
-        void getActiveEditorPlatform().presentation?.identifyDisplays?.().catch(error_ => { setError(error_ instanceof Error ? error_.message : "Couldn’t identify the displays."); });
-      }}>Identify Displays</button> : null}
-      {!desktop && options.mode === "display" ? <p>Move the audience window to your display, then enter fullscreen there.</p> : null}
-      {!active ? <>
-        <label className={css.checkbox}><input type="checkbox" checked={showPresenter} onChange={event => { patch({ showPresenter: event.target.checked }); }} disabled={options.mode === "rehearse"} />Show Presenter View</label>
-        {desktop && showPresenter ? <label>Presenter display<select value={options.presenterDisplay ?? ""} onChange={event => { patch({ presenterDisplay: event.target.value || null }); }}><option value="">Main Display</option>{displays.map((display, index) => <option key={display.id} value={display.id}>{index + 1}. {display.name}</option>)}</select></label> : null}
-        <label>Countdown budget (minutes)<input type="number" min="1" max="1440" aria-label="Countdown budget" placeholder="Optional" value={options.countdownMinutes ?? ""} onChange={event => { patch({ countdownMinutes: event.target.value ? Math.max(1, Math.min(1440, Number(event.target.value))) : null }); }} /></label>
-      </> : null}
-      <div className={css.actions}><button type="button" onClick={onClose}>Cancel</button><button type="submit">{active ? "Show Audience Output" : options.mode === "rehearse" ? "Rehearse" : "Start Presentation"}</button></div>
+      <Modal.Header
+        title="Presentation Options"
+        titleId="presentation-options-title"
+        showCloseButton
+        onClose={onClose}
+        closeAriaLabel="Close presentation options"
+      />
+      <Modal.Body>
+        {error ? <p className={css.optionsError} role="status">{error}</p> : null}
+        {!active ? <div className={settingsCss.settingsGroup}>
+          <div className={settingsCss.settingRow}>
+            <label className={settingsCss.settingLabel} htmlFor="presentation-start-from">Start from</label>
+            <select id="presentation-start-from" className={settingsCss.select} value={from} onChange={event => { setFrom(event.target.value as "current" | "beginning"); }}>
+              <option value="current">Current Slide</option><option value="beginning">Beginning</option>
+            </select>
+          </div>
+          <div className={settingsCss.settingRow}>
+            <label className={settingsCss.settingLabel} htmlFor="presentation-mode">Present</label>
+            <select id="presentation-mode" className={settingsCss.select} aria-label="Presentation mode" value={options.mode} onChange={event => { patch({ mode: event.target.value as PresentationOptions["mode"] }); }}>
+              <option value="display">On a Display</option><option value="window">In a Window</option><option value="rehearse">Rehearse</option>
+            </select>
+          </div>
+        </div> : null}
+        {desktop ? <div className={settingsCss.settingsGroup}>
+          {active || options.mode !== "rehearse" ? <div className={settingsCss.settingRow}>
+            <label className={settingsCss.settingLabel} htmlFor="presentation-audience-display">Audience display</label>
+            <select id="presentation-audience-display" className={[settingsCss.select, css.displaySelect].join(" ")} value={options.audienceDisplay ?? ""} onChange={event => { patch({ audienceDisplay: event.target.value || null }); setError(null); }}>
+              <option value="">Default Display</option>{displays.map((display, index) => <option key={display.id} value={display.id}>{index + 1}. {display.name}{display.primary ? " (Main)" : ""} · {display.width} × {display.height}</option>)}
+            </select>
+          </div> : null}
+          {getActiveEditorPlatform().presentation?.identifyDisplays ? <div className={[settingsCss.settingRow, css.identifyRow].join(" ")}>
+            <Modal.SecondaryButton onClick={() => {
+              void getActiveEditorPlatform().presentation?.identifyDisplays?.().catch(error_ => { setError(error_ instanceof Error ? error_.message : "Couldn’t identify the displays."); });
+            }}>Identify Displays</Modal.SecondaryButton>
+          </div> : null}
+        </div> : null}
+        {!desktop && options.mode === "display" ? <p className={settingsCss.settingDesc}>Move the audience window to your display, then enter fullscreen there.</p> : null}
+        {!active ?
+          <div className={settingsCss.settingsGroup}>
+            <div className={settingsCss.settingRow}>
+              <label className={settingsCss.settingLabel} htmlFor="presentation-show-presenter">Show Presenter View</label>
+              <input id="presentation-show-presenter" className={settingsCss.checkbox} type="checkbox" checked={showPresenter} onChange={event => { patch({ showPresenter: event.target.checked }); }} disabled={options.mode === "rehearse"} />
+            </div>
+            {desktop && showPresenter ? <div className={settingsCss.settingRow}>
+              <label className={settingsCss.settingLabel} htmlFor="presentation-presenter-display">Presenter display</label>
+              <select id="presentation-presenter-display" className={[settingsCss.select, css.displaySelect].join(" ")} value={options.presenterDisplay ?? ""} onChange={event => { patch({ presenterDisplay: event.target.value || null }); }}>
+                <option value="">Main Display</option>{displays.map((display, index) => <option key={display.id} value={display.id}>{index + 1}. {display.name}</option>)}
+              </select>
+            </div> : null}
+            <div className={settingsCss.settingRow}>
+              <label className={settingsCss.settingLabel} htmlFor="presentation-countdown">
+                Countdown budget
+                <span className={settingsCss.settingDesc}>Optional, in minutes.</span>
+              </label>
+              <input id="presentation-countdown" className={settingsCss.numberInput} type="number" min="1" max="1440" aria-label="Countdown budget" value={options.countdownMinutes ?? ""} onChange={event => { patch({ countdownMinutes: event.target.value ? Math.max(1, Math.min(1440, Number(event.target.value))) : null }); }} />
+            </div>
+          </div>
+        : null}
+      </Modal.Body>
+      <Modal.Footer>
+        <Modal.SecondaryButton onClick={onClose}>Cancel</Modal.SecondaryButton>
+        <Modal.PrimaryButton type="submit">{active ? "Show Audience Output" : options.mode === "rehearse" ? "Rehearse" : "Start Presentation"}</Modal.PrimaryButton>
+      </Modal.Footer>
     </form>
   </Modal>;
 }

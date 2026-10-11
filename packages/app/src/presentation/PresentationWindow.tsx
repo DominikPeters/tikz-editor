@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getActiveEditorPlatform } from "../platform/current";
 import { useSettingsStore } from "../settings/useSettingsStore";
+import { Modal } from "../ui/Modal";
+import settingsCss from "../ui/SettingsModal.module.css";
+import navigatorCss from "../ui/RootNavigator.module.css";
 import { createBrowserPresentationApi } from "./browser-platform";
 import { presentationElapsed } from "./controller";
 import { presentationKeyCommand } from "./keyboard";
@@ -21,7 +24,7 @@ function AudienceSlide({ page }: { page: PresentationSnapshot["current"] }) {
   </div>;
 }
 export function PresentationDisplayIdentifier({ number, name }: { number: string; name: string }) {
-  return <main className={css.identifier}><strong>{number}</strong><span>{name}</span></main>;
+  return <main className={css.identifier} data-color-scheme="dark"><strong>{number}</strong><span>{name}</span></main>;
 }
 function formatTime(milliseconds: number): string {
   const seconds = Math.floor(Math.abs(milliseconds) / 1000), minutes = Math.floor(seconds / 60);
@@ -40,9 +43,9 @@ function FilmstripItem({ frame, title, svg, active, revision, send }: { frame: n
     return () => { observer.disconnect(); };
   }, [frame, svg, revision, send]);
   useEffect(() => { if (active) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [active]);
-  return <button type="button" ref={ref} className={css.thumbnail} aria-label={`Show slide ${frame + 1}: ${title}`} aria-current={active ? "true" : undefined}
+  return <button type="button" ref={ref} className={[navigatorCss.thumb, css.thumbnail].join(" ")} data-active={active || undefined} data-selected={active || undefined} aria-label={`Show slide ${frame + 1}: ${title}`} aria-current={active ? "true" : undefined}
     data-testid="presenter-thumbnail" data-frame={frame} onClick={() => { send({ type: "jump", frame }); }}>
-    <Slide svg={svg ?? null} label={title} /><span>{frame + 1}. {title}</span>
+    <div className={[navigatorCss.preview, css.thumbnailPreview].join(" ")}><Slide svg={svg ?? null} label={title} /></div><span className={navigatorCss.label}>{frame + 1}. {title}</span>
   </button>;
 }
 
@@ -87,6 +90,8 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   const [arrangement, setArrangement] = useState(loadArrangement);
   const audienceRoot = useRef<HTMLElement | null>(null);
   const scheme = useSettingsStore(s => s.settings.general.colorScheme);
+  const uiFontSizePx = useSettingsStore(s => s.settings.general.uiFontSizePx);
+  const uiStyle = { "--app-ui-font-size": uiFontSizePx + "px", "--app-ui-scale": uiFontSizePx / 11 } as CSSProperties;
   const transport = useRef<PresentationTransport | null>(null);
   const snapshotRef = useRef(snapshot);
   const lastSeen = useRef(Date.now());
@@ -172,15 +177,15 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
     catch { /* Layout changes work without persistent storage. */ }
   }, [arrangement]);
 
-  if (role === "audience") return <main ref={audienceRoot} tabIndex={0} className={css.audience} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
+  if (role === "audience") return <main ref={audienceRoot} tabIndex={0} className={css.audience} style={uiStyle} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
     onPointerMove={() => { setControlsVisible(true); if (hideControls.current) clearTimeout(hideControls.current); hideControls.current = setTimeout(() => { setControlsVisible(false); }, 1800); }}
     onClick={event => { if (!(event.target as Element).closest("button,a") && !snapshot?.ended) send({ type: "next" }); }}>
     {snapshot?.blank === "none" && !snapshot.ended ? <AudienceSlide page={snapshot.current} /> : null}
     {snapshot?.ended ? <div className={css.ended}>Presentation ended</div> : null}
-    {controlsVisible && !snapshot?.ended ? <div className={css.audienceControls}>
-      {!fullscreen && !getActiveEditorPlatform().id.startsWith("desktop") ? <button type="button" onClick={enterFullscreen}>Enter Fullscreen</button> : null}
-      <button type="button" onClick={() => { send({ type: "show-presenter" }); }}>Show Presenter View</button>
-      <button type="button" onClick={() => { send({ type: "stop" }); }}>End Presentation</button>
+    {controlsVisible && !snapshot?.ended ? <div className={css.audienceControls} data-color-scheme="dark">
+      {!fullscreen && !getActiveEditorPlatform().id.startsWith("desktop") ? <Modal.SecondaryButton onClick={enterFullscreen}>Enter Fullscreen</Modal.SecondaryButton> : null}
+      <Modal.SecondaryButton onClick={() => { send({ type: "show-presenter" }); }}>Show Presenter View</Modal.SecondaryButton>
+      <Modal.SecondaryButton onClick={() => { send({ type: "stop" }); }}>End Presentation</Modal.SecondaryButton>
     </div> : null}
     {error && !snapshot ? <div className={css.ended}>{error}</div> : null}
   </main>;
@@ -191,7 +196,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   const vertical = arrangement.preset !== "balanced";
   const mainStyle = { gridTemplateColumns: `minmax(0, ${100 - arrangement.notesRatio}fr) 6px minmax(0, ${arrangement.notesRatio}fr)` };
   const previewsStyle: CSSProperties = vertical ? { gridTemplateRows: `minmax(0, ${arrangement.previewRatio}fr) 6px minmax(0, ${100 - arrangement.previewRatio}fr)` } : { gridTemplateColumns: `minmax(0, ${arrangement.previewRatio}fr) 6px minmax(0, ${100 - arrangement.previewRatio}fr)` };
-  return <main className={css.presenter} data-testid="presenter-window" data-preset={arrangement.preset}>
+  return <main className={css.presenter} style={uiStyle} data-testid="presenter-window" data-preset={arrangement.preset}>
     <header className={css.header}>
       <strong className={css.title}>{snapshot?.title ?? "Presenter View"}</strong>
       <div className={css.clocks}>
@@ -199,12 +204,12 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
         {snapshot?.timer.budgetMs != null ? <span><small>Remaining</small><output>{formatTime(snapshot.timer.budgetMs - elapsed)}</output></span> : null}
         <span><small>Clock</small><output>{new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</output></span>
       </div>
-      <button type="button" onClick={() => { send({ type: "timer", action: snapshot?.timer.runningSince == null ? "start" : "pause" }); }}>{snapshot?.timer.runningSince != null ? "Pause" : "Start"}</button>
-      <button type="button" onClick={() => { send({ type: "timer", action: "reset" }); }}>Reset</button>
-      <button type="button" onClick={() => { send({ type: "stop" }); }}>End Presentation</button>
+      <Modal.SecondaryButton onClick={() => { send({ type: "timer", action: snapshot?.timer.runningSince == null ? "start" : "pause" }); }}>{snapshot?.timer.runningSince != null ? "Pause" : "Start"}</Modal.SecondaryButton>
+      <Modal.SecondaryButton onClick={() => { send({ type: "timer", action: "reset" }); }}>Reset</Modal.SecondaryButton>
+      <Modal.SecondaryButton onClick={() => { send({ type: "stop" }); }}>End Presentation</Modal.SecondaryButton>
     </header>
     {(snapshot?.error || error) ? <div className={css.notice} role="status">{snapshot?.error ?? error}</div> : null}
-    {snapshot && !snapshot.outputAvailable && !snapshot.ended ? <div className={css.notice}><span>Audience output is closed.</span><button type="button" onClick={() => { send({ type: "recover-output" }); }}>Show Audience Window</button></div> : null}
+    {snapshot && !snapshot.outputAvailable && !snapshot.ended ? <div className={css.notice}><span>Audience output is closed.</span><Modal.SecondaryButton onClick={() => { send({ type: "recover-output" }); }}>Show Audience Window</Modal.SecondaryButton></div> : null}
     <div className={css.main} style={mainStyle}>
       <div className={css.previews} data-vertical={vertical || undefined} style={previewsStyle}>
         <section className={css.preview}><h2>Current <span>{current ? `Slide ${current.cursor.frame + 1} / ${snapshot?.frames.length ?? 0} · Build ${current.cursor.step} / ${frame?.steps ?? 1}${current.cursor.continuation > 1 ? ` · Page ${current.cursor.continuation}` : ""}` : ""}</span></h2>
@@ -219,15 +224,15 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       </div></section>
     </div>
     <div className={css.controls}>
-      <button type="button" onClick={() => { send({ type: "previous-frame" }); }} title="Previous slide (Shift+Left)">Previous Slide</button>
-      <button type="button" onClick={() => { send({ type: "previous" }); }} title="Previous build/page (Left or Page Up)">Previous</button>
-      <button type="button" onClick={() => { send({ type: "next" }); }} title="Next build/page (Right, Space, or Page Down)">Next</button>
-      <button type="button" onClick={() => { send({ type: "next-frame" }); }} title="Next slide (Shift+Right)">Next Slide</button>
+      <Modal.SecondaryButton onClick={() => { send({ type: "previous-frame" }); }} title="Previous slide (Shift+Left)">Previous Slide</Modal.SecondaryButton>
+      <Modal.SecondaryButton onClick={() => { send({ type: "previous" }); }} title="Previous build/page (Left or Page Up)">Previous</Modal.SecondaryButton>
+      <Modal.SecondaryButton onClick={() => { send({ type: "next" }); }} title="Next build/page (Right, Space, or Page Down)">Next</Modal.SecondaryButton>
+      <Modal.SecondaryButton onClick={() => { send({ type: "next-frame" }); }} title="Next slide (Shift+Right)">Next Slide</Modal.SecondaryButton>
       <span className={css.spacer} />
-      <button type="button" aria-pressed={snapshot?.blank === "black"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "black" ? "none" : "black" }); }} title="Black screen (B)">Black</button>
-      <button type="button" aria-pressed={snapshot?.blank === "white"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "white" ? "none" : "white" }); }} title="White screen (W)">White</button>
-      {getActiveEditorPlatform().id.startsWith("desktop") ? <button type="button" onClick={() => { send({ type: "swap-displays" }); }}>Swap Displays</button> : null}
-      <select aria-label="Presenter layout" value={arrangement.preset} onChange={event => { const preset = event.target.value as Arrangement["preset"]; setArrangement({ preset, notesRatio: preset === "notes" ? 52 : 34, previewRatio: preset === "compact" ? 75 : 60 }); }}>
+      <Modal.SecondaryButton className={css.blankButton} aria-pressed={snapshot?.blank === "black"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "black" ? "none" : "black" }); }} title="Black screen (B)">Black</Modal.SecondaryButton>
+      <Modal.SecondaryButton className={css.blankButton} aria-pressed={snapshot?.blank === "white"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "white" ? "none" : "white" }); }} title="White screen (W)">White</Modal.SecondaryButton>
+      {getActiveEditorPlatform().id.startsWith("desktop") ? <Modal.SecondaryButton onClick={() => { send({ type: "swap-displays" }); }}>Swap Displays</Modal.SecondaryButton> : null}
+      <select className={settingsCss.select} aria-label="Presenter layout" value={arrangement.preset} onChange={event => { const preset = event.target.value as Arrangement["preset"]; setArrangement({ preset, notesRatio: preset === "notes" ? 52 : 34, previewRatio: preset === "compact" ? 75 : 60 }); }}>
         <option value="balanced">Balanced</option><option value="notes">Notes</option><option value="compact">Compact</option>
       </select>
     </div>

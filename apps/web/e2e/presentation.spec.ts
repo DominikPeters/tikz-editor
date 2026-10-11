@@ -39,8 +39,8 @@ test("native-style menus and toolbar follow document type, with separate saved p
   await expect(page.getByTestId("menu-section-slide")).toHaveCount(0);
   await expect(page.getByTestId("menu-section-path")).toHaveCount(0);
   await expect(page.locator(".cm-content")).toBeVisible();
-  await expect(page.getByRole("button", { name: "＋ New Slide", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "＋ New Slide", exact: true }).click();
+  await expect(page.getByRole("button", { name: "New Slide", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New Slide", exact: true }).click();
   await expect.poll(async () => (await readStoreSource(page)).match(/\\begin\{frame\}/g)?.length).toBe(2);
   await openMenuCommand(page, "view", "view.toggle-builds-panel");
   await tabSwitchButtons(page).first().click();
@@ -120,7 +120,7 @@ test("audience-only playback retains its position after output closure and recon
   await expect(slide(audience)).toHaveAttribute("data-step", "2");
   await audience.keyboard.press("Escape").catch(error => { if (!audience.isClosed()) throw error; });
   await expect.poll(() => audience.isClosed()).toBe(true);
-  await expect(page.getByTestId("present-button")).toHaveText("▶ Present");
+  await expect(page.getByTestId("present-button")).toHaveText("Present");
 });
 
 test("rehearsal opens a presenter without an audience window", async ({ page, context }) => {

@@ -1,28 +1,83 @@
-.toolbarControls { position: relative; display: flex; align-items: center; gap: 10px; flex: 0 0 auto; margin-right: 6px; font: 12px var(--font-ui); }
-.toolbarControls button, .newSlide { font: inherit; color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; background: var(--bg-pane); cursor: pointer; }
-.toolbarControls button:hover, .newSlide:hover { background: var(--btn-hover-bg); }
-.newSlide { margin-right: 8px; font: 12px var(--font-ui); white-space: nowrap; }
-.newSlide:disabled { opacity: .5; cursor: default; }
-.split { display: flex; }
-.split button:first-child { border-radius: 5px 0 0 5px; }
-.split button:last-child { border-radius: 0 5px 5px 0; border-left: 0; padding-left: 6px; padding-right: 6px; }
-.presenting { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); }
-.menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 1500; min-width: 220px; padding: 5px; display: flex; flex-direction: column; background: var(--bg-pane); box-shadow: 0 5px 18px #0003; border: 1px solid var(--border); border-radius: 6px; }
-.menu button { text-align: left; border: 0; border-radius: 3px; }
-.options { padding: 20px; font: 13px var(--font-ui); color: var(--text); }
-.options h2 { margin: 0 0 20px; font-size: 18px; }
-.options label { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 14px 0; }
-.options select, .options input[type="number"] { min-width: 190px; max-width: 300px; border: 1px solid var(--border); border-radius: 4px; padding: 6px; font: inherit; color: inherit; background: var(--bg-pane); }
-.options .checkbox { justify-content: flex-start; gap: 8px; }
-.options p { color: var(--text-muted); }
-.actions { margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px; }
-.actions button { border: 1px solid var(--border); border-radius: 5px; padding: 7px 12px; color: inherit; background: var(--bg-pane); font: inherit; cursor: pointer; }
-.actions button[type="submit"] { background: var(--accent-btn-bg); border-color: var(--accent-btn-border); }
-.feedback { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-pane); font: 12px var(--font-ui); color: var(--text); }
-.feedback button { font: inherit; color: inherit; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-app); cursor: pointer; }
+.toolbarControls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-right: 3px;
+}
+
+.labelButton {
+  padding: 4px 8px;
+  gap: 5px;
+}
+
+.newSlide {
+  margin-right: 6px;
+}
+
+.presentButton {
+  flex-direction: row;
+  gap: 4px;
+  padding: 4px 4px 4px 8px;
+}
+
+.presenting {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text-faint);
+}
+
+.menu {
+  left: auto;
+  z-index: 1500;
+  font-family: var(--font-ui);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+}
+
+.optionsError {
+  margin: 0;
+  font-size: calc(var(--app-ui-scale, 1) * 12px);
+  color: var(--color-error);
+  line-height: 1.4;
+}
+
+.displaySelect {
+  min-width: 0;
+  max-width: 62%;
+}
+
+.identifyRow {
+  justify-content: flex-end;
+}
+
+.feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-diagnostics);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text);
+}
+
 @media (max-width: 520px) {
-  .options label { flex-direction: column; align-items: stretch; gap: 6px; }
-  .options select, .options input[type="number"] { min-width: 0; max-width: none; width: 100%; }
-  .options .checkbox { flex-direction: row; align-items: center; }
-  .toolbarControls .presenting { display: none; }
+  .displaySelect {
+    max-width: 58%;
+  }
+
+  .toolbarControls .presenting {
+    display: none;
+  }
 }

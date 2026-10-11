@@ -357,11 +357,11 @@ type ModalButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const PrimaryButton = forwardRef<HTMLButtonElement, ModalButtonProps>(function PrimaryButton(
-  { className, ...rest },
+  { className, type = "button", ...rest },
   ref
 ) {
   const classes = [css.btn, css.btnPrimary, className].filter(Boolean).join(" ");
-  return <button ref={ref} className={classes} {...rest} type="button" />;
+  return <button ref={ref} className={classes} {...rest} type={type} />;
 });
 
 const SecondaryButton = forwardRef<HTMLButtonElement, ModalButtonProps>(function SecondaryButton(
