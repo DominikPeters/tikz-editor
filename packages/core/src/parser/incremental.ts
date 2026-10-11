@@ -92,8 +92,8 @@ type CachedIncrementalParseState = {
   figure: TikzFigure;
   statementRefsBySourceId: Map<string, StatementRef>;
   diagnosticPartition: ParseDiagnosticPartition;
-  tree: Tree;
-  treeFresh: boolean;
+  /** Built on first use: most consumers of an incremental parse never read it. */
+  tree: () => Tree;
 };
 
 const SNIPPET_PREFIX = "\\begin{tikzpicture}\n";
@@ -113,8 +113,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
     cached = buildCache(parse, {
       activeFigureId: options.activeFigureId ?? parse.activeFigureId,
       includeContextDefinitions: options.includeContextDefinitions ?? false,
-      sourceRevision: options.sourceRevision ?? null,
-      treeFresh: true
+      sourceRevision: options.sourceRevision ?? null
     });
   };
 
@@ -177,8 +176,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       });
       cached = buildCache(parse, {
         activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions, sourceRevision: input.sourceRevision ?? null,
-        treeFresh: true
+        includeContextDefinitions, sourceRevision: input.sourceRevision ?? null
       });
       return { parse, stats: {
         strategy: "full", fallbackReason: reason, patchApplication,
@@ -227,7 +225,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         return fallbackToFull("active-figure-unresolved");
       }
 
-      const nextFigure = shiftSpansDeep(structuredClone(cached.figure), patches);
+      const nextFigure = shiftFigure(cached.figure, patches);
       const changedSourceIdSet = new Set(changedSourceIds);
       const statementReplacementDiagnostics = new Map<string, Diagnostic[]>();
 
@@ -295,8 +293,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         figure: nextFigure,
         statementRefsBySourceId: nextIndex,
         diagnosticPartition: nextDiagnosticPartition,
-        tree: cached.tree,
-        treeFresh: false
+        tree: lazy(() => parseSyntax(resolveParseWindowSource(input.source, nextActiveFigureSpan)))
       };
       cached = nextCache;
       return {
@@ -520,11 +517,7 @@ function createParseResultFromCache(cache: CachedIncrementalParseState, source: 
   return {
     source,
     get tree() {
-      if (!cache.treeFresh) {
-        cache.tree = parseSyntax(resolveParseWindowSource(source, cache.activeFigureSpan));
-        cache.treeFresh = true;
-      }
-      return cache.tree;
+      return cache.tree();
     },
     figure: cache.figure,
     figures: cache.figures,
@@ -534,13 +527,17 @@ function createParseResultFromCache(cache: CachedIncrementalParseState, source: 
   };
 }
 
+function lazy<T>(build: () => T): () => T {
+  let value: { readonly current: T } | undefined;
+  return () => (value ??= { current: build() }).current;
+}
+
 function buildCache(
   parse: ParseTikzResult,
   options: {
     activeFigureId: string | null | undefined;
     includeContextDefinitions: boolean;
     sourceRevision: number | null;
-    treeFresh: boolean;
   }
 ): CachedIncrementalParseState {
   const activeFigureSpan = resolveActiveFigureSpan(
@@ -559,11 +556,13 @@ function buildCache(
       options.includeContextDefinitions && activeFigureSpan
         ? getCachedContextDefinitions(parse.source.slice(0, activeFigureSpan.from), collectContextDefinitions)
         : [],
-    figure: structuredClone(parse.figure),
+    // Consumers do not change parse trees (foreach reindexing rewrites ids
+    // to the values they already have), so the cache shares the caller's
+    // tree; an edit copies only the statements it moves.
+    figure: parse.figure,
     statementRefsBySourceId: buildStatementIndex(parse.figure.body),
     diagnosticPartition: partition,
-    tree: parse.tree,
-    treeFresh: options.treeFresh
+    tree: lazy(() => parse.tree)
   };
 }
 
@@ -681,6 +680,20 @@ function collectDiagnostics(partition: ParseDiagnosticPartition): Diagnostic[] {
     return left.span.to - right.span.to;
   });
   return diagnostics;
+}
+
+/**
+ * The figure with spans moved through the patches. Statements that end
+ * before the first patch are unchanged and shared with the previous parse;
+ * the rest (including any scope around a patch) are copied.
+ */
+function shiftFigure(figure: TikzFigure, patches: readonly SourcePatch[]): TikzFigure {
+  const firstChange = Math.min(...patches.map((patch) => patch.oldSpan.from));
+  const { body, ...rest } = figure;
+  return {
+    ...shiftSpansDeep(structuredClone(rest), patches),
+    body: body.map((statement) => statement.span.to < firstChange ? statement : shiftSpansDeep(structuredClone(statement), patches))
+  };
 }
 
 function shiftSpansDeep<T>(value: T, patchesOrDelta: readonly SourcePatch[] | number): T {

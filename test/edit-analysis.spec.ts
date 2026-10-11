@@ -285,3 +285,34 @@ describe("property target resolution", () => {
     );
   });
 });
+
+describe("incremental edit analysis", () => {
+  const base = String.raw`\begin{tikzpicture}
+  \draw[fill=red] (0,0) rectangle (1,1);
+  \foreach \i in {1,2} { \draw (\i,0) -- (\i,1); }
+  \begin{scope}[blue]
+    \draw[fill=red, draw=none] (3,0) rectangle (4,1) node[midway] {x};
+  \end{scope}
+  \node (A) at (5,0) {A};
+\end{tikzpicture}`;
+  const parseFigure = (source: string) =>
+    JSON.parse(JSON.stringify(parseTikz(source, { recover: true, includeContextDefinitions: true }).figure));
+
+  it.each([
+    ["shortens a statement before others", base.replace("\\draw[fill=red] (0,0)", "\\fill[red] (0,0)")],
+    ["rewrites a statement inside a scope", base.replace("\\draw[fill=red, draw=none] (3,0)", "\\fill[red] (3,0)")],
+    ["lengthens the last statement", base.replace("{A};", "{A and more};")]
+  ])("%s like a full parse, leaving the base parse unchanged", (_name, edited) => {
+    const session = createEditAnalysisSession(4, { incremental: true });
+    const first = session.ensure(base).parseResult;
+    const before = JSON.stringify(first.figure);
+    const spy = vi.spyOn(parserModule, "parseTikz");
+    const derived = session.ensure(edited).parseResult;
+    expect(spy.mock.calls.filter(([source]) => source === edited)).toHaveLength(0);
+    spy.mockRestore();
+    expect(JSON.parse(JSON.stringify(derived.figure))).toEqual(parseFigure(edited));
+    expect(JSON.stringify(first.figure)).toBe(before);
+    expect(evaluateTikzFigure(derived.figure, edited).scene.elements.length)
+      .toBe(evaluateTikzFigure(parseTikz(edited, { recover: true, includeContextDefinitions: true }).figure, edited).scene.elements.length);
+  });
+});

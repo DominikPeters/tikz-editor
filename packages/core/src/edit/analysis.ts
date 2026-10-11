@@ -1,5 +1,6 @@
 import type { PathStatement, Statement } from "../ast/types.js";
 import { parseTikz, type ParseTikzResult } from "../parser/index.js";
+import { createIncrementalParseSession, type IncrementalParseSession } from "../parser/incremental.js";
 import {
   resolveFigurePropertyTargetFromParseResult,
   resolvePropertyTargetFromParseResult,
@@ -33,6 +34,7 @@ type EditAnalysisCache = {
   pathStatementCache: Map<string, PathStatement | null>;
   figureTargetCache: PropertyTargetResolution | null;
   view: EditAnalysisView;
+  incremental?: IncrementalParseSession;
 };
 
 export type EditAnalysisSession = {
@@ -49,9 +51,11 @@ export type EditAnalysisSession = {
  * Keeps the last `capacity` parses, most recent first. Two by default, so
  * that callers with a slightly stale source (e.g. snapshot.source that hasn't
  * caught up to the latest edit) still get a cache hit instead of triggering
- * a redundant full parse.
+ * a redundant full parse. With `incremental`, a new source is parsed from the
+ * most recent parse, reparsing only the statement its change falls in (the
+ * parser falls back to a full parse when the change does not fit one).
  */
-export function createEditAnalysisSession(capacity = 2): EditAnalysisSession {
+export function createEditAnalysisSession(capacity = 2, sessionOptions: { incremental?: boolean } = {}): EditAnalysisSession {
   let entries: EditAnalysisCache[] = [];
 
   const lookup = (source: string, activeFigureId: string | null | undefined): EditAnalysisCache | null =>
@@ -67,7 +71,8 @@ export function createEditAnalysisSession(capacity = 2): EditAnalysisSession {
     if (hit) {
       return hit.view;
     }
-    const parseResult = parseTikz(source, {
+    const base = sessionOptions.incremental ? entries.find((entry) => entry.activeFigureId === activeFigureId) : undefined;
+    const parseResult = base ? parseFrom(base, source, activeFigureId) : parseTikz(source, {
       recover: true,
       activeFigureId,
       includeContextDefinitions: true
@@ -94,6 +99,14 @@ export function createEditAnalysisSession(capacity = 2): EditAnalysisSession {
       entries = [];
     }
   };
+}
+
+function parseFrom(base: EditAnalysisCache, source: string, activeFigureId: string | null | undefined): ParseTikzResult {
+  if (!base.incremental) {
+    base.incremental = createIncrementalParseSession();
+    base.incremental.prime(base.parseResult, { activeFigureId, includeContextDefinitions: true });
+  }
+  return base.incremental.fork().evaluate({ source, activeFigureId, includeContextDefinitions: true, inferChanges: true }).parse;
 }
 
 function createCache(

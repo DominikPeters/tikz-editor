@@ -93,11 +93,15 @@ export function planPropertyWrite(request: PropertyWriteRequest): PropertyWriteP
   }
   // Cleanup parses the same few sources (conservative write, candidates, their
   // steps) repeatedly; one planning step shares its parses.
-  const analysisSession = createEditAnalysisSession(8);
-  if (request.geometry?.source === request.source && request.geometry.parsed.activeFigureId === (parseOptions.activeFigureId ?? null)) {
-    analysisSession.primeFromParse(request.geometry.parsed, request.source, { activeFigureId: parseOptions.activeFigureId });
+  // Candidates differ from the conservative write in one statement, so after
+  // one parse the rest reparse just that statement.
+  const analysisSession = createEditAnalysisSession(8, { incremental: true });
+  const snapshotParse = request.geometry?.source === request.source ? request.geometry.parsed : undefined;
+  const activeFigureId = parseOptions.activeFigureId ?? snapshotParse?.activeFigureId;
+  if (snapshotParse && snapshotParse.activeFigureId === activeFigureId) {
+    analysisSession.primeFromParse(snapshotParse, request.source, { activeFigureId });
   }
-  const cleanupParseOptions: EditParseOptions = { ...parseOptions, analysisSession, analysisView: null, preparedParse: undefined };
+  const cleanupParseOptions: EditParseOptions = { ...parseOptions, activeFigureId, analysisSession, analysisView: null, preparedParse: undefined };
   if (hasParseErrors(conservative.newSource, cleanupParseOptions)) {
     return { conservative, selected: conservative, certificates: [] };
   }
@@ -472,10 +476,12 @@ function createEquivalenceChecker(
     return fallback;
   };
   const elements = (source: string, elementId: string): readonly SceneElement[] | null => {
-    for (const session of [geometry, fallbackSession()]) {
-      if (!session) continue;
+    // The fallback evaluates the whole picture, so it is built only when needed.
+    for (const session of [() => geometry, fallbackSession]) {
+      const current = session();
+      if (!current) continue;
       try {
-        return session.measureStatement(source, elementId, parseTikzForEdit(source, parseOptions));
+        return current.measureStatement(source, elementId, parseTikzForEdit(source, parseOptions));
       } catch {
         // This session cannot evaluate an edit outside its statement; try the next.
       }
