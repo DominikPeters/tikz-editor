@@ -204,6 +204,25 @@ function hasDocument(documents: Record<string, DocumentSession>, documentId: str
   return readDocument(documents, documentId) !== undefined;
 }
 
+// Each undo step keeps its full source (consecutive steps share strings), so a
+// long session on a large document is bounded by the oldest steps' bytes.
+const MAX_HISTORY_ENTRIES = 1000;
+const MAX_HISTORY_SOURCE_BYTES = 64 * 1024 * 1024;
+
+function boundHistory(doc: DocumentSession): DocumentSession {
+  let bytes = 0;
+  let keepFrom = doc.history.length;
+  while (keepFrom > 0 && doc.history.length - keepFrom < MAX_HISTORY_ENTRIES) {
+    bytes += doc.history[keepFrom - 1].sourceAfter.length * 2;
+    if (bytes > MAX_HISTORY_SOURCE_BYTES && keepFrom < doc.history.length) break;
+    keepFrom -= 1;
+  }
+  // Only undoable steps go: redo steps after the current one stay replayable.
+  keepFrom = Math.min(keepFrom, doc.historyIndex + 1);
+  if (keepFrom <= 0) return doc;
+  return { ...doc, history: doc.history.slice(keepFrom), historyIndex: doc.historyIndex - keepFrom };
+}
+
 function updateDocument(
   workspace: WorkspacePersistedState,
   documentId: string,
@@ -213,10 +232,11 @@ function updateDocument(
   if (!current) {
     return workspace;
   }
-  const next = updateDocumentIdentities(current, updater(current));
-  if (next === current) {
+  const updated = updateDocumentIdentities(current, updater(current));
+  if (updated === current) {
     return workspace;
   }
+  const next = updated.history === current.history ? updated : boundHistory(updated);
   return {
     ...workspace,
     documents: {
