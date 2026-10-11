@@ -33,7 +33,7 @@ import { useEditorCommandRuntime } from "./editor-command-runtime";
 import { toolModeFromShortcut } from "./tool-config";
 import { createSingleFlightScheduler } from "./compute-scheduler";
 import { yieldToBrowser } from "../yield-to-browser";
-import { computeTrigger } from "./compute-trigger";
+import { computeTrigger, isInteractiveEdit } from "./compute-trigger";
 import { buildRepeatPreviewScene } from "./repeat-preview";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { getActiveEditorPlatform } from "../platform/current";
@@ -864,15 +864,15 @@ function EditorApp() {
     [activeSourceScrubSourceId, lastEditChangedSourceIds]
   );
   const trigger = computeTrigger(activeCanvasDragKind, activeSourceScrubSourceId);
-  const isInteractiveEdit = trigger === "drag-element" || trigger === "drag-handle" || activeInspectorEditDocumentId === activeDocumentId;
+  const interactiveEdit = isInteractiveEdit({ activeCanvasDragKind, activeSourceScrubSourceId, activeInspectorEditDocumentId, activeDocumentId });
   useLayoutEffect(() => {
-    if (!isInteractiveEdit) {
+    if (!interactiveEdit) {
       setDragRenderViewBox(null);
       return;
     }
     setDragRenderViewBox((current) => current ?? snapshot.svg?.viewBox ?? null);
-  }, [isInteractiveEdit, snapshot.svg?.viewBox]);
-  const renderViewBox = isInteractiveEdit ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
+  }, [interactiveEdit, snapshot.svg?.viewBox]);
+  const renderViewBox = interactiveEdit ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
   const publishedDeckSnapshot = snapshot.deck ? snapshot : null;
   const computeInput = useMemo<ComputeSchedulingInput>(() => ({
     request: {

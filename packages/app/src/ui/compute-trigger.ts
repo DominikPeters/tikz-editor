@@ -25,3 +25,14 @@ export function computeTrigger(
   }
   return "other";
 }
+
+/** Canvas drags, source scrubs and inspector scrubs render with the viewBox frozen. */
+export function isInteractiveEdit(state: {
+  readonly activeCanvasDragKind: CanvasDragKind | null;
+  readonly activeSourceScrubSourceId: string | null;
+  readonly activeInspectorEditDocumentId: string | null;
+  readonly activeDocumentId: string;
+}): boolean {
+  return computeTrigger(state.activeCanvasDragKind, state.activeSourceScrubSourceId) !== "other" ||
+    state.activeInspectorEditDocumentId === state.activeDocumentId;
+}

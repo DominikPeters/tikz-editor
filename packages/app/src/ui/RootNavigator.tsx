@@ -4,6 +4,7 @@ import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/doc
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { getActiveEditorPlatform } from "../platform/current";
 import { useEditorStore } from "../store/store";
+import { isInteractiveEdit } from "./compute-trigger";
 import { useFigureThumbnails } from "./useFigureThumbnails";
 import { useSlideManager } from "./slide-manager/useSlideManager";
 import css from "./RootNavigator.module.css";
@@ -27,6 +28,7 @@ export function RootNavigator() {
   const activeRootId = rootRef?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: rootRef.frameIndex }) : selectedRootId;
   const locked = useEditorStore(s => !!s.documents[s.activeDocumentId]?.assistantLockReason);
   const dispatch = useEditorStore(s => s.dispatch);
+  const interactiveEdit = useEditorStore(isInteractiveEdit);
   const panelRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
@@ -152,17 +154,23 @@ export function RootNavigator() {
   }, [source, activeRootId, manager.ids]);
 
   const thumbnailRoots = useMemo(() => roots.map(root => ({ ...root, id: root.thumbnailId })), [roots]);
+  // The active slide or picture shows the canvas's own render instead of
+  // rendering it again in the worker. A picture rendered during a drag or
+  // scrub keeps its pre-edit viewBox, so its thumbnail waits for the edit's end.
   const mainFrame = snapshot.deck?.activeFrame;
-  const mainFrameUrl = useMemo(() => mainFrame?.svg
-    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(mainFrame.svg)}` : null, [mainFrame?.svg]);
-  const mirrorActiveFrame = rootRef?.kind === "beamer-frame";
+  const mainSvg = rootRef?.kind === "beamer-frame"
+    ? mainFrame?.frameId === activeRootId ? mainFrame?.svg ?? null : null
+    : rootRef?.kind === "tikz-figure" && snapshot.activeRootId === activeRootId && !interactiveEdit
+      ? snapshot.svg?.svg ?? null : null;
+  const mainUrl = useMemo(() => mainSvg
+    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(mainSvg)}` : null, [mainSvg]);
+  const mirrorActiveRoot = rootRef?.kind === "beamer-frame" || rootRef?.kind === "tikz-figure";
   const externalThumbnail = useMemo(() => {
-    if (!mirrorActiveFrame) return;
+    if (!mirrorActiveRoot) return;
     const root = roots.find(root => root.id === activeRootId);
     if (!root) return;
-    return { figureId: root.thumbnailId, deckFrameIndex: root.deckFrameIndex,
-      url: mainFrame?.frameId === root.id ? mainFrameUrl : null };
-  }, [activeRootId, mainFrame?.frameId, mainFrameUrl, mirrorActiveFrame, roots]);
+    return { figureId: root.thumbnailId, deckFrameIndex: root.deckFrameIndex, url: mainUrl };
+  }, [activeRootId, mainUrl, mirrorActiveRoot, roots]);
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
   const thumbnails = useFigureThumbnails(model ? source : snapshot.source, thumbnailRoots, {
     documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
