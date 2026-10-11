@@ -472,7 +472,7 @@ export function groupSelection(context: SelectionCommandContext): boolean {
     kind: "groupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  context.dispatch({ type: "APPLY_EDIT_ACTION", action });
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action, parseOptions: { indentSize: context.parseOptions?.indentSize } });
   return true;
 }
 
