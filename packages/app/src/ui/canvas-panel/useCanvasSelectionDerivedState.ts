@@ -47,6 +47,7 @@ import {
   getHandleCursor,
   preferredNodeBoundsForSource,
   isTextOnlyNodeSource,
+  itemsForSource,
   resolveAdornmentOwnerBoundaryPoint,
   resolveBoundsEdgePointToward,
   resolveScenePathShapeHint,
@@ -525,11 +526,13 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
         frames.set(sourceId, frame);
         continue;
       }
-      const path = snapshot.scene.elements.find((element): element is ScenePath => element.sourceRef.sourceId === sourceId && element.kind === "Path");
+      // Per-source lists: a large selection must not scan the scene per element.
+      const sourceElements = itemsForSource(snapshot.scene.elements, sourceId);
+      const path = sourceElements.find((element): element is ScenePath => element.kind === "Path");
       const pathShapeHint = path ? resolveScenePathShapeHint(path, statements, sourceId) : undefined;
       const frame = resolveResizeFrameForSource(
-        snapshot.scene.elements,
-        snapshot.editHandles,
+        sourceElements,
+        itemsForSource(snapshot.editHandles, sourceId),
         sourceId,
         svgResult.viewBox,
         pathShapeHint
@@ -862,13 +865,17 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     return displays;
   }, [ROTATE_HANDLE_OFFSET_PX, canvasTransform.scale, collapsedDensePathEndpointsBySource, collapsedDensePathSourceIds, dragCapability.draggableHandleIds, draggableSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, resizablePathShapeSourceIds, resizeFrameSourceIds, resizeFramesBySource, scopeResizeSourceIds, selectedElementIds, selectedHandles, selectionBoundsBySource, snapshot.editHandles, snapshot.parseResult, snapshot.scene, snapshot.source, svgResult, toolMode, treeChildSourceIds]);
 
+  // Hit tolerances are in screen pixels, so regions depend on the zoom. A
+  // quarter-octave step (tolerance within 9%) keeps them, and every element
+  // drawn from them, unchanged across most zoom ticks.
+  const hitRegionScale = 2 ** (Math.round(Math.log2(Math.max(canvasTransform.scale, 1e-3)) * 4) / 4);
   const hitRegions = useMemo(() => {
     if (!snapshot.scene || !svgResult) return [];
-    const matrixEdgeRegions = buildMatrixEdgeHitRegions(snapshot.scene.elements, sourceBoundsSvg, canvasTransform.scale);
-    const regions = buildHitRegions(snapshot.scene.elements, svgResult.viewBox, canvasTransform.scale, selectedScopeHitBounds);
+    const matrixEdgeRegions = buildMatrixEdgeHitRegions(snapshot.scene.elements, sourceBoundsSvg, hitRegionScale);
+    const regions = buildHitRegions(snapshot.scene.elements, svgResult.viewBox, hitRegionScale, selectedScopeHitBounds);
     // Matrix edge selectors must stay behind regular hit regions so nearby elements keep precedence.
     return [...matrixEdgeRegions, ...regions];
-  }, [canvasTransform.scale, selectedScopeHitBounds, snapshot.scene, sourceBoundsSvg, svgResult]);
+  }, [hitRegionScale, selectedScopeHitBounds, snapshot.scene, sourceBoundsSvg, svgResult]);
 
   const visibleRanges = useMemo<VisibleRanges | null>(() => {
     if (!svgResult || viewportSize.width <= 0 || viewportSize.height <= 0) return null;
