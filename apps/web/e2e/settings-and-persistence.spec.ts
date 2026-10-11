@@ -179,14 +179,17 @@ test("settings modal controls follow dark theme colors", async ({ page }) => {
     const style = getComputedStyle(document.documentElement);
     return {
       colorScheme: style.colorScheme,
-      scrollbarColor: style.scrollbarColor
+      scrollbarColor: style.scrollbarColor,
+      supportsScrollbarColor: CSS.supports("scrollbar-color", "red blue")
     };
   });
 
   expect(rootScrollbarStyles.colorScheme).toBe("dark");
-  expect(rootScrollbarStyles.scrollbarColor).toBe(
-    `${expectedThemeColors.scrollbarThumb} ${expectedThemeColors.scrollbarTrack}`
-  );
+  if (rootScrollbarStyles.supportsScrollbarColor) {
+    expect(rootScrollbarStyles.scrollbarColor).toBe(
+      `${expectedThemeColors.scrollbarThumb} ${expectedThemeColors.scrollbarTrack}`
+    );
+  }
 });
 
 test("codemirror search controls follow dark theme colors", async ({ page }) => {
