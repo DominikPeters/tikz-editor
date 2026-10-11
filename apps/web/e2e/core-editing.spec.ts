@@ -13,6 +13,7 @@ import {
   focusCanvas,
   gotoApp,
   interactionLayer,
+  nodeMoveStartPoint,
   openMenuCommand,
   openMenuSection,
   readSource,
@@ -380,15 +381,7 @@ test("neutral path-attached node drag rewrites pos without introducing side regi
     throw new Error("Missing text region target id.");
   }
   await clickHitRegionByTargetId(page, targetId);
-  const targetRegion = page.locator(
-    `[data-hit-region-target-id='${targetId}'][data-hit-region-interaction-mode='text']`
-  ).first();
-  const box = await targetRegion.boundingBox();
-  if (!box) {
-    throw new Error("Missing target text-region bounds.");
-  }
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
+  const { x: startX, y: startY } = await nodeMoveStartPoint(page, targetId);
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(startX + 16, startY, { steps: 6 });
@@ -414,13 +407,15 @@ test("path-attached directional distance drag is stable from off-center pickup",
   await waitForHitRegions(page, 2);
   const textRegion = page.locator('[data-hit-region-interaction-mode="text"]').first();
   await expect(textRegion).toBeVisible();
-  const box = await textRegion.boundingBox();
-  if (!box) {
-    throw new Error("Missing text hit-region bounds for path-attached node.");
+  const targetId = await textRegion.getAttribute("data-hit-region-target-id");
+  if (!targetId) {
+    throw new Error("Missing text region target id.");
   }
-
-  const startX = box.x + box.width * 0.2;
-  const startY = box.y + box.height * 0.25;
+  // Off-center: in the padding above the text, left of the middle.
+  const padding = await nodeMoveStartPoint(page, targetId);
+  const textBox = (await textRegion.boundingBox())!;
+  const startX = textBox.x + textBox.width * 0.2;
+  const startY = padding.y;
 
   await page.mouse.move(startX, startY);
   await page.mouse.down();
