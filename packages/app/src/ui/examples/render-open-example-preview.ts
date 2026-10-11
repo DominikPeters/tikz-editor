@@ -11,7 +11,7 @@ export type OpenExamplePreview = {
 
 type RenderTikzToSvgAsync = typeof renderTikzToSvgAsyncType;
 
-async function renderOpenExamplePreviewWithRenderer(
+export async function renderOpenExamplePreviewWithRenderer(
   example: TikzOpenExample,
   renderTikzToSvgAsync: RenderTikzToSvgAsync
 ): Promise<OpenExamplePreview> {
@@ -37,7 +37,9 @@ async function renderOpenExamplePreviewWithRenderer(
 
     return {
       exampleId: example.id,
-      svg: result.svg.svg,
+      // Paragraph ids name live layout-cache entries and vary with render
+      // order; a static preview has no use for them.
+      svg: result.svg.svg.replace(/ data-paragraph-id="[^"]*"/gu, ""),
       warningCount,
       errorCount,
       errorMessage
