@@ -607,7 +607,8 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
 
   // Auto-show/hide RootNavigator based on figure count
   const figureCount = useEditorStore((s) => snapshotRoots(s.snapshot).length);
-  const prevFigureCountRef = useRef(figureCount);
+  // From none, as at startup: a layout mounted for a multi-figure document opens the list too.
+  const prevFigureCountRef = useRef(0);
   useEffect(() => {
     const prev = prevFigureCountRef.current;
     prevFigureCountRef.current = figureCount;
