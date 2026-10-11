@@ -317,6 +317,23 @@ suffix.`);
     expect([fonts(result.pages[0], "epsilon"), fonts(result.pages[1], "epsilon")]).toEqual([["lmsans10-regular"], ["lmsans10-oblique"]]);
   });
 
+  it("switches a color, never its text, per its specification", async () => {
+    const source = deck(String.raw`Alpha \alert<2>{delta}, \textcolor<1>{magenta}{epsilon}, \textcolor<2>[rgb]{0,0.5,0} {zeta}.
+
+Beta \color<2>{blue}
+eta.`);
+    const result = await renderBeamerFramePages(source);
+    const fills = (page: (typeof result.pages)[number]) =>
+      [...new Set(page.svg.svg.match(/fill="#(?:ff0000|ff00ff|008000|0000ff)"/gu))].sort();
+
+    expect(result.stepCount).toBe(2);
+    expect(result.pages.map(tracedText)).toEqual(["Alphadelta,epsilon,zeta. Betaeta.", "Alphadelta,epsilon,zeta. Betaeta."]);
+    expect(result.pages.map(fills)).toEqual([
+      ['fill="#ff00ff"'],
+      ['fill="#0000ff"', 'fill="#008000"', 'fill="#ff0000"'],
+    ]);
+  });
+
   it("keeps covered material in layout while suppressing its paint", async () => {
     const source = deck(String.raw`
 Always visible.

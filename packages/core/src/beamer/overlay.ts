@@ -77,16 +77,19 @@ export type BeamerOverlayReference = {
 };
 
 /**
- * A font command with an overlay specification: beamer defines
- * `\textbf<2>{x}` as `\only<2>{\textbf}{x}`, so the argument always
- * shows and only the font change follows the specification.
+ * A font or color change with an overlay specification, whose text always
+ * shows: beamer defines `\textbf<2>{x}` as `\only<2>{\textbf}{x}`,
+ * `\alert<2>{x}` as an alert on matching steps only, and `\color<2>{c}`
+ * as `\alt<2>{\color}{<gobble the color>}` (`\textcolor<2>{c}{x}` is
+ * xcolor's `{\color<2>{c}x}`).
  */
-export type BeamerOverlayFontSwitch = {
-  /** The command name, kept on matching steps and removed on the others. */
+export type BeamerOverlaySwitch = {
   readonly commandSpan: Span;
-  /** The specification, through the spaces TeX skips before the argument. */
-  readonly overlaySpan: Span;
   readonly spec: BeamerOverlaySpec;
+  /** Removed on matching steps: the specification, through the spaces TeX skips after it. */
+  readonly activeSyntax: Span;
+  /** Removed on the other steps: the command up to the text it applies to. */
+  readonly inactiveSyntax: Span;
 };
 
 export type BeamerOverlayModel = {
@@ -98,7 +101,7 @@ export type BeamerOverlayModel = {
   readonly listDefaults: readonly { readonly span: Span; readonly spec: BeamerOverlaySpec }[];
   readonly pauses: readonly BeamerOverlayPause[];
   readonly referenceSpecs: readonly BeamerOverlayReference[];
-  readonly fontSwitches?: readonly BeamerOverlayFontSwitch[];
+  readonly switches?: readonly BeamerOverlaySwitch[];
   readonly stepCount: number;
   readonly overprints?: readonly { readonly span: Span; readonly contentSpan: Span; readonly width?: BeamerDelimitedSourceValue; readonly branches: readonly BeamerOverlayCommand[] }[];
 };
@@ -112,7 +115,7 @@ export type BeamerOverlayTextProjection = {
 
 type PendingSpec =
   | { readonly kind: "reference"; readonly sourceOrder: number; readonly rawSpec: BeamerDelimitedSourceValue; readonly contentSpan?: Span }
-  | { readonly kind: "font"; readonly sourceOrder: number; readonly commandSpan: Span; readonly overlaySpan: Span; readonly rawSpec: BeamerDelimitedSourceValue }
+  | { readonly kind: "switch"; readonly sourceOrder: number; readonly switch: Omit<BeamerOverlaySwitch, "spec">; readonly rawSpec: BeamerDelimitedSourceValue }
   | {
       readonly kind: "list-default";
       readonly sourceOrder: number;
@@ -152,9 +155,10 @@ const OVERLAY_COMMANDS = new Map<string, BeamerOverlayCommandKind>([
   ["onslide", "uncover"],
 ]);
 
-/** Beamer's overlay-aware font commands (beamerbaseoverlay.sty). */
-const OVERLAY_FONT_COMMANDS: ReadonlySet<string> = new Set([
+/** Beamer's overlay-aware font and color commands (beamerbaseoverlay.sty, beamerbaselocalstructure.sty). */
+const OVERLAY_SWITCH_COMMANDS: ReadonlySet<string> = new Set([
   "textbf", "textit", "textmd", "textnormal", "textrm", "textsc", "textsf", "textsl", "texttt", "textup", "emph",
+  "alert", "color", "textcolor",
 ]);
 
 /**
@@ -235,13 +239,10 @@ export function scanBeamerFrameOverlays(
       }
       continue;
     }
-    if (OVERLAY_FONT_COMMANDS.has(command.name)) {
+    if (OVERLAY_SWITCH_COMMANDS.has(command.name)) {
       const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
-      const argument = rawSpec && beamerRequiredArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to);
-      if (rawSpec && argument) {
-        pending.push({ kind: "font", sourceOrder: command.from, commandSpan: { from: command.from, to: command.to },
-          overlaySpan: { from: rawSpec.span.from, to: argument.span.from }, rawSpec });
-      }
+      const parsed = rawSpec && parseOverlaySwitch(context, frame.bodySpan.to, command, rawSpec);
+      if (rawSpec && parsed) pending.push({ kind: "switch", sourceOrder: command.from, switch: parsed, rawSpec });
       continue;
     }
     const overlayKind = OVERLAY_COMMANDS.get(command.name);
@@ -416,7 +417,7 @@ export function scanBeamerFrameOverlays(
   const referenceSpecs: BeamerOverlayReference[] = [];
   const items: BeamerOverlayItem[] = [];
   const listDefaults: Array<{ span: Span; spec: BeamerOverlaySpec }> = [];
-  const fontSwitches: BeamerOverlayFontSwitch[] = [];
+  const switches: BeamerOverlaySwitch[] = [];
   const pauseStarts: Array<{
     span: Span;
     threshold: number;
@@ -440,8 +441,8 @@ export function scanBeamerFrameOverlays(
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
       commands.push({ ...entry.command, spec: resolved.spec });
-    } else if (entry.kind === "font") {
-      fontSwitches.push({ commandSpan: entry.commandSpan, overlaySpan: entry.overlaySpan, spec: resolved.spec });
+    } else if (entry.kind === "switch") {
+      switches.push({ ...entry.switch, spec: resolved.spec });
     } else if (entry.kind === "reference") {
       referenceSpecs.push({ sourceStart: entry.sourceOrder, spec: resolved.spec, contentSpan: entry.contentSpan });
     } else {
@@ -471,7 +472,7 @@ export function scanBeamerFrameOverlays(
     listDefaults,
     pauses,
     referenceSpecs,
-    ...(fontSwitches.length ? { fontSwitches } : {}),
+    ...(switches.length ? { switches } : {}),
     stepCount,
     ...(overprints.length ? { overprints: overprints.map(overprint => ({ ...overprint,
       branches: commands.filter(command => command.commandSpan.from >= overprint.contentSpan.from && command.commandSpan.to <= overprint.contentSpan.to && declarations.some(declaration => declaration.from === command.commandSpan.from)) })) } : {}),
@@ -598,8 +599,8 @@ export function projectBeamerOverlayText(
       hidden.push(item.commandSpan, item.contentSpan);
     }
   }
-  for (const font of model.fontSwitches ?? []) {
-    removals.push(beamerOverlaySpecContains(font.spec, step) ? font.overlaySpan : { from: font.commandSpan.from, to: font.overlaySpan.to });
+  for (const entry of model.switches ?? []) {
+    removals.push(beamerOverlaySpecContains(entry.spec, step) ? entry.activeSyntax : entry.inactiveSyntax);
   }
   for (const pause of model.pauses) {
     removals.push(pause.span);
@@ -683,6 +684,40 @@ function parseOverlayCommand(
       branches,
       syntaxSpans: overlayCommandSyntaxSpans(span, branches),
     },
+  };
+}
+
+function parseOverlaySwitch(
+  context: BeamerSyntaxContext,
+  limit: number,
+  command: Span & { readonly name: string },
+  spec: BeamerDelimitedSourceValue
+): Omit<BeamerOverlaySwitch, "spec"> | null {
+  let first: Span;
+  let inactiveTo: number;
+  if (command.name === "color" || command.name === "textcolor") {
+    const model = beamerOptionalArgumentAfter(context, spec.span.to, limit);
+    const color = beamerRequiredArgumentAfter(context, model?.span.to ?? spec.span.to, limit);
+    if (!color) return null;
+    first = model?.span ?? color.span;
+    if (command.name === "color") {
+      // The gobbled color ends with \ignorespaces: a line's spaces, never a blank line.
+      inactiveTo = color.span.to + (/^[ \t]*(?:\n(?![ \t]*\n)[ \t]*)?/u.exec(context.source.slice(color.span.to, limit))?.[0].length ?? 0);
+    } else {
+      const text = beamerRequiredArgumentAfter(context, color.span.to, limit);
+      if (!text) return null;
+      inactiveTo = text.span.from;
+    }
+  } else {
+    const text = beamerRequiredArgumentAfter(context, spec.span.to, limit);
+    if (!text) return null;
+    first = text.span;
+    inactiveTo = text.span.from;
+  }
+  return {
+    commandSpan: { from: command.from, to: command.to },
+    activeSyntax: { from: spec.span.from, to: first.from },
+    inactiveSyntax: { from: command.from, to: inactiveTo },
   };
 }
 
