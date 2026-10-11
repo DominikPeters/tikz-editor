@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { cancelGroup, requestThumbnail } from "./workers/thumbnail-worker-client";
 import type { ThumbnailRenderRequest } from "./workers/thumbnail-worker-types";
+import { BoundedLru } from "../bounded-lru";
 
 /**
  * Any document root with a source span renders a thumbnail; deck frames
@@ -21,12 +22,19 @@ type UseFigureThumbnailsOptions = {
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
   refreshDelayMs?: number;
+  /**
+   * A deck frame also depends on the rest of the document (preamble, sections,
+   * numbering), but edits elsewhere rarely change it: frames whose own source
+   * did not change refresh only once the document has been quiet this long.
+   */
+  contextRefreshDelayMs?: number;
   /** Reuse an existing render without caching it as a final-overlay thumbnail. */
   externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
 };
 const EMPTY_PRIORITY_FIGURE_IDS: readonly string[] = [];
 
-const thumbnailCache = new Map<string, string>();
+// Data URLs, so bounded by size: a long editing session renders many versions.
+const thumbnailCache = new BoundedLru<string, string>(512, 48 * 1024 * 1024);
 const thumbnailInFlight = new Map<string, Promise<string | null>>();
 let thumbnailGroupCounter = 0;
 let thumbnailRequestCounter = 0;
@@ -71,6 +79,7 @@ export function useFigureThumbnails(
     priorityFigureIds = EMPTY_PRIORITY_FIGURE_IDS,
     maxToRender = 8,
     refreshDelayMs = 350,
+    contextRefreshDelayMs = 2000,
     externalThumbnail
   } = options;
   const externalFigureId = externalThumbnail?.figureId;
@@ -81,38 +90,52 @@ export function useFigureThumbnails(
     figures: readonly FigureEntry[];
     documentKey: string;
     graphicsPreviewBundleKey: string | null;
+    /** The source deck frames' document context is taken from (see `contextRefreshDelayMs`). */
+    contextSource: string;
   }>({
     source,
     figures,
     documentKey,
-    graphicsPreviewBundleKey
+    graphicsPreviewBundleKey,
+    contextSource: source
   });
   const lastThumbnailByDocumentKeyRef = useRef(new Map<string, Map<string, string>>());
   const requestTokenByFigureRef = useRef(new Map<string, number>());
   const stableSource = stableInput.source;
   const stableFigures = stableInput.figures;
+  const switchedDocument = stableInput.documentKey !== documentKey ||
+    stableInput.graphicsPreviewBundleKey !== graphicsPreviewBundleKey;
 
+  // Another document (or its images) updates at once; edits wait for a pause.
   useEffect(() => {
-    setStableInput({ source, figures, documentKey, graphicsPreviewBundleKey });
     if (!lastThumbnailByDocumentKeyRef.current.has(documentKey)) {
       lastThumbnailByDocumentKeyRef.current.set(documentKey, new Map<string, string>());
     }
-  }, [documentKey, figures, graphicsPreviewBundleKey, source]);
-
-  useEffect(() => {
+    if (switchedDocument) {
+      setStableInput({ source, figures, documentKey, graphicsPreviewBundleKey, contextSource: source });
+      return;
+    }
     const timer = window.setTimeout(
       () => { setStableInput((current) => ({ ...current, source, figures })); },
       refreshDelayMs
     );
     return () => { window.clearTimeout(timer); };
-  }, [documentKey, figures, refreshDelayMs, source]);
+  }, [documentKey, figures, graphicsPreviewBundleKey, refreshDelayMs, source, switchedDocument]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => { setStableInput((current) => current.documentKey === documentKey ? { ...current, contextSource: source } : current); },
+      Math.max(refreshDelayMs, contextRefreshDelayMs)
+    );
+    return () => { window.clearTimeout(timer); };
+  }, [contextRefreshDelayMs, documentKey, refreshDelayMs, source]);
 
   const figureSignatures = useMemo(() => {
     const map = new Map<string, string>();
     const documentFingerprint = stableFigures.some(
       (figure) => figure.deckFrameIndex != null
     )
-      ? computeSourceFingerprint(stableSource)
+      ? computeSourceFingerprint(stableInput.contextSource)
       : null;
     for (const figure of stableFigures) {
       map.set(
@@ -123,7 +146,7 @@ export function useFigureThumbnails(
       );
     }
     return map;
-  }, [stableFigures, stableInput.graphicsPreviewBundleKey, stableSource]);
+  }, [stableFigures, stableInput.contextSource, stableInput.graphicsPreviewBundleKey, stableSource]);
   const figureKey = useMemo(
     () => stableFigures.map((figure) => `${figure.id}:${figureSignatures.get(figure.id) ?? ""}`).join("|"),
     [figureSignatures, stableFigures]
@@ -264,7 +287,7 @@ export function useFigureThumbnails(
         if (!url) {
           continue;
         }
-        thumbnailCache.set(key, url);
+        thumbnailCache.set(key, url, url.length * 2);
         setTick((value) => value + 1);
         await new Promise<void>((resolve) => {
           const hasIdleCallback = typeof window.requestIdleCallback === "function";
