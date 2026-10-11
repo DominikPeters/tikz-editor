@@ -45,7 +45,8 @@ export class PresentationService {
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private update(patch: Partial<ServiceState>): void { this.state = { ...this.state, ...patch }; for (const listener of this.listeners) listener(); }
   clearError = (): void => { this.update({ error: null }); };
-  focusEditor = (): void => { this.update({ focus: "editor" }); };
+  // Called on every pointer-down in the editor: publish only a change of focus.
+  focusEditor = (): void => { if (this.state.focus !== "editor") this.update({ focus: "editor" }); };
   private publish = (): void => {
     const snapshot = this.controller?.getSnapshot();
     if (!snapshot) return;
