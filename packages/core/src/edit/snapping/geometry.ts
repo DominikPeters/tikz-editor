@@ -93,7 +93,20 @@ export function selectionSnapPointsFromBounds(bounds: WorldBounds): SelectionSna
   ];
 }
 
-export function collectSourceWorldBounds(elements: SceneElement[], frame?: WorldTransform): Map<string, SnapBounds> {
+// Selection, snapping, availability and edits all ask for one scene's bounds.
+const worldBoundsByElements = new WeakMap<readonly SceneElement[], ReadonlyMap<string, SnapBounds>>();
+
+export function collectSourceWorldBounds(elements: readonly SceneElement[], frame?: WorldTransform): ReadonlyMap<string, SnapBounds> {
+  if (frame) return collectBounds(elements, frame);
+  let bounds = worldBoundsByElements.get(elements);
+  if (!bounds) {
+    bounds = collectBounds(elements);
+    worldBoundsByElements.set(elements, bounds);
+  }
+  return bounds;
+}
+
+function collectBounds(elements: readonly SceneElement[], frame?: WorldTransform): Map<string, SnapBounds> {
   const boundsBySource = new Map<string, SnapBounds>();
 
   for (const element of elements) {

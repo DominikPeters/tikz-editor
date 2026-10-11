@@ -29,9 +29,34 @@ export function resolvePathEndpointSnap(input: {
   const snapRadius = ENDPOINT_SNAP_RADIUS_PX / zoom;
   const snapRadiusSq = snapRadius * snapRadius;
 
-  // Group path-point handles by sourceId
+  let bestSnap: PathEndpointSnap | null = null;
+  let bestDistSq = snapRadiusSq;
+  for (const endpoint of openPathEndpoints(input.editHandles, input.source, input.parseOptions)) {
+    const dx = endpoint.world.x - input.pointerWorld.x;
+    const dy = endpoint.world.y - input.pointerWorld.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      bestSnap = endpoint;
+    }
+  }
+  return bestSnap;
+}
+
+// Pointer moves ask again with the same snapshot: find the endpoints once per
+// handle list and source.
+const endpointCache = new WeakMap<readonly EditHandle[], { source: string; endpoints: readonly PathEndpointSnap[] }>();
+
+function openPathEndpoints(
+  editHandles: readonly EditHandle[],
+  source: string,
+  parseOptions: EditParseOptions | undefined
+): readonly PathEndpointSnap[] {
+  const cached = endpointCache.get(editHandles);
+  if (cached?.source === source) return cached.endpoints;
+
   const handlesBySource = new Map<string, EditHandle[]>();
-  for (const handle of input.editHandles) {
+  for (const handle of editHandles) {
     if (handle.kind !== "path-point") continue;
     const existing = handlesBySource.get(handle.sourceRef.sourceId);
     if (existing) {
@@ -41,19 +66,15 @@ export function resolvePathEndpointSnap(input: {
     }
   }
 
-  // Parse once to find path statements
-  const parsed = parseTikzForEdit(input.source, {
-    ...input.parseOptions,
-  });
-
-  let bestSnap: PathEndpointSnap | null = null;
-  let bestDistSq = snapRadiusSq;
-
+  const parsed = parseTikzForEdit(source, { ...parseOptions });
+  const statements = new Map<string, PathStatement>();
+  collectPathStatements(parsed.figure.body, statements);
+  const endpoints: PathEndpointSnap[] = [];
   for (const [sourceId, handles] of handlesBySource) {
-    const statement = findPathStatementById(parsed.figure.body, sourceId);
+    const statement = statements.get(sourceId);
     if (!statement) continue;
 
-    const analyzed = analyzeExplicitPathStatement(input.source, statement);
+    const analyzed = analyzeExplicitPathStatement(source, statement);
     if (analyzed.kind !== "eligible") continue;
     if (analyzed.analysis.closed) continue;
 
@@ -62,39 +83,25 @@ export function resolvePathEndpointSnap(input: {
     const lastAnchor = analysis.anchors[analysis.anchors.length - 1];
     if (!firstAnchor || !lastAnchor) continue;
 
-    // Find handles matching first and last anchor spans
+    // Handles matching the first and last anchor spans
     for (const handle of handles) {
       const span = handle.sourceRef.sourceSpan;
       const isFirst = span.from === firstAnchor.item.span.from && span.to === firstAnchor.item.span.to;
       const isLast = span.from === lastAnchor.item.span.from && span.to === lastAnchor.item.span.to;
       if (!isFirst && !isLast) continue;
-
-      const dx = handle.world.x - input.pointerWorld.x;
-      const dy = handle.world.y - input.pointerWorld.y;
-      const distSq = dx * dx + dy * dy;
-      if (distSq < bestDistSq) {
-        bestDistSq = distSq;
-        bestSnap = {
-          elementId: sourceId,
-          end: isLast ? "end" : "start",
-          world: handle.world
-        };
-      }
+      endpoints.push({ elementId: sourceId, end: isLast ? "end" : "start", world: handle.world });
     }
   }
-
-  return bestSnap;
+  endpointCache.set(editHandles, { source, endpoints });
+  return endpoints;
 }
 
-function findPathStatementById(statements: readonly Statement[], elementId: string): PathStatement | null {
+function collectPathStatements(statements: readonly Statement[], into: Map<string, PathStatement>): void {
   for (const statement of statements) {
-    if (statement.kind === "Path" && statement.id === elementId) {
-      return statement;
-    }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, elementId);
-      if (nested) return nested;
+    if (statement.kind === "Path") {
+      into.set(statement.id, statement);
+    } else if (statement.kind === "Scope") {
+      collectPathStatements(statement.body, into);
     }
   }
-  return null;
 }

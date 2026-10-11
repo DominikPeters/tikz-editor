@@ -305,6 +305,27 @@ function nodeElementsForSource(elements: readonly SceneElement[], sourceId: stri
   return index.get(sourceId) ?? [];
 }
 
+const itemIndexes = new WeakMap<readonly object[], ReadonlyMap<string, readonly object[]>>();
+
+/** A scene's elements or edit handles for one source, indexed once per array. */
+export function itemsForSource<T extends { readonly sourceRef: { readonly sourceId: string } }>(
+  items: readonly T[],
+  sourceId: string
+): readonly T[] {
+  let index = itemIndexes.get(items) as ReadonlyMap<string, readonly T[]> | undefined;
+  if (!index) {
+    const next = new Map<string, T[]>();
+    for (const item of items) {
+      const group = next.get(item.sourceRef.sourceId);
+      if (group) group.push(item);
+      else next.set(item.sourceRef.sourceId, [item]);
+    }
+    itemIndexes.set(items, next);
+    index = next;
+  }
+  return index.get(sourceId) ?? [];
+}
+
 export function textBounds(element: SceneText, viewBox: SvgViewBox): SvgBounds {
   const textGeometry = textGeometryInSvg(element, viewBox);
   return computeRotatedRectBounds(
