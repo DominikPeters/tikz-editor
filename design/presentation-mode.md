@@ -12,6 +12,8 @@ menu. Launch choices are from the beginning/current slide, on a display, in a
 window, and rehearsal. Rehearsal opens the presenter without audience output.
 New tabs inherit the active document kind; File also offers the other kind.
 Drawing tools remain available inside embedded TikZ pictures.
+A projector-screen button immediately left of the status-bar zoom slider starts
+from the current slide, or shows the presenter view when a session is running.
 
 Presentation controls reuse the editor's toolbar/split-button and app-menu styles.
 Options use the shared Modal header, body, footer, and action buttons together
