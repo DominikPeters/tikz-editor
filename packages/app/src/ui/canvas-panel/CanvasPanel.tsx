@@ -1,6 +1,7 @@
 import { deckPageDerived } from "../../deck-page-derived-cache";
 import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit } from "../../edit-execution";
+import { useStableCallback } from "../hooks/useStableCallback";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { buildSelectionRects } from "../builds-panel/build-selection";
 import {
@@ -740,7 +741,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       editParseOptions
     };
   });
-  const dispatchCanvasTransform = useCallback(
+  const dispatchCanvasTransform = useStableCallback(
     (transform: CanvasTransform) => {
       if (
         Math.abs(transform.translateX - canvasTransform.translateX) < 1e-9 &&
@@ -750,8 +751,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         return;
       }
       dispatch({ type: "SET_CANVAS_TRANSFORM", transform });
-    },
-    [canvasTransform.scale, canvasTransform.translateX, canvasTransform.translateY, dispatch]
+    }
   );
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -1037,14 +1037,14 @@ export const CanvasPanel = memo(function CanvasPanel({
   const pendingNodePositionEffectiveHoverSourceId = pendingNodePositionTargetPick
     ? pendingNodePositionAnchorHoverSourceId ?? hoveredElementId
     : null;
-  const prepareEditGeometry = useCallback(() => {
+  const prepareEditGeometry = useStableCallback(() => {
     if (!snapshot.parseResult || !snapshot.semanticResult || snapshot.source !== source) return;
     return createEditGeometrySession({
       source: nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
       parsed: snapshot.parseResult,
       semantic: snapshot.semanticResult
     }, { textEngine: textEngineRef.current }, editParseOptions);
-  }, [snapshot, source, nestedFigureSpan, editParseOptions]);
+  });
 
   const resolvePendingNodePositionTargetStatus = useMemo(() => {
     if (!pendingNodePositionTargetPick) {
@@ -1640,7 +1640,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cache identity tracks the layout inputs
     [deckEditing, layoutSource, layoutOverlayBranches]
   );
-  const resolveDeckCaretDomain = useCallback((scopeId: string): BeamerCaretDomain | null => {
+  const resolveDeckCaretDomain = useStableCallback((scopeId: string): BeamerCaretDomain | null => {
     const cached = deckCaretDomainCache.get(scopeId);
     if (cached !== undefined) {
       return cached;
@@ -1658,7 +1658,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       : null;
     deckCaretDomainCache.set(scopeId, domain);
     return domain;
-  }, [deckCaretDomainCache, deckEditing, layoutSource, layoutOverlayBranches]);
+  });
 
   useLayoutEffect(() => {
     canvasTransformRef.current = canvasTransform;
@@ -2251,6 +2251,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
     resolveDeckCaretDomain,
+    deckCaretLayout: deckCaretDomainCache,
     onCanvasSessionEscape: handleCanvasSessionEscape,
     textLayoutContext,
     textEditPlacement,
@@ -2355,7 +2356,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     span: Span;
   } | null>(null);
 
-  const applyDeckObjectEdit = useCallback(
+  const applyDeckObjectEdit = useStableCallback(
     (mode: "delete" | "duplicate", node: BeamerObjectNode) => {
       if (!deckActiveFrame || !deckObjectIndex) {
         return;
@@ -2393,8 +2394,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (mode === "delete") {
         selectDeckObject(null);
       }
-    },
-    [deckActiveFrame, deckObjectIndex, dispatch, selectDeckObject, snapshot.source, source]
+    }
   );
 
   useEffect(() => {
