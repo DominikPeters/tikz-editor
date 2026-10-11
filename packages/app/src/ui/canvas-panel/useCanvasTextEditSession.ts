@@ -12,6 +12,7 @@ import {
   type RefObject,
   type SyntheticEvent as ReactSyntheticEvent
 } from "react";
+import { useStableCallback } from "../hooks/useStableCallback";
 import {
   clientPoint as makeClientPoint,
   svgPoint as makeSvgPoint,
@@ -223,6 +224,8 @@ export type UseCanvasTextEditSessionArgs = {
   ) => EditableTextTarget | null;
   /** Rendered caret-stop domain for a deck scope; null → source-style keys. */
   resolveDeckCaretDomain: (scopeId: string) => BeamerCaretDomain | null;
+  /** Changes identity exactly when the deck layout the caret domains come from changes. */
+  deckCaretLayout: object;
   /**
    * Esc ladder handoff (design doc "Object layer"): called before a
    * canvas-focused scope session closes on Escape, with the caret's document
@@ -757,6 +760,7 @@ export function useCanvasTextEditSession(
     suppressNextBackgroundClickRef,
     resolveEditableTextTargetById,
     resolveDeckCaretDomain,
+    deckCaretLayout,
     onCanvasSessionEscape,
     textLayoutContext,
     textEditPlacement,
@@ -1014,7 +1018,7 @@ export function useCanvasTextEditSession(
       clearTimeout(layoutWaitTimerRef.current);
       layoutWaitTimerRef.current = null;
     }
-  }, [intentScheduler, resolveDeckCaretDomain]);
+  }, [deckCaretLayout, intentScheduler, resolveDeckCaretDomain]);
 
   const closeTextEditingSession = useCallback(() => {
     dispatchCanvasTextEditAction({ type: "session_close" });
@@ -1093,7 +1097,7 @@ export function useCanvasTextEditSession(
     return null;
   }, [svgLayerHostRef]);
 
-  const resolveScopeParagraphAtClient = useCallback(
+  const resolveScopeParagraphAtClient = useStableCallback(
     (target: EditableTextTarget, clientPoint: ClientPoint) => {
       const paragraphs = target.scopeParagraphs;
       if (!paragraphs || paragraphs.length === 0) {
@@ -1132,8 +1136,7 @@ export function useCanvasTextEditSession(
         }
       }
       return best;
-    },
-    [canvasTransform, interactionSvgRef, svgResult, viewportRef]
+    }
   );
 
   const resolveParagraphHitView = useCallback(
@@ -1310,7 +1313,7 @@ export function useCanvasTextEditSession(
     [canvasTransform, interactionSvgRef, resolveParagraphHitView, resolveTexVListSourceHitFromClient, svgResult, textLayoutContext, viewportRef]
   );
 
-  const startTextEditingSession = useCallback(
+  const startTextEditingSession = useStableCallback(
     (
       target: EditableTextTarget,
       selectionStart: number,
@@ -1325,8 +1328,7 @@ export function useCanvasTextEditSession(
         selectionEnd,
         historyMergeKey: historyMergeKey ?? makeMergeKey("canvas-text-edit", target.sourceId, Date.now())
       });
-    },
-    [dispatchCanvasTextEditAction, source]
+    }
   );
 
   const beginCanvasTextInteraction = useCallback(
