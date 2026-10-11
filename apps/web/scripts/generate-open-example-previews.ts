@@ -3,51 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderTikzToSvgAsync } from "../../../packages/core/src/render/index";
 import { OPEN_EXAMPLE_CATALOG } from "../../../packages/app/src/ui/examples/open-example-catalog";
-
-type GeneratedOpenExamplePreview = {
-  exampleId: string;
-  svg: string | null;
-  warningCount: number;
-  errorCount: number;
-  errorMessage: string | null;
-};
+import { renderOpenExamplePreviewWithRenderer, type OpenExamplePreview } from "../../../packages/app/src/ui/examples/render-open-example-preview";
 
 async function main(): Promise<void> {
-  const generated: Record<string, GeneratedOpenExamplePreview> = {};
-
+  const generated: Record<string, OpenExamplePreview> = {};
   for (const example of OPEN_EXAMPLE_CATALOG) {
-    try {
-      const result = await renderTikzToSvgAsync(example.source, {
-        parse: { recover: true },
-        svg: { padding: 18 }
-      });
-      const parseErrors = result.parse.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
-      const semanticErrors = result.semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
-      const renderErrors = result.renderDiagnostics.filter((diagnostic) => diagnostic.severity === "error");
-      const parseWarnings = result.parse.diagnostics.filter((diagnostic) => diagnostic.severity === "warning");
-      const semanticWarnings = result.semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "warning");
-      const renderWarnings = result.renderDiagnostics.filter((diagnostic) => diagnostic.severity === "warning");
-
-      generated[example.id] = {
-        exampleId: example.id,
-        svg: result.svg.svg,
-        warningCount: parseWarnings.length + semanticWarnings.length + renderWarnings.length,
-        errorCount: parseErrors.length + semanticErrors.length + renderErrors.length,
-        errorMessage:
-          parseErrors[0]?.message ??
-          semanticErrors[0]?.message ??
-          renderErrors[0]?.message ??
-          null
-      };
-    } catch (error) {
-      generated[example.id] = {
-        exampleId: example.id,
-        svg: null,
-        warningCount: 0,
-        errorCount: 1,
-        errorMessage: error instanceof Error ? error.message : String(error)
-      };
-    }
+    generated[example.id] = await renderOpenExamplePreviewWithRenderer(example, renderTikzToSvgAsync);
   }
 
   const moduleSource = [
