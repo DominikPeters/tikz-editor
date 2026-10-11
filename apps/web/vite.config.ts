@@ -14,6 +14,17 @@ export default defineConfig(({ command }) => ({
   worker: {
     format: "es"
   },
+  build: {
+    rollupOptions: {
+      // Only keynote-clipboard's file reader (its CLI) imports this; left as written, the
+      // browser never runs it, and no stub module joins the app's chunk.
+      external: ["node:fs/promises"],
+      output: {
+        // The font data changes rarely; its own chunk stays cached across app releases.
+        manualChunks: (id) => (id.includes("/packages/core/src/text/tex/fonts/data/") ? "tex-fonts" : undefined)
+      }
+    }
+  },
   optimizeDeps: {
     exclude: ["mathlive"]
   },
