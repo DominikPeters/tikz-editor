@@ -104,19 +104,20 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
     const graphicsResolver = previewBundle
       ? createDocumentGraphicsResolverFromPreviewBundle(previewBundle)
       : undefined;
-    let svg: string;
-    if (request.deckFrameIndex != null) {
-      const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
-      const prepared = prepareBeamerDocument(request.source);
-      const step = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
-      svg = (await prepared.renderFrame({
-        frameIndex: request.deckFrameIndex,
-        step,
-        graphicsResolver
-      })).svg.svg;
-    } else {
+    const { withTexGlyphOutlines } = await import("@tikz-editor/core/text/tex/fonts/glyph-outlines");
+    const svg = await withTexGlyphOutlines(async () => {
+      if (request.deckFrameIndex != null) {
+        const { prepareBeamerDocument } = await import("@tikz-editor/core/beamer/index");
+        const prepared = prepareBeamerDocument(request.source);
+        const step = Math.max(1, prepared.frameStepCount(request.deckFrameIndex));
+        return (await prepared.renderFrame({
+          frameIndex: request.deckFrameIndex,
+          step,
+          graphicsResolver
+        })).svg.svg;
+      }
       const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
-      svg = (await renderTikzToSvgAsync(request.source, {
+      return (await renderTikzToSvgAsync(request.source, {
         parse: {
           recover: request.parseOptions.recover ?? true,
           activeFigureId: request.parseOptions.activeRootId,
@@ -127,7 +128,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
           padding: request.svgOptions?.padding
         }
       })).svg.svg;
-    }
+    });
     return {
       type: "result",
       ok: true,

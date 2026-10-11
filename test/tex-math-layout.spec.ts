@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { texGlyphOutline } from "../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import { createBeamerTexMathFontProfile } from "../packages/core/src/beamer/theme/index.js";
 import { texLength } from "../packages/core/src/text/tex/coordinates.js";
 import {
@@ -1307,7 +1308,7 @@ describe("TeX math hlist layout", () => {
     expect(fontProfile.resolveMathFont({ family: "operators", style: "script", baseAtPt: 14.4 }))
       .toMatchObject({ id: "cmss10", atPt: 10 });
     for (const fontId of ["cmss9", "cmss12", "cmss17"]) {
-      expect(computerModernTexMetricProvider.resolveFont({ fontId, atPt: texLength(10) }).data.glyphs?.[37])
+      expect(texGlyphOutline(computerModernTexMetricProvider.resolveFont({ fontId, atPt: texLength(10) }).id, 37))
         .toBeTruthy();
     }
   });

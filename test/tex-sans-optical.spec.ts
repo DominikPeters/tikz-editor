@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { texGlyphOutline } from "../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
 import { createTexNodeTextEngine } from "../packages/core/src/text/tex-node-text-engine.js";
 import type { NodeTextEngine } from "../packages/core/src/text/types.js";
@@ -23,7 +24,7 @@ describe("Latin Modern sans optical size 17", () => {
       expect(font.id).toBe(`lmsans${optical}-${shape === "upright" ? "regular" : "oblique"}`);
       expect(font.atPt).toBe(size);
       expect(DEFAULT_COMPUTER_MODERN_TEXT_FONTS).toContain(font.id);
-      expect(font.data.glyphs?.[120]).toBeTruthy();
+      expect(texGlyphOutline(font.id, 120)).toBeTruthy();
     });
 
   it.each(["upright", "slanted", "italic"] as const)("retains the declared bold %s policy at Huge", shape => {

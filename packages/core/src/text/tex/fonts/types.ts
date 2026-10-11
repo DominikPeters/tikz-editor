@@ -35,10 +35,12 @@ export interface GeneratedTexFont {
   readonly fontdimen: Readonly<Record<string, number>>;
   readonly chars: Readonly<Record<string, GeneratedTexCharMetric>>;
   readonly ligKerns: readonly GeneratedTexLigKern[];
-  readonly glyphs?: Readonly<Record<string, string>>;
 }
 
 export type GeneratedTexFontTable = Readonly<Record<string, GeneratedTexFont>>;
+
+/** One font's SVG glyph paths by character code, at 10pt. */
+export type TexGlyphOutlines = Readonly<Record<string, string>>;
 
 export interface ResolvedTexFont {
   readonly id: string;

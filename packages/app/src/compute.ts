@@ -24,6 +24,7 @@ import { runTextRenderOperation, retainSceneTextLayout } from "@tikz-editor/core
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { resolveFigureBoundsFromFigure } from "@tikz-editor/core/edit/figure-bounds";
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
+import { texGlyphOutlineGeneration, texGlyphOutlinesLoading, withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { detectDocumentKind } from "@tikz-editor/core/document/kind";
 import { parseDocumentRootId, type DocumentRootRef } from "@tikz-editor/core/document/root-id";
 import {
@@ -174,6 +175,8 @@ type ComputeCache = {
   text: TextLayoutContext | null;
   warmSource: string | null;
   graphicsResolverCacheKey: string | null;
+  /** Text in the cache was rendered under this glyph outline generation. */
+  outlineGeneration: number;
 };
 let committedCache: ComputeCache | null = null;
 
@@ -203,9 +206,20 @@ export function makeEmptySnapshot(source: string = ""): SessionSnapshot {
  */
 export async function computeSnapshot(request: ComputeRequest, work?: CooperativeWorkOptions): Promise<ComputeResponse> {
   cancelDeckPrewarm();
+  // Text using a font whose glyph outlines had not loaded yet renders blank;
+  // once they arrive, render again from scratch (an older outline generation
+  // invalidates every cache, so incremental hints no longer apply).
+  return withTexGlyphOutlines((attempt) => computeSnapshotOnce(attempt === 0 ? request
+    : { ...request, changedSourceIds: null, patches: null, patchBaseRevision: null, inferSourceChanges: false }, work));
+}
+
+async function computeSnapshotOnce(request: ComputeRequest, work?: CooperativeWorkOptions): Promise<ComputeResponse> {
   const revision = ++revisionCounter;
-  const previous = committedCache?.documentId === request.documentId ? committedCache : null;
+  const outlineGeneration = texGlyphOutlineGeneration();
+  const committed = committedCache;
+  const previous = committed && committed.documentId === request.documentId && committed.outlineGeneration === outlineGeneration ? committed : null;
   const cache: ComputeCache = {
+    outlineGeneration,
     documentId: request.documentId,
     semantic: previous?.semantic.fork() ?? createIncrementalSemanticSession(),
     parse: previous?.parse.fork() ?? createIncrementalParseSession(),
@@ -501,7 +515,7 @@ function deckContextKey(request: ComputeRequest): string {
   const file = request.documentFileRef;
   return JSON.stringify([request.documentId ?? null, request.sourceRevision ?? null,
     file ? [file.kind, file.provider, file.path, file.handleId, file.name] : null,
-    getImageAssetCacheGeneration(), getActiveEditorPlatformGeneration(),
+    getImageAssetCacheGeneration(), getActiveEditorPlatformGeneration(), texGlyphOutlineGeneration(),
     request.textEditMaskSpan?.from ?? null, request.textEditMaskSpan?.to ?? null]);
 }
 
@@ -543,7 +557,8 @@ export function claimCachedDeckSnapshot(request: ComputeRequest): SessionSnapsho
   const session = matchingDeckSession(request);
   const page = session && requestedDeckPage(session, request);
   const frame = page && session?.renderedPages.get(page.key);
-  if (!session || !frame) return null;
+  // A page prewarmed while outlines load may have blank glyphs; render it afresh.
+  if (!session || !frame || texGlyphOutlinesLoading()) return null;
   cancelDeckPrewarm();
   const snapshot = deckSnapshot(session, frame, ++revisionCounter);
   recordProfilingComputeTiming({ requestId: request.id, kind: "render", trigger: request.schedulingTrigger ?? "cached-navigation",

@@ -1,5 +1,6 @@
 import type { TikzOpenExample } from "./open-example-catalog";
 import type { renderTikzToSvgAsync as renderTikzToSvgAsyncType } from "@tikz-editor/core/render/index";
+import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 
 export type OpenExamplePreview = {
   exampleId: string;
@@ -16,10 +17,10 @@ export async function renderOpenExamplePreviewWithRenderer(
   renderTikzToSvgAsync: RenderTikzToSvgAsync
 ): Promise<OpenExamplePreview> {
   try {
-    const result = await renderTikzToSvgAsync(example.source, {
+    const result = await withTexGlyphOutlines(() => renderTikzToSvgAsync(example.source, {
       parse: { recover: true },
       svg: { padding: 18 }
-    });
+    }));
     const parseErrors = result.parse.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
     const semanticErrors = result.semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
     const renderErrors = result.renderDiagnostics.filter((diagnostic) => diagnostic.severity === "error");

@@ -51,12 +51,15 @@ import {
   type TextLayoutContext,
 } from "./layout-context.js";
 import { TexWeightedLruCache } from "./tex/cache.js";
+import { preloadTexGlyphOutlines, texGlyphOutlineGeneration } from "./tex/fonts/glyph-outlines.js";
 import { estimateVListLayoutBytes } from "./layout-cache-size.js";
 
 export { renderTexVListSvgMetadata };
 
 type CachedRenderEntry = {
   readonly cacheKey: string;
+  /** Rendered glyphs are blank for fonts whose outlines had not loaded yet. */
+  readonly outlineGeneration: number;
   readonly layoutCacheKey: string;
   readonly sourceMap?: TextSourceMap;
   readonly layout: CachedTextLayout;
@@ -143,14 +146,15 @@ export async function createTexNodeTextEngine(
 async function initializeEngine(
   options: TexNodeTextEngineOptions
 ): Promise<NodeTextEngine> {
-  await preloadEnglishHyphenator();
+  await Promise.all([preloadEnglishHyphenator(), preloadTexGlyphOutlines()]);
 
   const entriesByParagraph = new Map<string, CachedRenderEntry>();
   const renderCache = new TexWeightedLruCache<string, CachedRenderEntry>(RENDER_CACHE_LIMIT, RENDER_CACHE_BYTES, {
     retainOversizedEntry: true,
+    version: texGlyphOutlineGeneration,
     onEvict: (_key, entry) => { if (entriesByParagraph.get(entry.paragraphId) === entry) entriesByParagraph.delete(entry.paragraphId); },
   });
-  const layoutCache = new TexWeightedLruCache<string, TexSharedLayout>(TEX_LAYOUT_CACHE_LIMIT, TEX_LAYOUT_CACHE_BYTES);
+  const layoutCache = new TexWeightedLruCache<string, TexSharedLayout>(TEX_LAYOUT_CACHE_LIMIT, TEX_LAYOUT_CACHE_BYTES, { version: texGlyphOutlineGeneration });
   const validationCache = new TexWeightedLruCache<string, NodeTextValidationIssue | null>(VALIDATION_CACHE_LIMIT, VALIDATION_CACHE_BYTES);
   // Reports are owned by live render entries rather than a separately evicted
   // registry. Dropping a render entry drops its metadata in the same operation.
@@ -195,8 +199,8 @@ async function initializeEngine(
       : `${layoutCacheKey}|sm:${sourceMapKey}`;
 
   }
-  function findEntry(cacheKey: string): CachedRenderEntry | undefined {
-    return activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey);
+  function findEntry(cacheKey: string, scope = activeScope): CachedRenderEntry | undefined {
+    return current(scope?.entries.get(cacheKey)) ?? current(scope?.previous?.get(cacheKey)) ?? renderCache.get(cacheKey);
   }
   function retainEntry(entry: CachedRenderEntry): void {
     activeScope?.entries.set(entry.cacheKey, entry);
@@ -236,7 +240,7 @@ async function initializeEngine(
         retain(cacheKeys) {
           const retained = new Map<string, CachedRenderEntry>();
           for (const key of cacheKeys) {
-            const entry = scopeEntries.get(key) ?? scope.previous?.get(key) ?? renderCache.get(key);
+            const entry = findEntry(key, scope);
             if (entry) retained.set(key, entry);
           }
           scopeEntries.clear();
@@ -304,7 +308,7 @@ async function initializeEngine(
       );
       const cacheKey = bindingKey(layoutCacheKey, layoutInput.sourceMap);
 
-      let entry = activeScope?.entries.get(cacheKey) ?? activeScope?.previous?.get(cacheKey) ?? renderCache.get(cacheKey) ?? null;
+      let entry = findEntry(cacheKey) ?? null;
       if (!entry) {
         entry = buildTexTextCacheEntry({
           cacheKey,
@@ -631,11 +635,15 @@ function buildTexTextCacheEntry(params: {
     requestedAlignment: params.requestedAlignment,
     retainedBytes: shared.retainedBytes + body.length * 2 + params.sourceText.length * 2 + 256,
   };
-  return { cacheKey: params.cacheKey, layoutCacheKey: params.layoutCacheKey, sourceMap: params.sourceMap ? structuredClone(params.sourceMap) : undefined,
+  return { cacheKey: params.cacheKey, outlineGeneration: texGlyphOutlineGeneration(), layoutCacheKey: params.layoutCacheKey, sourceMap: params.sourceMap ? structuredClone(params.sourceMap) : undefined,
     layout, paragraphId, canRenderLocalSource: isDirectTextSourceMap(params.sourceMap),
     // Conservative per-binding accounting includes retained shared layout and
     // a possible resolved report; eviction never leaves an unbounded side cache.
     retainedBytes: layout.retainedBytes * 2 + (params.sourceMap ? params.sourceMap.charOrigins.length * 160 + params.sourceMap.boundaryOrigins.length * 96 : 0) };
+}
+
+function current(entry: CachedRenderEntry | undefined): CachedRenderEntry | undefined {
+  return entry?.outlineGeneration === texGlyphOutlineGeneration() ? entry : undefined;
 }
 
 /** Uniform direct projection preserves DOM segment topology. Macro/generated

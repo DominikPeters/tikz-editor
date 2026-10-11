@@ -1,5 +1,6 @@
 import type { GeneratedTexFont, ResolvedTexFont } from "../fonts/types.js";
 import { texGlyphSvgPath } from "../fonts/glyph-svg.js";
+import { texGlyphOutline } from "../fonts/glyph-outlines.js";
 import {
   texHBoxX,
   texHBoxY,
@@ -61,7 +62,7 @@ export function texMathGlyphVisualBounds(
     fontId: item.fontId,
     atPt: item.atPt,
   });
-  const d = font.data.glyphs?.[String(item.code)] ?? "";
+  const d = texGlyphOutline(font.id, item.code);
   if (!d) {
     return null;
   }
