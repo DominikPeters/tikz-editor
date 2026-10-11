@@ -529,6 +529,23 @@ export async function dragHitRegionByTargetIdAndMode(
   await page.mouse.up();
 }
 
+/** A point in a node's padding, above its text: pressing on the text itself edits it. */
+export async function nodeMoveStartPoint(page: Page, targetId: string): Promise<{ x: number; y: number }> {
+  const outer = await page.locator(`[data-hit-region-target-id='${targetId}']:not([data-hit-region-interaction-mode='text'])`).first().boundingBox();
+  const text = await page.locator(`[data-hit-region-target-id='${targetId}'][data-hit-region-interaction-mode='text']`).first().boundingBox();
+  if (!outer || !text || outer.y >= text.y) throw new Error("Missing node padding for movement.");
+  return { x: outer.x + outer.width / 2, y: (outer.y + text.y) / 2 };
+}
+
+export async function dragNodeByPadding(page: Page, targetId: string, dx: number, dy: number): Promise<void> {
+  await waitForHitRegions(page, 1);
+  const start = await nodeMoveStartPoint(page, targetId);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + dx, start.y + dy, { steps: 8 });
+  await page.mouse.up();
+}
+
 export async function dragHitRegionByTargetId(
   page: Page,
   targetId: string,

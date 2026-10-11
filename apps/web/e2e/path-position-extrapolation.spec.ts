@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   clickTextHitRegionByTargetId,
-  dragHitRegionByTargetIdAndMode,
+  dragNodeByPadding,
   expectSourceCanvasConsistency,
   gotoApp,
   readSource,
@@ -23,7 +23,7 @@ for (const position of [-0.5, 2]) {
     const text = page.locator('[data-hit-region-interaction-mode="text"]').first();
     const targetId = await text.getAttribute("data-hit-region-target-id");
     if (!targetId) throw new Error("Missing label target");
-    await dragHitRegionByTargetIdAndMode(page, targetId, "text", position < 0 ? -30 : 30, 0);
+    await dragNodeByPadding(page, targetId, position < 0 ? -30 : 30, 0);
     await expect.poll(() => readSource(page)).not.toBe(source);
     const edited = await readSource(page);
     const match = /pos=([+-]?\d+(?:\.\d+)?)/u.exec(edited);
@@ -51,7 +51,7 @@ test("dragging an ordinary path label can cross the endpoint", async ({ page }) 
   await waitForHitRegions(page, 2);
   const targetId = await page.locator('[data-hit-region-interaction-mode="text"]').first().getAttribute("data-hit-region-target-id");
   if (!targetId) throw new Error("Missing label target");
-  await dragHitRegionByTargetIdAndMode(page, targetId, "text", 70, 0);
+  await dragNodeByPadding(page, targetId, 70, 0);
   await expect.poll(() => readSource(page)).not.toBe(source);
   const match = /pos=([+-]?\d+(?:\.\d+)?)/u.exec(await readSource(page));
   expect(match).not.toBeNull();

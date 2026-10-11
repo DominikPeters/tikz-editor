@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   clickTextHitRegionByTargetId,
   gotoApp,
+  nodeMoveStartPoint,
   readSelectedSourceIds,
   readStoreSource,
   resetStorageBeforeNavigation,
@@ -43,13 +44,6 @@ async function readTextareaSelectedText(page: Page): Promise<string> {
     const end = textareaElement.selectionEnd ?? start;
     return textareaElement.value.slice(start, end);
   });
-}
-
-async function nodeMoveStartPoint(page: Page, targetId: string): Promise<{ x: number; y: number }> {
-  const outer = await page.locator(`[data-hit-region-target-id='${targetId}']:not([data-hit-region-interaction-mode='text'])`).first().boundingBox();
-  const text = await page.locator(`[data-hit-region-target-id='${targetId}'][data-hit-region-interaction-mode='text']`).first().boundingBox();
-  if (!outer || !text || outer.y >= text.y) throw new Error("Missing node padding for movement.");
-  return { x: outer.x + outer.width / 2, y: (outer.y + text.y) / 2 };
 }
 
 async function readCanvasCaretCenter(page: Page): Promise<{ x: number; y: number }> {
