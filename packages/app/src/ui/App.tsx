@@ -27,6 +27,7 @@ import { AppMenuBar } from "./AppMenuBar";
 import { Toolbar } from "./Toolbar";
 import { DockLayout } from "./DockLayout";
 import { StatusBar } from "./StatusBar";
+import { Modal } from "./Modal";
 import { isMacLikePlatform, isWindowsLikePlatform } from "./key-labels";
 import { isCodeMirrorEventTarget } from "./editor-commands";
 import { useEditorCommandRuntime } from "./editor-command-runtime";
@@ -2011,8 +2012,8 @@ function EditorApp() {
           requestCloseIntent({ kind: "close-document", documentId });
         }}
       />
-      {presentation.error ? <div className={presentationCss.feedback} role="alert"><span>{presentation.error}</span><button type="button" onClick={handlePresentationOptions}>Presentation Options…</button><button type="button" onClick={presentationService.clearError}>Dismiss</button></div> : null}
-      {presentation.snapshot && !presentation.snapshot.outputAvailable ? <div className={presentationCss.feedback} role="status"><span>Audience output is closed.</span><button type="button" onClick={handlePresentationOptions}>Choose Audience Output…</button></div> : null}
+      {presentation.error ? <div className={presentationCss.feedback} role="alert"><span>{presentation.error}</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Presentation Options…</Modal.SecondaryButton><Modal.SecondaryButton onClick={presentationService.clearError}>Dismiss</Modal.SecondaryButton></div> : null}
+      {presentation.snapshot && !presentation.snapshot.outputAvailable ? <div className={presentationCss.feedback} role="status"><span>Audience output is closed.</span><Modal.SecondaryButton onClick={handlePresentationOptions}>Choose Audience Output…</Modal.SecondaryButton></div> : null}
       {showPresentationOptions ? <PresentationOptionsModal active={presenting} onClose={() => { setShowPresentationOptions(false); }} /> : null}
       <div className={css.body}>
         <DockLayout
