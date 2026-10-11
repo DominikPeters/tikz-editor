@@ -113,12 +113,13 @@ export function OpenFromArxivModal({
 
     void (async () => {
       const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
+      const { withTexGlyphOutlines } = await import("@tikz-editor/core/text/tex/fonts/glyph-outlines");
       await Promise.all(candidates.map(async (candidate) => {
         try {
-          const result = await renderTikzToSvgAsync(candidate.contextualSource, {
+          const result = await withTexGlyphOutlines(() => renderTikzToSvgAsync(candidate.contextualSource, {
             parse: { recover: true, includeContextDefinitions: true },
             svg: { padding: 18 }
-          });
+          }));
           if (cancelled) {
             return;
           }

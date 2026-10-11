@@ -1,4 +1,5 @@
 import { renderTikzToSvgAsync } from "@tikz-editor/core/render/index";
+import { withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { prepareBeamerDocument, type PreparedBeamerDocument } from "@tikz-editor/core/beamer/index";
 import {
   createDocumentGraphicsResolverFromPreviewBundle,
@@ -62,7 +63,7 @@ async function pumpQueue(): Promise<void> {
   busy = true;
   try {
     const graphicsResolver = resolveGraphicsResolver(next.graphicsPreviewBundleKey);
-    const svg = next.deckFrameIndex != null
+    const svg = await withTexGlyphOutlines(async () => next.deckFrameIndex != null
       ? await renderDeckFrameThumbnail(next.source, next.deckFrameIndex, graphicsResolver)
       : (await renderTikzToSvgAsync(next.source, {
           parse: {
@@ -74,7 +75,7 @@ async function pumpQueue(): Promise<void> {
           svg: {
             padding: next.svgOptions?.padding
           }
-        })).svg.svg;
+        })).svg.svg);
 
     if (isCancelled(next)) {
       return;

@@ -2,6 +2,7 @@ type TexCacheEntry<K, V> = {
   key: K;
   value: V;
   bytes: number;
+  version: number;
   previous: TexCacheEntry<K, V> | null;
   next: TexCacheEntry<K, V> | null;
 };
@@ -20,12 +21,18 @@ export class TexWeightedLruCache<K, V> {
       readonly onEvict?: (key: K, value: V) => void;
       /** Preserve immediate rendering of a single result larger than the budget. */
       readonly retainOversizedEntry?: boolean;
+      /** Entries stored under another version are misses (and dropped). */
+      readonly version?: () => number;
     } = {}
   ) {}
 
   public get(key: K): V | undefined {
     const entry = this.entries.get(key);
     if (!entry) return undefined;
+    if (this.options.version && entry.version !== this.options.version()) {
+      this.delete(key);
+      return undefined;
+    }
     if (entry !== this.newest) {
       this.unlink(entry);
       this.append(entry);
@@ -37,7 +44,7 @@ export class TexWeightedLruCache<K, V> {
     this.delete(key);
     if (!Number.isFinite(bytes) || bytes < 0 ||
       (bytes > this.maxBytes && !this.options.retainOversizedEntry)) return false;
-    const entry = { key, value, bytes, previous: null, next: null };
+    const entry = { key, value, bytes, version: this.options.version?.() ?? 0, previous: null, next: null };
     this.entries.set(key, entry);
     this.append(entry);
     this.bytes += bytes;

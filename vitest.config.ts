@@ -8,6 +8,7 @@ export default defineConfig({
   cacheDir: process.env.VITE_CACHE_DIR ?? ".vite-temp",
   test: {
     include: ["test/**/*.spec.ts"],
+    setupFiles: ["test/setup/tex-glyph-outlines.ts"],
     environment: "node",
     // The full suite intentionally runs several CPU-heavy render/fuzz files in
     // parallel. Keep individual logic timeouts explicit where stricter bounds

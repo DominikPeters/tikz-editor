@@ -1,3 +1,4 @@
+import { texGlyphOutline } from "./glyph-outlines.js";
 import type { GeneratedTexFont, ResolvedTexFont } from "./types.js";
 
 type EscapedGlyphPath = { readonly source: string; readonly escaped: string };
@@ -5,7 +6,7 @@ const escapedPaths = new WeakMap<GeneratedTexFont, Map<number, EscapedGlyphPath>
 
 /** Glyph outlines are shared across font sizes and source positions. */
 export function texGlyphSvgPath(font: ResolvedTexFont, code: number): string {
-  const source = font.data.glyphs?.[String(code)] ?? "";
+  const source = texGlyphOutline(font.id, code);
   if (!source) return "";
   let paths = escapedPaths.get(font.data);
   const cached = paths?.get(code);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { texGlyphSvgPath } from "../packages/core/src/text/tex/fonts/glyph-svg.js";
+import { installTexGlyphOutlines } from "../packages/core/src/text/tex/fonts/glyph-outlines.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/fonts/computer-modern.js";
 import type { ResolvedTexFont } from "../packages/core/src/text/tex/fonts/types.js";
 import {
@@ -11,13 +12,16 @@ import { defaultTexMathFontProfile } from "../packages/core/src/text/tex/math/fo
 import type { TexMathGlyphLayoutItem } from "../packages/core/src/text/tex/math/layout.js";
 import { texMathGlyphVisualBounds } from "../packages/core/src/text/tex/math/render-svg.js";
 
+let nextFont = 0;
 function fontWithPath(path: string) {
   const base = computerModernTexMetricProvider.resolveFont();
   const glyphs: Record<string, string> = { 65: path };
   const font: ResolvedTexFont = {
     ...base,
-    data: { ...base.data, glyphs },
+    id: `test-font-${++nextFont}`,
+    data: { ...base.data },
   };
+  installTexGlyphOutlines(font.id, glyphs);
   return { font, glyphs };
 }
 
@@ -60,10 +64,9 @@ describe("cached TeX glyph outlines", () => {
     expect(texGlyphSvgPath(font, 65)).toBe("");
   });
 
-  it("isolates different font data even when font IDs match", () => {
+  it("isolates different fonts", () => {
     const first = fontWithPath("M0 0 L1 2").font;
     const second = fontWithPath("M3 4 L5 6").font;
-    expect(second.id).toBe(first.id);
     expect(texGlyphSvgPath(first, 65)).toBe("M0 0 L1 2");
     expect(texGlyphSvgPath(second, 65)).toBe("M3 4 L5 6");
     expect(visualBounds(first, 10)).toEqual({ xStart: 2, xEnd: 3, yStart: 3, yEnd: 5 });

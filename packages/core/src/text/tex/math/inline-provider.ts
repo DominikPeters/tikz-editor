@@ -62,6 +62,7 @@ import {
   normalizeTexMathAtomClasses,
 } from "./spacing.js";
 import { TexWeightedLruCache } from "../cache.js";
+import { texGlyphOutlineGeneration } from "../fonts/glyph-outlines.js";
 
 type MathBoxLayout = {
   readonly list: TexMathList;
@@ -100,7 +101,7 @@ export function createTexDerivedInlineMathBoxProvider(
   const renderInlineSvg = !options.deferInlineSvg;
   let cache: MathBoxCaches | undefined;
   const getCache = () => cache ??= {
-    boxes: new TexWeightedLruCache(256, 4 * 1024 * 1024),
+    boxes: new TexWeightedLruCache(256, 4 * 1024 * 1024, { version: texGlyphOutlineGeneration }),
   };
   return {
     getInlineMathBox: (params) => {

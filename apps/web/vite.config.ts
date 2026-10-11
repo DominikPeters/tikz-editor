@@ -20,8 +20,9 @@ export default defineConfig(({ command }) => ({
       // browser never runs it, and no stub module joins the app's chunk.
       external: ["node:fs/promises"],
       output: {
-        // The font data changes rarely; its own chunk stays cached across app releases.
-        manualChunks: (id) => (id.includes("/packages/core/src/text/tex/fonts/data/") ? "tex-fonts" : undefined)
+        // Font metrics change rarely; their own chunk stays cached across app releases.
+        // (Glyph outlines are already a lazily loaded chunk per font.)
+        manualChunks: (id) => (id.includes("/packages/core/src/text/tex/fonts/data/computer-modern-ot1.generated.") ? "tex-fonts" : undefined)
       }
     }
   },
