@@ -7,7 +7,7 @@ import { BeamerPresentationRenderer, remapPresentationCursor } from "./renderer"
 import type { PlatformPresentationApi, PresentationCommand, PresentationMessage, PresentationOptions, PresentationSnapshot, PresentationTransport, PresentationWindows } from "./types";
 
 const OPTIONS_KEY = "tikz-editor:presentation-options";
-const DEFAULT_OPTIONS: PresentationOptions = { mode: "display", audienceDisplay: null, presenterDisplay: null, showPresenter: true, countdownMinutes: null };
+const DEFAULT_OPTIONS: PresentationOptions = { mode: "display", audienceDisplay: null, presenterDisplay: null, showPresenter: null, countdownMinutes: null };
 export function loadPresentationOptions(): PresentationOptions {
   try {
     const raw = getActiveEditorPlatform().persistence.load(OPTIONS_KEY);
@@ -15,7 +15,7 @@ export function loadPresentationOptions(): PresentationOptions {
     return { mode: saved.mode === "window" || saved.mode === "rehearse" ? saved.mode : "display",
       audienceDisplay: typeof saved.audienceDisplay === "string" ? saved.audienceDisplay : null,
       presenterDisplay: typeof saved.presenterDisplay === "string" ? saved.presenterDisplay : null,
-      showPresenter: typeof saved.showPresenter === "boolean" ? saved.showPresenter : true,
+      showPresenter: typeof saved.showPresenter === "boolean" ? saved.showPresenter : null,
       countdownMinutes: typeof saved.countdownMinutes === "number" && saved.countdownMinutes > 0 && saved.countdownMinutes <= 1440 ? saved.countdownMinutes : null };
   } catch { return { ...DEFAULT_OPTIONS }; }
 }
@@ -57,7 +57,9 @@ export class PresentationService {
     if (message.type === "hello") {
       if (message.role === "presenter") this.controller.setPresenterVisible(true);
       if (message.role === "audience" && !this.outputNeedsSelection) this.controller.setOutputAvailable(true);
-      this.publish();
+      const snapshot = this.controller.getSnapshot();
+      if (message.sequence === snapshot.sequence) void this.transport?.send({ type: "alive", sessionId: snapshot.sessionId, sequence: snapshot.sequence });
+      else this.publish();
     } else if (message.type === "command") this.command(message.command);
     else if (message.type === "focus") this.update({ focus: message.role });
     else if (message.type === "closed") {
@@ -92,9 +94,12 @@ export class PresentationService {
       const renderer = await BeamerPresentationRenderer.create(document.source, document.fileRef);
       if (this.controller !== controller) return;
       this.renderer = renderer;
-      await controller.replace(renderer, { frame, step: 1, continuation: 1 }, document.title);
-      for (const command of this.launchCommands) this.command(command);
+      const buffered = this.launchCommands;
       this.launchCommands = [];
+      const initialJump = buffered[0]?.type === "jump" ? buffered.shift() : undefined;
+      await controller.replace(renderer, { frame: initialJump?.type === "jump" ? initialJump.frame : frame, step: 1, continuation: 1 }, document.title);
+      if (this.controller !== controller) return;
+      for (const command of buffered) this.command(command);
       this.unsubscribe = useEditorStore.subscribe(state => {
         const current = state.documents[document.id];
         if (!current) { void this.stop(); return; }
@@ -112,9 +117,8 @@ export class PresentationService {
       // Collect handles even when the other operation rejects, then release them.
       const resources = await Promise.allSettled([connection, opening]);
       if (resources[0].status === "fulfilled") resources[0].value.close();
-      if (resources[1].status === "fulfilled") await resources[1].value.close();
-      await this.stop();
-      this.update({ error: message });
+      if (resources[1].status === "fulfilled") await Promise.resolve(resources[1].value.close()).catch(() => {});
+      if (this.controller === controller) { await this.stop(); this.update({ error: message }); }
     }
   }
 

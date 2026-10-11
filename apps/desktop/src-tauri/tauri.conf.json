@@ -18,6 +18,7 @@
         "resizable": true,
         "fullscreen": false,
         "dragDropEnabled": false,
+        "backgroundThrottling": "disabled",
         "decorations": true
       }
     ],

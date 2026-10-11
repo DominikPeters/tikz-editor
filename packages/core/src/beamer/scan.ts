@@ -4,6 +4,7 @@ import { formatDocumentRootId } from "../document/root-id.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { scanTikzFigures } from "../parser/figure-scan.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
+import { scanBeamerNoteCommands } from "./notes.js";
 import {
   createBeamerSyntaxContext,
   beamerOptionalArgumentAfter,
@@ -69,13 +70,14 @@ const METADATA_COMMANDS = new Set<BeamerMetadataFieldName>([
  * `\beamer@framecommand`, `\beamer@@@@frame`, and the `beamerframe` keys.
  */
 export function scanBeamerDocument(source: string): BeamerDocumentModel {
-  return scanBeamerDocumentWithSyntax(createBeamerSyntaxContext(source));
+  return scanBeamerDocumentWithSyntax(createBeamerSyntaxContext(source, scanBeamerNoteCommands(source).map(note => note.bodySpan)));
 }
 
 export function scanBeamerDocumentWithSyntax(
   syntaxContext: BeamerSyntaxContext
 ): BeamerDocumentModel {
   const { source } = syntaxContext;
+  const privateSpans = scanBeamerNoteCommands(source, syntaxContext.syntax).map(note => note.bodySpan);
   const diagnostics: Diagnostic[] = [];
   const documentRange = findDocumentRange(
     syntaxContext,
@@ -87,7 +89,7 @@ export function scanBeamerDocumentWithSyntax(
     diagnostics
   );
   const preliminaryFrames = frameCandidates.map((candidate, index) =>
-    buildFrameModel(syntaxContext, candidate, index)
+    buildFrameModel(syntaxContext, candidate, index, privateSpans)
   );
   const sections = scanSections(
     syntaxContext,
@@ -228,14 +230,15 @@ function collectFrameCandidates(
 function buildFrameModel(
   context: BeamerSyntaxContext,
   candidate: FrameCandidate,
-  index: number
+  index: number,
+  privateSpans: readonly Span[]
 ): BeamerFrameModel {
   const { source } = context;
   const frameEnd = candidate.end?.span.from ?? source.length;
   const header = scanFrameHeader(context, candidate.begin.span.to, frameEnd);
   const bodySpan = { from: header.headerSpan.to, to: frameEnd };
   const id = formatDocumentRootId({ kind: "beamer-frame", index });
-  const children = scanFrameTikzPictures(source, bodySpan, index);
+  const children = scanFrameTikzPictures(source, bodySpan, index, privateSpans);
   const title =
     header.title ??
     scanFirstCommandValue(context, bodySpan, "frametitle", children);
@@ -390,11 +393,12 @@ function parseFrameOptions(
 function scanFrameTikzPictures(
   source: string,
   bodySpan: Span,
-  frameIndex: number
+  frameIndex: number,
+  privateSpans: readonly Span[]
 ): BeamerTikzPictureRoot[] {
   const body = source.slice(bodySpan.from, bodySpan.to);
   return scanTikzFigures(body)
-    .filter((figure) => !figure.isTemplate)
+    .filter((figure) => !figure.isTemplate && !privateSpans.some(span => figure.span.from + bodySpan.from >= span.from && figure.span.to + bodySpan.from <= span.to))
     .map((figure, index) => ({
       kind: "tikzpicture",
       id: formatDocumentRootId({

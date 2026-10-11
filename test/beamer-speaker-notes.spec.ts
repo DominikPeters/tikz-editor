@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { prepareBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 
 describe("Beamer speaker notes", () => {
   it("accumulates build-specific prose and items without adding notes to audience output", async () => {
@@ -40,5 +40,15 @@ Hello\note{\pause\begin{itemize}\item<9> Secret\end{itemize}}\end{frame}\end{doc
     const prepared = prepareBeamerDocument(String.raw`\documentclass{beamer}\newcommand{\reminder}{\note{PRIVATE MACRO NOTE}}\begin{document}\begin{frame}Public\reminder\end{frame}\end{document}`);
     const page = await prepared.renderFrame();
     expect(page.svg.svg).not.toMatch(/PRIVATE|MACRO NOTE/);
+  });
+  it("keeps private frames and diagrams out of the document's public root inventory", () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}
+\note{\begin{frame}Private\end{frame}\begin{tikzpicture}\node{Private};\end{tikzpicture}}
+\begin{tikzpicture}\node{Public};\end{tikzpicture}\end{frame}\end{document}`;
+    const scanned = scanBeamerDocument(source);
+    expect(scanned.frames).toHaveLength(1);
+    expect(scanned.frames[0].children).toHaveLength(1);
+    expect(source.slice(scanned.frames[0].children[0].span.from, scanned.frames[0].children[0].span.to)).toContain("Public");
+    expect(prepareBeamerDocument(source).document.frames[0].children).toHaveLength(1);
   });
 });

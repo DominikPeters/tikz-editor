@@ -1,6 +1,6 @@
 import { isPresentationMessage, type PlatformPresentationApi, type PresentationDisplay, type PresentationOptions, type PresentationRole } from "@tikz-editor/app/presentation";
 import type { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { Monitor } from "@tauri-apps/api/window";
+import type { BackgroundThrottlingPolicy, Monitor } from "@tauri-apps/api/window";
 import type { EditorPlatform } from "@tikz-editor/app/platform/types";
 import { resolvePlatformStorage } from "@tikz-editor/app/platform/storage";
 
@@ -117,6 +117,7 @@ export function createDesktopPresentationApi(): PlatformPresentationApi {
         url.searchParams.set("presentation", role); url.searchParams.set("session", sessionId);
         const child = new WebviewWindow(label, { url: url.pathname + url.search, title: role === "audience" ? "Presentation" : "Presenter View",
           width: role === "audience" ? 1100 : 1180, height: role === "audience" ? 720 : 820, visible: false, focus: false,
+          backgroundThrottling: "disabled" as BackgroundThrottlingPolicy,
           resizable: true, dragDropEnabled: false, backgroundColor: role === "audience" ? "#000000" : undefined });
         await waitForCreated(child);
         await invoke("desktop_prepare_presentation_window", { label });
