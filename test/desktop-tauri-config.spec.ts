@@ -23,6 +23,7 @@ describe("desktop Tauri platform config split", () => {
     expect(window.hiddenTitle).toBeUndefined();
     expect(window.trafficLightPosition).toBeUndefined();
     expect(window.decorations).toBe(true);
+    expect(window.backgroundThrottling).toBe("disabled");
   });
 
   it("defines macOS overlay titlebar in tauri.macos.conf.json", () => {

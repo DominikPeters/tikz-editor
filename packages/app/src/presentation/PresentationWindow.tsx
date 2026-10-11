@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getActiveEditorPlatform } from "../platform/current";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { createBrowserPresentationApi } from "./browser-platform";
@@ -14,6 +14,12 @@ function Slide({ svg, cursor, label }: { svg: string | null; cursor?: Presentati
     dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 function SpeakerNotes({ svg }: { svg: string }) { const markup = usePresentationSvg(svg); return <div dangerouslySetInnerHTML={{ __html: markup }} />; }
+function AudienceSlide({ page }: { page: PresentationSnapshot["current"] }) {
+  const source = useMemo(() => page ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(page.svg)}` : null, [page]);
+  return <div className={css.slide} role="img" aria-label="Audience slide" data-frame={page?.cursor.frame} data-step={page?.cursor.step} data-continuation={page?.cursor.continuation}>
+    {source ? <img src={source} alt="" draggable={false} /> : null}
+  </div>;
+}
 export function PresentationDisplayIdentifier({ number, name }: { number: string; name: string }) {
   return <main className={css.identifier}><strong>{number}</strong><span>{name}</span></main>;
 }
@@ -169,7 +175,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   if (role === "audience") return <main ref={audienceRoot} tabIndex={0} className={css.audience} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
     onPointerMove={() => { setControlsVisible(true); if (hideControls.current) clearTimeout(hideControls.current); hideControls.current = setTimeout(() => { setControlsVisible(false); }, 1800); }}
     onClick={event => { if (!(event.target as Element).closest("button,a") && !snapshot?.ended) send({ type: "next" }); }}>
-    {snapshot?.blank === "none" && !snapshot.ended ? <Slide svg={snapshot.current?.svg ?? null} cursor={snapshot.current?.cursor} label="Audience slide" /> : null}
+    {snapshot?.blank === "none" && !snapshot.ended ? <AudienceSlide page={snapshot.current} /> : null}
     {snapshot?.ended ? <div className={css.ended}>Presentation ended</div> : null}
     {controlsVisible && !snapshot?.ended ? <div className={css.audienceControls}>
       {!fullscreen && !getActiveEditorPlatform().id.startsWith("desktop") ? <button type="button" onClick={enterFullscreen}>Enter Fullscreen</button> : null}
