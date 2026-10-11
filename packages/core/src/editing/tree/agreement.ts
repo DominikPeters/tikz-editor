@@ -17,7 +17,11 @@ import type { EditTree, NodeId } from "./types.js";
  * - it models a prime (`f'`) as a superscript, where the tree keeps the
  *   prime as a character;
  * - a script with an empty base (`$^*$`) has no base atom in the math IR;
- * - the text IR desugars `\url` into a `\texttt` font command.
+ * - the text IR desugars `\url` into a `\texttt` font command;
+ * - the renderer projects Beamer source before the text IR reads it: link
+ *   commands become their text in braces, and a font command's overlay
+ *   specification (`\textbf<2>{x}`) is resolved per step. The IR reads the
+ *   paragraph as projected on a step where the specification matches.
  */
 export type EngineDisagreement = {
   readonly engine: "math" | "text";
@@ -47,8 +51,8 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
       }
       diff(disagreements, "math", ours, engine, slot.contentSpan);
     } else if (node.kind === "paragraph") {
-      const { from, to } = node.span;
-      const parsed = parseSimpleTexInlineNodes(tree.text.slice(from, to), from);
+      const { from } = node.span;
+      const parsed = parseSimpleTexInlineNodes(projectedParagraph(tree, node.id), from);
       if (parsed.unsupportedCommand) continue;
       const engine = new Set<string>();
       collectFontCommands(parsed.nodes, engine);
@@ -65,6 +69,37 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
     }
   }
   return disagreements;
+}
+
+/**
+ * The paragraph's source as the renderer's Beamer projections hand it to
+ * the text IR, with every offset kept: replaced syntax becomes spaces.
+ */
+function projectedParagraph(tree: EditTree, paragraph: NodeId): string {
+  const { from, to } = tree.nodes[paragraph].span;
+  const chars = tree.text.slice(from, to).split("");
+  const blank = (start: number, end: number) => {
+    for (let index = start; index < end; index++) chars[index - from] = " ";
+  };
+  const visit = (id: NodeId) => {
+    const node = tree.nodes[id];
+    if (node.kind === "link") {
+      const text = node.slots.map((slot) => tree.slots[slot]).find((slot) => slot.role === "content");
+      const { from: start, to: end } = text?.contentSpan ?? { from: -1, to: -1 };
+      if (text && tree.text[start - 1] === "{" && tree.text[end] === "}") {
+        blank(node.span.from, start - 1);
+        blank(end + 1, node.span.to);
+      }
+    } else if (node.kind === "style" && node.command && FONT_COMMANDS.has(node.command)) {
+      const spec = /^\\[A-Za-z]+(\s*<[^<>{}]*>)/u.exec(tree.text.slice(node.span.from, node.span.to));
+      if (spec) blank(node.span.from + spec[0].length - spec[1].length, node.span.from + spec[0].length);
+    }
+    for (const slot of node.slots) {
+      for (const child of tree.slots[slot].children) visit(child);
+    }
+  };
+  visit(paragraph);
+  return chars.join("");
 }
 
 function diff(
