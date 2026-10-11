@@ -1772,3 +1772,21 @@ describe("editorReducer – nested figure edit actions", () => {
     expect(next.lastEditWarningMessage).toContain("catching up");
   });
 });
+
+describe("undo history bounds", () => {
+  it("drops the oldest steps of a long session and keeps undo working", () => {
+    let state = makeInitialState();
+    for (let index = 0; index < 1005; index++) {
+      state = editorReducer(state, {
+        type: "APPLY_EDIT_ACTION",
+        action: { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: index % 2 ? "red" : "blue" },
+        precomputedSource: state.source,
+        precomputedResult: { kind: "success", newSource: `${state.source.split("\n%")[0]}\n% ${index}`, patches: [] }
+      });
+    }
+    expect(state.history).toHaveLength(1000);
+    expect(state.historyIndex).toBe(999);
+    const undone = editorReducer(state, { type: "UNDO" });
+    expect(undone.source.endsWith("% 1003")).toBe(true);
+  });
+});
