@@ -2,9 +2,14 @@ import { TreeFragment, type SyntaxNodeRef, type Tree } from "@lezer/common";
 import type { LRParser } from "@lezer/lr";
 
 import type { Span } from "../../ast/types.js";
+import { TexWeightedLruCache } from "./cache.js";
 import { maskTexRecovery, NO_TEX_RECOVERY, scanTexRecovery } from "./recovery.js";
 
+// Callers index both node text and whole documents, and every document edit
+// is a new key; an index retains roughly 50 bytes per source character, so
+// the budget is in bytes (a few large decks, or many short texts).
 const SYNTAX_INDEX_CACHE_LIMIT = 128;
+const SYNTAX_INDEX_CACHE_BYTES = 32 * 1024 * 1024;
 const OPAQUE_ENVIRONMENT_NAMES = [
   "BVerbatim",
   "Verbatim",
@@ -108,10 +113,7 @@ export interface TexSyntaxIndex {
   ): TexSyntaxDelimitedArgument | null;
 }
 
-const syntaxIndexCache = new WeakMap<
-  LRParser,
-  Map<string, TexSyntaxIndex>
->();
+const syntaxIndexCache = new WeakMap<LRParser, TexWeightedLruCache<string, TexSyntaxIndex>>();
 const matchedEnvironmentCache = new WeakMap<
   TexSyntaxIndex,
   ReadonlyMap<number, TexSyntaxMatchedEnvironment>
@@ -121,27 +123,30 @@ export function getTexSyntaxIndex(
   source: string,
   parser: LRParser
 ): TexSyntaxIndex {
-  let parserCache = syntaxIndexCache.get(parser);
-  if (!parserCache) {
-    parserCache = new Map();
-    syntaxIndexCache.set(parser, parserCache);
+  return cachedIndex(syntaxIndexCache, parser, source, () => buildTexSyntaxIndex(source, parser));
+}
+
+function cachedIndex(
+  caches: WeakMap<LRParser, TexWeightedLruCache<string, TexSyntaxIndex>>,
+  parser: LRParser,
+  source: string,
+  build: () => TexSyntaxIndex
+): TexSyntaxIndex {
+  let cache = caches.get(parser);
+  if (!cache) {
+    cache = new TexWeightedLruCache(SYNTAX_INDEX_CACHE_LIMIT, SYNTAX_INDEX_CACHE_BYTES);
+    caches.set(parser, cache);
   }
-  const cached = parserCache.get(source);
+  const cached = cache.get(source);
   if (cached) {
     return cached;
   }
-  const index = buildTexSyntaxIndex(source, parser);
-  parserCache.set(source, index);
-  if (parserCache.size > SYNTAX_INDEX_CACHE_LIMIT) {
-    const oldest = parserCache.keys().next().value;
-    if (oldest !== undefined) {
-      parserCache.delete(oldest);
-    }
-  }
+  const index = build();
+  cache.set(source, index, source.length * 64 + 4096);
   return index;
 }
 
-const recoveredIndexCache = new WeakMap<LRParser, Map<string, TexSyntaxIndex>>();
+const recoveredIndexCache = new WeakMap<LRParser, TexWeightedLruCache<string, TexSyntaxIndex>>();
 
 /**
  * The syntax index of `source` with its unbalanced openers and closers
@@ -159,24 +164,7 @@ export function getRecoveredTexSyntaxIndex(
   if (parseSource === source) {
     return getTexSyntaxIndex(source, parser);
   }
-  let parserCache = recoveredIndexCache.get(parser);
-  if (!parserCache) {
-    parserCache = new Map();
-    recoveredIndexCache.set(parser, parserCache);
-  }
-  const cached = parserCache.get(source);
-  if (cached) {
-    return cached;
-  }
-  const index = buildTexSyntaxIndex(source, parser, { parseSource });
-  parserCache.set(source, index);
-  if (parserCache.size > SYNTAX_INDEX_CACHE_LIMIT) {
-    const oldest = parserCache.keys().next().value;
-    if (oldest !== undefined) {
-      parserCache.delete(oldest);
-    }
-  }
-  return index;
+  return cachedIndex(recoveredIndexCache, parser, source, () => buildTexSyntaxIndex(source, parser, { parseSource }));
 }
 
 export function buildTexSyntaxIndex(
