@@ -302,6 +302,21 @@ suffix.`);
     );
   });
 
+  it("switches a font command's font, never its text, per its specification", async () => {
+    const source = deck(String.raw`Alpha \textbf<1>{delta} and \emph<2> {epsilon}.`);
+    const result = await renderBeamerFramePages(source);
+    const fonts = (page: (typeof result.pages)[number], word: string) => {
+      const line = buildNativeBeamerPageTrace(page, computerModernTexMetricProvider).lines.find((entry) => entry.role === "body")!;
+      const start = line.text.indexOf(word);
+      return [...new Set(line.glyphs.slice(start, start + word.length).map((glyph) => glyph.fontName))];
+    };
+
+    expect(result.stepCount).toBe(2);
+    expect(result.pages.map(tracedText)).toEqual(["Alphadeltaandepsilon.", "Alphadeltaandepsilon."]);
+    expect([fonts(result.pages[0], "delta"), fonts(result.pages[1], "delta")]).toEqual([["lmsans10-bold"], ["lmsans10-regular"]]);
+    expect([fonts(result.pages[0], "epsilon"), fonts(result.pages[1], "epsilon")]).toEqual([["lmsans10-regular"], ["lmsans10-oblique"]]);
+  });
+
   it("keeps covered material in layout while suppressing its paint", async () => {
     const source = deck(String.raw`
 Always visible.

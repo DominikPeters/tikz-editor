@@ -76,6 +76,19 @@ export type BeamerOverlayReference = {
   readonly contentSpan?: Span;
 };
 
+/**
+ * A font command with an overlay specification: beamer defines
+ * `\textbf<2>{x}` as `\only<2>{\textbf}{x}`, so the argument always
+ * shows and only the font change follows the specification.
+ */
+export type BeamerOverlayFontSwitch = {
+  /** The command name, kept on matching steps and removed on the others. */
+  readonly commandSpan: Span;
+  /** The specification, through the spaces TeX skips before the argument. */
+  readonly overlaySpan: Span;
+  readonly spec: BeamerOverlaySpec;
+};
+
 export type BeamerOverlayModel = {
   readonly frameSpan: Span;
   readonly commands: readonly BeamerOverlayCommand[];
@@ -85,6 +98,7 @@ export type BeamerOverlayModel = {
   readonly listDefaults: readonly { readonly span: Span; readonly spec: BeamerOverlaySpec }[];
   readonly pauses: readonly BeamerOverlayPause[];
   readonly referenceSpecs: readonly BeamerOverlayReference[];
+  readonly fontSwitches?: readonly BeamerOverlayFontSwitch[];
   readonly stepCount: number;
   readonly overprints?: readonly { readonly span: Span; readonly contentSpan: Span; readonly width?: BeamerDelimitedSourceValue; readonly branches: readonly BeamerOverlayCommand[] }[];
 };
@@ -98,6 +112,7 @@ export type BeamerOverlayTextProjection = {
 
 type PendingSpec =
   | { readonly kind: "reference"; readonly sourceOrder: number; readonly rawSpec: BeamerDelimitedSourceValue; readonly contentSpan?: Span }
+  | { readonly kind: "font"; readonly sourceOrder: number; readonly commandSpan: Span; readonly overlaySpan: Span; readonly rawSpec: BeamerDelimitedSourceValue }
   | {
       readonly kind: "list-default";
       readonly sourceOrder: number;
@@ -135,6 +150,11 @@ const OVERLAY_COMMANDS = new Map<string, BeamerOverlayCommandKind>([
   ["alt", "alt"],
   ["temporal", "temporal"],
   ["onslide", "uncover"],
+]);
+
+/** Beamer's overlay-aware font commands (beamerbaseoverlay.sty). */
+const OVERLAY_FONT_COMMANDS: ReadonlySet<string> = new Set([
+  "textbf", "textit", "textmd", "textnormal", "textrm", "textsc", "textsf", "textsl", "texttt", "textup", "emph",
 ]);
 
 /**
@@ -212,6 +232,15 @@ export function scanBeamerFrameOverlays(
         const content = command.name !== "label" && target
           ? beamerRequiredArgumentAfter(context, target.span.to, frame.bodySpan.to) : null;
         pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, contentSpan: content?.contentSpan });
+      }
+      continue;
+    }
+    if (OVERLAY_FONT_COMMANDS.has(command.name)) {
+      const rawSpec = beamerOverlayArgumentAfter(context, command.to, frame.bodySpan.to);
+      const argument = rawSpec && beamerRequiredArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to);
+      if (rawSpec && argument) {
+        pending.push({ kind: "font", sourceOrder: command.from, commandSpan: { from: command.from, to: command.to },
+          overlaySpan: { from: rawSpec.span.from, to: argument.span.from }, rawSpec });
       }
       continue;
     }
@@ -387,6 +416,7 @@ export function scanBeamerFrameOverlays(
   const referenceSpecs: BeamerOverlayReference[] = [];
   const items: BeamerOverlayItem[] = [];
   const listDefaults: Array<{ span: Span; spec: BeamerOverlaySpec }> = [];
+  const fontSwitches: BeamerOverlayFontSwitch[] = [];
   const pauseStarts: Array<{
     span: Span;
     threshold: number;
@@ -410,6 +440,8 @@ export function scanBeamerFrameOverlays(
     stepCount = Math.max(stepCount, resolved.spec.lastRequiredStep);
     if (entry.kind === "command") {
       commands.push({ ...entry.command, spec: resolved.spec });
+    } else if (entry.kind === "font") {
+      fontSwitches.push({ commandSpan: entry.commandSpan, overlaySpan: entry.overlaySpan, spec: resolved.spec });
     } else if (entry.kind === "reference") {
       referenceSpecs.push({ sourceStart: entry.sourceOrder, spec: resolved.spec, contentSpan: entry.contentSpan });
     } else {
@@ -439,6 +471,7 @@ export function scanBeamerFrameOverlays(
     listDefaults,
     pauses,
     referenceSpecs,
+    ...(fontSwitches.length ? { fontSwitches } : {}),
     stepCount,
     ...(overprints.length ? { overprints: overprints.map(overprint => ({ ...overprint,
       branches: commands.filter(command => command.commandSpan.from >= overprint.contentSpan.from && command.commandSpan.to <= overprint.contentSpan.to && declarations.some(declaration => declaration.from === command.commandSpan.from)) })) } : {}),
@@ -564,6 +597,9 @@ export function projectBeamerOverlayText(
     if (!beamerOverlaySpecContains(item.spec, step)) {
       hidden.push(item.commandSpan, item.contentSpan);
     }
+  }
+  for (const font of model.fontSwitches ?? []) {
+    removals.push(beamerOverlaySpecContains(font.spec, step) ? font.overlaySpan : { from: font.commandSpan.from, to: font.overlaySpan.to });
   }
   for (const pause of model.pauses) {
     removals.push(pause.span);
