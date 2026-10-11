@@ -1,4 +1,4 @@
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Activity, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Layout, Model, Actions, DockLocation, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
 import type { EditorAction } from "../store/types";
@@ -392,6 +392,22 @@ export type DockLayoutHandle = {
 // Module-level ref so editor commands can access the handle without prop drilling.
 let activeDockHandle: DockLayoutHandle | null = null;
 
+/**
+ * flexlayout keeps a tab mounted once shown. While another tab of its set is
+ * selected, the panel keeps its state but stops following the store (its
+ * subscriptions are effects, which a hidden Activity cleans up); it catches up
+ * when shown again.
+ */
+function WhileTabVisible({ node, children }: { node: TabNode; children: ReactNode }) {
+  const [visible, setVisible] = useState(() => node.isVisible());
+  useEffect(() => {
+    node.setEventListener("visibility", (event: { visible: boolean }) => { setVisible(event.visible); });
+    setVisible(node.isVisible());
+    return () => { node.removeEventListener("visibility"); };
+  }, [node]);
+  return <Activity mode={visible ? "visible" : "hidden"}>{children}</Activity>;
+}
+
 const MemoSourcePanel = memo(SourcePanel);
 const MemoCanvasPanel = memo(CanvasPanel);
 const MemoRootNavigator = memo(RootNavigator);
@@ -482,18 +498,20 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
           );
         case "figure-navigator":
           return (
-            <Suspense fallback={null}>
-              <MemoRootNavigator />
-            </Suspense>
+            <WhileTabVisible node={node}>
+              <Suspense fallback={null}>
+                <MemoRootNavigator />
+              </Suspense>
+            </WhileTabVisible>
           );
         case "inspector":
-          return <InspectorPanelSwitch />;
+          return <WhileTabVisible node={node}><InspectorPanelSwitch /></WhileTabVisible>;
         case "builds":
-          return <MemoBuildsPanel />;
+          return <WhileTabVisible node={node}><MemoBuildsPanel /></WhileTabVisible>;
         case "objects":
-          return <MemoObjectsPanel />;
+          return <WhileTabVisible node={node}><MemoObjectsPanel /></WhileTabVisible>;
         case "styles":
-          return <MemoStylesPanel />;
+          return <WhileTabVisible node={node}><MemoStylesPanel /></WhileTabVisible>;
         case "assistant":
           return <MemoAssistantPanel onSubmitPrompt={onSubmitPrompt} onInterruptTurn={onInterruptTurn} onNewChat={onNewChat} />;
         case undefined:
