@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import { resolveBeamerPageGeometry, scanBeamerDocument, type BeamerDocumentModel, type BeamerSlideDestination } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
@@ -41,7 +41,7 @@ export function RootNavigator() {
   const [dragging, setDragging] = useState(false);
   const [drop, setDrop] = useState<Drop | null>(null);
   const [layout, setLayout] = useState<Layout>("strip");
-  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+  const [visibleRootIds, setVisibleRootIds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => collapsedByDocument.get(documentId) ?? new Set());
   // The canvas render has scanned the deck already. Its model serves here too,
   // rather than scanning the document again at each key before the key can
@@ -93,6 +93,11 @@ export function RootNavigator() {
     return result;
   }, [model, roots, collapsed]);
 
+  // Cards move only when the shown slides, their labels or sections change:
+  // an edit inside a slide shifts later source spans but no card, so it
+  // must not make every card measure itself (a forced layout).
+  const shownKey = useMemo(() => entries.map(entry => entry.kind === "frame"
+    ? `f\u0000${entry.root.id}\u0000${entry.root.label}` : `s\u0000${entry.id}\u0000${entry.level}\u0000${entry.title}`).join("\n"), [entries]);
   useEffect(() => {
     setCollapsed(collapsedByDocument.get(documentId) ?? new Set());
     const viewport = viewportRef.current;
@@ -111,16 +116,20 @@ export function RootNavigator() {
     const panel = panelRef.current;
     const viewport = viewportRef.current;
     if (!panel || !viewport) return;
+    const shownIds = shownKey.split("\n").flatMap(line => {
+      const [kind, id] = line.split("\u0000");
+      return kind === "f" && id ? [id] : [];
+    });
     let frame = 0;
     const update = () => {
       frame = 0;
       setLayout(panel.clientWidth < 270 ? "vertical" : panel.clientHeight < 240 ? "strip" : "grid");
       const box = viewport.getBoundingClientRect();
-      const visible = roots.filter(root => {
-        const rect = buttons.current.get(root.id)?.getBoundingClientRect();
+      const visible = shownIds.filter(id => {
+        const rect = buttons.current.get(id)?.getBoundingClientRect();
         return rect && rect.right >= box.left - 180 && rect.left <= box.right + 180 && rect.bottom >= box.top - 180 && rect.top <= box.bottom + 180;
-      }).map(root => root.thumbnailId);
-      setVisibleIds(current => current.join() === visible.join() ? current : visible);
+      });
+      setVisibleRootIds(current => current.join() === visible.join() ? current : visible);
       scrollByDocument.set(documentId, { left: viewport.scrollLeft, top: viewport.scrollTop });
     };
     const schedule = () => { frame ||= requestAnimationFrame(update); };
@@ -129,9 +138,13 @@ export function RootNavigator() {
     viewport.addEventListener("scroll", schedule, { passive: true });
     schedule();
     return () => { observer.disconnect(); viewport.removeEventListener("scroll", schedule); cancelAnimationFrame(frame); };
-  }, [documentId, roots, layout, collapsed]);
+  }, [documentId, shownKey, layout]);
+  // Reveal the active card when it or the slides' arrangement changes, not at
+  // every edit: scrolling into view measures the layout. Collapsing a section
+  // is no reason to reopen it.
+  const arrangementKey = useMemo(() => roots.map(root => `${root.id}\u0000${root.label}`).join("\n"), [roots]);
   useEffect(() => {
-    const navigation = `${documentId}:${activeRootId}:${revision}`;
+    const navigation = `${documentId}:${activeRootId}\n${arrangementKey}`;
     if (lastNavigation.current === navigation) return;
     lastNavigation.current = navigation;
     const switchedDocument = lastNavigationDocument.current !== documentId;
@@ -145,7 +158,7 @@ export function RootNavigator() {
       });
     }
     buttons.current.get(activeRootId ?? "")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeRootId, documentId, model, collapsed, revision]);
+  }, [activeRootId, arrangementKey, documentId, model, collapsed]);
   useEffect(() => {
     const releaseFocus = () => { ownsFocus.current = false; };
     document.addEventListener("pointerdown", releaseFocus, true);
@@ -184,11 +197,52 @@ export function RootNavigator() {
     if (!root) return;
     return { figureId: root.thumbnailId, deckFrameIndex: root.deckFrameIndex, url: mainUrl };
   }, [activeRootId, mainUrl, mirrorActiveRoot, roots]);
+  const visibleIds = useMemo(() => {
+    const byId = new Map(roots.map(root => [root.id, root.thumbnailId]));
+    return visibleRootIds.flatMap(id => byId.get(id) ?? []);
+  }, [roots, visibleRootIds]);
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
   const thumbnails = useFigureThumbnails(model ? model.source : snapshot.source, thumbnailRoots, {
     documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
     priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4),
     externalThumbnail,
+  });
+  // Cards are memoized on what they show; their handlers read the latest
+  // panel state through this ref instead of being new closures each render.
+  const cardHandlers = useRef<CardHandlers | null>(null);
+  useLayoutEffect(() => {
+    cardHandlers.current = {
+      click: (id, event) => {
+        event.currentTarget.focus({ preventScroll: true });
+        if (deckMode) manager.select(id, event); else dispatch({ type: "SET_ACTIVE_ROOT", rootId: id });
+      },
+      contextMenu: (id, event) => { if (deckMode) manager.contextMenu(event, id); },
+      dragStart: (id, label, event) => {
+        const ids = manager.ids.includes(id) ? manager.ids : [id];
+        if (!ids.every(value => manager.movable.includes(value))) { event.preventDefault(); return; }
+        if (!manager.ids.includes(id)) manager.select(id);
+        const token = `${documentId}:${revision}:${id}`;
+        drag.current = { documentId, revision, ids, token }; setDragging(true);
+        event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(DRAG_TYPE, token);
+        if (ids.length > 1) {
+          dragPreview.current?.remove();
+          const ghost = document.createElement("div");
+          ghost.className = css.dragPreview; ghost.setAttribute("aria-hidden", "true");
+          ghost.dataset.testid = "slide-drag-preview";
+          const image = event.currentTarget.querySelector("img")?.cloneNode(true);
+          if (image) ghost.appendChild(image);
+          else {
+            const title = document.createElement("div");
+            title.className = css.dragTitle; title.textContent = label; ghost.appendChild(title);
+          }
+          const count = document.createElement("span");
+          count.textContent = `${ids.length} slides`; ghost.appendChild(count);
+          panelRef.current?.appendChild(ghost); dragPreview.current = ghost;
+          event.dataTransfer.setDragImage(ghost, 24, 24);
+        }
+      },
+      dragEnd: () => { clearDrag(); },
+    };
   });
   const clearDrag = () => { dragPreview.current?.remove(); dragPreview.current = null; drag.current = null; setDragging(false); setDrop(null); };
   const toggleSection = (id: string) => {
@@ -328,52 +382,12 @@ export function RootNavigator() {
             <button type="button" aria-expanded={!collapsed.has(entry.id)} onClick={() => { toggleSection(entry.id); }}>
               <span aria-hidden="true">{collapsed.has(entry.id) ? "▸" : "▾"}</span><span>{entry.title || "Untitled section"}</span>
             </button>
-          </div> : (() => {
-            const root = entry.root;
-            const selected = deckMode ? manager.ids.includes(root.id) : activeRootId === root.id;
-            const thumbnail = thumbnails.get(root.thumbnailId);
-            return <div role="listitem" key={root.id} data-slide-id={root.id} data-drop={drop?.key === root.id ? drop.edge : undefined} className={css.card}>
-              <button type="button" className={css.thumb} data-selected={selected || undefined} data-active={activeRootId === root.id || undefined}
-                aria-pressed={selected} aria-current={activeRootId === root.id ? "true" : undefined} aria-label={root.label} title={root.label}
-                ref={node => { if (node) buttons.current.set(root.id, node); else buttons.current.delete(root.id); }}
-                onClick={event => {
-                  event.currentTarget.focus({ preventScroll: true });
-                  if (deckMode) manager.select(root.id, event); else dispatch({ type: "SET_ACTIVE_ROOT", rootId: root.id });
-                }}
-                onContextMenu={event => { if (deckMode) manager.contextMenu(event, root.id); }}
-                draggable={deckMode && manager.enabled && manager.movable.includes(root.id)}
-                onDragStart={event => {
-                  const ids = manager.ids.includes(root.id) ? manager.ids : [root.id];
-                  if (!ids.every(id => manager.movable.includes(id))) { event.preventDefault(); return; }
-                  if (!manager.ids.includes(root.id)) manager.select(root.id);
-                  const token = `${documentId}:${revision}:${root.id}`;
-                  drag.current = { documentId, revision, ids, token }; setDragging(true);
-                  event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData(DRAG_TYPE, token);
-                  if (ids.length > 1) {
-                    dragPreview.current?.remove();
-                    const ghost = document.createElement("div");
-                    ghost.className = css.dragPreview; ghost.setAttribute("aria-hidden", "true");
-                    ghost.dataset.testid = "slide-drag-preview";
-                    const image = event.currentTarget.querySelector("img")?.cloneNode(true);
-                    if (image) ghost.appendChild(image);
-                    else {
-                      const title = document.createElement("div");
-                      title.className = css.dragTitle; title.textContent = root.label; ghost.appendChild(title);
-                    }
-                    const count = document.createElement("span");
-                    count.textContent = `${ids.length} slides`; ghost.appendChild(count);
-                    panelRef.current?.appendChild(ghost); dragPreview.current = ghost;
-                    event.dataTransfer.setDragImage(ghost, 24, 24);
-                  }
-                }} onDragEnd={clearDrag}>
-                <div className={css.preview} style={layout === "strip" ? undefined : { aspectRatio: previewAspectRatio }}>
-                  {thumbnail ? <img src={thumbnail} alt="" draggable={false} /> : <span>Rendering…</span>}
-                  {root.stepCount != null && root.stepCount > 1 ? <span className={css.stepBadge} data-testid="navigator-step-badge" title={`${root.stepCount} overlay steps`}>{root.stepCount}</span> : null}
-                </div>
-                <div className={css.label}>{root.label}</div>
-              </button>
-            </div>;
-          })())}
+          </div> : <SlideCard key={entry.root.id} handlers={cardHandlers} buttons={buttons} id={entry.root.id} label={entry.root.label}
+            thumbnail={thumbnails.get(entry.root.thumbnailId)} stepCount={entry.root.stepCount}
+            selected={deckMode ? manager.ids.includes(entry.root.id) : activeRootId === entry.root.id}
+            active={activeRootId === entry.root.id} drop={drop?.key === entry.root.id ? drop.edge : undefined}
+            draggable={deckMode && manager.enabled && manager.movable.includes(entry.root.id)}
+            aspectRatio={layout === "strip" ? undefined : previewAspectRatio} />)}
         <div className={css.endDrop} data-drop={drop?.key === "end" ? "after" : undefined} aria-hidden="true" />
       </div>
       {!roots.length && deckMode ? <div className={css.empty}>No slides</div> : null}
@@ -382,3 +396,42 @@ export function RootNavigator() {
     {manager.review}
   </div>;
 }
+
+type CardHandlers = {
+  click: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  contextMenu: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
+  dragStart: (id: string, label: string, event: DragEvent<HTMLButtonElement>) => void;
+  dragEnd: () => void;
+};
+
+const SlideCard = memo(function SlideCard({ handlers, buttons, id, label, thumbnail, stepCount, selected, active, drop, draggable, aspectRatio }: {
+  handlers: RefObject<CardHandlers | null>;
+  buttons: RefObject<Map<string, HTMLButtonElement>>;
+  id: string;
+  label: string;
+  thumbnail: string | undefined;
+  stepCount: number | undefined;
+  selected: boolean;
+  active: boolean;
+  drop: Drop["edge"] | undefined;
+  draggable: boolean;
+  aspectRatio: string | undefined;
+}) {
+  const style = useMemo(() => aspectRatio ? { aspectRatio } : undefined, [aspectRatio]);
+  return <div role="listitem" data-slide-id={id} data-drop={drop} className={css.card}>
+    <button type="button" className={css.thumb} data-selected={selected || undefined} data-active={active || undefined}
+      aria-pressed={selected} aria-current={active ? "true" : undefined} aria-label={label} title={label}
+      ref={node => { if (node) buttons.current.set(id, node); else buttons.current.delete(id); }}
+      onClick={event => { handlers.current?.click(id, event); }}
+      onContextMenu={event => { handlers.current?.contextMenu(id, event); }}
+      draggable={draggable}
+      onDragStart={event => { handlers.current?.dragStart(id, label, event); }}
+      onDragEnd={() => { handlers.current?.dragEnd(); }}>
+      <div className={css.preview} style={style}>
+        {thumbnail ? <img src={thumbnail} alt="" draggable={false} /> : <span>Rendering…</span>}
+        {stepCount != null && stepCount > 1 ? <span className={css.stepBadge} data-testid="navigator-step-badge" title={`${stepCount} overlay steps`}>{stepCount}</span> : null}
+      </div>
+      <div className={css.label}>{label}</div>
+    </button>
+  </div>;
+});

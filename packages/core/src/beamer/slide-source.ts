@@ -1,5 +1,5 @@
 import type { Span } from "../ast/types.js";
-import { matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
+import { matchTexSyntaxEnvironments, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerDocumentModel, BeamerFrameModel } from "./types.js";
 import type { BeamerSlideDestination } from "./slide-manager.js";
@@ -9,10 +9,33 @@ export function beamerSlideIsEditable(source: string, frame: BeamerFrameModel): 
   return !!frame.endSpan && isDocumentLevelSpan(source, frame.span);
 }
 
+// Per index, environments other than `document` by start, with the furthest
+// end among those starting so far: the slides panel asks this of every frame.
+const enclosingEnvironmentIndex = new WeakMap<TexSyntaxIndex, { starts: number[]; furthestEnd: number[] }>();
+
+function enclosedByEnvironment(syntax: TexSyntaxIndex, span: Span): boolean {
+  let index = enclosingEnvironmentIndex.get(syntax);
+  if (!index) {
+    const environments = [...matchTexSyntaxEnvironments(syntax).values()]
+      .filter(env => env.name !== "document").sort((a, b) => a.span.from - b.span.from);
+    const furthestEnd: number[] = [];
+    for (const env of environments) furthestEnd.push(Math.max(furthestEnd.at(-1) ?? -1, env.span.to));
+    index = { starts: environments.map(env => env.span.from), furthestEnd };
+    enclosingEnvironmentIndex.set(syntax, index);
+  }
+  // Environments starting strictly before the span; one of them encloses it
+  // when it ends strictly after it.
+  let low = 0, high = index.starts.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (index.starts[middle] < span.from) low = middle + 1; else high = middle;
+  }
+  return low > 0 && index.furthestEnd[low - 1] > span.to;
+}
+
 export function isDocumentLevelSpan(source: string, span: Span): boolean {
   const syntax = createBeamerSyntaxContext(source).syntax;
-  if ([...matchTexSyntaxEnvironments(syntax).values()].some(env => env.name !== "document" &&
-    env.span.from < span.from && span.to < env.span.to)) return false;
+  if (enclosedByEnvironment(syntax, span)) return false;
   let node = syntax.tree.resolveInner(span.from + 1, 1).parent;
   while (node) {
     if (["Group", "MacroDefinition", "OptionalArgument"].includes(node.name)) return false;
