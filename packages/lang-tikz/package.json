@@ -25,6 +25,8 @@
   },
   "dependencies": {
     "@codemirror/language": "^6.12.1",
+    "@codemirror/state": "^6.5.4",
+    "@codemirror/view": "^6.39.14",
     "@lezer/common": "^1.5.3",
     "@lezer/highlight": "^1.2.3",
     "@tikz-editor/lezer-tex": "0.6.0",

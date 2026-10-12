@@ -8,6 +8,8 @@ import {
 } from "@tikz-editor/lezer-tex";
 import { parser as baseTikzParser } from "@tikz-editor/lezer-tikz";
 
+import { texHeadings } from "./headings.js";
+
 const tikzHighlighting = styleTags({
   Comment: t.lineComment,
 
@@ -295,7 +297,7 @@ export const texLanguage = LRLanguage.define({
 });
 
 export function tex(): LanguageSupport {
-  return new LanguageSupport(texLanguage);
+  return new LanguageSupport(texLanguage, [texHeadings]);
 }
 
 export const beamerLanguage = LRLanguage.define({
@@ -306,5 +308,5 @@ export const beamerLanguage = LRLanguage.define({
 });
 
 export function beamer(): LanguageSupport {
-  return new LanguageSupport(beamerLanguage);
+  return new LanguageSupport(beamerLanguage, [texHeadings]);
 }
