@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderTikzToSvg } from "../../packages/core/src/render/index.js";
+import { scanBeamerDocument } from "../../packages/core/src/beamer/index.js";
 import { makeInitialState } from "../../packages/app/src/store/reducer.js";
 import { useEditorStore } from "../../packages/app/src/store/store.js";
 import {
@@ -98,6 +99,7 @@ describe("SourcePanel diagnostics", () => {
       revision: 1,
       deck: {
         frames: [],
+        document: scanBeamerDocument(source),
         activeFrame: null,
         diagnostics: [
           {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { resolveBeamerPageGeometry, scanBeamerDocument, type BeamerSlideDestination } from "@tikz-editor/core/beamer/index";
+import { resolveBeamerPageGeometry, scanBeamerDocument, type BeamerDocumentModel, type BeamerSlideDestination } from "@tikz-editor/core/beamer/index";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { computeSourceFingerprint } from "@tikz-editor/core/utils/source-fingerprint";
 import { getActiveEditorPlatform } from "../platform/current";
@@ -43,7 +43,18 @@ export function RootNavigator() {
   const [layout, setLayout] = useState<Layout>("strip");
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => collapsedByDocument.get(documentId) ?? new Set());
-  const model = useMemo(() => deckMode ? scanBeamerDocument(source) : null, [deckMode, source]);
+  // The canvas render has scanned the deck already. Its model serves here too,
+  // rather than scanning the document again at each key before the key can
+  // paint (12 ms in a 125 kB deck). While the next render is pending the
+  // panel shows the last one; only a document not yet rendered is scanned.
+  const renderedModel = deckMode && snapshot.deck?.document.source === source ? snapshot.deck.document : null;
+  const [lastModel, setLastModel] = useState<{ documentId: string; model: BeamerDocumentModel } | null>(null);
+  if (renderedModel && (lastModel?.model !== renderedModel || lastModel.documentId !== documentId)) {
+    setLastModel({ documentId, model: renderedModel });
+  }
+  const reusedModel = deckMode ? renderedModel ?? (lastModel?.documentId === documentId ? lastModel.model : null) : null;
+  const scannedModel = useMemo(() => deckMode && !reusedModel ? scanBeamerDocument(source) : null, [deckMode, reusedModel, source]);
+  const model = reusedModel ?? scannedModel;
   const previewAspectRatio = useMemo(() => {
     if (!model) return;
     const { page } = resolveBeamerPageGeometry(model);
@@ -52,18 +63,18 @@ export function RootNavigator() {
   const manager = useSlideManager(model, panelRef);
   // A new active-frame SVG does not change the deck inventory. Keep card and
   // thumbnail inputs stable instead of rebuilding them for every snapshot.
-  const deckFrames = snapshot.source === source ? snapshot.deck?.frames : undefined;
+  const deckFrames = model && snapshot.deck?.document === model ? snapshot.deck.frames : undefined;
   const figures = model ? undefined : snapshot.figures;
   const roots: Root[] = useMemo(() => {
     const occurrences = new Map<string, number>();
     return model ? model.frames.map((frame, i) => {
-      const fingerprint = computeSourceFingerprint(source.slice(frame.span.from, frame.span.to));
+      const fingerprint = computeSourceFingerprint(model.source.slice(frame.span.from, frame.span.to));
       const occurrence = occurrences.get(fingerprint) ?? 0; occurrences.set(fingerprint, occurrence + 1);
       return { id: frame.id, span: frame.span, label: frame.title?.value ? `${i + 1}. ${frame.title.value}` : `Slide ${i + 1}`,
         thumbnailId: `slide:${fingerprint}:${occurrence}`, deckFrameIndex: i,
         stepCount: deckFrames?.[i]?.stepCount };
     }) : (figures ?? []).map((figure, i) => ({ id: figure.id, span: figure.span, label: `Figure ${i + 1} (L${figure.startLine})`, thumbnailId: figure.id }));
-  }, [model, deckFrames, figures, source]);
+  }, [model, deckFrames, figures]);
   const entries = useMemo(() => {
     if (!model) return roots.map<Entry>(root => ({ kind: "frame", root }));
     const byId = new Map(roots.map(root => [root.id, root]));
@@ -144,14 +155,16 @@ export function RootNavigator() {
       document.removeEventListener("focusin", releaseFocus, true);
     };
   }, []);
+  // Restore focus once the slides of an edit the panel made are shown.
+  const shownSource = model?.source ?? source;
   useEffect(() => {
-    if (lastFocusSource.current === source) return;
-    lastFocusSource.current = source;
+    if (lastFocusSource.current === shownSource) return;
+    lastFocusSource.current = shownSource;
     if (!ownsFocus.current || !panelRef.current) return;
     const target = manager.ids.includes(activeRootId ?? "") ? activeRootId : manager.ids[0];
     const button = buttons.current.get(target ?? "");
     (button ?? panelRef.current).focus({ preventScroll: true });
-  }, [source, activeRootId, manager.ids]);
+  }, [shownSource, activeRootId, manager.ids]);
 
   const thumbnailRoots = useMemo(() => roots.map(root => ({ ...root, id: root.thumbnailId })), [roots]);
   // The active slide or picture shows the canvas's own render instead of
@@ -172,7 +185,7 @@ export function RootNavigator() {
     return { figureId: root.thumbnailId, deckFrameIndex: root.deckFrameIndex, url: mainUrl };
   }, [activeRootId, mainUrl, mirrorActiveRoot, roots]);
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
-  const thumbnails = useFigureThumbnails(model ? source : snapshot.source, thumbnailRoots, {
+  const thumbnails = useFigureThumbnails(model ? model.source : snapshot.source, thumbnailRoots, {
     documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
     priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4),
     externalThumbnail,

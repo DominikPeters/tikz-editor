@@ -32,6 +32,7 @@ import {
   prepareBeamerDocument,
   resolveBeamerTheme,
   scanBeamerDocument,
+  type BeamerDocumentModel,
   type BeamerFrameLayout,
   type PreparedBeamerDocument
 } from "@tikz-editor/core/beamer/index";
@@ -97,6 +98,8 @@ export type DeckSnapshot = {
   /** Opaque, clone-safe freshness fence for the complete SVG/layout pair. */
   cacheEpoch?: number;
   frames: DeckFrameSummary[];
+  /** The scanned deck this render used, which the slides panel shares. */
+  document: BeamerDocumentModel;
   activeFrame: DeckActiveFrame | null;
   diagnostics: Diagnostic[];
 };
@@ -547,8 +550,8 @@ export function isDeckSnapshotCurrent(snapshot: SessionSnapshot, request: Comput
 function deckSnapshot(session: DeckComputeSession, frame: DeckActiveFrame, revision: number): SessionSnapshot {
   return { ...makeEmptySnapshot(session.source), revision, activeRootId: frame.frameId,
     graphicsPreviewBundleKey: session.graphicsContext.previewBundle.cacheKey,
-    deck: { cacheEpoch: session.epoch, frames: session.frames, activeFrame: frame,
-      diagnostics: session.prepared.document.diagnostics } };
+    deck: { cacheEpoch: session.epoch, frames: session.frames, document: session.prepared.document,
+      activeFrame: frame, diagnostics: session.prepared.document.diagnostics } };
 }
 
 /** Only completed pages in the exact current render context can be published. */
@@ -795,6 +798,7 @@ async function computeDeckSnapshot(
     deck: {
       cacheEpoch: session.epoch,
       frames: session.frames,
+      document: session.prepared.document,
       activeFrame,
       diagnostics: session.prepared.document.diagnostics
     }

@@ -8,7 +8,7 @@ import type { EditHandle } from "../packages/core/src/semantic/types.js";
 import { identityMatrix } from "../packages/core/src/semantic/transform.js";
 import { computeSourceFingerprint } from "../packages/core/src/utils/source-fingerprint.js";
 import { PT_PER_CM } from "../packages/core/src/edit/format.js";
-import { prepareBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { buildBeamerObjectIndex } from "../packages/core/src/beamer/object-index.js";
 import { wp } from "./coords-helpers.js";
 
@@ -266,6 +266,7 @@ describe("editorReducer – compute lifecycle", () => {
       ...makeEmptySnapshot("deck source"),
       source: "deck source",
       deck: {
+        document: scanBeamerDocument("deck source"),
         frames: [
           { id: "frame:0", frameIndex: 0, span: { from: 0, to: 10 }, title: "A", stepCount: 1 },
           { id: "frame:1", frameIndex: 1, span: { from: 10, to: 20 }, title: "B", stepCount: 3 }
@@ -1613,7 +1614,7 @@ describe("editorReducer – deck edit actions", () => {
       snapshot: {
         ...makeEmptySnapshot(DECK_SOURCE),
         source: DECK_SOURCE,
-        deck: { frames: [], activeFrame, diagnostics: [] }
+        deck: { frames: [], document: scanBeamerDocument(DECK_SOURCE), activeFrame, diagnostics: [] }
       },
       deckObjectSelection: {
         documentId: initial.activeDocumentId,
