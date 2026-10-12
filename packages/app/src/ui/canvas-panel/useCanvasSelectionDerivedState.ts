@@ -28,7 +28,7 @@ import { resolveResizeFrameForSource } from "./resize-frames";
 import { resolveResizeFrameInFrame } from "./resize-frames";
 import { RESIZE_FRAME_CORNER_ROLES } from "./resize-frames";
 import { resolveRotateHandlePosition } from "./rotate-handle";
-import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex } from "./scope-overlay";
+import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex, scopeWorldBounds } from "./scope-overlay";
 import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 import type {
   AdornmentConnectorDisplay,
@@ -325,10 +325,10 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     return [...selectedElementIds]
       .filter((sourceId) => movableScopeSourceIds.has(sourceId) && scopeOverlay.scopesById.has(sourceId))
       .flatMap((sourceId) => {
-        const bounds = sourceBoundsWorld.get(sourceId);
+        const bounds = scopeWorldBounds(scopeOverlay, sourceId, sourceBoundsWorld);
         return bounds ? [{ scopeId: sourceId, bounds }] : [];
       });
-  }, [movableScopeSourceIds, scopeOverlay.scopesById, selectedElementIds, sourceBoundsWorld]);
+  }, [movableScopeSourceIds, scopeOverlay, selectedElementIds, sourceBoundsWorld]);
 
   const selectionBoundsBySource = useMemo<ReadonlyMap<string, SvgBounds>>(() => {
     const bySource = new Map<string, SvgBounds>();
