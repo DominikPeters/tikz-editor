@@ -15,6 +15,9 @@ import { revisionForText } from "../../packages/app/src/linked-file-sync";
 vi.mock("../../apps/desktop/src/platform/native-menu", () => ({
   createNativeDesktopMenuManager: () => ({ sync: async () => {}, refreshRecents: () => {} }), serializeDesktopContextMenuItems: () => []
 }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onFocusChanged: async () => () => {} })
+}));
 const previousPlatform = getActiveEditorPlatform();
 const previousState = useEditorStore.getState();
 let temp: string;
