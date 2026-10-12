@@ -32,7 +32,9 @@ export function useScheduledCompute(
         schedulingTrigger: policy.cause,
         // A navigation request may also need to render pending typed source.
         // Preserve parse inference independently of whether we delay it.
-        inferSourceChanges: input.sourceChangeOrigin === "source-editor" || input.sourceChangeOrigin === "assistant"
+        // Only edit commands describe their own changes; undo and reloads
+        // carry none, and would otherwise render from scratch.
+        inferSourceChanges: input.sourceChangeOrigin !== "edit-command"
       });
     };
     if (policy.delayMs == null) schedule();
