@@ -10,10 +10,16 @@ export function useScheduledCompute(
 ): void {
   const previousInput = useRef<ComputeSchedulingInput | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When the first key not yet rendered was typed.
+  const typingSinceRef = useRef<number | null>(null);
 
   useLayoutEffect(() => {
-    // Abort obsolete evaluation before a delayed source render is scheduled.
-    schedulerRef.current?.invalidate();
+    // Abort obsolete evaluation before a delayed source render is scheduled,
+    // except while typing: the render in flight then still shows the text
+    // typed so far, where aborting it at every key would show nothing.
+    if (computeSchedulingPolicy(previousInput.current, input).cause !== "source-typing") {
+      schedulerRef.current?.invalidate();
+    }
     if (timerRef.current != null) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -23,9 +29,11 @@ export function useScheduledCompute(
   useEffect(() => {
     const policy = computeSchedulingPolicy(previousInput.current, input);
     previousInput.current = input;
+    if (policy.cause !== "source-typing") typingSinceRef.current = null;
     if (input.publishedDeckSnapshot && isDeckSnapshotCurrent(input.publishedDeckSnapshot, { ...input.request, id: "current-snapshot" })) return;
     const schedule = () => {
       timerRef.current = null;
+      typingSinceRef.current = null;
       schedulerRef.current?.schedule({
         ...input.request,
         id: crypto.randomUUID(),
@@ -35,10 +43,19 @@ export function useScheduledCompute(
         // Only edit commands describe their own changes; undo and reloads
         // carry none, and would otherwise render from scratch.
         inferSourceChanges: input.sourceChangeOrigin !== "edit-command"
-      });
+      }, { keepInFlight: policy.cause === "source-typing" });
     };
-    if (policy.delayMs == null) schedule();
-    else timerRef.current = setTimeout(schedule, policy.delayMs);
+    if (policy.delayMs == null) {
+      schedule();
+      return;
+    }
+    let delayMs = policy.delayMs;
+    if (policy.maxWaitMs != null) {
+      const now = performance.now();
+      typingSinceRef.current ??= now;
+      delayMs = Math.max(0, Math.min(delayMs, typingSinceRef.current + policy.maxWaitMs - now));
+    }
+    timerRef.current = setTimeout(schedule, delayMs);
     return () => {
       if (timerRef.current != null) {
         clearTimeout(timerRef.current);
