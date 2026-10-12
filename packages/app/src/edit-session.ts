@@ -7,6 +7,8 @@ type SessionState = Pick<EditorState, "documents" | "activeDocumentId">;
 export type DocumentEditSession = {
   documentId: string;
   activeRootId: string | null;
+  /** Whether the document had chosen its root (on its first render) when the edit began. */
+  rootChosen: boolean;
   baseSource: string;
   latestSource: string;
   latestRevision: number;
@@ -16,7 +18,7 @@ export type DocumentEditSession = {
 
 export function beginDocumentEdit(state: SessionState, changedSourceIds: string[] | null = null): DocumentEditSession {
   const doc = state.documents[state.activeDocumentId];
-  return { documentId: doc.id, activeRootId: doc.activeRootId, baseSource: doc.source,
+  return { documentId: doc.id, activeRootId: doc.activeRootId, rootChosen: doc.hasInitializedRootSelection, baseSource: doc.source,
     latestSource: doc.source, latestRevision: doc.sourceRevision, changedSourceIds, patches: [] };
 }
 
@@ -26,8 +28,11 @@ export function ownsDocumentEdit(session: DocumentEditSession, state: SessionSta
 }
 
 export function canContinueDocumentEdit(session: DocumentEditSession, state: SessionState): boolean {
-  return state.activeDocumentId === session.documentId &&
-    state.documents[session.documentId]?.activeRootId === session.activeRootId && ownsDocumentEdit(session, state);
+  // A document picks its root when its first render lands. An edit begun
+  // before then (a paste right after opening) is about that same picture.
+  const doc = state.documents[session.documentId];
+  const sameRoot = doc?.activeRootId === session.activeRootId || (session.activeRootId === null && !session.rootChosen);
+  return state.activeDocumentId === session.documentId && sameRoot && ownsDocumentEdit(session, state);
 }
 
 /** Called only around synchronous edits after checking ownership. */
