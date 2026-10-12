@@ -116,6 +116,19 @@ const darkHighlightStyle = HighlightStyle.define([
   { tag: t.punctuation,    color: "#d4d4d4" },
   { tag: t.bracket,        color: "#ffd700" },
   { tag: t.name,           color: "#d4d4d4" },
+  // Tags the TikZ and TeX grammars use that the light theme colours too.
+  { tag: t.meta,           color: "#dcdcaa" },
+  { tag: t.labelName,      color: "#9cdcfe" },
+  { tag: t.className,      color: "#4ec9b0" },
+  { tag: t.literal,        color: "#b5cea8" },
+  { tag: t.invalid,        color: "#f44747" },
+]);
+
+// CodeMirror's default style leaves plain variable names uncoloured; colour
+// math identifiers as the dark theme does.
+const lightHighlightStyle = HighlightStyle.define([
+  ...defaultHighlightStyle.specs,
+  { tag: t.variableName, color: "#219" },
 ]);
 
 function buildHighlightExtension(dark: boolean) {
@@ -1001,7 +1014,7 @@ export function SourcePanel() {
         dropCursor(),
         CMState.allowMultipleSelections.of(true),
         indentOnInput(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        syntaxHighlighting(lightHighlightStyle, { fallback: true }),
         bracketMatching(),
         closeBrackets(),
         completionExtension,
