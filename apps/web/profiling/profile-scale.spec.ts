@@ -114,7 +114,9 @@ type ScaleHelpers = {
   viewport: () => HTMLElement;
 };
 
-async function heapMb(page: Page): Promise<number> {
+// Heap readings need CDP, so other browsers report timings only.
+async function heapMb(page: Page): Promise<number | null> {
+  if (page.context().browser()?.browserType().name() !== "chromium") return null;
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("HeapProfiler.collectGarbage");
   const { usedSize } = await cdp.send("Runtime.getHeapUsage");
