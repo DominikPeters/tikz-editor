@@ -43,6 +43,8 @@ test("slide switches use a navigation trigger after source typing", async ({ pag
 });
 
 test("overlay navigation bypasses the delay after a source typing render", async ({ page }) => {
+  // Record from before the edit: its render starts right after the next paint.
+  await resetProfiling(page);
   await page.evaluate(source => (window as typeof window & {
     __TIKZ_EDITOR_APP_TEST_API__: { setSource: (source: string) => void };
   }).__TIKZ_EDITOR_APP_TEST_API__.setSource(source), DECK.replace("First slide.", "Edited first slide."));
