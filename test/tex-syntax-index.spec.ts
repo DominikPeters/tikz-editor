@@ -172,6 +172,24 @@ literal % \end{frame}`;
       .toEqual(["verbatim"]);
   });
 
+  it("reparses from the previous index after an edit with the same result as a fresh parse", () => {
+    const base = String.raw`\begin{frame}{Title}
+  The previous slide says the system
+  \[ f(x)^Td<0 \]
+  \item<2-> More \textbf{text}.
+\end{frame}`;
+    getTexSyntaxIndex(base, beamerDocumentParser);
+    for (const edit of [" given as", "\\alpha", "{", "}"]) {
+      const at = base.indexOf("system") + "system".length;
+      const edited = base.slice(0, at) + edit + base.slice(at);
+      const incremental = getTexSyntaxIndex(edited, beamerDocumentParser);
+      const fresh = buildTexSyntaxIndex(edited, beamerDocumentParser);
+      expect(incremental.tree.toString()).toBe(fresh.tree.toString());
+      expect(incremental.groups).toEqual(fresh.groups);
+      expect(incremental.controls).toEqual(fresh.controls);
+    }
+  });
+
   it("keys the bounded cache by parser identity as well as source", () => {
     const source = "Alpha <2-> omega";
     const generic = getTexSyntaxIndex(source, texDocumentParser);
