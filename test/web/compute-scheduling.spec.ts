@@ -18,13 +18,13 @@ function input(overrides: Partial<ComputeSchedulingInput> = {}, request: Partial
 describe("render scheduling policy", () => {
   const before = input();
   it("renders initial state immediately, including restored typing provenance", () => {
-    expect(computeSchedulingPolicy(null, before)).toEqual({ cause: "initial", delayMs: null });
+    expect(computeSchedulingPolicy(null, before)).toEqual({ cause: "initial" });
   });
   it("debounces actual source typing independently of stale changed-object IDs", () => {
     expect(computeSchedulingPolicy(before, input({}, { source: "after", changedSourceIds: ["old-target"] })))
-      .toEqual({ cause: "source-typing", delayMs: null, afterPaint: true });
+      .toEqual({ cause: "source-typing", afterPaint: true });
     expect(computeSchedulingPolicy(before, input({}, { source: "x".repeat(80_001) })))
-      .toEqual({ cause: "source-typing", delayMs: null, afterPaint: true });
+      .toEqual({ cause: "source-typing", afterPaint: true });
   });
   it.each([
     [{}, { activeRootId: "frame:1" }, "root-switch"],
@@ -34,11 +34,11 @@ describe("render scheduling policy", () => {
     [{ assetRefreshToken: 1 }, {}, "asset-refresh"],
     [{}, { textEditMaskSpan: { from: 0, to: 4 } }, "text-edit-state"],
   ] as const)("flushes discrete context changes without inheriting typing delay", (state, request, cause) => {
-    expect(computeSchedulingPolicy(before, input(state, request))).toEqual({ cause, delayMs: null });
+    expect(computeSchedulingPolicy(before, input(state, request))).toEqual({ cause });
   });
   it("lets navigation win when pending source and root both change", () => {
     expect(computeSchedulingPolicy(before, input({}, { activeRootId: "frame:1", source: "pending edit" })))
-      .toEqual({ cause: "root-switch", delayMs: null });
+      .toEqual({ cause: "root-switch" });
   });
   it.each([
     [{ dragKind: "handle" }, "drag-handle"], [{ dragKind: "resize" }, "drag-element"],
@@ -46,13 +46,13 @@ describe("render scheduling policy", () => {
     [{ sourceScrubActive: true }, "source-scrub"], [{ inspectorEditActive: true }, "inspector-edit"],
     [{ canvasTextEditActive: true }, "canvas-text-edit"],
   ] as const)("keeps rapid direct editing responsive", (state, cause) => {
-    expect(computeSchedulingPolicy(before, input(state, { source: "after" }))).toEqual({ cause, delayMs: null });
+    expect(computeSchedulingPolicy(before, input(state, { source: "after" }))).toEqual({ cause });
   });
   it.each([
-    ["history", "history", null], ["disk", "disk-update", null],
-    ["edit-command", "edit-command", null], ["assistant", "assistant-update", 60],
-  ] as const)("uses explicit provenance for %s source changes", (sourceChangeOrigin, cause, delayMs) => {
-    expect(computeSchedulingPolicy(before, input({ sourceChangeOrigin }, { source: "after" }))).toEqual({ cause, delayMs });
+    ["history", { cause: "history" }], ["disk", { cause: "disk-update" }],
+    ["edit-command", { cause: "edit-command" }], ["assistant", { cause: "assistant-update", afterPaint: true }],
+  ] as const)("uses explicit provenance for %s source changes", (sourceChangeOrigin, policy) => {
+    expect(computeSchedulingPolicy(before, input({ sourceChangeOrigin }, { source: "after" }))).toEqual(policy);
   });
 });
 
@@ -113,7 +113,7 @@ describe("scheduled render transitions", () => {
   });
   it("flushes undo while retiring a pending assistant stream update", () => {
     update(input({ sourceChangeOrigin: "assistant" }, { source: "stream chunk", sourceRevision: 2 }));
-    act(() => { vi.advanceTimersByTime(30); });
+    act(() => { vi.advanceTimersByTime(5); });
     update(input({ sourceChangeOrigin: "history" }, { source: "undone", sourceRevision: 3 }));
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "undone", schedulingTrigger: "history", inferSourceChanges: true

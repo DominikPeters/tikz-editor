@@ -18,6 +18,7 @@ import type {
   AssistantPendingApproval,
   CodexStatus
 } from "../platform/types";
+import { afterNextPaint } from "./frame-scheduling";
 import css from "./AssistantPanel.module.css";
 
 type AssistantPanelProps = {
@@ -607,11 +608,9 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                 onOpen={() => {
                   if (!metaRequested) {
                     setMetaLoading(true);
-                    // Defer metaRequested to ensure the dropdown has a chance to paint 
-                    // the spinner before the potentially blocking listModels call.
-                    setTimeout(() => {
-                      setMetaRequested(true);
-                    }, 100);
+                    // The dropdown paints its spinner before the potentially
+                    // blocking listModels call.
+                    afterNextPaint(() => { setMetaRequested(true); });
                   }
                 }}
                 disabled={submitting || running}

@@ -19,8 +19,12 @@ export type ComputeSchedulingCause = "initial" | "document-switch" | "root-switc
 
 export type ComputeSchedulingPolicy = {
   cause: ComputeSchedulingCause;
-  delayMs: number | null;
-  /** Render once the frame showing the change has been painted, so it shows first. */
+  /**
+   * For a stream of text edits (typing, an assistant's streamed reply): render
+   * once the frame showing the change has been painted, so it shows first,
+   * and keep the render in flight, which shows the text so far, rather than
+   * aborting it at each edit. The latest source renders after it.
+   */
   afterPaint?: boolean;
 };
 
@@ -29,7 +33,7 @@ export function computeSchedulingPolicy(
   previous: ComputeSchedulingInput | null,
   current: ComputeSchedulingInput
 ): ComputeSchedulingPolicy {
-  const immediate = (cause: ComputeSchedulingCause): ComputeSchedulingPolicy => ({ cause, delayMs: null });
+  const immediate = (cause: ComputeSchedulingCause): ComputeSchedulingPolicy => ({ cause });
   if (!previous) return immediate("initial");
   const before = previous.request, next = current.request;
   // Navigation must flush pending typing, even if the new source is still
@@ -51,10 +55,8 @@ export function computeSchedulingPolicy(
     if (current.inspectorEditActive) return immediate("inspector-edit");
     if (current.canvasTextEditActive) return immediate("canvas-text-edit");
     switch (current.sourceChangeOrigin) {
-      // The render in flight is kept and the latest source runs after it, so
-      // typing needs no debounce to coalesce, only to let its text paint.
-      case "source-editor": return { cause: "source-typing", delayMs: null, afterPaint: true };
-      case "assistant": return { cause: "assistant-update", delayMs: 60 };
+      case "source-editor": return { cause: "source-typing", afterPaint: true };
+      case "assistant": return { cause: "assistant-update", afterPaint: true };
       case "disk": return immediate("disk-update");
       case "history": return immediate("history");
       case "edit-command": return immediate("edit-command");
