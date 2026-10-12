@@ -34,8 +34,8 @@
     "build": "npm run generate:grammar && tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@lezer/common": "^1.5.1",
-    "@lezer/lr": "^1.4.8"
+    "@lezer/common": "^1.5.3",
+    "@lezer/lr": "^1.4.11"
   },
   "devDependencies": {
     "@lezer/generator": "^1.8.0",
