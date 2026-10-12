@@ -39,8 +39,6 @@ function Harness(props: {
   graphicsPreviewBundleKey?: string | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
-  refreshDelayMs?: number;
-  contextRefreshDelayMs?: number;
   externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
   onUpdate: (value: ReadonlyMap<string, string>) => void;
 }) {
@@ -49,8 +47,6 @@ function Harness(props: {
     graphicsPreviewBundleKey: props.graphicsPreviewBundleKey,
     priorityFigureIds: props.priorityFigureIds,
     maxToRender: props.maxToRender ?? 4,
-    refreshDelayMs: props.refreshDelayMs ?? 0,
-    contextRefreshDelayMs: props.contextRefreshDelayMs,
     externalThumbnail: props.externalThumbnail
   });
 
@@ -253,7 +249,7 @@ describe("useFigureThumbnails", () => {
     expect(latest.get("figure:0")).toContain("%3Csvg%3Enew%3C%2Fsvg%3E");
   });
 
-  it("restarts a canceled thumbnail when visibility changes without a source edit", async () => {
+  it("keeps a thumbnail still wanted in flight across renders, and restarts one it canceled", async () => {
     const pending = createDeferred<any>();
     vi.mocked(requestThumbnail).mockReturnValueOnce(pending.promise).mockImplementation(async request => ({
       type: "result", ok: true, requestId: request.requestId, groupId: request.groupId,
@@ -265,7 +261,13 @@ describe("useFigureThumbnails", () => {
     await act(async () => { root.render(createElement(Harness, { ...props, priorityFigureIds: [] })); });
     expect(requestThumbnail).toHaveBeenCalledTimes(1);
     await act(async () => { root.render(createElement(Harness, { ...props, priorityFigureIds: ["figure:0"] })); });
+    expect(requestThumbnail).toHaveBeenCalledTimes(1);
+    expect(cancelGroup).not.toHaveBeenCalled();
+    await act(async () => { root.render(createElement(Harness, { ...props, maxToRender: 0 })); });
+    expect(cancelGroup).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(createElement(Harness, props)); });
     await waitForCondition(() => latest.has("figure:0"));
+    expect(requestThumbnail).toHaveBeenCalledTimes(2);
     expect(latest.get("figure:0")).toContain("fresh");
     pending.resolve({ ok: true, svg: "<svg>stale</svg>" });
     await act(flushMicrotasks);
@@ -481,54 +483,52 @@ describe("useFigureThumbnails", () => {
       .not.toBe(firstSignature);
   });
 
-  it("re-renders an edited frame after a pause and the other frames once the document is quiet", async () => {
+  it("re-renders an edited frame at once, and the other frames when text outside frames changes or the edit leaves the frame", async () => {
     vi.mocked(requestThumbnail).mockImplementation(async (request) => ({
       type: "result", ok: true, requestId: request.requestId, groupId: request.groupId,
       figureId: request.figureId, figureSignature: request.figureSignature, svg: "<svg/>"
     }));
-    const frames = (first: string) => [`\\begin{frame}${first}\\end{frame}`, "\\begin{frame}Two\\end{frame}"];
-    const deck = (first: string) => {
-      const [a, b] = frames(first);
-      const source = `\\documentclass{beamer}${a}${b}`;
-      const from = source.indexOf(a);
-      return {
-        source,
-        figures: [
-          { id: "frame:0", span: { from, to: from + a.length }, deckFrameIndex: 0 },
-          { id: "frame:1", span: { from: from + a.length, to: from + a.length + b.length }, deckFrameIndex: 1 }
-        ]
-      };
-    };
-    const renderDeck = async (first: string) => {
-      await act(async () => {
-        root.render(createElement(Harness, { ...deck(first), documentKey: "deck", refreshDelayMs: 300, contextRefreshDelayMs: 2000, onUpdate: () => undefined }));
-        await flushMicrotasks();
+    const deck = (preamble: string, first: string) => {
+      const frames = [`\\begin{frame}${first}\\end{frame}`, "\\begin{frame}Two\\end{frame}", "\\begin{frame}Three\\end{frame}"];
+      let from = preamble.length;
+      const figures = frames.map((frame, index) => {
+        const span = { from, to: from + frame.length };
+        from = span.to;
+        return { id: `frame:${index}`, span, deckFrameIndex: index };
       });
+      return { source: preamble + frames.join(""), figures };
     };
-    const advance = async (ms: number) => {
+    const renderDeck = async (preamble: string, first: string, activeIndex: number) => {
       await act(async () => {
-        vi.advanceTimersByTime(ms);
+        root.render(createElement(Harness, { ...deck(preamble, first), documentKey: "deck", maxToRender: 8,
+          externalThumbnail: { figureId: `frame:${activeIndex}`, deckFrameIndex: activeIndex, url: "data:main" },
+          onUpdate: () => undefined }));
         await flushMicrotasks();
       });
     };
     const requestedFrames = () => vi.mocked(requestThumbnail).mock.calls.map(([request]) => request.figureId);
+    const settle = async (count: number) => { await waitForCondition(() => requestedFrames().length >= count, 10); };
 
-    await renderDeck("One");
-    await advance(0);
-    await waitForCondition(() => requestedFrames().length >= 2, 5);
-    expect(requestedFrames()).toEqual(["frame:0", "frame:1"]);
+    await renderDeck("\\documentclass{beamer}", "One", 1);
+    await settle(2);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:2"]);
 
-    await renderDeck("One edited");
-    await advance(100);
-    await renderDeck("One edited again");
-    await advance(200);
-    expect(requestedFrames()).toHaveLength(2);
-    await advance(150);
-    expect(requestedFrames()).toEqual(["frame:0", "frame:1", "frame:0"]);
+    // Typing in the first frame, from the source editor while the second is shown.
+    await renderDeck("\\documentclass{beamer}", "One edited", 1);
+    await renderDeck("\\documentclass{beamer}", "One edited again", 1);
+    await settle(4);
+    expect(requestedFrames()).toEqual(["frame:0", "frame:2", "frame:0", "frame:0"]);
 
-    await advance(2000);
-    await waitForCondition(() => requestedFrames().length >= 5, 5);
-    expect(requestedFrames()).toEqual(["frame:0", "frame:1", "frame:0", "frame:0", "frame:1"]);
+    // Leaving the second frame gives the others the edited document's numbering.
+    await renderDeck("\\documentclass{beamer}", "One edited again", 0);
+    await settle(6);
+    expect(requestedFrames().slice(4)).toEqual(["frame:1", "frame:2"]);
+
+    // The preamble reaches every frame at once.
+    await renderDeck("\\documentclass[t]{beamer}", "One edited again", 0);
+    await settle(8);
+    expect(requestedFrames().slice(6)).toEqual(["frame:1", "frame:2"]);
+    expect(requestedFrames()).toHaveLength(8);
   });
 
   it("isolates thumbnail cache entries by document", async () => {

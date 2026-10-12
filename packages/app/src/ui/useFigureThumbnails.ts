@@ -21,13 +21,6 @@ type UseFigureThumbnailsOptions = {
   graphicsPreviewBundleKey?: string | null;
   priorityFigureIds?: readonly string[];
   maxToRender?: number;
-  refreshDelayMs?: number;
-  /**
-   * A deck frame also depends on the rest of the document (preamble, sections,
-   * numbering), but edits elsewhere rarely change it: frames whose own source
-   * did not change refresh only once the document has been quiet this long.
-   */
-  contextRefreshDelayMs?: number;
   /** Reuse an existing render without caching it as a final-overlay thumbnail. */
   externalThumbnail?: { figureId: string; deckFrameIndex?: number; url: string | null };
 };
@@ -60,6 +53,26 @@ function makeFigureSignature(
     : `deck:${documentFingerprint ?? computeSourceFingerprint(source)}:${sliceFingerprint}`;
 }
 
+/**
+ * A deck frame also depends on the rest of the document. Text outside the
+ * frames (preamble, sections) can change any of them, so it is compared
+ * directly; other frames' bodies matter only through cross-frame state
+ * (theorem and equation numbers, references, frame-break page counts).
+ */
+function textOutsideDeckFrames(source: string, figures: readonly FigureEntry[]): string | null {
+  const frames = figures.filter((figure) => figure.deckFrameIndex != null)
+    .map((figure) => figure.span).sort((a, b) => a.from - b.from);
+  if (frames.length === 0) return null;
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const span of frames) {
+    parts.push(source.slice(cursor, Math.max(cursor, span.from)));
+    cursor = Math.max(cursor, span.to);
+  }
+  parts.push(source.slice(cursor));
+  return parts.join("\u0000");
+}
+
 function makeCacheKey(
   documentKey: string,
   figureId: string,
@@ -78,80 +91,41 @@ export function useFigureThumbnails(
     graphicsPreviewBundleKey = null,
     priorityFigureIds = EMPTY_PRIORITY_FIGURE_IDS,
     maxToRender = 8,
-    refreshDelayMs = 350,
-    contextRefreshDelayMs = 2000,
     externalThumbnail
   } = options;
   const externalFigureId = externalThumbnail?.figureId;
   const externalDeckFrameIndex = externalThumbnail?.deckFrameIndex;
   const externalUrl = externalThumbnail?.url;
-  const [stableInput, setStableInput] = useState<{
-    source: string;
-    figures: readonly FigureEntry[];
-    documentKey: string;
-    graphicsPreviewBundleKey: string | null;
-    /** The source deck frames' document context is taken from (see `contextRefreshDelayMs`). */
-    contextSource: string;
-  }>({
-    source,
-    figures,
-    documentKey,
-    graphicsPreviewBundleKey,
-    contextSource: source
-  });
   const lastThumbnailByDocumentKeyRef = useRef(new Map<string, Map<string, string>>());
-  const requestTokenByFigureRef = useRef(new Map<string, number>());
-  const stableSource = stableInput.source;
-  const stableFigures = stableInput.figures;
-  const switchedDocument = stableInput.documentKey !== documentKey ||
-    stableInput.graphicsPreviewBundleKey !== graphicsPreviewBundleKey;
 
-  // Another document (or its images) updates at once; edits wait for a pause.
-  useEffect(() => {
-    if (!lastThumbnailByDocumentKeyRef.current.has(documentKey)) {
-      lastThumbnailByDocumentKeyRef.current.set(documentKey, new Map<string, string>());
-    }
-    if (switchedDocument) {
-      setStableInput({ source, figures, documentKey, graphicsPreviewBundleKey, contextSource: source });
-      return;
-    }
-    const timer = window.setTimeout(
-      () => { setStableInput((current) => ({ ...current, source, figures })); },
-      refreshDelayMs
-    );
-    return () => { window.clearTimeout(timer); };
-  }, [documentKey, figures, graphicsPreviewBundleKey, refreshDelayMs, source, switchedDocument]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => { setStableInput((current) => current.documentKey === documentKey ? { ...current, contextSource: source } : current); },
-      Math.max(refreshDelayMs, contextRefreshDelayMs)
-    );
-    return () => { window.clearTimeout(timer); };
-  }, [contextRefreshDelayMs, documentKey, refreshDelayMs, source]);
+  // An edited frame refreshes at once. The others take the whole document as
+  // their context when text outside the frames changes, or once the edit
+  // leaves the frame (the active frame changes): an edit inside a frame
+  // reaches them only through cross-frame numbering and references, and
+  // rerendering every visible frame at each key would almost always redraw
+  // the same images.
+  const outsideFrames = useMemo(() => textOutsideDeckFrames(source, figures), [figures, source]);
+  const contextKey = outsideFrames == null ? null : `${documentKey}\u0000${externalDeckFrameIndex ?? ""}\u0000${outsideFrames}`;
+  const [context, setContext] = useState({ key: contextKey, source });
+  if (context.key !== contextKey) setContext({ key: contextKey, source });
+  const contextSource = context.key === contextKey ? context.source : source;
+  const documentFingerprint = useMemo(
+    () => outsideFrames == null ? null : computeSourceFingerprint(contextSource),
+    [contextSource, outsideFrames]
+  );
 
   const figureSignatures = useMemo(() => {
     const map = new Map<string, string>();
-    const documentFingerprint = stableFigures.some(
-      (figure) => figure.deckFrameIndex != null
-    )
-      ? computeSourceFingerprint(stableInput.contextSource)
-      : null;
-    for (const figure of stableFigures) {
+    for (const figure of figures) {
       map.set(
         figure.id,
-        `${makeFigureSignature(stableSource, figure, documentFingerprint)}:graphics=${
-          stableInput.graphicsPreviewBundleKey ?? ""
+        `${makeFigureSignature(source, figure, documentFingerprint)}:graphics=${
+          graphicsPreviewBundleKey ?? ""
         }`
       );
     }
     return map;
-  }, [stableFigures, stableInput.contextSource, stableInput.graphicsPreviewBundleKey, stableSource]);
-  const figureKey = useMemo(
-    () => stableFigures.map((figure) => `${figure.id}:${figureSignatures.get(figure.id) ?? ""}`).join("|"),
-    [figureSignatures, stableFigures]
-  );
-  const priorityKey = useMemo(() => priorityFigureIds.join("|"), [priorityFigureIds]);
+  }, [documentFingerprint, figures, graphicsPreviewBundleKey, source]);
   const [tick, setTick] = useState(0);
   const lastThumbnailByFigureId =
     lastThumbnailByDocumentKeyRef.current.get(documentKey) ??
@@ -189,106 +163,100 @@ export function useFigureThumbnails(
     return next;
   }, [documentKey, externalFigureId, externalUrl, figureSignatures, figures, lastThumbnailByFigureId, tick]);
 
+  // Requests started here that have not settled, by cache key. A queue that a
+  // new render supersedes leaves running the requests the new one still
+  // wants: while typing, cancelling at every key would discard each render
+  // the worker is in the middle of, so nothing would finish until a pause.
+  const liveRequestsRef = useRef(new Map<string, { groupId: string; promise: Promise<string | null> }>());
+
   useEffect(() => {
-    if (stableFigures.length === 0 || maxToRender <= 0) {
+    const live = liveRequestsRef.current;
+    const wanted = new Map<string, { figure: FigureEntry; signature: string }>();
+    if (figures.length > 0 && maxToRender > 0) {
+      const missing = figures
+        // Frame indices also exclude the previous source revision's thumbnail ID
+        // while edited frame content is acquiring a new fingerprint.
+        .filter(figure => figure.id !== externalFigureId &&
+          (externalDeckFrameIndex == null || figure.deckFrameIndex !== externalDeckFrameIndex))
+        .filter((figure) => {
+          const signature = figureSignatures.get(figure.id);
+          return signature && !thumbnailCache.has(makeCacheKey(documentKey, figure.id, signature));
+        });
+      const prioritized = priorityFigureIds.flatMap((figureId) => missing.filter((figure) => figure.id === figureId));
+      const ordered = [...prioritized, ...missing.filter((figure) => !prioritized.includes(figure))].slice(0, maxToRender);
+      for (const figure of ordered) {
+        const signature = figureSignatures.get(figure.id) ?? "";
+        wanted.set(makeCacheKey(documentKey, figure.id, signature), { figure, signature });
+      }
+    }
+    for (const [key, request] of live) {
+      if (wanted.has(key)) continue;
+      cancelGroup(request.groupId);
+      live.delete(key);
+      // A new queue must not reuse a promise canceled here.
+      if (thumbnailInFlight.get(key) === request.promise) thumbnailInFlight.delete(key);
+    }
+    if (wanted.size === 0) {
       return;
     }
-
-    const figureById = new Map(stableFigures.map((figure) => [figure.id, figure]));
-    const missingIds = stableFigures
-      // Frame indices also exclude the previous source revision's thumbnail ID
-      // while edited frame content is acquiring a new fingerprint.
-      .filter(figure => figure.id !== externalFigureId &&
-        (externalDeckFrameIndex == null || figure.deckFrameIndex !== externalDeckFrameIndex))
-      .map((figure) => figure.id)
-      .filter((figureId) => {
-        const signature = figureSignatures.get(figureId);
-        return (
-          !signature ||
-          !thumbnailCache.has(makeCacheKey(documentKey, figureId, signature))
-        );
-      });
-    if (missingIds.length === 0) {
-      return;
-    }
-
-    const prioritized = priorityFigureIds.filter((figureId) => missingIds.includes(figureId));
-    const orderedMissing = [...prioritized, ...missingIds.filter((figureId) => !prioritized.includes(figureId))]
-      .slice(0, maxToRender);
 
     let cancelled = false;
-    const groupId = `figure-thumb-group-${(thumbnailGroupCounter += 1).toString(36)}`;
     const timers: Array<{ kind: "idle" | "timeout"; id: number }> = [];
-    const ownedRequests = new Map<string, Promise<string | null>>();
+    const startRequest = (key: string, figure: FigureEntry, figureSignature: string): Promise<string | null> => {
+      const groupId = `figure-thumb-group-${(thumbnailGroupCounter += 1).toString(36)}`;
+      const request: ThumbnailRenderRequest = {
+        type: "render",
+        requestId: `figure-thumb-${(thumbnailRequestCounter += 1).toString(36)}`,
+        groupId,
+        source,
+        figureId: figure.id,
+        figureSignature,
+        ...(graphicsPreviewBundleKey
+          ? { graphicsPreviewBundleKey }
+          : {}),
+        ...(figure.deckFrameIndex != null ? { deckFrameIndex: figure.deckFrameIndex } : {}),
+        parseOptions: {
+          recover: true,
+          activeRootId: figure.id,
+          includeContextDefinitions: true
+        },
+        svgOptions: { padding: 8 }
+      };
+      const promise: Promise<string | null> = requestThumbnail(request)
+        .then((result) => result.ok ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}` : null)
+        .catch(() => null)
+        .then((url) => {
+          // A request canceled after its frame left the queue (it scrolled
+          // away or now mirrors the main render) may still answer.
+          if (live.get(key)?.promise !== promise) return null;
+          live.delete(key);
+          if (thumbnailInFlight.get(key) === promise) thumbnailInFlight.delete(key);
+          if (url) {
+            thumbnailCache.set(key, url, url.length * 2);
+            setTick((value) => value + 1);
+          }
+          return url;
+        });
+      live.set(key, { groupId, promise });
+      thumbnailInFlight.set(key, promise);
+      return promise;
+    };
 
     const queue = async (): Promise<void> => {
-      for (const figureId of orderedMissing) {
+      for (const [key, { figure, signature }] of wanted) {
         if (cancelled) {
           return;
         }
-        const figureSignature = figureSignatures.get(figureId);
-        if (!figureSignature) {
-          continue;
-        }
-        const key = makeCacheKey(documentKey, figureId, figureSignature);
         if (thumbnailCache.has(key)) {
           continue;
         }
-        let inFlight = thumbnailInFlight.get(key);
-        if (!inFlight) {
-          const figure = figureById.get(figureId);
-          if (!figure) {
-            continue;
-          }
-          const requestId = `figure-thumb-${(thumbnailRequestCounter += 1).toString(36)}`;
-          const tokenKey = `${documentKey}|${figureId}`;
-          const nextToken = (requestTokenByFigureRef.current.get(tokenKey) ?? 0) + 1;
-          requestTokenByFigureRef.current.set(tokenKey, nextToken);
-          const request: ThumbnailRenderRequest = {
-            type: "render",
-            requestId,
-            groupId,
-            source: stableSource,
-            figureId: figure.id,
-            figureSignature,
-            ...(stableInput.graphicsPreviewBundleKey
-              ? { graphicsPreviewBundleKey: stableInput.graphicsPreviewBundleKey }
-              : {}),
-            ...(figure.deckFrameIndex != null ? { deckFrameIndex: figure.deckFrameIndex } : {}),
-            parseOptions: {
-              recover: true,
-              activeRootId: figure.id,
-              includeContextDefinitions: true
-            },
-            svgOptions: { padding: 8 }
-          };
-          inFlight = requestThumbnail(request)
-            .then((result) => {
-              if (!result.ok || cancelled) {
-                return null;
-              }
-              const activeToken = requestTokenByFigureRef.current.get(tokenKey);
-              if (activeToken !== nextToken) {
-                return null;
-              }
-              return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`;
-            })
-            .catch(() => null)
-            .finally(() => {
-              if (thumbnailInFlight.get(key) === inFlight) thumbnailInFlight.delete(key);
-            });
-          thumbnailInFlight.set(key, inFlight);
-          ownedRequests.set(key, inFlight);
-        }
-        const url = await inFlight;
+        const url = await (thumbnailInFlight.get(key) ?? startRequest(key, figure, signature));
         if (cancelled) {
           return;
         }
         if (!url) {
           continue;
         }
-        thumbnailCache.set(key, url, url.length * 2);
-        setTick((value) => value + 1);
         await new Promise<void>((resolve) => {
           const hasIdleCallback = typeof window.requestIdleCallback === "function";
           if (hasIdleCallback) {
@@ -306,11 +274,6 @@ export function useFigureThumbnails(
 
     return () => {
       cancelled = true;
-      cancelGroup(groupId);
-      // A new queue must not reuse promises canceled by this queue's cleanup.
-      for (const [key, request] of ownedRequests) {
-        if (thumbnailInFlight.get(key) === request) thumbnailInFlight.delete(key);
-      }
       for (const timer of timers) {
         if (timer.kind === "idle" && typeof window.cancelIdleCallback === "function") {
           window.cancelIdleCallback(timer.id);
@@ -319,7 +282,18 @@ export function useFigureThumbnails(
         window.clearTimeout(timer.id);
       }
     };
-  }, [documentKey, externalDeckFrameIndex, externalFigureId, figureKey, figureSignatures, maxToRender, priorityFigureIds, priorityKey, stableFigures, stableInput.graphicsPreviewBundleKey, stableSource]);
+  }, [documentKey, externalDeckFrameIndex, externalFigureId, figureSignatures, figures, graphicsPreviewBundleKey, maxToRender, priorityFigureIds, source]);
+
+  useEffect(() => {
+    const live = liveRequestsRef.current;
+    return () => {
+      for (const [key, request] of live) {
+        cancelGroup(request.groupId);
+        if (thumbnailInFlight.get(key) === request.promise) thumbnailInFlight.delete(key);
+      }
+      live.clear();
+    };
+  }, []);
 
   return thumbnails;
 }
