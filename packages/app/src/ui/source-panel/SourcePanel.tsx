@@ -27,7 +27,6 @@ import {
 } from "@codemirror/commands";
 import {
   bracketMatching,
-  defaultHighlightStyle,
   foldGutter,
   foldKeymap,
   HighlightStyle,
@@ -100,36 +99,37 @@ function sourceLanguage(mode: SourceLanguageMode) {
 
 // ── Theme-aware highlight styles ─────────────────────────────────────────────
 
-const darkHighlightStyle = HighlightStyle.define([
-  { tag: t.keyword,        color: "#569cd6", fontWeight: "bold" },
-  { tag: t.typeName,       color: "#4ec9b0" },
-  { tag: t.lineComment,    color: "#6a9955", fontStyle: "italic" },
-  { tag: t.blockComment,   color: "#6a9955", fontStyle: "italic" },
-  { tag: t.string,         color: "#ce9178" },
-  { tag: t.special(t.string), color: "#dcdcaa" },
-  { tag: t.regexp,         color: "#c586c0", fontWeight: "600" },
-  { tag: t.number,         color: "#b5cea8" },
-  { tag: t.variableName,   color: "#9cdcfe" },
-  { tag: t.attributeName,  color: "#9cdcfe" },
-  { tag: t.propertyName,   color: "#9cdcfe" },
-  { tag: t.operator,       color: "#d4d4d4" },
-  { tag: t.punctuation,    color: "#d4d4d4" },
-  { tag: t.bracket,        color: "#ffd700" },
-  { tag: t.name,           color: "#d4d4d4" },
-  // Tags the TikZ and TeX grammars use that the light theme colours too.
-  { tag: t.meta,           color: "#dcdcaa" },
-  { tag: t.labelName,      color: "#9cdcfe" },
-  { tag: t.className,      color: "#4ec9b0" },
-  { tag: t.literal,        color: "#b5cea8" },
-  { tag: t.invalid,        color: "#f44747" },
-]);
+// One set of roles, coloured per theme, so both themes say the same thing:
+// structure, commands (in text and in math alike), names, math and numbers
+// (delimiters included), option keys and overlays, node text and comments.
+// Prose, operators and brackets keep the text colour.
+type SyntaxPalette = Record<"structure" | "command" | "name" | "math" | "option" | "nodeText" | "comment" | "invalid", string>;
 
-// CodeMirror's default style leaves plain variable names uncoloured; colour
-// math identifiers as the dark theme does.
-const lightHighlightStyle = HighlightStyle.define([
-  ...defaultHighlightStyle.specs,
-  { tag: t.variableName, color: "#219" },
-]);
+const LIGHT_SYNTAX: SyntaxPalette = {
+  structure: "#7a3e9d", command: "#1f5fa8", name: "#0f766e", math: "#2e7d32",
+  option: "#8a6100", nodeText: "#a31515", comment: "#6e7781", invalid: "#d00000"
+};
+
+const DARK_SYNTAX: SyntaxPalette = {
+  structure: "#c586c0", command: "#569cd6", name: "#4ec9b0", math: "#b5cea8",
+  option: "#d7ba7d", nodeText: "#ce9178", comment: "#6a9955", invalid: "#f44747"
+};
+
+function syntaxHighlightStyle(palette: SyntaxPalette): HighlightStyle {
+  return HighlightStyle.define([
+    { tag: t.keyword, color: palette.structure },
+    { tag: t.meta, color: palette.command },
+    { tag: [t.typeName, t.className], color: palette.name },
+    { tag: [t.variableName, t.literal, t.regexp, t.special(t.string)], color: palette.math },
+    { tag: t.labelName, color: palette.option },
+    { tag: t.string, color: palette.nodeText },
+    { tag: t.comment, color: palette.comment, fontStyle: "italic" },
+    { tag: t.invalid, color: palette.invalid }
+  ]);
+}
+
+const lightHighlightStyle = syntaxHighlightStyle(LIGHT_SYNTAX);
+const darkHighlightStyle = syntaxHighlightStyle(DARK_SYNTAX);
 
 function buildHighlightExtension(dark: boolean) {
   return dark ? [Prec.highest(syntaxHighlighting(darkHighlightStyle))] : [];
