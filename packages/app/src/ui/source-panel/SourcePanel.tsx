@@ -1,4 +1,5 @@
 import { useAfterCanvasPaint } from "../hooks/useAfterCanvasPaint";
+import { whenIdle } from "../frame-scheduling";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { clamp } from "@tikz-editor/core/utils/math";
 import { useShallow } from "zustand/react/shallow";
@@ -14,7 +15,8 @@ import {
   Transaction,
   StateEffect,
   StateField,
-  type Range
+  type Range,
+  type Text
 } from "@codemirror/state";
 import {
   defaultKeymap,
@@ -221,7 +223,6 @@ const EMPTY_SYMBOLS: DocumentSymbols = {
 const MAX_DIAGNOSTICS = 300;
 const MAX_DECORATED_SPAN = 160;
 const MAX_RECOVERY_NOISE_DISTANCE = 80;
-const DIAGNOSTIC_DEBOUNCE_MS = 120;
 const DOCS_TOOLTIP_HOVER_TIME_MS = 650;
 const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
 const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
@@ -283,7 +284,7 @@ export const figureOverlayField = StateField.define<{
   update(value, tr) {
     const request = tr.effects.find(effect => effect.is(setFigureOverlay))?.value;
     const next = request ?? value.request;
-    if (next && (request || tr.docChanged) && tr.state.doc.toString() === next.source) {
+    if (next && (request || tr.docChanged) && tr.state.doc.length === next.source.length && tr.state.doc.toString() === next.source) {
       return { request: next, decorations: buildFigureOverlayDecorations({ ...next, docLength: tr.state.doc.length }) };
     }
     // A new range can arrive before the coalesced source sync. Keep it pending
@@ -480,11 +481,11 @@ function useExternalSourceSync(
   lastEditPatches: readonly SourceSyncPatch[] | null,
   lastEditPatchBaseRevision: number | null,
   coalesceToAnimationFrame: boolean,
-  throttleMs = 0,
+  inIdleTime = false,
   onSourceSynced?: () => void
 ) {
   const rafIdRef = useRef<number | null>(null);
-  const throttleIdRef = useRef<number | null>(null);
+  const cancelIdleRef = useRef<(() => void) | null>(null);
   const pendingSyncRef = useRef<PendingExternalSourceSync | null>(null);
   const onSourceSyncedRef = useRef(onSourceSynced);
   useLayoutEffect(() => {
@@ -497,10 +498,8 @@ function useExternalSourceSync(
         window.cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      if (throttleIdRef.current != null) {
-        window.clearTimeout(throttleIdRef.current);
-        throttleIdRef.current = null;
-      }
+      cancelIdleRef.current?.();
+      cancelIdleRef.current = null;
       pendingSyncRef.current = null;
     };
   }, []);
@@ -520,10 +519,8 @@ function useExternalSourceSync(
         window.cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      if (throttleIdRef.current != null) {
-        window.clearTimeout(throttleIdRef.current);
-        throttleIdRef.current = null;
-      }
+      cancelIdleRef.current?.();
+      cancelIdleRef.current = null;
       pendingSyncRef.current = null;
       plugin.syncExternalSource(source, sourceRevision, lastEditPatches, null, false);
       onSourceSyncedRef.current?.();
@@ -554,7 +551,7 @@ function useExternalSourceSync(
     };
     const flushPendingSync = () => {
       rafIdRef.current = null;
-      throttleIdRef.current = null;
+      cancelIdleRef.current = null;
       const pending = pendingSyncRef.current;
       pendingSyncRef.current = null;
       if (!pending) {
@@ -569,18 +566,15 @@ function useExternalSourceSync(
       );
       onSourceSyncedRef.current?.();
     };
-    if (throttleMs > 0) {
-      if (throttleIdRef.current != null) {
-        return;
-      }
-      throttleIdRef.current = window.setTimeout(flushPendingSync, throttleMs);
+    if (rafIdRef.current != null || cancelIdleRef.current != null) {
       return;
     }
-    if (rafIdRef.current != null) {
+    if (inIdleTime) {
+      cancelIdleRef.current = whenIdle(flushPendingSync);
       return;
     }
     rafIdRef.current = window.requestAnimationFrame(flushPendingSync);
-  }, [coalesceToAnimationFrame, lastEditPatchBaseRevision, lastEditPatches, source, sourceRevision, throttleMs, viewRef]);
+  }, [coalesceToAnimationFrame, lastEditPatchBaseRevision, lastEditPatches, inIdleTime, source, sourceRevision, viewRef]);
 }
 
 const diagnosticTooltip = hoverTooltip((view, pos) => {
@@ -877,7 +871,6 @@ export function SourcePanel() {
   const suppressStoreSelectionSyncRef = useRef(false);
   const suppressElementScrollOnFigureSwitchRef = useRef(false);
   const colorPickerApplyingRef = useRef(false);
-  const diagnosticTimerRef = useRef<number | null>(null);
   const spanIndexRef = useRef<SourceSpanIndex>(EMPTY_SPAN_INDEX);
   const symbolsRef = useRef<DocumentSymbols>(EMPTY_SYMBOLS);
   const selectedElementIdsRef = useRef(selectedElementIds);
@@ -1082,10 +1075,6 @@ export function SourcePanel() {
 
     return () => {
       dispatch({ type: "SET_ACTIVE_SOURCE_SCRUB", sourceId: null });
-      if (diagnosticTimerRef.current != null) {
-        clearTimeout(diagnosticTimerRef.current);
-        diagnosticTimerRef.current = null;
-      }
       view.destroy();
       viewRef.current = null;
     };
@@ -1323,7 +1312,7 @@ export function SourcePanel() {
     lastEditPatches,
     lastEditPatchBaseRevision,
     activeCanvasDragKind != null || lastEditPatches != null,
-    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null ? 80 : 0,
+    activeCanvasDragKind != null || activeCanvasTextEditSourceId != null,
     scheduleSourceCosmetics
   );
 
@@ -1376,28 +1365,21 @@ export function SourcePanel() {
   }, [hoveredElementId, snapshot.scene]);
 
   // ── Update diagnostic decorations when snapshot changes ────────────────────
-  useEffect(() => {
-    if (diagnosticTimerRef.current != null) {
-      clearTimeout(diagnosticTimerRef.current);
-    }
-
-    diagnosticTimerRef.current = window.setTimeout(() => {
-      diagnosticTimerRef.current = null;
-      const view = viewRef.current;
-      if (!view) return;
-
-      const docSource = view.state.doc.toString();
-      const list = sourcePanelDiagnostics(snapshot, docSource);
-      view.dispatch({ effects: setDiagnostics.of(list) });
-    }, DIAGNOSTIC_DEBOUNCE_MS);
-
-    return () => {
-      if (diagnosticTimerRef.current != null) {
-        clearTimeout(diagnosticTimerRef.current);
-        diagnosticTimerRef.current = null;
-      }
-    };
+  // After the canvas paints. A drag publishes a snapshot every frame, almost
+  // always with the same diagnostics: those need no transaction.
+  const appliedDiagnosticsRef = useRef<{ doc: Text; key: string } | null>(null);
+  const applyDiagnostics = useCallback(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const doc = view.state.doc;
+    const list = doc.length === snapshot.source.length ? sourcePanelDiagnostics(snapshot, doc.toString()) : [];
+    const key = JSON.stringify(list.map(({ from, to, severity, code, message }) => [from, to, severity, code, message]));
+    const applied = appliedDiagnosticsRef.current;
+    if (applied?.doc === doc && applied.key === key) return;
+    appliedDiagnosticsRef.current = { doc, key };
+    view.dispatch({ effects: setDiagnostics.of(list) });
   }, [snapshot]);
+  useAfterCanvasPaint(applyDiagnostics, true);
 
   useEffect(() => {
     const handleFormatRequest = (): void => {
