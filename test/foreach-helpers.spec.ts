@@ -324,6 +324,31 @@ in {right}`);
     expect(nodes.map((statement) => statement.id)).toEqual(["path:2", "path:3", "path:4", "path:5"]);
   });
 
+  it("gives every iteration and every expansion its own statements, even for identical bodies", () => {
+    const source = String.raw`\begin{tikzpicture}
+\foreach \k in {1,1} { \draw (\k,0) -- (\k,1); }
+\draw (0,0) -- \foreach \k in {1,1} { -- (\k,\k) };
+\end{tikzpicture}`;
+    const first = expandForeachFigure(parseFigure(source), source);
+    const second = expandForeachFigure(parseFigure(source), source);
+
+    const [loopA, loopB, path] = first.figureBody;
+    expect(loopA).not.toBe(loopB);
+    expect(loopA?.id).not.toBe(loopB?.id);
+    expect(second.figureBody).toEqual(first.figureBody);
+    for (const [index, statement] of first.figureBody.entries()) {
+      expect(second.figureBody[index]).not.toBe(statement);
+    }
+    const items = path?.kind === "Path" ? path.items : [];
+    const [secondPath] = second.figureBody.slice(2);
+    const secondItems = secondPath?.kind === "Path" ? secondPath.items : [];
+    expect(items.length).toBeGreaterThan(2);
+    for (const [index, item] of items.entries()) {
+      expect(secondItems[index]).not.toBe(item);
+      expect(items.indexOf(item)).toBe(index);
+    }
+  });
+
   it("expands top-level callable macro invocations by reading source arguments", () => {
     const source = String.raw`\begin{tikzpicture}
 \newcommand{\markpoint}[2][blue]{\node[#1] at (#2,0) {#1};}
