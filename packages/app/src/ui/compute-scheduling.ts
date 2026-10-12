@@ -20,8 +20,6 @@ export type ComputeSchedulingCause = "initial" | "document-switch" | "root-switc
 export type ComputeSchedulingPolicy = {
   cause: ComputeSchedulingCause;
   delayMs: number | null;
-  /** Typing keeps postponing its render, but never past this since the first unrendered key. */
-  maxWaitMs?: number;
   /** Render once the frame showing the change has been painted, so it shows first. */
   afterPaint?: boolean;
 };
@@ -53,11 +51,9 @@ export function computeSchedulingPolicy(
     if (current.inspectorEditActive) return immediate("inspector-edit");
     if (current.canvasTextEditActive) return immediate("canvas-text-edit");
     switch (current.sourceChangeOrigin) {
-      case "source-editor": return next.source.length > 80_000
-        ? { cause: "source-typing", delayMs: 120, maxWaitMs: 400 }
-        // The render in flight is kept and the latest source runs after it,
-        // so typing needs no debounce to coalesce, only to let its text paint.
-        : { cause: "source-typing", delayMs: null, afterPaint: true };
+      // The render in flight is kept and the latest source runs after it, so
+      // typing needs no debounce to coalesce, only to let its text paint.
+      case "source-editor": return { cause: "source-typing", delayMs: null, afterPaint: true };
       case "assistant": return { cause: "assistant-update", delayMs: 60 };
       case "disk": return immediate("disk-update");
       case "history": return immediate("history");

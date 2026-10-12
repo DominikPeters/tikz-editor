@@ -24,7 +24,7 @@ describe("render scheduling policy", () => {
     expect(computeSchedulingPolicy(before, input({}, { source: "after", changedSourceIds: ["old-target"] })))
       .toEqual({ cause: "source-typing", delayMs: null, afterPaint: true });
     expect(computeSchedulingPolicy(before, input({}, { source: "x".repeat(80_001) })))
-      .toEqual({ cause: "source-typing", delayMs: 120, maxWaitMs: 400 });
+      .toEqual({ cause: "source-typing", delayMs: null, afterPaint: true });
   });
   it.each([
     [{}, { activeRootId: "frame:1" }, "root-switch"],
@@ -88,14 +88,6 @@ describe("scheduled render transitions", () => {
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "second", schedulingTrigger: "source-typing", inferSourceChanges: true
     }), { keepInFlight: true });
-  });
-  it("renders continuous typing in a long document at least every maximum wait", () => {
-    const long = "x".repeat(80_001);
-    for (let key = 0; key < 4; key++) {
-      update(input({}, { source: `${long} ${key}`, sourceRevision: 2 + key }));
-      act(() => { vi.advanceTimersByTime(100); });
-    }
-    expect(scheduler.schedule.mock.calls.map(([request]) => request.source.slice(-2))).toEqual([" 3"]);
   });
   it.each(["root", "step", "document"] as const)("flushes pending typing on %s navigation and retires its timer", kind => {
     const typed = input({}, { source: "latest typing", sourceRevision: 2 });
