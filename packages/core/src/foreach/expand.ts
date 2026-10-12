@@ -66,7 +66,9 @@ import { buildForeachIterations } from "./options.js";
 import {
   parsePathItemsFromFragmentWithSyntheticMapping,
   parseStatementsFromBody,
-  parseStatementsFromBodyWithMapping
+  parseStatementsFromBodyWithMapping,
+  type ForeachStatementBodyParseResult,
+  type PathFragmentParseResult
 } from "./snippet-parse.js";
 import { expandTexConditionals } from "../conditionals/expand.js";
 import { substituteForeachBindingsWithMap } from "./substitute.js";
@@ -284,7 +286,7 @@ function expandForeachStatement(
       statement.bodyRaw,
       combinedBindings,
       context,
-      parseStatementsFromBodyWithMapping,
+      parseLoopStatementBody,
       { retryWithoutMacroExpansionOnParseError: true }
     );
     const parsedBody = fragment.parsed;
@@ -448,6 +450,40 @@ function offsetSpan(span: { from: number; to: number } | null, offset: number): 
   return span ? { from: span.from + offset, to: span.to + offset } : null;
 }
 
+/**
+ * Each evaluation expands every loop again, parsing its body once per
+ * iteration, almost always from text an earlier evaluation parsed already.
+ * Keep recent parses and hand out copies: expansion renumbers statement ids
+ * in place and keys its maps by node identity, so no two uses may share nodes.
+ */
+const FRAGMENT_PARSE_CACHE_LIMIT = 4096;
+const statementBodyParses = new Map<string, ForeachStatementBodyParseResult>();
+const pathFragmentParses = new Map<string, PathFragmentParseResult>();
+
+function cachedFragmentParse<T>(cache: Map<string, T>, raw: string, span: Span, parse: () => T): T {
+  const key = `${span.from}:${span.to}:${raw}`;
+  let parsed = cache.get(key);
+  if (parsed) {
+    cache.delete(key);
+  } else {
+    parsed = parse();
+    if (cache.size >= FRAGMENT_PARSE_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  }
+  cache.set(key, parsed);
+  return parsed;
+}
+
+function parseLoopStatementBody(raw: string, span: Span): ForeachStatementBodyParseResult {
+  const parsed = cachedFragmentParse(statementBodyParses, raw, span, () => parseStatementsFromBodyWithMapping(raw, span));
+  const figure = parsed.parseResult.figure;
+  return { ...parsed, parseResult: { ...parsed.parseResult, figure: { ...figure, body: structuredClone(figure.body) } } };
+}
+
+function parseLoopPathFragment(raw: string, span: Span): PathFragmentParseResult {
+  const parsed = cachedFragmentParse(pathFragmentParses, raw, span, () => parsePathItemsFromFragmentWithSyntheticMapping(raw, span));
+  return { ...parsed, value: structuredClone(parsed.value) };
+}
+
 function expandSubstitutedFragment<T extends FragmentParseResult>(
   templateRaw: string,
   bindings: Record<string, string>,
@@ -537,7 +573,7 @@ function expandPathItems(
           item.bodyRaw,
           combinedBindings,
           context,
-          parsePathItemsFromFragmentWithSyntheticMapping
+          parseLoopPathFragment
         );
         const parsedItems = fragment.parsed;
         if (parsedItems.hasParseError) {
@@ -716,7 +752,7 @@ function expandChildOperationItem(
       item.templateRaw,
       variant.bindings,
       context,
-      parsePathItemsFromFragmentWithSyntheticMapping
+      parseLoopPathFragment
     );
     const parsed = fragment.parsed;
     if (parsed.hasParseError) {
@@ -813,7 +849,7 @@ function expandNodeForeachItem(
       item.templateRaw,
       variant.bindings,
       context,
-      parsePathItemsFromFragmentWithSyntheticMapping
+      parseLoopPathFragment
     );
     const parsed = fragment.parsed;
     if (parsed.hasParseError) {
@@ -880,7 +916,7 @@ function expandPicForeachItem(
       template.raw,
       variant.bindings,
       context,
-      parsePathItemsFromFragmentWithSyntheticMapping
+      parseLoopPathFragment
     );
     const parsed = fragment.parsed;
     if (parsed.hasParseError) {
