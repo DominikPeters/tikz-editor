@@ -469,11 +469,13 @@ function createInitialModel(kind: DocumentKind): Model {
   return model;
 }
 
-export function DockLayout(props: DockLayoutProps) {
+// Memoized: the app re-renders on each edit, and re-rendering the dock makes
+// flexlayout measure every panel (a forced layout) though none has moved.
+export const DockLayout = memo(function DockLayout(props: DockLayoutProps) {
   const kind = useEditorStore(s => s.documentKind);
   // A nested TikZ picture keeps its parent deck's panel arrangement.
   return <DocumentDockLayout key={kind} {...props} kind={kind} />;
-}
+});
 
 function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTurn, onNewChat, kind }: DockLayoutProps & { kind: DocumentKind }) {
   const dispatch = useEditorStore((s) => s.dispatch);
