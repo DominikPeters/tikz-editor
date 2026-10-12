@@ -4,6 +4,7 @@ import {
   texDocumentParser,
   texFragmentParser,
 } from "@tikz-editor/lezer-tex";
+import { LRParser } from "@lezer/lr";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -188,6 +189,37 @@ literal % \end{frame}`;
       expect(incremental.groups).toEqual(fresh.groups);
       expect(incremental.controls).toEqual(fresh.controls);
     }
+  });
+
+  it("keeps reparsing a document from its own tree while fragments of it are indexed in between", () => {
+    const frame = String.raw`\begin{frame}{Slide}
+  Text with a caption \caption{A figure} and a \footnote{note}.
+\end{frame}
+`;
+    const document = `\\documentclass{beamer}\n\\begin{document}\n${frame.repeat(40)}\\end{document}\n`;
+    getTexSyntaxIndex(document, beamerDocumentParser);
+    const reused: number[] = [];
+    const createParse = LRParser.prototype.createParse;
+    LRParser.prototype.createParse = function (input, fragments, ranges) {
+      if (this === beamerDocumentParser && input.length > 1000) {
+        reused.push(fragments.reduce((sum, fragment) => sum + fragment.to - fragment.from, 0));
+      }
+      return createParse.call(this, input, fragments, ranges);
+    };
+    try {
+      let source = document;
+      for (let key = 0; key < 12; key++) {
+        // A render indexes fragments of the document with the same parser.
+        for (const fragment of ["A figure", "note", `caption ${key}`]) getTexSyntaxIndex(fragment, beamerDocumentParser);
+        const at = source.indexOf("Text with") + key;
+        source = source.slice(0, at) + "x" + source.slice(at);
+        getTexSyntaxIndex(source, beamerDocumentParser);
+      }
+    } finally {
+      LRParser.prototype.createParse = createParse;
+    }
+    expect(reused).toHaveLength(12);
+    for (const length of reused) expect(length).toBeGreaterThan(document.length / 2);
   });
 
   it("keys the bounded cache by parser identity as well as source", () => {

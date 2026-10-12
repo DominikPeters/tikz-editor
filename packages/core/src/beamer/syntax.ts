@@ -38,7 +38,8 @@ export function createBeamerSyntaxContext(
     patches?: readonly SourcePatch[];
   } = {}
 ): BeamerSyntaxContext {
-  if (structuralMasks.length === 0 && !incremental.previousTree) {
+  // Unmasked indexes are shared and reparse incrementally from recent ones.
+  if (structuralMasks.length === 0) {
     return { source, syntax: getTexSyntaxIndex(source, beamerDocumentParser) };
   }
   const parseSource = applyStructuralMasks(source, structuralMasks);

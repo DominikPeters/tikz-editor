@@ -13,9 +13,20 @@ export type BeamerNoteCommand = {
   option: string;
 };
 
+// Per index: each frame's overlay scan asks for the whole document's notes.
+const notesBySyntax = new WeakMap<TexSyntaxIndex, { source: string; notes: readonly BeamerNoteCommand[] }>();
+
 /** Literal standard Beamer notes, including both orders of [] and <>. */
-export function scanBeamerNoteCommands(source: string, syntax?: TexSyntaxIndex): BeamerNoteCommand[] {
+export function scanBeamerNoteCommands(source: string, syntax?: TexSyntaxIndex): readonly BeamerNoteCommand[] {
   const context = beamerSyntaxContext(source, syntax);
+  const cached = notesBySyntax.get(context.syntax);
+  if (cached?.source === source) return cached.notes;
+  const notes = collectNoteCommands(source, context);
+  notesBySyntax.set(context.syntax, { source, notes });
+  return notes;
+}
+
+function collectNoteCommands(source: string, context: ReturnType<typeof beamerSyntaxContext>): BeamerNoteCommand[] {
   const result: BeamerNoteCommand[] = [];
   let consumed = -1;
   for (const command of context.syntax.controls) {
