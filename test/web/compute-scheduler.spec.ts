@@ -27,6 +27,27 @@ describe("single-flight compute scheduler", () => {
     scheduler.dispose();
   });
 
+  it("lets the request in flight finish when asked to, then runs the latest pending input", async () => {
+    const signals: AbortSignal[] = [];
+    const completed: number[] = [];
+    const deferred = createDeferred<number>();
+    const scheduler = createSingleFlightScheduler<number, number>({
+      run: (input, signal) => {
+        signals.push(signal);
+        return input === 1 ? deferred.promise : Promise.resolve(input);
+      },
+      onSuccess: (_input, output) => completed.push(output)
+    });
+    scheduler.schedule(1);
+    scheduler.schedule(2, { keepInFlight: true });
+    scheduler.schedule(3, { keepInFlight: true });
+    expect(signals[0].aborted).toBe(false);
+    deferred.resolve(1);
+    await waitFor(() => completed.length > 1);
+    expect(completed).toEqual([1, 3]);
+    scheduler.dispose();
+  });
+
   it("runs at most one request in flight and coalesces to the latest pending input", async () => {
     const started: number[] = [];
     const finished: number[] = [];

@@ -1,5 +1,9 @@
 export type SingleFlightScheduler<Input> = {
-  schedule: (input: Input) => void;
+  /**
+   * Run `input` now, or after the run in flight, which is aborted unless
+   * `keepInFlight`: typing would otherwise abort every render before it lands.
+   */
+  schedule: (input: Input, options?: { keepInFlight?: boolean }) => void;
   /** Invalidate immediately, even when the next request is still debouncing. */
   invalidate: () => void;
   dispose: () => void;
@@ -54,13 +58,13 @@ export function createSingleFlightScheduler<Input, Output>(
   };
 
   return {
-    schedule(input: Input): void {
+    schedule(input: Input, scheduleOptions?: { keepInFlight?: boolean }): void {
       if (disposed) {
         return;
       }
       if (inFlight) {
         pending = input;
-        active?.abort();
+        if (!scheduleOptions?.keepInFlight) active?.abort();
         return;
       }
       runNext(input);

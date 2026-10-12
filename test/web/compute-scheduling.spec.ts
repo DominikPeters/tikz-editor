@@ -22,8 +22,8 @@ describe("render scheduling policy", () => {
   });
   it("debounces actual source typing independently of stale changed-object IDs", () => {
     expect(computeSchedulingPolicy(before, input({}, { source: "after", changedSourceIds: ["old-target"] })))
-      .toEqual({ cause: "source-typing", delayMs: 120 });
-    expect(computeSchedulingPolicy(before, input({}, { source: "x".repeat(80_001) })).delayMs).toBe(220);
+      .toEqual({ cause: "source-typing", delayMs: 50, maxWaitMs: 200 });
+    expect(computeSchedulingPolicy(before, input({}, { source: "x".repeat(80_001) })).delayMs).toBe(120);
   });
   it.each([
     [{}, { activeRootId: "frame:1" }, "root-switch"],
@@ -57,7 +57,7 @@ describe("render scheduling policy", () => {
 
 describe("scheduled render transitions", () => {
   let root: Root;
-  const scheduler = { schedule: vi.fn<(request: ComputeRequest) => void>(), invalidate: vi.fn(), dispose: vi.fn() };
+  const scheduler = { schedule: vi.fn<(request: ComputeRequest, options?: { keepInFlight?: boolean }) => void>(), invalidate: vi.fn(), dispose: vi.fn() };
   const schedulerRef = { current: scheduler };
   function Harness({ value }: { value: ComputeSchedulingInput }) {
     useScheduledCompute(schedulerRef, value);
@@ -78,29 +78,36 @@ describe("scheduled render transitions", () => {
     act(() => root.unmount());
     vi.useRealTimers(); vi.unstubAllGlobals();
   });
-  it("coalesces source typing and cancels obsolete computation as soon as source changes", () => {
+  it("coalesces source typing without aborting the render in flight", () => {
     update(input({}, { source: "first", sourceRevision: 2 }));
-    expect(scheduler.invalidate).toHaveBeenCalledTimes(1);
-    act(() => { vi.advanceTimersByTime(100); });
+    act(() => { vi.advanceTimersByTime(40); });
     update(input({}, { source: "second", sourceRevision: 3 }));
-    act(() => { vi.advanceTimersByTime(119); });
+    expect(scheduler.invalidate).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(49); });
     expect(scheduler.schedule).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "second", schedulingTrigger: "source-typing", inferSourceChanges: true
-    }));
+    }), { keepInFlight: true });
+  });
+  it("renders continuous typing at least every maximum wait", () => {
+    for (let key = 0; key < 10; key++) {
+      update(input({}, { source: `typed ${key}`, sourceRevision: 2 + key }));
+      act(() => { vi.advanceTimersByTime(30); });
+    }
+    expect(scheduler.schedule.mock.calls.map(([request]) => request.source)).toEqual(["typed 6"]);
   });
   it.each(["root", "step", "document"] as const)("flushes pending typing on %s navigation and retires its timer", kind => {
     const typed = input({}, { source: "latest typing", sourceRevision: 2 });
     update(typed);
-    act(() => { vi.advanceTimersByTime(50); });
+    act(() => { vi.advanceTimersByTime(30); });
     const navigated = { ...typed, request: { ...typed.request,
       ...(kind === "root" ? { activeRootId: "frame:1" } : kind === "step" ? { deckStep: 2 } : { documentId: "doc-2" }) } };
     update(navigated);
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "latest typing", activeRootId: navigated.request.activeRootId,
       deckStep: navigated.request.deckStep, documentId: navigated.request.documentId, inferSourceChanges: true
-    }));
+    }), expect.anything());
     act(() => { vi.advanceTimersByTime(500); });
     expect(scheduler.schedule).toHaveBeenCalledTimes(1);
   });
@@ -118,7 +125,7 @@ describe("scheduled render transitions", () => {
     update(input({ sourceChangeOrigin: "history" }, { source: "undone", sourceRevision: 3 }));
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "undone", schedulingTrigger: "history", inferSourceChanges: true
-    }));
+    }), expect.anything());
     act(() => { vi.advanceTimersByTime(100); });
     expect(scheduler.schedule).toHaveBeenCalledTimes(1);
   });
@@ -126,7 +133,7 @@ describe("scheduled render transitions", () => {
     update(input({ sourceChangeOrigin: "edit-command" }, { source: "edited", sourceRevision: 2 }));
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "edited", schedulingTrigger: "edit-command", inferSourceChanges: false
-    }));
+    }), expect.anything());
   });
   it("keeps successive source scrub values immediate", () => {
     for (const source of ["1", "2", "3"]) update(input({ sourceScrubActive: true }, { source }));
