@@ -22,8 +22,6 @@ export function useScheduledCompute(
 ): void {
   const previousInput = useRef<ComputeSchedulingInput | null>(null);
   const cancelPendingRef = useRef<(() => void) | null>(null);
-  // When the first key not yet rendered was typed.
-  const typingSinceRef = useRef<number | null>(null);
 
   useLayoutEffect(() => {
     // Abort obsolete evaluation before a delayed source render is scheduled,
@@ -39,11 +37,9 @@ export function useScheduledCompute(
   useEffect(() => {
     const policy = computeSchedulingPolicy(previousInput.current, input);
     previousInput.current = input;
-    if (policy.cause !== "source-typing") typingSinceRef.current = null;
     if (input.publishedDeckSnapshot && isDeckSnapshotCurrent(input.publishedDeckSnapshot, { ...input.request, id: "current-snapshot" })) return;
     const schedule = () => {
       cancelPendingRef.current = null;
-      typingSinceRef.current = null;
       schedulerRef.current?.schedule({
         ...input.request,
         id: crypto.randomUUID(),
@@ -61,13 +57,7 @@ export function useScheduledCompute(
       schedule();
       return;
     } else {
-      let delayMs = policy.delayMs;
-      if (policy.maxWaitMs != null) {
-        const now = performance.now();
-        typingSinceRef.current ??= now;
-        delayMs = Math.max(0, Math.min(delayMs, typingSinceRef.current + policy.maxWaitMs - now));
-      }
-      const timer = setTimeout(schedule, delayMs);
+      const timer = setTimeout(schedule, policy.delayMs);
       cancelPendingRef.current = () => {
         clearTimeout(timer);
       };
