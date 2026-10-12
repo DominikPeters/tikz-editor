@@ -22,6 +22,8 @@ export type ComputeSchedulingPolicy = {
   delayMs: number | null;
   /** Typing keeps postponing its render, but never past this since the first unrendered key. */
   maxWaitMs?: number;
+  /** Render once the frame showing the change has been painted, so it shows first. */
+  afterPaint?: boolean;
 };
 
 /** Classify the current transition, rather than metadata retained from an old edit. */
@@ -53,7 +55,9 @@ export function computeSchedulingPolicy(
     switch (current.sourceChangeOrigin) {
       case "source-editor": return next.source.length > 80_000
         ? { cause: "source-typing", delayMs: 120, maxWaitMs: 400 }
-        : { cause: "source-typing", delayMs: 50, maxWaitMs: 200 };
+        // The render in flight is kept and the latest source runs after it,
+        // so typing needs no debounce to coalesce, only to let its text paint.
+        : { cause: "source-typing", delayMs: null, afterPaint: true };
       case "assistant": return { cause: "assistant-update", delayMs: 60 };
       case "disk": return immediate("disk-update");
       case "history": return immediate("history");

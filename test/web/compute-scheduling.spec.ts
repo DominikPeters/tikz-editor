@@ -22,8 +22,9 @@ describe("render scheduling policy", () => {
   });
   it("debounces actual source typing independently of stale changed-object IDs", () => {
     expect(computeSchedulingPolicy(before, input({}, { source: "after", changedSourceIds: ["old-target"] })))
-      .toEqual({ cause: "source-typing", delayMs: 50, maxWaitMs: 200 });
-    expect(computeSchedulingPolicy(before, input({}, { source: "x".repeat(80_001) })).delayMs).toBe(120);
+      .toEqual({ cause: "source-typing", delayMs: null, afterPaint: true });
+    expect(computeSchedulingPolicy(before, input({}, { source: "x".repeat(80_001) })))
+      .toEqual({ cause: "source-typing", delayMs: 120, maxWaitMs: 400 });
   });
   it.each([
     [{}, { activeRootId: "frame:1" }, "root-switch"],
@@ -78,29 +79,28 @@ describe("scheduled render transitions", () => {
     act(() => root.unmount());
     vi.useRealTimers(); vi.unstubAllGlobals();
   });
-  it("coalesces source typing without aborting the render in flight", () => {
+  it("renders typing once its frame has painted, without aborting the render in flight", () => {
     update(input({}, { source: "first", sourceRevision: 2 }));
-    act(() => { vi.advanceTimersByTime(40); });
     update(input({}, { source: "second", sourceRevision: 3 }));
     expect(scheduler.invalidate).not.toHaveBeenCalled();
-    act(() => { vi.advanceTimersByTime(49); });
     expect(scheduler.schedule).not.toHaveBeenCalled();
-    act(() => { vi.advanceTimersByTime(1); });
+    act(() => { vi.advanceTimersByTime(40); });
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       source: "second", schedulingTrigger: "source-typing", inferSourceChanges: true
     }), { keepInFlight: true });
   });
-  it("renders continuous typing at least every maximum wait", () => {
-    for (let key = 0; key < 10; key++) {
-      update(input({}, { source: `typed ${key}`, sourceRevision: 2 + key }));
-      act(() => { vi.advanceTimersByTime(30); });
+  it("renders continuous typing in a long document at least every maximum wait", () => {
+    const long = "x".repeat(80_001);
+    for (let key = 0; key < 4; key++) {
+      update(input({}, { source: `${long} ${key}`, sourceRevision: 2 + key }));
+      act(() => { vi.advanceTimersByTime(100); });
     }
-    expect(scheduler.schedule.mock.calls.map(([request]) => request.source)).toEqual(["typed 6"]);
+    expect(scheduler.schedule.mock.calls.map(([request]) => request.source.slice(-2))).toEqual([" 3"]);
   });
   it.each(["root", "step", "document"] as const)("flushes pending typing on %s navigation and retires its timer", kind => {
     const typed = input({}, { source: "latest typing", sourceRevision: 2 });
     update(typed);
-    act(() => { vi.advanceTimersByTime(30); });
+    act(() => { vi.advanceTimersByTime(5); });
     const navigated = { ...typed, request: { ...typed.request,
       ...(kind === "root" ? { activeRootId: "frame:1" } : kind === "step" ? { deckStep: 2 } : { documentId: "doc-2" }) } };
     update(navigated);
