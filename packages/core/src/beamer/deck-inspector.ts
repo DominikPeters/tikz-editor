@@ -12,6 +12,7 @@ import {
   RENAMEABLE_ENVIRONMENT_GROUPS,
 } from "./deck-edit-actions.js";
 import type { BeamerObjectNode } from "./object-index.js";
+import type { BeamerDocumentModel } from "./types.js";
 
 /**
  * Inspector models for deck objects and frames (Stage 3b). Builders read
@@ -404,11 +405,13 @@ const FRAME_ALIGNMENT_OPTIONS = [
   { value: "b", label: "Bottom" },
 ] as const;
 
+/** `document` is the scan of `source` when the caller has one already. */
 export function buildDeckFrameInspector(
   source: string,
-  frameId: string
+  frameId: string,
+  document?: BeamerDocumentModel
 ): DeckInspectorModel | null {
-  const model = scanBeamerDocument(source);
+  const model = document?.source === source ? document : scanBeamerDocument(source);
   const frame = model.frames.find((candidate) => candidate.id === frameId);
   if (!frame) {
     return null;

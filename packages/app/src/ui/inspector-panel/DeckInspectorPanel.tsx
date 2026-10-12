@@ -38,6 +38,7 @@ export function DeckInspectorPanel(): JSX.Element {
   const activeDocumentId = useEditorStore((s) => s.activeDocumentId);
 
   const activeFrame = snapshot.deck?.activeFrame ?? null;
+  const deckDocument = snapshot.deck?.document;
   const activeRootId = useEditorStore(s => s.activeRootId);
   const activeStep = useEditorStore(s => s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
   const fresh = activeFrame != null && snapshot.source === source && activeFrame.frameId === activeRootId &&
@@ -68,8 +69,9 @@ export function DeckInspectorPanel(): JSX.Element {
     if (selectedNode) {
       return buildDeckObjectInspector(source, selectedNode);
     }
-    return buildDeckFrameInspector(source, activeFrame.frameId);
-  }, [activeFrame, fresh, selectedNode, source]);
+    // The render's scan of the deck, rather than scanning it again here.
+    return buildDeckFrameInspector(source, activeFrame.frameId, deckDocument);
+  }, [activeFrame, deckDocument, fresh, selectedNode, source]);
 
   // Keep showing the last model while a re-render is in flight so the panel
   // does not flicker to empty between an edit and its reconciled snapshot.
