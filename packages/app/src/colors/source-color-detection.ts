@@ -1,4 +1,4 @@
-import type { Tree } from "@lezer/common";
+import type { SyntaxNode, Tree } from "@lezer/common";
 import { hexToRgb, rgbToHex } from "@tikz-editor/core/utils/color-convert";
 import { clamp, clamp01 } from "@tikz-editor/core/utils/math";
 import { parseOptionListRaw } from "@tikz-editor/core/options/parse";
@@ -166,6 +166,7 @@ export function collectDetectedColors(
     occurrences.push(occurrence);
   };
 
+  // Only nodes in the visible ranges matter, so skip every subtree outside them.
   walkTree(tree, (name, from, to) => {
     if (name === "OptionList") {
       if (!intersectsRanges(from, to, normalizedRanges)) {
@@ -240,7 +241,7 @@ export function collectDetectedColors(
         readOnlyReason: DEFINECOLOR_READ_ONLY_REASON
       });
     }
-  });
+  }, normalizedRanges);
 
   occurrences.sort((left, right) => {
     if (left.from !== right.from) {
@@ -556,21 +557,19 @@ type DeclaredColorStatement = {
 };
 
 function collectDeclaredColorStatements(source: string, tree: Tree): DeclaredColorStatement[] {
-  const declarations: DeclaredColorStatement[] = [];
-
-  walkTree(tree, (name, from, to) => {
-    if (name !== "ColorletStatement" && name !== "DefineColorStatement") {
-      return;
+  // Each statement starts with its command, so find the commands in the text
+  // and climb to their statements rather than walking the whole tree.
+  const declarations = new Map<number, DeclaredColorStatement>();
+  for (const command of ["\\colorlet", "\\definecolor"]) {
+    for (let at = source.indexOf(command); at >= 0; at = source.indexOf(command, at + command.length)) {
+      for (let node: SyntaxNode | null = tree.resolveInner(at, 1); node; node = node.parent) {
+        if (node.name !== "ColorletStatement" && node.name !== "DefineColorStatement") continue;
+        declarations.set(node.from, { kind: node.name, from: node.from, to: node.to, raw: source.slice(node.from, node.to) });
+        break;
+      }
     }
-    declarations.push({
-      kind: name,
-      from,
-      to,
-      raw: source.slice(from, to)
-    });
-  });
-
-  return declarations;
+  }
+  return [...declarations.values()].sort((left, right) => left.from - right.from);
 }
 
 export function sourceMayContainDeclaredColors(source: string): boolean {
@@ -634,13 +633,20 @@ function normalizeOptionKey(rawKey: string): string {
   return rawKey.trim().toLowerCase().replace(/\s+/gu, " ");
 }
 
-function walkTree(tree: Tree, visit: (name: string, from: number, to: number) => void): void {
+function walkTree(
+  tree: Tree,
+  visit: (name: string, from: number, to: number) => void,
+  ranges?: readonly SourceRange[]
+): void {
   const cursor = tree.cursor();
 
   for (;;) {
-    visit(cursor.name, cursor.from, cursor.to);
+    const inRanges = !ranges || intersectsRanges(cursor.from, cursor.to, ranges);
+    if (inRanges) {
+      visit(cursor.name, cursor.from, cursor.to);
+    }
 
-    if (cursor.firstChild()) {
+    if (inRanges && cursor.firstChild()) {
       continue;
     }
 
