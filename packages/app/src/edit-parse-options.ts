@@ -44,22 +44,8 @@ export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditPa
     input.activeRootId,
     input.snapshot.figures.length
   );
-  const sharedAnalysis = input.analysis === "shared"
-    ? {
-        analysisView: getSharedEditAnalysisView({
-          documentId: input.documentId ?? "",
-          sourceRevision: input.sourceRevision ?? 0,
-          source: input.source,
-          activeRootId,
-          snapshot: input.snapshot
-        }),
-        analysisSession: getSharedEditAnalysisSession()
-      }
-    : {};
-
-  return {
+  const options: EditParseOptions = {
     activeFigureId: activeRootId,
-    ...sharedAnalysis,
     ...input.overrides,
     sourceFingerprint: buildSnapshotEditSourceFingerprint({
       documentId: input.documentId,
@@ -68,4 +54,20 @@ export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditPa
       sourceRefs: input.snapshot.editHandles.map((handle) => handle.sourceRef)
     })
   };
+  if (input.analysis !== "shared") return options;
+  // Analysed on first use: the command runtime builds these options at every
+  // render, and in a deck, which has no TikZ parse to prime the analysis
+  // from, analysing would parse the whole document as TikZ each time.
+  let analysisView: EditAnalysisView | undefined;
+  const view = (): EditAnalysisView => analysisView ??= getSharedEditAnalysisView({
+    documentId: input.documentId ?? "",
+    sourceRevision: input.sourceRevision ?? 0,
+    source: input.source,
+    activeRootId,
+    snapshot: input.snapshot
+  });
+  return Object.defineProperties(options, {
+    analysisView: { enumerable: true, get: view },
+    analysisSession: { enumerable: true, get: () => { view(); return getSharedEditAnalysisSession(); } }
+  });
 }

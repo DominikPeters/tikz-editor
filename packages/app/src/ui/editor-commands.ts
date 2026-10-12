@@ -1680,13 +1680,17 @@ function resolvedContextActiveFigureId(context: SelectionCommandContext): string
 }
 
 function parseOptionsForContext(context: SelectionCommandContext): EditParseOptions {
-  return {
+  const options = context.parseOptions;
+  // The analysis stays lazy (see buildEditParseOptions): reading it here would
+  // analyse the document whenever availability is computed.
+  return Object.defineProperties({
     activeFigureId: resolvedContextActiveFigureId(context),
-    analysisView: context.parseOptions?.analysisView,
-    analysisSession: context.parseOptions?.analysisSession,
-    indentSize: context.parseOptions?.indentSize,
-    sourceFingerprint: context.parseOptions?.sourceFingerprint
-  };
+    indentSize: options?.indentSize,
+    sourceFingerprint: options?.sourceFingerprint
+  }, {
+    analysisView: { enumerable: true, get: () => options?.analysisView },
+    analysisSession: { enumerable: true, get: () => options?.analysisSession }
+  });
 }
 
 function findSelectedSceneElement(scene: SceneFigure | null, selectedId: string): SceneElement | null {
