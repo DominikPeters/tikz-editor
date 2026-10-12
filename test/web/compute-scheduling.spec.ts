@@ -117,10 +117,16 @@ describe("scheduled render transitions", () => {
     act(() => { vi.advanceTimersByTime(30); });
     update(input({ sourceChangeOrigin: "history" }, { source: "undone", sourceRevision: 3 }));
     expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-      source: "undone", schedulingTrigger: "history", inferSourceChanges: false
+      source: "undone", schedulingTrigger: "history", inferSourceChanges: true
     }));
     act(() => { vi.advanceTimersByTime(100); });
     expect(scheduler.schedule).toHaveBeenCalledTimes(1);
+  });
+  it("lets edit commands keep the changes they describe rather than inferring them", () => {
+    update(input({ sourceChangeOrigin: "edit-command" }, { source: "edited", sourceRevision: 2 }));
+    expect(scheduler.schedule).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      source: "edited", schedulingTrigger: "edit-command", inferSourceChanges: false
+    }));
   });
   it("keeps successive source scrub values immediate", () => {
     for (const source of ["1", "2", "3"]) update(input({ sourceScrubActive: true }, { source }));
