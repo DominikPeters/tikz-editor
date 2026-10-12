@@ -56,7 +56,7 @@
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.14",
-    "@lezer/common": "^1.5.1",
+    "@lezer/common": "^1.5.3",
     "@lezer/highlight": "^1.2.3",
     "@remixicon/react": "^4.9.0",
     "@tikz-editor/core": "0.6.0",

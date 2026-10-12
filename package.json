@@ -142,7 +142,7 @@
     "@eslint-react/eslint-plugin": "^5.8.5",
     "@eslint/js": "^10.0.1",
     "@jridgewell/trace-mapping": "^0.3.31",
-    "@lezer/common": "^1.5.1",
+    "@lezer/common": "^1.5.3",
     "@lezer/highlight": "^1.2.3",
     "@types/node": "^22.13.0",
     "@vitest/coverage-v8": "^3.2.4",
