@@ -10,6 +10,9 @@ import { makeInitialState } from "../../packages/app/src/store/reducer";
 import type { AssistantEvent, AssistantThreadSummary } from "../../packages/app/src/platform/types";
 
 vi.mock("../../apps/desktop/src/platform/native-menu", () => ({ createNativeDesktopMenuManager: () => ({ sync: async () => {}, refreshRecents: () => {} }), serializeDesktopContextMenuItems: () => [] }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ onFocusChanged: async () => () => {} })
+}));
 
 const previousPlatform = getActiveEditorPlatform();
 const previousState = useEditorStore.getState();

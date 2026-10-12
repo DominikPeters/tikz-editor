@@ -59,6 +59,7 @@ import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { PresentationWindow, PresentationDisplayIdentifier } from "../presentation/PresentationWindow";
 import { PresentationOptionsModal } from "../presentation/PresentationOptionsModal";
 import { presentationService } from "../presentation/service";
+import { bindPresentationFocus } from "../presentation/focus";
 import presentationCss from "../presentation/PresentationControls.module.css";
 
 const DevPanel = lazy(async () => {
@@ -704,11 +705,10 @@ function EditorApp() {
   useActiveDocumentAssetWatches({ files: platform.files, source, documentFileRef: activeDocumentFileRef, additionalDocuments: presentationAssets });
   useEffect(() => { presentationService.refresh(); }, [imageAssetRefreshToken]);
   useEffect(() => {
-    let disposed = false, unbind: (() => void) | undefined;
-    void platform.presentation?.onFocus?.(presentationService.focusEditor).then(value => { if (disposed) value(); else unbind = value; });
+    const unbindFocus = bindPresentationFocus(platform.presentation, presentationService.focusEditor);
     const close = () => { void presentationService.stop(); };
     window.addEventListener("pagehide", close);
-    return () => { disposed = true; unbind?.(); window.removeEventListener("pagehide", close); };
+    return () => { unbindFocus(); window.removeEventListener("pagehide", close); };
   }, [platform.presentation]);
 
   useEffect(() => {

@@ -61,7 +61,7 @@ export type PlatformPresentationApi = {
   open(sessionId: string, options: PresentationOptions, onOutputLost: () => void): Promise<PresentationWindows>;
   keepAwake?(active: boolean): Promise<void>;
   enterFullscreen?(): Promise<void>;
-  onFocus?(receive: () => void): Promise<() => void>;
+  onFocus?(receive: () => void): Promise<() => void | Promise<void>>;
 };
 
 /** Inputs cross window boundaries; malformed commands must never reach navigation. */

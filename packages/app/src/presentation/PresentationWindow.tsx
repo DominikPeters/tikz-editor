@@ -5,6 +5,7 @@ import { Modal } from "../ui/Modal";
 import settingsCss from "../ui/SettingsModal.module.css";
 import navigatorCss from "../ui/RootNavigator.module.css";
 import { createBrowserPresentationApi } from "./browser-platform";
+import { bindPresentationFocus } from "./focus";
 import { presentationElapsed } from "./controller";
 import { presentationKeyCommand } from "./keyboard";
 import type { PresentationCommand, PresentationCursor, PresentationRole, PresentationSnapshot, PresentationTransport } from "./types";
@@ -115,7 +116,6 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   useEffect(() => {
     let disposed = false;
     const api = apiRef.current;
-    let unbindFocus: (() => void) | undefined;
     let channel: PresentationTransport | undefined;
     const hello = () => { void Promise.resolve(channel?.send({ type: "hello", sessionId, role, sequence: snapshotRef.current?.sequence ?? -1 })).catch(() => {}); };
     void api.connect(sessionId, message => {
@@ -134,7 +134,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       if (!getActiveEditorPlatform().id.startsWith("desktop") && document.hasFocus()) void Promise.resolve(channel?.send({ type: "focus", sessionId, role })).catch(() => {});
       hello();
     };
-    void api.onFocus?.(focus).then(unbind => { if (disposed) unbind(); else unbindFocus = unbind; });
+    const unbindFocus = bindPresentationFocus(api, focus);
     const timer = window.setInterval(() => {
       if (snapshotRef.current?.ended) return;
       hello();
@@ -144,7 +144,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
     window.addEventListener("pagehide", closed);
     if (!getActiveEditorPlatform().id.startsWith("desktop")) void api.keepAwake?.(true);
     return () => {
-      disposed = true; window.clearInterval(timer); unbindFocus?.();
+      disposed = true; window.clearInterval(timer); unbindFocus();
       window.removeEventListener("pagehide", closed); channel?.close(); transport.current = null;
       if (!getActiveEditorPlatform().id.startsWith("desktop")) void api.keepAwake?.(false);
     };
