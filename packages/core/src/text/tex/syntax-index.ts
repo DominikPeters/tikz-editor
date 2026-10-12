@@ -119,21 +119,38 @@ const matchedEnvironmentCache = new WeakMap<
   ReadonlyMap<number, TexSyntaxMatchedEnvironment>
 >();
 
-// The latest index per parser. Successive sources are usually one edit
-// apart (typing), so a new index reparses from its tree rather than afresh.
-const latestIndexByParser = new WeakMap<LRParser, TexSyntaxIndex>();
+// Recent indexes per parser. Successive sources are usually one edit apart
+// (typing), so a new index reparses from the tree of the one sharing most
+// text with it rather than afresh, and takes its place. A document's render
+// also indexes fragments of it (captions, notes, footnotes) with the same
+// parser; when too many are kept the smallest goes first, since a fragment
+// reparses quickly from scratch and a whole document does not.
+const RECENT_INDEX_LIMIT = 8;
+const recentIndexesByParser = new WeakMap<LRParser, TexSyntaxIndex[]>();
 
 export function getTexSyntaxIndex(
   source: string,
   parser: LRParser
 ): TexSyntaxIndex {
+  let recent = recentIndexesByParser.get(parser) ?? [];
   const index = cachedIndex(syntaxIndexCache, parser, source, () => {
-    const latest = latestIndexByParser.get(parser);
-    return latest
-      ? buildTexSyntaxIndex(source, parser, { previousTree: latest.tree, changes: [changedSpan(latest.source, source)] })
-      : buildTexSyntaxIndex(source, parser);
+    let best: { index: TexSyntaxIndex; change: ReturnType<typeof changedSpan>; unchanged: number } | null = null;
+    for (const candidate of recent) {
+      const change = changedSpan(candidate.source, source);
+      const unchanged = change.fromA + candidate.source.length - change.toA;
+      if (!best || unchanged > best.unchanged) best = { index: candidate, change, unchanged };
+    }
+    if (!best || best.unchanged === 0) return buildTexSyntaxIndex(source, parser);
+    const previous = best.index;
+    recent = recent.filter((entry) => entry !== previous);
+    return buildTexSyntaxIndex(source, parser, { previousTree: previous.tree, changes: [best.change] });
   });
-  latestIndexByParser.set(parser, index);
+  recent = [index, ...recent.filter((entry) => entry !== index)];
+  if (recent.length > RECENT_INDEX_LIMIT) {
+    const smallest = recent.slice(1).reduce((min, entry) => entry.source.length < min.source.length ? entry : min);
+    recent = recent.filter((entry) => entry !== smallest);
+  }
+  recentIndexesByParser.set(parser, recent);
   return index;
 }
 
