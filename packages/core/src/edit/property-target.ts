@@ -1,6 +1,6 @@
 import type { Span, Statement, PathStatement, PathItem, NodeItem, ChildOperationItem } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
-import { parseStatementsFromBodyWithMapping } from "../foreach/snippet-parse.js";
+import { parseStatementsFromBodyWithMapping, type ForeachStatementBodyParseResult } from "../foreach/snippet-parse.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { normalizeOptionKey } from "./option-key.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
@@ -16,6 +16,25 @@ import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/node
 import { incrementProfilingCounter } from "../profiling.js";
 import { findPathStatementById } from "./statement-find.js";
 import { walkPathItems } from "../ast/walk.js";
+
+// Every foreach-template target reparses its loop's body, and the canvas
+// resolves the targets of all text in a figure on each render, most of them in
+// the same few loops: keep recent body parses. Callers only read them.
+const LOOP_BODY_PARSE_LIMIT = 64;
+const loopBodyParses = new Map<string, ForeachStatementBodyParseResult>();
+
+function parseLoopBody(bodyRaw: string, bodySpan: Span): ForeachStatementBodyParseResult {
+  const key = `${bodySpan.from}:${bodySpan.to}:${bodyRaw}`;
+  let parsed = loopBodyParses.get(key);
+  if (parsed) {
+    loopBodyParses.delete(key);
+  } else {
+    parsed = parseStatementsFromBodyWithMapping(bodyRaw, bodySpan);
+    if (loopBodyParses.size >= LOOP_BODY_PARSE_LIMIT) loopBodyParses.delete(loopBodyParses.keys().next().value!);
+  }
+  loopBodyParses.set(key, parsed);
+  return parsed;
+}
 
 // A parse result owns its target index. Normal targets no longer walk every
 // preceding path (and all their items) for each object in the scene.
@@ -601,7 +620,7 @@ function resolveForeachTemplateTargetFromParseResult(
     return null;
   }
 
-  const reparsedBody = parseStatementsFromBodyWithMapping(loopBody.bodyRaw, loopBody.bodySpan);
+  const reparsedBody = parseLoopBody(loopBody.bodyRaw, loopBody.bodySpan);
   const resolved = resolvePropertyTargetFromParseResult(
     reparsedBody.parseResult.source,
     reparsedBody.parseResult,
@@ -639,7 +658,7 @@ function resolveNestedForeachBody(
   }
 
   for (const nestedLoopLocalId of nestedLoopLocalIds) {
-    const reparsedBody = parseStatementsFromBodyWithMapping(currentLoop.bodyRaw, currentBodySpan);
+    const reparsedBody = parseLoopBody(currentLoop.bodyRaw, currentBodySpan);
     const nestedLoop = findForeachStatementById(reparsedBody.parseResult.figure.body, nestedLoopLocalId);
     if (!nestedLoop?.bodySpan) {
       return null;
