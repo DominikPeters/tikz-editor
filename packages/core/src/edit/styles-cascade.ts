@@ -550,6 +550,17 @@ function mapEntryToDeclaration(
   };
 }
 
+const propertyIdSets = new WeakMap<Map<string, InspectorProperty>, ReadonlySet<string>>();
+
+function propertyIdSet(propertyMap: Map<string, InspectorProperty>): ReadonlySet<string> {
+  let ids = propertyIdSets.get(propertyMap);
+  if (!ids) {
+    ids = new Set(propertyMap.keys());
+    propertyIdSets.set(propertyMap, ids);
+  }
+  return ids;
+}
+
 function mapContributionToDeclaration(
   key: keyof ResolvedStyle,
   style: ResolvedStyle,
@@ -557,7 +568,7 @@ function mapContributionToDeclaration(
   writeTarget: SetPropertyWriteTarget,
   entry: StyleChainEntry
 ): StylesDeclarationDraft | null {
-  const propertyId = propertyIdForStyleContribution(key, new Set(propertyMap.keys()));
+  const propertyId = propertyIdForStyleContribution(key, propertyIdSet(propertyMap));
   if (!propertyId) {
     return null;
   }
@@ -958,18 +969,30 @@ function formatSectionSubtitle(entry: StyleChainEntry): string | null {
   return null;
 }
 
+let lineStartsSource: string | null = null;
+let lineStarts: number[] = [];
+
 function formatSourceLocation(source: string, sourceRef: StyleSourceRef | undefined): string | null {
   const span = sourceRef?.sourceSpan;
   if (!span) {
     return null;
   }
-  let line = 1;
-  for (let index = 0; index < span.from && index < source.length; index += 1) {
-    if (source.charCodeAt(index) === 10) {
-      line += 1;
+  // A selection builds one model per element over the same source: index its
+  // line starts once rather than scanning from the start for every section.
+  if (lineStartsSource !== source) {
+    lineStartsSource = source;
+    lineStarts = [0];
+    for (let index = 0; index < source.length; index += 1) {
+      if (source.charCodeAt(index) === 10) lineStarts.push(index + 1);
     }
   }
-  return `line ${line}`;
+  let low = 0, high = lineStarts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (lineStarts[middle] <= span.from) low = middle;
+    else high = middle - 1;
+  }
+  return `line ${low + 1}`;
 }
 
 function entryValueForProperty(entry: OptionEntry, property: InspectorProperty): unknown {
