@@ -92,6 +92,16 @@ describe("@tikz-editor/lezer-tex", () => {
     expect(errorRanges(opaqueTree)).toEqual([]);
   });
 
+  it("reads angle brackets in Beamer math as relations, not overlay specifications", () => {
+    const source = String.raw`\item<2-> If \[ f(x)^Td<0, \] and $a > b$ then $c<d$ \only<3>{shown}.`;
+    const tree = beamerDocumentParser.parse(source);
+
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "OverlaySpecification")).toBe(2);
+    expect(countNodes(tree, "DisplayMath")).toBe(1);
+    expect(countNodes(tree, "InlineMath")).toBe(2);
+  });
+
   it.each([
     ["BVerbatim", String.raw`[fontsize=\small]`],
     ["Verbatim", "[numbers=left]"],

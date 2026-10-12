@@ -257,6 +257,11 @@ MathEnvironmentName {
   MissingOpaqueEnvironmentEnd
 }
 
+@external tokens overlayTokens from "./overlay-tokens.js" {
+  OverlayOpen[@dialect=beamer]
+  OverlayClose[@dialect=beamer]
+}
+
 @external tokens mathDelimiterTokens from "./math-delimiter-tokens.js" {
   Dollar
   DoubleDollar
@@ -264,8 +269,6 @@ MathEnvironmentName {
 
 @tokens {
   @precedence {
-    OverlayOpen,
-    OverlayClose,
     BeginCommand,
     EndCommand,
     BeamerPartCmd,
@@ -304,9 +307,6 @@ MathEnvironmentName {
 
   BeginCommand { "\\begin{" }
   EndCommand { "\\end{" }
-
-  OverlayOpen[@dialect=beamer] { "<" }
-  OverlayClose[@dialect=beamer] { ">" }
 
   BeamerPartCmd[@dialect=beamer] { "\\part" }
   BeamerSectionLevelCmd[@dialect=beamer] { "\\section" }
