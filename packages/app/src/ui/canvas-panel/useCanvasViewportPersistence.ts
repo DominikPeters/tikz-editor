@@ -109,14 +109,26 @@ export function useCanvasViewportPersistence({
 
   const maxZoomScale = Math.max(MAX_SCALE, fitToContentScale == null ? MAX_SCALE : fitToContentScale * 2);
 
+  // The viewport's client size, read again only when it is resized: fitting
+  // runs after each new render, when reading it would force a style and
+  // layout pass over the SVG just inserted (~4 ms a key in a large deck).
+  const clientSizeRef = useRef<{ element: HTMLElement; measured: string; width: number; height: number } | null>(null);
+  const measuredSize = `${viewportSize.width}x${viewportSize.height}`;
+
   const fitToContent = useCallback((): boolean => {
     if (!snapshotMatchesActive) return false;
     const fitViewBox = baseSvgResult?.viewBox ?? svgResult?.viewBox;
     const renderViewBox = svgResult?.viewBox ?? fitViewBox;
-    if (!fitViewBox || !renderViewBox || !viewportRef.current) return false;
+    const viewport = viewportRef.current;
+    if (!fitViewBox || !renderViewBox || !viewport) return false;
 
-    const viewportWidth = viewportRef.current.clientWidth;
-    const viewportHeight = viewportRef.current.clientHeight;
+    let clientSize = clientSizeRef.current;
+    if (clientSize?.element !== viewport || clientSize.measured !== measuredSize) {
+      clientSize = { element: viewport, measured: measuredSize, width: viewport.clientWidth, height: viewport.clientHeight };
+      clientSizeRef.current = clientSize;
+    }
+    const viewportWidth = clientSize.width;
+    const viewportHeight = clientSize.height;
 
     const scale = computeFitToContentScale(fitViewBox, viewportWidth, viewportHeight, MIN_SCALE, MAX_SCALE, fitPadding);
     if (scale == null) {
@@ -132,7 +144,7 @@ export function useCanvasViewportPersistence({
     dispatchCanvasTransform(next);
     canvasTransformRef.current = next;
     return true;
-  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, fitPadding, MAX_SCALE, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
+  }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, fitPadding, MAX_SCALE, measuredSize, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
     () => rootKey(activeDocumentId, activeRootId),
