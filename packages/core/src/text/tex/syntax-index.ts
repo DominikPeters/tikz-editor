@@ -119,11 +119,36 @@ const matchedEnvironmentCache = new WeakMap<
   ReadonlyMap<number, TexSyntaxMatchedEnvironment>
 >();
 
+// The latest index per parser. Successive sources are usually one edit
+// apart (typing), so a new index reparses from its tree rather than afresh.
+const latestIndexByParser = new WeakMap<LRParser, TexSyntaxIndex>();
+
 export function getTexSyntaxIndex(
   source: string,
   parser: LRParser
 ): TexSyntaxIndex {
-  return cachedIndex(syntaxIndexCache, parser, source, () => buildTexSyntaxIndex(source, parser));
+  const index = cachedIndex(syntaxIndexCache, parser, source, () => {
+    const latest = latestIndexByParser.get(parser);
+    return latest
+      ? buildTexSyntaxIndex(source, parser, { previousTree: latest.tree, changes: [changedSpan(latest.source, source)] })
+      : buildTexSyntaxIndex(source, parser);
+  });
+  latestIndexByParser.set(parser, index);
+  return index;
+}
+
+/** The single span where `previous` and `next` differ, as a Lezer change. */
+function changedSpan(previous: string, next: string): { fromA: number; toA: number; fromB: number; toB: number } {
+  let prefix = 0;
+  const limit = Math.min(previous.length, next.length);
+  while (prefix < limit && previous.charCodeAt(prefix) === next.charCodeAt(prefix)) prefix += 1;
+  let previousEnd = previous.length;
+  let nextEnd = next.length;
+  while (previousEnd > prefix && nextEnd > prefix && previous.charCodeAt(previousEnd - 1) === next.charCodeAt(nextEnd - 1)) {
+    previousEnd -= 1;
+    nextEnd -= 1;
+  }
+  return { fromA: prefix, toA: previousEnd, fromB: prefix, toB: nextEnd };
 }
 
 function cachedIndex(
