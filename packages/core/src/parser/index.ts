@@ -8,6 +8,7 @@ import { collectContextDefinitions, fromCst } from "../transform/cst-to-ast.js";
 import type { TikzFigure, TikzFigureInventoryItem } from "../ast/types.js";
 import { parseSyntax } from "@tikz-editor/lezer-tikz";
 import {
+  compareDiagnosticPosition,
   getCachedContextDefinitions,
   resolveActiveFigureSpan,
   resolveParseWindowSource
@@ -101,6 +102,8 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
       });
     }
   }
+
+  diagnostics.sort(compareDiagnosticPosition);
 
   if (!recover) {
     const firstError = diagnostics.find((diagnostic) => diagnostic.severity === "error");

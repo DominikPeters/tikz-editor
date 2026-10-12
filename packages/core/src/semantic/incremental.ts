@@ -15,12 +15,14 @@ import {
   type SemanticStatementEffectSummary
 } from "./context.js";
 import { collectGeometryInvalidation, replaceSourceDependencies } from "./dependencies.js";
+import { restoreSemanticSymbolUses } from "./symbol-resolver.js";
 import {
   collectNodeAnchorTargets,
   computeBounds,
   createSemanticEvaluationRun,
   evaluateSemanticStatementByIndex,
   finalizeSemanticEvaluationRun,
+  markOpaqueDependencySources,
   rememberGeometryCheckpoints,
   type EvaluateTikzResult
 } from "./evaluate.js";
@@ -571,6 +573,7 @@ function* evaluateSelectively(args: {
     throw new Error("Selective replay changed the edit-handle count before the reused suffix");
   }
 
+  const reusedSourceIds = new Set<string>();
   for (let statementIndex = corridorEndIndex + 1; statementIndex < statementCount; statementIndex += 1) {
     const fragment = previous.statementFragments[statementIndex];
     if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
@@ -584,12 +587,19 @@ function* evaluateSelectively(args: {
       // Its graphical children can still reuse their recorded effects/geometry.
       nextFragments[statementIndex] = createStatementFragment(evaluateSemanticStatementByIndex(run, statementIndex), run.context.sourceFingerprint);
     } else {
-      applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.sourceId });
+      // Dependencies are recorded per evaluated statement: a foreach iteration
+      // under its own id, not the foreach it came from (as withDependencySource).
+      applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.statementId, elementSourceId: fragment.sourceId });
       run.context.editHandles.push(...fragment.editHandles);
       mergeFeatureUsage(run.featureUsage, fragment.featureUsage);
+      reusedSourceIds.add(fragment.statementId);
     }
     yield;
   }
+  // The effect summaries replay what reused statements define, not what they
+  // look up: take their macro, style and library uses from the previous run.
+  const previousFinal = previousCheckpoints.checkpointsBeforeStatement.get(statementCount);
+  if (previousFinal) restoreSemanticSymbolUses(run.context.symbolResolver, previousFinal.symbolResolverState, reusedSourceIds);
   const finalFeatureUsage = cloneFeatureUsage(run.featureUsage);
   checkpointsBeforeStatement.set(
     statementCount,
@@ -597,9 +607,11 @@ function* evaluateSelectively(args: {
   );
 
   const currentFragments = yield* bindFragmentsToCurrentSource(run, nextFragments, resolveSpan);
-  const recomputedSourceIds = new Set(currentFragments
-    .slice(restoreIndex, corridorEndIndex + 1)
-    .map((fragment) => fragment.sourceId));
+  const recomputed = currentFragments.slice(restoreIndex, corridorEndIndex + 1);
+  const recomputedSourceIds = new Set(recomputed.map((fragment) => fragment.statementId));
+  // A full evaluation marks sources whose elements came from macros or
+  // foreach loops as opaque, which later edits must re-evaluate in full.
+  markOpaqueDependencySources(recomputed.flatMap((fragment) => fragment.elements), run.context);
   const dependencies = replaceSourceDependencies(
     previous.dependencies,
     run.context.dependencyBuilder.buildForSources(recomputedSourceIds),
@@ -675,7 +687,8 @@ function assembleSelectiveSemanticResult(args: {
     }),
     layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements,
-    bounds: computeBounds(elements),
+    // As a full evaluation: clipping and `use as bounding box` paths bound the picture, not all of its elements.
+    bounds: run.context.pictureBounds ?? computeBounds(elements),
     hasStatefulGraphicsState:
       finalFeatureUsage.path_clipping === "used-supported" || finalFeatureUsage.use_as_bounding_box === "used-supported"
   };

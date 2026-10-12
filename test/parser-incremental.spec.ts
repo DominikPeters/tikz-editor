@@ -398,7 +398,9 @@ describe("incremental parser session", () => {
     });
 
     expect(result.stats.strategy).toBe("full");
-    expect(["statement-structure-changed", "statement-parse-error"]).toContain(result.stats.fallbackReason);
+    // The statement ends on the line before \end{tikzpicture}, so the
+    // delimiter check may see the change first.
+    expect(["statement-structure-changed", "statement-parse-error", "patch-touches-figure-delimiter"]).toContain(result.stats.fallbackReason);
   });
 
   it("reuses cached parses and falls back for non-incremental session inputs", () => {

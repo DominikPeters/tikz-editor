@@ -235,6 +235,7 @@ function applyInverseMatrix(matrix: WorldTransform, point: WorldPoint): WorldPoi
 
 export function makeCircleElement(
   sourceId: string,
+  itemId: string,
   center: WorldPoint,
   radius: number,
   style: ResolvedStyle,
@@ -243,8 +244,8 @@ export function makeCircleElement(
 ): SceneCircle {
   return {
     kind: "Circle",
-    id: `scene-circle:${sourceId}:${span.from}`,
-    runtimeId: `scene-circle:${sourceId}:${span.from}`,
+    id: `scene-circle:${sourceId}:${itemId}`,
+    runtimeId: `scene-circle:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
@@ -261,6 +262,7 @@ export function makeCircleElement(
 
 export function makeEllipseElement(
   sourceId: string,
+  itemId: string,
   center: WorldPoint,
   rx: number,
   ry: number,
@@ -271,8 +273,8 @@ export function makeEllipseElement(
 ): SceneEllipse {
   return {
     kind: "Ellipse",
-    id: `scene-ellipse:${sourceId}:${span.from}`,
-    runtimeId: `scene-ellipse:${sourceId}:${span.from}`,
+    id: `scene-ellipse:${sourceId}:${itemId}`,
+    runtimeId: `scene-ellipse:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,

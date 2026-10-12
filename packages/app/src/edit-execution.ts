@@ -42,6 +42,11 @@ export function executeDocumentEdit(
       ? applyDeckEditAction(source, frame.layout, action)
       : { kind: "unsupported", reason: "The slide layout is still catching up." };
   }
+  // Element ids and handles name things in the picture the snapshot shows. Right
+  // after switching pictures they would resolve against the new one instead.
+  if (!nested && activeRootId != null && snapshot.activeRootId != null && snapshot.activeRootId !== activeRootId) {
+    return { kind: "unsupported", reason: "The figure is still catching up." };
+  }
   const span = options.nestedFigureSpan ?? (nested ? resolveNestedEditSpan(context) : null);
   const propertyEdit = action.kind === "setProperty" || action.kind === "setProperties";
   if (nested && (!span || (!propertyEdit && !options.geometry && snapshot.source !== source))) {

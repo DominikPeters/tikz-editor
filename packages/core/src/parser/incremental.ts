@@ -7,9 +7,11 @@ import type { NodeItem, PathItem, TikzFigure, TikzFigureInventoryItem, Span, Sta
 import type { ParseTikzOptions, ParseTikzResult } from "./index.js";
 import type { SourcePatch } from "../edit/types.js";
 import {
+  compareDiagnosticPosition,
   getCachedContextDefinitions,
   resolveActiveFigureSpan,
-  resolveParseWindowSource
+  resolveParseWindowSource,
+  scanFigureSpans
 } from "./shared.js";
 import { parseTikz } from "./index.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
@@ -149,9 +151,10 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       }
     }
 
+    // Only an absent id means "the cached figure": null asks for no figure.
     if (
       cached?.source === input.source &&
-      cached.activeFigureId === (activeFigureId ?? cached.activeFigureId) &&
+      cached.activeFigureId === (activeFigureId === undefined ? cached.activeFigureId : activeFigureId) &&
       cached.includeContextDefinitions === includeContextDefinitions &&
       patches.length === 0
     ) {
@@ -217,6 +220,12 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       }
 
       const nextFigures = shiftFigureInventory(cached.figures, patches, input.source);
+      // Typing a delimiter, comment or verbatim text can move where figures
+      // begin and end, which shifting the old inventory cannot show.
+      if (patches.some((patch) => figureScanMayChange(cached!.source, input.source, patch)) &&
+        !sameSpans(scanFigureSpans(input.source), nextFigures.map((figure) => figure.span))) {
+        return fallbackToFull("patch-touches-figure-delimiter");
+      }
       const nextActiveFigureSpan = resolveActiveFigureSpan(
         nextFigures.map((figure) => figure.span),
         activeFigureId ?? cached.activeFigureId
@@ -250,9 +259,11 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
           return fallbackToFull("statement-structure-changed");
         }
 
-        // New/deleted path items can change generated IDs in other statements.
-        // Source edits must then rebuild ownership from the complete document.
-        if (input.inferChanges && identityStructure(previousStatement) !== identityStructure(replacement)) {
+        // Item ids are positional: an added or removed item (an option list
+        // a property edit inserts, a deleted point) renumbers the items after
+        // it, and can change generated ids in other statements. Rebuild ids
+        // from the complete document then.
+        if (identityStructure(previousStatement) !== identityStructure(replacement)) {
           return fallbackToFull("statement-structure-changed");
         }
 
@@ -319,6 +330,22 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
   };
 }
 
+
+// What the figure scanner reacts to: comments, verbatim, environment delimiters.
+const FIGURE_SCAN_TOKENS = /%|\\(?:begin|end|verb)(?![a-zA-Z])/u;
+
+/** Whether the lines a patch touches, before or after it, hold anything the figure scanner reads. */
+function figureScanMayChange(before: string, after: string, patch: SourcePatch): boolean {
+  const lines = (text: string, span: Span) => {
+    const end = text.indexOf("\n", span.to);
+    return text.slice(text.lastIndexOf("\n", span.from - 1) + 1, end < 0 ? text.length : end);
+  };
+  return FIGURE_SCAN_TOKENS.test(lines(before, patch.oldSpan)) || FIGURE_SCAN_TOKENS.test(lines(after, patch.newSpan));
+}
+
+function sameSpans(left: readonly Span[], right: readonly Span[]): boolean {
+  return left.length === right.length && left.every((span, index) => span.from === right[index].from && span.to === right[index].to);
+}
 
 function identityStructure(statement: Statement): string {
   const items = (entries: readonly PathItem[]): string => entries.map((item) => {
@@ -540,15 +567,16 @@ function buildCache(
     sourceRevision: number | null;
   }
 ): CachedIncrementalParseState {
-  const activeFigureSpan = resolveActiveFigureSpan(
-    parse.figures.map((figure) => figure.span),
-    options.activeFigureId ?? parse.activeFigureId
-  );
+  // The figure the parse resolved, not the one requested: a request may name
+  // a root this source no longer has, which a full parse replaces with its
+  // default, and the cache must describe what the parse holds.
+  const activeFigureId = parse.activeFigureId ?? options.activeFigureId ?? null;
+  const activeFigureSpan = resolveActiveFigureSpan(parse.figures.map((figure) => figure.span), activeFigureId);
   const partition = partitionDiagnostics(parse.diagnostics, parse.figure.body);
   return {
     source: parse.source,
     sourceRevision: options.sourceRevision,
-    activeFigureId: options.activeFigureId ?? parse.activeFigureId,
+    activeFigureId,
     includeContextDefinitions: options.includeContextDefinitions,
     figures: structuredClone(parse.figures),
     activeFigureSpan,
@@ -673,13 +701,7 @@ function collectDiagnostics(partition: ParseDiagnosticPartition): Diagnostic[] {
     diagnostics.push(...localDiagnostics);
   }
   diagnostics.push(...partition.global);
-  diagnostics.sort((left, right) => {
-    if (left.span.from !== right.span.from) {
-      return left.span.from - right.span.from;
-    }
-    return left.span.to - right.span.to;
-  });
-  return diagnostics;
+  return diagnostics.sort(compareDiagnosticPosition);
 }
 
 /**
@@ -838,8 +860,11 @@ function findContainingStatementRef(
   span: Span
 ): StatementRef | null {
   let best: StatementRef | null = null;
+  // Text inserted right at a statement's start or end lands outside its shifted
+  // span, so the statement does not own it: reparsing it would never read it.
+  const insertion = span.from === span.to;
   for (const ref of refsBySourceId.values()) {
-    if (ref.span.from <= span.from && ref.span.to >= span.to) {
+    if (insertion ? ref.span.from < span.from && span.to < ref.span.to : ref.span.from <= span.from && ref.span.to >= span.to) {
       if (!best || width(ref.span) < width(best.span)) {
         best = ref;
       }

@@ -384,7 +384,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       params.markFeature("svg_path", "supported");
     } else if (params.nodeShape === "magnifying glass") {
       pushMatrixNodeElement(
-        makeCircleElement(params.statement.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
+        makeCircleElement(params.statement.id, params.item.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
       );
       pushMatrixNodeElement(
         makeNodeMagnifyingHandleElement(
@@ -403,7 +403,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       params.markFeature("svg_path", "supported");
     } else if (params.nodeShape === "circle split" || params.nodeShape === "circle solidus") {
       pushMatrixNodeElement(
-        makeCircleElement(params.statement.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
+        makeCircleElement(params.statement.id, params.item.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span)
       );
       const radius = matrixLayout.visualRadius;
       if (params.nodeShape === "circle split") {
@@ -530,7 +530,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       params.markFeature("shape_rectangle_split", "supported");
       params.markFeature("svg_path", "supported");
     } else if (params.nodeShape === "circle") {
-      pushMatrixNodeElement(makeCircleElement(params.statement.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span));
+      pushMatrixNodeElement(makeCircleElement(params.statement.id, params.item.id, matrixCenter, matrixLayout.visualRadius, matrixBoxStyle, params.item.span));
       params.markFeature("shape_circle", "supported");
       params.markFeature("svg_circle", "supported");
     } else if (params.nodeShape === "ellipse") {

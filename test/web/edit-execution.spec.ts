@@ -10,6 +10,12 @@ const source = String.raw`\begin{tikzpicture}
   \draw (0,3) rectangle (2,1);
   \draw (3,2) rectangle (5,1);
 \end{tikzpicture}`;
+// Statements that already carry an option list: a property edit then changes
+// the list in place, where adding the list would renumber the path's items.
+const optionedSource = String.raw`\begin{tikzpicture}
+  \draw[thin] (0,3) rectangle (2,1);
+  \draw[thin] (3,2) rectangle (5,1);
+\end{tikzpicture}`;
 let nextId = 0;
 async function setup(input = source, activeRootId = "figure:0") {
   let state = editorReducer(makeInitialState(), { type: "CODE_EDITED", source: input });
@@ -57,7 +63,7 @@ it("shares snapshot geometry with grouping commands", async () => {
 });
 
 it("uses incremental parsing and evaluation for ordinary property commands", async () => {
-  const { state, documentId } = await setup();
+  const { state, documentId } = await setup(optionedSource);
   const result = executeDocumentEdit({ ...state, documentId }, { kind: "setProperty", elementId: "path:1", level: "command", key: "draw", value: "red" });
   if (result.kind !== "success") throw new Error("Expected property edit");
   const { snapshot } = await computeSnapshot({ id: "property-next", documentId, kind: "render", source: result.newSource,
@@ -66,6 +72,19 @@ it("uses incremental parsing and evaluation for ordinary property commands", asy
   expect(snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental" });
   const full = await computeSnapshot({ id: "property-full", documentId: `full-${++nextId}`, kind: "render", source: result.newSource, activeRootId: state.activeRootId });
   expect(snapshot.svg?.svg).toBe(full.snapshot.svg?.svg);
+  expect(snapshot.scene?.elements.map((element) => element.id)).toEqual(full.snapshot.scene?.elements.map((element) => element.id));
+});
+
+it("parses in full when a property edit adds an option list, which renumbers the path's items", async () => {
+  const { state, documentId } = await setup();
+  const result = executeDocumentEdit({ ...state, documentId }, { kind: "setProperty", elementId: "path:1", level: "command", key: "line width", value: "2pt" });
+  if (result.kind !== "success") throw new Error("Expected property edit");
+  const { snapshot } = await computeSnapshot({ id: "property-list", documentId, kind: "render", source: result.newSource,
+    sourceRevision: state.sourceRevision + 1, activeRootId: state.activeRootId, patches: result.patches,
+    patchBaseRevision: state.sourceRevision, changedSourceIds: result.changedSourceIds, trigger: "other" });
+  const full = await computeSnapshot({ id: "property-list-full", documentId: `full-${++nextId}`, kind: "render", source: result.newSource, activeRootId: state.activeRootId });
+  expect(snapshot.parseResult?.figure.body[1]).toEqual(full.snapshot.parseResult?.figure.body[1]);
+  expect(snapshot.scene?.elements.map((element) => element.id)).toEqual(full.snapshot.scene?.elements.map((element) => element.id));
 });
 
 it("rejects misleading patch ownership before semantic or SVG reuse", async () => {
@@ -136,18 +155,17 @@ Before\begin{tikzpicture}\draw (0,0)--(1,1);\end{tikzpicture}After
   expect(current.history).toHaveLength(0);
 });
 
-it("does not reuse geometry from a different active figure", async () => {
+it("does not apply ids from one figure's snapshot to another active figure", async () => {
+  // path:0 names the first figure's statement; in the second figure it is a different one.
   const figures = source + String.raw`\begin{tikzpicture}\draw (0,0)--(9,9);\end{tikzpicture}`;
   const { state, documentId } = await setup(figures);
   const result = executeDocumentEdit({ ...state, documentId, activeRootId: "figure:1" },
     { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "red" });
-  if (result.kind !== "success") throw new Error(JSON.stringify(result));
-  expect(result.newSource.startsWith(source)).toBe(true);
-  expect(result.newSource).toContain(String.raw`\draw[red] (0,0)--(9,9);`);
+  expect(result.kind).toBe("unsupported");
 });
 
 it("preserves separate patch ranges so multi-selection properties stay incremental", async () => {
-  const { state, documentId } = await setup();
+  const { state, documentId } = await setup(optionedSource);
   const result = executeDocumentEdit({ ...state, documentId }, { kind: "setProperties", actions: [
     { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "red" },
     { kind: "setProperty", elementId: "path:1", level: "command", key: "draw", value: "blue" },
@@ -161,4 +179,18 @@ it("preserves separate patch ranges so multi-selection properties stay increment
   expect(snapshot.incremental, JSON.stringify({ patches: result.patches, incremental: snapshot.incremental })).toMatchObject({ parseStrategy: "incremental", strategy: "incremental" });
   const full = await computeSnapshot({ id: "batch-full", documentId: "batch-full", source: result.newSource, activeRootId: state.activeRootId });
   expect(snapshot.svg?.svg).toBe(full.snapshot.svg?.svg);
+});
+
+it("refuses element edits from a snapshot of another picture, right after switching pictures", async () => {
+  const twoPictures = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (1,1);
+\end{tikzpicture}
+\begin{tikzpicture}
+  \draw (5,5) -- (6,6);
+\end{tikzpicture}`;
+  const { state: shown } = await setup(twoPictures, "figure:0");
+  // The second picture is chosen; its render has not arrived yet.
+  const switched = editorReducer(shown, { type: "SET_ACTIVE_ROOT", rootId: "figure:1" });
+  const edited = editorReducer(switched, { type: "APPLY_EDIT_ACTION", action: { kind: "deleteElement", elementId: "path:0" } });
+  expect(edited.source).toBe(twoPictures);
 });

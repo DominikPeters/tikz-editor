@@ -22,9 +22,9 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     "elementTotals": {
       "circles": 432,
       "ellipses": 41,
-      "paths": 7751,
-      "texts": 4271,
-      "total": 12495,
+      "paths": 7755,
+      "texts": 4270,
+      "total": 12498,
     },
     "semanticEmptySceneRate": 0.3306,
     "semanticEmptySceneSnippets": 723,
@@ -190,7 +190,7 @@ exports[`pgf-docs corpus regression > extracts snippets and tracks parse+semanti
     },
     {
       "code": "invalid-coordinate-operation",
-      "count": 51,
+      "count": 52,
     },
     {
       "code": "unsupported-pic-operation",

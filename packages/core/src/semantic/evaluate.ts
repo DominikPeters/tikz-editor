@@ -259,7 +259,9 @@ export function createSemanticEvaluationRun(
   const parent = currentFrame(context);
   const rootCustomStyles = cloneCustomStyleRegistry(parent.customStyles);
   const figureSourceRef: StyleSourceRef = {
-    sourceId: `figure:${figure.span.from}:${figure.span.to}`,
+    // One picture per evaluation, so a fixed id: an id made of its offsets
+    // would go stale in style chains an incremental render reuses.
+    sourceId: "figure-options",
     sourceSpan: figure.options?.span ?? figure.span,
     sourceKind: "figure-options",
     label: "figure"
@@ -882,8 +884,8 @@ export function collectNodeAnchorTargets(context: SemanticContext): NodeAnchorTa
   return targets;
 }
 
-function markOpaqueDependencySources(
-  elements: SceneElement[],
+export function markOpaqueDependencySources(
+  elements: readonly SceneElement[],
   context: ReturnType<typeof createSemanticContext>
 ): void {
   const reasonsBySource = new Map<string, Set<"foreach-origin" | "macro-origin">>();

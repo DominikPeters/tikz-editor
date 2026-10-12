@@ -1,18 +1,20 @@
 import { coordinateTransform, type AxisBasis } from "../coords/axis-basis.js";
 import { worldTransform } from "../../coords/transforms.js";
-import { worldBounds, worldPoint } from "../../coords/points.js";
-import type { WorldPoint, WorldBounds } from "../../coords/points.js";
+import { worldPoint } from "../../coords/points.js";
+import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { CoordinateItem, EdgeFromParentOperationItem, EdgeOperationItem, GraphOperationItem, NodeItem, PathItem, PathStatement, PicOperationItem, PlotOperationItem, Span, ToOperationItem } from "../../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { parseTikz } from "../../parser/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import {
+  extendPictureBounds,
   readNamedCoordinate,
   readNamedNodeGeometry,
   resolveContextColorAliasValue,
   withDependencySource,
   writeNamedCoordinate,
+  writeNamedCoordinateRewriteHandle,
   type SemanticContext
 } from "../context.js";
 import {
@@ -96,9 +98,6 @@ function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
 }
 
-function wb(minX: number, minY: number, maxX: number, maxY: number): WorldBounds {
-  return worldBounds(pt(minX), pt(minY), pt(maxX), pt(maxY));
-}
 
 function pushStyleDiagnostic(
   pushDiagnostic: DiagnosticPushFn,
@@ -281,7 +280,8 @@ export function evaluatePathStatement(
     lastPlacementSegment: null,
     previousSegmentRoundedCorners: null,
     leadingToLikeOptions: undefined,
-    currentPointLogical: initialCurrentPointLogical,
+    // TikZ starts every path at (0,0) (\tikz@@command@path); only nested paths continue.
+    currentPointLogical: honorInitialCurrentPoint ? initialCurrentPointLogical : null,
     currentPointCoordinate: null,
     pendingEdgeStartCoordinateRaw: null,
     edgeOperationStart: null,
@@ -1902,7 +1902,7 @@ export function evaluatePathStatement(
         const scopedName = applyNameScope(builder.pendingNamedCoordinate.name, context);
         writeNamedCoordinate(context, scopedName, evaluated.world);
         if (handle && handle.rewriteMode !== "unsupported" && !handle.rewriteTargetHandleId) {
-          context.namedCoordinateRewriteHandles.set(scopedName, handle.id);
+          writeNamedCoordinateRewriteHandle(context, scopedName, handle.id);
         }
         builder.pendingNamedCoordinate = null;
       }
@@ -2781,21 +2781,6 @@ function attachClipChainToElements(elements: readonly SceneElement[], clipChain:
   }));
 }
 
-function extendPictureBounds(context: SemanticContext, bounds: WorldBounds | undefined): void {
-  if (!bounds) {
-    return;
-  }
-  if (!context.pictureBounds) {
-    context.pictureBounds = worldBounds(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
-    return;
-  }
-  context.pictureBounds = wb(
-    Math.min(context.pictureBounds.minX, bounds.minX),
-    Math.min(context.pictureBounds.minY, bounds.minY),
-    Math.max(context.pictureBounds.maxX, bounds.maxX),
-    Math.max(context.pictureBounds.maxY, bounds.maxY)
-  );
-}
 
 function resolveLengthTransform(
   applyBasis: boolean,

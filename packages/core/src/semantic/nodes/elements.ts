@@ -53,6 +53,7 @@ function translatePoint(center: WorldPoint, point: WorldPoint): WorldPoint {
 
 export function makeCircleElement(
   sourceId: string,
+  itemId: string,
   center: WorldPoint,
   radius: number,
   style: ResolvedStyle,
@@ -62,8 +63,8 @@ export function makeCircleElement(
 ): SceneCircle {
   return {
     kind: "Circle",
-    id: `scene-circle:${sourceId}:${span.from}`,
-    runtimeId: `scene-circle:${sourceId}:${span.from}`,
+    id: `scene-circle:${sourceId}:${itemId}`,
+    runtimeId: `scene-circle:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
     adornment,

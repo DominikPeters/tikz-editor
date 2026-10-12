@@ -193,6 +193,29 @@ export function exportSemanticSymbolResolverState(resolver: SemanticSymbolResolv
   };
 }
 
+/**
+ * Records again what `consumers` looked up in an earlier run, from that run's
+ * final state: their dependency edges, the names they could not resolve, and
+ * the libraries they required (each recorded as one or the other). For
+ * statements a run reuses instead of evaluating.
+ */
+export function restoreSemanticSymbolUses(
+  resolver: SemanticSymbolResolver,
+  state: SemanticSymbolResolverState,
+  consumers: ReadonlySet<string>
+): void {
+  for (const edge of state.dependencyEdges) {
+    if (!consumers.has(edge.consumerStatementId)) continue;
+    resolver.dependencyEdges.set(`${edge.consumerStatementId}\u0000${edge.providerStatementId}\u0000${edge.kind}\u0000${edge.name}`, edge);
+    if (edge.kind === "library") resolver.requiredLibraries.add(edge.name);
+  }
+  for (const entry of state.unresolvedSymbols) {
+    if (!consumers.has(entry.consumerStatementId)) continue;
+    resolver.unresolvedSymbols.set(`${entry.consumerStatementId}\u0000${entry.kind}\u0000${entry.name}`, entry);
+    if (entry.kind === "library") resolver.requiredLibraries.add(entry.name);
+  }
+}
+
 export function importSemanticSymbolResolverState(
   resolver: SemanticSymbolResolver,
   state: SemanticSymbolResolverState

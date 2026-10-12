@@ -9,6 +9,7 @@ import { mapTransformedTextWithFallback, type MappedText } from "../../text/sour
 import { analyzeSimpleTexResources } from "../../text/tex/index.js";
 import type { NodeTextColorResolver } from "../../text/types.js";
 import {
+  addNamedNodeSetMembers,
   currentFrame,
   readNamedNodeGeometry,
   resolveContextColorAliasValue,
@@ -1627,24 +1628,11 @@ function normalizeRotationDegrees(degrees: number): number {
 }
 
 function registerNodeSetMembership(nodeNames: string[], setNames: string[], context: SemanticContext): void {
-  if (nodeNames.length === 0 || setNames.length === 0) {
+  if (nodeNames.length === 0) {
     return;
   }
-
   for (const setName of setNames) {
-    const existingMembers = context.namedNodeSets.get(setName);
-    const members = existingMembers ? new Set(existingMembers) : new Set<string>();
-    let changed = !existingMembers;
-    for (const nodeName of nodeNames) {
-      if (members.has(nodeName)) {
-        continue;
-      }
-      members.add(nodeName);
-      changed = true;
-    }
-    if (changed) {
-      context.namedNodeSets.set(setName, members);
-    }
+    addNamedNodeSetMembers(context, setName, nodeNames);
   }
 }
 

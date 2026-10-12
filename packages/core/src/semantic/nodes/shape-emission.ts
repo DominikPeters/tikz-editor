@@ -214,7 +214,7 @@ export function emitNodeShape(state: NodeShapeEmissionContext): void {
       markFeature("shape_strike_out", "supported");
       markFeature("svg_path", "supported");
     } else if (nodeShape === "magnifying glass") {
-      pushNodeElement(makeCircleElement(nodeSourceId, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
+      pushNodeElement(makeCircleElement(nodeSourceId, item.id, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
       pushNodeElement(
         makeNodeMagnifyingHandleElement(
           nodeSourceId,
@@ -231,7 +231,7 @@ export function emitNodeShape(state: NodeShapeEmissionContext): void {
       markFeature("svg_circle", "supported");
       markFeature("svg_path", "supported");
     } else if (nodeShape === "circle split" || nodeShape === "circle solidus") {
-      pushNodeElement(makeCircleElement(nodeSourceId, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
+      pushNodeElement(makeCircleElement(nodeSourceId, item.id, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
       const r = nodeLayout.visualRadius;
       if (nodeShape === "circle split") {
         pushNodeElement(
@@ -416,7 +416,7 @@ export function emitNodeShape(state: NodeShapeEmissionContext): void {
       markFeature("shape_rectangle_split", "supported");
       markFeature("svg_path", "supported");
     } else if (nodeShape === "circle") {
-      pushNodeElement(makeCircleElement(nodeSourceId, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
+      pushNodeElement(makeCircleElement(nodeSourceId, item.id, center, nodeLayout.visualRadius, nodeBoxStyle, item.span));
       markFeature("shape_circle", "supported");
       markFeature("svg_circle", "supported");
     } else if (nodeShape === "ellipse") {

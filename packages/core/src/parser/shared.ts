@@ -56,6 +56,15 @@ export function resolveActiveFigureSpan(
   return spans[index] ?? null;
 }
 
+/**
+ * Diagnostics in source order. Full and incremental parses both report in
+ * this order, so a document lists its problems the same way whichever
+ * parsed it.
+ */
+export function compareDiagnosticPosition(left: { span: { from: number; to: number } }, right: { span: { from: number; to: number } }): number {
+  return left.span.from - right.span.from || left.span.to - right.span.to;
+}
+
 export function scanFigureSpans(source: string): Array<{ from: number; to: number }> {
   return scanTikzFigures(source)
     .filter((figure) => !figure.isTemplate)

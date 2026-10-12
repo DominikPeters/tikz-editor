@@ -1173,10 +1173,42 @@ function collectSvgReuseAffectedSourceIds(
 
   const scopeDescendantSourceIds = collectNestedScopeSourceIds(parseResult.figure.body, changedSourceIds);
   const affectedStatementSourceIds = mergeSourceIds(dependencyAffectedSourceIds, scopeDescendantSourceIds) ?? dependencyAffectedSourceIds;
-  return mergeSourceIds(affectedStatementSourceIds, collectGeneratedDescendantSourceIdsForChangedSources(
-    semanticResult.scene.elements,
-    affectedStatementSourceIds
-  ));
+  return mergeSourceIds(
+    mergeSourceIds(affectedStatementSourceIds, collectGeneratedDescendantSourceIdsForChangedSources(
+      semanticResult.scene.elements,
+      affectedStatementSourceIds
+    )),
+    collectNodeSourceIdsOfStatements(parseResult.figure.body, affectedStatementSourceIds)
+  );
+}
+
+/**
+ * Nodes on a path (`-- node {a}`, edge labels) have their own source ids, but
+ * move with the statement: its line width or coordinates place them.
+ */
+function collectNodeSourceIdsOfStatements(statements: readonly Statement[], statementIds: readonly string[]): string[] {
+  const wanted = new Set(statementIds);
+  const nodeIds: string[] = [];
+  const collect = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const entry of value) collect(entry);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const record = value as { kind?: unknown; id?: unknown };
+    if (record.kind === "Node" && typeof record.id === "string") nodeIds.push(record.id);
+    for (const [key, entry] of Object.entries(value)) {
+      if (key !== "span" && !key.endsWith("Span")) collect(entry);
+    }
+  };
+  const visit = (list: readonly Statement[]): void => {
+    for (const statement of list) {
+      if (wanted.has(statement.id)) collect(statement);
+      else if (statement.kind === "Scope") visit(statement.body);
+    }
+  };
+  visit(statements);
+  return nodeIds;
 }
 
 function collectNestedScopeSourceIds(
