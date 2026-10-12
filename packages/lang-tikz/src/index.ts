@@ -94,14 +94,16 @@ const texHighlighting = styleTags({
   Comment: t.lineComment,
 
   "BeginCommand EndCommand": t.keyword,
-  "EnvironmentName MathEnvironmentName": t.typeName,
+  // A rule tags only a node's own text, not its children's, so the name
+  // (a WordToken inside EnvironmentName) needs the inheriting form.
+  "EnvironmentName/... MathEnvironmentName": t.typeName,
   "IncludeGraphicsCmd": t.keyword,
   "BeamerPartCmd BeamerSectionLevelCmd BeamerSubsectionCmd BeamerSubsubsectionCmd BeamerFrameStartCmd BeamerFrameTitleCmd BeamerFrameSubtitleCmd BeamerOnlyCmd BeamerUncoverCmd BeamerVisibleCmd BeamerInvisibleCmd BeamerAltCmd BeamerTemporalCmd BeamerOnslideCmd BeamerPauseCmd":
     t.keyword,
 
   "ControlWord ControlSymbol MathTextCmd": t.meta,
-  "Text/WordToken Text/NumberToken Text/OperatorToken Text/PunctuationToken Text/OtherTextToken":
-    t.string,
+  // Beamer overlay specifications (`<2->`) read as one unit.
+  "OverlaySpecification/...": t.labelName,
 
   "InlineMath/Dollar DisplayMath/DoubleDollar InlineMathOpen InlineMathClose DisplayMathOpen DisplayMathClose":
     t.regexp,
@@ -116,6 +118,13 @@ const texHighlighting = styleTags({
   "{ }": t.brace,
   "< >": t.angleBracket,
   "⚠": t.invalid,
+});
+
+// Prose is most of a document, so it keeps the default colour there; node
+// text inside a picture is coloured as a string to set it apart from code.
+const texFragmentTextHighlighting = styleTags({
+  "Text/WordToken Text/NumberToken Text/OperatorToken Text/PunctuationToken Text/OtherTextToken":
+    t.string,
 });
 
 const texFoldProps = foldNodeProp.add({
@@ -137,7 +146,7 @@ const texFoldProps = foldNodeProp.add({
 const EDITOR_BUFFER_LENGTH = 128;
 
 const highlightedTexFragmentParser = texFragmentParser.configure({
-  props: [texHighlighting, texFoldProps],
+  props: [texHighlighting, texFragmentTextHighlighting, texFoldProps],
   bufferLength: EDITOR_BUFFER_LENGTH,
 });
 

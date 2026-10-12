@@ -108,6 +108,28 @@ describe("@tikz-editor/lang-tikz highlighting", () => {
     expect(hasClassAt(ranges, lambdaFrom, lambdaFrom + String.raw`\lambda`.length, "meta")).toBe(true);
   });
 
+  it("keeps document prose uncoloured but tags environment names and overlay specifications", () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Title}
+  Some prose \item<2-> more.
+  $x$
+\end{frame}
+\end{document}`;
+    const ranges = collectHighlights(source, beamerLanguage);
+    const proseFrom = source.indexOf("Some");
+    const frameFrom = source.indexOf("frame}");
+    const overlayFrom = source.indexOf("<2->");
+    const mathFrom = source.indexOf("$x$") + 1;
+
+    expect(ranges.some((range) => range.from <= proseFrom && range.to > proseFrom && range.classes.includes("string"))).toBe(false);
+    expect(hasClassAt(ranges, frameFrom, frameFrom + "frame".length, "typeName")).toBe(true);
+    expect(ranges.filter((range) => range.from >= overlayFrom && range.to <= overlayFrom + "<2->".length)
+      .every((range) => range.classes.includes("labelName"))).toBe(true);
+    expect(ranges.some((range) => range.from <= overlayFrom + 1 && range.to > overlayFrom + 1 && range.classes.includes("labelName"))).toBe(true);
+    expect(hasClassAt(ranges, mathFrom, mathFrom + 1, "variableName")).toBe(true);
+  });
+
   it("nests TikZ and then TeX inside a Beamer document", () => {
     const source = String.raw`\documentclass{beamer}
 \begin{document}
