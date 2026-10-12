@@ -308,8 +308,20 @@ function buildExternalSourceSyncChanges(
       trustedPatch: true
     };
   }
+  // Undo, reloads and assistant updates carry no patch. Replace only the
+  // span that differs: replacing the whole document would make the editor
+  // reparse its syntax from scratch and lose folds and the caret's place.
+  let prefix = 0;
+  const limit = Math.min(currentSource.length, nextSource.length);
+  while (prefix < limit && currentSource.charCodeAt(prefix) === nextSource.charCodeAt(prefix)) prefix += 1;
+  let currentEnd = currentSource.length;
+  let nextEnd = nextSource.length;
+  while (currentEnd > prefix && nextEnd > prefix && currentSource.charCodeAt(currentEnd - 1) === nextSource.charCodeAt(nextEnd - 1)) {
+    currentEnd -= 1;
+    nextEnd -= 1;
+  }
   return {
-    changes: { from: 0, to: currentSource.length, insert: nextSource },
+    changes: { from: prefix, to: currentEnd, insert: nextSource.slice(prefix, nextEnd) },
     trustedPatch: false
   };
 }
