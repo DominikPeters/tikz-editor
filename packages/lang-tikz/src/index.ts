@@ -8,6 +8,7 @@ import {
 } from "@tikz-editor/lezer-tex";
 import { parser as baseTikzParser } from "@tikz-editor/lezer-tikz";
 
+import { completeSyntaxTree } from "./complete-parse.js";
 import { texHeadings } from "./headings.js";
 
 const tikzHighlighting = styleTags({
@@ -286,7 +287,7 @@ export const tikzLanguage = LRLanguage.define({
 });
 
 export function tikz(): LanguageSupport {
-  return new LanguageSupport(tikzLanguage, [tikzEnvironmentFolding]);
+  return new LanguageSupport(tikzLanguage, [tikzEnvironmentFolding, completeSyntaxTree]);
 }
 
 export const texLanguage = LRLanguage.define({
@@ -297,7 +298,7 @@ export const texLanguage = LRLanguage.define({
 });
 
 export function tex(): LanguageSupport {
-  return new LanguageSupport(texLanguage, [texHeadings]);
+  return new LanguageSupport(texLanguage, [texHeadings, completeSyntaxTree]);
 }
 
 export const beamerLanguage = LRLanguage.define({
@@ -308,5 +309,5 @@ export const beamerLanguage = LRLanguage.define({
 });
 
 export function beamer(): LanguageSupport {
-  return new LanguageSupport(beamerLanguage, [texHeadings]);
+  return new LanguageSupport(beamerLanguage, [texHeadings, completeSyntaxTree]);
 }
