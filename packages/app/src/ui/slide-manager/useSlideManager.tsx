@@ -21,7 +21,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
   const frameId = root?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: root.frameIndex }) : doc.activeRootId;
   const ids = selection?.frameIds ?? (frameId ? [frameId] : []);
   const anchorId = selection?.anchorId ?? frameId;
-  const editable = useMemo(() => model?.frames.filter(frame => beamerSlideIsEditable(doc.source, frame)).map(frame => frame.id) ?? [], [model, doc.source]);
+  const editable = useMemo(() => model?.frames.filter(frame => beamerSlideIsEditable(model.source, frame)).map(frame => frame.id) ?? [], [model]);
   const enabled = !!model && model.source === doc.source && !doc.assistantLockReason && !busy;
   // Allow attempted moves so the analysis can explain structural restrictions.
   const movable = model?.frames.map(frame => frame.id) ?? [];
