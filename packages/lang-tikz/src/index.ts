@@ -129,11 +129,20 @@ const texFoldProps = foldNodeProp.add({
   MathGroup: foldInside,
 });
 
+// Lezer reuses only tree nodes across edits, never the contents of its
+// compact buffers, so an edit reparses everything sharing a buffer with it.
+// Smaller buffers keep that region small: a keystroke in a long document
+// reparses in about a millisecond instead of five, for twice the tree memory
+// (2 MB rather than 1 MB for a 150 KB paper).
+const EDITOR_BUFFER_LENGTH = 128;
+
 const highlightedTexFragmentParser = texFragmentParser.configure({
   props: [texHighlighting, texFoldProps],
+  bufferLength: EDITOR_BUFFER_LENGTH,
 });
 
 const mixedTikzParser = baseTikzParser.configure({
+  bufferLength: EDITOR_BUFFER_LENGTH,
   props: [
     tikzHighlighting,
     foldNodeProp.add({
@@ -162,6 +171,7 @@ function isTikzEnvironment(node: SyntaxNodeRef, input: Input): boolean {
 
 const mixedTexDocumentParser = texDocumentParser.configure({
   props: [texHighlighting, texFoldProps],
+  bufferLength: EDITOR_BUFFER_LENGTH,
   wrap: parseMixed((node, input) =>
     isTikzEnvironment(node, input)
       ? {
@@ -174,6 +184,7 @@ const mixedTexDocumentParser = texDocumentParser.configure({
 
 const mixedBeamerDocumentParser = beamerDocumentParser.configure({
   props: [texHighlighting, texFoldProps],
+  bufferLength: EDITOR_BUFFER_LENGTH,
   wrap: parseMixed((node, input) =>
     isTikzEnvironment(node, input)
       ? {
