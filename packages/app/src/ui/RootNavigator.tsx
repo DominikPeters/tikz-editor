@@ -174,7 +174,7 @@ export function RootNavigator() {
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
   const thumbnails = useFigureThumbnails(model ? source : snapshot.source, thumbnailRoots, {
     documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
-    priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4), refreshDelayMs: 350,
+    priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4),
     externalThumbnail,
   });
   const clearDrag = () => { dragPreview.current?.remove(); dragPreview.current = null; drag.current = null; setDragging(false); setDrop(null); };
