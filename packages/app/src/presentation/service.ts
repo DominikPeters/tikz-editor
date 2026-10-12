@@ -4,6 +4,7 @@ import type { DocumentSession } from "../store/types";
 import { createBrowserPresentationApi } from "./browser-platform";
 import { PresentationController } from "./controller";
 import { BeamerPresentationRenderer, remapPresentationCursor } from "./renderer";
+import { afterNextPaint } from "../ui/frame-scheduling";
 import type { PlatformPresentationApi, PresentationCommand, PresentationMessage, PresentationOptions, PresentationSnapshot, PresentationTransport, PresentationWindows } from "./types";
 
 const OPTIONS_KEY = "tikz-editor:presentation-options";
@@ -36,7 +37,7 @@ export class PresentationService {
   private unsubscribe: (() => void) | null = null;
   private unsubscribeController: (() => void) | null = null;
   private revision = 0;
-  private updateTimer: ReturnType<typeof setTimeout> | null = null;
+  private replacing = false;
   private observedDocument: DocumentSession | null = null;
   private launchCommands: PresentationCommand[] = [];
   private outputNeedsSelection = false;
@@ -126,21 +127,35 @@ export class PresentationService {
   refresh = (): void => {
     if (!this.controller) return;
     this.revision++;
-    if (this.updateTimer) clearTimeout(this.updateTimer);
-    const revision = this.revision;
-    this.updateTimer = setTimeout(() => { this.updateTimer = null; void this.replaceDocument(revision); }, 120);
+    if (!this.replacing) void this.replaceUntilCurrent();
   };
+  // One update at a time. The one in flight is kept, since it shows the edits
+  // made so far, and the latest source is taken up once it is done. Each
+  // starts after the editor has painted the edit that asked for it.
+  private async replaceUntilCurrent(): Promise<void> {
+    this.replacing = true;
+    try {
+      let revision: number;
+      do {
+        await new Promise<void>((resolve) => { afterNextPaint(resolve); });
+        revision = this.revision;
+        await this.replaceDocument(revision);
+      } while (revision !== this.revision && this.controller);
+    } finally {
+      this.replacing = false;
+    }
+  }
   private async replaceDocument(revision: number): Promise<void> {
     const controller = this.controller, previous = this.renderer;
     const doc = controller ? useEditorStore.getState().documents[controller.getSnapshot().documentId] : null;
     if (!controller || !previous || !doc) return;
     try {
       const next = await BeamerPresentationRenderer.create(doc.source, doc.fileRef);
-      if (revision !== this.revision || this.controller !== controller) return;
+      if (this.controller !== controller) return;
       const cursor = controller.getSnapshot().current?.cursor ?? { frame: 0, step: 1, continuation: 1 };
       const mapped = remapPresentationCursor(previous, next, cursor);
       const committed = await controller.replace(next, mapped, doc.title);
-      if (committed && revision === this.revision && this.controller === controller) this.renderer = next;
+      if (committed && this.controller === controller) this.renderer = next;
     } catch (error) {
       if (revision === this.revision && this.controller === controller) {
         console.info("[tikz-editor] Couldn’t update presentation source", error);
@@ -178,8 +193,6 @@ export class PresentationService {
     this.unsubscribe?.(); this.unsubscribe = null;
     this.unsubscribeController?.(); this.unsubscribeController = null;
     this.revision++;
-    if (this.updateTimer) clearTimeout(this.updateTimer);
-    this.updateTimer = null;
     this.launchCommands = [];
     const transport = this.transport, windows = this.windows, api = this.api;
     this.controller = null; this.renderer = null; this.transport = null; this.windows = null; this.api = null;
