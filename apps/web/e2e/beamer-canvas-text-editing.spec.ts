@@ -1161,6 +1161,23 @@ test("the caret in a description item stands at its text, in beamer's label colu
   }).toBeLessThan(3);
 });
 
+test("the caret can stand in a description item's label, at its glyphs", async ({ page }) => {
+  const source = GHOST_SOURCE.replace("\\item second", "\\item second\n\\item[Alpha] first");
+  await setSource(page, source);
+  const textarea = await openScopeContaining(page, "Root");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("Alpha") + 2);
+  const caret = page.getByTestId("canvas-text-selection-caret");
+  const label = page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${source.indexOf("Alpha")}"]`).first();
+  const text = page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${source.indexOf("first")}"]`).first();
+  await expect.poll(async () => {
+    const [labelBox, textBox, caretBox] = [await label.boundingBox(), await text.boundingBox(), await caret.boundingBox()];
+    return labelBox && textBox && caretBox && caretBox.x > labelBox.x + 1 && caretBox.x < textBox.x - 5;
+  }).toBe(true);
+  await page.keyboard.type("X");
+  await expect.poll(() => readStoreSource(page)).toContain("\\item[AlXpha] first");
+});
+
 test("the command chip shows math completions as set, and a completion can be picked with the pointer (V2)", async ({ page }, testInfo) => {
   await setSource(page, GHOST_SOURCE);
   const textarea = await openScopeContaining(page, "Root");

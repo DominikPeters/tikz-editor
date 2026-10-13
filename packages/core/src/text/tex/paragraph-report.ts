@@ -692,6 +692,11 @@ function texMathBoxFromWrapper(
   return normalized;
 }
 
+/** Label text written in the source character for character (not a generated counter). */
+function authoredLabelText(item: { readonly text: string; readonly sourceStart: number; readonly sourceEnd: number }): boolean {
+  return item.sourceEnd > item.sourceStart && item.sourceEnd - item.sourceStart === item.text.length;
+}
+
 function buildTexLineLabelSegments(
   label: TexLineLabel,
   metricProvider: TexMetricProvider
@@ -743,6 +748,12 @@ function buildTexLineLabelSegments(
         text: item.text,
         startOffset: 0,
         endOffset: item.text.length,
+        // An authored label's characters (`\item[Alpha]`) are its source, one caret stop each: the caret can stand in it.
+        ...(authoredLabelText(item) ? {
+          sourceStartRaw: layoutSourceOffset(item.sourceStart),
+          sourceEndRaw: layoutSourceOffset(item.sourceEnd),
+          sourceKind: "text" as const,
+        } : {}),
         fontId: item.font.id,
         fontAtPt: item.font.atPt,
         ...(item.font.color ? { color: item.font.color } : {}),
@@ -822,6 +833,11 @@ function buildTexLineLabelSegments(
       kind: "space",
       role: "list-label",
       text: " ",
+      ...(item.kind === "space" && item.sourceEnd > item.sourceStart ? {
+        sourceStartRaw: layoutSourceOffset(item.sourceStart),
+        sourceEndRaw: layoutSourceOffset(item.sourceEnd),
+        sourceKind: "text" as const,
+      } : {}),
       x,
       width: glue.width,
       caretStops: [x, texLineX(roundTexPt(x + glue.width))],
