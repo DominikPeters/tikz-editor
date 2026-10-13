@@ -214,11 +214,38 @@ function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | 
       }
       continue;
     }
-    if (inked(view, child)) {
-      return "ink";
+    // Its own end decides: ink, or a line it ends (`\textbf{a \\ }`).
+    const tail = trailing(view, child);
+    if (tail) {
+      return tail;
     }
   }
   return "start";
+}
+
+/** What a node ends with, looking from its end: ink, a line break, or nothing visible (null). */
+function trailing(view: EditView, id: NodeId): "ink" | "line" | null {
+  const node = view.tree.nodes[id];
+  if (node.kind === "break" || node.kind === "vertical") {
+    return "line";
+  }
+  if (view.role(id) === "invisible" || node.kind === "space" || node.kind === "declaration") {
+    return null;
+  }
+  if (node.slots.length === 0 || (node.kind === "overlay" && node.command != null && OVERLAY_ABSENT.has(node.command))) {
+    return inked(view, id) ? "ink" : null;
+  }
+  const slots = node.slots.map((slot) => view.tree.slots[slot]).filter((slot) => slot.presence === "present")
+    .sort((left, right) => right.contentSpan.from - left.contentSpan.from);
+  for (const slot of slots) {
+    for (const child of [...slot.children].reverse()) {
+      const found = trailing(view, child);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return null;
 }
 
 /** Whether a node is inside an `overprint` environment. */

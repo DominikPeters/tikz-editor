@@ -21,7 +21,7 @@ const HIDEABLE = new Set(["overlay", "paragraph", "display"]);
  * caret stops. Null for an older buffer: stale spans cannot identify what
  * the current source hides.
  */
-export function renderedVisibility(tree: EditTree, rendered: RenderedStops, bufferFrom: number): Required<EditViewOptions> | null {
+export function renderedVisibility(tree: EditTree, rendered: RenderedStops, bufferFrom: number): Required<Pick<EditViewOptions, "hidden" | "hiddenSlots">> | null {
   if (rendered.source.slice(bufferFrom, bufferFrom + tree.text.length) !== tree.text) {
     return null;
   }

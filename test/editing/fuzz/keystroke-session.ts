@@ -51,7 +51,9 @@ export type FuzzKey =
   /** A click on a completion of the open command chip (V2). */
   | { readonly kind: "complete"; readonly index: number }
   /** An entry of the focus tag's menu (V4), by its index among the entries. */
-  | { readonly kind: "menu"; readonly index: number };
+  | { readonly kind: "menu"; readonly index: number }
+  /** The ¶ toggle: reveal codes on or off (R14). */
+  | { readonly kind: "reveal" };
 
 export class KeystrokeSession {
   private machine: CanvasTextEditState = INITIAL_CANVAS_TEXT_EDIT_STATE;
@@ -117,6 +119,9 @@ export class KeystrokeSession {
   }
 
   /** Presses one key; returns the intent it became (null for keys without one). */
+  /** Reveal codes (R14): invisible syntax is an item. */
+  private revealCodes = false;
+
   /** The keystroke as typed, when the last key was transformed by an input rule (R12). */
   literal: { readonly text: string } | null = null;
 
@@ -187,6 +192,9 @@ export class KeystrokeSession {
         this.run(intent);
         return intent;
       }
+      case "reveal":
+        this.revealCodes = !this.revealCodes;
+        return null;
       case "menu": {
         const view = this.view();
         const caret = view.index.resolve(this.selection.focus, "after");
@@ -308,6 +316,7 @@ export class KeystrokeSession {
       commands: this.commands,
       title: this.title,
       frameBody: this.frameBody,
+      revealCodes: this.revealCodes,
     };
   }
 

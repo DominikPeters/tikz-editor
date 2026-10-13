@@ -16,7 +16,7 @@ export function createEditViewCache(size = 4): EditViewCache {
   const entries: { text: string; commands: CommandTable; hiddenKey: string; view: EditView }[] = [];
   return (text, commands, visibility) => {
     const ids = (set: ReadonlySet<number> | undefined) => set ? [...set].sort((left, right) => left - right).join(",") : "";
-    const hiddenKey = `${ids(visibility?.hidden)}|${ids(visibility?.hiddenSlots)}`;
+    const hiddenKey = `${ids(visibility?.hidden)}|${ids(visibility?.hiddenSlots)}|${visibility?.revealCodes === true}`;
     const index = entries.findIndex((entry) =>
       entry.text === text && entry.commands === commands && entry.hiddenKey === hiddenKey
     );

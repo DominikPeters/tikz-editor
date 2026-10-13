@@ -1206,6 +1206,25 @@ test("the hint line says what the keys do (V7), and hovering shows an item's sou
   await expect(page.getByTestId("canvas-hover-source")).toHaveCount(0);
 });
 
+test("reveal codes shows invisible syntax as chips that select and delete (R14, B4)", async ({ page }, testInfo) => {
+  await setSource(page, String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Codes}
+First point.\pause Second point. % TODO cite
+\end{frame}
+\end{document}`);
+  await openScopeContaining(page, "First point");
+  await expect(page.getByTestId("canvas-revealed-code")).toHaveCount(0);
+  await page.getByTestId("text-format-revealCodes").click();
+  const chips = page.getByTestId("canvas-revealed-code");
+  await expect(chips).toHaveText(["⏸ pause", "% TODO cite"]);
+  await page.screenshot({ path: testInfo.outputPath("reveal-codes.png") });
+  await chips.first().click();
+  await page.keyboard.press("Backspace");
+  await expect.poll(() => readStoreSource(page)).toContain("First point.Second point. % TODO cite");
+  await expect(chips).toHaveText(["% TODO cite"]);
+});
+
 test("a typed \" is a quotation mark, and ⌘Z right after gives back the \" (P3, R12)", async ({ page }) => {
   const textarea = await openScopeContaining(page, "Body typo.");
   const buffer = await textarea.inputValue();

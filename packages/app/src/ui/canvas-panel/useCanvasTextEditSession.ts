@@ -52,6 +52,7 @@ import { useCanvasPendingCloser } from "./useCanvasPendingCloser";
 import { useCanvasSlotPlaceholders } from "./useCanvasSlotPlaceholders";
 import { useCanvasGhostSlots } from "./useCanvasGhostSlots";
 import { useCanvasHoverSource } from "./useCanvasHoverSource";
+import { useCanvasRevealedCodes } from "./useCanvasRevealedCodes";
 
 /** A slot's tag menu (V4): no variants of its own. */
 const SLOT_MENU: readonly ConstructMenuEntry[] = [
@@ -790,6 +791,10 @@ export function useCanvasTextEditSession(
   const canvasSurfaceFocused =
     textEditingSession?.isScopeSession === true && textEditFocusSurface === "canvas";
   const editCommands = useEditCommands(snapshot.deck?.activeFrame?.editingEnvironment ?? null);
+  /** Reveal codes (R14): the ¶ toggle in the format bar, kept while the panel is open. */
+  const [revealCodes, setRevealCodes] = useState(false);
+  const revealCodesRef = useRef(revealCodes);
+  revealCodesRef.current = revealCodes;
   const editCommandsRef = useRef(editCommands);
   useLayoutEffect(() => {
     editCommandsRef.current = editCommands;
@@ -956,6 +961,7 @@ export function useCanvasTextEditSession(
       commands: session.isScopeSession ? editCommandsRef.current : null,
       title: session.sourceId.endsWith(":scope:title"),
       frameBody: session.sourceId.endsWith(":scope:body"),
+      revealCodes: session.isScopeSession && revealCodesRef.current,
     };
   }, []);
 
@@ -1621,6 +1627,10 @@ export function useCanvasTextEditSession(
   }, [submitTextareaInput]);
 
   const handleTextFormatCommand = useCallback((command: CanvasTextFormatCommandId) => {
+    if (command === "revealCodes") {
+      setRevealCodes((on) => !on);
+      return;
+    }
     intentScheduler.submit({ type: "format", command, origin: "menu", repeat: false });
   }, [intentScheduler]);
 
@@ -2297,6 +2307,13 @@ export function useCanvasTextEditSession(
           glyph: "⇥",
           active: false,
           disabled: !listContext
+        },
+        {
+          id: "revealCodes",
+          label: "Reveal codes",
+          glyph: "¶",
+          active: revealCodes,
+          disabled: false
         }
       );
     }
@@ -2315,6 +2332,7 @@ export function useCanvasTextEditSession(
       onColor: handleTextFormatColor
     };
   }, [
+    revealCodes,
     editCommands,
     handleTextFormatColor,
     handleTextFormatCommand,
@@ -2803,6 +2821,34 @@ export function useCanvasTextEditSession(
     onCreate: handleCreateSlot
   });
 
+  const selectSpan = useCallback((span: { from: number; to: number }) => {
+    const current = stateRef.current;
+    if (!current.session) {
+      return;
+    }
+    commitTransaction({
+      baseRevision: current.inputRevision,
+      patches: [],
+      selection: { kind: "absolute", anchor: span.from, focus: span.to },
+      undo: { group: "own-step" }
+    }, true);
+    refocusCanvas();
+  }, [commitTransaction, refocusCanvas]);
+
+  const revealedCodeChips = useCanvasRevealedCodes({
+    session: textEditFocusSurface === "canvas" ? textEditingSession : null,
+    enabled: revealCodes,
+    commands: editCommands,
+    renderedSource: snapshot.source,
+    source,
+    textLayoutContext,
+    canvasTransform,
+    viewportRef,
+    resolveTarget: (session) => resolveEditableTextTargetById(session.sourceId, session.sceneTextId),
+    resolveContainer: resolveRenderedMathTextElement,
+    onSelect: selectSpan
+  });
+
   /** The quick fix (T6): once the lens is closed, the missing closers written in with one click. */
   const recoveryFix = useMemo<CanvasRecoveryFixModel | null>(() => {
     const first = recoveryGhosts[0];
@@ -2840,9 +2886,10 @@ export function useCanvasTextEditSession(
       pendingCloser,
       slotPlaceholders,
       ghostSlots,
-      hoverSource: hoverSourceTooltip
+      hoverSource: hoverSourceTooltip,
+      revealedCodes: revealedCodeChips
     }),
-    [canvasFocusInput, commandChip, contextOutlines, ghostSlots, handleConstructMenu, handleEditValues, hoverSourceTooltip, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, slotPlaceholders, sourceLens,
+    [canvasFocusInput, commandChip, contextOutlines, ghostSlots, handleConstructMenu, handleEditValues, hoverSourceTooltip, revealedCodeChips, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, slotPlaceholders, sourceLens,
       textEditFocusSurface, textEditingSession, valueEditor]
   );
 

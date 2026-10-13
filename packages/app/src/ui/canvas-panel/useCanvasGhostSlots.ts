@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState, type RefObject } from "react";
 import { ghostSlots, type EditView, type GhostSlot, type Position } from "@tikz-editor/core/editing/position/index";
-import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
-import { documentSourceOffset } from "@tikz-editor/core/text/source-coordinates";
 import type { CanvasTransform } from "../../store/types";
-import { clientBoundsToViewport } from "../coords/text";
+import { scopeCaretPoint, type ScopeCaretPoint } from "./scope-caret-point";
 import type { EditableTextTarget, TextEditingSession } from "./types";
 
 /**
@@ -20,8 +18,6 @@ export type CanvasGhostSlot = {
   readonly height: number;
   readonly onCreate: () => void;
 };
-
-type CaretPoint = { readonly x: number; readonly top: number; readonly bottom: number };
 
 /**
  * The focus construct's ghost slots, placed by the caret's geometry at the
@@ -58,45 +54,8 @@ export function useCanvasGhostSlots(args: {
     }
     const cancelled = { value: false };
     const viewportRect = viewport.getBoundingClientRect();
-    const pointAt = async (local: number): Promise<CaretPoint | null> => {
-      const offset = session.sourceSpan.from + local;
-      const paragraph = paragraphs.find((candidate) => candidate.sourceSpan.from <= offset && offset <= candidate.sourceSpan.to);
-      const container = paragraph ? resolveContainer(target, paragraph.paragraphId) : null;
-      if (!paragraph || !container) {
-        return null;
-      }
-      const layout = {
-        paragraphId: paragraph.paragraphId,
-        sourceText: source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to),
-        sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
-        sourceCoordinateSpace: "document" as const,
-        containerElement: container
-      };
-      const point = await getKnuthPlassPointFromOffset(textLayoutContext, { ...layout, offset: documentSourceOffset(offset) });
-      if (!point.ok || !point.clientPoint) {
-        return null;
-      }
-      const x = point.clientPoint.x - viewportRect.left;
-      if (point.caretTop && point.caretBottom) {
-        return {
-          x,
-          top: Math.min(point.caretTop.y, point.caretBottom.y) - viewportRect.top,
-          bottom: Math.max(point.caretTop.y, point.caretBottom.y) - viewportRect.top
-        };
-      }
-      // A caret in text has no extent of its own: the character after it gives the line's.
-      const rects = await getKnuthPlassSelectionRects(textLayoutContext, {
-        ...layout,
-        startOffset: documentSourceOffset(offset),
-        endOffset: documentSourceOffset(offset + 1)
-      });
-      const rect = rects.ok ? rects.rects[0] : undefined;
-      if (!rect) {
-        return null;
-      }
-      const bounds = clientBoundsToViewport(rect.bounds, viewportRect);
-      return { x, top: bounds.minY, bottom: bounds.maxY };
-    };
+    const pointAt = (local: number) =>
+      scopeCaretPoint({ session, target, source, textLayoutContext, viewportRect, resolveContainer, local });
     void (async () => {
       const result: CanvasGhostSlot[] = [];
       for (const ghost of ghosts) {
@@ -131,7 +90,7 @@ export function useCanvasGhostSlots(args: {
  * the base's top, a missing subscript under the superscript, a label to
  * the left of the item's text.
  */
-function ghostBox(ghost: GhostSlot, anchor: CaretPoint, pair: CaretPoint | null): { left: number; top: number; width: number; height: number } | null {
+function ghostBox(ghost: GhostSlot, anchor: ScopeCaretPoint, pair: ScopeCaretPoint | null): { left: number; top: number; width: number; height: number } | null {
   const size = anchor.bottom - anchor.top;
   switch (ghost.kind) {
     case "index": {

@@ -295,6 +295,8 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "C18", title: "in overprint, ⇧⏎ right after \\onslide has no line to end", body: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}", keys: "⇧⏎", expect: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}" },
   { id: "C19", title: "\\ then a character that makes no control symbol types that character", body: "a‸ b", keys: "\\<", expect: "a<‸ b" },
   { id: "C20", title: "[ after an environment's overlay specification is not its optional argument", body: "\\begin{lemma}<2->\n‸Text.\n\\end{lemma}", keys: "[", expect: "\\begin{lemma}<2->\n{}[‸Text.\n\\end{lemma}" },
+  { id: "C24", title: "⇧⏎ right after a wrapper ending in a line break has no line to end", body: R`a\textbf{b \\ }‸c`, keys: "⇧⏎", expect: R`a\textbf{b \\ }‸c` },
+  { id: "C23", title: "a table rule is not committed inside a script in a cell", body: "\\begin{align*}\n  x_{a‸} &= 1\n\\end{align*}", keys: R`\hline␣`, expect: "\\begin{align*}\n  x_{a‸} &= 1\n\\end{align*}" },
   { id: "C22", title: "\\pause is not committed in overprint (beamer: overprints may not overlap)", body: "\\begin{overprint}\n\\onslide<1>Alpha.‸\n\\onslide<2>Beta.\n\\end{overprint}", keys: R`\pause␣`, expect: "\\begin{overprint}\n\\onslide<1>Alpha.‸\n\\onslide<2>Beta.\n\\end{overprint}" },
   { id: "C17", title: "a line break typed before a * does not take it as its star", body: "A page‸*", keys: "\\\\", expect: "A page\\\\{}‸*" },
 ];

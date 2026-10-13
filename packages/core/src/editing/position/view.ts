@@ -1,4 +1,4 @@
-import { isCaretSlot, isDeclarationGroup, isTerminatorGroup, itemRole, type ItemRole } from "../ownership/kinds.js";
+import { isCaretSlot, isDeclarationGroup, isRevealedCode, isTerminatorGroup, itemRole, type ItemRole } from "../ownership/kinds.js";
 import { slotChain } from "../tree/navigate.js";
 import type { EditTree, NodeId, SlotId } from "../tree/types.js";
 import { createPositionIndex, positionOffset, type Position, type PositionIndex } from "./position.js";
@@ -62,6 +62,11 @@ const key = (position: Position) => `${position.slot}:${position.index}`;
 export type EditViewOptions = {
   readonly hidden?: ReadonlySet<NodeId>;
   readonly hiddenSlots?: ReadonlySet<SlotId>;
+  /**
+   * Reveal codes (R14): invisible syntax (`\pause`, comments, `\label`,
+   * vertical space) is an item the caret steps over and ⌫ selects first.
+   */
+  readonly revealCodes?: boolean;
 };
 
 const NO_HIDDEN: ReadonlySet<NodeId> = new Set();
@@ -76,7 +81,9 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
     for (const slot of tree.nodes[node].slots) for (const child of tree.slots[slot].children) hideNode(child);
   };
   for (const slot of hiddenSlots) for (const child of tree.slots[slot].children) hideNode(child);
-  const baseRole = (node: NodeId): ItemRole => (hiddenDescendants.has(node) ? "invisible" : itemRole(tree, node));
+  const revealed = options.revealCodes === true;
+  const baseRole = (node: NodeId): ItemRole => hiddenDescendants.has(node) ? "invisible"
+    : revealed && isRevealedCode(tree, node) ? "construct" : itemRole(tree, node);
   const droppedSpaces = paragraphEdgeSpaces(tree, baseRole);
   const role = (node: NodeId): ItemRole => (droppedSpaces.has(node) ? "invisible" : baseRole(node));
   const ranks = new Map<string, number>();

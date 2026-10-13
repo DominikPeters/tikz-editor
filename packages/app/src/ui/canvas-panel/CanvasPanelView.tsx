@@ -901,6 +901,23 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             />
           ))}
 
+          {canvasTextEdit.revealedCodes.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={chip.selected ? `${css.revealedCode} ${css.revealedCodeSelected}` : css.revealedCode}
+              style={{ left: chip.left, top: chip.top, height: chip.height, fontSize: chip.height * 0.72 }}
+              data-testid="canvas-revealed-code"
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                chip.onSelect();
+              }}
+            >
+              {chip.label}
+            </button>
+          ))}
+
           {canvasTextEdit.hoverSource ? (
             <div
               className={css.hoverSource}

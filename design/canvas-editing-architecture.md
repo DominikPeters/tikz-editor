@@ -985,6 +985,14 @@ uses positions but deletion still uses raw source ranges.
    placeholder, or the slot the caret is in (`superscript · → to leave`).
    Each hint shows its first four appearances, counted in this browser.
 
+   **Reveal codes (R14, B4), done.** The ¶ button in the format bar turns
+   it on for the canvas: `\pause`, comments, `\label` and its kin, vertical
+   space and table rules are items (view option `revealCodes`), so arrows
+   stop beside them and ⌫ selects one before deleting it. Each shows as a
+   small gray chip above its place (`⏸ pause`, `% TODO cite`), drawn over
+   the slide rather than reflowing it; a click selects it, and ⌘E then
+   edits its source. Not done: V6's local markers without the toggle.
+
 **Recovery and the source lens (T1, T2, T5, T6, R13), done.** The text
 engine recovers from unbalanced source the way TeX does, but keeps the
 damage in the run being edited: `text/tex/recovery.ts` scans a text for

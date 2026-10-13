@@ -305,7 +305,7 @@ ones it relies on.
   argument), that one construct temporarily renders in a compact source
   form on the slide, e.g. `textcolor⟨red⟩⟨risk⟩` with editable fields, and
   returns to normal when the caret leaves it.
-- **R14 Reveal codes.** A toggle (¶ button) shows invisible syntax as small
+- **R14 Reveal codes** (done 2026-10-13). A toggle (¶ button) shows invisible syntax as small
   gray chips (`⏸ pause`, `% TODO…`, `label`, `vspace`). In this mode they
   are items: the caret can step over, select and delete them.
 - **R15 Paste.** Plain text pasted from outside is literal. *All* TeX
@@ -1051,7 +1051,7 @@ options that are awkward today.
   - **Floating pills only for real guesses with a plausible
     alternative:** "Paste as TeX" after pasting TeX-looking text (C2), and
     "keep `- `" after list autoformat (P10), if that ships.
-- **V2 Ghost completion in the command chip.** `\setm` shows `inus` in
+- **V2 Ghost completion in the command chip** (done; rendered previews and pointer picks 2026-10-13). `\setm` shows `inus` in
   ghost text, with a preview of ∖ in a small popover listing the other
   candidates. `⇥` accepts. Environment names after `\begin` work the same
   way, as do preamble macros, previewed with their rendering. `\left` and
@@ -1068,7 +1068,7 @@ options that are awkward today.
   `\sqrt`, a missing superscript or subscript, an item label in
   `description`. Clicking or typing into one creates it. This makes
   optional arguments discoverable without menus.
-- **V4 Focus tag as a handle.** The small tag on the focus outline
+- **V4 Focus tag as a handle** (done 2026-10-13, without symbol variants and environments). The small tag on the focus outline
   (`textbf`, `sub`, `ee`, `align*`) opens a menu when clicked:
   - **variants**: textbf ↔ textit ↔ emph ↔ ee; `\le` ↔ `\leq` ↔
     `\leqslant`; inline ↔ display; itemize ↔ enumerate; block ↔ alertblock
@@ -1078,14 +1078,14 @@ options that are awkward today.
   - **Edit source** (the lens).
 
   It is the discoverable home for everything that has a key shortcut.
-- **V5 Hover reveals source.** Hovering over a symbol, atom or style run
+- **V5 Hover reveals source** (done 2026-10-13). Hovering over a symbol, atom or style run
   for about 0.5 s shows a tooltip with its source (`\setminus`, or `\R` →
   `\mathbb{R}`). This teaches command names without the bar.
 - **V6 Local reveal codes.** When the caret sits next to an invisible
   token (`% comment`, `\label`, `\pause`, `\medskip`), a small gray marker
   appears at that spot, Word-pilcrow style, without the global R14 toggle.
   Hovering over it shows the token, and clicking selects it.
-- **V7 Hint line.** A short context hint in the status bar, like TeXmacs's
+- **V7 Hint line** (done 2026-10-13). A short context hint in the status bar, like TeXmacs's
   footer: "superscript · → to leave", "command · ⇥ accept · esc cancel",
   "selection extended to whole formula". The hint for a situation stops
   appearing after it has been seen a few times. The breadcrumb (V11) never

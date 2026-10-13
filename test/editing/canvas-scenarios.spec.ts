@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { runScenario } from "../../packages/core/src/editing/testing/index.js";
 import { editingHint, resolveIntent, type InteractionState } from "../../packages/core/src/editing/input/index.js";
 import { createCommandTable } from "../../packages/core/src/editing/commands/index.js";
-import { createEditView, hoverSource } from "../../packages/core/src/editing/position/index.js";
+import { createEditView, hoverSource, revealedCodes } from "../../packages/core/src/editing/position/index.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { applyPatches } from "../../packages/core/src/editing/transaction/index.js";
 import { canvasSessionDriver } from "./canvas-session-driver.js";
@@ -290,6 +290,46 @@ describe("canvas editing: hover reveals source (V5)", () => {
   it("nothing for plain text", () => {
     const view = createEditView(buildEditTree("plain words"));
     expect(hoverSource(view, 3)).toBeNull();
+  });
+});
+
+describe("canvas editing: reveal codes (R14, B4)", () => {
+  const press = (body: string, intent: Parameters<typeof resolveIntent>[1], revealCodes: boolean) => {
+    const caret = body.indexOf("‸");
+    const text = body.replace("‸", "");
+    const resolution = resolveIntent({
+      surface: "canvas", editMode: "default", isScopeSession: true, revision: 0, text, bufferFrom: 0,
+      anchor: caret, focus: caret, composition: null, domain: null, verticalGoal: null,
+      structure: (source, visibility) => createEditView(buildEditTree(source), visibility),
+      positions: null, interaction: {}, commands: createCommandTable(), revealCodes,
+    }, intent);
+    if (resolution.kind !== "transaction") {
+      return null;
+    }
+    const { patches, selection } = resolution.transaction;
+    const after = applyPatches(text, patches);
+    if (selection.kind !== "absolute") {
+      return after;
+    }
+    const [from, to] = [Math.min(selection.anchor, selection.focus), Math.max(selection.anchor, selection.focus)];
+    return from === to ? `${after.slice(0, from)}‸${after.slice(from)}` : `${after.slice(0, from)}⟦${after.slice(from, to)}⟧${after.slice(to)}`;
+  };
+  const backspace = { type: "deleteBackward", unit: "item", origin: "keyboard", repeat: false } as const;
+  const left = { type: "move", dir: "left", unit: "item", extend: false, origin: "keyboard", repeat: false } as const;
+
+  it("⌫ after a revealed \\pause selects it; without reveal codes it is passed over", () => {
+    expect(press(R`First.\pause‸ Second.`, backspace, true)).toBe(R`First.⟦\pause ⟧Second.`);
+    expect(press(R`First.\pause‸ Second.`, backspace, false)).toBe(R`First‸\pause Second.`);
+  });
+
+  it("← stops on both sides of a revealed comment", () => {
+    expect(press("a % note\n‸b", left, true)).toBe("a ‸% note\nb");
+  });
+
+  it("labels the codes it reveals", () => {
+    const text = "First.\\pause Second. % TODO cite\nThird $x=0\\label{eq:a}$.\n\\vspace{1em}\nLast \\small x \\LaTeX{} y";
+    expect(revealedCodes(createEditView(buildEditTree(text))).map((code) => code.label))
+      .toEqual(["⏸ pause", "% TODO cite", "label eq:a", "vspace 1em"]);
   });
 });
 

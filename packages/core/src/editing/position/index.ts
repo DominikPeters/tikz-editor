@@ -14,3 +14,4 @@ export { caretContext, caretEdge, type CaretEdge, type ContextCrumb } from "./co
 export { emptyMathSlots, type EmptySlot } from "./empty-slots.js";
 export { ghostSlots, type GhostSlot } from "./ghost-slots.js";
 export { hoverSource, type HoverSource } from "./hover-source.js";
+export { revealedCodes, type RevealedCode } from "./revealed-codes.js";

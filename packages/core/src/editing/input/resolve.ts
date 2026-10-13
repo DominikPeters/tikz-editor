@@ -135,6 +135,8 @@ export type IntentContext = {
   readonly commands: CommandTable | null;
   /** The buffer is a title (a frame title): one line of text, with no paragraph breaks or lists. */
   readonly title?: boolean;
+  /** Reveal codes (R14): invisible syntax is an item the caret steps over and ⌫ selects first. */
+  readonly revealCodes?: boolean;
   /**
    * The buffer is a frame body: `\begin{frame}` before it reads a `[` at
    * its start as the frame's options (and a group as its title).
@@ -450,10 +452,11 @@ class Resolver {
 
   /** The current buffer's view, minus what the rendered layout hides on this step. */
   private currentView(structure: NonNullable<IntentContext["structure"]>): EditView {
-    const view = structure(this.context.text);
+    const reveal = this.context.revealCodes === true ? { revealCodes: true } : undefined;
+    const view = structure(this.context.text, reveal);
     const visibility = this.context.domain ? renderedVisibility(view.tree, this.context.domain, this.context.bufferFrom) : null;
     return visibility && (visibility.hidden.size > 0 || visibility.hiddenSlots.size > 0)
-      ? structure(this.context.text, visibility) : view;
+      ? structure(this.context.text, { ...visibility, ...reveal }) : view;
   }
 
   /** The raw selection ends, from the caller or from the offsets. */
@@ -512,7 +515,8 @@ class Resolver {
         // it: a space just typed at a paragraph's end is not a stop yet,
         // and a cell's `&` is not followed by its trailing newline.
         const run = typingRun ?? outcome.run;
-        const nextView = run === "insert" || outcome.exact ? null : structure(applyPatches(this.context.text, outcome.patches));
+        const nextView = run === "insert" || outcome.exact ? null
+          : structure(applyPatches(this.context.text, outcome.patches), this.context.revealCodes === true ? { revealCodes: true } : undefined);
         const found = nextView?.stopAt(outcome.caret) ?? null;
         const stop = found && nextView!.offset(found) >= outcome.caret ? found : null;
         const caret = stop ? nextView!.offset(stop) : outcome.caret;
@@ -1671,8 +1675,9 @@ class Resolver {
       // A line break with no line to end (at an item's start, after a blank line).
       return this.keepSelection(NO_INTERACTION);
     }
-    if (TABLE_RULES.has(name) && !inAlignment(view, caret.slot)) {
-      // Outside a table, TeX has no row for a rule ("Misplaced \noalign").
+    const rowLevel = view.tree.slots[caret.slot].role === "cell" || view.tree.nodes[view.tree.slots[caret.slot].node].kind === "alignment";
+    if (TABLE_RULES.has(name) && !(rowLevel && inAlignment(view, caret.slot))) {
+      // Outside a table, or inside something in a cell (a script, a group), TeX has no row for a rule ("Misplaced \noalign").
       return this.keepSelection(NO_INTERACTION);
     }
     if ((name === "item" || name === "bibitem") && !inListFlow(view, caret.slot)) {

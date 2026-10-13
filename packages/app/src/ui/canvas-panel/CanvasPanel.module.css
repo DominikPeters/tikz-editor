@@ -1502,6 +1502,30 @@
   opacity: 0.7;
 }
 
+/* Reveal codes (R14): invisible syntax as a small gray chip above its place. */
+.revealedCode {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  line-height: 1;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-pane) 88%, transparent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.revealedCodeSelected {
+  color: #fff;
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
 /* The source of the item under the pointer (V5). */
 .hoverSource {
   position: absolute;

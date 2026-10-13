@@ -20,6 +20,7 @@ import type { CanvasPendingCloser } from "./useCanvasPendingCloser";
 import type { CanvasSlotPlaceholder } from "./useCanvasSlotPlaceholders";
 import type { CanvasGhostSlot } from "./useCanvasGhostSlots";
 import type { CanvasHoverSource } from "./useCanvasHoverSource";
+import type { CanvasRevealedCode } from "./useCanvasRevealedCodes";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -30,7 +31,8 @@ export type CanvasTextFormatCommandId =
   | "bullets"
   | "numbered"
   | "outdent"
-  | "indent";
+  | "indent"
+  | "revealCodes";
 
 export type CanvasTextFormatToolbarItem = {
   id: CanvasTextFormatCommandId;
@@ -166,6 +168,8 @@ export type CanvasTextEditViewModel = {
   ghostSlots: readonly CanvasGhostSlot[];
   /** The source of the item under the pointer (V5), after a pause. */
   hoverSource: CanvasHoverSource | null;
+  /** Invisible syntax as chips while reveal codes is on (R14). */
+  revealedCodes: readonly CanvasRevealedCode[];
 };
 
 /** The pill that writes the missing closers in (T6), viewport px. */
@@ -209,7 +213,7 @@ function CanvasTextFormatToolbar({
     <div className={css.textEditToolbar} data-testid="canvas-text-format-toolbar">
       {toolbar.items.map((item) => (
         <span key={item.id} className={css.textEditToolbarSlot}>
-          {item.id === "bullets" ? <span className={css.textEditToolbarDivider} /> : null}
+          {item.id === "bullets" || item.id === "revealCodes" ? <span className={css.textEditToolbarDivider} /> : null}
           <button
             type="button"
             className={[

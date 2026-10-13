@@ -83,6 +83,16 @@ export function itemRole(tree: EditTree, node: NodeId): ItemRole {
 }
 
 /**
+ * Invisible syntax that reveal codes shows as an item (R14): comments,
+ * `\pause` and vertical space, `\label` and its kin, table rules. Not
+ * declarations (`\small` shows in what follows), nor terminator groups.
+ */
+export function isRevealedCode(tree: EditTree, node: NodeId): boolean {
+  const kind = tree.nodes[node].kind;
+  return (kind === "invisible" || kind === "vertical" || kind === "atom") && itemRole(tree, node) === "invisible";
+}
+
+/**
  * Whether the slot's positions are caret stops. Flow slots hold blocks and
  * an alignment's slot holds rows; between those there is no caret, unless
  * the slot is empty (an empty item still takes the caret).

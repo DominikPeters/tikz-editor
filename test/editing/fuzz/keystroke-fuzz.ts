@@ -135,6 +135,8 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
   [3, ["@ghost", "@ghost x", "\\s @complete", "\\al @complete", "\\te @complete"]],
   // The focus tag's menu (V4): a variant, Unwrap, Select or Edit source of the construct around the caret.
   [3, ["@menu", "@menu x", "← @menu", "@menu ⌫"]],
+  // Reveal codes (R14): invisible syntax becomes an item to step over and delete.
+  [2, ["@reveal", "@reveal ⌫ ⌫", "@reveal ← ⌫"]],
   [2, ["⌘B", "⌘I"]],
   [1, ["⏸"]],
   [7, ["@click"]],
@@ -414,6 +416,8 @@ function tokenKeys(token: string, session: KeystrokeSession, index: number): Fuz
       return [{ kind: "complete", index: index % 3 }];
     case "@menu":
       return [{ kind: "menu", index: hash(session.text) ^ index }];
+    case "@reveal":
+      return [{ kind: "reveal" }];
     case "@copy":
     case "@cut":
       return [{ kind: token === "@copy" ? "copy" : "cut" }];
