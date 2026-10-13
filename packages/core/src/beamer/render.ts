@@ -356,6 +356,8 @@ export type PreparedBeamerDocument = {
   frameEditingEnvironment(frameIndex: number): {
     readonly macros: ReadonlyMap<string, MacroBinding>;
     readonly theorems: readonly string[];
+    /** The document's quotation marks: Unicode “ ” where it uses them and never ``` `` ```. */
+    readonly quotes: "tex" | "unicode";
   };
   renderFrame(
     options?: RenderBeamerFrameOptions
@@ -377,6 +379,7 @@ export function prepareBeamerDocument(
   options: PrepareBeamerDocumentOptions = {}
 ): PreparedBeamerDocument {
   const context = createBeamerRenderContext(source, options);
+  let quotes: "tex" | "unicode" | undefined;
   const bodyIrByFrameIndex = new Map<number, BeamerFrameBodyIr>();
   const counterContexts = new Map<DocumentGraphicsResolver | undefined, Promise<{ beforeFrames: number[]; totalFrames: number }>>();
 
@@ -456,9 +459,11 @@ export function prepareBeamerDocument(
     speakerNotes: (frameIndex, step) => beamerSpeakerNotes(context.document, context.noteCommands, frameIndex, step, context.overlaysByFrameId.get(requireFrame(frameIndex).id)!),
     frameEditingEnvironment: (frameIndex) => {
       const frame = requireFrame(frameIndex);
+      quotes ??= /[“”]/u.test(source) && !source.includes("``") ? "unicode" : "tex";
       return {
         macros: context.macroBindingsForFrame(frame),
         theorems: [...activeBeamerTheoremDeclarations(context.document, frame.span.from).keys()],
+        quotes,
       };
     },
     async renderFrame(options = {}) {

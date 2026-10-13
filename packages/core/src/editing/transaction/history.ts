@@ -1,4 +1,4 @@
-import type { Transaction } from "./transaction.js";
+import type { HistoryState, Transaction } from "./transaction.js";
 
 /**
  * Session undo history with explicit grouping
@@ -11,11 +11,7 @@ import type { Transaction } from "./transaction.js";
  * TYPING_RUN_PAUSE_MS between two transactions of the run.
  */
 
-export type HistorySnapshot = {
-  readonly text: string;
-  readonly anchor: number;
-  readonly focus: number;
-};
+export type HistorySnapshot = HistoryState;
 
 export type UndoHistory = {
   readonly undo: readonly HistorySnapshot[];
@@ -61,6 +57,16 @@ export function recordTransaction(
     case "amend":
       merges = history.undo.length > 0;
       break;
+    case "transformation": {
+      // The literal keystroke goes as a typing run would; the transformation
+      // is the step after it, and typing after it starts a new run.
+      const literalMerges =
+        history.openRun?.run === grouping.run &&
+        time - history.openRun.time <= TYPING_RUN_PAUSE_MS &&
+        history.undo.length > 0;
+      const undo = literalMerges ? history.undo : [...history.undo, before];
+      return { undo: [...undo, grouping.literal], redo: [], openRun: null };
+    }
   }
   if (merges) {
     return { undo: history.undo, redo: [], openRun };

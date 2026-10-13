@@ -75,6 +75,7 @@ export const contractScenarios: readonly Scenario[] = [
   { id: "F1 mid-run", title: "⌘B mid-run splits in place without moving the caret", body: R`\textbf{one ‸two}`, keys: "⌘B", expect: R`\textbf{one }‸\textbf{two}` },
 ];
 
+const tabular = (...rows: string[]) => ["\\begin{tabular}{ll}", ...rows, "\\end{tabular}"].join("\n");
 const align = (...rows: string[]) => ["\\begin{align*}", ...rows.map((row) => `  ${row}`), "\\end{align*}"].join("\n");
 
 /**
@@ -118,7 +119,7 @@ export const treeEditingScenarios: readonly Scenario[] = [
   { id: "⌫ into script", title: "⌫ after a longer script deletes its last character", body: R`$x^{23}‸$`, keys: "⌫", expect: R`$x^{2‸}$` },
   { id: "⌫ \\label", title: "⌫ skips an invisible \\label", body: R`ab\label{x}‸ c`, keys: "⌫", expect: R`a‸\label{x} c` },
   { id: "⌫ range in bold", title: "deleting all of a wrapper's content removes it", body: R`\textbf{⟦abc⟧}d`, keys: "⌫", expect: R`‸d` },
-  { id: "⌫ row start", title: "⌫ at a row's start moves to the previous row's end", body: align(R`a &= b \\`, "‸c &= d"), keys: "⌫", expect: align(R`a &= b ‸\\`, "c &= d") },
+  { id: "⌫ row start", title: "⌫ at a row's start joins it to the previous row (D3)", body: align(R`a &= b \\`, "‸c &= d"), keys: "⌫", expect: align(R`a &= b ‸c &= d`) },
   { id: "⌫ cell start", title: "⌫ at a cell's start moves to the previous cell's end", body: align(R`a &= b \\`, "c &‸= d"), keys: "⌫", expect: align(R`a &= b \\`, "c ‸&= d") },
   // User macros (K1): style macros edit like \\textbf, symbol macros are units, the rest atoms.
   { id: "K1 ⌫", title: "⌫ after a style macro deletes its last character", preamble: EE_MACRO, body: R`\ee{bold}‸ x`, keys: "⌫", expect: R`\ee{bol‸} x` },
@@ -158,6 +159,18 @@ export const inputRuleScenarios: readonly Scenario[] = [
   { id: "R6 ^ ⌫", title: "⌫ right after ^ removes the empty script", body: R`$x‸$`, keys: "^ ⌫", expect: R`$x‸$` },
   { id: "R6 ^ →", title: "leaving an empty script removes it", body: R`$x ‸y$`, keys: "^ →", expect: R`$x ‸y$` },
   { id: "M13", title: "retyping an emptied unbraced limit keeps it unbraced", body: R`$\sum_{i=1}^m‸$`, keys: "← ⌫ p", expect: R`$\sum_{i=1}^p‸$` },
+  // Transformations (R12): quotes (P3), dashes (P4), list autoformat (P10).
+  { id: "P3", title: "\" opens and closes TeX quotes", body: "They generalize ‸.", keys: "\"gradient␣equals␣zero.\"", expect: "They generalize ``gradient equals zero.''‸." },
+  { id: "P3 ⌘Z", title: "⌘Z right after a converted quote leaves a literal \"", body: "say ‸", keys: "hi␣\" ⌘Z", expect: "say hi \"‸" },
+  { id: "P3 ⌘Z ⌘Z", title: "a second ⌘Z undoes the typing run with the quote", body: "say ‸", keys: "hi␣\" ⌘Z ⌘Z", expect: "say ‸" },
+  { id: "P3 ⌫", title: "a TeX quote is one item", body: "say ``hi''‸", keys: "⌫", expect: "say ``hi‸" },
+  { id: "P3 unicode", title: "a document with Unicode quotes gets Unicode quotes", body: "“one” ‸", keys: "\"two\"", expect: "“one” “two”‸" },
+  { id: "P3 math", title: "\" in math stays", body: R`$a‸$`, keys: "\"", expect: R`$a"‸$` },
+  { id: "P4", title: "an en dash typed as two keys is one item", body: "pages 3‸", keys: "--5 ⌫ ⌫", expect: "pages 3‸" },
+  { id: "P10", title: "- ␣ starting an empty paragraph starts a list", body: "Intro.\n\n‸", keys: "-␣One", expect: "Intro.\n\n\\begin{itemize}\n\\item One‸\n\\end{itemize}" },
+  { id: "P10 ⌘Z", title: "⌘Z right after the list autoformat leaves the literal - ␣", body: "Intro.\n\n‸", keys: "-␣ ⌘Z", expect: "Intro.\n\n- ‸" },
+  { id: "P10 mid-paragraph", title: "- ␣ mid-paragraph stays text", body: "Intro ‸", keys: "-␣x", expect: "Intro - x‸" },
+  { id: "P10 item", title: "- ␣ at an item's start stays text", body: itemize(R`\item ‸`), keys: "-␣", expect: itemize(R`\item - ‸`) },
   // Terminators (R5) and optional arguments (K9).
   { id: "R5 math", title: "a letter after a control word gets a space", body: R`$\alpha‸$`, keys: "x", expect: R`$\alpha x‸$` },
   { id: "R5 text", title: "a letter after a control word gets {}", body: R`see \ldots‸`, keys: "x", expect: R`see \ldots{}x‸` },
@@ -186,6 +199,13 @@ export const structuralKeyScenarios: readonly Scenario[] = [
   { id: "M8 ⇥", title: "⇥ moves through a fraction's slots and out", body: R`$\frac{n‸}{}$`, keys: "⇥ 2 ⇥ +", expect: R`$\frac{n}{2}+‸$` },
   { id: "⇧⇥ slot", title: "⇧⇥ moves back to the previous slot", body: R`$\frac{n}{‸2}$`, keys: "⇧⇥", expect: R`$\frac{n‸}{2}$` },
   { id: "D2 ⇥", title: "⇥ at a row's last cell adds a cell", body: align(R`a &= b‸`), keys: "⇥ c", expect: align(R`a &= b & c‸`) },
+  { id: "D3 ⌫ full", title: "⌫ at a row's start moves to the previous row's end when the join would not fit", body: R`$\begin{array}{ll} a & b \\ ‸c & d \end{array}$`, keys: "⌫", expect: R`$\begin{array}{ll} a & b ‸\\ c & d \end{array}$` },
+  { id: "D3 ⌫ fits", title: "⌫ joins rows of a fixed-width array when the join fits", body: R`$\begin{array}{ll} a \\ ‸c & d \end{array}$`, keys: "⌫", expect: R`$\begin{array}{ll} a ‸c & d \end{array}$` },
+  { id: "D3 ⌦", title: "⌦ at a row's end joins the next row", body: align(R`a &= b‸ \\`, "c &= d"), keys: "⌦", expect: align(R`a &= b‸ c &= d`) },
+  { id: "D3 ⌫ empty row", title: "⌫ in an empty row removes the row break before it", body: align(R`a &= b \\`, R`‸\\`, "c &= d"), keys: "⌫", expect: align(R`a &= b ‸\\`, "c &= d") },
+  { id: "D3 rule", title: "⌫ does not join rows across a rule", body: tabular(R`a & b \\ \hline`, R`‸c & d`), keys: "⌫", expect: tabular(R`a & b ‸\\ \hline`, R`c & d`) },
+  { id: "K13 math column", title: "cells of a >{$}c<{$} column are math", body: "\\begin{tabular}{>{$}c<{$}l}\n‸ & text\n\\end{tabular}", keys: "x^2 ⇥ a^b", expect: "\\begin{tabular}{>{$}c<{$}l}\nx^2 & a\\^{}b‸text\n\\end{tabular}" },
+  { id: "K13 ⇥", title: "⇥ and ⇧⇥ move between tabular cells", body: tabular(R`a‸ & b \\`, R`c & d`), keys: "⇥ x ⇥ y ⇧⇥ ⇧⇥ z", expect: tabular(R`az‸ & xb \\`, R`yc & d`) },
   { id: "D4 ⇥", title: "⇥ in a fixed-width array goes to the next row", body: R`$\begin{array}{ll} a & b‸ \\ c & d \end{array}$`, keys: "⇥ x", expect: R`$\begin{array}{ll} a & b \\ x‸c & d \end{array}$` },
   { id: "⇧⇥ unnest", title: "⇧⇥ unnests an item", body: itemize(R`\item First`, R`\begin{itemize}`, R`\item ‸Second`, R`\end{itemize}`), keys: "⇧⇥", expect: itemize(R`\item First`, R`\item ‸Second`) },
   // ⌫ / ⌦ at block edges.
@@ -226,8 +246,6 @@ export const chipScenarios: readonly Scenario[] = [
   { id: "M9", title: "a selection fills the numerator; the caret goes to the denominator", body: R`$⟦a⟧$`, keys: R`\frac␣`, expect: R`$\frac{a}{‸}$` },
   { id: "R12 chip", title: "a chip commit is one undo step", body: R`$a‸$`, keys: R`\alpha␣ ⌘Z`, expect: R`$a‸$` },
 ];
-
-const tabular = (...rows: string[]) => ["\\begin{tabular}{ll}", ...rows, "\\end{tabular}"].join("\n");
 
 /**
  * Edits the LaTeX oracle (test/editing/keystroke-tex-oracle.spec.ts)
@@ -277,6 +295,7 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "C18", title: "in overprint, ⇧⏎ right after \\onslide has no line to end", body: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}", keys: "⇧⏎", expect: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}" },
   { id: "C19", title: "\\ then a character that makes no control symbol types that character", body: "a‸ b", keys: "\\<", expect: "a<‸ b" },
   { id: "C20", title: "[ after an environment's overlay specification is not its optional argument", body: "\\begin{lemma}<2->\n‸Text.\n\\end{lemma}", keys: "[", expect: "\\begin{lemma}<2->\n{}[‸Text.\n\\end{lemma}" },
+  { id: "C22", title: "\\pause is not committed in overprint (beamer: overprints may not overlap)", body: "\\begin{overprint}\n\\onslide<1>Alpha.‸\n\\onslide<2>Beta.\n\\end{overprint}", keys: R`\pause␣`, expect: "\\begin{overprint}\n\\onslide<1>Alpha.‸\n\\onslide<2>Beta.\n\\end{overprint}" },
   { id: "C17", title: "a line break typed before a * does not take it as its star", body: "A page‸*", keys: "\\\\", expect: "A page\\\\{}‸*" },
 ];
 

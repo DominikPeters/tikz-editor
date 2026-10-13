@@ -227,6 +227,12 @@ export function StatusBar() {
           </div>
         )}
 
+        {textContext?.hint && (
+          <div className={css.cell} data-testid="canvas-text-hint">
+            <span className={css.hint}>{textContext.hint}</span>
+          </div>
+        )}
+
         {canvasStatusHint && (
           <div className={css.cell}>
             <span className={css.hint}>{canvasStatusHint}</span>

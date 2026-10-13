@@ -65,6 +65,8 @@ export type CommandTable = {
   environment(name: string): EnvironmentSchema | null;
   /** The command names known in a mode (user macros first): the completion vocabulary. */
   names(mode: EditMode): readonly string[];
+  /** The document's quotation marks (P3): TeX's ``` `` ``` and `''`, or Unicode “ ”. */
+  readonly quotes: "tex" | "unicode";
 };
 
 const content = (mode?: EditMode): ArgSchema => ({ kind: "mandatory", rendered: true, role: "content", mode });
@@ -392,11 +394,13 @@ export function createCommandTable(
   options: {
     readonly macros?: ReadonlyMap<string, MacroBinding>;
     readonly theorems?: readonly string[];
+    readonly quotes?: "tex" | "unicode";
   } = {}
 ): CommandTable {
   const macros = options.macros;
   const theorems = new Set(options.theorems ?? []);
   return {
+    quotes: options.quotes ?? "tex",
     command(name, mode) {
       const macro = macros?.get(`\\${name}`);
       if (macro) {

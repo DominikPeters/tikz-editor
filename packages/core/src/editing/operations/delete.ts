@@ -5,6 +5,7 @@ import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, NodeId, SlotId, Span } from "../tree/types.js";
 import type { BufferPatch } from "../transaction/transaction.js";
 import { mapThrough, PatchSet, slotOuterSpan, withBracketGuard, withTerminator } from "./source.js";
+import { joinRows } from "./structure.js";
 
 /**
  * Deletion (R9, O2, O3, F5). Operations return what should happen; the
@@ -26,6 +27,8 @@ export type EditOutcome =
       readonly placeholder?: number;
       readonly exact?: boolean;
       readonly selectionEnd?: number;
+      /** R12: the edit transforms a keystroke; this is the keystroke as typed, its own undo state. */
+      readonly literal?: { readonly patches: readonly BufferPatch[]; readonly caret: number };
     }
   /** Select a construct first (R9: never delete more than one visible item unseen). */
   | { readonly kind: "select"; readonly anchor: Position; readonly focus: Position }
@@ -182,6 +185,10 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   }
   const allSlots = presentSlots(tree, owner);
   const slots = allSlots.filter((candidate) => !view.hiddenSlots.has(candidate.id));
+  if (tree.nodes[owner].kind === "row" && slots[edge === "start" ? 0 : slots.length - 1]?.id === slot) {
+    // A row's edges are its breaks (D3), empty or not.
+    return outcome(neighbouringRow(view, owner, edge));
+  }
   const hiddenContent = allSlots.some((candidate) => view.hiddenSlots.has(candidate.id) && candidate.children.length > 0);
   if (!hiddenContent && slots.every((candidate) => isEmptySlot(view, candidate.id))) {
     return outcome(removeNode(view, owner));
@@ -210,8 +217,16 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   return outcome({ kind: "move", to: { slot: node.parent, index: edge === "start" ? index : index + 1 } });
 }
 
-/** From a row's first cell start to the previous row's last cell end (and the mirror). */
+/**
+ * At a row's first cell start: the row joins the previous one (D3), or,
+ * where it cannot, the caret moves to the previous row's last cell end
+ * (and the mirror).
+ */
 function neighbouringRow(view: EditView, row: NodeId, edge: "start" | "end"): EditOutcome {
+  const joined = joinRows(view, row, edge === "start" ? "backward" : "forward");
+  if (joined) {
+    return joined;
+  }
   const { tree } = view;
   const parent = tree.slots[tree.nodes[row].parent!];
   const rows = parent.children.filter((child) => tree.nodes[child].kind === "row");

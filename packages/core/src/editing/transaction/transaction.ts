@@ -59,7 +59,17 @@ export type UndoGrouping =
   | { readonly group: "typing-run"; readonly run: string }
   | { readonly group: "composition"; readonly first: boolean }
   /** Part of the step before it, whatever that was (a pending `\right` taken along after its pair was written). */
-  | { readonly group: "amend" };
+  | { readonly group: "amend" }
+  /**
+   * A keystroke an input rule transformed (R12: a smart quote, list
+   * autoformat): the literal keystroke joins the typing run as its own
+   * state, `literal`, and the transformation is a step of its own on top,
+   * so that undo first gives back what was typed.
+   */
+  | { readonly group: "transformation"; readonly run: string; readonly literal: HistoryState };
+
+/** A buffer and its selection, as undo restores them. */
+export type HistoryState = { readonly text: string; readonly anchor: number; readonly focus: number };
 
 export type BufferRange = { readonly from: number; readonly to: number };
 

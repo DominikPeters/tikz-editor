@@ -1,7 +1,7 @@
 \documentclass{beamer}
 % Constructs that real decks use inside frames and that canvas editing must
 % keep valid (see the corpus survey): written for the editing fuzzers.
-\usepackage{amsmath,amssymb,booktabs}
+\usepackage{amsmath,amssymb,booktabs,array}
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\highlight}[1]{\textcolor{red}{#1}}
 \newcommand{\remark}[2][Note]{\textbf{#1:} #2}
@@ -123,6 +123,14 @@ Delta & \textcolor{red}{\bf 1} & 2\\
 Epsilon & 3 & 4\\
 \bottomrule
 \end{tabular}}
+\end{frame}
+
+\begin{frame}{Math columns}
+\begin{tabular}{>{$}c<{$}l}
+x^2 & Alpha\\
+  & Beta\\
+\frac{1}{2} & Gamma
+\end{tabular}
 \end{frame}
 
 \begin{frame}{Math forms}

@@ -1105,6 +1105,118 @@ test("the command chip completes a command at the caret and commits it in one un
   await expect(input).toBeFocused();
 });
 
+const GHOST_SOURCE = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Ghosts}
+Root $\sqrt{x+1}$ here.
+
+\begin{description}
+\item second
+\end{description}
+\end{frame}
+\end{document}`;
+
+async function placeCanvasCaret(page: Page, at: number): Promise<void> {
+  await page.getByTestId("canvas-focus-input").evaluate((element, offset) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(offset, offset);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, at);
+}
+
+test("ghost slots: the optional slots of the construct at the caret show faintly and are created by a click (V3)", async ({ page }, testInfo) => {
+  await setSource(page, GHOST_SOURCE);
+  const textarea = await openScopeContaining(page, "Root");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("x+1") + 1);
+  const index = page.locator('[data-testid="canvas-ghost-slot"][data-ghost-kind="index"]');
+  await expect(index).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("ghost-index.png") });
+  await index.click();
+  await page.keyboard.type("3");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`$\sqrt[3]{x+1}$`);
+  await expect(index).toHaveCount(0);
+
+  const after = await textarea.inputValue();
+  await placeCanvasCaret(page, after.indexOf("second") + 2);
+  const label = page.locator('[data-testid="canvas-ghost-slot"][data-ghost-kind="label"]');
+  await expect(label).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("ghost-label.png") });
+  await label.click();
+  await page.keyboard.type("Two");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\item[Two] second`);
+});
+
+test("the command chip shows math completions as set, and a completion can be picked with the pointer (V2)", async ({ page }, testInfo) => {
+  await setSource(page, GHOST_SOURCE);
+  const textarea = await openScopeContaining(page, "Root");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("+1"));
+  await page.keyboard.type("\\se");
+  const chip = page.getByTestId("canvas-command-chip");
+  await expect(chip).toBeVisible();
+  const option = chip.getByRole("option").filter({ hasText: "\\setminus" });
+  await expect(option.locator("svg path").first()).toBeAttached();
+  await page.screenshot({ path: testInfo.outputPath("chip-previews.png") });
+  await option.click();
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`$\sqrt{x\setminus+1}$`);
+  await expect(chip).toHaveCount(0);
+  await expect(page.getByTestId("canvas-focus-input")).toBeFocused();
+});
+
+test("the focus tag opens a menu of the construct's variants and actions (V4)", async ({ page }, testInfo) => {
+  await setSource(page, GHOST_SOURCE);
+  const textarea = await openScopeContaining(page, "Root");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("x+1") + 1);
+  const tag = page.getByTestId("canvas-context-outline-tag");
+  await expect(tag).toHaveText("\\sqrt");
+  await tag.click();
+  const menu = page.getByTestId("canvas-context-outline-menu");
+  await expect(menu.getByRole("menuitem")).toHaveText(["Unwrap", "Select", "Edit source"]);
+  await page.screenshot({ path: testInfo.outputPath("tag-menu.png") });
+  await menu.getByRole("menuitem", { name: "Unwrap" }).click();
+  await expect.poll(() => readStoreSource(page)).toContain("Root $x+1$ here.");
+  await expect(page.getByTestId("canvas-focus-input")).toBeFocused();
+
+  await expect(tag).toHaveText("math");
+  await tag.click();
+  await menu.getByRole("menuitem", { name: "display \\[ … \\]" }).click();
+  await expect.poll(() => readStoreSource(page)).toContain("Root \\[x+1\\] here.");
+});
+
+test("the hint line says what the keys do (V7), and hovering shows an item's source (V5)", async ({ page }) => {
+  await setSource(page, GHOST_SOURCE);
+  const textarea = await openScopeContaining(page, "Root");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("here"));
+  await page.keyboard.type("\\");
+  await expect(page.getByTestId("canvas-text-hint")).toContainText("command · ⇥ to accept");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("canvas-text-hint")).toHaveCount(0);
+
+  const sqrt = page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${GHOST_SOURCE.indexOf("\\sqrt")}"]`).first();
+  const box = await sqrt.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.move(box!.x + box!.width / 2 + 1, box!.y + box!.height / 2);
+  await expect(page.getByTestId("canvas-hover-source")).toHaveText("\\sqrt{…}");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByTestId("canvas-hover-source")).toHaveCount(0);
+});
+
+test("a typed \" is a quotation mark, and ⌘Z right after gives back the \" (P3, R12)", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("typo."));
+  await page.keyboard.type('"x" ');
+  await expect.poll(() => readStoreSource(page)).toContain("Body ``x'' typo.");
+  await page.keyboard.type('"');
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toContain("Body ``x'' \"typo.");
+});
+
 test("the value editor: a command's values are asked for before it is written, and edited from its tag", async ({ page }) => {
   const textarea = await openScopeContaining(page, "Body typo.");
   const input = page.getByTestId("canvas-focus-input");

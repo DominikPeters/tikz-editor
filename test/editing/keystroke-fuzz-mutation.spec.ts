@@ -97,7 +97,7 @@ describe("keystroke fuzzing catches broken operations", () => {
     ["empty formula as $$", "balance"],
     ["no terminator", "content"],
     ["⌫ takes two", "content|balance"],
-    ["range deletion ignores structure", "balance"],
+    ["range deletion ignores structure", "balance|content"],
     ["item merge eats a word", "content|balance"],
     ["lost undo step", "undo"],
   ])("%s → %s", (mutant, invariants) => {

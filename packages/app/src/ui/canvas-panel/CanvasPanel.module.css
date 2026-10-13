@@ -485,24 +485,13 @@
 }
 
 .contextOutlineFocus {
+  /* Above the caret and the ghosts: its tag's menu opens over them. */
+  z-index: 7;
   outline: 1.25px solid color-mix(in srgb, var(--accent) 70%, transparent 30%);
 }
 
 .contextOutlineParent {
   outline: 1px solid color-mix(in srgb, var(--accent) 28%, transparent 72%);
-}
-
-.contextOutlineTag {
-  position: absolute;
-  left: -1px;
-  bottom: 100%;
-  margin-bottom: 2px;
-  padding: 0 3px;
-  border-radius: 2px;
-  font: 500 9px/13px var(--font-ui);
-  color: #fff;
-  background: var(--accent-dark);
-  white-space: nowrap;
 }
 
 /* Hidden input capturing keyboard/IME while the canvas surface owns focus.
@@ -1330,6 +1319,33 @@
   background: var(--accent-dark);
 }
 
+.commandChipList {
+  pointer-events: auto;
+}
+
+.commandChipOption {
+  cursor: pointer;
+}
+
+.commandChipOption:hover {
+  background: var(--btn-hover-bg);
+}
+
+/* A math completion as the engine sets it: 1em is 14px, a little larger than the name. */
+.commandChipPreview {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.commandChipPreview svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
 .commandChipDetail {
   font: 10px/18px var(--font-ui);
   color: var(--text-muted);
@@ -1486,6 +1502,37 @@
   opacity: 0.7;
 }
 
+/* The source of the item under the pointer (V5). */
+.hoverSource {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  padding: 1px 6px;
+  font: 12px/18px var(--font-mono);
+  color: var(--text);
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  white-space: nowrap;
+}
+
+/* An optional slot the focus construct lacks (V3): fainter than a placeholder, solid on hover. */
+.ghostSlot {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 1px dotted var(--accent);
+  border-radius: 1px;
+  opacity: 0.55;
+}
+
+.ghostSlot:hover {
+  opacity: 0.9;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 /* How to accept a pending \right (M14): "tab \right)" below its faint glyph. */
 .pendingCloserHint {
   position: absolute;
@@ -1518,8 +1565,72 @@
 
 /* A construct's values on its outline tag, clickable to edit them. */
 .contextOutlineValueTag {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
   font-family: var(--font-mono);
+}
+
+/* The focus tag as a handle (V4): the tag, and its menu below it. */
+.contextOutlineTagGroup {
+  position: absolute;
+  left: -1px;
+  bottom: 100%;
+  margin-bottom: 2px;
+  display: flex;
+  gap: 1px;
+  pointer-events: auto;
+}
+
+.contextOutlineTagButton {
+  padding: 0 3px;
+  border: none;
+  border-radius: 2px;
+  font: 500 9px/13px var(--font-ui);
+  color: #fff;
+  background: var(--accent-dark);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.contextOutlineTagButton.contextOutlineValueTag {
+  font-family: var(--font-mono);
+}
+
+/* Above the tag, clear of the construct and of the format bar below it. */
+.contextOutlineMenu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  margin-bottom: 2px;
+  padding: 3px 0;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.contextOutlineMenuItem {
+  padding: 1px 10px;
+  border: none;
+  font: 12px/18px var(--font-ui);
+  text-align: left;
+  color: var(--text);
+  background: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.contextOutlineMenuItem:hover {
+  color: #fff;
+  background: var(--accent-dark);
+}
+
+.contextOutlineMenuVariant {
+  font-family: var(--font-mono);
+}
+
+.contextOutlineMenuSeparator {
+  margin: 3px 0;
+  border-top: 1px solid var(--border);
 }

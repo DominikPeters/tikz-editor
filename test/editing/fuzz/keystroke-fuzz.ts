@@ -116,7 +116,7 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
     "\\displaystyle", "\\notag",
   ]],
   // Sequences random keys almost never type: overlay specifications, spacing, labels, dashes and quotes.
-  [4, ["<2->", "<+->", "[<+->]", "\\\\[2pt]", "\\item[", "\\item<2->", "--", "---", "``", "''", "{}", "{\\bf"]],
+  [4, ["<2->", "<+->", "[<+->]", "\\\\[2pt]", "\\item[", "\\item<2->", "--", "---", "``", "''", "{}", "{\\bf", "⏎ -␣", "\"x\""]],
   [16, ["⌫", "⌦"]],
   [6, ["⏎", "⇧⏎"]],
   [5, ["⇥", "⇧⇥"]],
@@ -131,6 +131,10 @@ const FAMILIES: readonly (readonly [number, readonly string[]])[] = [
   // The source lens (R13), edited as raw source, and the fix for what that leaves unbalanced (T6).
   // (⏎ in the lens is the lens field's own key, which this harness does not model: Esc closes it.)
   [3, ["⌘E @lens", "⌘E @lens @lens Esc", "⌘E @lens Esc", "@fix"]],
+  // Pointer picks: a ghost slot of the construct around the caret (V3), a completion of the chip (V2).
+  [3, ["@ghost", "@ghost x", "\\s @complete", "\\al @complete", "\\te @complete"]],
+  // The focus tag's menu (V4): a variant, Unwrap, Select or Edit source of the construct around the caret.
+  [3, ["@menu", "@menu x", "← @menu", "@menu ⌫"]],
   [2, ["⌘B", "⌘I"]],
   [1, ["⏸"]],
   [7, ["@click"]],
@@ -404,6 +408,12 @@ function tokenKeys(token: string, session: KeystrokeSession, index: number): Fuz
   switch (token) {
     case "@fix":
       return [{ kind: "fixClosers" }];
+    case "@ghost":
+      return [{ kind: "ghost" }];
+    case "@complete":
+      return [{ kind: "complete", index: index % 3 }];
+    case "@menu":
+      return [{ kind: "menu", index: hash(session.text) ^ index }];
     case "@copy":
     case "@cut":
       return [{ kind: token === "@copy" ? "copy" : "cut" }];
@@ -498,12 +508,32 @@ function difference(before: readonly string[], after: readonly string[]): { remo
   return { removed: before.slice(prefix, before.length - suffix), added: after.slice(prefix, after.length - suffix) };
 }
 
+const LIGATURE = /^(?:---?|``|'')$/u;
+
+/**
+ * A character typed or deleted next to another can make a TeX ligature
+ * of them (`-` then `-` is one en dash): compared by their characters,
+ * that is the one character typed or deleted.
+ */
+function ligatured(diff: { removed: string[]; added: string[] }): boolean {
+  return [...diff.removed, ...diff.added].some((key) => LIGATURE.test(key));
+}
+
+function byCharacters(diff: { removed: string[]; added: string[] }): { removed: string[]; added: string[] } {
+  const characters = (list: readonly string[]) => list.flatMap((key) => (LIGATURE.test(key) ? [...key] : [key]));
+  return difference(characters(diff.removed), characters(diff.added));
+}
+
 /** What a key may do to the visible items, by the intent it became. */
 type ContentRule = "unchanged" | "adds" | "deletes-one" | "replaces-selection" | "any";
 
 function contentRule(intent: Intent | null, hadSelection: boolean, chipOpen: boolean): ContentRule {
   if (!intent) {
     return "unchanged";
+  }
+  if (intent.type === "constructMenu") {
+    // A variant or Unwrap from the focus tag: another construct, by request.
+    return "any";
   }
   if (intent.type === "setValues") {
     // A value edited through its tag, whatever it shows.
@@ -520,6 +550,8 @@ function contentRule(intent: Intent | null, hadSelection: boolean, chipOpen: boo
     case "insertText":
     case "paste":
     case "pickValues":
+    case "pickCompletion":
+    case "createSlot":
       return hadSelection ? "replaces-selection" : "adds";
     case "deleteBackward":
     case "deleteForward":
@@ -555,8 +587,19 @@ function checkContent(
   if (selection.from === selection.to && allBefore.some((item) => item.from < caret && caret < item.to)) {
     return null;
   }
-  const before = allBefore;
-  const { removed, added } = difference(keys(before), keys(after));
+  const diff = difference(keys(allBefore), keys(after));
+  const problem = contentProblem(rule, diff, allBefore, after, selection);
+  // A ligature counts as one item, or as the characters it was typed as.
+  return problem && ligatured(diff) ? contentProblem(rule, byCharacters(diff), allBefore, after, selection) : problem;
+}
+
+function contentProblem(
+  rule: ContentRule,
+  { removed, added }: { removed: string[]; added: string[] },
+  before: readonly Item[],
+  after: readonly Item[],
+  selection: { from: number; to: number }
+): string | null {
   switch (rule) {
     case "any":
       return null;
@@ -590,6 +633,7 @@ function checkStep(
     displays: number;
     selection: { from: number; to: number };
     chipOpen: boolean;
+    pickerOpen: boolean;
     /** Where commands miss an argument (the offset after them). */
     missing: number[];
   },
@@ -623,7 +667,8 @@ function checkStep(
     const waiting = new Set(before.missing.filter((offset) => offset === before.selection.from));
     const typing = rule === "adds" || rule === "replaces-selection";
     const items = typing ? before.items.filter((item) => !waiting.has(item.to)) : before.items;
-    const content = checkContent(rule, items, visibleItems(view), before.selection);
+    // A transformed key (R12) is judged as typed: what it then became is the rule's own business.
+    const content = checkContent(rule, items, visibleItems(session.literal ? session.view(session.literal.text) : view), before.selection);
     if (content) {
       return { invariant: "content", message: content };
     }
@@ -642,9 +687,9 @@ function checkStep(
     }
   }
   const interaction = session.interaction();
-  // (With the chip open, ⌘Z only closes it: a pending `\right` stays pending.)
+  // (With the chip or the value editor open, ⌘Z only closes it: a pending `\right` stays pending.)
   if (history && (interaction.chip || interaction.picker || interaction.placeholder != null || interaction.pending != null ||
-    (interaction.pendingCloser != null && !before.chipOpen))) {
+    (interaction.pendingCloser != null && !before.chipOpen && !before.pickerOpen))) {
     // O7: undo and redo restore source and selection, never editing state.
     return { invariant: "undo", message: "undo or redo brought back interaction state" };
   }
@@ -712,6 +757,7 @@ export function runCase(fuzz: FuzzCase): FuzzRun {
         displays: dollarDisplays(view.tree),
         selection: { from: Math.min(anchor, focus), to: Math.max(anchor, focus) },
         chipOpen: session.chipOpen(),
+        pickerOpen: session.pickerOpen(),
         missing: view.tree.diagnostics.filter((diagnostic) => diagnostic.code === "missing-argument").map((diagnostic) => diagnostic.span.from),
       };
       let intent: Intent | null;

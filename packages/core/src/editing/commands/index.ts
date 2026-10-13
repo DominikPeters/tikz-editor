@@ -8,3 +8,4 @@ export {
   type EnvironmentSchema,
 } from "./table.js";
 export { classifyMacro, type MacroClass } from "./macro-classes.js";
+export { mathCompletionPreview } from "./preview.js";

@@ -375,6 +375,45 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
   return patchOutcome({ edits: [{ span: { from: end, to: end }, insert }], caret: end + insert.length });
 }
 
+/**
+ * ⌫ at a row's start or ⌦ at its end (D3): the row joins its neighbour
+ * by removing the row break between them, the two cells at the join
+ * becoming one. Null when a rule or comment stands between the rows, or
+ * when the joined row would have more columns than the alignment fixes
+ * (`a&b\\c&d` in a two-column array); the key then moves instead.
+ */
+export function joinRows(view: EditView, row: NodeId, direction: "backward" | "forward"): EditOutcome | null {
+  const { tree } = view;
+  const parent = tree.nodes[row].parent;
+  if (parent == null) {
+    return null;
+  }
+  const siblings = tree.slots[parent].children;
+  const at = siblings.indexOf(row);
+  const [first, second] = direction === "backward" ? [siblings[at - 1], row] : [row, siblings[at + 1]];
+  if (first == null || second == null || tree.nodes[first].kind !== "row" || tree.nodes[second].kind !== "row") {
+    return null;
+  }
+  const upper = tree.nodes[first];
+  const breakToken = upper.delimiters.find((span) => span.to === upper.span.to && tree.text[span.from] === "\\");
+  if (!breakToken || !isBlank(tree.text, upper.span.to, tree.nodes[second].span.from)) {
+    return null;
+  }
+  const limit = columnLimit(view, tree.slots[parent].node);
+  if (limit != null && columnsUsed(view, first) + columnsUsed(view, second) - 1 > limit) {
+    return null;
+  }
+  const lastCell = presentSlots(tree, first).at(-1);
+  const firstCell = presentSlots(tree, second)[0];
+  if (!lastCell || !firstCell) {
+    return null;
+  }
+  const from = trimmedEnd(tree.text, { from: lastCell.contentSpan.from, to: breakToken.from });
+  const to = skipHorizontalForward(tree.text, firstCell.contentSpan.from, firstCell.contentSpan.to);
+  const insert = from === upper.span.from ? "" : joinSeparator(tree.text, from, " ");
+  return patchOutcome({ edits: [{ span: { from, to }, insert }], caret: direction === "backward" ? from + insert.length : from });
+}
+
 /** Whether the row of `cell` has all the columns its alignment fixes (`\multicolumn{n}` counting n), so `&` cannot add one. */
 export function rowIsFull(view: EditView, cell: SlotId): boolean {
   const { tree } = view;

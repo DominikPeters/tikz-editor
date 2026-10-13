@@ -7,6 +7,7 @@ import {
   type TexSyntaxMatchedEnvironment,
 } from "../../text/tex/syntax-index.js";
 import { scanTexRecovery, texVirtualCloserAt } from "../../text/tex/recovery.js";
+import { parseTexTabularPreamble } from "../../text/tex/tabular/parser.js";
 import {
   createCommandTable,
   type ArgSchema,
@@ -108,6 +109,8 @@ const PRIMITIVE_SPECS: Readonly<Record<string, RegExp>> = {
 };
 
 const WORD_CHAR = /[A-Za-z@]/u;
+const TEXT_LIGATURE = /^(?:---?|``|'')/u;
+const MULTICOLUMN = /\\multicolumn\s*\{\s*(\d+)\s*\}/uy;
 /**
  * Rules between alignment rows and the arguments each takes, in order:
  * `[` an optional width, `(` a trim (`\cmidrule(lr)`), `{` a mandatory
@@ -384,6 +387,12 @@ class Binder {
   }
 
   /** One TeX token at `at`: a control sequence or one character. */
+  /** A text character, or TeX's ligature starting there (`---`, `--`, ``` `` ```, `''`), which shows as one (P4, P3). */
+  private ligatureEnd(at: number, limit: number): number {
+    const match = TEXT_LIGATURE.exec(this.text.slice(at, Math.min(limit, at + 3)));
+    return match ? at + match[0].length : this.tokenEnd(at);
+  }
+
   private tokenEnd(at: number): number {
     if (this.text[at] === "\\") {
       return this.controlAt(at).end;
@@ -478,7 +487,7 @@ class Binder {
       if (char === "&") {
         this.diagnose("stray-alignment-tab", cursor, cursor + 1, "& outside an alignment");
       }
-      const end = this.tokenEnd(cursor);
+      const end = run.mode === "text" ? this.ligatureEnd(cursor, run.end) : this.tokenEnd(cursor);
       this.leaf(run, "char", cursor, end);
       cursor = end;
     }
@@ -1076,7 +1085,9 @@ class Binder {
   }
 
   private alignment(node: NodeId, from: number, to: number, mode: EditMode): void {
-    const slot = this.slot(node, "content", { from, to }, { mode, flow: false });
+    const columns = mode === "text" ? this.columnModes(node) : [];
+    // Text typed between rows starts a row: in the first column's mode.
+    const slot = this.slot(node, "content", { from, to }, { mode: columns[0] ?? mode, flow: false });
     const text = this.text;
     let cursor = from;
     while (cursor < to) {
@@ -1113,18 +1124,48 @@ class Binder {
           continue;
         }
       }
-      cursor = this.row(slot, cursor, to, mode);
+      // A row takes the indentation before it, so that an empty first
+      // cell (`  & b`) has its place where the line's text begins.
+      let start = cursor;
+      while (start > from && (text[start - 1] === " " || text[start - 1] === "\t")) {
+        start -= 1;
+      }
+      cursor = this.row(slot, start, to, mode, columns);
     }
   }
 
-  private row(parent: SlotId, from: number, to: number, mode: EditMode): number {
-    const row = this.node("row", mode, { from, to: from });
+  /**
+   * The mode of each column of a table: math where the column
+   * specification wraps it in `>{$}…<{$}`, as the renderer reads it
+   * (text/tex/ir.ts); text otherwise, and for a specification it cannot read.
+   */
+  private columnModes(node: NodeId): EditMode[] {
+    const spec = this.nodes[node].values.find((value) => value.role === "spec");
+    if (!spec) {
+      return [];
+    }
+    try {
+      return parseTexTabularPreamble(this.text.slice(spec.contentSpan.from, spec.contentSpan.to)).columns
+        .map((column) => column.before?.trim() === "$" && column.after?.trim() === "$" ? "math" : "text");
+    } catch {
+      return [];
+    }
+  }
+
+  private row(parent: SlotId, from: number, to: number, mode: EditMode, columns: readonly EditMode[] = []): number {
+    const row = this.node("row", columns[0] ?? mode, { from, to: from });
     this.attach(parent, row);
     const stops: ReadonlySet<Stop> = new Set(["cell"]);
     let cellFrom = from;
+    let column = 0;
     for (;;) {
-      const slot = this.slot(row, "cell", { from: cellFrom, to }, { mode });
-      const stopped = this.scanSlot(slot, mode, cellFrom, to, stops, { trim: true });
+      // `\multicolumn{n}` takes n columns (its content is its own argument).
+      MULTICOLUMN.lastIndex = this.skipSpaces(cellFrom, to);
+      const span = MULTICOLUMN.exec(this.text);
+      const cellMode = span ? mode : columns[column] ?? mode;
+      column += span ? Number(span[1]) : 1;
+      const slot = this.slot(row, "cell", { from: cellFrom, to }, { mode: cellMode });
+      const stopped = this.scanSlot(slot, cellMode, cellFrom, to, stops, { trim: true });
       if (stopped >= to) {
         this.nodes[row].span.to = to;
         return to;

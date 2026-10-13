@@ -1,6 +1,6 @@
 import { useEffect, useState, type RefObject } from "react";
 import type { Span } from "@tikz-editor/core/ast/types";
-import type { TaggedValue } from "@tikz-editor/core/editing/operations/index";
+import type { ConstructMenuEntry, TaggedValue } from "@tikz-editor/core/editing/operations/index";
 import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
 import { documentSourceOffset } from "@tikz-editor/core/text/source-coordinates";
 import type { CanvasTransform } from "../../store/types";
@@ -16,6 +16,8 @@ export type CanvasContextOutlineRequest = {
   readonly span: Span;
   /** The construct's values, shown on its tag in source form and edited from it (O8). */
   readonly values?: { readonly command: string; readonly values: readonly TaggedValue[] } | null;
+  /** The tag's menu (V4): variants and what can be done to the construct whole. */
+  readonly menu?: readonly ConstructMenuEntry[];
 };
 
 export type CanvasContextOutline = {
@@ -23,6 +25,7 @@ export type CanvasContextOutline = {
   readonly tag: string | null;
   readonly span: Span;
   readonly values: CanvasContextOutlineRequest["values"];
+  readonly menu: readonly ConstructMenuEntry[];
   /** Viewport px. */
   readonly left: number;
   readonly top: number;
@@ -57,7 +60,7 @@ export function useCanvasContextOutlines(args: {
   const { session, requests, renderedSource, source, textLayoutContext, canvasTransform, viewportRef, resolveTarget, resolveContainer } = args;
   const [outlines, setOutlines] = useState<readonly CanvasContextOutline[]>([]);
   const requestKey = requests.map((request) =>
-    `${request.role}:${request.tag}:${request.span.from}-${request.span.to}:${request.values?.values.map((value) => value.text).join("\u0000") ?? ""}`).join("|");
+    `${request.role}:${request.tag}:${request.span.from}-${request.span.to}:${request.values?.values.map((value) => value.text).join("\u0000") ?? ""}:${request.menu?.map((entry) => entry.id).join(",") ?? ""}`).join("|");
 
   useEffect(() => {
     const target = session?.isScopeSession ? resolveTarget(session) : null;
@@ -123,6 +126,7 @@ export function useCanvasContextOutlines(args: {
             tag: request.tag,
             span: request.span,
             values: request.values ?? null,
+            menu: request.menu ?? [],
             left: minX - OUTLINE_PADDING_PX,
             top: minY - OUTLINE_PADDING_PX,
             width: maxX - minX + 2 * OUTLINE_PADDING_PX,

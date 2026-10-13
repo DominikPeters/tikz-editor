@@ -31,6 +31,23 @@ export function positionOffset(tree: EditTree, position: Position): number {
   return children.length === 0 ? slot.contentSpan.from : slot.contentSpan.to;
 }
 
+/**
+ * Where text typed at a position goes: its canonical offset, except at
+ * the end of a text slot whose trailing whitespace is a gap (a table cell
+ * before `&`), where it goes right after the last child, so that `a ‸&`
+ * typed into is `ax &`, not `a x&` with a space that shows.
+ */
+export function insertionOffset(tree: EditTree, position: Position): number {
+  const offset = positionOffset(tree, position);
+  const slot = tree.slots[position.slot];
+  const last = slot.children.at(-1);
+  if (slot.mode !== "text" || slot.flow || last == null || position.index < slot.children.length) {
+    return offset;
+  }
+  const end = tree.nodes[last].span.to;
+  return /^\s*$/u.test(tree.text.slice(end, offset)) ? end : offset;
+}
+
 export type PositionIndex = {
   /** Every position in document order. */
   readonly positions: readonly Position[];

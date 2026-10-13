@@ -1,5 +1,6 @@
 export {
   createPositionIndex,
+  insertionOffset,
   positionOffset,
   type Affinity,
   type Position,
@@ -11,3 +12,5 @@ export { renderedVisibility, type RenderedStops } from "./rendered.js";
 export { createEditViewCache, type EditViewCache } from "./view-cache.js";
 export { caretContext, caretEdge, type CaretEdge, type ContextCrumb } from "./context.js";
 export { emptyMathSlots, type EmptySlot } from "./empty-slots.js";
+export { ghostSlots, type GhostSlot } from "./ghost-slots.js";
+export { hoverSource, type HoverSource } from "./hover-source.js";

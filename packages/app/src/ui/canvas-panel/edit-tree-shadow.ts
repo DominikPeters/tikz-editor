@@ -30,7 +30,7 @@ function environmentKey(environment: EditingEnvironment): string {
       : `${name}/${binding.parameterCount}[${binding.optionalFirstArgDefault ?? ""}]` +
         `${binding.provenance.at(-1)?.commandRaw ?? ""}=${binding.body}`
   );
-  return `${environment.theorems.join(",")}\n${macros.join("\n")}`;
+  return `${environment.quotes}\n${environment.theorems.join(",")}\n${macros.join("\n")}`;
 }
 
 function commandsFor(environment: EditingEnvironment | null): CommandTable {

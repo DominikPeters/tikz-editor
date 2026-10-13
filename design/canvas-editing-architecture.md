@@ -933,6 +933,58 @@ uses positions but deletion still uses raw source ranges.
    enter (`\hspace`) shows its tag only when selected; cells of
    `>{$}c<{$}` columns are math to TeX but text to the edit tree.
 
+   **Tables (D2–D4, K13), done.** ⌫ at a row's start (⌦ at its end) joins
+   the rows by removing the row break, the two cells at the join becoming
+   one, where the alignment's column count allows it and no rule or
+   comment stands between; otherwise it moves to the neighbouring row as
+   before. Cells of `>{$}c<{$}` columns are math in the edit tree, read by
+   the renderer's own column parser. A row starts at its line's indentation,
+   so an empty first cell has its place where the line's text begins (typing
+   there wrote a row break), and text typed at the end of a cell goes before
+   its trailing spaces (`a z&` showed a space). A bare offset at the end of
+   an unbraced script is after the scripted atom (R6), also before a
+   cell's `&` (⇥ after `x^2` stayed in the script).
+
+   **Transformations (R12, P3, P4, P10), done.** A transformation is one
+   transaction whose undo group carries the keystroke as typed: the literal
+   state joins the typing run, the transformation is a step on top, and
+   typing after it starts a new run. `"` in prose is a quotation mark,
+   opening after a slot's start, a space or an opening bracket, in the
+   document's convention (``` `` ``` and `''`, or “ ” where the document
+   uses them and never ``` `` ```, from `frameEditingEnvironment`). `- `
+   as the first two characters of an empty paragraph in a frame body, a
+   column or a block starts an itemize. TeX's text ligatures (`--`, `---`,
+   ``` `` ```, `''`) are one item each, so ⌫ deletes an en dash whole.
+   Not done: the "keep `- `" pill (V1).
+
+   **Command chip (V2), done.** Math completions show as the engine sets
+   them (constructs with sample arguments, math alphabets with an R), in
+   TeX's fonts, drawn again once their glyph outlines load; a completion
+   can be picked with the pointer.
+
+   **Ghost slots (V3), done.** The construct around the caret shows the
+   optional slots it lacks as faint dotted boxes: a root's index, the
+   script a scripted atom lacks, a description item's label. A click writes
+   the slot with the caret in it (a script as a typed `^`/`_` would, K4).
+
+   **Focus tag menu (V4), done.** The focus outline's tag opens a menu
+   (a value tag still opens the value editor, its ▾ the menu): the
+   construct's variants (text styles and the document's style macros,
+   math alphabets, `\frac`/`\dfrac`/`\tfrac`, inline ↔ display where a
+   display can stand), Unwrap (a construct with one slot and something in
+   it, terminating control words at both seams), Select, Edit source. Not
+   done: symbol variants (`\le` ↔ `\leq`; a symbol is never the focus),
+   list and block environments (not outlined).
+
+   **Hover reveals source (V5), done.** Half a second over a command
+   symbol, atom or construct shows its source (`\setminus`, `\frac{…}{…}`)
+   by the pointer; a key, a click or moving away hides it.
+
+   **Hint line (V7), done.** Beside the breadcrumb: what is open (lens,
+   value editor, chip, a pending `\right`), a promoted selection, an empty
+   placeholder, or the slot the caret is in (`superscript · → to leave`).
+   Each hint shows its first four appearances, counted in this browser.
+
 **Recovery and the source lens (T1, T2, T5, T6, R13), done.** The text
 engine recovers from unbalanced source the way TeX does, but keeps the
 damage in the run being edited: `text/tex/recovery.ts` scans a text for

@@ -1063,7 +1063,7 @@ options that are awkward today.
   dashed box at the caret's place in them, of their size, during the
   session; drawn over the layout rather than taking space in it, so the
   slide is set as TeX sets it. Not for a bare `{}` atom. Absent optional
-  slots below are still to do.) When a construct is the focus, *optional* rendered
+  slots below done 2026-10-13.) When a construct is the focus, *optional* rendered
   slots that are absent also show as faint ghost boxes: the root index of
   `\sqrt`, a missing superscript or subscript, an item label in
   `description`. Clicking or typing into one creates it. This makes

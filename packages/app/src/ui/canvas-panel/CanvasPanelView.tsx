@@ -11,7 +11,7 @@ import {
 } from "react";
 import { CanvasValueEditor } from "./CanvasValueEditor";
 import { CanvasSourceLens } from "./CanvasSourceLens";
-import { valueTagText } from "./canvas-value-tag";
+import { ContextOutlineTag } from "./CanvasContextOutlineTag";
 import type { AppMenuCommandId } from "../../app-menu";
 import type { CanvasContextMenuDefinition } from "../../context-menu";
 import type { EditorPlatform } from "../../platform/types";
@@ -61,6 +61,7 @@ import css from "./CanvasPanel.module.css";
 import type { BeamerLinkDestination, BeamerLinkRegion } from "@tikz-editor/core/beamer";
 
 const MAGNIFIER_DIAMETER_PX = 300;
+const GHOST_SLOT_TITLES = { index: "Add a root index", sup: "Add a superscript", sub: "Add a subscript", label: "Add a label" } as const;
 const MAGNIFIER_SCALE = 2.25;
 const TEXT_CARET_BLINK_PERIOD_MS = 1000;
 const TEXT_CARET_BLINK_VISIBLE_MS = TEXT_CARET_BLINK_PERIOD_MS / 2;
@@ -832,23 +833,15 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             <div
               key={`${outline.role}:${outline.left}:${outline.top}:${outline.width}:${outline.height}`}
               className={outline.role === "focus" ? css.contextOutlineFocus : css.contextOutlineParent}
-              aria-hidden={outline.values ? undefined : true}
+              aria-hidden={outline.role === "focus" && (outline.values || outline.tag) ? undefined : true}
               data-testid={`canvas-context-outline-${outline.role}`}
               style={{ left: outline.left, top: outline.top, width: outline.width, height: outline.height }}
             >
-              {outline.role === "focus" && outline.values ? (
-                <button
-                  type="button"
-                  className={`${css.contextOutlineTag} ${css.contextOutlineValueTag}`}
-                  title="Edit values"
-                  data-testid="canvas-context-outline-values"
-                  onPointerDown={(event) => { event.stopPropagation(); event.preventDefault(); }}
-                  onClick={() => { canvasTextEdit.onEditValues(outline); }}
-                >
-                  {valueTagText(outline.values.command, outline.values.values, outline.width)}
-                </button>
-              ) : outline.role === "focus" && outline.tag ? (
-                <span className={css.contextOutlineTag}>{outline.tag}</span>
+              {outline.role === "focus" && (outline.values || outline.tag) ? (
+                <ContextOutlineTag
+                  outline={outline}
+                  onPick={(id) => { canvasTextEdit.onConstructMenu(outline, id); }}
+                />
               ) : null}
             </div>
           ))}
@@ -892,6 +885,33 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
             />
           ))}
 
+          {canvasTextEdit.ghostSlots.map((box) => (
+            <span
+              key={box.key}
+              className={css.ghostSlot}
+              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+              data-testid="canvas-ghost-slot"
+              data-ghost-kind={box.kind}
+              title={GHOST_SLOT_TITLES[box.kind]}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                box.onCreate();
+              }}
+            />
+          ))}
+
+          {canvasTextEdit.hoverSource ? (
+            <div
+              className={css.hoverSource}
+              style={{ left: canvasTextEdit.hoverSource.left, top: canvasTextEdit.hoverSource.top }}
+              data-testid="canvas-hover-source"
+              role="tooltip"
+            >
+              {canvasTextEdit.hoverSource.text}
+            </div>
+          ) : null}
+
           {canvasTextEdit.pendingCloser ? (
             <div
               className={css.pendingCloserHint}
@@ -921,14 +941,28 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               </div>
               {canvasTextEdit.commandChip.candidates.length > 0 ? (
                 <ul className={css.commandChipList} role="listbox" aria-label="Command completions">
-                  {canvasTextEdit.commandChip.candidates.map((candidate) => (
+                  {canvasTextEdit.commandChip.candidates.map((candidate, index) => (
                     <li
                       key={candidate.name}
                       role="option"
                       aria-selected={candidate.selected}
                       className={candidate.selected ? css.commandChipOptionSelected : css.commandChipOption}
+                      // (On pointer down, so the canvas keeps the keyboard.)
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        canvasTextEdit.commandChip?.onPick(index);
+                      }}
                     >
                       <span>\{candidate.name}</span>
+                      {candidate.preview ? (
+                        <span
+                          className={css.commandChipPreview}
+                          style={{ width: `${candidate.preview.widthEm}em` }}
+                          aria-hidden="true"
+                          dangerouslySetInnerHTML={{ __html: candidate.preview.svg }}
+                        />
+                      ) : null}
                       <span className={css.commandChipDetail}>{candidate.detail}</span>
                     </li>
                   ))}

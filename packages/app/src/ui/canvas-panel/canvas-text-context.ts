@@ -4,6 +4,8 @@
  */
 export type CanvasTextContext = {
   readonly crumbs: readonly string[];
+  /** The hint line (V7): what the keys do here, while it is still news. */
+  readonly hint: string | null;
   readonly select: (index: number) => void;
 };
 

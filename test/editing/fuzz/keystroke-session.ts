@@ -7,8 +7,8 @@ import {
   type IntentContext,
 } from "../../../packages/core/src/editing/input/index.js";
 import type { CommandTable } from "../../../packages/core/src/editing/commands/index.js";
-import type { ClipboardPayload } from "../../../packages/core/src/editing/operations/index.js";
-import { createEditViewCache, promotedOffsets, type EditView } from "../../../packages/core/src/editing/position/index.js";
+import { constructMenu, type ClipboardPayload } from "../../../packages/core/src/editing/operations/index.js";
+import { caretContext, createEditViewCache, ghostSlots, promotedOffsets, type EditView } from "../../../packages/core/src/editing/position/index.js";
 import { applyTransaction, TYPING_RUN_PAUSE_MS } from "../../../packages/core/src/editing/transaction/index.js";
 import type { ScenarioKey } from "../../../packages/core/src/editing/testing/index.js";
 import { scanTexRecovery } from "../../../packages/core/src/text/tex/recovery.js";
@@ -45,7 +45,13 @@ export type FuzzKey =
   /** The source lens's text after an edit, with its caret (the lens opens with ⌘E). */
   | { readonly kind: "lensText"; readonly text: string; readonly caret: number }
   /** The quick fix: the closers recovery puts in virtually, written in. */
-  | { readonly kind: "fixClosers" };
+  | { readonly kind: "fixClosers" }
+  /** A click on the first ghost slot the caret's construct shows (V3). */
+  | { readonly kind: "ghost" }
+  /** A click on a completion of the open command chip (V2). */
+  | { readonly kind: "complete"; readonly index: number }
+  /** An entry of the focus tag's menu (V4), by its index among the entries. */
+  | { readonly kind: "menu"; readonly index: number };
 
 export class KeystrokeSession {
   private machine: CanvasTextEditState = INITIAL_CANVAS_TEXT_EDIT_STATE;
@@ -111,8 +117,12 @@ export class KeystrokeSession {
   }
 
   /** Presses one key; returns the intent it became (null for keys without one). */
+  /** The keystroke as typed, when the last key was transformed by an input rule (R12). */
+  literal: { readonly text: string } | null = null;
+
   press(key: FuzzKey): Intent | null {
     this.time += 50;
+    this.literal = null;
     switch (key.kind) {
       case "pause":
         this.time += TYPING_RUN_PAUSE_MS * 2;
@@ -163,6 +173,38 @@ export class KeystrokeSession {
           return null;
         }
         const intent: Intent = { type: "setLensText", text: key.text, caret: key.caret, origin: "keyboard", repeat: false };
+        this.run(intent);
+        return intent;
+      }
+      case "ghost": {
+        const view = this.view();
+        const caret = view.index.resolve(this.selection.focus, "after");
+        const ghost = caret && this.selection.anchor === this.selection.focus ? ghostSlots(view, caret)[0] : undefined;
+        if (!ghost) {
+          return null;
+        }
+        const intent: Intent = { type: "createSlot", kind: ghost.kind, at: ghost.at, origin: "pointer", repeat: false };
+        this.run(intent);
+        return intent;
+      }
+      case "menu": {
+        const view = this.view();
+        const caret = view.index.resolve(this.selection.focus, "after");
+        const focus = caret ? caretContext(view, caret).filter((crumb) => crumb.outlined && crumb.slot == null).at(-1) : undefined;
+        const entries = focus ? constructMenu(view, focus.node, this.commands, this.title) : [];
+        const entry = entries[key.index % Math.max(1, entries.length)];
+        if (!focus || !entry) {
+          return null;
+        }
+        const intent: Intent = { type: "constructMenu", span: focus.span, id: entry.id, origin: "pointer", repeat: false };
+        this.run(intent);
+        return intent;
+      }
+      case "complete": {
+        if (!this.machine.treeSelection?.interaction.chip) {
+          return null;
+        }
+        const intent: Intent = { type: "pickCompletion", index: key.index, origin: "pointer", repeat: false };
         this.run(intent);
         return intent;
       }
@@ -276,6 +318,8 @@ export class KeystrokeSession {
       case "transaction": {
         const applied = applyTransaction(session.text, resolution.transaction);
         this.backward = applied.focus < applied.anchor;
+        const { undo } = resolution.transaction;
+        this.literal = undo.group === "transformation" ? undo.literal : null;
         this.dispatch({ type: "apply_transaction", transaction: resolution.transaction, time: this.time });
         return;
       }

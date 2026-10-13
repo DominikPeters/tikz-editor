@@ -111,6 +111,7 @@ const WRAPPERS = new Set<EditNodeKind>(["style", "overlay", "link", "group"]);
 const LR_BOXES = new Set([
   "mbox", "fbox", "makebox", "framebox", "hbox", "text", "rotatebox", "scalebox", "resizebox", "reflectbox",
   "raisebox", "colorbox", "fcolorbox", "underline", "textsuperscript", "textsubscript",
+  "beamerbutton", "beamerreturnbutton", "beamergotobutton", "beamerskipbutton",
 ]);
 const FLOW_CONTAINERS = new Set<EditNodeKind>(["list", "container", "alignment"]);
 

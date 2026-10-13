@@ -93,6 +93,14 @@ function scan(text: string): TexRecovery {
     while (end > floor && /\s/u.test(text[end - 1])) {
       end -= 1;
     }
+    // A control space (`\ `) is content: its space stays with its backslash.
+    let backslashes = 0;
+    while (end - backslashes > floor && text[end - backslashes - 1] === "\\") {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 1 && end < at) {
+      end += 1;
+    }
     const comment = comments.find((span) => span.from < end && end < span.to);
     return comment ? comment.to : end;
   };

@@ -34,6 +34,7 @@ import {
 import type { BeamerCaretDomain } from "@tikz-editor/core/beamer/index";
 import {
   CANVAS_CLIP_TYPE,
+  constructMenu,
   editValues,
   fieldProblems,
   listItemOf,
@@ -41,17 +42,27 @@ import {
   valueEditorFields,
   valueProblem,
   type CanvasClip,
-  type ClipboardPayload
+  type ClipboardPayload,
+  type ConstructMenuEntry
 } from "@tikz-editor/core/editing/operations/index";
 import type { CanvasValueEditorModel } from "./CanvasValueEditor";
 import type { CanvasSourceLensModel } from "./CanvasSourceLens";
 import { missingClosers, useCanvasRecoveryGhosts } from "./useCanvasRecoveryGhosts";
 import { useCanvasPendingCloser } from "./useCanvasPendingCloser";
 import { useCanvasSlotPlaceholders } from "./useCanvasSlotPlaceholders";
+import { useCanvasGhostSlots } from "./useCanvasGhostSlots";
+import { useCanvasHoverSource } from "./useCanvasHoverSource";
+
+/** A slot's tag menu (V4): no variants of its own. */
+const SLOT_MENU: readonly ConstructMenuEntry[] = [
+  { id: "select", label: "Select", group: "action" },
+  { id: "lens", label: "Edit source", group: "action" }
+];
 import {
   chipCandidates,
   copySelection,
   createIntentScheduler,
+  editingHint,
   intentFromBeforeInput,
   interpretKeyDown,
   needsFreshLayout,
@@ -117,13 +128,17 @@ const CHIP_CATEGORY_LABELS: Record<ChipCandidate["category"], string> = {
 };
 import { applyTransaction, type Transaction } from "@tikz-editor/core/editing/transaction/index";
 import type { CommandTable } from "@tikz-editor/core/editing/commands/index";
+import { completionPreview, useCompletionPreviewGeneration } from "./completion-previews";
 import {
   caretContext,
   caretEdge,
+  hoverSource,
   promotedOffsets,
   type CaretEdge,
   type ContextCrumb,
   type EditView,
+  type GhostSlot,
+  type HoverSource,
   type Position
 } from "@tikz-editor/core/editing/position/index";
 import {
@@ -174,6 +189,7 @@ import type {
 import { useCanvasTextEditingEffects } from "./useCanvasTextEditingEffects";
 import { canvasEditView, useEditCommands, useEditTree } from "./edit-tree-shadow";
 import { setCanvasTextContext } from "./canvas-text-context";
+import { hintAppears } from "./hint-memory";
 import { useCanvasContextOutlines, type CanvasContextOutline, type CanvasContextOutlineRequest } from "./useCanvasContextOutlines";
 
 type TextEditCaretOverlay = {
@@ -2384,6 +2400,25 @@ export function useCanvasTextEditSession(
     textSelectionOverlay
   ]);
 
+  /** The hint line (V7) for the caret and what is open; a hint seen a few times stops showing. */
+  const caretHint = useMemo(() => {
+    if (!caretFocus || !textEditingSession) {
+      return null;
+    }
+    const recorded = state.treeSelection?.text === textEditingSession.text ? state.treeSelection : null;
+    const { view } = caretFocus;
+    const from = Math.min(textEditingSession.selectionStart, textEditingSession.selectionEnd);
+    const to = Math.max(textEditingSession.selectionStart, textEditingSession.selectionEnd);
+    const raw = recorded?.ends ? [view.offset(recorded.ends.anchor), view.offset(recorded.ends.focus)] : null;
+    const promoted = raw != null && from < to && (Math.min(...raw) !== from || Math.max(...raw) !== to);
+    return editingHint(view, caretFocus.position, recorded?.interaction ?? NO_INTERACTION, promoted);
+  }, [caretFocus, state.treeSelection, textEditingSession]);
+  const shownHintRef = useRef<{ id: string; shows: boolean } | null>(null);
+  if (caretHint?.id !== shownHintRef.current?.id) {
+    shownHintRef.current = caretHint ? { id: caretHint.id, shows: hintAppears(caretHint) } : null;
+  }
+  const visibleHint = caretHint && shownHintRef.current?.shows ? caretHint.text : null;
+
   useEffect(() => {
     if (!caretCrumbs || textEditFocusSurface !== "canvas") {
       setCanvasTextContext(null);
@@ -2396,6 +2431,7 @@ export function useCanvasTextEditSession(
         : scopeId.includes("column") ? "column" : "frame";
     setCanvasTextContext({
       crumbs: [root, ...caretCrumbs.map((crumb) => crumb.label)],
+      hint: visibleHint,
       select: (index) => {
         const current = stateRef.current;
         const span = index === 0
@@ -2413,7 +2449,7 @@ export function useCanvasTextEditSession(
       }
     });
     return () => { setCanvasTextContext(null); };
-  }, [caretCrumbs, commitTransaction, textEditFocusSurface, textEditingSession?.sourceId]);
+  }, [caretCrumbs, commitTransaction, textEditFocusSurface, textEditingSession?.sourceId, visibleHint]);
 
   const outlineRequests = useMemo<CanvasContextOutlineRequest[]>(() => {
     const view = caretFocus?.view;
@@ -2423,17 +2459,20 @@ export function useCanvasTextEditSession(
         node.span.to === Math.max(textEditingSession.selectionStart, textEditingSession.selectionEnd) && node.values.length > 0 && node.command != null)
       : undefined;
     if (view && selected) {
-      return [{ role: "focus", tag: selected.command ?? null, span: selected.span, values: taggedValues(view, selected) }];
+      return [{ role: "focus", tag: selected.command ?? null, span: selected.span, values: taggedValues(view, selected), menu: constructMenu(view, selected.id, editCommands, textEditingSession?.sourceId.endsWith(":scope:title")) }];
     }
     const outlined = (caretCrumbs ?? []).filter((crumb) => crumb.outlined);
     const focus = outlined.at(-1);
     const parent = outlined.at(-2);
     const values = focus && view && focus.slot == null ? taggedValues(view, view.tree.nodes[focus.node]) : null;
+    // A slot (`sub`) is selected or edited as source; a construct has its variants too (V4).
+    const title = textEditingSession?.sourceId.endsWith(":scope:title") ?? false;
+    const menu = !focus || !view ? [] : focus.slot == null ? constructMenu(view, focus.node, editCommands, title) : SLOT_MENU;
     return [
-      ...(focus ? [{ role: "focus" as const, tag: focus.label, span: focus.span, values }] : []),
+      ...(focus ? [{ role: "focus" as const, tag: focus.label, span: focus.span, values, menu }] : []),
       ...(parent ? [{ role: "parent" as const, tag: null, span: parent.span }] : [])
     ];
-  }, [caretCrumbs, caretFocus, textEditingSession]);
+  }, [caretCrumbs, caretFocus, editCommands, textEditingSession]);
 
   const contextOutlines = useCanvasContextOutlines({
     session: textEditFocusSurface === "canvas" ? textEditingSession : null,
@@ -2469,6 +2508,8 @@ export function useCanvasTextEditSession(
     textEditingSession
   ]);
 
+  const previewGeneration = useCompletionPreviewGeneration();
+
   /** The command chip while one is open on the canvas, below the caret. */
   const commandChip = useMemo<CanvasCommandChipModel | null>(() => {
     const recorded = state.treeSelection;
@@ -2493,12 +2534,14 @@ export function useCanvasTextEditSession(
       candidates: candidates.map((candidate, index) => ({
         name: candidate.name,
         detail: candidate.user ? "document" : CHIP_CATEGORY_LABELS[candidate.category],
-        selected: index === selected
+        selected: index === selected,
+        preview: mode === "math" ? completionPreview(editCommands, candidate.name, previewGeneration) : null
       })),
+      onPick: (index) => { intentScheduler.submit({ type: "pickCompletion", index, origin: "pointer", repeat: false }); },
       left: caret.left,
       top: caret.top
     };
-  }, [editCommands, state.treeSelection, textEditFocusSurface, textEditingSession, textSelectionOverlay]);
+  }, [editCommands, intentScheduler, previewGeneration, state.treeSelection, textEditFocusSurface, textEditingSession, textSelectionOverlay]);
 
   /** Values opened from a construct's tag, while the buffer is as it was then. */
   const [valueEditTarget, setValueEditTarget] = useState<{
@@ -2521,6 +2564,19 @@ export function useCanvasTextEditSession(
     intentScheduler.flush();
     setValueEditTarget({ text: session.text, span: outline.span, left: outline.left, top: outline.top, bottom: outline.top + outline.height });
   }, [intentScheduler]);
+
+  /** An entry of a focus tag's menu (V4), for the construct the outline is drawn around. */
+  const handleConstructMenu = useCallback((outline: CanvasContextOutline, id: string) => {
+    if (id === "values") {
+      handleEditValues(outline);
+      return;
+    }
+    intentScheduler.submit({ type: "constructMenu", span: outline.span, id, origin: "menu", repeat: false });
+    if (id !== "lens") {
+      refocusCanvas();
+    }
+  }, [handleEditValues, intentScheduler, refocusCanvas]);
+
 
   /** The value editor (O8): for the command the chip is writing, or for the values opened from a tag. */
   const valueEditor = useMemo<CanvasValueEditorModel | null>(() => {
@@ -2696,6 +2752,57 @@ export function useCanvasTextEditSession(
     resolveContainer: resolveRenderedMathTextElement
   });
 
+  /** The source of the item under a client point (V5), or null off the session's text. */
+  const hoverSourceAt = useCallback(async (point: { x: number; y: number }): Promise<HoverSource | null> => {
+    const clientPoint = makeClientPoint(px(point.x), px(point.y));
+    const session = stateRef.current.session;
+    if (!session?.isScopeSession || !textLayoutContext) {
+      return null;
+    }
+    const target = resolveEditableTextTargetById(session.sourceId, session.sceneTextId);
+    const paragraph = target ? resolveScopeParagraphAtClient(target, clientPoint) : null;
+    const container = target && paragraph ? resolveRenderedMathTextElement(target, paragraph.paragraphId) : null;
+    if (!target || !paragraph || !container) {
+      return null;
+    }
+    const result = await getKnuthPlassCaretFromPoint(textLayoutContext, {
+      paragraphId: paragraph.paragraphId,
+      sourceText: source.slice(paragraph.sourceSpan.from, paragraph.sourceSpan.to),
+      sourceTextStartOffset: documentSourceOffset(paragraph.sourceSpan.from),
+      sourceCoordinateSpace: "document",
+      containerElement: container,
+      clientPoint
+    });
+    if (!result.ok || result.offset == null || stateRef.current.session?.text !== session.text) {
+      return null;
+    }
+    return hoverSource(canvasEditView(session.text, editCommands), documentOffsetToTextarea(result.offset, target.sourceSpan));
+  }, [editCommands, resolveEditableTextTargetById, resolveRenderedMathTextElement, resolveScopeParagraphAtClient, source, textLayoutContext]);
+
+  const hoverSourceTooltip = useCanvasHoverSource({
+    enabled: textEditFocusSurface === "canvas" && textEditingSession?.isScopeSession === true,
+    viewportRef,
+    lookup: hoverSourceAt
+  });
+
+  const handleCreateSlot = useCallback((ghost: GhostSlot) => {
+    intentScheduler.submit({ type: "createSlot", kind: ghost.kind, at: ghost.at, origin: "pointer", repeat: false });
+    refocusCanvas();
+  }, [intentScheduler, refocusCanvas]);
+
+  const ghostSlots = useCanvasGhostSlots({
+    session: textEditFocusSurface === "canvas" && !state.treeSelection?.interaction.chip ? textEditingSession : null,
+    caret: caretFocus,
+    renderedSource: snapshot.source,
+    source,
+    textLayoutContext,
+    canvasTransform,
+    viewportRef,
+    resolveTarget: (session) => resolveEditableTextTargetById(session.sourceId, session.sceneTextId),
+    resolveContainer: resolveRenderedMathTextElement,
+    onCreate: handleCreateSlot
+  });
+
   /** The quick fix (T6): once the lens is closed, the missing closers written in with one click. */
   const recoveryFix = useMemo<CanvasRecoveryFixModel | null>(() => {
     const first = recoveryGhosts[0];
@@ -2726,13 +2833,16 @@ export function useCanvasTextEditSession(
       commandChip,
       valueEditor,
       onEditValues: handleEditValues,
+      onConstructMenu: handleConstructMenu,
       sourceLens,
       recoveryGhosts,
       recoveryFix,
       pendingCloser,
-      slotPlaceholders
+      slotPlaceholders,
+      ghostSlots,
+      hoverSource: hoverSourceTooltip
     }),
-    [canvasFocusInput, commandChip, contextOutlines, handleEditValues, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, slotPlaceholders, sourceLens,
+    [canvasFocusInput, commandChip, contextOutlines, ghostSlots, handleConstructMenu, handleEditValues, hoverSourceTooltip, pendingCloser, popup, recoveryFix, recoveryGhosts, scopeEditBorder, slotPlaceholders, sourceLens,
       textEditFocusSurface, textEditingSession, valueEditor]
   );
 

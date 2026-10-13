@@ -32,3 +32,4 @@ export {
   type IntentScheduler,
   type IntentSchedulerOptions,
 } from "./scheduler.js";
+export { editingHint, type EditingHint } from "./hints.js";

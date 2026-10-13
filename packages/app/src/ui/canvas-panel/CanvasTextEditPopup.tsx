@@ -18,6 +18,8 @@ import type { CanvasSourceLensModel } from "./CanvasSourceLens";
 import type { CanvasRecoveryGhost } from "./useCanvasRecoveryGhosts";
 import type { CanvasPendingCloser } from "./useCanvasPendingCloser";
 import type { CanvasSlotPlaceholder } from "./useCanvasSlotPlaceholders";
+import type { CanvasGhostSlot } from "./useCanvasGhostSlots";
+import type { CanvasHoverSource } from "./useCanvasHoverSource";
 
 export type CanvasTextFormatCommandId =
   | "bold"
@@ -124,7 +126,11 @@ export type CanvasCommandChipModel = {
     readonly name: string;
     readonly detail: string;
     readonly selected: boolean;
+    /** A math completion as the engine sets it (V2): an SVG document, its width in em. */
+    readonly preview: { readonly svg: string; readonly widthEm: number } | null;
   }[];
+  /** Commits a completion picked with the pointer. */
+  readonly onPick: (index: number) => void;
   /** Viewport px. */
   readonly left: number;
   readonly top: number;
@@ -144,6 +150,8 @@ export type CanvasTextEditViewModel = {
   valueEditor: CanvasValueEditorModel | null;
   /** Opens the value editor for the values on an outline's tag. */
   onEditValues: (outline: CanvasContextOutline) => void;
+  /** An entry of the focus tag's menu (V4); `values` opens the value editor. */
+  onConstructMenu: (outline: CanvasContextOutline, id: string) => void;
   /** The source lens (R13), while it is open. */
   sourceLens: CanvasSourceLensModel | null;
   /** Closers recovery put in virtually (T2), drawn faintly where they belong. */
@@ -154,6 +162,10 @@ export type CanvasTextEditViewModel = {
   pendingCloser: CanvasPendingCloser | null;
   /** Boxes where empty math slots put their content (V3). */
   slotPlaceholders: readonly CanvasSlotPlaceholder[];
+  /** Optional slots the focus construct lacks (V3), clicked to create. */
+  ghostSlots: readonly CanvasGhostSlot[];
+  /** The source of the item under the pointer (V5), after a pause. */
+  hoverSource: CanvasHoverSource | null;
 };
 
 /** The pill that writes the missing closers in (T6), viewport px. */

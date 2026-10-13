@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { runScenario } from "../../packages/core/src/editing/testing/index.js";
-import { resolveIntent } from "../../packages/core/src/editing/input/index.js";
+import { editingHint, resolveIntent, type InteractionState } from "../../packages/core/src/editing/input/index.js";
 import { createCommandTable } from "../../packages/core/src/editing/commands/index.js";
-import { createEditView } from "../../packages/core/src/editing/position/index.js";
+import { createEditView, hoverSource } from "../../packages/core/src/editing/position/index.js";
 import { buildEditTree } from "../../packages/core/src/editing/tree/build.js";
 import { applyPatches } from "../../packages/core/src/editing/transaction/index.js";
 import { canvasSessionDriver } from "./canvas-session-driver.js";
 import { KeystrokeSession } from "./fuzz/keystroke-session.js";
 import { parseScenarioKeys } from "../../packages/core/src/editing/testing/index.js";
-import { copyRange } from "../../packages/core/src/editing/operations/index.js";
+import { constructMenu, constructMenuEdit, copyRange } from "../../packages/core/src/editing/operations/index.js";
 
 const R = String.raw;
 import {
@@ -159,6 +159,137 @@ describe("canvas editing: plain-text copy", () => {
     const payload = copyRange(createEditView(buildEditTree(source, { commands })), 0, source.length, commands);
     expect(payload?.plain).toBe(expected);
     expect(payload?.clip?.source).toBe(source);
+  });
+});
+
+/** Keys, then pointer picks (`@ghost`, `@complete:n`), from a caret marked `‸`. */
+function pointerPicks(body: string, keys: readonly string[]): string {
+  const caret = body.indexOf("‸");
+  const session = new KeystrokeSession(body.replace("‸", ""), createCommandTable(), caret, caret);
+  for (const token of keys) {
+    const complete = /^@complete:(\d+)$/u.exec(token);
+    if (token === "@ghost") {
+      session.press({ kind: "ghost" });
+    } else if (complete) {
+      session.press({ kind: "complete", index: Number(complete[1]) });
+    } else {
+      for (const key of parseScenarioKeys(token)) {
+        session.press(key);
+      }
+    }
+  }
+  const { focus } = session.selection;
+  return `${session.text.slice(0, focus)}‸${session.text.slice(focus)}`;
+}
+
+describe("canvas editing: ghost slots (V3) and picked completions (V2)", () => {
+  it.each([
+    ["a root's index", R`$\sqrt{x‸}$`, ["@ghost", "3"], R`$\sqrt[3‸]{x}$`],
+    ["the superscript a subscripted atom lacks", R`$a_{1‸} + b$`, ["@ghost", "2"], R`$a_{1}^2‸ + b$`],
+    ["the subscript a superscripted atom lacks", R`$c^{2‸}$`, ["@ghost", "i"], R`$c^{2}_i‸$`],
+    ["a description item's label", "\\begin{description}\n\\item ‸two\n\\end{description}", ["@ghost", "A"], "\\begin{description}\n\\item[A‸] two\n\\end{description}"],
+    ["nothing where the construct has every slot", R`$\sqrt[3]{x‸}$`, ["@ghost"], R`$\sqrt[3]{x‸}$`],
+    ["nothing for an itemize item", "\\begin{itemize}\n\\item ‸two\n\\end{itemize}", ["@ghost"], "\\begin{itemize}\n\\item ‸two\n\\end{itemize}"],
+  ])("a ghost slot clicked writes %s", (_, body, keys, expected) => {
+    expect(pointerPicks(body, keys)).toBe(expected);
+  });
+
+  it("a completion picked with the pointer commits as ⇥ does on it", () => {
+    expect(pointerPicks(R`$A‸$`, [R`\setm`, "@complete:0", "␣B"])).toBe(R`$A\setminus B‸$`);
+    const picked = pointerPicks(R`$a‸$`, [R`\al`, "@complete:1"]);
+    expect(picked).toBe(pointerPicks(R`$a‸$`, [R`\al`, "↓", "⇥"]));
+  });
+});
+
+/** The focus tag's menu (V4) for the construct whose source starts at `‸`'s construct, picked by entry id. */
+function menuEdit(body: string, construct: string, id: string): string | null {
+  const caret = body.indexOf("‸");
+  const text = body.replace("‸", "");
+  const commands = createCommandTable();
+  const view = createEditView(buildEditTree(text, { commands }));
+  const from = text.indexOf(construct);
+  const node = view.tree.nodes.find((candidate) => candidate.parent != null && candidate.span.from === from && candidate.span.to === from + construct.length);
+  const edit = node ? constructMenuEdit(view, node.id, id, commands, caret) : null;
+  if (!edit || edit.kind !== "patch") {
+    return null;
+  }
+  const after = applyPatches(text, edit.patches);
+  return `${after.slice(0, edit.caret)}‸${after.slice(edit.caret)}`;
+}
+
+describe("canvas editing: the focus tag's menu (V4)", () => {
+  it("offers a construct's variants and what can be done to it whole", () => {
+    const commands = createCommandTable();
+    const text = R`a \textbf{bold} $\frac{1}{2}$ $\sqrt{x}$`;
+    const view = createEditView(buildEditTree(text, { commands }));
+    const ids = (construct: string) => {
+      const from = text.indexOf(construct);
+      const node = view.tree.nodes.find((candidate) => candidate.span.from === from && candidate.span.to === from + construct.length)!;
+      return constructMenu(view, node.id, commands).map((entry) => entry.id);
+    };
+    expect(ids(R`\textbf{bold}`)).toEqual(expect.arrayContaining(["variant:textit", "variant:emph", "unwrap", "select", "lens"]));
+    expect(ids(R`\textbf{bold}`)).not.toContain("variant:textbf");
+    expect(ids(R`\frac{1}{2}`)).toEqual(["variant:dfrac", "variant:tfrac", "select", "lens"]);
+    expect(ids(R`$\sqrt{x}$`)).toEqual(["variant:display", "select", "lens"]);
+  });
+
+  it.each([
+    ["a style for another, the caret kept", R`a \textbf{bo‸ld} b`, R`\textbf{bold}`, "variant:emph", R`a \emph{bo‸ld} b`],
+    ["a fraction for a display one", R`$\frac{1‸}{2}$`, R`\frac{1}{2}`, "variant:dfrac", R`$\dfrac{1‸}{2}$`],
+    ["an inline formula for a display", R`Let $x+‸y$ be`, R`$x+y$`, "variant:display", R`Let \[x+‸y\] be`],
+    ["a display for an inline formula", R`\[x‸\]`, R`\[x\]`, "variant:inline", R`$x‸$`],
+    ["Unwrap keeps the content and the caret in it", R`a \textbf{bo‸ld} b`, R`\textbf{bold}`, "unwrap", R`a bo‸ld b`],
+    ["Unwrap after a control word keeps it a word", R`$\alpha\sqrt{x‸}$`, R`\sqrt{x}`, "unwrap", R`$\alpha x‸$`],
+    ["Unwrap of a control word before a letter keeps it a word", R`see \textbf{\LaTeX‸}x`, R`\textbf{\LaTeX}`, "unwrap", R`see \LaTeX‸{}x`],
+  ])("%s", (_, body, construct, id, expected) => {
+    expect(menuEdit(body, construct, id)).toBe(expected);
+  });
+
+  it("offers a display only where TeX takes one: in a paragraph, not a table cell", () => {
+    const commands = createCommandTable();
+    const text = "\\begin{tabular}{l}\n$x$ \\\\\n\\end{tabular}";
+    const view = createEditView(buildEditTree(text, { commands }));
+    const node = view.tree.nodes.find((candidate) => candidate.kind === "formula")!;
+    expect(constructMenu(view, node.id, commands).map((entry) => entry.id)).not.toContain("variant:display");
+  });
+
+  it("does not unwrap a construct with nothing to keep", () => {
+    expect(menuEdit(R`$\sqrt{‸}$`, R`\sqrt{}`, "unwrap")).toBeNull();
+  });
+});
+
+describe("canvas editing: the hint line (V7)", () => {
+  const hintAt = (body: string, interaction: InteractionState = {}, promoted = false) => {
+    const caret = body.indexOf("‸");
+    const view = createEditView(buildEditTree(body.replace("‸", "")));
+    return editingHint(view, view.index.resolve(caret, "after")!, interaction, promoted)?.text ?? null;
+  };
+  it.each([
+    ["in a superscript", R`$x^{2‸}$`, {}, false, "superscript · → to leave"],
+    ["in a numerator", R`$\frac{1‸}{2}$`, {}, false, "numerator · ⇥ to the denominator"],
+    ["in an alignment cell", "\\begin{align*}\na &= b‸\n\\end{align*}", {}, false, "cell · ⇥ next cell · ⏎ new row"],
+    ["while the chip is open", R`a‸`, { chip: { name: "fr", at: 1, selected: 0, held: null } }, false, "command · ⇥ to accept · ␣ as typed · esc to cancel"],
+    ["for a promoted selection", R`a‸ b`, {}, true, "selection extended to the whole construct"],
+    ["nowhere in plain prose", R`a‸ b`, {}, false, null],
+  ] as const)("%s", (_, body, interaction, promoted, expected) => {
+    expect(hintAt(body, interaction as InteractionState, promoted)).toBe(expected);
+  });
+});
+
+describe("canvas editing: hover reveals source (V5)", () => {
+  it.each([
+    ["a symbol", R`$A\setminus B$`, R`\setminus`, R`\setminus`],
+    ["a symbol macro", R`$x\in\R$`, R`\R`, R`\R`],
+    ["a style run, its content elided", R`a \textbf{bold} b`, "ol", R`\textbf{…}`],
+    ["a fraction", R`$\frac{1}{2}$`, "1", R`\frac{…}{…}`],
+  ])("%s", (_, text, under, expected) => {
+    const view = createEditView(buildEditTree(text));
+    expect(hoverSource(view, text.indexOf(under))?.text).toBe(expected);
+  });
+
+  it("nothing for plain text", () => {
+    const view = createEditView(buildEditTree("plain words"));
+    expect(hoverSource(view, 3)).toBeNull();
   });
 });
 

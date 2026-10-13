@@ -70,6 +70,15 @@ export type IntentBody =
   | { readonly type: "insertClosers"; readonly closers: readonly { readonly at: number; readonly text: string }[] }
   | { readonly type: "undo" }
   | { readonly type: "redo" }
+  /**
+   * An entry of the focus tag's menu (V4) for the construct with this
+   * span (buffer-local): a variant, Unwrap, Select or Edit source.
+   */
+  | { readonly type: "constructMenu"; readonly span: Span; readonly id: string }
+  /** A ghost slot clicked (V3): the optional slot it stands for is written, with the caret in it. */
+  | { readonly type: "createSlot"; readonly kind: "index" | "sup" | "sub" | "label"; readonly at: number }
+  /** A completion of the command chip picked with the pointer (V2): committed as ⇥ commits the highlighted one. */
+  | { readonly type: "pickCompletion"; readonly index: number }
   /** Esc while something transient is open (the command chip, value editor or lens); the session itself handles Esc otherwise. */
   | { readonly type: "escape" };
 

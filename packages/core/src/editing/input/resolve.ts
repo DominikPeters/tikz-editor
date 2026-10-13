@@ -53,9 +53,15 @@ import {
   tab,
   toggleList,
   typeCharacter,
+  constructMenuEdit,
+  listAutoformat,
+  smartQuote,
   type EditOutcome,
 } from "../operations/index.js";
+import { childIndex } from "../tree/navigate.js";
 import {
+  ghostSlots,
+  insertionOffset,
   renderedVisibility,
   promoteSelection,
   selectionEndsAt,
@@ -64,7 +70,7 @@ import {
   type Position,
   type SelectionEnds,
 } from "../position/index.js";
-import type { EditNode, NodeId, SlotId } from "../tree/types.js";
+import type { EditNode, NodeId, SlotId, Span } from "../tree/types.js";
 import {
   applyPatches,
   applyTransaction,
@@ -207,6 +213,9 @@ export function needsFreshLayout(intent: Intent, surface: InputSurface, _isScope
     case "paste":
     case "color":
     case "pickValues":
+    case "pickCompletion":
+    case "createSlot":
+    case "constructMenu":
     case "setValues":
     case "openLens":
     case "setLensText":
@@ -243,6 +252,12 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
       return resolver.cut();
     case "enter":
       return resolver.enter(intent.soft);
+    case "pickCompletion":
+      return resolver.pickCompletion(intent.index);
+    case "createSlot":
+      return resolver.createSlot(intent.kind, intent.at);
+    case "constructMenu":
+      return resolver.constructMenu(intent.span, intent.id);
     case "tab":
       return resolver.tab(intent.back);
     case "move":
@@ -377,7 +392,28 @@ export function copySelection(context: IntentContext): ClipboardPayload | null {
 
 /** The position a caret at an offset is at: the outermost there (after `x^2‸`, outside the script). */
 function caretAt(view: EditView, offset: number): Position {
-  return view.index.resolve(offset, "after") ?? view.positionAt(offset);
+  const found = view.index.resolve(offset, "after") ?? view.positionAt(offset);
+  return outsideUnbracedScript(view, found, offset) ?? found;
+}
+
+/**
+ * A bare offset at the end of an unbraced script is after the scripted
+ * atom (R6: `x^2‸` has left its script), also where whitespace puts that
+ * position further on (`x^2 & y`). Positions recorded by motion keep the
+ * inside.
+ */
+function outsideUnbracedScript(view: EditView, position: Position, offset: number): Position | null {
+  const { tree } = view;
+  const slot = tree.slots[position.slot];
+  if ((slot.role !== "sup" && slot.role !== "sub") || slot.braced || position.index < slot.children.length) {
+    return null;
+  }
+  const scripted = tree.nodes[slot.node];
+  if (scripted.parent == null || scripted.span.to !== offset) {
+    return null;
+  }
+  const after = { slot: scripted.parent, index: childIndex(tree, scripted.id) + 1 };
+  return /^\s*$/u.test(tree.text.slice(offset, view.offset(after))) ? after : null;
 }
 
 /**
@@ -481,10 +517,17 @@ class Resolver {
         const stop = found && nextView!.offset(found) >= outcome.caret ? found : null;
         const caret = stop ? nextView!.offset(stop) : outcome.caret;
         const focus = outcome.selectionEnd ?? caret;
+        const literal = outcome.literal;
         return this.transaction(
           outcome.patches,
           { kind: "absolute", anchor: caret, focus, positions: stop && focus === caret ? { anchor: stop, focus: stop } : undefined },
-          run ? { group: "typing-run", run } : { group: "own-step" },
+          literal
+            ? {
+                group: "transformation",
+                run: run ?? "insert",
+                literal: { text: applyPatches(this.context.text, literal.patches), anchor: literal.caret, focus: literal.caret },
+              }
+            : run ? { group: "typing-run", run } : { group: "own-step" },
           outcome.placeholder != null ? { interaction: { placeholder: outcome.placeholder } } : {}
         );
       }
@@ -749,8 +792,17 @@ class Resolver {
     // (after a space TeX drops, inside a half-typed name), and the tree
     // position there gives the context.
     const caret = this.caretPosition(view);
-    const at = this.context.positions ? view.offset(caret) : this.from;
-    return this.outcome(view, typeCharacter(view, caret, text, this.context.interaction, at, this.context.title));
+    const at = this.context.positions ? insertionOffset(view.tree, caret) : this.from;
+    const typed = typeCharacter(view, caret, text, this.context.interaction, at, this.context.title);
+    return this.outcome(view, (keyboard && !this.context.title ? this.transform(view, caret, at, text, typed) : null) ?? typed);
+  }
+
+  /** The input rules that transform a typed key after the fact (R12): smart quotes (P3), list autoformat (P10). */
+  private transform(view: EditView, caret: Position, at: number, char: string, typed: EditOutcome): EditOutcome | null {
+    if (char === "\"") {
+      return smartQuote(view, caret, at, typed, this.context.commands?.quotes ?? "tex");
+    }
+    return char === " " ? listAutoformat(view, caret, at, typed) : null;
   }
 
   /**
@@ -766,7 +818,7 @@ class Resolver {
     const { commands, title } = this.context;
     if (!this.hasRange()) {
       const caret = this.caretPosition(view);
-      const at = this.context.positions ? view.offset(caret) : this.from;
+      const at = this.context.positions ? insertionOffset(view.tree, caret) : this.from;
       return this.outcome(view, pasteAt(view, caret, at, payload, commands, title));
     }
     const { start, end } = this.effectiveRange(view, this.rawEnds(view));
@@ -973,7 +1025,7 @@ class Resolver {
     const raw = this.rawEnds(view);
     if (!this.hasRange()) {
       const caret = this.caretPosition(view);
-      const at = this.context.positions ? view.offset(caret) : this.from;
+      const at = this.context.positions ? insertionOffset(view.tree, caret) : this.from;
       return this.outcome(view, enter(view, caret, at, key));
     }
     // Delete, then break where the deletion left the caret: one step.
@@ -997,6 +1049,59 @@ class Resolver {
   }
 
   /** ⇥ / ⇧⇥ on the canvas: the next slot or cell, or nesting the selected items. */
+  /** An entry of the focus tag's menu (V4), for the construct with `span`, while it is still there. */
+  constructMenu(span: Span, id: string): IntentResolution {
+    const view = this.view;
+    const commands = this.context.commands;
+    if (!view || !commands) {
+      return NONE;
+    }
+    const { tree } = view;
+    const { chip, picker } = this.context.interaction;
+    if (chip || picker) {
+      return NONE;
+    }
+    if (id === "lens") {
+      return this.keepSelection({ lens: { span } });
+    }
+    const node = tree.nodes.find((candidate) => candidate.span.from === span.from && candidate.span.to === span.to && candidate.parent != null);
+    if (!node) {
+      return NONE;
+    }
+    if (id === "select") {
+      const index = childIndex(tree, node.id);
+      return this.selectPositions(view, { anchor: { slot: node.parent!, index }, focus: { slot: node.parent!, index: index + 1 } });
+    }
+    const edit = constructMenuEdit(view, node.id, id, commands, this.from, this.context.title);
+    return edit ? this.outcome(view, edit) : NONE;
+  }
+
+  /** A ghost slot of the construct around the caret, written (V3): as a typed `^`/`_` adds a missing script (K4), `[]` for an index or label. */
+  createSlot(kind: "index" | "sup" | "sub" | "label", at: number): IntentResolution {
+    const view = this.view;
+    if (!view || this.hasRange()) {
+      return NONE;
+    }
+    const ghost = ghostSlots(view, this.caretPosition(view)).find((candidate) => candidate.kind === kind && candidate.at === at);
+    if (!ghost) {
+      return NONE;
+    }
+    if (kind === "sup" || kind === "sub") {
+      const after = { slot: view.tree.nodes[ghost.node].parent!, index: childIndex(view.tree, ghost.node) + 1 };
+      return this.outcome(view, typeCharacter(view, after, kind === "sup" ? "^" : "_", NO_INTERACTION, at));
+    }
+    return this.outcome(view, { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: null, exact: true });
+  }
+
+  pickCompletion(index: number): IntentResolution {
+    const view = this.view;
+    const chip = this.context.interaction.chip;
+    if (!view || !chip || !this.context.commands) {
+      return NONE;
+    }
+    return this.commitChip(view, this.context.commands, { ...chip, selected: index }, "structure", true);
+  }
+
   tab(back: boolean): IntentResolution {
     const view = this.view;
     if (!view) {
@@ -1215,7 +1320,7 @@ class Resolver {
 
   /** The caret offset: at its recorded position, or exactly where it is. */
   private caretOffset(view: EditView): number {
-    return this.context.positions ? view.offset(view.representative(this.rawEnds(view).focus)) : this.from;
+    return this.context.positions ? insertionOffset(view.tree, view.representative(this.rawEnds(view).focus)) : this.from;
   }
 
   /**
@@ -1576,6 +1681,11 @@ class Resolver {
     }
     if (UNCOVERING.has(name) && insideCommand(view, caret.slot, "operatorname")) {
       // beamer's `\uncover` family is set with `\limits`, which an operator's name has no operator for.
+      return this.keepSelection(NO_INTERACTION);
+    }
+    const holder = view.tree.slots[caret.slot].node;
+    if (name === "pause" && (view.tree.nodes[holder].command === "overprint" || insideEnvironment(view, holder, "overprint"))) {
+      // In `overprint`, a `\pause` makes its areas overlap (beamer: "Overprints may not overlap").
       return this.keepSelection(NO_INTERACTION);
     }
     if (inBoldMath(view, caret.slot) && breaksBoldMath(commands, name)) {
