@@ -45,6 +45,8 @@ export type InteractionState = {
    * The offset is the `\right`'s, which is the caret's.
    */
   readonly pendingCloser?: number;
+  /** Outside text just pasted as TeX (C2), which ⌘Z gives back as text. The caret's offset after it. */
+  readonly pastedTex?: number;
 };
 
 /**

@@ -295,6 +295,8 @@ export const texValidityScenarios: readonly Scenario[] = [
   { id: "C18", title: "in overprint, ⇧⏎ right after \\onslide has no line to end", body: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}", keys: "⇧⏎", expect: "\\begin{overprint}\n\\onslide<1>‸Alpha.\n\\onslide<2>Beta.\n\\end{overprint}" },
   { id: "C19", title: "\\ then a character that makes no control symbol types that character", body: "a‸ b", keys: "\\<", expect: "a<‸ b" },
   { id: "C20", title: "[ after an environment's overlay specification is not its optional argument", body: "\\begin{lemma}<2->\n‸Text.\n\\end{lemma}", keys: "[", expect: "\\begin{lemma}<2->\n{}[‸Text.\n\\end{lemma}" },
+  { id: "C29", title: "\\left\\langle around a selection starting with a letter keeps the control word apart", body: R`$⟦a_i⟧ b$`, keys: R`\left\langle␣`, expect: R`$\left\langle ⟦a_i ⟧\right\rangle b$` },
+  { id: "C28", title: "emptying the script a formula only holds leaves placeholder braces, never $$", body: "a $_a‸$ b", keys: "⌫", expect: "a ${‸}$ b" },
   { id: "C27", title: "⇧⏎ after a wrapper holding only a line break has no line to end", body: "``x''\\textbf{\\\\}‸\n", keys: "⇧⏎", expect: "``x''\\textbf{\\\\}‸\n" },
   { id: "C26", title: "⇧⏎ after a wrapper ending in a line break and a space has no line to end", body: itemize(R`\item a\textbf{ \\ }‸ma`), keys: "⇧⏎", expect: itemize(R`\item a\textbf{ \\ }‸ma`) },
   { id: "C25", title: "\\pause accepted with ⏎ is not committed in the last slot of an overprint", body: "\\begin{overprint}\n\\onslide<1>Alpha.\n\\onslide<2>Gamma.‸\n\\end{overprint}", keys: R`\pause⏎`, expect: "\\begin{overprint}\n\\onslide<1>Alpha.\n\\onslide<2>Gamma.‸\n\\end{overprint}" },

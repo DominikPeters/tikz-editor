@@ -1027,6 +1027,29 @@ test("canvas copy and paste: a formula fragment becomes a formula in prose, outs
   await expect(textarea).toHaveValue(buffer);
 });
 
+test("outside text that reads as TeX is pasted as TeX, and ⌘Z gives it back as text (C2)", async ({ page }, testInfo) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const buffer = await textarea.inputValue();
+  const caret = buffer.indexOf("Body typo") + "Body typo".length;
+  await input.evaluate((element, at) => {
+    const field = element as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(at, at);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", String.raw` as in~\cite{key}, the \emph{core} is $\alpha^2$-stable`);
+    element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }));
+  }, caret);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body typo as in~\cite{key}, the \emph{core} is $\alpha^2$-stable.`);
+  await expect(page.getByTestId("canvas-text-hint")).toContainText("pasted as TeX · ⌘Z to paste as text");
+  await page.screenshot({ path: testInfo.outputPath("pasted-tex.png") });
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`Body typo as in\~{}\textbackslash{}cite\{key\}`);
+  await page.keyboard.press(`${PRIMARY_MOD}+z`);
+  await expect(textarea).toHaveValue(buffer);
+});
+
 for (const step of [1, 2]) {
   test(`canvas editing uses only the displayed alt branch on step ${step} and preserves copied symbols`, async ({ page }) => {
     const source = String.raw`\documentclass{beamer}

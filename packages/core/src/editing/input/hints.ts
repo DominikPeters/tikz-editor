@@ -22,7 +22,7 @@ const SLOT_HINTS: Readonly<Record<string, string>> = {
 /**
  * The hint for the caret at `caret` with the interaction state, most
  * pressing first: what is open (lens, value editor, chip, a pending
- * `\right`), a selection promoted to a whole construct, an empty
+ * `\right`), a paste read as TeX, a selection promoted to a whole construct, an empty
  * placeholder, then the slot the caret is in.
  */
 export function editingHint(view: EditView, caret: Position, interaction: InteractionState, promoted: boolean): EditingHint | null {
@@ -37,6 +37,9 @@ export function editingHint(view: EditView, caret: Position, interaction: Intera
   }
   if (interaction.pendingCloser != null) {
     return { id: "pending-closer", text: "\\right pending · ⇥ to accept · → to take it along" };
+  }
+  if (interaction.pastedTex != null) {
+    return { id: "pasted-tex", text: "pasted as TeX · ⌘Z to paste as text" };
   }
   if (promoted) {
     return { id: "promoted", text: "selection extended to the whole construct" };

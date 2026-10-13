@@ -303,10 +303,12 @@ export function commitLeftDelimiter(text: string, at: number, held: Span | null,
   }
   const range = held;
   const selected = text.slice(range.from, range.to);
-  const caret = range.from + open.length;
+  // (`\left\langle` before a selected `a` is not `\langlea`.)
+  const head = apart(open, selected, 0);
+  const caret = range.from + head.length;
   return {
     kind: "patch",
-    patches: [{ from: range.from, to: range.to, insert: apart(`${open}${selected}\\right${closer}`, text, range.to) }],
+    patches: [{ from: range.from, to: range.to, insert: apart(`${head}${selected}\\right${closer}`, text, range.to) }],
     caret,
     run: null,
     exact: true,

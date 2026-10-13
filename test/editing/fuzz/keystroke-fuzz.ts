@@ -252,6 +252,12 @@ export const OUTSIDE_TEXTS = [
   "\n\n\n- dash\n",
   "word",
   "x",
+  // Passages of a paper, pasted as TeX (C2).
+  "$x^2$",
+  "As in~\\cite{key}, the \\emph{core} is $\\alpha$-stable.",
+  "50\\% of \\textbf{all}\n\nNext $a_i$. % note",
+  "\\frac{1}{2} + \\beta",
+  "$10 and $20",
 ] as const;
 
 /**
@@ -523,8 +529,10 @@ function ligatured(diff: { removed: string[]; added: string[] }): boolean {
   return [...diff.removed, ...diff.added].some((key) => LIGATURE.test(key));
 }
 
+function characters(list: readonly string[]): string[] {
+  return list.flatMap((key) => (LIGATURE.test(key) ? [...key] : [key]));
+}
 function byCharacters(diff: { removed: string[]; added: string[] }): { removed: string[]; added: string[] } {
-  const characters = (list: readonly string[]) => list.flatMap((key) => (LIGATURE.test(key) ? [...key] : [key]));
   return difference(characters(diff.removed), characters(diff.added));
 }
 
@@ -620,7 +628,9 @@ function contentProblem(
     case "replaces-selection": {
       // Everything outside the selection survives, in order.
       const outside = before.filter((item) => item.to <= selection.from || item.from >= selection.to);
-      const kept = difference(keys(outside), keys(after));
+      // (A ligature the typed text makes with what is before it, `-` then `-`, holds that as its characters.)
+      const kept = [difference(keys(outside), keys(after)), difference(characters(keys(outside)), characters(keys(after)))]
+        .reduce((best, next) => (next.removed.length < best.removed.length ? next : best));
       return kept.removed.length ? `items outside the selection went: [${kept.removed.join(" ")}]` : null;
     }
   }

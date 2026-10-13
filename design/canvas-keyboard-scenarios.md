@@ -314,10 +314,8 @@ ones it relies on.
   inside a slot, and paragraph breaks only in body prose. A copy made on
   the canvas carries source as a custom type, which pastes as source. It
   converts on context change: math copied into prose is wrapped in `$…$`,
-  and prose pasted into math is wrapped in `\text{…}`. "Paste as TeX" (Edit
-  menu, and the C2 pill) pastes outside text raw. Today's paste handling
-  reads only `text/plain` (`useCanvasTextEditSession.ts`), so the custom
-  type is new work.
+  and prose pasted into math is wrapped in `\text{…}`. Outside text that
+  reads as TeX goes in as TeX, with ⌘Z giving the literal paste (C2).
 - **R17 Composition comes first.** Keyboard composition sessions (IME, and
   dead keys such as `^` on French and German layouts) are never
   interpreted mid-composition. The rules act only on the committed
@@ -746,11 +744,17 @@ outline confirms which.
 **C1 Pasting outside text.** "Costs rose 50% at R&D" → `50\%`, `R\&D`.
 *R15.*
 
-**C2 Pasting `$x^2$` from a web page.** Pasted literally by default (it
-comes out as `\$x\^{}2\$`). If the text parses as TeX with math or
-commands, a one-click "Paste as TeX" pill appears after pasting, like
-Word's paste options button (**decided**). This is one of the few places
-that keep a pill (V1).
+**C2 Pasting TeX (a passage of a paper).** Outside text that reads as
+TeX is pasted as TeX (done 2026-10-13, revising the earlier "literal plus
+a Paste as TeX pill" decision). It reads as TeX when TeX accepts it
+(balanced; no `^`/`_`/`&` out of place, no command of the other mode, no
+`#`, no percentage like `50%`, no prices like `$10 and $20`) and something
+in it means something only to TeX: a formula, a known command, an escaped
+special, a tie (`Fig.~3`), TeX quotes. A paper's own macros are fine. The
+literal paste is its own undo state (R12): ⌘Z gives it back as text, and
+the hint line says so. Into math, one whole `$…$` goes in without its
+delimiters. A trailing comment gets a line end so it does not take what
+follows. `operations/paste.ts` (`recognizedTex`).
 
 **C3 Copying from the canvas.** `text/plain` gets the rendered text (for
 email); a custom MIME type gets the balanced source. Pasting on the canvas
@@ -1049,8 +1053,9 @@ options that are awkward today.
     (V7) shows how to get the alternative: "literal $: type \$". This
     happens once, in the status bar, and never floats over the slide.
   - **Floating pills only for real guesses with a plausible
-    alternative:** "Paste as TeX" after pasting TeX-looking text (C2), and
-    "keep `- `" after list autoformat (P10), if that ships.
+    alternative:** "keep `- `" after list autoformat (P10), if that ships.
+    (A paste read as TeX, C2, needs none: ⌘Z gives the text, and the hint
+    line says so.)
 - **V2 Ghost completion in the command chip** (done; rendered previews and pointer picks 2026-10-13). `\setm` shows `inus` in
   ghost text, with a preview of ∖ in a small popover listing the other
   candidates. `⇥` accepts. Environment names after `\begin` work the same
@@ -1244,7 +1249,8 @@ R15 with a table:
 | `\text{}` in math | As prose | Wrapped in `$…$` | As is |
 | Verbatim slot (`\url`) | Raw, nothing escaped; line breaks dropped | Its source text | Its source text |
 
-"Paste as TeX" overrides all of these.
+Outside text that reads as TeX (C2) goes in as TeX instead, ⌘Z giving
+the row above.
 
 **O7 Undo restores source and selection, not editing state.** Undo and
 redo restore the source and selection only. Every brace then counts as
@@ -1315,7 +1321,7 @@ Decided 2026-10-08, beyond the list at the top:
 - `$$` becomes a `\[…\]` display (D1).
 - `⇥` goes to the next slot or cell; variants live in the focus-tag menu
   (D2, V4).
-- Pasting is literal, with a "Paste as TeX" pill (C2).
+- Pasting is literal unless the text reads as TeX, which ⌘Z turns back into text (C2).
 - `^` in prose is a literal circumflex (K5).
 - Vertical commands typed mid-paragraph are inserted in place and do not
   split it (K10, corrected after review: LaTeX's `\medskip` uses

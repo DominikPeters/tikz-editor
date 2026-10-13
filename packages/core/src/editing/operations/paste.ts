@@ -226,10 +226,27 @@ export function pasteAt(
   }
   const mode = view.tree.slots[caret.slot].mode === "math" ? "math" : "text";
   const place = { view, caret, at, mode, title } as const;
-  const converted = (payload.clip && convertClip(place, payload.clip, commands)) ?? convertPlain(place, payload.plain);
-  if (!converted) {
+  const clip = payload.clip && convertClip(place, payload.clip, commands);
+  if (clip) {
+    return insertSource(place, clip);
+  }
+  const literal = convertPlain(place, payload.plain);
+  if (!literal) {
     return { kind: "none" };
   }
+  const typed = insertSource(place, literal);
+  // Outside text that reads as TeX (a passage of a paper) goes in as TeX; ⌘Z gives the literal paste (R12).
+  const tex = payload.clip ? null : recognizedTex(place, payload.plain, commands);
+  const pasted = tex != null && tex !== literal && fits(place, tex, commands) ? insertSource(place, tex) : null;
+  if (pasted?.kind !== "patch" || typed.kind !== "patch") {
+    return typed;
+  }
+  return { ...pasted, run: "paste", literal: { patches: typed.patches, caret: typed.caret } };
+}
+
+/** Source inserted at the place, with the seams an insertion needs. */
+function insertSource(place: Place, converted: string): EditOutcome {
+  const { view, caret, at, mode, title } = place;
   const guarded = title || insideOptional(view, caret.slot) ? protectClosingBrackets(converted) : converted;
   const source = startSeam(place, guarded) + guarded;
   const end = at + source.length;
@@ -363,6 +380,80 @@ function convertPlain(place: Place, plain: string): string | null {
     : [text];
   const joined = paragraphs.map((part) => escapeText(line(part))).join("\n\n");
   return joined === "" ? " " : joined;
+}
+
+/** Diagnostics of source that TeX reads, if with commands it does not know (a paper's own macros). */
+const READABLE = new Set(["unknown-command", "unknown-environment"]);
+
+/**
+ * Outside text as TeX source, when it reads as TeX (C2): TeX accepts it,
+ * and something in it means something only to TeX — a formula, a command
+ * TeX knows, an escaped special (`\%`), a tie (`Fig.~3`), TeX quotes.
+ * `$x^2$` is TeX; `50% at R&D`, `$10 and $20`, `a_b` and `C:\dir` are
+ * text. Into math, one whole formula goes in without its delimiters.
+ */
+function recognizedTex(place: Place, plain: string, commands: CommandTable | null): string | null {
+  const normalized = plain.replace(/\r\n?/gu, "\n");
+  let text = normalized.trim();
+  let delimited = false;
+  if (place.mode === "math") {
+    const whole = /^(?:\$([^$]+)\$|\\\(([\s\S]+)\\\))$/u.exec(text);
+    if (whole) {
+      text = (whole[1] ?? whole[2]).trim();
+      delimited = true;
+    }
+  }
+  // Paragraphs only where they go: elsewhere a blank line is a line end.
+  if (place.mode === "math" || place.title || !holdsParagraphs(place.view, place.caret.slot)) {
+    text = text.replace(/\n[ \t]*\n\s*/gu, "\n");
+  }
+  if (text === "" || !(readsAsTex(text, place.mode, commands) || (delimited && texAccepts(text, "math", commands)))) {
+    return null;
+  }
+  // Space at the edges is one space in prose, as in a literal paste; a comment on the last line would take what follows the paste.
+  const edge = (space: string) => (space === "" || place.mode === "math" ? "" : " ");
+  const lead = edge(/^\s*/u.exec(normalized)![0]);
+  return /(?:^|[^\\])(?:\\\\)*%[^\n]*$/u.test(text) ? `${lead}${text}\n` : `${lead}${text}${edge(/\s*$/u.exec(normalized)![0])}`;
+}
+
+/** Whether TeX accepts the source in the mode: balanced, nothing out of its mode, no `#`, no percentage (`50%`). */
+function texAccepts(text: string, mode: "text" | "math", commands: CommandTable | null): boolean {
+  return texReading(text, mode, commands) != null;
+}
+
+function readsAsTex(text: string, mode: "text" | "math", commands: CommandTable | null): boolean {
+  const tree = texReading(text, mode, commands);
+  if (!tree) {
+    return false;
+  }
+  const shift = mode === "math" ? 1 : 0;
+  const unknown = (from: number) => tree.diagnostics.some((diagnostic) => diagnostic.code === "unknown-command" && diagnostic.span.from === from);
+  return tree.nodes.some((node) =>
+    ((node.kind === "formula" || node.kind === "display") && node.span.from >= shift) ||
+    (node.command != null && tree.text[node.span.from] === "\\" && !unknown(node.span.from))) ||
+    /\\[%&$#_{}]|\S~\S|``/u.test(text);
+}
+
+/** The edit tree of source TeX accepts, or null. */
+function texReading(text: string, mode: "text" | "math", commands: CommandTable | null): EditTree | null {
+  if (/(?:^|[^\\])(?:\\\\)*#|\d%/u.test(text)) {
+    return null;
+  }
+  const tree = buildEditTree(mode === "math" ? `$${text}$` : text, commands ? { commands } : {});
+  for (const diagnostic of tree.diagnostics) {
+    if (!READABLE.has(diagnostic.code)) {
+      return null;
+    }
+    // A command of the other mode (`\alpha` in prose) is an error to TeX.
+    const name = /^\\([A-Za-z@]+)/u.exec(tree.text.slice(diagnostic.span.from, diagnostic.span.to))?.[1];
+    const other = modeAround(tree, diagnostic.span.from, diagnostic.span.to) === "math" ? "text" : "math";
+    if (diagnostic.code === "unknown-command" && name && commands?.command(name, other)) {
+      return null;
+    }
+  }
+  // A price is no formula: `$10 and $20`.
+  const price = tree.nodes.some((node) => node.kind === "formula" && /^\$\d[^$]*\s\$/u.test(tree.text.slice(node.span.from, node.span.to)));
+  return price ? null : tree;
 }
 
 const TEXT_ESCAPES: Readonly<Record<string, string>> = {

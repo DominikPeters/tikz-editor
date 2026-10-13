@@ -148,6 +148,61 @@ describe("canvas editing: paste (O6)", () => {
   });
 });
 
+describe("canvas editing: pasting TeX (C2)", () => {
+  it.each([
+    ["a formula", "a ‸", "$x^2$", R`a $x^2$‸`],
+    ["a paper's sentence", "‸", R`As shown in~\cite{key}, the \emph{core} is $\alpha$-stable (see Fig.~\ref{fig:a}).`, R`As shown in~\cite{key}, the \emph{core} is $\alpha$-stable (see Fig.~\ref{fig:a}).‸`],
+    ["escaped specials", "‸", R`50\% of R\&D`, R`50\% of R\&D‸`],
+    ["a paper's own macros", "‸", R`the set $\R^n$ and \myterm{x}`, R`the set $\R^n$ and \myterm{x}‸`],
+    ["paragraphs where they go", "‸", "One $a$.\n\nTwo $b$.", "One $a$.\n\nTwo $b$.‸"],
+    ["a blank line in a style's argument as a line end", R`\textbf{‸}`, "One $a$.\n\nTwo.", "\\textbf{One $a$.\nTwo.‸}"],
+    ["space at the edges as one space", "a‸b", " \\emph{x}\n", R`a \emph{x} ‸b`],
+    ["a comment ended before what follows", "‸ next", "$a$ % note", "$a$ % note\n‸ next"],
+    ["a whole formula into math, without its delimiters", R`$y+‸$`, R`$\frac{1}{2}$`, R`$y+\frac{1}{2}‸$`],
+    ["math commands into math", R`$‸$`, R`\alpha + \beta`, R`$\alpha + \beta‸$`],
+  ] as const)("%s is pasted as TeX", (_, body, plain, expected) => {
+    expect(paste(body, plain)).toBe(expected);
+  });
+
+  it.each([
+    ["a percentage", "50% at R&D"],
+    ["prices", "$10 and $20"],
+    ["a path", "C:\\dir\\file"],
+    ["a hash", R`\emph{a} #1`],
+    ["a script in prose", "a_b and $x$"],
+    ["a math command in prose", R`$x^2$ and \alpha`],
+    ["an unbalanced group", R`\emph{a`],
+    ["braces alone", "{braces} [brackets]"],
+  ])("%s is pasted as text", (_, plain) => {
+    expect(paste("‸", plain)).not.toBe(`${plain}‸`);
+    expect(paste("‸", plain)).toBe(paste("‸", `${plain} #`).replace(" \\#‸", "‸"));
+  });
+
+  it("⌘Z after a paste read as TeX gives the literal paste, and ⌘Z again the text before", () => {
+    const session = new KeystrokeSession("a ", createCommandTable(), 2, 2);
+    session.press({ kind: "paste", plain: "$x^2$" });
+    expect(session.text).toBe("a $x^2$");
+    for (const key of parseScenarioKeys("⌘Z")) {
+      session.press(key);
+    }
+    expect(session.text).toBe(R`a \$x\^{}2\$`);
+    for (const key of parseScenarioKeys("⌘Z")) {
+      session.press(key);
+    }
+    expect(session.text).toBe("a ");
+  });
+
+  it("over a selection, ⌘Z gives the literal paste in its place", () => {
+    const session = new KeystrokeSession("a old b", createCommandTable(), 2, 5);
+    session.press({ kind: "paste", plain: R`\emph{new}` });
+    expect(session.text).toBe(R`a \emph{new} b`);
+    for (const key of parseScenarioKeys("⌘Z")) {
+      session.press(key);
+    }
+    expect(session.text).toBe(R`a \textbackslash{}emph\{new\} b`);
+  });
+});
+
 describe("canvas editing: plain-text copy", () => {
   it.each([
     [R`Stra\ss e \copyright{}`, "Straße ©"],

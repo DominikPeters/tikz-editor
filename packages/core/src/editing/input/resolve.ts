@@ -532,7 +532,8 @@ class Resolver {
                 literal: { text: applyPatches(this.context.text, literal.patches), anchor: literal.caret, focus: literal.caret },
               }
             : run ? { group: "typing-run", run } : { group: "own-step" },
-          outcome.placeholder != null ? { interaction: { placeholder: outcome.placeholder } } : {}
+          outcome.placeholder != null ? { interaction: { placeholder: outcome.placeholder } }
+            : literal && run === "paste" ? { interaction: { pastedTex: caret } } : {}
         );
       }
       case "select":
@@ -837,10 +838,14 @@ class Resolver {
       return NONE;
     }
     const caret = pasted.caret;
+    const literal = pasted.literal;
     return this.transaction(
       replacementPatches(this.context.text, applyPatches(middle, pasted.patches)),
       { kind: "absolute", anchor: caret, focus: caret },
-      { group: "own-step" }
+      literal
+        ? { group: "transformation", run: "paste", literal: { text: applyPatches(middle, literal.patches), anchor: literal.caret, focus: literal.caret } }
+        : { group: "own-step" },
+      literal ? { interaction: { pastedTex: caret } } : {}
     );
   }
 

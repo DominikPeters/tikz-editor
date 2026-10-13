@@ -335,7 +335,12 @@ function emptiedSlotCleanup(
     return { span: tree.nodes[owner].span };
   }
   if (throughScript && (record.role === "sup" || record.role === "sub")) {
-    return { span: slotOuterSpan(tree, slot) };
+    // A formula that was only this script (`$_a$`) keeps placeholder braces, as for an item.
+    const parent = tree.nodes[owner].parent;
+    const alone = parent != null && isDollarFormula(view, tree.slots[parent].node) &&
+      tree.slots[parent].children.every((child) => child === owner || view.role(child) === "invisible") &&
+      presentSlots(tree, owner).every((candidate) => candidate.id === slot || isEmptySlot(view, candidate.id));
+    return alone ? { span: tree.slots[parent].contentSpan, insert: "{}" } : { span: slotOuterSpan(tree, slot) };
   }
   if ((!record.braced && ARGUMENT_ROLES.has(record.role)) || isDollarFormula(view, owner)) {
     return { span: record.contentSpan, insert: "{}" };
