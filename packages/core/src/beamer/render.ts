@@ -292,10 +292,7 @@ function createBeamerRenderContext(
   const syntaxContext = createBeamerSyntaxContext(
     source,
     [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)],
-    {
-      previousTree: options.previousSyntaxTree,
-      patches: options.syntaxPatches,
-    }
+    options.previousSyntax
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);
@@ -345,7 +342,7 @@ export type PreparedBeamerDocument = {
   readonly document: BeamerDocumentModel;
   readonly theme: ResolvedBeamerTheme;
   /** Retained by the app compute session for incremental document parsing. */
-  readonly syntaxTree: TexSyntaxIndex["tree"];
+  readonly syntax: TexSyntaxIndex;
   /** Overlay step count for one frame, without rendering it. */
   frameStepCount(frameIndex: number): number;
   /** Presenter-only standard Beamer note source for this overlay build. */
@@ -451,7 +448,7 @@ export function prepareBeamerDocument(
   return {
     document: context.document,
     theme: context.theme,
-    syntaxTree: context.syntax.tree,
+    syntax: context.syntax,
     frameStepCount: (frameIndex) => {
       return context.overlaysByFrameId.get(requireFrame(frameIndex).id)!.stepCount;
     },

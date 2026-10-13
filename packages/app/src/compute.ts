@@ -364,15 +364,16 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     phases.textEngine = performance.now() - phaseStartedAt;
     // Full renders also seed the incremental cache. Route their one semantic
     // evaluation through the session instead of evaluating again after render.
-    cache.semantic.reset();
-    const semanticSession = cache.semantic;
+    // A masked render evaluates text the source does not have, so it
+    // evaluates in a session of its own (see the priming below).
+    const semanticSession = request.textEditMaskSpan ? createIncrementalSemanticSession() : cache.semantic;
+    semanticSession.reset();
     phaseStartedAt = performance.now();
     const graphicsContext = await prepareDocumentGraphicsContext({
       source: request.source,
       documentFileRef: request.documentFileRef ?? null
     });
     const graphicsResolver = graphicsContext.resolver;
-    cache.graphicsResolverCacheKey = graphicsResolver.cacheKey;
     phases.imageAssets = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
     const textEditMaskSpan = request.textEditMaskSpan ?? null;
@@ -401,17 +402,19 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     cache.warmSource = request.source;
     phaseStartedAt = performance.now();
     if (!textEditMaskSpan) {
-      // A masked parse must not seed the drag-incremental cache; the session
-      // ending clears the mask and triggers an unmasked render that primes.
+      // A masked render must not seed the incremental caches: the render
+      // after the mask ends may reuse the parse, evaluation and SVG from
+      // before it, and those must agree with each other.
       const parseSession = cache.parse;
       parseSession.prime(result.parse, {
         activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
         includeContextDefinitions: true,
         sourceRevision: request.sourceRevision ?? null
       });
+      cache.svg = result.svg.model;
+      cache.graphicsResolverCacheKey = graphicsResolver.cacheKey;
     }
     phases.primeParse = performance.now() - phaseStartedAt;
-    cache.svg = result.svg.model;
     cache.text = result.textLayoutContext;
 
     const snapshot: SessionSnapshot = {
@@ -495,7 +498,6 @@ type DeckComputeSession = {
   contextKey: string;
   epoch: number;
   source: string;
-  sourceRevision: number | null;
   resolverCacheKey: string;
   structuralMaskKey: string;
   prepared: PreparedBeamerDocument;
@@ -726,26 +728,14 @@ async function computeDeckSnapshot(
     deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey ||
     deckComputeSession.structuralMaskKey !== structuralMaskKey
   ) {
-    const previousPrepared = deckComputeSession?.prepared;
-    const canIncrementallyParse =
-      request.patches != null &&
-      request.patches.length > 0 &&
-      request.patchBaseRevision != null &&
-      deckComputeSession?.sourceRevision === request.patchBaseRevision;
+    // Any earlier document reparses correctly: what changed is found by diffing.
     const prepared = prepareBeamerDocument(request.source, {
       structuralMasks: structuralMask ? [structuralMask] : undefined,
-      previousSyntaxTree:
-        canIncrementallyParse && previousPrepared
-          ? previousPrepared.syntaxTree
-          : undefined,
-      syntaxPatches: canIncrementallyParse
-        ? request.patches ?? undefined
-        : undefined
+      previousSyntax: deckComputeSession?.prepared.syntax
     });
     session = {
       contextKey, epoch: ++deckCacheEpoch, graphicsContext,
       source: request.source,
-      sourceRevision: request.sourceRevision ?? null,
       resolverCacheKey: graphicsResolver.cacheKey,
       structuralMaskKey,
       prepared,

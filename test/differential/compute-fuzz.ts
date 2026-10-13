@@ -423,6 +423,33 @@ function reconcileRoot(doc: DocState, previous: SessionSnapshot | null, snapshot
   return changed;
 }
 
+/**
+ * A deck made long by repeating the frames of `deck`. Lezer reuses only
+ * whole subtrees of an earlier parse, which a short deck does not have, so
+ * the reparse from a previous tree is exercised only on long ones.
+ */
+export function longDeck(deck: FuzzDocument, copies: number): FuzzDocument {
+  const begin = deck.source.indexOf("\\begin{document}") + "\\begin{document}".length;
+  const end = deck.source.lastIndexOf("\\end{document}");
+  const body = deck.source.slice(begin, end);
+  const bodies = Array.from({ length: copies }, (_, index) => body.replace(/\\section\{([^}]*)\}/gu, `\\section{$1 ${index + 1}}`));
+  return { label: `${deck.label} ×${copies}`, source: deck.source.slice(0, begin) + bodies.join("") + deck.source.slice(end) };
+}
+
+/**
+ * A figure made long by repeating the body of `document`'s first picture,
+ * each copy in a shifted scope. Selective replay keeps a checkpoint every
+ * few statements, which short figures barely cross. Node names repeat, so
+ * later copies redefine them and later references follow the latest one.
+ */
+export function longFigure(document: FuzzDocument, copies: number): FuzzDocument {
+  const begin = document.source.indexOf("\n", document.source.indexOf("\\begin{tikzpicture}")) + 1;
+  const end = document.source.indexOf("\\end{tikzpicture}");
+  const body = document.source.slice(begin, end);
+  const bodies = Array.from({ length: copies }, (_, index) => `\\begin{scope}[xshift=${index * 6}cm]\n${body}\\end{scope}\n`);
+  return { label: `${document.label} ×${copies}`, source: document.source.slice(0, begin) + bodies.join("") + document.source.slice(end) };
+}
+
 function isDeckSource(source: string): boolean {
   return /\\documentclass(\[[^\]]*\])?\{beamer\}/u.test(source);
 }

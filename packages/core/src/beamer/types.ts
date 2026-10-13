@@ -15,9 +15,8 @@ import type { SvgRenderModel, SvgViewBox } from "../svg/types.js";
 import type { ParagraphLayoutReport } from "../text/knuth-plass/paragraph/report.js";
 import type { TexVListLayout } from "../text/tex/index.js";
 import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
+import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type { SvgRect } from "../coords/index.js";
-import type { SourcePatch } from "../edit/types.js";
-import type { Tree } from "@lezer/common";
 import type { CooperativeWorkOptions } from "../semantic/cooperative-work.js";
 
 export type BeamerDelimitedSourceValue = {
@@ -382,9 +381,8 @@ export type PrepareBeamerDocumentOptions = {
    * layout still consumes the real source.
    */
   structuralMasks?: readonly Span[];
-  /** Previous CST and source patches for incremental Lezer parsing. */
-  previousSyntaxTree?: Tree;
-  syntaxPatches?: readonly SourcePatch[];
+  /** An earlier syntax index of the document to reparse from incrementally. */
+  previousSyntax?: TexSyntaxIndex;
 };
 
 export type BeamerEmbeddedTikzLayout = {

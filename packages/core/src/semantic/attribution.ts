@@ -104,6 +104,8 @@ export function finalizeExpandedStatementElements(args: {
   pathItemSourceMaps: WeakMap<PathItem, ExpansionSourceMap>;
   statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>;
   templateLocalIdByExpandedId: ReadonlyMap<string, string>;
+  /** Statements written in the document, as opposed to produced by an expansion. */
+  authoredSourceIds: ReadonlyMap<string, unknown>;
 }): SceneElement[] {
   const {
     statement,
@@ -113,7 +115,8 @@ export function finalizeExpandedStatementElements(args: {
     pathItemForeachStack,
     pathItemSourceMaps,
     statementMacroAttribution,
-    templateLocalIdByExpandedId
+    templateLocalIdByExpandedId,
+    authoredSourceIds
   } = args;
   if (elements.length === 0) {
     return elements;
@@ -203,7 +206,7 @@ export function finalizeExpandedStatementElements(args: {
         sourceSpan: nextSourceSpan
       },
       identityRef,
-      styleChain: remapStyleChainSourceRefs(element.styleChain, effectiveSourceMap),
+      styleChain: remapStyleChainSourceRefs(element.styleChain, effectiveSourceMap, authoredSourceIds),
       origin: nextOrigin
     };
   });
@@ -284,13 +287,19 @@ function composePathItemSourceMap(
 
 function remapStyleChainSourceRefs(
   styleChain: StyleChainEntry[],
-  sourceMap: ExpansionSourceMap | undefined
+  sourceMap: ExpansionSourceMap | undefined,
+  authoredSourceIds: ReadonlyMap<string, unknown>
 ): StyleChainEntry[] {
   if (!sourceMap || styleChain.length === 0) {
     return styleChain;
   }
   return styleChain.map((entry) => {
     if (!entry.sourceRef?.sourceSpan) {
+      return entry;
+    }
+    // Options of the figure and of scopes around the expansion are already
+    // in document coordinates: only the expansion's own entries are mapped.
+    if (entry.sourceRef.sourceKind === "figure-options" || authoredSourceIds.has(entry.sourceRef.sourceId)) {
       return entry;
     }
     return {

@@ -1,8 +1,6 @@
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 
 import type { Span } from "../ast/types.js";
-import type { SourcePatch } from "../edit/types.js";
-import type { Tree } from "@lezer/common";
 import {
   buildTexSyntaxIndex,
   getTexSyntaxIndex,
@@ -33,10 +31,7 @@ export interface BeamerEnvironmentBoundary {
 export function createBeamerSyntaxContext(
   source: string,
   structuralMasks: readonly Span[] = [],
-  incremental: {
-    previousTree?: Tree;
-    patches?: readonly SourcePatch[];
-  } = {}
+  previous?: TexSyntaxIndex
 ): BeamerSyntaxContext {
   // Unmasked indexes are shared and reparse incrementally from recent ones.
   if (structuralMasks.length === 0) {
@@ -47,13 +42,7 @@ export function createBeamerSyntaxContext(
     source,
     syntax: buildTexSyntaxIndex(source, beamerDocumentParser, {
       parseSource,
-      previousTree: incremental.previousTree,
-      changes: incremental.patches?.map((patch) => ({
-        fromA: patch.oldSpan.from,
-        toA: patch.oldSpan.to,
-        fromB: patch.newSpan.from,
-        toB: patch.newSpan.to,
-      })),
+      previous,
     }),
   };
 }

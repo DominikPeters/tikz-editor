@@ -74,6 +74,8 @@ export interface TexSyntaxMatchedEnvironment {
 
 export interface TexSyntaxIndex {
   readonly source: string;
+  /** The text the tree was parsed from: `source` with any masks applied. */
+  readonly parseSource: string;
   readonly tree: Tree;
   readonly controls: readonly TexSyntaxControlSequence[];
   readonly environmentBoundaries: readonly TexSyntaxEnvironmentBoundary[];
@@ -143,7 +145,7 @@ export function getTexSyntaxIndex(
     if (!best || best.unchanged === 0) return buildTexSyntaxIndex(source, parser);
     const previous = best.index;
     recent = recent.filter((entry) => entry !== previous);
-    return buildTexSyntaxIndex(source, parser, { previousTree: previous.tree, changes: [best.change] });
+    return buildTexSyntaxIndex(source, parser, { previous });
   });
   recent = [index, ...recent.filter((entry) => entry !== index)];
   if (recent.length > RECENT_INDEX_LIMIT) {
@@ -166,6 +168,36 @@ function changedSpan(previous: string, next: string): { fromA: number; toA: numb
     nextEnd -= 1;
   }
   return { fromA: prefix, toA: previousEnd, fromB: prefix, toB: nextEnd };
+}
+
+/**
+ * What Lezer must reparse: the text that changed, and the previous parse's
+ * error recoveries. An error-free reparse equals a fresh parse. How Lezer
+ * recovers from an error depends on what it reused, so a recovery kept from
+ * an earlier tree often differs from a fresh parse's; reparsing recoveries
+ * makes that rare, though not impossible.
+ */
+function reparseChanges(
+  previous: TexSyntaxIndex,
+  parseSource: string
+): { fromA: number; toA: number; fromB: number; toB: number }[] {
+  const change = changedSpan(previous.parseSource, parseSource);
+  const shift = change.toB - change.fromB - (change.toA - change.fromA);
+  const spans = [{ from: change.fromA, to: change.toA }, ...previous.errors]
+    .sort((left, right) => left.from - right.from);
+  const merged: { from: number; to: number }[] = [];
+  for (const span of spans) {
+    const last = merged.at(-1);
+    if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
+    else merged.push({ from: span.from, to: span.to });
+  }
+  // Spans before the change keep their offsets; spans after it shift.
+  return merged.map(({ from, to }) => ({
+    fromA: from,
+    toA: to,
+    fromB: from <= change.fromA ? from : from + shift,
+    toB: to < change.toA ? to : to + shift,
+  }));
 }
 
 function cachedIndex(
@@ -214,26 +246,25 @@ export function buildTexSyntaxIndex(
   parser: LRParser,
   options: {
     parseSource?: string;
-    previousTree?: Tree;
-    changes?: readonly {
-      fromA: number;
-      toA: number;
-      fromB: number;
-      toB: number;
-    }[];
+    /**
+     * An index to reparse from. Lezer is told what changed by diffing the
+     * texts parsed, not the sources: masks differ between the two parses
+     * wherever they appear, vanish or move, not only where the source does.
+     */
+    previous?: TexSyntaxIndex;
   } = {}
 ): TexSyntaxIndex {
   const parseSource = options.parseSource ?? source;
   if (parseSource.length !== source.length) {
     throw new Error("A TeX syntax parse source must preserve source length.");
   }
-  const fragments =
-    options.previousTree && options.changes?.length
-      ? TreeFragment.applyChanges(
-          TreeFragment.addTree(options.previousTree),
-          options.changes
-        )
-      : undefined;
+  const previous = options.previous;
+  const fragments = previous
+    ? TreeFragment.applyChanges(
+        TreeFragment.addTree(previous.tree),
+        reparseChanges(previous, parseSource)
+      )
+    : undefined;
   const tree = parser.parse(parseSource, fragments);
   const controlsByStart = new Map<number, TexSyntaxControlSequence>();
   const boundariesByStart = new Map<
@@ -382,6 +413,7 @@ export function buildTexSyntaxIndex(
 
   const index: TexSyntaxIndex = {
     source,
+    parseSource,
     tree,
     controls,
     environmentBoundaries,

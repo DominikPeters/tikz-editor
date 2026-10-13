@@ -411,7 +411,8 @@ export function evaluateSemanticStatementByIndex(
       pathItemForeachStack: run.pathItemForeachStack,
       pathItemSourceMaps: run.pathItemSourceMaps,
       statementMacroAttribution: run.statementMacroAttribution,
-      templateLocalIdByExpandedId: run.templateLocalIdByExpandedId
+      templateLocalIdByExpandedId: run.templateLocalIdByExpandedId,
+      authoredSourceIds: run.sourceStatementSpanById
     }),
     run.context.sourceFingerprint
   );

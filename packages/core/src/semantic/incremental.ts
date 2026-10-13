@@ -11,9 +11,12 @@ import {
   restoreSemanticContext,
   retargetEditHandlesSourceFingerprint,
   snapshotSemanticContext,
+  type ProvenanceOptionList,
+  type SemanticContextFrame,
   type SemanticContextSnapshot,
   type SemanticStatementEffectSummary
 } from "./context.js";
+import type { StyleChainEntry, StyleSourceRef } from "./style-chain.js";
 import { collectGeometryInvalidation, replaceSourceDependencies } from "./dependencies.js";
 import { restoreSemanticSymbolUses } from "./symbol-resolver.js";
 import {
@@ -437,8 +440,9 @@ function* evaluateIncrementalSuffix(args: {
     checkpointPreparation
   } = args;
   const statementCount = run.expandedFigureBody.length;
+  const bindCheckpoint = createCheckpointBinder(run, resolveSpan);
 
-  restoreSemanticContext(run.context, startCheckpoint, {
+  restoreSemanticContext(run.context, bindCheckpoint(startCheckpoint), {
     editHandleSource: previous.editHandles
   });
 
@@ -448,7 +452,8 @@ function* evaluateIncrementalSuffix(args: {
   for (const fragment of nextFragments) run.diagnostics.push(...fragment.diagnostics);
   const checkpointsBeforeStatement = cloneCheckpointsBefore(
     previousCheckpoints.checkpointsBeforeStatement,
-    restoreIndex
+    restoreIndex,
+    bindCheckpoint
   );
   yield* restorePrefixFeatureUsage(run.featureUsage, previous.statementFragments, restoreIndex);
   run.captureGeometryCheckpoints = false;
@@ -537,8 +542,9 @@ function* evaluateSelectively(args: {
     checkpointPreparation
   } = args;
   const statementCount = run.expandedFigureBody.length;
+  const bindCheckpoint = createCheckpointBinder(run, resolveSpan);
 
-  restoreSemanticContext(run.context, startCheckpoint, {
+  restoreSemanticContext(run.context, bindCheckpoint(startCheckpoint), {
     editHandleSource: previous.editHandles
   });
   retargetEditHandlesSourceFingerprint(run.context.editHandles, run.context.sourceFingerprint);
@@ -547,7 +553,8 @@ function* evaluateSelectively(args: {
   const nextFragments = previous.statementFragments.slice();
   const checkpointsBeforeStatement = cloneCheckpointsBefore(
     previousCheckpoints.checkpointsBeforeStatement,
-    restoreIndex
+    restoreIndex,
+    bindCheckpoint
   );
   yield* restorePrefixFeatureUsage(run.featureUsage, previous.statementFragments, restoreIndex);
   run.captureGeometryCheckpoints = false;
@@ -888,16 +895,70 @@ function findCheckpointIndexAtOrBefore(
 
 function cloneCheckpointsBefore<T>(
   checkpoints: ReadonlyMap<number, T>,
-  statementIndexExclusive: number
+  statementIndexExclusive: number,
+  bind: (checkpoint: T) => T
 ): Map<number, T> {
   const cloned = new Map<number, T>();
   for (const [checkpointIndex, value] of checkpoints) {
     if (checkpointIndex >= statementIndexExclusive) {
       continue;
     }
-    cloned.set(checkpointIndex, value);
+    cloned.set(checkpointIndex, bind(value));
   }
   return cloned;
+}
+
+/**
+ * Scopes open at a checkpoint can enclose the change, so the source
+ * locations in its frames move like those of reused fragments, and a kept
+ * checkpoint must be moved at every run, not only when restored. Frames
+ * inside an expansion also carry the expansion's own locations, which stay.
+ */
+function createCheckpointBinder(
+  run: ReturnType<typeof createSemanticEvaluationRun>,
+  resolveSpan: (span: Span) => Span
+): (checkpoint: SemanticContextSnapshot) => SemanticContextSnapshot {
+  const binder = createSceneSourceBinder(resolveSpan, run.context.sourceFingerprint);
+  const authored = (sourceRef: Pick<StyleSourceRef, "sourceId"> & { sourceKind?: string } | undefined) =>
+    sourceRef != null && (sourceRef.sourceKind === "figure-options" || run.sourceStatementSpanById.has(sourceRef.sourceId));
+  const chain = (entries: StyleChainEntry[]) => {
+    const bound = entries.map(entry => authored(entry.sourceRef)
+      ? { ...entry, sourceRef: binder.metadata(entry.sourceRef), rawOptions: binder.metadata(entry.rawOptions) }
+      : entry);
+    return bound.every((entry, index) => entry.sourceRef === entries[index].sourceRef && entry.rawOptions === entries[index].rawOptions)
+      ? entries : bound;
+  };
+  const provenance = (lists: ProvenanceOptionList[]) => {
+    const bound = lists.map(list => authored(list.sourceRef) ? { ...list, sourceRef: binder.metadata(list.sourceRef) } : list);
+    return bound.every((list, index) => list.sourceRef === lists[index].sourceRef) ? lists : bound;
+  };
+  const frame = (current: SemanticContextFrame): SemanticContextFrame => {
+    const next: SemanticContextFrame = {
+      ...current,
+      styleChain: chain(current.styleChain),
+      clipChain: current.clipChain.map(clip => authored(clip.sourceRef) ? { ...clip, sourceRef: binder.metadata(clip.sourceRef) } : clip),
+      everyPathStyles: provenance(current.everyPathStyles),
+      everyNodeStyles: provenance(current.everyNodeStyles),
+      everyTextNodePartStyles: provenance(current.everyTextNodePartStyles),
+      everyFitStyles: provenance(current.everyFitStyles),
+      everyPicStyles: provenance(current.everyPicStyles),
+      everyShapeNodeStyles: new Map([...current.everyShapeNodeStyles].map(([shape, lists]) => [shape, provenance(lists)])),
+      treeEveryChildStyles: provenance(current.treeEveryChildStyles),
+      treeEveryChildNodeStyles: provenance(current.treeEveryChildNodeStyles),
+      treeLevelStyleTemplateLayers: provenance(current.treeLevelStyleTemplateLayers),
+      treeLevelStyleLayers: current.treeLevelStyleLayers.map(level => ({ ...level, layers: provenance(level.layers) }))
+    };
+    return next;
+  };
+  const bound = new WeakMap<SemanticContextSnapshot, SemanticContextSnapshot>();
+  return (checkpoint) => {
+    let result = bound.get(checkpoint);
+    if (!result) {
+      result = { ...checkpoint, stack: checkpoint.stack.map(frame) };
+      bound.set(checkpoint, result);
+    }
+    return result;
+  };
 }
 
 function cloneFeatureUsage(featureUsage: FeatureUsage): FeatureUsage {

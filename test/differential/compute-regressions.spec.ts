@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ComputeRequest } from "../../packages/app/src/compute.js";
 import { applyEditAction } from "../../packages/core/src/edit/actions.js";
-import { coldCompute, compareResponses } from "./compute-fuzz.js";
+import { coldCompute, compareResponses, longDeck, longFigure } from "./compute-fuzz.js";
 import { freshComputeModule } from "./compute-instances.js";
 
 // Minimal request sequences the compute differential fuzzer found: in each, a
@@ -141,6 +141,64 @@ describe("compute shortcuts match cold renders", () => {
     await expectLastMatchesCold([
       { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
       { id: "b", documentId: "d", source: source.replace("(3,1.5)", "(4.51,1.5)"), sourceRevision: 1, activeRootId: "figure:0", inferSourceChanges: true }
+    ]);
+  });
+
+  it("moves the enclosing scope's options of foreach elements kept from the last render", async () => {
+    // Style layers from outside an expansion are document spans, not expansion ones.
+    const source = String.raw`\begin{tikzpicture}[thick]
+  \draw (0,0) -- (1,0);
+  \draw (0,1) -- (1,1);
+  \begin{scope}[xshift=1cm]
+    \foreach \x in {0,1} \fill (\x,0) circle (2pt);
+  \end{scope}
+\end{tikzpicture}`;
+    await expectLastMatchesCold([
+      { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
+      { id: "b", documentId: "d", source: source.replace("(1,0)", "(1.25,0)"), sourceRevision: 1, activeRootId: "figure:0", inferSourceChanges: true }
+    ]);
+  });
+
+  it("moves the scopes open at a checkpoint when an edit inside them replays from it", async () => {
+    // Twelve copies of the figure in scopes put a checkpoint inside the scope
+    // around the edited node; the statement replayed from it inherits the scope.
+    const source = longFigure({ label: "graph", source: readFileSync("test/fixtures/differential/node-graph.tex", "utf8") }, 12).source;
+    const at = source.indexOf("{box}", source.length / 2) + 3;
+    await expectLastMatchesCold([
+      { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
+      { id: "b", documentId: "d", source: insertAt(source, at, "W"), sourceRevision: 1, activeRootId: "figure:0", inferSourceChanges: true }
+    ]);
+  });
+
+  it("evaluates a node as unmasked once a mask over its options ends", async () => {
+    // The render after the mask reuses the parse from before it, so it must
+    // also reuse the evaluation from before it, not the masked one.
+    const edited = picture.replace("(3,0.4)", "(3,0.9)");
+    const at = picture.indexOf("(3,0.4)") + 3;
+    const request = { documentId: "d", source: edited, sourceRevision: 1, activeRootId: "figure:0", changedSourceIds: ["path:0"], trigger: "other" as const,
+      patches: [{ oldSpan: { from: at, to: at + 1 }, newSpan: { from: at, to: at + 1 }, replacement: "9" }], patchBaseRevision: 0 };
+    const options = edited.indexOf("[draw,circle]");
+    await expectLastMatchesCold([
+      { id: "a", documentId: "d", source: picture, sourceRevision: 0, activeRootId: "figure:0" },
+      { id: "b", ...request },
+      { id: "c", ...request, textEditMaskSpan: { from: options, to: options + "[draw,circle]".length } },
+      { id: "d", ...request }
+    ]);
+  });
+
+  it("reparses a long deck when a text-edit mask appears away from the edit", async () => {
+    // Lezer reuses subtrees only of long documents. The new mask blanks an item
+    // the edit did not touch, so it must count as a change to the parsed text.
+    const deck = longDeck({ label: "deck", source: readFileSync("test/fixtures/differential/mixed-deck.tex", "utf8") }, 25).source;
+    const item = "\\item<3-> A tunnel is planned for 2031.";
+    const masked = deck.indexOf(item, deck.length / 2);
+    const at = deck.indexOf("Left bank");
+    const edited = insertAt(deck, at, "k");
+    await expectLastMatchesCold([
+      { id: "a", documentId: "d", source: deck, sourceRevision: 0, activeRootId: "frame:0" },
+      { id: "b", documentId: "d", source: edited, sourceRevision: 1, activeRootId: "frame:0", changedSourceIds: [], trigger: "other",
+        patches: [{ oldSpan: { from: at, to: at }, newSpan: { from: at, to: at + 1 }, replacement: "k" }], patchBaseRevision: 0,
+        textEditMaskSpan: { from: masked + 1, to: masked + 1 + item.length } }
     ]);
   });
 
