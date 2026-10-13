@@ -45,7 +45,9 @@ const DOCUMENTS = [
 
 // Balanced pieces keep a clean text clean; wild ones break it.
 const BALANCED = ["x", " ", "\n", "{x}", "[a]", "$x$", "\\[x\\]", "\\(x\\)", "\\item", "%c\n", "\\only<2>{x}", "\\note{x}",
-  "\\begin{itemize}\\item a\\end{itemize}", "\\end{frame}\n\\begin{frame}", "\\begin{verbatim}x\\end{verbatim}"];
+  "\\begin{itemize}\\item a\\end{itemize}", "\\end{frame}\n\\begin{frame}", "\\begin{verbatim}x\\end{verbatim}",
+  // Whether `<` opens an overlay depends on the text before it and after it.
+  "<2->", "<+(1)-| alert@2>", " < x > ", "\\item", "\\", "math", "array", "\\begin{cases}a\\end{cases}"];
 const WILD = ["{", "}", "[", "]", "<", ">", "$", "$$", "\\", "%", "&", "^", "_",
   "\\begin{itemize}", "\\end{itemize}", "\\begin{frame}", "\\end{frame}", "\\[", "\\]", "\\(", "\\)",
   "\\only<2>{", "\\note{", "\\begin{verbatim}", "\\end{verbatim}", "\\begin{align}", "\\end{align}"];
@@ -92,6 +94,24 @@ function nextMasks(source: string, masks: Span[], rng: () => number): Span[] {
 }
 
 describe("syntax index reparse", () => {
+  // Whether `<` opens an overlay depends on the text before it, which Lezer
+  // does not track as it tracks lookahead: edit right before one.
+  it.each([
+    ["the backslash of its command goes", "\\item<2-> a", "item<2-> a"],
+    ["a backslash makes its command", "item<2-> a", "\\item<2-> a"],
+    ["its command's backslash is escaped", "\\item<2-> a", "\\\\item<2-> a"],
+    ["a group closes before it", "x <2> a", "{x} <2> a"],
+    ["a line break pushes it away", "\\item\n<2> a", "\\item\n\n<2> a"],
+  ])("follows an overlay specification whose position changes when %s", (_, before, after) => {
+    const padding = DOCUMENTS[1].slice(0, 20_000);
+    const at = padding.lastIndexOf("\\end{frame}");
+    const wrap = (text: string) => `${padding.slice(0, at)}${text}\n${padding.slice(at)}`;
+    const previous = buildTexSyntaxIndex(wrap(before), beamerDocumentParser);
+    const reparsed = buildTexSyntaxIndex(wrap(after), beamerDocumentParser, { previous });
+    expect(reparsed.overlayArguments.length).not.toBe(previous.overlayArguments.length);
+    expect(reparsed.tree.toString()).toBe(beamerDocumentParser.parse(wrap(after)).toString());
+  });
+
   it("gives the tree of a fresh parse after edits and mask changes", () => {
     const rng = makeRng(SEED);
     let checked = 0;

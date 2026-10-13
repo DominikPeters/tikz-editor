@@ -302,7 +302,7 @@ export function buildTexSyntaxIndex(
         });
         return;
       }
-      if (node.name === "ControlSequence" || node.name === "IncludeGraphicsCmd") {
+      if (node.name === "ControlSequence" || node.name === "IncludeGraphicsCmd" || node.name === "EnvironmentDefinitionCmd" || node.name === "CommandDefinitionCmd") {
         addControl(source, node, controlsByStart);
       } else if (node.name === "BeginCommand") {
         addEnvironmentControl(source, node.from, "begin", controlsByStart);
@@ -320,7 +320,7 @@ export function buildTexSyntaxIndex(
         whitespaceEndByStart.set(node.from, node.to);
       } else if (node.name === "Text") {
         textEndByStart.set(node.from, node.to);
-      } else if (node.name === "Group" || node.name === "MathGroup") {
+      } else if (node.name === "Group" || node.name === "MathGroup" || node.name === "DefinitionBody") {
         addArgument(
           source,
           node,

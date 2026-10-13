@@ -72,7 +72,7 @@ describe("@tikz-editor/lezer-tex", () => {
   });
 
   it("keeps overlays Beamer-specific and opaque bodies lexical", () => {
-    const angleText = String.raw`Alpha <2-> omega`;
+    const angleText = String.raw`\item<2-> omega`;
     const opaque = String.raw`\begin{verbatim}
 { % literal opaque source
 \end{frame}
@@ -90,6 +90,59 @@ describe("@tikz-editor/lezer-tex", () => {
       "OpaqueEnvironment(OpaqueEnvironmentToken)"
     );
     expect(errorRanges(opaqueTree)).toEqual([]);
+  });
+
+  it.each([
+    ["the default overlay of a list", String.raw`\begin{itemize}[<+->] \item a \end{itemize}`, 1],
+    ["a command and its arguments", String.raw`\only<1>{a}<2> \item[x]<3> \begin{block}<4>{T}<5> \end{block}`, 5],
+    ["incremental, mode and action specifications", String.raw`\item<+(1)-> a \item<.-| alert@+> b \uncover<1|handout:0>{c}`, 3],
+    ["an empty specification", String.raw`\newcommand<>{\x}{y}`, 1],
+    ["a starred command, across a space", String.raw`\item* <2> a`, 1],
+    ["a modified command", String.raw`\onslide+<2-> a \onslide*<3>{b}`, 2],
+    ["a command across a comment", "\\uncover % wrapper\n<2-> {a}", 1],
+  ])("reads an overlay specification behind %s", (_, source, count) => {
+    const tree = beamerDocumentParser.parse(source);
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "OverlaySpecification")).toBe(count);
+  });
+
+  it.each([
+    ["a comparison in text", "Alpha <2-> omega and x < y > z"],
+    ["a tag in a group", String.raw`\texttt{<tag>} and {<a>}`],
+    ["listings escapes", String.raw`\lstset{escapeinside={<@}{@>}}`],
+    ["a command in the brackets", String.raw`\textbf{a} < \textcolor{red}{b} > c`],
+    ["an escaped backslash", String.raw`a\\item<2> b`],
+    ["a command across a paragraph break", "\\item\n\n<2> a"],
+    ["a command whose comment sign is escaped", "\\item \\% x\n\n<2> a"],
+  ])("reads %s as text, not an overlay specification", (_, source) => {
+    const tree = beamerDocumentParser.parse(source);
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "OverlaySpecification")).toBe(0);
+  });
+
+  it.each(["math", "array", "equation", "align", "cases", "matrix"])("reads %s as a word outside an environment name", (word) => {
+    const tree = beamerDocumentParser.parse(String.raw`\begin{frame}{Inline ${word}} An ${word} here. \begin{${word}}x\end{${word}}\end{frame}`);
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "MathEnvironment")).toBe(1);
+  });
+
+  it.each([
+    ["an environment opened in one body and closed in the other", String.raw`\newenvironment{wide}{\begin{frame}}{\end{frame}}`],
+    ["a math environment split the same way", "\\newenvironment{rcases}\n  {\\left.\\begin{aligned}}\n  {\\end{aligned}\\right\\rbrace}"],
+    ["arguments, a default and comments between the parts", "\\renewenvironment*{abstract}[1][x]% args\n{\\begin{list}{}{}}%\n{\\end{list}}"],
+    ["a command opening an environment", String.raw`\newcommand{\bi}{\begin{itemize}}\providecommand\ei{\end{itemize}}`],
+    ["a command with arguments and a balanced environment", String.raw`\renewcommand*{\x}[2][d]{\begin{center}#1#2\end{center}}`],
+  ])("parses a definition with %s", (_, definition) => {
+    const tree = beamerDocumentParser.parse(`${definition}\n\\begin{document}\\begin{frame}A\\end{frame}\\end{document}`);
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "Definition")).toBeGreaterThan(0);
+    expect(countNodes(tree, "Environment")).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps a definition command in an argument an ordinary command", () => {
+    const tree = beamerDocumentParser.parse(String.raw`\foo[\newcommand]{x} $\renewcommand$`);
+    expect(errorRanges(tree)).toEqual([]);
+    expect(countNodes(tree, "Definition")).toBe(0);
   });
 
   it("reads angle brackets in Beamer math as relations, not overlay specifications", () => {

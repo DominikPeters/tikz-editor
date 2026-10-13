@@ -20,12 +20,49 @@ TexItem {
   DisplayMath |
   InlineMath |
   IncludeGraphicsCommand |
+  Definition |
   GenericCommand |
   Group |
   OptionalArgument |
   OverlaySpecification |
   Whitespace |
   Text
+}
+
+// A definition's body is not run where it stands, so it may begin an
+// environment that another body or definition ends:
+// `\newenvironment{x}{\begin{frame}}{\end{frame}}`.
+Definition {
+  EnvironmentDefinitionCmd Star? OverlaySpecification? DefinitionGap Group DefinitionArguments DefinitionBody DefinitionGap DefinitionBody |
+  CommandDefinitionCmd Star? OverlaySpecification? DefinitionGap (Group | ControlSequence) DefinitionArguments DefinitionBody
+}
+
+DefinitionGap { (Whitespace | Comment)* }
+
+DefinitionArguments { (DefinitionGap OptionalArgument)* DefinitionGap }
+
+DefinitionBody {
+  "{" DefinitionItem* "}"
+}
+
+// Within a body an environment's begin and end stand alone, paired or not.
+DefinitionItem {
+  Comment |
+  OpaqueEnvironment |
+  DisplayMath |
+  InlineMath |
+  IncludeGraphicsCommand |
+  Definition |
+  GenericCommand |
+  Group |
+  OptionalArgument |
+  OverlaySpecification |
+  Whitespace |
+  Text |
+  BeginEnvironment |
+  EndEnvironment |
+  BeginMathEnvironment |
+  EndMathEnvironment
 }
 
 OpaqueEnvironment {
@@ -228,27 +265,20 @@ BeamerOverlayCmd {
 }
 
 MathEnvironmentName {
-  @specialize<WordToken, "math"> |
-  @specialize<WordToken, "displaymath"> |
-  @specialize<WordToken, "equation"> |
-  @specialize<WordToken, "align"> |
-  @specialize<WordToken, "alignat"> |
-  @specialize<WordToken, "aligned"> |
-  @specialize<WordToken, "alignedat"> |
-  @specialize<WordToken, "gather"> |
-  @specialize<WordToken, "gathered"> |
-  @specialize<WordToken, "flalign"> |
-  @specialize<WordToken, "multline"> |
-  @specialize<WordToken, "split"> |
-  @specialize<WordToken, "cases"> |
-  @specialize<WordToken, "matrix"> |
-  @specialize<WordToken, "pmatrix"> |
-  @specialize<WordToken, "bmatrix"> |
-  @specialize<WordToken, "Bmatrix"> |
-  @specialize<WordToken, "vmatrix"> |
-  @specialize<WordToken, "Vmatrix"> |
-  @specialize<WordToken, "smallmatrix"> |
-  @specialize<WordToken, "array">
+  MathEnvironmentWord
+}
+
+// Definition commands are keywords only where a definition can stand: in an
+// argument or in math they are ordinary commands.
+@external specialize { ControlWord } definitionCommand from "./definition-commands.js" {
+  EnvironmentDefinitionCmd,
+  CommandDefinitionCmd
+}
+
+// The names of math environments are keywords only where an environment is
+// named: elsewhere `math`, `array` or `cases` is a word of the text.
+@external specialize { WordToken } mathEnvironmentName from "./math-environment-names.js" {
+  MathEnvironmentWord
 }
 
 @external tokens opaqueEnvironmentTokens from "./opaque-tokens.js" {

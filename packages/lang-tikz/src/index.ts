@@ -104,7 +104,7 @@ const texHighlighting = styleTags({
   "BeamerPartCmd BeamerSectionLevelCmd BeamerSubsectionCmd BeamerSubsubsectionCmd BeamerFrameStartCmd BeamerFrameTitleCmd BeamerFrameSubtitleCmd BeamerOnlyCmd BeamerUncoverCmd BeamerVisibleCmd BeamerInvisibleCmd BeamerAltCmd BeamerTemporalCmd BeamerOnslideCmd BeamerPauseCmd":
     t.keyword,
 
-  "ControlWord ControlSymbol MathTextCmd": t.meta,
+  "ControlWord ControlSymbol MathTextCmd EnvironmentDefinitionCmd CommandDefinitionCmd": t.meta,
   // Beamer overlay specifications (`<2->`) read as one unit.
   "OverlaySpecification/...": t.labelName,
 

@@ -62,7 +62,7 @@ describe("shared TeX syntax index", () => {
     expect(generic.overlayArguments).toEqual([]);
     expect(beamer.overlayArguments.map((argument) =>
       valueOf(source, argument.contentSpan)
-    )).toEqual(["2-", "beta"]);
+    )).toEqual(["2-"]);
     expect(
       beamer.argumentAfter(only?.span.to ?? 0, "overlay", source.length)
     ).toEqual(beamer.overlayArguments[0]);
@@ -223,7 +223,7 @@ literal % \end{frame}`;
   });
 
   it("keys the bounded cache by parser identity as well as source", () => {
-    const source = "Alpha <2-> omega";
+    const source = String.raw`\item<2-> omega`;
     const generic = getTexSyntaxIndex(source, texDocumentParser);
     const beamer = getTexSyntaxIndex(source, beamerDocumentParser);
 
