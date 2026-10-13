@@ -15,7 +15,7 @@ export type ComputeSchedulingInput = {
 export type ComputeSchedulingCause = "initial" | "document-switch" | "root-switch" | "overlay-step" |
   "file-context" | "asset-refresh" | "source-typing" | "assistant-update" | "disk-update" |
   "history" | "edit-command" | "canvas-text-edit" | "source-scrub" | "inspector-edit" |
-  "drag-element" | "drag-handle" | "text-edit-state" | "interaction-state";
+  "drag-element" | "drag-handle" | "text-edit-state" | "exact-parse" | "interaction-state";
 
 export type ComputeSchedulingPolicy = {
   cause: ComputeSchedulingCause;
@@ -64,5 +64,6 @@ export function computeSchedulingPolicy(
   }
   if (before.textEditMaskSpan?.from !== next.textEditMaskSpan?.from ||
     before.textEditMaskSpan?.to !== next.textEditMaskSpan?.to) return immediate("text-edit-state");
+  if (next.exactParse && !before.exactParse) return immediate("exact-parse");
   return immediate("interaction-state");
 }

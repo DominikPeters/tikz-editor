@@ -292,7 +292,8 @@ function createBeamerRenderContext(
   const syntaxContext = createBeamerSyntaxContext(
     source,
     [...(options.structuralMasks ?? []), ...noteCommands.map(note => note.bodySpan)],
-    options.previousSyntax
+    options.previousSyntax,
+    options.exactSyntax
   );
   const document = scanBeamerDocumentWithSyntax(syntaxContext);
   const theme = resolveBeamerTheme(document);

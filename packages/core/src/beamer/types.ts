@@ -383,6 +383,8 @@ export type PrepareBeamerDocumentOptions = {
   structuralMasks?: readonly Span[];
   /** An earlier syntax index of the document to reparse from incrementally. */
   previousSyntax?: TexSyntaxIndex;
+  /** Parse afresh, so that the syntax tree is exact even if it has errors. */
+  exactSyntax?: boolean;
 };
 
 export type BeamerEmbeddedTikzLayout = {

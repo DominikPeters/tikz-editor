@@ -173,8 +173,8 @@ function start(harness: Harness, request: ComputeRequest): void {
 }
 
 /** As compute-scheduler.ts: run now, or queue after the running render, which is aborted unless kept. */
-function schedule(harness: Harness, keepInFlight: boolean): void {
-  const request = appRequest(harness.store.getState(), `store-fuzz-${++harness.requestCounter}`);
+function schedule(harness: Harness, keepInFlight: boolean, exactParse = false): void {
+  const request = { ...appRequest(harness.store.getState(), `store-fuzz-${++harness.requestCounter}`), ...exactParse && { exactParse } };
   if (harness.scheduler.running) {
     harness.scheduler.queued = request;
     if (!keepInFlight) harness.scheduler.running.controller.abort();
@@ -211,7 +211,13 @@ async function settle(harness: Harness): Promise<void> {
     // The new snapshot can change the root selection, which renders again.
     const after = harness.store.getState();
     const doc = after.documents[after.activeDocumentId];
-    if (doc.activeRootId === before.documents[before.activeDocumentId].activeRootId && isShownFor(doc.snapshot, appRequest(after, "check"))) return;
+    if (doc.activeRootId === before.documents[before.activeDocumentId].activeRootId && isShownFor(doc.snapshot, appRequest(after, "check"))) break;
+  }
+  // As the app does once typing pauses on a deck whose reparse recovered from errors.
+  const state = harness.store.getState();
+  if (state.documents[state.activeDocumentId].snapshot.deck?.exactParse === false) {
+    schedule(harness, false, true);
+    await finishAll(harness);
   }
 }
 

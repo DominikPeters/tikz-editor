@@ -76,6 +76,12 @@ export interface TexSyntaxIndex {
   readonly source: string;
   /** The text the tree was parsed from: `source` with any masks applied. */
   readonly parseSource: string;
+  /**
+   * Whether the tree is the one a fresh parse gives. It is, unless it was
+   * reparsed from an earlier tree and recovered from errors: how Lezer
+   * recovers depends on what it reused (see `reparseChanges`).
+   */
+  readonly exact: boolean;
   readonly tree: Tree;
   readonly controls: readonly TexSyntaxControlSequence[];
   readonly environmentBoundaries: readonly TexSyntaxEnvironmentBoundary[];
@@ -134,7 +140,8 @@ export function getTexSyntaxIndex(
   source: string,
   parser: LRParser
 ): TexSyntaxIndex {
-  let recent = recentIndexesByParser.get(parser) ?? [];
+  const recent = recentIndexesByParser.get(parser) ?? [];
+  let reparsedFrom: TexSyntaxIndex | null = null;
   const index = cachedIndex(syntaxIndexCache, parser, source, () => {
     let best: { index: TexSyntaxIndex; change: ReturnType<typeof changedSpan>; unchanged: number } | null = null;
     for (const candidate of recent) {
@@ -143,17 +150,51 @@ export function getTexSyntaxIndex(
       if (!best || unchanged > best.unchanged) best = { index: candidate, change, unchanged };
     }
     if (!best || best.unchanged === 0) return buildTexSyntaxIndex(source, parser);
-    const previous = best.index;
-    recent = recent.filter((entry) => entry !== previous);
-    return buildTexSyntaxIndex(source, parser, { previous });
+    reparsedFrom = best.index;
+    return buildTexSyntaxIndex(source, parser, { previous: best.index });
   });
-  recent = [index, ...recent.filter((entry) => entry !== index)];
+  rememberRecentIndex(parser, index, reparsedFrom);
+  return index;
+}
+
+/**
+ * The index of `source` as a fresh parse gives it. The shared index is
+ * replaced when it is not exact, so everything reading it agrees.
+ */
+export function getExactTexSyntaxIndex(
+  source: string,
+  parser: LRParser
+): TexSyntaxIndex {
+  const index = getTexSyntaxIndex(source, parser);
+  if (index.exact) return index;
+  const exact = buildTexSyntaxIndex(source, parser);
+  syntaxIndexCache.get(parser)?.set(source, exact, source.length * 64 + 4096);
+  rememberRecentIndex(parser, exact, index);
+  return exact;
+}
+
+/** Put `index` first among the recent ones, in place of the one it replaces. */
+function rememberRecentIndex(parser: LRParser, index: TexSyntaxIndex, replaced: TexSyntaxIndex | null): void {
+  let recent = (recentIndexesByParser.get(parser) ?? []).filter((entry) => entry !== index && entry !== replaced);
+  recent = [index, ...recent];
   if (recent.length > RECENT_INDEX_LIMIT) {
     const smallest = recent.slice(1).reduce((min, entry) => entry.source.length < min.source.length ? entry : min);
     recent = recent.filter((entry) => entry !== smallest);
   }
   recentIndexesByParser.set(parser, recent);
-  return index;
+}
+
+/** Whether two trees have the same nodes at the same places. */
+export function sameSyntaxTree(left: Tree, right: Tree): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  const a = left.cursor(), b = right.cursor();
+  for (;;) {
+    if (a.type !== b.type || a.from !== b.from || a.to !== b.to) return false;
+    const more = a.next();
+    if (more !== b.next()) return false;
+    if (!more) return true;
+  }
 }
 
 /** The single span where `previous` and `next` differ, as a Lezer change. */
@@ -414,6 +455,7 @@ export function buildTexSyntaxIndex(
   const index: TexSyntaxIndex = {
     source,
     parseSource,
+    exact: !previous || errors.length === 0,
     tree,
     controls,
     environmentBoundaries,

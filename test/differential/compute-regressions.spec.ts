@@ -204,6 +204,38 @@ describe("compute shortcuts match cold renders", () => {
 
 });
 
+describe("exact deck parses", () => {
+  // A deck with an unclosed group, reparsed from its previous tree.
+  const deck = longDeck({ label: "deck", source: readFileSync("test/fixtures/differential/mixed-deck.tex", "utf8") }, 25).source;
+  const broken = insertAt(deck, deck.indexOf("Left bank", deck.length / 2), "\\textbf{");
+  const request = (id: string, source: string, revision: number, exactParse?: boolean) =>
+    ({ id, documentId: "d", source, sourceRevision: revision, activeRootId: "frame:3", inferSourceChanges: true, exactParse });
+
+  it("reports a reparse with errors as not exact, and parses it afresh when asked", async () => {
+    const warm = await freshComputeModule();
+    await warm.computeSnapshot(request("a", deck, 0));
+    const typed = await warm.computeSnapshot(request("b", broken, 1));
+    expect(typed.snapshot.deck?.exactParse).toBe(false);
+    // The app keeps a current page, except for a parse from scratch.
+    expect(warm.isDeckSnapshotCurrent(typed.snapshot, request("c", broken, 1))).toBe(true);
+    expect(warm.isDeckSnapshotCurrent(typed.snapshot, request("c", broken, 1, true))).toBe(false);
+    const paused = await warm.computeSnapshot(request("d", broken, 1, true));
+    expect(paused.snapshot.deck?.exactParse).toBe(true);
+    expect(compareResponses(await coldCompute(request("d", broken, 1)), paused)).toEqual([]);
+  });
+
+  it("keeps the rendered pages when the fresh parse has the same structure", async () => {
+    const warm = await freshComputeModule();
+    await warm.computeSnapshot(request("a", deck, 0));
+    const typed = await warm.computeSnapshot(request("b", broken, 1));
+    const paused = await warm.computeSnapshot(request("c", broken, 1, true));
+    // This unclosed group recovers the same way either way.
+    expect(paused.snapshot.deck?.cacheEpoch).toBe(typed.snapshot.deck?.cacheEpoch);
+    expect(paused.snapshot.deck?.exactParse).toBe(true);
+    expect(warm.isDeckSnapshotCurrent(paused.snapshot, request("d", broken, 1, true))).toBe(true);
+  });
+});
+
 // Request sequences the fuzzer found and shrank, kept as they were: each line
 // is a request, and the last one's render must match a cold render.
 const REPLAYS = "test/fixtures/differential/replays";

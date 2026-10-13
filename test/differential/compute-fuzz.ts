@@ -69,6 +69,8 @@ export type WarmModuleFactory = () => Promise<ComputeModule>;
 const IGNORED_KEYS = new Set([
   // Request bookkeeping, not output.
   "revision", "cacheEpoch", "incremental",
+  // Whether a deck's parse is known to be a fresh parse's; checked by healing (see `check`).
+  "exactParse",
   // Retained layout state for later incremental renders; its output is in the scene and SVG.
   "textLayoutContext",
   // Identity of an evaluation run, not of the content.
@@ -262,22 +264,40 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
   const docs = documents.map((document, index) => initialDocState(document, index));
   let comparisons = 0;
 
-  const check = async (what: string, request: ComputeRequest, actual: { snapshot: SessionSnapshot; diagnostics: unknown }) => {
+  /**
+   * Compares with a cold render and returns the snapshot shown afterwards. A
+   * deck reparsed with syntax errors may differ, but says its parse is not
+   * exact; the app then parses it afresh once typing pauses, which must match.
+   */
+  const check = async (what: string, request: ComputeRequest, actual: { snapshot: SessionSnapshot; diagnostics: unknown },
+    { shown = true }: { shown?: boolean } = {}): Promise<SessionSnapshot> => {
     comparisons += 1;
     recordReach(reach, actual.snapshot);
     const incremental = actual.snapshot.incremental;
     trace?.(`  ${what}: ${incremental ? `${incremental.parseStrategy}${incremental.parseFallbackReason ? `(${incremental.parseFallbackReason})` : ""} ${incremental.strategy}` : actual.snapshot.deck ? "deck" : "full"}`);
     const expected = await coldCompute(request);
     const differences = compareResponses(expected, actual);
-    if (differences.length > 0) throw new Mismatch(what, request, differences);
+    const inexact = actual.snapshot.deck?.exactParse === false;
+    if (differences.length > 0 && !inexact) throw new Mismatch(what, request, differences);
+    // A response the app discards is never parsed afresh.
+    if (!shown) return actual.snapshot;
+    // Typing does not always pause at an inexact parse; when it differs it must be healed.
+    if (!inexact || (differences.length === 0 && comparisons % 2 === 0)) return actual.snapshot;
+    count(reach, differences.length > 0 ? "deck:exact-parse-healed" : "deck:exact-parse");
+    const exactRequest = { ...request, id: `${request.id}-exact`, exactParse: true };
+    const exact = await warm.computeSnapshot(exactRequest);
+    const remaining = compareResponses(expected, exact);
+    if (remaining.length > 0) throw new Mismatch(`${what}, parsed afresh after a pause`, exactRequest, remaining);
+    if (exact.snapshot.deck?.exactParse === false) throw new Mismatch(`${what}, parsed afresh after a pause`, exactRequest, ["deck parse still not exact"]);
+    return exact.snapshot;
   };
 
   /** Shows a snapshot as the store does; true when its root selection changed. */
   const publish = async (doc: DocState, request: ComputeRequest, response: ComputeResponse, what: string): Promise<boolean> => {
-    await check(what, request, response);
+    const shown = await check(what, request, response);
     const previous = doc.shown;
-    doc.shown = response.snapshot;
-    return reconcileRoot(doc, previous, response.snapshot);
+    doc.shown = shown;
+    return reconcileRoot(doc, previous, shown);
   };
 
   const render = async (doc: DocState, what: string): Promise<void> => {
@@ -287,7 +307,7 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
       if (isDeckSource(doc.source) && doc.shown && warm.isDeckSnapshotCurrent(doc.shown, request)) {
         // The app keeps the published page instead of rendering again.
         count(reach, "deck:current");
-        await check(`${what} (kept current page)`, request, { snapshot: doc.shown, diagnostics: shownDiagnostics(doc.shown) });
+        doc.shown = await check(`${what} (kept current page)`, request, { snapshot: doc.shown, diagnostics: shownDiagnostics(doc.shown) });
         return;
       }
       if (!await publish(doc, request, await warm.computeSnapshot(request), round === 0 ? what : `${what}, after root reconciliation`)) return;
@@ -328,10 +348,10 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
               sourceRevision: doc.revision, activeRootId: doc.root, deckStep: doc.step });
             if (claimed) {
               count(reach, "deck:claimed");
-              await check("navigate (claimed cached page)", request, { snapshot: claimed, diagnostics: shownDiagnostics(claimed) });
+              const shown = await check("navigate (claimed cached page)", request, { snapshot: claimed, diagnostics: shownDiagnostics(claimed) });
               const previous = doc.shown;
-              doc.shown = claimed;
-              if (reconcileRoot(doc, previous, claimed)) await render(doc, "render after root reconciliation");
+              doc.shown = shown;
+              if (reconcileRoot(doc, previous, shown)) await render(doc, "render after root reconciliation");
               break;
             }
           }
@@ -375,10 +395,10 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
           const firstResponse = await first.promise;
           const secondResponse = await second.promise;
           count(reach, "race");
-          await check(first.what, first.request, firstResponse);
-          await check(second.what, second.request, secondResponse);
+          const firstShown = await check(first.what, first.request, firstResponse, { shown: first.request === newerRequest });
+          const secondShown = await check(second.what, second.request, secondResponse, { shown: second.request === newerRequest });
           const previous = doc.shown;
-          doc.shown = (await newer).snapshot;
+          doc.shown = first.request === newerRequest ? firstShown : secondShown;
           if (reconcileRoot(doc, previous, doc.shown)) await render(doc, "render after root reconciliation");
           break;
         }

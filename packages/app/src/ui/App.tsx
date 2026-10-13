@@ -62,6 +62,9 @@ import { presentationService } from "../presentation/service";
 import { bindPresentationFocus } from "../presentation/focus";
 import presentationCss from "../presentation/PresentationControls.module.css";
 
+/** How long typing must pause before a deck with syntax errors is parsed afresh. */
+const EXACT_PARSE_IDLE_MS = 500;
+
 const DevPanel = lazy(async () => {
   const mod = await import("./DevPanel");
   return { default: mod.DevPanel };
@@ -874,6 +877,21 @@ function EditorApp() {
   }, [interactiveEdit, snapshot.svg?.viewBox]);
   const renderViewBox = interactiveEdit ? dragRenderViewBox ?? snapshot.svg?.viewBox ?? null : null;
   const publishedDeckSnapshot = snapshot.deck ? snapshot : null;
+  // Typing reparses a deck from its previous tree, which, while the text has
+  // errors, can recover from them unlike a fresh parse. Once typing pauses,
+  // the shown revision is parsed afresh.
+  const [exactParseRevision, setExactParseRevision] = useState<{ documentId: string; sourceRevision: number } | null>(null);
+  const deckParseInexact = snapshot.deck?.exactParse === false && snapshot.source === source;
+  useEffect(() => {
+    if (!deckParseInexact || interactiveEdit) return;
+    const timer = window.setTimeout(() => {
+      setExactParseRevision({ documentId: activeDocumentId, sourceRevision });
+    }, EXACT_PARSE_IDLE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeDocumentId, deckParseInexact, interactiveEdit, sourceRevision]);
+  const exactParse = exactParseRevision?.documentId === activeDocumentId && exactParseRevision.sourceRevision === sourceRevision;
   const computeInput = useMemo<ComputeSchedulingInput>(() => ({
     request: {
       documentId: activeDocumentId,
@@ -888,7 +906,8 @@ function EditorApp() {
       patchBaseRevision: lastEditPatchBaseRevision,
       trigger,
       renderViewBox,
-      textEditMaskSpan
+      textEditMaskSpan,
+      exactParse
     },
     sourceChangeOrigin,
     dragKind: activeCanvasDragKind,
@@ -898,7 +917,7 @@ function EditorApp() {
     assetRefreshToken: imageAssetRefreshToken,
     publishedDeckSnapshot
   }), [activeCanvasDragKind, activeDeckStep, activeDocumentFileRef, activeDocumentId, activeInspectorEditDocumentId,
-    activeRootId, activeSourceScrubSourceId, canvasTextEditActive, changedSourceIds, imageAssetRefreshToken,
+    activeRootId, activeSourceScrubSourceId, canvasTextEditActive, changedSourceIds, exactParse, imageAssetRefreshToken,
     lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceChangeOrigin, sourceRevision, textEditMaskSpan, trigger, publishedDeckSnapshot]);
   useScheduledCompute(computeSchedulerRef, computeInput);
   useDeckNeighborPrewarm();

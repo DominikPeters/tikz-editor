@@ -37,6 +37,7 @@ import {
   type PreparedBeamerDocument
 } from "@tikz-editor/core/beamer/index";
 import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
+import { sameSyntaxTree } from "@tikz-editor/core/text/tex/syntax-index";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { prepareDocumentGraphicsContext, getImageAssetCacheGeneration, type PreparedDocumentGraphicsContext } from "./image-asset-cache";
 import { getActiveEditorPlatformGeneration } from "./platform/current";
@@ -102,6 +103,11 @@ export type DeckSnapshot = {
   document: BeamerDocumentModel;
   activeFrame: DeckActiveFrame | null;
   diagnostics: Diagnostic[];
+  /**
+   * False when the deck's structure may not be the one a fresh parse gives:
+   * a reparse of text with syntax errors can recover from them differently.
+   */
+  exactParse?: boolean;
 };
 
 export type SessionSnapshotIncrementalInfo = {
@@ -149,6 +155,11 @@ export type ComputeRequest = {
    * still feeds node text rendering.
    */
   textEditMaskSpan?: { from: number; to: number } | null;
+  /**
+   * Parse a deck afresh if its current parse is not exact, as the app asks
+   * once typing pauses (see `DeckSnapshot.exactParse`).
+   */
+  exactParse?: boolean;
 };
 
 export type ComputeResponse = {
@@ -501,6 +512,8 @@ type DeckComputeSession = {
   resolverCacheKey: string;
   structuralMaskKey: string;
   prepared: PreparedBeamerDocument;
+  /** Whether `prepared` has the structure a fresh parse gives. */
+  parseExact: boolean;
   frames: DeckFrameSummary[];
   graphicsContext: PreparedDocumentGraphicsContext;
   renderedPages: BoundedLru<string, DeckActiveFrame>;
@@ -526,6 +539,7 @@ function deckContextKey(request: ComputeRequest): string {
 
 function matchingDeckSession(request: ComputeRequest): DeckComputeSession | null {
   const session = deckComputeSession;
+  if (request.exactParse && !session?.parseExact) return null;
   return session?.source === request.source && session.contextKey === deckContextKey(request) ? session : null;
 }
 
@@ -553,7 +567,7 @@ function deckSnapshot(session: DeckComputeSession, frame: DeckActiveFrame, revis
   return { ...makeEmptySnapshot(session.source), revision, activeRootId: frame.frameId,
     graphicsPreviewBundleKey: session.graphicsContext.previewBundle.cacheKey,
     deck: { cacheEpoch: session.epoch, frames: session.frames, document: session.prepared.document,
-      activeFrame: frame, diagnostics: session.prepared.document.diagnostics } };
+      activeFrame: frame, diagnostics: session.prepared.document.diagnostics, exactParse: session.parseExact } };
 }
 
 /** Only completed pages in the exact current render context can be published. */
@@ -722,16 +736,22 @@ async function computeDeckSnapshot(
     ? `${structuralMask.from}:${structuralMask.to}`
     : "";
   let session: DeckComputeSession;
-  if (
-    deckComputeSession?.source !== request.source ||
-    deckComputeSession.contextKey !== contextKey ||
-    deckComputeSession.resolverCacheKey !== graphicsResolver.cacheKey ||
-    deckComputeSession.structuralMaskKey !== structuralMaskKey
-  ) {
+  const sameContext = deckComputeSession?.source === request.source &&
+    deckComputeSession.contextKey === contextKey &&
+    deckComputeSession.resolverCacheKey === graphicsResolver.cacheKey &&
+    deckComputeSession.structuralMaskKey === structuralMaskKey;
+  // Parsed afresh, a deck whose structure is unchanged keeps its rendered pages.
+  const exact = sameContext && request.exactParse && !deckComputeSession!.parseExact
+    ? prepareBeamerDocument(request.source, { structuralMasks: structuralMask ? [structuralMask] : undefined, exactSyntax: true })
+    : null;
+  if (exact && sameSyntaxTree(exact.syntax.tree, deckComputeSession!.prepared.syntax.tree)) {
+    session = { ...deckComputeSession!, parseExact: true, renderedPages: deckComputeSession!.renderedPages.fork() };
+  } else if (!sameContext || exact) {
     // Any earlier document reparses correctly: what changed is found by diffing.
-    const prepared = prepareBeamerDocument(request.source, {
+    const prepared = exact ?? prepareBeamerDocument(request.source, {
       structuralMasks: structuralMask ? [structuralMask] : undefined,
-      previousSyntax: deckComputeSession?.prepared.syntax
+      previousSyntax: deckComputeSession?.prepared.syntax,
+      exactSyntax: request.exactParse
     });
     session = {
       contextKey, epoch: ++deckCacheEpoch, graphicsContext,
@@ -739,6 +759,7 @@ async function computeDeckSnapshot(
       resolverCacheKey: graphicsResolver.cacheKey,
       structuralMaskKey,
       prepared,
+      parseExact: prepared.syntax.exact,
       frames: prepared.document.frames.map((frame, frameIndex) => ({
         id: frame.id,
         frameIndex,
@@ -751,7 +772,7 @@ async function computeDeckSnapshot(
   } else {
     // A suspended render owns its page writes. Aborted or older requests must
     // not replace the newest completed deck baseline, even for the same source.
-    session = { ...deckComputeSession, renderedPages: deckComputeSession.renderedPages.fork() };
+    session = { ...deckComputeSession!, renderedPages: deckComputeSession!.renderedPages.fork() };
   }
   const frameIndex = resolveDeckFrameIndex(session.frames, request.activeRootId);
   let activeFrame: DeckActiveFrame | null = null;
@@ -790,7 +811,8 @@ async function computeDeckSnapshot(
       frames: session.frames,
       document: session.prepared.document,
       activeFrame,
-      diagnostics: session.prepared.document.diagnostics
+      diagnostics: session.prepared.document.diagnostics,
+      exactParse: session.parseExact
     }
   };
   recordProfilingComputeTiming({

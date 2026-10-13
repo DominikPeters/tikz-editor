@@ -3,6 +3,7 @@ import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 import type { Span } from "../ast/types.js";
 import {
   buildTexSyntaxIndex,
+  getExactTexSyntaxIndex,
   getTexSyntaxIndex,
   type TexSyntaxArgumentKind,
   type TexSyntaxDelimitedArgument,
@@ -31,18 +32,20 @@ export interface BeamerEnvironmentBoundary {
 export function createBeamerSyntaxContext(
   source: string,
   structuralMasks: readonly Span[] = [],
-  previous?: TexSyntaxIndex
+  previous?: TexSyntaxIndex,
+  /** Parse afresh rather than from an earlier tree, so the tree is exact. */
+  exact = false
 ): BeamerSyntaxContext {
   // Unmasked indexes are shared and reparse incrementally from recent ones.
   if (structuralMasks.length === 0) {
-    return { source, syntax: getTexSyntaxIndex(source, beamerDocumentParser) };
+    return { source, syntax: (exact ? getExactTexSyntaxIndex : getTexSyntaxIndex)(source, beamerDocumentParser) };
   }
   const parseSource = applyStructuralMasks(source, structuralMasks);
   return {
     source,
     syntax: buildTexSyntaxIndex(source, beamerDocumentParser, {
       parseSource,
-      previous,
+      previous: exact ? undefined : previous,
     }),
   };
 }
