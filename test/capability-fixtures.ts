@@ -346,6 +346,10 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
   beamer_speaker_notes: String.raw`\documentclass{beamer}\begin{document}\begin{frame}Public\note<2>{Private}\end{frame}\end{document}`,
   beamer_footnotes: String.raw`\documentclass{beamer}
 \begin{document}\begin{frame}Alpha\footnote{A frame note.}\end{frame}\end{document}`,
+  beamer_overlay_pictures: String.raw`\documentclass{beamer}\usepackage{tikz}
+\begin{document}\begin{frame}Text.
+\begin{tikzpicture}[remember picture, overlay]\node[anchor=north east] at (current page.north east) {Corner};\end{tikzpicture}
+\end{frame}\end{document}`,
   beamer_float_captions: String.raw`\documentclass{beamer}
 \begin{document}\begin{frame}Before.\begin{figure}\rule{20pt}{10pt}\caption{Alpha}\end{figure}After.\end{frame}\end{document}`,
   beamer_references: String.raw`\documentclass{beamer}

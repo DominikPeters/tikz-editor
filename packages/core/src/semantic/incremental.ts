@@ -827,6 +827,7 @@ function containsStatefulGraphicsState(source: string): boolean {
     /\\useasboundingbox\b/.test(source) ||
     /\[\s*clip(?:[\],])/m.test(source) ||
     /use as bounding box/.test(source) ||
+    /\boverlay\b/.test(source) ||
     /on background layer/.test(source) ||
     /show background (?:rectangle|grid|top|bottom|left|right)/.test(source) ||
     /\b(?:framed|gridded|tight background|loose background)\b/.test(source) ||

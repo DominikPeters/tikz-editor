@@ -212,6 +212,28 @@ function* evaluateFigureSteps(figure: TikzFigure, source: string, opts: Evaluate
   return finalizeSemanticEvaluationRun(run, elementsByStatement);
 }
 
+/** PGF's `current page`: a rectangle node spanning the page, without a source. */
+function defineCurrentPage(context: SemanticContext, page: NonNullable<EvaluateOptions["currentPage"]>): void {
+  const midX = (page.minX + page.maxX) / 2;
+  const midY = (page.minY + page.maxY) / 2;
+  context.namedNodeGeometries.set("current page", {
+    shape: "rectangle",
+    center: worldPoint(pt(midX), pt(midY)),
+    anchorHalfWidth: (page.maxX - page.minX) / 2,
+    anchorHalfHeight: (page.maxY - page.minY) / 2,
+    anchorRadius: 0,
+  });
+  const anchors: Record<string, [number, number]> = {
+    center: [midX, midY], north: [midX, page.maxY], south: [midX, page.minY], east: [page.maxX, midY], west: [page.minX, midY],
+    "north east": [page.maxX, page.maxY], "north west": [page.minX, page.maxY],
+    "south east": [page.maxX, page.minY], "south west": [page.minX, page.minY],
+  };
+  context.namedCoordinates.set("current page", worldPoint(pt(midX), pt(midY)));
+  for (const [anchor, [x, y]] of Object.entries(anchors)) {
+    context.namedCoordinates.set(`current page.${anchor}`, worldPoint(pt(x), pt(y)));
+  }
+}
+
 export function createSemanticEvaluationRun(
   figure: TikzFigure,
   source: string,
@@ -228,6 +250,9 @@ export function createSemanticEvaluationRun(
     opts.sourceFingerprint,
     opts.graphicsResolver
   );
+  if (opts.currentPage) {
+    defineCurrentPage(context, opts.currentPage);
+  }
   const expanded = withPgfMathRuntime(
     { rng: context.mathRandom },
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)

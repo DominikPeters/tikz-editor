@@ -1451,3 +1451,27 @@ Intro $f+g(x)+h$ word.
   await expect.poll(() => readStoreSource(page)).toBe(source);
   await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart)).toBe(word);
 });
+
+test("text beside an overlay picture is edited on the canvas: a click places the caret at its glyph", async ({ page }, testInfo) => {
+  const source = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{Overlay}
+Words beside a paragraph.
+
+\begin{tikzpicture}[remember picture, overlay]
+  \draw[fill=orange!20] (current page.south west) rectangle (current page.north east);
+\end{tikzpicture}
+\end{frame}
+\end{document}`;
+  await setSource(page, source);
+  await openScopeContaining(page, "Words");
+  const glyph = page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${source.indexOf("paragraph")}"]`).first();
+  const box = await glyph.boundingBox();
+  expect(box).not.toBeNull();
+  // The picture covers the whole page; the text above it still takes the click.
+  await page.mouse.click(box!.x + 1, box!.y + box!.height / 2);
+  await page.keyboard.type("X");
+  await expect.poll(() => readStoreSource(page)).toBe(source.replace("a paragraph", "a Xparagraph"));
+  await page.screenshot({ path: testInfo.outputPath("overlay-picture-text.png") });
+});

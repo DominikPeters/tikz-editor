@@ -173,10 +173,15 @@ export async function loadCoreRenderer() {
     "dist",
     "index.js"
   );
-  const [beamer, core] = await Promise.all([
+  const outlinesEntry = join(repoRoot, "packages", "core", "dist", "text", "tex", "fonts", "glyph-outlines.js");
+  const [beamer, core, outlines] = await Promise.all([
     import(pathToFileURL(beamerEntry).href),
     import(pathToFileURL(coreEntry).href),
+    import(pathToFileURL(outlinesEntry).href),
   ]);
+  // Outlines load when a render first asks for them; a render without them
+  // paints its glyphs blank, so load them all up front, as the test setup does.
+  await outlines.loadAllTexGlyphOutlines();
   return {
     prepareBeamerDocument: beamer.prepareBeamerDocument,
     computerModernTexMetricProvider: core.computerModernTexMetricProvider,

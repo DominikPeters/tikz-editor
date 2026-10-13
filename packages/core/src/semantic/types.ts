@@ -444,6 +444,8 @@ export type ResolvedStyle = {
   fillRule: "nonzero" | "evenodd";
   clip: boolean;
   useAsBoundingBox: boolean;
+  /** `overlay`: what is drawn does not count towards the picture's size. */
+  overlay: boolean;
   textColor: string | null;
   textOpacity: number;
   fontSize: number;
@@ -513,6 +515,11 @@ export type EvaluateOptions = {
   sourceFingerprint?: string;
   textEngine?: NodeTextEngine | null;
   graphicsResolver?: DocumentGraphicsResolver;
+  /**
+   * The page, in this picture's coordinates (pt), for a picture whose place
+   * on a page is known: PGF's `current page` node.
+   */
+  currentPage?: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
 };
 
 export type { CoordinateForm };

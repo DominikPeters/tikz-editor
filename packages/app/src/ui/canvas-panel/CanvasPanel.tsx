@@ -1428,7 +1428,8 @@ export const CanvasPanel = memo(function CanvasPanel({
       // Frame-level atoms: embedded tikzpictures and graphics select their
       // whole source span in the enclosing scope's session.
       const frameAtoms = [
-        ...layout.embeddedTikz.map((tikz) => ({
+        // Overlay pictures are drawn over the page, not set in a scope's text.
+        ...layout.embeddedTikz.filter((tikz) => !tikz.overlayPicture).map((tikz) => ({
           id: tikz.itemId,
           span: tikz.sourceSpan,
           bounds: tikz.bounds,
@@ -1596,7 +1597,8 @@ export const CanvasPanel = memo(function CanvasPanel({
       deckObjectId: node.id
     });
     for (const node of deckObjectIndex.nodes) {
-      if (node.kind === "block" || node.kind === "columns" || node.kind === "column") {
+      // An overlay picture can cover the whole page; the text under it stays clickable.
+      if (node.kind === "block" || node.kind === "columns" || node.kind === "column" || node.overlayPicture) {
         under.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
       } else if (node.kind === "graphics" || node.kind === "tikzpicture" || node.kind === "unsupported") {
         over.push(regionFor(node, `deck-object:${node.id}`, node.bounds));

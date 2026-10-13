@@ -283,6 +283,9 @@ export const NON_STYLE_OPTION_KEYS = new Set([
 
 export const NON_STYLE_OPTION_FLAGS = new Set([
   "every picture",
+  // Records the picture's page position in the .aux file for `current page`
+  // and cross-picture node references; the renderer places pictures itself.
+  "remember picture",
   "behind path",
   "in front of path",
   "circle",

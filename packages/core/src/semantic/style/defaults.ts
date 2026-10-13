@@ -24,6 +24,7 @@ export function defaultStyle(): ResolvedStyle {
     fillRule: "nonzero",
     clip: false,
     useAsBoundingBox: false,
+    overlay: false,
     textColor: null,
     textOpacity: 1,
     fontSize: DEFAULT_TEXT_FONT_SIZE,

@@ -2688,10 +2688,10 @@ export function evaluatePathStatement(
   statementElements = attachClipChainToElements(statementElements, outputClipChain);
   for (const element of statementElements) {
     if (element.kind === "Path") {
-      element.pictureSizeRelevant ??= !builder.style.clip && !builder.style.useAsBoundingBox && frame.pictureSizeRelevant;
+      element.pictureSizeRelevant ??= !builder.style.clip && !builder.style.useAsBoundingBox && !builder.style.overlay && frame.pictureSizeRelevant;
     }
   }
-  if (!builder.style.clip && !builder.style.useAsBoundingBox && frame.pictureSizeRelevant) {
+  if (!builder.style.clip && !builder.style.useAsBoundingBox && !builder.style.overlay && frame.pictureSizeRelevant) {
     extendPictureBounds(context, computeBounds(statementElements));
   }
 

@@ -249,6 +249,8 @@ export type BeamerFrameLayoutItem = {
   paragraphId?: string;
   /** Document root id for embedded tikzpictures (`frame:i:tikzpicture:j`). */
   rootId?: string;
+  /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
+  overlayPicture?: true;
   childIds?: string[];
   message?: string;
   /** The marker is already represented by a glyph in its paragraph VList. */
@@ -394,6 +396,8 @@ export type BeamerEmbeddedTikzLayout = {
   bounds: BeamerRect;
   viewBox: SvgViewBox;
   model: SvgRenderModel;
+  /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
+  overlayPicture?: true;
 };
 
 export type BeamerGraphicsLayout = {

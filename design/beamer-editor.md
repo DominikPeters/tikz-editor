@@ -695,6 +695,21 @@ Two modes, matching Beamer idiom:
   an authoring feature, not a coverage feature; it ships after editing
   basics.
 
+  Step 1 (rendering) is done: an `overlay` picture is an empty box that TeX
+  sets in the paragraph around it (alone between blank lines it adds an empty
+  line; within a line it sits between two spaces). The native renderer sets it
+  as `\rule{0pt}{0pt}` keeping the picture's source range, reads the picture's
+  origin from where that box lands, and draws the picture from there over the
+  page, with `current page` given to the TikZ evaluator (the page in picture
+  coordinates; without `remember picture`, PGF puts the page's lower-left
+  corner at the picture's origin). Checked against LuaLaTeX in
+  `test/fixtures/beamer/overlay-pictures-fidelity` (frames, lists, columns,
+  blocks, `\only`/`\uncover`). 7 of the 11 corpus authors use such pictures,
+  mostly a node at a `current page` anchor. Interim interaction: the picture
+  is selectable only where no text is (its hit region sits under the text);
+  step 2 hit-tests its shapes and edits them on the slide, step 3 creates the
+  picture from the drawing tools.
+
 The slide canvas is a composition root: theme chrome (non-editable) + flow
 blocks (block layout engine) + embedded figure boxes (existing renderer) +
 free-form layer (existing renderer + tools). Unlike the infinite tikz

@@ -35,6 +35,7 @@ import type {
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
 import { scanBeamerFrameOverlays, type BeamerOverlayModel } from "./overlay.js";
+import { readBeamerOverlayPicture } from "./overlay-pictures.js";
 import {
   resolveBeamerTheoremOccurrences,
   type BeamerTheoremOccurrence,
@@ -636,7 +637,7 @@ function frameTikzFlowNode(params: {
       to: end.span.to,
     });
     const root = roots[0];
-    return root
+    return root && !readBeamerOverlayPicture(context, root.span)
       ? {
           kind: "tikzpicture",
           id: `${frameId}:tikz:${nodeIndex}`,
@@ -651,7 +652,7 @@ function frameTikzFlowNode(params: {
   }
   const innerSpan = { from: begin.span.to, to: end.span.from };
   const roots = scanTikzRootsInSpan(context, frameId, innerSpan);
-  if (roots.length !== 1) {
+  if (roots.length !== 1 || readBeamerOverlayPicture(context, roots[0].span)) {
     return null;
   }
   const root = roots[0];
@@ -1096,6 +1097,8 @@ function parseColumnFlow(
   }
 
   for (const root of scanTikzRootsInSpan(context, frameId, bodySpan)) {
+    // An overlay picture is an empty box in the text around it.
+    if (readBeamerOverlayPicture(context, root.span)) continue;
     structural.push({
       span: root.span,
       node: {

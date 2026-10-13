@@ -58,6 +58,9 @@ export function applyFlagEntry(
       diagnostics: []
     };
   }
+  if (key === "overlay") {
+    return { style: { ...style, overlay: true }, transform, diagnostics: [] };
+  }
   if (key === "shade") {
     return { style: { ...style, fill: style.fill ?? "black", shadeEnabled: true }, transform, diagnostics: [] };
   }

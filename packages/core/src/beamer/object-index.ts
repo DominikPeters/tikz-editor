@@ -50,6 +50,8 @@ export type BeamerObjectNode = {
   readonly listItem?: BeamerObjectListItemContext;
   /** Document root id for embedded tikzpictures (nested figure entry). */
   readonly rootId?: string;
+  /** A TikZ `overlay` picture, drawn over the page rather than in the text. */
+  readonly overlayPicture?: true;
 };
 
 export type BeamerObjectIndex = {
@@ -125,6 +127,7 @@ export function buildBeamerObjectIndex(args: {
       parentId: null,
       childIds: [],
       ...(item.rootId !== undefined ? { rootId: item.rootId } : {}),
+      ...(item.overlayPicture ? { overlayPicture: true as const } : {}),
     });
   }
 

@@ -1547,10 +1547,12 @@ function registeredLineGeometry(
     }
     const lineHeight = Number(placement.height);
     const lineTop = Number(placement.y);
+    // A line can be empty of height: one holding only an empty box (`\mbox{}`,
+    // an overlay picture) is set at 0pt height and depth.
     if (
       !Number.isFinite(lineTop) ||
       !Number.isFinite(lineHeight) ||
-      lineHeight <= EPSILON
+      lineHeight < 0
     ) {
       throw new Error(`Invalid registered line placement for line ${line.lineIndex}.`);
     }

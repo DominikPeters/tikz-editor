@@ -774,6 +774,14 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_footnotes"],
     notes: "Beamer frame footnotes support automatic or explicit numeric marks, multiple and wrapped notes, the stock bottom rule and text template, and explicit [frame] notes inside columns or blocks. Glyph sizes, superscript placement and insertion geometry are checked against LuaLaTeX. Minipage-local footnotes, footnotemark/footnotetext and arbitrary template/font redefinitions are not implemented.",
   },
+  beamer_overlay_pictures: {
+    parser: "partial",
+    semantic: "not-applicable",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["beamer_overlay_pictures"],
+    notes: "A tikzpicture with `overlay` among its own options is set as TeX sets it, an empty box in the paragraph around it, and drawn from that place over the page; with `remember picture` its `current page` node is the page. Paragraph glue, the picture's origin and its text are checked against LuaLaTeX in frames, lists, columns, blocks and under \\only/\\uncover. The `\\tikz` command form, references between remembered pictures, `remember picture` set through styles, scaling by frame shrink and drawing covered pictures invisibly are not implemented; the pictures are not yet editable on the slide.",
+  },
   beamer_float_captions: {
     parser: "partial",
     semantic: "not-applicable",

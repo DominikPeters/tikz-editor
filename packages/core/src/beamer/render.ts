@@ -97,8 +97,9 @@ import {
   type BeamerOverlayVisibility,
 } from "./overlay.js";
 import { scanBeamerDocumentWithSyntax } from "./scan.js";
-import { createBeamerSyntaxContext } from "./syntax.js";
+import { createBeamerSyntaxContext, type BeamerSyntaxContext } from "./syntax.js";
 import { beamerSpeakerNotes, projectBeamerSpeakerNotes, scanBeamerNoteCommands, type BeamerNoteCommand } from "./notes.js";
+import { beamerOverlayPictureOrigin, beamerOverlayPicturesIn, projectBeamerOverlayPictureBoxes } from "./overlay-pictures.js";
 import { getTexSyntaxIndex, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import { texFragmentParser } from "@tikz-editor/lezer-tex";
 import type { NodeTextColorResolver } from "../text/types.js";
@@ -921,6 +922,21 @@ async function renderBeamerFrameStep(params: {
     }
     contentBounds = transformBeamerRect(bodyTransform, contentBounds);
   }
+  await emitBeamerOverlayPictures({
+    context: { source, syntax: context.syntax },
+    frameId: frame.id,
+    bodySpan: frame.bodySpan,
+    paragraphs: paragraphs.slice(bodyParagraphStart, bodyParagraphEnd),
+    bodyTransform,
+    page: page.page,
+    font: theme.fonts["normal-text"],
+    diagnostics,
+    items,
+    embeddedTikz,
+    modelBuilder,
+    graphicsResolver: params.graphicsResolver,
+    work: params.work,
+  });
   const model = modelBuilder.build({
     viewBox: page.page,
     defs: [],
@@ -3444,6 +3460,88 @@ async function prepareEmbeddedTikz(params: {
   };
 }
 
+/**
+ * TikZ `overlay` pictures in the frame body. TeX set each as an empty box in
+ * its paragraph (projectBeamerOverlayPictureBoxes); the picture is drawn from
+ * that box's place, over the page, and with `remember picture` its
+ * `current page` node is the page.
+ */
+async function emitBeamerOverlayPictures(params: {
+  context: BeamerSyntaxContext;
+  frameId: string;
+  bodySpan: Span;
+  paragraphs: readonly BeamerParagraphLayout[];
+  bodyTransform: BeamerPaintTransform | undefined;
+  page: BeamerRect;
+  font: BeamerThemeFont;
+  diagnostics: Diagnostic[];
+  items: BeamerFrameLayoutItem[];
+  embeddedTikz: BeamerEmbeddedTikzLayout[];
+  modelBuilder: ReturnType<typeof createSvgModelBuilder>;
+  graphicsResolver?: DocumentGraphicsResolver;
+  work?: BeamerRenderWork;
+}): Promise<void> {
+  const pictures = beamerOverlayPicturesIn(params.context, params.bodySpan);
+  if (pictures.length === 0) return;
+  const textEngine = await createTexNodeTextEngine({
+    mathFontProfile: createBeamerTexMathFontProfile(params.font),
+  });
+  for (const [index, picture] of pictures.entries()) {
+    const paragraph = params.paragraphs.find((candidate) =>
+      candidate.report.lines.some((line) => line.segments.some((segment) => Number(segment.sourceStartRaw) === picture.span.from))
+    );
+    if (!paragraph || paragraph.hiddenSourceSpans?.some((span) => span.from <= picture.span.from && picture.span.to <= span.to)) {
+      continue;
+    }
+    const intrinsic = beamerOverlayPictureOrigin(paragraph, paragraph.transformedLayout?.intrinsicBounds ?? paragraph.bounds, picture.span);
+    if (!intrinsic) continue;
+    // A shrunk body scales its boxes; the picture is drawn at its box's place.
+    const origin = params.bodyTransform ? transformBeamerPoint(params.bodyTransform, intrinsic) : intrinsic;
+    const rendered = await renderTikzToSvgAsync(
+      applyThemeFamilyToTikz(params.context.source.slice(picture.span.from, picture.span.to), params.font),
+      {
+        textEngine,
+        graphicsResolver: params.graphicsResolver,
+        cooperative: params.work?.options,
+        svg: { padding: 0 },
+        // With `remember picture`, PGF knows where the picture is on the page;
+        // without, `current page` takes the picture's origin for the page's corner.
+        evaluate: {
+          currentPage: picture.rememberPicture
+            ? { minX: -origin.x, minY: origin.y - params.page.height, maxX: params.page.width - origin.x, maxY: origin.y }
+            : { minX: 0, minY: 0, maxX: params.page.width, maxY: params.page.height },
+        },
+      }
+    );
+    for (const diagnostic of [...rendered.parse.diagnostics, ...rendered.semantic.diagnostics]) {
+      params.diagnostics.push({ severity: diagnostic.severity, code: diagnostic.code, message: diagnostic.message, span: picture.span });
+    }
+    const viewBox = rendered.svg.viewBox;
+    // The picture's origin, world (0, 0), is at SVG (0, 2·y + height) of its view box.
+    emitEmbeddedTikz({
+      tikz: {
+        kind: "tikzpicture",
+        visibility: "visible",
+        id: `${params.frameId}:overlay-picture:${index}`,
+        sourceSpan: picture.span,
+        horizontalAlignment: "left",
+        width: viewBox.width,
+        height: viewBox.height,
+        model: rendered.svg.model,
+        viewBox,
+      },
+      x: origin.x + viewBox.x,
+      y: origin.y - viewBox.y - viewBox.height,
+      parentId: null,
+      items: params.items,
+      embeddedTikz: params.embeddedTikz,
+      modelBuilder: params.modelBuilder,
+    });
+    params.items[params.items.length - 1].overlayPicture = true;
+    params.embeddedTikz[params.embeddedTikz.length - 1].overlayPicture = true;
+  }
+}
+
 function measureColumnVerticalBox(
   alignment: BeamerColumnAlignment,
   flow: readonly PreparedColumnFlowItem[],
@@ -3644,7 +3742,7 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
-  params = { ...params, mapped: projectBeamerSpeakerNotes(params.mapped) };
+  params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped)) };
   // A size declaration preceding the list is an ambient font selection,
   // not an empty paragraph (and must apply to its generated labels too).
   const leadingSize = activeBeamerNamedSize(params.mapped.text, params.references.theme);

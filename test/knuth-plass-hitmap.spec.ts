@@ -699,7 +699,8 @@ describe("knuth-plass hitmap line ranges", () => {
     expect(point.lineLocalX).toBeCloseTo(expectedEntry?.x ?? 0, 6);
   });
 
-  it("uses registered TeX vlist line placements in a paragraph group without owner-viewBox rescaling", async () => {
+  // A line holding only an empty box (`\mbox{}`, an overlay picture) is set at 0pt height.
+  it.each([10, 0])("uses registered TeX vlist line placements in a paragraph group without owner-viewBox rescaling (first line %ipt high)", async (firstLineHeight) => {
     const report = makeTwoLineReport();
     const shiftedLine = report.lines[1];
     const shiftedSegment = shiftedLine?.segments[0];
@@ -741,7 +742,7 @@ describe("knuth-plass hitmap line ranges", () => {
           }
         ]),
         linePlacements: coordinateFixture<RegisteredLayout["linePlacements"]>([
-          { lineIndex: 0, x: 0, y: 0, height: 10 },
+          { lineIndex: 0, x: 0, y: 0, height: firstLineHeight },
           { lineIndex: 1, x: 5, y: 12, height: 10 }
         ]),
         graphicsPlacements: [],
