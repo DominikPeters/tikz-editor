@@ -82,6 +82,8 @@ export interface TexListLayoutProfile {
    * along. Without it, descriptions are LaTeX's: the label inline.
    */
   readonly descriptionLabelWidthPt?: number;
+  /** A list's own column, from its widest label (`\begin{description}[Longest]`), keyed by the list's source start. */
+  readonly descriptionLabelWidths?: ReadonlyMap<number, number>;
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
   readonly bibliographyParsepPt?: number;
   readonly topsepPtByDepth: readonly number[];

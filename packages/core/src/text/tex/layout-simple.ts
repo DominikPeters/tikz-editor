@@ -127,6 +127,7 @@ export function layoutSimpleTexParagraph(
       listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth,
       bibliographyMargins: options.listProfile?.bibliographyMargins,
       descriptionLabelWidthPt: options.listProfile?.descriptionLabelWidthPt,
+      descriptionLabelWidths: options.listProfile?.descriptionLabelWidths,
       colorResolverCacheKey: options.colorResolver?.cacheKey,
       fontSizePt: font.atPt,
       baselineSkipPt: options.baselineSkip,

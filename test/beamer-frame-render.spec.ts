@@ -591,6 +591,30 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     expect(Number(third.x)).toBeCloseTo(Number(long.width) + 5.475, 3);
   });
 
+  it("takes a description list's column from the widest label it names, which is not shown", async () => {
+    const page = (opening: string) => String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Desc}
+${opening}
+\item[A] one
+\item[Longest] two
+\end{description}
+\end{frame}
+\end{document}`;
+    const body = async (opening: string) => (await renderBeamerFrame(page(opening))).layout.paragraphs
+      .find((paragraph) => paragraph.paragraphId === "frame:0:paragraph:0")!;
+    const widest = await body(String.raw`\begin{description}[Longest]`);
+    expect(widest.report.lines.map((line) => line.segments.filter((segment) => segment.kind === "text").map((segment) => segment.text)))
+      .toEqual([["A", "one"], ["Longest", "two"]]);
+    const labels = widest.vlistLayout.boxReport.items.filter((item) => item.hboxRole?.kind === "list-label");
+    // The column is "Longest" wide: that label fills it, and the text follows after \labelsep.
+    expect(Number(labels[1].x)).toBeCloseTo(0, 3);
+    expect(Number(widest.vlistLayout.linePlacements[0].x)).toBeCloseTo(Number(labels[1].width) + 5.475, 3);
+    // A default overlay there is no label.
+    const overlay = await body(String.raw`\begin{description}[<+->]`);
+    expect(Number(overlay.vlistLayout.linePlacements[0].x)).toBeCloseTo(62.3805, 3);
+  });
+
   it("uses Beamer's 11pt NFSS and AMS alignment spacing for the KKT conditions", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 3 });

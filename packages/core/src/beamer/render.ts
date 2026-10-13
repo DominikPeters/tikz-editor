@@ -99,7 +99,8 @@ import {
 import { scanBeamerDocumentWithSyntax } from "./scan.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
 import { beamerSpeakerNotes, projectBeamerSpeakerNotes, scanBeamerNoteCommands, type BeamerNoteCommand } from "./notes.js";
-import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import { getTexSyntaxIndex, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
+import { texFragmentParser } from "@tikz-editor/lezer-tex";
 import type { NodeTextColorResolver } from "../text/types.js";
 import {
   activeBeamerTheoremDeclarations,
@@ -232,6 +233,28 @@ const BEAMER_NORMAL_DISPLAY_MATH_PROFILE: TexDisplayMathLayoutProfile = {
     short: { sizePt: 6.5, stretchPt: 3.5, shrinkPt: 3 },
   },
 };
+
+/**
+ * The label columns of description lists given their widest label
+ * (`\begin{description}[Longest label]`, beamerbaselocalstructure.sty):
+ * that label's width as the description item template sets it, keyed by
+ * the list's `\begin`. A `[<+->]` there is a default overlay, not a label.
+ */
+function beamerDescriptionLabelWidths(text: string, measure: (tex: string) => number): ReadonlyMap<number, number> {
+  const widths = new Map<number, number>();
+  if (!text.includes("\\begin{description}")) {
+    return widths;
+  }
+  const syntax = getTexSyntaxIndex(text, texFragmentParser);
+  for (const match of text.matchAll(/\\begin\s*\{description\}/gu)) {
+    const option = syntax.argumentAfter(match.index + match[0].length, "optional", text.length);
+    const label = option ? text.slice(option.contentSpan.from, option.contentSpan.to) : "";
+    if (option && !label.trimStart().startsWith("<")) {
+      widths.set(match.index, measure(label));
+    }
+  }
+  return widths;
+}
 
 function beamerListLayoutProfile(
   theme: ResolvedBeamerTheme,
@@ -3700,6 +3723,14 @@ function layoutParagraph(params: {
     })
   );
   mapped = referenceProjection.mapped;
+  const descriptionLabelWidths = beamerDescriptionLabelWidths(mapped.text, (tex) => {
+    const prefix = namedSize ? `\\fontsize{${namedSize.sizePt}pt}{${namedSize.lineHeightPt}pt}\\selectfont ` : "";
+    return layoutSimpleTexParagraph(prefix + tex, {
+      width: texLength(10000), font: resolvedFont, metricProvider, textFontProfile,
+      alignment: "ragged-right", graphicsResolver,
+      mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
+    }).report?.lines[0]?.naturalWidth ?? 0;
+  });
   const layoutOptions = {
     namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
     paragraphId: params.paragraphId,
@@ -3745,6 +3776,7 @@ function layoutParagraph(params: {
     listProfile: {
       ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),
       bibliographyMargins: referenceProjection.bibliographyMargins,
+      ...(descriptionLabelWidths.size > 0 ? { descriptionLabelWidths } : {}),
       bibliographyParsepPt: (leadingSize?.command ?? namedSize?.command) === "small"
         ? 3
         : (leadingSize?.command ?? namedSize?.command) === "footnotesize" ? 2 : 0,

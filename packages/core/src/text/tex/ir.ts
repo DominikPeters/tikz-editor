@@ -925,6 +925,8 @@ export interface SimpleTexParagraphIrOptions {
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
   /** Beamer's description label column (TexListLayoutProfile.descriptionLabelWidthPt). */
   readonly descriptionLabelWidthPt?: number;
+  /** Description columns set by a list's widest label (`\begin{description}[Longest]`), keyed by its source start. */
+  readonly descriptionLabelWidths?: ReadonlyMap<number, number>;
   /** Identifies all color alias results; change this when any alias changes. */
   readonly colorResolverCacheKey?: string;
 }
@@ -1297,7 +1299,8 @@ function buildSimpleTexParagraphIr(
   const cacheable = text.length <= PARAGRAPH_IR_MAX_SOURCE_LENGTH &&
     (!resolveColorAlias || options?.colorResolverCacheKey !== undefined) &&
     (!options?.listLeftMarginEmByDepth || options.listLeftMarginEmByDepth.every(Number.isFinite)) &&
-    [...(options?.bibliographyMargins?.values() ?? [])].every(Number.isFinite);
+    [...(options?.bibliographyMargins?.values() ?? [])].every(Number.isFinite) &&
+    [...(options?.descriptionLabelWidths?.values() ?? [])].every(Number.isFinite);
   const key = cacheable
     ? JSON.stringify([
       text,
@@ -1305,6 +1308,7 @@ function buildSimpleTexParagraphIr(
       options?.listLeftMarginEmByDepth ?? null,
       [...(options?.bibliographyMargins ?? [])],
       options?.descriptionLabelWidthPt ?? null,
+      [...(options?.descriptionLabelWidths ?? [])],
       options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes,
     ])
     : null;
@@ -1520,6 +1524,14 @@ function scanSimpleTexIrNodes(
         index
       );
       if (environmentBoundary) {
+        // A list's optional argument (beamer's widest description label,
+        // enumitem's keys) belongs to its opening, not to the text.
+        const option = environmentBoundary.boundary === "begin" && isSimpleTexListEnvironmentName(environmentBoundary.name)
+          ? syntax.argumentAfter(environmentBoundary.end, "optional", text.length)
+          : null;
+        if (option && !text.startsWith("<", option.contentSpan.from)) {
+          environmentBoundary.end = option.span.to;
+        }
         nodes.push({
           kind: "environment-boundary",
           text: text.slice(index, environmentBoundary.end),
@@ -4792,8 +4804,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ? listStack.length
       : depth - 1;
     // Beamer's description: its label column and `\labelsep` (0.5em).
-    const descriptionMargin = kind === "description" && options?.descriptionLabelWidthPt !== undefined
-      ? options.descriptionLabelWidthPt / sizeAt(sourceStart).sizePt + 0.5
+    const descriptionColumn = options?.descriptionLabelWidths?.get(sourceStart) ?? options?.descriptionLabelWidthPt;
+    const descriptionMargin = kind === "description" && options?.descriptionLabelWidthPt !== undefined && descriptionColumn !== undefined
+      ? descriptionColumn / sizeAt(sourceStart).sizePt + 0.5
       : undefined;
     const ownMargin = (kind === "bibliography" ? options?.bibliographyMargins?.get(sourceStart) : undefined) ?? descriptionMargin ?? margins[
       Math.min(marginDepthIndex, margins.length - 1)
