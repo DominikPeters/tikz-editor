@@ -72,6 +72,8 @@ export type UseCanvasElementInteractionsArgs = {
   onDeckObjectSelect?: (objectId: string) => void;
   /** Double-click on a deck object region (nested figure entry). */
   onDeckObjectActivate?: (objectId: string) => void;
+  /** A press on a drawing layer's shape on a slide: open the layer with it selected. */
+  onLayerEnter?: (entry: NonNullable<HitRegion["layerEntry"]>) => void;
 };
 
 function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGElement> | ReactMouseEvent<SVGElement>, "clientX" | "clientY">): ClientPoint {
@@ -115,7 +117,8 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     parseOptions,
     onNodePositionTargetPick,
     onDeckObjectSelect,
-    onDeckObjectActivate
+    onDeckObjectActivate,
+    onLayerEnter
   } = args;
 
   const lastDeckObjectPressRef = useRef<{ objectId: string; at: number } | null>(null);
@@ -318,6 +321,15 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         return;
       }
       if (toolMode !== "select") return;
+      if (region?.layerEntry && onLayerEnter && event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressNextBackgroundClickRef.current = true;
+        viewportRef.current?.focus({ preventScroll: true });
+        closeTextEditingSession();
+        onLayerEnter(region.layerEntry);
+        return;
+      }
       if (
         region?.shape === "rect" &&
         region.deckObjectId != null &&
@@ -486,6 +498,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       onNodePositionTargetPick,
       onDeckObjectSelect,
       onDeckObjectActivate,
+      onLayerEnter,
       expandedDensePathSourceId,
       resolveEditableTextTarget,
       selectedElementIds,

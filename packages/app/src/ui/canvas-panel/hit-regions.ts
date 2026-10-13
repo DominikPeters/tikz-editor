@@ -15,7 +15,15 @@ export type HitRegionClipPath = {
   fillRule: "nonzero" | "evenodd";
 };
 
-export type HitRegion =
+/** What every region may carry besides its shape. */
+type HitRegionPlacement = {
+  /** Drawn shifted by this much: a drawing layer's shapes, in its own SVG coordinates, on its slide. */
+  offset?: { x: number; y: number };
+  /** On a slide: pressing it opens this drawing layer with the shape selected. */
+  layerEntry?: { rootId: string; sourceId: string };
+};
+
+export type HitRegion = HitRegionPlacement & (
   | {
       shape: "path";
       key: string;
@@ -81,7 +89,7 @@ export type HitRegion =
         selectionIds: string[];
         cursor: "e-resize" | "s-resize";
       };
-    };
+    });
 
 export type ScopeHitBounds = {
   scopeId: string;

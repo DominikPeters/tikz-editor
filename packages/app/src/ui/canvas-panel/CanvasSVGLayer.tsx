@@ -9,12 +9,14 @@ export function CanvasSVGLayer(params: {
   model: SvgRenderModel | null;
   diffHints?: SvgDiffHints;
   forceReplaceAll: boolean;
+  /** Drawn over a slide (a drawing layer): no page of its own. */
+  overBackdrop?: boolean;
   showTransparencyGrid: boolean;
   showDocumentBounds: boolean;
   onFallback: (reason: "replaceDefs" | "replaceAll" | "patch-failure") => void;
   hostRef?: RefObject<HTMLDivElement | null>;
 }) {
-  const { model, diffHints, forceReplaceAll, showTransparencyGrid, showDocumentBounds, onFallback, hostRef: externalHostRef } = params;
+  const { model, diffHints, forceReplaceAll, overBackdrop, showTransparencyGrid, showDocumentBounds, onFallback, hostRef: externalHostRef } = params;
   const internalHostRef = useRef<HTMLDivElement | null>(null);
   const patcherRef = useRef<SvgDomPatcher | null>(null);
   const previousModelRef = useRef<SvgRenderModel | null>(null);
@@ -85,8 +87,8 @@ export function CanvasSVGLayer(params: {
 
   const className = [
     css.svgLayer,
-    showDocumentBounds ? "" : css.svgLayerNoDocumentBounds,
-    showTransparencyGrid ? css.svgLayerTransparencyGrid : ""
+    overBackdrop ? css.svgLayerOverBackdrop : showDocumentBounds ? "" : css.svgLayerNoDocumentBounds,
+    !overBackdrop && showTransparencyGrid ? css.svgLayerTransparencyGrid : ""
   ].filter(Boolean).join(" ");
   return (
     <div

@@ -56,7 +56,7 @@ import {
 } from "./panel-helpers";
 
 export type UseCanvasSelectionDerivedStateArgs = {
-  snapshot: Pick<CanvasSnapshot, "source" | "editHandles" | "scene" | "parseResult" | "semanticResult">;
+  snapshot: Pick<CanvasSnapshot, "source" | "editHandles" | "scene" | "parseResult" | "semanticResult" | "overlayLayer">;
   selectedElementIds: ReadonlySet<string>;
   collapsedDensePathSourceIds: ReadonlySet<string>;
   svgResult: CanvasSnapshot["svg"];
@@ -509,7 +509,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     }
     const statements = snapshot.parseResult?.figure.body;
     const geometry = snapshot.parseResult && snapshot.semanticResult && scopeResizeSourceIds.size > 0
-      ? createEditGeometrySession({ source: snapshot.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { textEngine: args.textEngine })
+      ? createEditGeometrySession({ source: snapshot.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { textEngine: args.textEngine, ...snapshot.overlayLayer?.evaluate })
       : null;
     for (const sourceId of resizeFrameSourceIds) {
       if (scopeResizeSourceIds.has(sourceId)) {

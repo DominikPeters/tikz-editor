@@ -201,6 +201,8 @@ type CanvasPanelViewProps = {
     figureLabel: string;
     onExit: () => void;
   } | null;
+  /** While a drawing layer is edited: its slide without it, an SVG of the page under the picture. */
+  layerBackdropSvg: string | null;
   RULER_SIZE: number;
   magnifierState: MagnifierState | null;
 };
@@ -314,6 +316,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
     selectionHint,
     deckStepper,
     nestedFigureBreadcrumb,
+    layerBackdropSvg,
     RULER_SIZE,
     magnifierState
   } = props;
@@ -508,10 +511,18 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 transform: `translate(${canvasTransform.translateX}px, ${canvasTransform.translateY}px)`
               }}
             >
+              {layerBackdropSvg != null ? (
+                <div
+                  className={css.layerBackdrop}
+                  data-testid="canvas-layer-backdrop"
+                  dangerouslySetInnerHTML={{ __html: layerBackdropSvg }}
+                />
+              ) : null}
               <CanvasSVGLayer
                 model={svgModel}
                 diffHints={svgDiffHints}
                 forceReplaceAll={forceSvgReplaceAll}
+                overBackdrop={layerBackdropSvg != null}
                 showTransparencyGrid={showTransparencyGrid}
                 showDocumentBounds={showDocumentBounds}
                 onFallback={onSvgPatchFallback}

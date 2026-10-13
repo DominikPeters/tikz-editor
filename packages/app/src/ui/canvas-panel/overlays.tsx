@@ -606,6 +606,9 @@ const HitRegionShape = memo(function HitRegionShape({
   for (const svgId of clipIds ? clipIds.split(" ") : []) {
     shape = <g clipPath={`url(#${svgId})`}>{shape}</g>;
   }
+  if (region.offset) {
+    shape = <g transform={`translate(${fmt(region.offset.x)} ${fmt(region.offset.y)})`}>{shape}</g>;
+  }
   return shape;
 });
 

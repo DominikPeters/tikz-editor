@@ -86,6 +86,7 @@ import type { PlacementSegment } from "./path/types.js";
 import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
 import { parseNodeDistance } from "./path/node-positioning.js";
+import { parseFontStyle } from "./style/option-utils.js";
 import { DEFAULT_TEXT_FONT_SIZE, defaultStyle, commandDefaultStyle, parseStyleValueAsOptionList, resolveContextDelta } from "./style/resolve.js";
 import { normalizeOptionValue } from "./style/option-utils.js";
 import { styleDiagnosticCode, styleDiagnosticSpan, type StyleDiagnostic } from "./style/diagnostics.js";
@@ -170,6 +171,8 @@ export type SemanticEvaluationRun = {
   statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>;
   templateLocalIdByExpandedId: Map<string, string>;
   rootFramePushed: boolean;
+  /** The transform the picture's own options set, when not the identity. */
+  rootTransform?: WorldTransform;
   baseDiagnosticsCount: number;
   scopeSteps: WeakMap<Statement, "enter" | "leave">;
   geometryCheckpoints: Map<number, SemanticContextSnapshot>;
@@ -242,8 +245,9 @@ export function createSemanticEvaluationRun(
   const diagnostics: Diagnostic[] = [];
   const featureUsage = initializeFeatureUsage();
   markForeachFeaturesFromFigure(figure, featureUsage);
+  const initialFont = opts.initialFont ? parseFontStyle(opts.initialFont) : null;
   const context = createSemanticContext(
-    defaultStyle(),
+    initialFont ? { ...defaultStyle(), ...initialFont } : defaultStyle(),
     identityMatrix(),
     opts.textEngine ?? null,
     source,
@@ -387,8 +391,14 @@ export function createSemanticEvaluationRun(
     statementMacroAttribution: expanded.statementMacroAttribution,
     templateLocalIdByExpandedId: expanded.templateLocalIdByExpandedId,
     rootFramePushed,
+    ...(rootFramePushed && !isIdentityTransform(currentFrame(context).transform) ? { rootTransform: currentFrame(context).transform } : {}),
     baseDiagnosticsCount: diagnostics.length
   };
+}
+
+function isIdentityTransform(transform: WorldTransform): boolean {
+  return transform.a === 1 && transform.b === 0 && transform.c === 0 && transform.d === 1 &&
+    Number(transform.e) === 0 && Number(transform.f) === 0;
 }
 
 export function evaluateSemanticStatementByIndex(
@@ -577,7 +587,8 @@ export function finalizeSemanticEvaluationRun(
         run.featureUsage.path_clipping === "used-supported" ||
         run.featureUsage.use_as_bounding_box === "used-supported" ||
         run.featureUsage.backgrounds_library === "used-supported" ||
-        run.context.backgroundState.used
+        run.context.backgroundState.used,
+      ...(run.rootTransform ? { rootTransform: run.rootTransform } : {})
     },
     diagnostics: run.diagnostics,
     featureUsage: run.featureUsage,

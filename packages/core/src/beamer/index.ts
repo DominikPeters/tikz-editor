@@ -74,11 +74,18 @@ export {
   scanBeamerFrameOverlays,
 } from "./overlay.js";
 export {
+  beamerTikzFontCommand,
   prepareBeamerDocument,
   renderBeamerFrame,
   renderBeamerFramePages,
   type PreparedBeamerDocument,
 } from "./render.js";
+export {
+  BEAMER_DRAWING_LAYER,
+  beamerDrawingLayerInsertions,
+  beamerOverlayPicturesIn,
+  type BeamerOverlayPicture,
+} from "./overlay-pictures.js";
 export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
 export { scanBeamerNoteCommands, beamerSpeakerNotes, type BeamerNoteCommand } from "./notes.js";
 export {

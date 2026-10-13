@@ -59,6 +59,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
   const isDesktop = getActiveEditorPlatform().id.startsWith("desktop");
   const isMacDesktop = isDesktop && isMacLikePlatform();
   const showAppTitle = !isDesktop;
+  // On a slide a drawing tool opens its drawing layer; leaving the layer puts the tool down.
   useEffect(() => {
     if (!drawingSurface && toolMode !== "select" && toolMode !== "magnify") dispatch({ type: "SET_TOOL_MODE", mode: "select" });
   }, [drawingSurface, toolMode, dispatch]);
@@ -362,7 +363,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
 
       <div className={css.group}>
         <NewSlideButton />
-        {TOOL_BUTTONS.filter(tool => drawingSurface || tool.mode === "select" || tool.mode === "magnify").flatMap((toolDef) => {
+        {TOOL_BUTTONS.flatMap((toolDef) => {
           const separator = toolDef.separatorBefore ? <div key={`sep-${toolDef.mode}`} className={css.separator} /> : null;
           // Special handling for bucket and shape buttons
           let button;

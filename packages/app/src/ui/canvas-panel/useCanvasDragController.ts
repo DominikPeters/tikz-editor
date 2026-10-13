@@ -128,6 +128,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     svgResult,
     dragRef,
     suppressNextBackgroundClickRef,
+    onEmptyClick,
     svgResultRef,
     interactionSvgRef,
     liveResizeFramesRef,
@@ -1136,6 +1137,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
           if (!drag.additive) {
             dispatch({ type: "CLEAR_SELECTION" });
           }
+          onEmptyClick?.(drag.additive);
         } else if (currentSvg) {
           commitMarqueeSelection(drag, finalWorld, currentSvg);
           suppressNextBackgroundClickRef.current = true;

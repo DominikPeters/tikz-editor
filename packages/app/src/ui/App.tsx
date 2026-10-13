@@ -1810,8 +1810,7 @@ function EditorApp() {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         const shortcutMode = toolModeFromShortcut(key);
         if (shortcutMode) {
-          const state = useEditorStore.getState();
-          if (state.documentKind === "beamer" && parseDocumentRootId(state.activeRootId ?? "")?.kind !== "beamer-frame-tikz" && shortcutMode !== "select" && shortcutMode !== "magnify") return;
+          // On a slide, a drawing tool opens the slide's drawing layer (the reducer's SET_TOOL_MODE).
           dispatch({ type: "SET_TOOL_MODE", mode: shortcutMode });
           e.preventDefault();
           return;

@@ -18,6 +18,7 @@ import type { SimpleTexGraphicsOptions } from "../text/tex/ir.js";
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import type { SvgRect } from "../coords/index.js";
 import type { CooperativeWorkOptions } from "../semantic/cooperative-work.js";
+import type { SceneElement } from "../semantic/types.js";
 
 export type BeamerDelimitedSourceValue = {
   /** Span including the delimiters. */
@@ -397,7 +398,19 @@ export type BeamerEmbeddedTikzLayout = {
   viewBox: SvgViewBox;
   model: SvgRenderModel;
   /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
-  overlayPicture?: true;
+  overlay?: BeamerOverlayPictureLayout;
+};
+
+/** An overlay picture on the page: a drawing layer the slide edits in place. */
+export type BeamerOverlayPictureLayout = {
+  /** Its layer root id, `frame:i:overlay:j`. */
+  rootId: string;
+  /** Its origin, TikZ's (0,0), on the page (pt, y down). */
+  origin: { x: number; y: number };
+  rememberPicture: boolean;
+  /** What it draws, in its own coordinates; source spans are relative to `sourceOffset`. */
+  elements: readonly SceneElement[];
+  sourceOffset: number;
 };
 
 export type BeamerGraphicsLayout = {

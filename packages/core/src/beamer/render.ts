@@ -97,6 +97,7 @@ import {
   type BeamerOverlayVisibility,
 } from "./overlay.js";
 import { scanBeamerDocumentWithSyntax } from "./scan.js";
+import { formatDocumentRootId } from "../document/root-id.js";
 import { createBeamerSyntaxContext, type BeamerSyntaxContext } from "./syntax.js";
 import { beamerSpeakerNotes, projectBeamerSpeakerNotes, scanBeamerNoteCommands, type BeamerNoteCommand } from "./notes.js";
 import { beamerOverlayPictureOrigin, beamerOverlayPicturesIn, projectBeamerOverlayPictureBoxes } from "./overlay-pictures.js";
@@ -925,6 +926,7 @@ async function renderBeamerFrameStep(params: {
   await emitBeamerOverlayPictures({
     context: { source, syntax: context.syntax },
     frameId: frame.id,
+    frameIndex,
     bodySpan: frame.bodySpan,
     paragraphs: paragraphs.slice(bodyParagraphStart, bodyParagraphEnd),
     bodyTransform,
@@ -950,7 +952,7 @@ async function renderBeamerFrameStep(params: {
   // the scan model. Rebind each published picture item to the scan child
   // whose begin token it contains.
   for (const item of items) {
-    if (item.kind !== "tikzpicture") {
+    if (item.kind !== "tikzpicture" || item.overlayPicture) {
       continue;
     }
     const child = frame.children.find(
@@ -3469,6 +3471,7 @@ async function prepareEmbeddedTikz(params: {
 async function emitBeamerOverlayPictures(params: {
   context: BeamerSyntaxContext;
   frameId: string;
+  frameIndex: number;
   bodySpan: Span;
   paragraphs: readonly BeamerParagraphLayout[];
   bodyTransform: BeamerPaintTransform | undefined;
@@ -3498,7 +3501,7 @@ async function emitBeamerOverlayPictures(params: {
     // A shrunk body scales its boxes; the picture is drawn at its box's place.
     const origin = params.bodyTransform ? transformBeamerPoint(params.bodyTransform, intrinsic) : intrinsic;
     const rendered = await renderTikzToSvgAsync(
-      applyThemeFamilyToTikz(params.context.source.slice(picture.span.from, picture.span.to), params.font),
+      params.context.source.slice(picture.span.from, picture.span.to),
       {
         textEngine,
         graphicsResolver: params.graphicsResolver,
@@ -3507,6 +3510,7 @@ async function emitBeamerOverlayPictures(params: {
         // With `remember picture`, PGF knows where the picture is on the page;
         // without, `current page` takes the picture's origin for the page's corner.
         evaluate: {
+          initialFont: beamerTikzFontCommand(params.font),
           currentPage: picture.rememberPicture
             ? { minX: -origin.x, minY: origin.y - params.page.height, maxX: params.page.width - origin.x, maxY: origin.y }
             : { minX: 0, minY: 0, maxX: params.page.width, maxY: params.page.height },
@@ -3537,8 +3541,15 @@ async function emitBeamerOverlayPictures(params: {
       embeddedTikz: params.embeddedTikz,
       modelBuilder: params.modelBuilder,
     });
-    params.items[params.items.length - 1].overlayPicture = true;
-    params.embeddedTikz[params.embeddedTikz.length - 1].overlayPicture = true;
+    const rootId = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: params.frameIndex, index, layer: true });
+    Object.assign(params.items[params.items.length - 1], { overlayPicture: true, rootId });
+    params.embeddedTikz[params.embeddedTikz.length - 1].overlay = {
+      rootId,
+      origin,
+      rememberPicture: picture.rememberPicture,
+      elements: rendered.semantic.scene.elements,
+      sourceOffset: picture.span.from,
+    };
   }
 }
 
@@ -4564,6 +4575,21 @@ function applyThemeFamilyToTikz(
   source: string,
   font: BeamerThemeFont
 ): string {
+  const command = beamerTikzFontCommand(font);
+  return source.replace(
+    /\\begin\s*\{tikzpicture\}(?:\s*\[([^\]]*)\])?/,
+    (_whole, options: string | undefined) =>
+      `\\begin{tikzpicture}[${options ? `${options},` : ""}font=${command}]`
+  );
+}
+
+/**
+ * The font a TikZ picture in Beamer text starts with, as a `font=` value. It
+ * inherits the surrounding frame font before its root options execute; the
+ * embedded renderer starts from a standalone 10pt context, so this projects
+ * the complete resolved Beamer role, not just its family.
+ */
+export function beamerTikzFontCommand(font: BeamerThemeFont): string {
   const family =
     font.family === "sans"
       ? String.raw`\sffamily`
@@ -4578,21 +4604,11 @@ function applyThemeFamilyToTikz(
       : font.shape === "slanted"
         ? String.raw`\slshape`
         : String.raw`\upshape`;
-  // A TikZ picture inherits the surrounding frame font before its root
-  // options execute. The embedded renderer starts from a standalone 10pt
-  // context, so project the complete resolved Beamer role—not just its
-  // family—onto the picture's root font option.
-  const command =
-    `\\fontsize{${fmt(font.sizePt)}pt}{${fmt(font.lineHeightPt)}pt}` +
+  return `\\fontsize{${fmt(font.sizePt)}pt}{${fmt(font.lineHeightPt)}pt}` +
     String.raw`\selectfont` +
     family +
     series +
     shape;
-  return source.replace(
-    /\\begin\s*\{tikzpicture\}(?:\s*\[([^\]]*)\])?/,
-    (_whole, options: string | undefined) =>
-      `\\begin{tikzpicture}[${options ? `${options},` : ""}font=${command}]`
-  );
 }
 
 function hideOverlayPaintInSvg(

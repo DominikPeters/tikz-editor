@@ -697,7 +697,8 @@ function assembleSelectiveSemanticResult(args: {
     // As a full evaluation: clipping and `use as bounding box` paths bound the picture, not all of its elements.
     bounds: run.context.pictureBounds ?? computeBounds(elements),
     hasStatefulGraphicsState:
-      finalFeatureUsage.path_clipping === "used-supported" || finalFeatureUsage.use_as_bounding_box === "used-supported"
+      finalFeatureUsage.path_clipping === "used-supported" || finalFeatureUsage.use_as_bounding_box === "used-supported",
+    ...(run.rootTransform ? { rootTransform: run.rootTransform } : {})
   };
   for (const libraryName of scene.requiredTikzLibraries) {
     requireContextLibrary(run.context, libraryName, null);

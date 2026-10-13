@@ -11,6 +11,10 @@
  * - `frame:${index}` — a Beamer frame root.
  * - `frame:${frameIndex}:tikzpicture:${index}` — a TikZ picture nested in a
  *   Beamer frame.
+ * - `frame:${frameIndex}:overlay:${index}` — the frame's `index`-th TikZ
+ *   `overlay` picture, drawn over the page: a drawing layer edited in place on
+ *   the slide. When the frame has none, index 0 is the layer a first drawing
+ *   creates.
  *
  * Ids may carry a descendant suffix after the root prefix (for example
  * `figure:2:node:5`); parsing resolves the owning root.
@@ -22,7 +26,10 @@ export type DocumentRootRef =
   | {
       readonly kind: "beamer-frame-tikz";
       readonly frameIndex: number;
+      /** Among the frame's pictures, or among its overlay pictures for a layer. */
       readonly index: number;
+      /** A drawing layer: an overlay picture, edited in place on the slide. */
+      readonly layer?: true;
     };
 
 export type DocumentRootKind = DocumentRootRef["kind"];
@@ -34,7 +41,7 @@ export function formatDocumentRootId(ref: DocumentRootRef): string {
     case "beamer-frame":
       return `frame:${ref.index}`;
     case "beamer-frame-tikz":
-      return `frame:${ref.frameIndex}:tikzpicture:${ref.index}`;
+      return `frame:${ref.frameIndex}:${ref.layer ? "overlay" : "tikzpicture"}:${ref.index}`;
   }
 }
 
@@ -53,10 +60,12 @@ export function parseDocumentRootId(id: string): DocumentRootRef | null {
     return { kind: "tikz-figure", index };
   }
   if (segments[0] === "frame") {
-    if (segments[2] === "tikzpicture") {
+    if (segments[2] === "tikzpicture" || segments[2] === "overlay") {
       const nestedIndex = parseIndexSegment(segments[3]);
       if (nestedIndex !== null) {
-        return { kind: "beamer-frame-tikz", frameIndex: index, index: nestedIndex };
+        return segments[2] === "overlay"
+          ? { kind: "beamer-frame-tikz", frameIndex: index, index: nestedIndex, layer: true }
+          : { kind: "beamer-frame-tikz", frameIndex: index, index: nestedIndex };
       }
     }
     return { kind: "beamer-frame", index };

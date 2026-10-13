@@ -920,6 +920,34 @@ describe("editorReducer – SET_TOOL_MODE", () => {
     const after = editorReducer(initial, { type: "SET_TOOL_MODE", mode: "select" });
     expect(after).toBe(initial);
   });
+
+  it("opens the slide's drawing layer for a drawing tool, the one there or the one to come", async () => {
+    const source = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{A}
+Text.
+\begin{tikzpicture}[overlay]\draw (0,0) -- (1,1);\end{tikzpicture}
+\begin{tikzpicture}[remember picture, overlay]\draw (0,0) -- (1,1);\end{tikzpicture}
+\end{frame}
+\begin{frame}{B}
+Text.
+\end{frame}
+\end{document}`;
+    const loaded = applyActions([{ type: "CODE_EDITED", source }]);
+    for (const [frame, layer] of [["frame:0", "frame:0:overlay:1"], ["frame:1", "frame:1:overlay:0"]] as const) {
+      const { snapshot } = await computeSnapshot({ id: frame, source, activeRootId: frame });
+      const shown = applyActions([
+        { type: "SET_ACTIVE_ROOT", rootId: frame },
+        { type: "COMPUTE_REQUESTED", requestId: frame },
+        { type: "SNAPSHOT_READY", requestId: frame, snapshot }
+      ], loaded);
+      expect(editorReducer(shown, { type: "SET_TOOL_MODE", mode: "magnify" }).activeRootId).toBe(frame);
+      const drawing = editorReducer(shown, { type: "SET_TOOL_MODE", mode: "addRect" });
+      expect(drawing.toolMode).toBe("addRect");
+      expect(drawing.activeRootId).toBe(layer);
+    }
+  });
 });
 
 describe("editorReducer – SET_FREEHAND_SMOOTHING", () => {

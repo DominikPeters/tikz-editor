@@ -91,6 +91,8 @@ export type SceneFigure = {
   elements: SceneElement[];
   bounds?: WorldBounds;
   hasStatefulGraphicsState?: boolean;
+  /** What the picture's own options do to its coordinates (`shift`, `scale`, …): its statements' world. Absent when nothing. */
+  rootTransform?: WorldTransform;
 };
 
 export type SceneLayer = {
@@ -520,6 +522,8 @@ export type EvaluateOptions = {
    * on a page is known: PGF's `current page` node.
    */
   currentPage?: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
+  /** The font the picture's surroundings set (a `font=` value), before its own options. */
+  initialFont?: string;
 };
 
 export type { CoordinateForm };

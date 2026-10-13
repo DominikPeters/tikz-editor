@@ -8,6 +8,9 @@ describe("document and presentation menus", () => {
     const deck = appMenuForDocument(APP_MENU_DEFINITION, { kind: "beamer", nestedDrawing: false, presenting: false });
     expect(deck.some(section => section.id === "present")).toBe(true);
     expect(deck.some(section => section.id === "path")).toBe(false);
+    // On a slide, Insert's drawing tools open the slide's drawing layer.
+    const insert = deck.find(section => section.id === "insert")!;
+    expect(insert.items.some(item => item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.INSERT_RECT)).toBe(true);
     const nested = appMenuForDocument(APP_MENU_DEFINITION, { kind: "beamer", nestedDrawing: true, presenting: false });
     expect(nested.some(section => section.id === "path")).toBe(true);
     expect(nested.some(section => section.id === "present")).toBe(true);

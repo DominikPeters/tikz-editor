@@ -1,5 +1,6 @@
 import { applyEditAction, type EditAction, type EditActionResult } from "@tikz-editor/core/edit/actions";
-import { applyDeckEditAction, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
+import { applyDeckEditAction, beamerOverlayPicturesIn, isDeckEditAction, scanBeamerDocument, type DeckEditAction } from "@tikz-editor/core/beamer/index";
+import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
@@ -52,18 +53,50 @@ export function executeDocumentEdit(
   if (nested && (!span || (!propertyEdit && !options.geometry && snapshot.source !== source))) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
-  const editSource = span ? maskSourceOutsideSpan(source, span) : source;
+  // A drawing layer the frame does not have yet is edited in the source with it inserted.
+  const layer = nested ? snapshot.overlayLayer ?? null : null;
+  const insertion = layer?.insertion ?? null;
+  if (insertion && snapshot.source !== source) {
+    return { kind: "unsupported", reason: "The figure is still catching up." };
+  }
+  const working = insertion ? insertLayer(source, insertion) : source;
+  const editSource = span ? maskSourceOutsideSpan(working, span) : source;
   const parseOptions = buildEditParseOptions({ ...context, source: editSource, activeRootId: span ? snapshot.activeRootId : activeRootId, analysis: "none", overrides: options.parseOptions });
-  const evaluateOptions = { ...options.evaluateOptions, sourceFingerprint: parseOptions.sourceFingerprint };
+  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, sourceFingerprint: parseOptions.sourceFingerprint };
   const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.activeRootId === parseOptions.activeFigureId;
   const geometry = options.geometry ?? (snapshotMatchesRoot && snapshot.source === source && snapshot.parseResult && snapshot.semanticResult
     ? createEditGeometrySession({ source: editSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, evaluateOptions, parseOptions)
     : undefined);
   const result = applyEditAction(editSource, snapshot.editHandles, action, { geometry, parseOptions, evaluateOptions });
   if (!span || (result.kind !== "success" && result.kind !== "partial")) return result;
-  const replay = applySourcePatches(source, result.patches);
-  return replay.kind === "success" ? { ...result, newSource: replay.source }
-    : { kind: "error", message: "The figure edit did not apply cleanly." };
+  const replay = applySourcePatches(working, result.patches);
+  if (replay.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
+  if (!insertion) return { ...result, newSource: replay.source };
+  // The first drawing inserts the layer: one patch, the layer as drawn on.
+  const end = insertion.at + insertion.text.length;
+  if (result.patches.some((patch) => patch.oldSpan.from < insertion.at || patch.oldSpan.to > end)) {
+    return { kind: "error", message: "The figure edit did not apply cleanly." };
+  }
+  const replacement = replay.source.slice(insertion.at, end + replay.source.length - working.length);
+  return {
+    ...result,
+    newSource: replay.source,
+    patches: [{ oldSpan: { from: insertion.at, to: insertion.at }, newSpan: { from: insertion.at, to: insertion.at + replacement.length }, replacement }],
+    changedSourceIds: undefined
+  };
+}
+
+/**
+ * The source a nested picture's edits apply to: the document's, or for a
+ * drawing layer still to come, the document's with the layer inserted.
+ */
+export function nestedEditBaseSource(source: string, snapshot: SessionSnapshot): string {
+  const insertion = snapshot.overlayLayer?.insertion;
+  return insertion && snapshot.source === source ? insertLayer(source, insertion) : source;
+}
+
+function insertLayer(source: string, insertion: { at: number; text: string }): string {
+  return source.slice(0, insertion.at) + insertion.text + source.slice(insertion.at);
 }
 
 /** Property previews can outpace rendering; resolve their current picture span. */
@@ -74,5 +107,9 @@ export function resolveNestedEditSpan(context: EditExecutionContext): Span | nul
   if (snapshot.source === source) {
     return snapshot.figures.find(figure => figure.id === snapshot.activeRootId)?.span ?? null;
   }
-  return scanBeamerDocument(source).frames[ref.frameIndex]?.children[ref.index]?.span ?? null;
+  const frame = scanBeamerDocument(source).frames[ref.frameIndex];
+  if (!frame) return null;
+  return ref.layer
+    ? beamerOverlayPicturesIn(createBeamerSyntaxContext(source), frame.bodySpan)[ref.index]?.span ?? null
+    : frame.children[ref.index]?.span ?? null;
 }

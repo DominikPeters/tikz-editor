@@ -14,6 +14,7 @@ import type { AssistantItem } from "../platform/types";
 import { deriveSingleSourcePatch } from "./source-patch-diff";
 import { applySourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+import { deckDrawingLayerRootId } from "../drawing-layer";
 import {
   createDocumentSession,
   createInitialWorkspaceState,
@@ -1392,11 +1393,22 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       break;
     }
 
-    case "SET_TOOL_MODE":
-      if (readDocument(workspace.documents, activeId)?.assistantLockReason) return state;
-      if (ui.toolMode === action.mode) return state;
+    case "SET_TOOL_MODE": {
+      const doc = readDocument(workspace.documents, activeId);
+      if (doc?.assistantLockReason) return state;
+      // A drawing tool on a slide opens the slide's drawing layer.
+      const layerRootId = doc && action.mode !== "select" && action.mode !== "magnify" && documentKindForSource(doc.source) === "beamer"
+        ? deckDrawingLayerRootId(doc.activeRootId, doc.snapshot)
+        : null;
+      if (ui.toolMode === action.mode && !layerRootId) return state;
       ui = { ...ui, toolMode: action.mode };
+      if (layerRootId) {
+        workspace = updateDocument(workspace, activeId, (current) => ({
+          ...current, activeRootId: layerRootId, deckSlideSelection: undefined, hasInitializedRootSelection: true
+        }));
+      }
       break;
+    }
 
     case "SET_CANVAS_TRANSFORM":
       ui = { ...ui, canvasTransform: action.transform };

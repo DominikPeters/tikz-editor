@@ -156,3 +156,48 @@ export function beamerOverlayPictureOrigin(
   }
   return null;
 }
+
+/** A new drawing layer: coordinates in cm from the page's lower-left corner. */
+export const BEAMER_DRAWING_LAYER = String.raw`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]` +
+  "\n" + String.raw`\end{tikzpicture}`;
+
+/** Environments a layer may be set inside of, at the end of their last text. */
+const LAYER_HOSTS = new Set(["itemize", "enumerate", "description", "block", "alertblock", "exampleblock", "column", "columns"]);
+
+/**
+ * Where a frame's new drawing layer can go, in order of preference. First,
+ * after the body's last text (inside the lists, blocks and columns it ends
+ * in), joined to it by `%`: its empty box then ends a line already there and
+ * moves nothing. That fails where the last thing is not text (a display, a
+ * `\vspace`); the caller checks by laying the frame out. Second, a paragraph
+ * of its own at the body's end, which TeX sets as an empty line.
+ */
+export function beamerDrawingLayerInsertions(
+  context: BeamerSyntaxContext,
+  bodySpan: Span
+): Array<{ at: number; text: string }> {
+  const source = context.source;
+  const ends = new Map(
+    beamerEnvironmentBoundariesIn(context, bodySpan)
+      .filter((token) => token.kind === "end" && LAYER_HOSTS.has(token.name))
+      .map((token) => [token.span.to, token.span.from] as const)
+  );
+  let at = bodySpan.to;
+  for (;;) {
+    while (at > bodySpan.from && /\s/u.test(source[at - 1])) at -= 1;
+    const lineStart = source.lastIndexOf("\n", at - 1) + 1;
+    if (at > bodySpan.from && /^\s*%/u.test(source.slice(Math.max(lineStart, bodySpan.from), at))) {
+      at = Math.max(lineStart, bodySpan.from);
+      continue;
+    }
+    const end = ends.get(at);
+    if (end == null) break;
+    at = end;
+  }
+  let last = bodySpan.to;
+  while (last > bodySpan.from && /\s/u.test(source[last - 1])) last -= 1;
+  const alone = last === bodySpan.from
+    ? { at: bodySpan.from, text: "\n" + BEAMER_DRAWING_LAYER }
+    : { at: last, text: "\n\n" + BEAMER_DRAWING_LAYER };
+  return at > bodySpan.from ? [{ at, text: "%\n" + BEAMER_DRAWING_LAYER }, alone] : [alone];
+}

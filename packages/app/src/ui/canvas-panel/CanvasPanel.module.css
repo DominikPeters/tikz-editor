@@ -171,6 +171,36 @@
   cursor: default;
 }
 
+/* A drawing layer's slide, under the layer's own transparent SVG. */
+.layerBackdrop {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  user-select: none;
+}
+
+.layerBackdrop :global(svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.svgLayerOverBackdrop {
+  background: transparent;
+  box-shadow: none;
+}
+
+:global([data-canvas-invert]) .layerBackdrop {
+  background: #e8e8e8;
+  filter: invert(1) hue-rotate(180deg);
+}
+
+:global([data-canvas-invert]) .svgLayer.svgLayerOverBackdrop {
+  background: transparent;
+}
+
 .svgLayer,
 .svgLayer * {
   -webkit-user-select: none;

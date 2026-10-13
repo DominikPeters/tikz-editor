@@ -34,8 +34,8 @@ describe("Beamer overlay pictures", () => {
     const rendered = await renderBeamerFrame(source, { frameIndex: 0 });
     const pictures = rendered.layout.items.filter(item => item.kind === "tikzpicture");
     expect(pictures).toHaveLength(1);
-    expect(pictures[0]).toMatchObject({ overlayPicture: true, rootId: "frame:0:tikzpicture:0" });
-    expect(rendered.layout.embeddedTikz[0].overlayPicture).toBe(true);
+    expect(pictures[0]).toMatchObject({ overlayPicture: true, rootId: "frame:0:overlay:0" });
+    expect(rendered.layout.embeddedTikz[0].overlay).toMatchObject({ rootId: "frame:0:overlay:0", rememberPicture: true });
     // The page rectangle is drawn around the page.
     expect(pictures[0].bounds.x).toBeLessThan(0);
     expect(pictures[0].bounds.x + pictures[0].bounds.width).toBeGreaterThan(rendered.layout.page.page.width);

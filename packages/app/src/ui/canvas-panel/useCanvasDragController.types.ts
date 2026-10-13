@@ -35,6 +35,8 @@ export type UseCanvasDragControllerParams = {
   svgResult: { viewBox: SvgViewBox } | null;
   dragRef: { current: DragState | null };
   suppressNextBackgroundClickRef: { current: boolean };
+  /** A press and release on nothing (a marquee that did not move), after the selection is cleared. */
+  onEmptyClick?: (additive: boolean) => void;
   svgResultRef: { current: { viewBox: SvgViewBox } | null };
   interactionSvgRef: { current: SVGSVGElement | null };
   liveResizeFramesRef: { current: ReadonlyMap<string, ResizeFrame | null> };

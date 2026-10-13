@@ -28,7 +28,7 @@ import type { ForeachOriginFrame } from "@tikz-editor/core/semantic/types";
 import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { EditorAction, EditorState } from "../store/types";
 import { beginDocumentEdit, canContinueDocumentEdit, type DocumentEditSession } from "../edit-session";
-import { executeDocumentEdit, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
+import { executeDocumentEdit, nestedEditBaseSource, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
 import { buildEditParseOptions } from "../edit-parse-options";
 import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
 import { useEditorStore } from "../store/store";
@@ -108,7 +108,7 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
     activeRootId: session.activeRootId, snapshot: document.snapshot
   };
   const nestedSpan = resolveNestedEditSpan(editContext);
-  const parseSource = nestedSpan ? maskSourceOutsideSpan(context.source, nestedSpan) : context.source;
+  const parseSource = nestedSpan ? maskSourceOutsideSpan(nestedEditBaseSource(context.source, document.snapshot), nestedSpan) : context.source;
   return {
     ...context,
     getState,

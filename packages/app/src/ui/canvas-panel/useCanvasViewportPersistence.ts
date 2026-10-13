@@ -28,6 +28,8 @@ export type UseCanvasViewportPersistenceArgs = {
   dispatchCanvasTransform: (transform: CanvasTransform) => void;
   activeDocumentId: string;
   activeRootId: string | null;
+  /** The root whose view this is, when not the active root's own (a drawing layer shows its slide's). */
+  viewportRootId?: string | null;
   snapshotActiveRootId: string | null;
   tabOrder: readonly string[];
   canvasTransform: CanvasTransform;
@@ -59,6 +61,7 @@ export function useCanvasViewportPersistence({
   dispatchCanvasTransform,
   activeDocumentId,
   activeRootId,
+  viewportRootId = activeRootId,
   snapshotActiveRootId,
   tabOrder,
   canvasTransform,
@@ -147,8 +150,8 @@ export function useCanvasViewportPersistence({
   }, [baseSvgResult, canvasTransformRef, dispatchCanvasTransform, fitPadding, MAX_SCALE, measuredSize, MIN_SCALE, snapshotMatchesActive, svgResult, viewportRef]);
 
   const activeFigureViewportKey = useMemo(
-    () => rootKey(activeDocumentId, activeRootId),
-    [activeDocumentId, activeRootId]
+    () => rootKey(activeDocumentId, viewportRootId),
+    [activeDocumentId, viewportRootId]
   );
   const saveFigureViewportState = useCallback(
     (key: string, transform: CanvasTransform, fitToContentActive: boolean) => {

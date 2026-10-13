@@ -26,7 +26,7 @@ export function appMenuForDocument(definition: AppMenuDefinition, context: { kin
         if (launch ? !deck || context.presenting : item.commandId !== IDS.PRESENT_OPTIONS && !context.presenting) return [];
       }
       if (!deck && item.commandId === IDS.TOGGLE_BUILDS_PANEL) return [];
-      if (!drawing && section.id === "insert" && item.commandId !== IDS.INSERT_EQUATION) return [];
+      // On a slide, Insert's drawing tools open the slide's drawing layer.
       if (!drawing && item.commandId === IDS.SHOW_COMPILED_PICTURE) return [];
       if (item.commandId === IDS.TOGGLE_FIGURES_PANEL) return [{ ...item, label: deck ? "Slides Panel" : "Figures Panel" }];
       if (item.commandId === IDS.CLOSE_DOCUMENT && context.focus && context.focus !== "editor") return [{ ...item, label: "Close Window" }];

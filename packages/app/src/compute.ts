@@ -14,7 +14,7 @@ import {
   type IncrementalSemanticTrigger,
   type EvaluateTikzResult
 } from "@tikz-editor/core/semantic/index";
-import { emitSvg, type EmitSvgOptions, type EmitSvgResult, type SvgRenderModel } from "@tikz-editor/core/svg/index";
+import { emitSvg, serializeSvgModel, type EmitSvgOptions, type EmitSvgResult, type SvgRenderModel } from "@tikz-editor/core/svg/index";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
 import type { EditHandle, SceneFigure } from "@tikz-editor/core/semantic/types";
 import { renderTikzToSvgAsync, createRenderNodeTextValidator, type RenderDiagnostic } from "@tikz-editor/core/render/index";
@@ -26,8 +26,12 @@ import { resolveFigureBoundsFromFigure } from "@tikz-editor/core/edit/figure-bou
 import { recordProfilingComputeTiming } from "@tikz-editor/core/profiling";
 import { texGlyphOutlineGeneration, texGlyphOutlinesLoading, withTexGlyphOutlines } from "@tikz-editor/core/text/tex/fonts/glyph-outlines";
 import { detectDocumentKind } from "@tikz-editor/core/document/kind";
-import { parseDocumentRootId, type DocumentRootRef } from "@tikz-editor/core/document/root-id";
+import { formatDocumentRootId, parseDocumentRootId, type DocumentRootRef } from "@tikz-editor/core/document/root-id";
+import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import {
+  beamerDrawingLayerInsertions,
+  beamerOverlayPicturesIn,
+  beamerTikzFontCommand,
   createBeamerTexMathFontProfile,
   prepareBeamerDocument,
   resolveBeamerTheme,
@@ -69,6 +73,30 @@ export type SessionSnapshot = {
   incremental: SessionSnapshotIncrementalInfo | null;
   /** Present for Beamer decks; the tikz fields above stay empty. */
   deck: DeckSnapshot | null;
+  /** Present for a drawing layer (an overlay picture root), edited in place on its slide. */
+  overlayLayer?: OverlayLayerSnapshot | null;
+};
+
+/**
+ * A drawing layer: a TikZ `overlay` picture on a slide. The tikz fields hold
+ * the picture, rendered in its own coordinates with the page as its view box,
+ * so the slide's canvas transform shows it in place over the slide.
+ */
+export type OverlayLayerSnapshot = {
+  frameIndex: number;
+  step: number;
+  /** The slide without this picture: an SVG of the page. */
+  backdropSvg: string;
+  /** The picture's origin on the page (pt, y down). */
+  origin: { x: number; y: number };
+  /** What the picture is evaluated with: the page for `current page`, and the font of the text around it. */
+  evaluate: { currentPage: { minX: number; minY: number; maxX: number; maxY: number }; initialFont: string };
+  /**
+   * A layer the frame does not have yet: the snapshot shows the source with
+   * this inserted (its spans count in that source), and the first drawing
+   * inserts it.
+   */
+  insertion: { at: number; text: string } | null;
 };
 
 /** One frame of a deck's root inventory, in render order. */
@@ -260,7 +288,12 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       const rootRef = request.activeRootId
         ? parseDocumentRootId(request.activeRootId)
         : null;
-      if (rootRef?.kind === "beamer-frame-tikz") {
+      if (rootRef?.kind === "beamer-frame-tikz" && rootRef.layer) {
+        const layer = await computeOverlayLayerSnapshot(request, revision, requestKind, computeStartedAt, rootRef, work);
+        if (layer) {
+          return layer;
+        }
+      } else if (rootRef?.kind === "beamer-frame-tikz") {
         const nested = await computeNestedTikzSnapshot(
           request,
           revision,
@@ -944,6 +977,169 @@ async function computeNestedTikzSnapshot(
     snapshot,
     diagnostics: result.renderDiagnostics
   };
+}
+
+type OverlayLayerPlacement = {
+  /** The picture in the rendered source. */
+  span: { from: number; to: number };
+  origin: { x: number; y: number };
+  rememberPicture: boolean;
+  backdropSvg: string;
+  page: { width: number; height: number };
+  initialFont: string;
+};
+
+/**
+ * Where a layer's picture is and what is under it. Neither depends on what
+ * the picture draws (TeX sets it as an empty box), so they are kept under
+ * the source with the picture's interior left out: a drag in the picture
+ * renders the slide once.
+ */
+const overlayLayerPlacements = new BoundedLru<string, OverlayLayerPlacement>(8, 8 * 1024 * 1024);
+/** Where a frame's new layer goes, by source, frame and step. */
+const overlayLayerInsertions = new BoundedLru<string, { at: number; text: string } | null>(8, 1024 * 1024);
+
+async function renderLayerFrame(source: string, frameIndex: number, step: number, graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions) {
+  const prepared = deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source);
+  const stepCount = prepared.frameStepCount(frameIndex);
+  return prepared.renderFrame({ frameIndex, step: Math.min(Math.max(1, step), Math.max(1, stepCount)),
+    graphicsResolver: graphicsContext.resolver, cooperative: work });
+}
+
+/** The paragraphs a frame sets, as a comparable string: what an inserted layer must leave alone. */
+function frameTextGeometry(layout: BeamerFrameLayout): string {
+  return layout.paragraphs.map((paragraph) =>
+    [paragraph.paragraphId, paragraph.bounds.x, paragraph.bounds.y, paragraph.bounds.width, paragraph.bounds.height]
+      .map((value) => typeof value === "number" ? value.toFixed(3) : value).join(",")
+  ).join(";");
+}
+
+/** The first insertion that moves none of the frame's text, else the last (a paragraph of its own). */
+async function chooseLayerInsertion(source: string, frameIndex: number, step: number, graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions) {
+  const key = `${frameIndex}:${step}:${graphicsContext.resolver.cacheKey}:${source}`;
+  if (overlayLayerInsertions.has(key)) return overlayLayerInsertions.get(key) ?? null;
+  const document = scanBeamerDocument(source);
+  const frame = document.frames[frameIndex];
+  if (!frame) return null;
+  const candidates = beamerDrawingLayerInsertions(createBeamerSyntaxContext(source), frame.bodySpan);
+  const baseline = frameTextGeometry((await renderLayerFrame(source, frameIndex, step, graphicsContext, work)).layout);
+  let chosen = candidates.at(-1) ?? null;
+  for (const candidate of candidates.slice(0, -1)) {
+    const inserted = source.slice(0, candidate.at) + candidate.text + source.slice(candidate.at);
+    const layout = (await renderLayerFrame(inserted, frameIndex, step, graphicsContext, work)).layout;
+    if (frameTextGeometry(layout) === baseline) {
+      chosen = candidate;
+      break;
+    }
+  }
+  overlayLayerInsertions.set(key, chosen, source.length * 2);
+  return chosen;
+}
+
+/**
+ * A drawing layer (`frame:i:overlay:j`): the frame's j-th overlay picture,
+ * edited in place on its slide. Like a nested figure, the picture renders
+ * through the TikZ pipeline over the masked source, so spans stay absolute;
+ * in addition its page is known (`current page`), its view box is the page
+ * in its own coordinates, and the slide under it comes along as a backdrop.
+ * A frame without overlay pictures has layer 0 still to come: it renders as
+ * if inserted where `chooseLayerInsertion` puts it. Returns null when the
+ * layer cannot be placed, so the caller falls back to the deck.
+ */
+async function computeOverlayLayerSnapshot(
+  request: ComputeRequest,
+  revision: number,
+  requestKind: "render" | "prewarm",
+  computeStartedAt: number,
+  ref: Extract<DocumentRootRef, { kind: "beamer-frame-tikz" }>,
+  work?: CooperativeWorkOptions
+): Promise<ComputeResponse | null> {
+  if (requestKind === "prewarm") {
+    return { id: request.id, documentId: request.documentId, snapshot: makeEmptySnapshot(request.source), diagnostics: [] };
+  }
+  const source = request.source;
+  const document = scanBeamerDocument(source);
+  const frame = document.frames[ref.frameIndex];
+  if (!frame) return null;
+  const graphicsContext = await prepareDocumentGraphicsContext({ source, documentFileRef: request.documentFileRef ?? null });
+  const step = Math.max(1, request.deckStep ?? 1);
+  const pictures = beamerOverlayPicturesIn(createBeamerSyntaxContext(source), frame.bodySpan);
+  let insertion: { at: number; text: string } | null = null;
+  if (ref.index >= pictures.length) {
+    if (pictures.length > 0 || ref.index > 0) return null;
+    insertion = await chooseLayerInsertion(source, ref.frameIndex, step, graphicsContext, work);
+    if (!insertion) return null;
+  }
+  const working = insertion ? source.slice(0, insertion.at) + insertion.text + source.slice(insertion.at) : source;
+  const picture = beamerOverlayPicturesIn(createBeamerSyntaxContext(working), scanBeamerDocument(working).frames[ref.frameIndex]?.bodySpan ?? frame.bodySpan)[ref.index];
+  if (!picture) return null;
+  const placementKey = `${ref.frameIndex}:${ref.index}:${step}:${graphicsContext.resolver.cacheKey}:` +
+    working.slice(0, picture.span.from) + "\u0000" + working.slice(picture.span.to);
+  let placement = overlayLayerPlacements.get(placementKey);
+  if (!placement) {
+    const rendered = await renderLayerFrame(working, ref.frameIndex, step, graphicsContext, work);
+    const layerRootId = formatDocumentRootId(ref);
+    const entry = rendered.layout.embeddedTikz.find((candidate) => candidate.overlay?.rootId === layerRootId);
+    if (!entry?.overlay) return null;
+    const model = rendered.svg.model;
+    placement = {
+      span: picture.span,
+      origin: entry.overlay.origin,
+      rememberPicture: entry.overlay.rememberPicture,
+      backdropSvg: serializeSvgModel({ ...model, parts: model.parts.filter((part) => part.sourceId !== entry.itemId) }),
+      page: { width: rendered.layout.page.page.width, height: rendered.layout.page.page.height },
+      initialFont: beamerTikzFontCommand(resolveBeamerTheme(document).fonts["normal-text"])
+    };
+    overlayLayerPlacements.set(placementKey, placement, placementKey.length * 2 + placement.backdropSvg.length * 2);
+  }
+  const { origin, page } = placement;
+  // With `remember picture`, PGF knows where the picture is on the page;
+  // without, `current page` takes the picture's origin for the page's corner.
+  const currentPage = placement.rememberPicture
+    ? { minX: -origin.x, minY: origin.y - page.height, maxX: page.width - origin.x, maxY: origin.y }
+    : { minX: 0, minY: 0, maxX: page.width, maxY: page.height };
+  const evaluate = { currentPage, initialFont: placement.initialFont };
+  const theme = resolveBeamerTheme(document);
+  const textEngine = await createTexNodeTextEngine({
+    mathFontProfile: createBeamerTexMathFontProfile(theme.fonts["normal-text"])
+  });
+  work?.signal?.throwIfAborted();
+  // The page in the picture's SVG coordinates (y = 2·viewBox.y + height − world y):
+  // the slide's canvas transform then shows the picture where it is on the slide.
+  const viewBox = { x: -origin.x, y: origin.y - page.height, width: page.width, height: page.height };
+  const result = await renderTikzToSvgAsync(maskSourceOutsideSpan(working, picture.span), {
+    parse: { recover: true, includeContextDefinitions: true },
+    evaluate: { graphicsResolver: graphicsContext.resolver, ...evaluate },
+    svgOptionsFromParse: (parse) => ({ ...computeSvgOptions(parse, viewBox), padding: 0 }),
+    textEngine,
+    cooperative: work
+  });
+  const snapshot: SessionSnapshot = {
+    source,
+    revision,
+    figures: result.parse.figures,
+    activeRootId: result.parse.activeFigureId,
+    editHandles: result.semantic.editHandles,
+    scene: result.semantic.scene,
+    svg: result.svg,
+    svgModel: result.svg.model,
+    parseResult: result.parse,
+    semanticResult: result.semantic,
+    textLayoutContext: result.textLayoutContext,
+    graphicsPreviewBundleKey: graphicsContext.previewBundle.cacheKey,
+    incremental: null,
+    deck: null,
+    overlayLayer: { frameIndex: ref.frameIndex, step, backdropSvg: placement.backdropSvg, origin, evaluate, insertion }
+  };
+  recordProfilingComputeTiming({
+    requestId: request.id,
+    kind: requestKind,
+    trigger: request.schedulingTrigger ?? request.trigger ?? "other",
+    durationMs: performance.now() - computeStartedAt,
+    changedSourceCount: 0,
+    incremental: false
+  });
+  return { id: request.id, documentId: request.documentId, snapshot, diagnostics: result.renderDiagnostics };
 }
 
 async function computeSnapshotIncremental(
