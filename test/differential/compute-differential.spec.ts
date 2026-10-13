@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { coldCompute, compareResponses, describeFailure, generateOps, runOps, shrinkOps, type FuzzDocument, type FuzzOp, type FuzzReach } from "./compute-fuzz.js";
+import { coldCompute, compareResponses, describeFailure, generateOps, longDeck, longFigure, runOps, shrinkOps, type FuzzDocument, type FuzzOp, type FuzzReach } from "./compute-fuzz.js";
 import { freshComputeModule } from "./compute-instances.js";
 
-// Scale with COMPUTE_FUZZ_CASES / COMPUTE_FUZZ_STEPS / COMPUTE_FUZZ_SEED.
+// Scale with COMPUTE_FUZZ_CASES / COMPUTE_FUZZ_STEPS / COMPUTE_FUZZ_SEED;
+// COMPUTE_FUZZ_SET=n runs only the nth document set.
 const CASES = Number(process.env.COMPUTE_FUZZ_CASES ?? 10);
 const STEPS = Number(process.env.COMPUTE_FUZZ_STEPS ?? 24);
 const SEED = Number(process.env.COMPUTE_FUZZ_SEED ?? 1);
@@ -18,7 +19,9 @@ const DOCUMENT_SETS: FuzzDocument[][] = [
   [fixture("multi-figure-paper.tex")],
   [fixture("shapes-new.tex"), fixture("differential/mixed-deck.tex")],
   [fixture("differential/mixed-deck.tex"), fixture("beamer/hello_world_beamer.tex")],
-  [fixture("beamer/overlay_conformance_beamer.tex")]
+  [fixture("beamer/overlay_conformance_beamer.tex")],
+  [longDeck(fixture("differential/mixed-deck.tex"), 25)],
+  [longFigure(fixture("differential/node-graph.tex"), 12)]
 ];
 
 // Shortcuts the default budget must reach; without them a clean run means little.
@@ -45,7 +48,9 @@ describe("compute differential fuzzing", () => {
     for (let index = 0; index < CASES; index += 1) {
       // Each document set runs gentle (even seed) and then wild (odd seed).
       const seed = SEED * 1000 + index;
-      const documents = DOCUMENT_SETS[Math.floor(index / 2) % DOCUMENT_SETS.length];
+      const documents = process.env.COMPUTE_FUZZ_SET
+        ? DOCUMENT_SETS[Number(process.env.COMPUTE_FUZZ_SET)]
+        : DOCUMENT_SETS[Math.floor(index / 2) % DOCUMENT_SETS.length];
       const ops = await generateOps(documents, seed, STEPS);
       const result = await runOps(documents, ops);
       for (const [key, value] of Object.entries(result.reach)) reach[key] = (reach[key] ?? 0) + value;
@@ -55,7 +60,7 @@ describe("compute differential fuzzing", () => {
       }
     }
     if (process.env.COMPUTE_FUZZ_VERBOSE) console.log(reach);
-    for (const [name, measure] of REQUIRED_REACH) expect(measure(reach), `the fuzzer reached no ${name}`).toBeGreaterThan(0);
+    if (!process.env.COMPUTE_FUZZ_SET) for (const [name, measure] of REQUIRED_REACH) expect(measure(reach), `the fuzzer reached no ${name}`).toBeGreaterThan(0);
   }, 600_000);
 });
 

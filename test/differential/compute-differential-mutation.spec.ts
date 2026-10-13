@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { generateOps, runOps, type FuzzDocument } from "./compute-fuzz.js";
+import { generateOps, longDeck, runOps, type FuzzDocument } from "./compute-fuzz.js";
 import { freshComputeModule, type ModuleMock } from "./compute-instances.js";
 
 // Each sabotage breaks one shortcut the way a real bug would. The fuzzer must
@@ -11,6 +11,7 @@ import { freshComputeModule, type ModuleMock } from "./compute-instances.js";
 const fixture = (path: string): FuzzDocument => ({ label: path, source: readFileSync(`test/fixtures/${path}`, "utf8") });
 const tikz = [fixture("differential/node-graph.tex")];
 const deck = [fixture("differential/mixed-deck.tex")];
+const long = [longDeck(fixture("differential/mixed-deck.tex"), 25)];
 
 type Sabotage = { name: string; documents: FuzzDocument[]; mocks: ModuleMock[] };
 
@@ -43,8 +44,20 @@ const SABOTAGES: Sabotage[] = [
     }]
   },
   {
-    // The deck's previous-tree reparse is not sabotaged here: for this grammar
-    // even a wrong change list yields a fresh parse's tree, so it has no output to break.
+    name: "a deck reparses from its previous tree as if nothing had changed",
+    documents: long,
+    mocks: [{
+      path: "../../packages/core/src/text/tex/syntax-index.js",
+      factory: async (importOriginal) => {
+        const original = await importOriginal() as typeof import("../../packages/core/src/text/tex/syntax-index.js");
+        return { ...original, buildTexSyntaxIndex: ((source, parser, options = {}) => original.buildTexSyntaxIndex(source, parser, options.previous
+          // The previous parse claims the new text, so Lezer reuses its subtrees at their old offsets.
+          ? { ...options, previous: { ...options.previous, parseSource: options.parseSource ?? source } }
+          : options)) as typeof original.buildTexSyntaxIndex };
+      }
+    }]
+  },
+  {
     name: "the shared syntax index cache is keyed too coarsely",
     documents: deck,
     mocks: [{
