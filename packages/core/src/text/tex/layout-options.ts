@@ -75,6 +75,13 @@ export interface TexListLayoutProfile {
   /** LaTeX suppresses the first list's opening glue in a fresh minipage. */
   readonly suppressInitialTopsep?: boolean;
   readonly leftMarginEmByDepth: readonly number[];
+  /**
+   * Beamer's description lists: the labels sit in a column this wide
+   * (`description width`, 2cm), right-aligned, with the items' text after
+   * it at its width plus `\labelsep`; a wider label pushes its first line
+   * along. Without it, descriptions are LaTeX's: the label inline.
+   */
+  readonly descriptionLabelWidthPt?: number;
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
   readonly bibliographyParsepPt?: number;
   readonly topsepPtByDepth: readonly number[];

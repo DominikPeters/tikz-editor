@@ -1148,6 +1148,19 @@ test("ghost slots: the optional slots of the construct at the caret show faintly
   await expect.poll(() => readStoreSource(page)).toContain(String.raw`\item[Two] second`);
 });
 
+test("the caret in a description item stands at its text, in beamer's label column", async ({ page }) => {
+  await setSource(page, GHOST_SOURCE);
+  const textarea = await openScopeContaining(page, "Root");
+  const buffer = await textarea.inputValue();
+  await placeCanvasCaret(page, buffer.indexOf("second"));
+  const glyph = page.locator(`[data-testid="canvas-svg-layer"] [data-source-start="${GHOST_SOURCE.indexOf("second")}"]`).first();
+  const caret = page.getByTestId("canvas-text-selection-caret");
+  await expect.poll(async () => {
+    const [glyphBox, caretBox] = [await glyph.boundingBox(), await caret.boundingBox()];
+    return glyphBox && caretBox ? Math.abs(glyphBox.x - caretBox.x) : Infinity;
+  }).toBeLessThan(3);
+});
+
 test("the command chip shows math completions as set, and a completion can be picked with the pointer (V2)", async ({ page }, testInfo) => {
   await setSource(page, GHOST_SOURCE);
   const textarea = await openScopeContaining(page, "Root");

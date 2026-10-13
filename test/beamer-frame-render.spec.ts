@@ -559,6 +559,38 @@ Before \uncover<2->{\includegraphics[width=24pt]{overlay.png}} after
     expect(result.diagnostics).toEqual([]);
   }, 20_000);
 
+  it("sets description labels in beamer's 2cm column, right-aligned, a longer one pushing its line", async () => {
+    // LuaLaTeX: \leftmargin = \labelwidth = 62.3805pt (2cm + \labelsep), \labelsep = 5.47499pt.
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Desc}
+\begin{itemize}
+\item bullet text
+\end{itemize}
+\begin{description}
+\item[Alpha] first item
+\item second item
+\item[A much longer label] third
+\end{description}
+\end{frame}
+\end{document}`;
+    const result = await renderBeamerFrame(source);
+    const body = result.layout.paragraphs.find((paragraph) => paragraph.paragraphId === "frame:0:paragraph:0")!;
+    const lineX = body.vlistLayout.linePlacements.map((placement) => Number(placement.x));
+    expect(lineX[0]).toBeCloseTo(21.9, 4);
+    for (const x of lineX.slice(1)) {
+      expect(x).toBeCloseTo(62.3805, 3);
+    }
+    const labels = body.vlistLayout.boxReport.items.filter((item) => item.hboxRole?.kind === "list-label");
+    const [, alpha, long] = labels;
+    // Right-aligned, \labelsep before the text.
+    expect(Number(alpha.x) + Number(alpha.width)).toBeCloseTo(62.3805 - 5.475, 3);
+    // Wider than the column: it starts where the column does and the text follows it after \labelsep.
+    expect(Number(long.x)).toBeCloseTo(0, 3);
+    const third = body.report.lines[3].segments.find((segment) => segment.kind === "text" && segment.text === "third")!;
+    expect(Number(third.x)).toBeCloseTo(Number(long.width) + 5.475, 3);
+  });
+
   it("uses Beamer's 11pt NFSS and AMS alignment spacing for the KKT conditions", async () => {
     const source = readFileSync(FIXTURE_PATH, "utf8");
     const result = await renderBeamerFrame(source, { frameIndex: 3 });

@@ -199,6 +199,8 @@ const BEAMER_LIST_LAYOUT_PROFILE: TexListLayoutProfile = {
     { fontSizePt: 9, topsepPt: 4, topsepStretchPt: 2, topsepShrinkPt: 2, parsepPt: 2, parsepStretchPt: 1, parsepShrinkPt: 1, itemsepPt: 2, itemsepStretchPt: 1, itemsepShrinkPt: 1 },
   ],
   leftMarginEmByDepth: [2, 2, 2],
+  // beamerbaselocalstructure.sty: \beamer@descriptionwidth=2cm.
+  descriptionLabelWidthPt: (2 / 2.54) * 72.27,
   topsepPtByDepth: [3, 2, 2],
   topsepStretchPtByDepth: [2, 1, 1],
   topsepShrinkPtByDepth: [2.5, 2, 2],

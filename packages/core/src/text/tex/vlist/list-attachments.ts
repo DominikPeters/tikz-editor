@@ -23,6 +23,7 @@ import {
   texHBoxX,
   texHBoxY,
   texLength,
+  texVListLocalX,
   texVListLocalXFromOrigin,
   texVListX,
   type TexLength,
@@ -115,6 +116,21 @@ export function texListItemParagraphAttachments(params: {
         params.paragraphOriginX
       )
     : undefined;
+  // Beamer's description column: a label wider than it starts where the
+  // column does and pushes the first line on by the difference, as LaTeX's
+  // `\item` sets a label box wider than `\labelwidth` at its natural width.
+  const column = params.listItemLayout?.description?.marginLabelWidth;
+  const overflow = marginLabelHBox && column !== undefined
+    ? roundTexPt(Number(marginLabelHBox.box.metrics.width) - Number(column))
+    : 0;
+  if (marginLabelHBox && overflow > 0) {
+    return {
+      inlineLabelItems,
+      firstLineIndentWidth: texLength(overflow),
+      ...(marginLabel ? { marginLabel: { ...marginLabel, rightEdge: texVListX(roundTexPt(Number(marginLabel.rightEdge) + overflow)) } } : {}),
+      marginLabelHBox: { ...marginLabelHBox, x: texVListLocalX(roundTexPt(Number(marginLabelHBox.x) + overflow)) },
+    };
+  }
   return {
     inlineLabelItems,
     firstLineIndentWidth,

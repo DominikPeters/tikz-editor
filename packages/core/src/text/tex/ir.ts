@@ -923,6 +923,8 @@ export interface SimpleTexParagraphIrOptions {
   readonly listLeftMarginEmByDepth?: readonly number[];
   /** Margins of generated Beamer bibliography lists, keyed by layout source start. */
   readonly bibliographyMargins?: ReadonlyMap<number, number>;
+  /** Beamer's description label column (TexListLayoutProfile.descriptionLabelWidthPt). */
+  readonly descriptionLabelWidthPt?: number;
   /** Identifies all color alias results; change this when any alias changes. */
   readonly colorResolverCacheKey?: string;
 }
@@ -1302,6 +1304,7 @@ function buildSimpleTexParagraphIr(
       resolveColorAlias ? options?.colorResolverCacheKey : null,
       options?.listLeftMarginEmByDepth ?? null,
       [...(options?.bibliographyMargins ?? [])],
+      options?.descriptionLabelWidthPt ?? null,
       options?.fontSizePt, options?.baselineSkipPt, options?.namedFontSizes,
     ])
     : null;
@@ -4788,7 +4791,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const marginDepthIndex = options?.listLeftMarginEmByDepth
       ? listStack.length
       : depth - 1;
-    const ownMargin = (kind === "bibliography" ? options?.bibliographyMargins?.get(sourceStart) : undefined) ?? margins[
+    // Beamer's description: its label column and `\labelsep` (0.5em).
+    const descriptionMargin = kind === "description" && options?.descriptionLabelWidthPt !== undefined
+      ? options.descriptionLabelWidthPt / sizeAt(sourceStart).sizePt + 0.5
+      : undefined;
+    const ownMargin = (kind === "bibliography" ? options?.bibliographyMargins?.get(sourceStart) : undefined) ?? descriptionMargin ?? margins[
       Math.min(marginDepthIndex, margins.length - 1)
     ] ?? 1;
     const scopeRole = {

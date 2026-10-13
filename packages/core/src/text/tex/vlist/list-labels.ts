@@ -4,7 +4,6 @@ import type { SimpleTexFontState } from "../ir.js";
 import {
   texLength,
   texVListX,
-  type TexLength,
   type TexVListX,
 } from "../coordinates.js";
 import type {
@@ -12,6 +11,7 @@ import type {
   TexVBoxLayout,
   TexVBoxListItemLabelContent,
   TexVBoxListItemLabelKind,
+  TexVBoxListItemDescriptionLayout,
   TexVBoxListItemLabelPlacement,
   TexVBoxListItemLayout,
 } from "./types.js";
@@ -29,15 +29,18 @@ export function texListItemLayoutForParagraph(
     return undefined;
   }
   const labelKind = texListItemLabelKind(paragraph);
-  const labelPlacement = texListItemLabelPlacement(paragraph);
+  // Beamer sets description labels in a column of the margin, in the item font.
+  const beamerDescription = labelKind === "description" && listProfile?.descriptionLabelWidthPt !== undefined;
+  const labelPlacement = beamerDescription ? "margin" : texListItemLabelPlacement(paragraph);
   const labelContent = texListItemLabelContent(paragraph, listProfile);
   const labelRightEdge = texListItemLabelRightEdge(stack);
-  const descriptionIndent = texListItemDescriptionIndent(stack, paragraph);
+  const descriptionIndent = texListItemDescriptionIndent(stack, paragraph, beamerDescription);
   const labelColor = listProfile?.resolveLabelColor?.(paragraph.listContext.kind, paragraph.listContext.labelDepth, paragraph.listContext.depth);
+  const articleDescription = labelKind === "description" && !beamerDescription;
   const labelFontState: SimpleTexFontState | undefined = labelColor || paragraph.listContext.kind === "bibliography" || labelKind === "description"
     ? {
-        family: labelKind === "description" ? "roman" : "normal",
-        series: labelKind === "description" ? "bold" : "medium",
+        family: articleDescription ? "roman" : "normal",
+        series: articleDescription ? "bold" : "medium",
         shape: "upright",
         ...(labelColor ? { color: labelColor } : {}),
       }
@@ -65,10 +68,7 @@ export function texListItemLayoutForParagraph(
       : {}),
     ...(descriptionIndent
       ? {
-          description: {
-            labelFirstLineIndentWidth: descriptionIndent.labelFirstLineIndentWidth,
-            bodyFirstLineIndentWidth: descriptionIndent.bodyFirstLineIndentWidth,
-          },
+          description: descriptionIndent,
         }
       : {}),
   };
@@ -247,17 +247,23 @@ function texListItemLabelRightEdge(
 
 function texListItemDescriptionIndent(
   stack: readonly TexListItemLabelScopeFrame[],
-  paragraph: TexParagraphInput
-): {
-  readonly labelFirstLineIndentWidth: TexLength;
-  readonly bodyFirstLineIndentWidth: TexLength;
-} | undefined {
+  paragraph: TexParagraphInput,
+  beamer: boolean
+): TexVBoxListItemDescriptionLayout | undefined {
   if (paragraph.listContext?.kind !== "description" && paragraph.listContext?.kind !== "bibliography") {
     return undefined;
   }
   const listLayout = texNearestListLayout(stack);
   if (!listLayout) {
     return undefined;
+  }
+  if (beamer) {
+    // The text starts at the margin; the label is right-aligned in its column before it.
+    return {
+      labelFirstLineIndentWidth: texLength(0),
+      bodyFirstLineIndentWidth: texLength(0),
+      marginLabelWidth: texLength(roundTexPt(listLayout.ownLeftMarginWidth - listLayout.descriptionLabelSepWidth)),
+    };
   }
   return {
     labelFirstLineIndentWidth: texLength(roundTexPt(

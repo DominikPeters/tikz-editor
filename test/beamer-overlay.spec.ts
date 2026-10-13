@@ -223,7 +223,8 @@ describe("Beamer overlays", () => {
     const result = await renderBeamerFramePages(source);
     expect(result.diagnostics).toEqual([]);
     expect(result.stepCount).toBe(3);
-    expect(result.pages.map(page => listMarkerPaint(page).filter(marker => marker.visible).length)).toEqual(environment === "description" ? [1, 1, 2] : [1, 2, 3]);
+    // (A description's label is set in the margin, as beamer does, like an itemize marker.)
+    expect(result.pages.map(page => listMarkerPaint(page).filter(marker => marker.visible).length)).toEqual([1, 2, 3]);
     expect(tracedText(result.pages[0])).not.toContain("Nested");
     expect(tracedText(result.pages[1])).toContain("Nested");
     expect(tracedText(result.pages[1])).not.toContain("Final");

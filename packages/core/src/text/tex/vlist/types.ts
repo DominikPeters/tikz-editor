@@ -315,6 +315,8 @@ export interface TexVBoxListItemLabelBox {
 export interface TexVBoxListItemDescriptionLayout {
   readonly labelFirstLineIndentWidth: TexLength;
   readonly bodyFirstLineIndentWidth: TexLength;
+  /** Beamer: the label column's width; a wider label pushes the first line by the difference. */
+  readonly marginLabelWidth?: TexLength;
 }
 
 export interface TexVBoxListItemLayout {
