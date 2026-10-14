@@ -741,14 +741,24 @@ Two modes, matching Beamer idiom:
   else a paragraph of its own. A preceding `\pause`/`\onslide` cover is
   closed so the new drawing is visible on every step. Deleting the last drawing removes the empty picture and the
   lines that joined it in the same undoable edit. Clicking empty canvas clears
-  selection. Changes confined to an overlay picture reuse the slide's text
-  layout and rebind document source offsets. Drags, inspector scrubs and node
-  typing use the existing TikZ incremental parser, semantic checkpoints, and
-  per-object SVG patches. Structural masks keep unfinished node text contained
-  while typing; changing those masks invalidates any affected parse baseline.
-  Statement insertion/deletion can reparse the picture without laying out the
-  slide body again. Source edits outside the picture and step changes invalidate
-  the reused slide layout.
+  selection. The slide is laid out with the edited layer left undrawn
+  (`drawingLayer` in renderFrame); the layer's own incremental render paints
+  it in (composeOverlayPage), so an edit never renders the picture twice.
+  Since TeX sets the layer as an empty box, that layout stands while nothing
+  outside the layer changes and the layer keeps its length; otherwise the
+  slide is laid out again (a few ms), so no source offsets are ever patched.
+  Drags, inspector scrubs and node typing use the existing TikZ incremental
+  parser, semantic checkpoints, and per-object SVG patches. Structural masks
+  keep unfinished node text contained while typing; changing those masks
+  invalidates any affected parse baseline. Pages painted with a layer stay out
+  of the shared page cache, which holds pages as TeX draws them. The compute
+  differential fuzzer covers layer picks, layer edits (drags as runs of
+  frames) and layers still to come.
+  Edits beside the picture (slide text, the preamble) leave it as it was,
+  only moved: the incremental parser and evaluator then shift the last
+  parse and evaluation instead of redoing them, unless the edit touches a
+  statement the picture reads (its context definitions). Typing in slide
+  text beside a 500-object layer went from ~80 ms to ~30 ms per keystroke.
   Inspector queries reuse the picture's scoped parse with absolute spans.
   Both flow and overlay pictures inherit visible preamble/frame definitions
   (styles, colors and macros) with TeX group lifetimes. Embedded pictures have

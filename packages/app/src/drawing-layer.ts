@@ -1,7 +1,14 @@
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { beamerOverlayPicturesIn, scanBeamerDocument } from "@tikz-editor/core/beamer/index";
 import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
+import type { BeamerFrameLayout } from "@tikz-editor/core/beamer/types";
 import type { SessionSnapshot } from "./compute";
+
+/** The layer on a page a drawing tool opens: the last remembered one, else the last. */
+export function pageDrawingLayerRootId(layout: BeamerFrameLayout): string | null {
+  const layers = layout.embeddedTikz.flatMap((picture) => picture.overlay ? [picture.overlay] : []);
+  return (layers.filter((candidate) => candidate.rememberPicture).at(-1) ?? layers.at(-1))?.rootId ?? null;
+}
 
 /**
  * The drawing layer a drawing tool opens on a slide: the frame's overlay
@@ -14,11 +21,8 @@ export function deckDrawingLayerRootId(activeRootId: string | null, snapshot: Se
   const ref = parseDocumentRootId(activeRootId ?? "");
   if (ref?.kind !== "beamer-frame") return null;
   const frame = snapshot.deck?.activeFrame;
-  const layers = snapshot.source === source && frame?.frameIndex === ref.index
-    ? frame.layout.embeddedTikz.flatMap((picture) => picture.overlay ? [picture.overlay] : [])
-    : [];
-  const layer = layers.filter((candidate) => candidate.rememberPicture).at(-1) ?? layers.at(-1);
-  if (layer) return layer.rootId;
+  const layer = snapshot.source === source && frame?.frameIndex === ref.index ? pageDrawingLayerRootId(frame.layout) : null;
+  if (layer) return layer;
   const bodySpan = scanBeamerDocument(source).frames[ref.index]?.bodySpan;
   if (!bodySpan) return null;
   const index = beamerOverlayPicturesIn(createBeamerSyntaxContext(source), bodySpan).length;

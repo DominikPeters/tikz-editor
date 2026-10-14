@@ -358,7 +358,7 @@ test("switching between edited overlays keeps inactive hit regions at their page
   expect((await canvasState(page)).rootId).toBe("frame:0");
 });
 
-test("a 500-object text-heavy overlay drag reuses layout and untouched SVG nodes", async ({ page }, testInfo) => {
+test("a 500-object text-heavy overlay drag stays incremental and keeps untouched SVG nodes", async ({ page }, testInfo) => {
   const extras = Array.from({ length: 498 }, (_, index) => {
     const x = .3 + (index % 25) * .45;
     const y = .3 + Math.floor(index / 25) * .2;
@@ -392,7 +392,7 @@ test("a 500-object text-heavy overlay drag reuses layout and untouched SVG nodes
   await waitForSlideSnapshot(page, 500);
   const profile = await readProfile(page);
   const drags = profile.computeTimings.filter(timing => timing.trigger === "drag-element" && (timing.changedSourceCount ?? 0) > 0);
-  expect(drags.every(timing => timing.parseStrategy === "incremental" && timing.semanticStrategy === "incremental" && timing.deckLayoutReused)).toBe(true);
+  expect(drags.every(timing => timing.parseStrategy === "incremental" && timing.semanticStrategy === "incremental")).toBe(true);
   expect(drags.every(timing => timing.recomputedStatementCount === 1 && timing.reusedStatementCount === 499)).toBe(true);
   expect(profile.svgPatchTimings.every(timing => !timing.hasReplaceAll && !timing.hasReplaceDefs)).toBe(true);
   const profilePath = testInfo.outputPath("overlay-500-profile.json");
@@ -401,7 +401,7 @@ test("a 500-object text-heavy overlay drag reuses layout and untouched SVG nodes
   expect((await canvasState(page)).rootId).toBe("frame:0");
 });
 
-test("overlay inspector scrubs reuse slide layout and commit one undo step", async ({ page }, testInfo) => {
+test("overlay inspector scrubs stay incremental and commit one undo step", async ({ page }, testInfo) => {
   const source = LAYERED.replace("fill=orange!20", "fill=orange!20,xshift=2pt");
   await setSource(page, source);
   await page.getByRole("button", { name: "1. Layer", exact: true }).click();
@@ -421,7 +421,7 @@ test("overlay inspector scrubs reuse slide layout and commit one undo step", asy
   const profile = await readProfile(page);
   const edits = profile.computeTimings.filter(timing => (timing.changedSourceCount ?? 0) > 0);
   expect(edits.length).toBeGreaterThan(0);
-  expect(edits.every(timing => timing.parseStrategy === "incremental" && timing.semanticStrategy === "incremental" && timing.deckLayoutReused)).toBe(true);
+  expect(edits.every(timing => timing.parseStrategy === "incremental" && timing.semanticStrategy === "incremental")).toBe(true);
   await page.evaluate(({ pointer, initial }) => window.dispatchEvent(new PointerEvent("pointerup", {
     ...pointer, buttons: 0, clientX: initial.x + 48, clientY: initial.y
   })), { pointer, initial });
@@ -448,7 +448,7 @@ test("overlay node typing stays incremental and preserves the slide body", async
   await writeFile(profilePath, JSON.stringify(profile, null, 2));
   const edits = profile.computeTimings.filter(timing => (timing.changedSourceCount ?? 0) > 0);
   expect(edits.length).toBeGreaterThan(0);
-  expect(edits.every(timing => timing.parseStrategy === "incremental" && timing.semanticStrategy === "incremental" && timing.deckLayoutReused)).toBe(true);
+  expect(edits.every(timing => timing.parseStrategy === "incremental" && timing.semanticStrategy === "incremental")).toBe(true);
   await page.keyboard.press("Escape");
   await expectSourceCanvasConsistency(page);
   expect(await readStoreSource(page)).toContain("A first paragraph of text.");

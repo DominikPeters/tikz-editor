@@ -83,7 +83,7 @@ describe("Beamer pictures inherit visible TikZ definitions", () => {
     expect(result.newSource.slice(0, SOURCE.indexOf("\\begin{document}"))).toBe(SOURCE.slice(0, SOURCE.indexOf("\\begin{document}")));
     const after = await computeSnapshot({ ...request, id: "context-edited", source: result.newSource, sourceRevision: 1,
       patches: result.patches, patchBaseRevision: 0, changedSourceIds: result.changedSourceIds });
-    expect(after.snapshot.incremental?.deckLayoutReused).toBe(true);
+    expect(after.snapshot.incremental?.deckLayoutReused).toBe(result.newSource.length === SOURCE.length);
     expect(after.snapshot.scene!.elements.find(element => element.kind === "Path")!.style).toMatchObject({ fill: "#123456", lineWidth: 4 });
   });
 });

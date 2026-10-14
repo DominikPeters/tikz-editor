@@ -12,6 +12,7 @@ const fixture = (path: string): FuzzDocument => ({ label: path, source: readFile
 const tikz = [fixture("differential/node-graph.tex")];
 const deck = [fixture("differential/mixed-deck.tex")];
 const long = [longDeck(fixture("differential/mixed-deck.tex"), 25)];
+const layers = [fixture("beamer/overlay-pictures-fidelity/pictures.tex"), fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex")];
 
 type Sabotage = { name: string; documents: FuzzDocument[]; mocks: ModuleMock[] };
 
@@ -74,6 +75,20 @@ const SABOTAGES: Sabotage[] = [
           byLength.set(key, index);
           return index;
         }) as typeof original.getTexSyntaxIndex };
+      }
+    }]
+  },
+  {
+    name: "a slide laid out under a drawing layer stands after the layer changes length",
+    documents: layers,
+    mocks: [{
+      path: "../../packages/app/src/beamer-overlay-page.js",
+      factory: async (importOriginal) => {
+        const original = await importOriginal() as typeof import("../../packages/app/src/beamer-overlay-page.js");
+        // Offsets after the layer then point where its old end was.
+        return { ...original, undrawnLayerPageStands: ((before, source, span) =>
+          before.source.slice(0, before.span.from) === source.slice(0, span.from) &&
+          before.source.slice(before.span.to) === source.slice(span.to)) as typeof original.undrawnLayerPageStands };
       }
     }]
   },

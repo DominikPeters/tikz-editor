@@ -1,66 +1,25 @@
-import type { Span } from "@tikz-editor/core/ast/types";
 import type { BeamerEmbeddedTikzLayout } from "@tikz-editor/core/beamer/types";
 import { namespaceSvgModel, serializeSvgModel } from "@tikz-editor/core/svg/index";
 import type { SvgRenderModel } from "@tikz-editor/core/svg/types";
 import type { DeckActiveFrame, SessionSnapshot } from "./compute";
 
-/** Rebind document coordinates after replacing an empty-box overlay's contents. */
-export function rebindOverlayPage(frame: DeckActiveFrame, before: Span, after: Span): DeckActiveFrame {
-  const delta = after.to - before.to;
-  if (delta === 0) return frame;
-  const offset = (value: number) => value >= before.to ? value + delta : value;
-  const identity = (value: string) => value.replace(/:(footnote|unsupported):([0-9]+)(?=[:/]|$)/gu,
-    (_, kind: string, raw: string) => `:${kind}:${offset(Number(raw))}`);
-  const markup = (value: string) => value.replace(/(data-source-(?:start|end)=")([0-9]+)(")/gu,
-    (_, prefix: string, raw: string, suffix: string) => prefix + String(offset(Number(raw))) + suffix)
-    .replace(/((?:id|data-tex-paragraph-id|data-source-id|data-part-id)=")([^"]+)(")/gu,
-      (_, prefix: string, id: string, suffix: string) => prefix + identity(id) + suffix);
-  const bound = new WeakMap<object, unknown>();
-  const rebind = <T>(value: T): T => {
-    if (!value || typeof value !== "object") return value;
-    const known = bound.get(value);
-    if (known) return known as T;
-    const record = value as Record<string, unknown>;
-    let result: Record<string, unknown> | undefined;
-    bound.set(value, value);
-    for (const [key, entry] of Object.entries(record)) {
-      const isOffset = /^(?:(?:source(?:Start|End|Offset)|content(?:Start|End))(?:Raw)?|filename(?:Start|End)Raw)$/u.test(key) ||
-        ((key === "from" || key === "to") && typeof record.from === "number" && typeof record.to === "number") ||
-        ((key === "start" || key === "end") && typeof record.start === "number" && typeof record.end === "number") ||
-        (key === "offset" && record.kind === "offset");
-      const next = isOffset && typeof entry === "number" ? offset(entry)
-        : (key === "svgBody" || key === "mathSvgBody") && typeof entry === "string" ? markup(entry)
-        : (key === "id" || key.endsWith("Id")) && typeof entry === "string" ? identity(entry)
-        : key === "childIds" && Array.isArray(entry) ? entry.map((id: string) => identity(id)) : rebind(entry);
-      if (next !== entry) {
-        result ??= (Array.isArray(value) ? [...value] : { ...record }) as Record<string, unknown>;
-        result[key] = next;
-      }
-    }
-    const rebound = (result ?? value) as T;
-    bound.set(value, rebound);
-    return rebound;
-  };
-  // Embedded pictures own local source coordinates; only their document span
-  // and source origin move. Paragraph/VList reports are in document coordinates.
-  const embeddedTikz = frame.layout.embeddedTikz.map(entry => ({ ...entry, sourceSpan: rebind(entry.sourceSpan),
-    ...(entry.overlay && { overlay: { ...entry.overlay, sourceOffset: offset(entry.overlay.sourceOffset),
-      ...(entry.overlay.pageCoordinates && { elements: rebind(entry.overlay.elements) }) } }) }));
-  const layout = { ...rebind({ ...frame.layout, embeddedTikz: [] }), embeddedTikz };
-  const embeddedIds = new Set(embeddedTikz.map(entry => entry.itemId));
-  const parts = frame.svgModel.parts.map(part => {
-    if (embeddedIds.has(part.sourceId) || embeddedTikz.some(entry => part.partId.startsWith(`${entry.itemId}/`))) return part;
-    const next = markup(part.markup);
-    const partId = identity(part.partId), sourceId = identity(part.sourceId);
-    return next === part.markup && partId === part.partId && sourceId === part.sourceId ? part
-      : { ...part, partId, sourceId, elementId: part.elementId && identity(part.elementId), markup: next, fingerprint: next };
-  });
-  const svgModel = { ...frame.svgModel, parts };
-  return { ...frame, layout, svgModel, svg: serializeSvgModel(svgModel) };
+/**
+ * Whether a page laid out with a drawing layer undrawn stands for a new
+ * source. TeX sets the layer as an empty box, so the page does not depend on
+ * what it draws: it stands while nothing outside the layer changed and the
+ * layer kept its length (the offsets after it stay put).
+ */
+export function undrawnLayerPageStands(before: { source: string; span: { from: number; to: number } }, source: string, span: { from: number; to: number }): boolean {
+  return before.span.to - before.span.from === span.to - span.from &&
+    before.source.slice(0, before.span.from) === source.slice(0, span.from) &&
+    before.source.slice(before.span.to) === source.slice(span.to);
 }
 
-/** Replace one picture's paint without laying out the surrounding slide again. */
-export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapshot): DeckActiveFrame {
+/**
+ * Paints a drawing layer from its own render into the page that left it
+ * undrawn (`drawingLayer` in renderFrame), with its diagnostics.
+ */
+export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapshot, diagnostics: readonly { code: string; message: string }[]): DeckActiveFrame {
   const rootId = layer.overlayLayer?.rootId;
   const entry = frame.layout.embeddedTikz.find(picture => picture.overlay?.rootId === rootId);
   if (!entry || !layer.svgModel || !layer.parseResult || !layer.scene) return frame;
@@ -77,7 +36,8 @@ export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapsho
     order: firstIndex, markup: defs, fingerprint: defs },
     ...model.parts.map(part => ({ ...part, partId: prefix + part.partId })));
   const svgModel: SvgRenderModel = { ...frame.svgModel, parts: parts.map((part, order) =>
-    part.order === order ? part : { ...part, order }) };
+    part.order === order ? part : { ...part, order }),
+    diagnostics: [...frame.svgModel.diagnostics, ...diagnostics.map(({ code, message }) => ({ code, message }))] };
   const bounds = layer.scene.bounds;
   const updated: BeamerEmbeddedTikzLayout = { ...entry, sourceSpan: layer.parseResult.figure.span,
     bounds: bounds ? { x: bounds.minX, y: model.viewBox.height - bounds.maxY,
@@ -89,20 +49,3 @@ export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapsho
     embeddedTikz: frame.layout.embeddedTikz.map(picture => picture === entry ? updated : picture) } };
 }
 
-
-// Layout/model payloads are immutable. Reused subtrees keep their estimates,
-// so bounding the page cache does not rescan every glyph on every drag frame.
-const retainedBytes = new WeakMap<object, number>();
-export function overlayPageRetainedBytes(frame: DeckActiveFrame): number {
-  const estimate = (value: unknown): number => {
-    if (value === null || typeof value !== "object") return typeof value === "string" ? value.length * 2 : 8;
-    const known = retainedBytes.get(value);
-    if (known !== undefined) return known;
-    retainedBytes.set(value, 0);
-    const entries = Object.values(value);
-    const bytes = 48 + entries.length * 16 + entries.reduce<number>((sum, entry) => sum + estimate(entry), 0);
-    retainedBytes.set(value, bytes);
-    return bytes;
-  };
-  return estimate(frame);
-}

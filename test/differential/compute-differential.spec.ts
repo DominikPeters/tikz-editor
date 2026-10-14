@@ -6,7 +6,7 @@ import { freshComputeModule } from "./compute-instances.js";
 
 // Scale with COMPUTE_FUZZ_CASES / COMPUTE_FUZZ_STEPS / COMPUTE_FUZZ_SEED;
 // COMPUTE_FUZZ_SET=n runs only the nth document set.
-const CASES = Number(process.env.COMPUTE_FUZZ_CASES ?? 10);
+const CASES = Number(process.env.COMPUTE_FUZZ_CASES ?? 14);
 const STEPS = Number(process.env.COMPUTE_FUZZ_STEPS ?? 24);
 const SEED = Number(process.env.COMPUTE_FUZZ_SEED ?? 1);
 
@@ -15,12 +15,16 @@ const fixture = (path: string): FuzzDocument => ({ label: path, source: readFile
 const DOCUMENT_SETS: FuzzDocument[][] = [
   [fixture("differential/node-graph.tex")],
   [fixture("multi-figure-basic.tex")],
+  // Drawing layers: the editor's tikzlayer, and authored overlay pictures in a
+  // deck without its definition (a new layer there brings it).
+  [fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex"), fixture("beamer/overlay-pictures-fidelity/pictures.tex")],
   [fixture("differential/mixed-deck.tex")],
   [fixture("multi-figure-paper.tex")],
   [fixture("shapes-new.tex"), fixture("differential/mixed-deck.tex")],
-  [fixture("differential/mixed-deck.tex"), fixture("beamer/hello_world_beamer.tex")],
+  [fixture("differential/mixed-deck.tex"), fixture("beamer/hello_world_beamer.tex"), fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex")],
   [fixture("beamer/overlay_conformance_beamer.tex")],
   [longDeck(fixture("differential/mixed-deck.tex"), 25)],
+  [longDeck(fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex"), 12)],
   [longFigure(fixture("differential/node-graph.tex"), 12)]
 ];
 
@@ -31,7 +35,10 @@ const REQUIRED_REACH: [string, (reach: FuzzReach) => number][] = [
   ["patches applied directly", (reach) => reach["patches:direct"] ?? 0],
   ["patches rebased over skipped revisions", (reach) => reach["patches:rebased"] ?? 0],
   ["deck pages kept or claimed from the cache", (reach) => (reach["deck:current"] ?? 0) + (reach["deck:claimed"] ?? 0)],
-  ["racing renders", (reach) => reach.race ?? 0]
+  ["racing renders", (reach) => reach.race ?? 0],
+  ["drawing layers shown on a slide", (reach) => reach["layer:shown"] ?? 0],
+  ["drawing layers still to come", (reach) => reach["layer:to-come"] ?? 0],
+  ["slide layouts reused under a layer edit", (reach) => reach["layer:slide-layout-reused"] ?? 0]
 ];
 
 describe("compute differential fuzzing", () => {

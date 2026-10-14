@@ -512,6 +512,11 @@ export type RenderBeamerFrameOptions = {
   continuation?: number;
   /** Resolves document-local graphics for frame text and embedded TikZ. */
   graphicsResolver?: DocumentGraphicsResolver;
+  /**
+   * A drawing layer (`frame:i:overlay:j`) its editor paints itself: laid out
+   * as TeX sets it, with its origin, but its picture left undrawn.
+   */
+  drawingLayer?: string;
 };
 
 export type RenderBeamerFramePagesOptions = {

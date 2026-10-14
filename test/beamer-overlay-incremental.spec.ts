@@ -26,6 +26,9 @@ Text after the picture, with $x^2$.
 
 afterEach(() => resetSharedEditAnalysisManager());
 
+/** The slide's layout stands while the picture keeps its length; else it is laid out again (drawingLayerPage). */
+const keepsLength = (before: string, after: string) => before.length === after.length;
+
 function paragraphGeometry(snapshot: SessionSnapshot) {
   return snapshot.deck!.activeFrame!.layout.paragraphs.map(paragraph => ({
     sourceSpan: paragraph.sourceSpan, bounds: paragraph.bounds, editableTextSpans: paragraph.editableTextSpans,
@@ -59,7 +62,7 @@ describe("overlay editing on a slide", () => {
   });
 
   it.each(["remember picture", "", "remember picture, scale=1.5, rotate=30"])(
-    "reuses parsing, semantic checkpoints, SVG parts and slide layout during drags (%s)", async options => {
+    "reuses parsing, semantic checkpoints and SVG parts during drags, and the slide layout while the picture keeps its length (%s)", async options => {
       const documentId = `overlay-drag-${options}`;
       let source = SOURCE.replace("overlay, remember picture, shift={(current page.south west)}", `overlay, ${options}, shift={(current page.south west)}`);
       let { snapshot } = await computeSnapshot({ id: "seed", documentId, source, sourceRevision: 0,
@@ -73,7 +76,7 @@ describe("overlay editing on a slide", () => {
           trigger: "drag-element", changedSourceIds: ["path:0"], patches: [patch], patchBaseRevision: revision - 1 });
         snapshot = result.snapshot;
         expect(result.diagnostics).toEqual([]);
-        expect(snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: true });
+        expect(snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
         expect(snapshot.incremental!.reusedStatementCount).toBeGreaterThan(16);
         expect(snapshot.svgModel!.parts.find(part => part.sourceId === "path:31"))
           .toEqual(before.svgModel!.parts.find(part => part.sourceId === "path:31"));
@@ -94,7 +97,7 @@ describe("overlay editing on a slide", () => {
     }
   );
 
-  it("reuses the slide layout for inspector scrubs inside a picture", async () => {
+  it("reuses the slide layout for inspector scrubs inside a picture that keep its length", async () => {
     const request = { id: "inspector-seed", documentId: "overlay-inspector-reuse", source: SOURCE, sourceRevision: 0,
       activeRootId: "frame:0", includeDrawingLayer: true, drawingLayerRootId: "frame:0:overlay:0" };
     let { snapshot } = await computeSnapshot(request);
@@ -104,7 +107,7 @@ describe("overlay editing on a slide", () => {
       const result = await computeSnapshot({ ...request, id: `inspector-${revision}`, source: next, sourceRevision: revision,
         trigger: "other", schedulingTrigger: "inspector-edit", changedSourceIds: ["path:0"],
         patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: revision - 1 });
-      expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: true });
+      expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
       snapshot = result.snapshot;
       source = next;
     }
@@ -128,7 +131,7 @@ describe("overlay editing on a slide", () => {
       const result = await computeSnapshot({ ...request, id: `typing-${index}`, source: next, sourceRevision: index + 1,
         trigger: "other", schedulingTrigger: "canvas-text-edit", changedSourceIds: ["path:32"], textEditMaskSpan: mask,
         patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: index });
-      expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: true });
+      expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
       expect(result.snapshot.scene!.elements.some(element => element.kind === "Text" && element.text === text)).toBe(true);
       snapshot = result.snapshot;
       source = next;
@@ -158,7 +161,7 @@ describe("overlay editing on a slide", () => {
       const result = await computeSnapshot({ ...request, id: `stress-drag-${revision}`, source: next, sourceRevision: revision,
         trigger: "drag-element", changedSourceIds: ["path:0"],
         patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: revision - 1 });
-      expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: true });
+      expect(result.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(source, next) });
       expect(result.snapshot.incremental!.reusedStatementCount).toBe(499);
       expect(result.snapshot.svgModel!.parts.find(part => part.sourceId === "path:499")).toEqual(untouched);
       snapshot = result.snapshot;
@@ -169,7 +172,7 @@ describe("overlay editing on a slide", () => {
     expect(paragraphGeometry(snapshot)).toEqual(paragraphGeometry(cold.snapshot));
   });
 
-  it("reuses the slide body across statement insertion and deletion with safe full picture parsing", async () => {
+  it("keeps the slide body across statement insertion and deletion with safe full picture parsing", async () => {
     const request = { id: "structure-seed", documentId: "overlay-structure", source: SOURCE, sourceRevision: 0,
       activeRootId: "frame:0", includeDrawingLayer: true, drawingLayerRootId: "frame:0:overlay:0" };
     const seed = await computeSnapshot(request);
@@ -180,7 +183,7 @@ describe("overlay editing on a slide", () => {
     for (const [index, next] of [inserted, SOURCE].entries()) {
       const result = await computeSnapshot({ ...request, id: `structure-${index}`, source: next, sourceRevision: index + 1,
         patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: index });
-      expect(result.snapshot.deck!.activeFrame!.layout.paragraphs[0].bounds).toBe(unchangedBounds);
+      expect(result.snapshot.deck!.activeFrame!.layout.paragraphs[0].bounds).toEqual(unchangedBounds);
       results.push({ source: next, snapshot: result.snapshot });
       source = next;
     }
@@ -191,7 +194,7 @@ describe("overlay editing on a slide", () => {
     }
   });
 
-  it("rebinds math, links, footnotes and column reports after a picture changes length", async () => {
+  it("lays math, links, footnotes and columns out again as a fresh render does after a picture changes length", async () => {
     const source = SOURCE.replace("Text after the picture, with $x^2$.", String.raw`Text after with $\frac{x^2}{1+y}$ and \href{https://example.test}{a link}.
 \[\begin{aligned} a &= b+c \\ d &= e \end{aligned}\]
 \begin{block}{Later block}Text with a \footnote{Later footnote.}\end{block}
@@ -203,7 +206,7 @@ describe("overlay editing on a slide", () => {
     const result = await computeSnapshot({ ...request, id: "rich-drag", source: next, sourceRevision: 1,
       trigger: "drag-element", changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: 0 });
     const canonical = await computeSnapshot({ ...request, id: "rich-cold", source: next, documentId: "overlay-rich-cold" });
-    expect(result.snapshot.incremental?.deckLayoutReused).toBe(true);
+    expect(result.snapshot.incremental?.deckLayoutReused).toBe(false);
     const normalize = (value: unknown) => JSON.parse(JSON.stringify(value, (key, entry: unknown) =>
       key === "paragraphId" ? undefined : entry)) as unknown;
     expect(normalize(result.snapshot.deck!.activeFrame!.layout.paragraphs))
@@ -223,9 +226,10 @@ describe("overlay editing on a slide", () => {
     await expect(computeSnapshot(drag, { budgetMs: 0, signal: controller.signal,
       yieldControl: async () => { controller.abort(); } })).rejects.toMatchObject({ name: "AbortError" });
     expect(claimCachedDeckSnapshot(drag)).toBeNull();
-    expect(claimCachedDeckSnapshot(request)!.deck!.activeFrame).toBe(seed.snapshot.deck!.activeFrame);
+    // Pages painted with a layer stay out of the shared page cache (drawingLayerPage).
+    expect(claimCachedDeckSnapshot(request)?.deck?.activeFrame).not.toBe(seed.snapshot.deck!.activeFrame);
     const retried = await computeSnapshot({ ...drag, id: "retry" });
-    expect(retried.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: true });
+    expect(retried.snapshot.incremental).toMatchObject({ parseStrategy: "incremental", strategy: "incremental", deckLayoutReused: keepsLength(SOURCE, source) });
     const canonical = await computeSnapshot({ ...request, id: "cold", documentId: "overlay-canceled-cold", source });
     expect(retried.snapshot.svg?.svg).toBe(canonical.snapshot.svg?.svg);
     expect(paragraphGeometry(retried.snapshot)).toEqual(paragraphGeometry(canonical.snapshot));

@@ -6,7 +6,8 @@
  * commands with patches and changed statement ids, drags, coalesced edits that
  * skip revisions, root and overlay-step navigation, canvas text-edit masks,
  * cached-page claims, neighbor prewarming, renders aborted midway and renders
- * racing each other. Every result the app would show is compared with a "cold"
+ * racing each other, and on slides the drawing layer: picking a layer (or the
+ * next one, still to come) and editing its shapes as the canvas does. Every result the app would show is compared with a "cold"
  * render of the same request in a fresh module instance, without any hints.
  * The two must be identical: the shortcuts (incremental parsing and
  * evaluation, SVG reuse, the deck session and page cache, syntax-index reuse)
@@ -23,7 +24,11 @@ import type { SourcePatch } from "../../packages/core/src/edit/types.js";
 import type { SvgViewBox } from "../../packages/core/src/svg/types.js";
 import type { ComputeRequest, ComputeResponse, SessionSnapshot } from "../../packages/app/src/compute.js";
 import { reconcileActiveRootSelection, snapshotRoots } from "../../packages/app/src/root-inventory.js";
-import { parseDocumentRootId } from "../../packages/core/src/document/root-id.js";
+import { formatDocumentRootId, parseDocumentRootId } from "../../packages/core/src/document/root-id.js";
+import { executeDocumentEdit } from "../../packages/app/src/edit-execution.js";
+import { beamerOverlayPicturesIn, scanBeamerDocument } from "../../packages/core/src/beamer/index.js";
+import { createBeamerSyntaxContext } from "../../packages/core/src/beamer/syntax.js";
+import { worldToPictureCoordinates } from "../../packages/app/src/ui/canvas-panel/picture-coordinates.js";
 import { freshComputeModule, type ComputeModule } from "./compute-instances.js";
 import { diffValues } from "./snapshot-diff.js";
 
@@ -35,7 +40,11 @@ type EditOrigin = "source-editor" | "edit-command";
 
 export type FuzzOp =
   /** A source change; `render: false` leaves it to be coalesced into a later render. */
-  | { kind: "edit"; doc: number; edit: TextEdit; origin: EditOrigin; changedSourceIds: string[] | null; drag: boolean; render: boolean; note: string }
+  | { kind: "edit"; doc: number; edit: TextEdit; origin: EditOrigin; changedSourceIds: string[] | null; drag: boolean; render: boolean; note: string;
+    /** A drawing-layer edit sends its own patches and changed ids, as a tikz edit does. */
+    layer?: { patches: SourcePatch[]; changedSourceIds: string[] | null } }
+  /** A drawing tool or a shape's click picks a slide's drawing layer (null: the tool is put down). */
+  | { kind: "layer"; doc: number; root: string | null }
   /** Undo/redo: the source returns to an earlier text, with no patch. */
   | { kind: "history"; doc: number; back: number }
   | { kind: "navigate"; doc: number; root: string | null; step: number }
@@ -67,8 +76,8 @@ export type WarmModuleFactory = () => Promise<ComputeModule>;
 // ── Oracle ──────────────────────────────────────────────────────────────────
 
 const IGNORED_KEYS = new Set([
-  // Request bookkeeping, not output.
-  "revision", "cacheEpoch", "incremental",
+  // Request bookkeeping, not output (a drawing layer echoes the layer it was asked for).
+  "revision", "cacheEpoch", "incremental", "requestedRootId",
   // Whether a deck's parse is known to be a fresh parse's; checked by healing (see `check`).
   "exactParse",
   // Retained layout state for later incremental renders; its output is in the scene and SVG.
@@ -91,6 +100,8 @@ function coldRequest(request: ComputeRequest): ComputeRequest {
     documentFileRef: request.documentFileRef ?? null,
     activeRootId: request.activeRootId,
     deckStep: request.deckStep,
+    includeDrawingLayer: request.includeDrawingLayer,
+    drawingLayerRootId: request.drawingLayerRootId ?? null,
     textEditMaskSpan: request.textEditMaskSpan ?? null,
     renderViewBox: request.renderViewBox ?? null
   };
@@ -140,6 +151,8 @@ type DocState = {
   revision: number;
   root: string | null;
   rootInitialized: boolean;
+  /** The slide's drawing layer providing editing geometry (the store's drawingLayerRootId). */
+  drawingLayer: string | null;
   step: number;
   mask: Span | null;
   lastEdit: {
@@ -166,6 +179,8 @@ function requestFor(doc: DocState): ComputeRequest {
     sourceRevision: doc.revision,
     activeRootId: doc.root,
     deckStep: isDeckSource(doc.source) ? doc.step : null,
+    // As App.tsx: every slide render asks for its drawing layer.
+    ...(isDeckSource(doc.source) && { includeDrawingLayer: true, drawingLayerRootId: doc.drawingLayer }),
     changedSourceIds: doc.lastEdit.changedSourceIds,
     patches: doc.lastEdit.patches,
     patchBaseRevision: doc.lastEdit.base,
@@ -188,7 +203,8 @@ function mapThroughEdit(offset: number, edit: TextEdit, assoc: -1 | 1): number {
   return assoc < 0 ? edit.from : edit.from + edit.insert.length;
 }
 
-function applyEdit(doc: DocState, rawEdit: TextEdit, origin: EditOrigin, changedSourceIds: string[] | null, drag: boolean): boolean {
+function applyEdit(doc: DocState, rawEdit: TextEdit, origin: EditOrigin, changedSourceIds: string[] | null, drag: boolean,
+  layer?: { patches: SourcePatch[]; changedSourceIds: string[] | null }): boolean {
   const edit = clampEdit(doc.source, rawEdit);
   const source = doc.source.slice(0, edit.from) + edit.insert + doc.source.slice(edit.to);
   if (source === doc.source) return false;
@@ -204,7 +220,9 @@ function applyEdit(doc: DocState, rawEdit: TextEdit, origin: EditOrigin, changed
     const to = mapThroughEdit(doc.mask.to, edit, 1);
     doc.mask = to > from ? { from, to } : null;
   }
-  doc.lastEdit = origin === "edit-command"
+  doc.lastEdit = layer
+    ? { origin, patches: layer.patches, base: doc.revision, changedSourceIds: layer.changedSourceIds, trigger: drag ? "drag-handle" : "other" }
+    : origin === "edit-command"
     ? { origin, patches: [patch], base: doc.revision, changedSourceIds: isDeckSource(doc.source) ? [] : changedSourceIds, trigger: drag ? "drag-handle" : "other" }
     : { origin, patches: null, base: null, changedSourceIds: null, trigger: "other" };
   if (!drag) doc.dragViewBox = null;
@@ -238,6 +256,10 @@ function count(reach: FuzzReach, key: string): void {
 
 function recordReach(reach: FuzzReach, snapshot: SessionSnapshot): void {
   const incremental = snapshot.incremental;
+  if (snapshot.overlayLayer?.pageCoordinates) {
+    count(reach, snapshot.overlayLayer.insertion ? "layer:to-come" : "layer:shown");
+    if (incremental?.deckLayoutReused) count(reach, "layer:slide-layout-reused");
+  }
   if (incremental) {
     count(reach, `parse:${incremental.parseStrategy}${incremental.parseFallbackReason ? `:${incremental.parseFallbackReason}` : ""}`);
     if (incremental.parsePatchApplication) count(reach, `patches:${incremental.parsePatchApplication}`);
@@ -321,7 +343,15 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
     try {
       switch (op.kind) {
         case "edit": {
-          if (applyEdit(doc, op.edit, op.origin, op.changedSourceIds, op.drag) && op.render) await render(doc, op.note);
+          if (applyEdit(doc, op.edit, op.origin, op.changedSourceIds, op.drag, op.layer) && op.render) await render(doc, op.note);
+          break;
+        }
+        case "layer": {
+          if (!isDeckSource(doc.source)) break;
+          doc.drawingLayer = op.root;
+          doc.mask = null;
+          doc.dragViewBox = null;
+          await render(doc, op.root ? `pick drawing layer ${op.root}` : "put the drawing tool down");
           break;
         }
         case "history": {
@@ -337,6 +367,7 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
           break;
         }
         case "navigate": {
+          if (op.root !== doc.root) doc.drawingLayer = null;
           doc.root = op.root;
           doc.step = op.step;
           doc.mask = null;
@@ -345,13 +376,18 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
             // The store claims a completed page before scheduling a render.
             const request = requestFor(doc);
             const claimed = warm.claimCachedDeckSnapshot({ id: request.id, documentId: doc.documentId, source: doc.source,
-              sourceRevision: doc.revision, activeRootId: doc.root, deckStep: doc.step });
+              sourceRevision: doc.revision, activeRootId: doc.root, deckStep: doc.step,
+              drawingLayerRootId: doc.drawingLayer, includeDrawingLayer: true });
             if (claimed) {
               count(reach, "deck:claimed");
-              const shown = await check("navigate (claimed cached page)", request, { snapshot: claimed, diagnostics: shownDiagnostics(claimed) });
+              // A claimed page is the page as drawn, without a drawing layer's
+              // editing geometry; a slide with a layer renders that next.
+              const plain = { ...request, includeDrawingLayer: undefined, drawingLayerRootId: undefined };
+              const shown = await check("navigate (claimed cached page)", plain, { snapshot: claimed, diagnostics: shownDiagnostics(claimed) });
               const previous = doc.shown;
               doc.shown = shown;
-              if (reconcileRoot(doc, previous, shown)) await render(doc, "render after root reconciliation");
+              reconcileRoot(doc, previous, shown);
+              await render(doc, "render after a claimed page");
               break;
             }
           }
@@ -429,6 +465,8 @@ export async function runOps(documents: readonly FuzzDocument[], ops: readonly F
 
 /** The store's root reconciliation on SNAPSHOT_READY (reducer.ts). */
 function reconcileRoot(doc: DocState, previous: SessionSnapshot | null, snapshot: SessionSnapshot): boolean {
+  // The layer a slide snapshot edits becomes the document's (reducer, SNAPSHOT_READY).
+  if (snapshot.overlayLayer?.pageCoordinates) doc.drawingLayer = snapshot.overlayLayer.rootId;
   const keepsNestedFigureRoot = snapshot.deck == null && parseDocumentRootId(doc.root ?? "")?.kind === "beamer-frame-tikz" && isDeckSource(snapshot.source);
   if (keepsNestedFigureRoot) return false;
   const selection = reconcileActiveRootSelection({
@@ -481,6 +519,7 @@ function initialDocState(document: FuzzDocument, index: number): DocState {
     revision: 0,
     root: null,
     rootInitialized: false,
+    drawingLayer: null,
     step: 1,
     mask: null,
     lastEdit: { origin: "history", patches: null, base: null, changedSourceIds: null, trigger: "other" },
@@ -598,7 +637,9 @@ export function benignTextEdit(source: string, rng: () => number, within?: reado
 
 type GeneratorState = {
   docs: { source: string; isDeck: boolean; mask: Span | null; frames: number; stepCounts: number[]; nestedRoots: string[]; figures: string[];
-    statements: { id: string; span: Span }[]; editHandles: SessionSnapshot["editHandles"]; sceneIds: string[] }[];
+    statements: { id: string; span: Span }[]; editHandles: SessionSnapshot["editHandles"]; sceneIds: string[];
+    /** The cold snapshot the view was read from; drawing-layer edits run against it, as the canvas does. */
+    snapshot: SessionSnapshot }[];
 };
 
 /**
@@ -634,8 +675,79 @@ async function describeDoc(doc: DocState): Promise<GeneratorState["docs"][number
     figures: snapshot.figures.map((figure) => figure.id),
     statements: (snapshot.parseResult?.figure.body ?? []).map((statement) => ({ id: statement.id, span: statement.span })),
     editHandles: snapshot.editHandles,
-    sceneIds: [...new Set(snapshot.scene?.elements.map((element) => element.sourceRef.sourceId) ?? [])]
+    sceneIds: [...new Set(snapshot.scene?.elements.map((element) => element.sourceRef.sourceId) ?? [])],
+    snapshot
   };
+}
+
+/** The drawing layers a tool or a click can pick on the slide shown: its overlay pictures, the next one, none. */
+function drawingLayerChoices(doc: DocState, view: GeneratorState["docs"][number]): (string | null)[] {
+  const frame = view.snapshot.deck?.activeFrame;
+  if (!frame || frame.frameId !== doc.root) return [null];
+  const shown = frame.layout.embeddedTikz.flatMap((picture) => picture.overlay ? [picture.overlay.rootId] : []);
+  const body = scanBeamerDocument(doc.source).frames[frame.frameIndex]?.bodySpan;
+  const pictures = body ? beamerOverlayPicturesIn(createBeamerSyntaxContext(doc.source), body).length : shown.length;
+  const next = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: frame.frameIndex, index: pictures, layer: true });
+  return [...shown, next, null];
+}
+
+/** A shape edit on the slide's drawing layer, through the app's edit execution (the canvas's path). */
+function layerEditCommand(doc: DocState, view: GeneratorState["docs"][number], rng: () => number, focus: Focus):
+  { edit: TextEdit; layer: { patches: SourcePatch[]; changedSourceIds: string[] | null }; drag: boolean; note: string } | null {
+  const snapshot = view.snapshot;
+  if (!snapshot.overlayLayer?.pageCoordinates || snapshot.source !== doc.source) return null;
+  // A drag frame: a digit of a coordinate changes, the layer keeps its length.
+  const figure = snapshot.parseResult?.figure;
+  const statements = !snapshot.overlayLayer.insertion && figure
+    ? figure.body.filter((statement) => figure.span.from <= statement.span.from && statement.span.to <= figure.span.to) : [];
+  const dragged = focus.drag ? statements.find((statement) => statement.id === focus.drag!.statementId) : undefined;
+  if (focus.drag && !dragged) focus.drag = null;
+  if (dragged || (statements.length > 0 && chance(rng, 0.6))) {
+    const statement = dragged ?? pick(statements, rng);
+    // A drag runs over a few frames.
+    focus.drag = focus.drag && focus.drag.frames > 1 ? { statementId: statement.id, frames: focus.drag.frames - 1 }
+      : dragged ? null : { statementId: statement.id, frames: 2 + Math.floor(rng() * 3) };
+    const digits = [...doc.source.slice(statement.span.from, statement.span.to).matchAll(/\d/gu)].map((match) => statement.span.from + match.index);
+    if (digits.length > 0) {
+      const at = pick(digits, rng);
+      const insert = String((Number(doc.source[at]) + 1 + Math.floor(rng() * 8)) % 10);
+      const patch: SourcePatch = { oldSpan: { from: at, to: at + 1 }, newSpan: { from: at, to: at + 1 }, replacement: insert };
+      return { edit: { from: at, to: at + 1, insert }, layer: { patches: [patch], changedSourceIds: [statement.id] }, drag: true, note: "layer nudge" };
+    }
+  }
+  const actions: { action: EditAction; drag: boolean }[] = [];
+  const toPicture = worldToPictureCoordinates(snapshot.scene);
+  const at = worldPoint(pt(cm(1 + rng() * 10)), pt(cm(1 + rng() * 7)));
+  actions.push(
+    { action: { kind: "addElement", at: toPicture(at), template: { kind: "rectangle", corner: toPicture(worldPoint(pt(at.x + cm(1.5)), pt(at.y + cm(0.8)))) } }, drag: false },
+    { action: { kind: "addElement", at: toPicture(at), template: { kind: "node", text: pick(["Note", "$x^2$", "Two words"], rng) } }, drag: false }
+  );
+  if (!snapshot.overlayLayer.insertion && view.sceneIds.length > 0) {
+    const elementId = pick(view.sceneIds, rng);
+    actions.push(
+      { action: { kind: "moveElement", elementId, delta: worldPoint(pt(cm((rng() - 0.5) * 2)), pt(cm((rng() - 0.5) * 2))) }, drag: true },
+      // Recolouring keeps the layer's length, as many drags do: the slide's layout then stands.
+      { action: { kind: "setProperty", elementId, level: "command", key: "fill", value: pick(["red!20", "red!35", "red!50"], rng) }, drag: false },
+      { action: { kind: "setProperty", elementId, level: "command", key: "fill", value: pick(["red!20", "red!35", "red!50"], rng) }, drag: false },
+      { action: { kind: "duplicateElements", elementIds: [elementId], delta: worldPoint(pt(cm(0.4)), pt(cm(-0.3))) }, drag: false },
+      { action: { kind: "deleteElement", elementId }, drag: false }
+    );
+    const handles = view.editHandles.filter((handle) => handle.handleType === "coordinate" && handle.rewriteMode === "direct");
+    if (handles.length > 0) {
+      const handle = pick(handles, rng);
+      actions.push({ action: { kind: "moveHandle", handleId: handle.id,
+        newWorld: worldPoint(pt(handle.world.x + cm((rng() - 0.5) * 1.4)), pt(handle.world.y + cm((rng() - 0.5) * 1.4))) }, drag: true });
+    }
+  }
+  for (let attempt = 0; attempt < 4 && actions.length > 0; attempt += 1) {
+    const { action, drag } = actions.splice(Math.floor(rng() * actions.length), 1)[0];
+    const result = executeDocumentEdit({ documentId: doc.documentId, source: doc.source, sourceRevision: doc.revision,
+      activeRootId: doc.root, snapshot, drawingLayerRootId: doc.drawingLayer }, action);
+    if ((result.kind !== "success" && result.kind !== "partial") || result.newSource === doc.source) continue;
+    return { edit: singleEdit(doc.source, result.newSource), layer: { patches: result.patches, changedSourceIds: result.changedSourceIds ?? null },
+      drag, note: `layer ${action.kind}` };
+  }
+  return null;
 }
 
 function cm(value: number): number {
@@ -697,11 +809,19 @@ function statementContaining(view: GeneratorState["docs"][number], offset: numbe
  */
 type Profile = { wild: number };
 
-async function generateOp(docs: DocState[], rng: () => number, focus: { doc: number }, profile: Profile): Promise<FuzzOp> {
-  if (docs.length > 1 && chance(rng, 0.08)) focus.doc = Math.floor(rng() * docs.length);
+/** Which document the run edits, and a drag on a drawing layer still going on. */
+type Focus = { doc: number; drag?: { statementId: string; frames: number } | null };
+
+async function generateOp(docs: DocState[], rng: () => number, focus: Focus, profile: Profile): Promise<FuzzOp> {
+  if (docs.length > 1 && !focus.drag && chance(rng, 0.08)) focus.doc = Math.floor(rng() * docs.length);
   const index = focus.doc;
   const doc = docs[index];
   const view = await describeDoc(doc);
+  if (focus.drag && view.snapshot.overlayLayer) {
+    const command = layerEditCommand(doc, view, rng, focus);
+    if (command) return { kind: "edit", doc: index, origin: "edit-command", render: true, changedSourceIds: null, ...command };
+  }
+  focus.drag = null;
   const roll = rng();
 
   if (view.mask) {
@@ -721,6 +841,10 @@ async function generateOp(docs: DocState[], rng: () => number, focus: { doc: num
       drag: false, render: chance(rng, 0.75), note: "source typing" };
   }
   if (roll < 0.56) {
+    if (view.isDeck && view.snapshot.overlayLayer && chance(rng, 0.85)) {
+      const command = layerEditCommand(doc, view, rng, focus);
+      if (command) return { kind: "edit", doc: index, origin: "edit-command", render: chance(rng, 0.85), changedSourceIds: null, ...command };
+    }
     if (!view.isDeck && view.editHandles.length > 0 && chance(rng, 0.6)) {
       const command = editCommandFromAction(view, rng);
       if (command) return { kind: "edit", doc: index, origin: "edit-command", render: chance(rng, 0.85), ...command };
@@ -759,6 +883,8 @@ async function generateOp(docs: DocState[], rng: () => number, focus: { doc: num
     if (view.isDeck) return { kind: "neighbors", doc: index, abortAfterYields: chance(rng, 0.4) ? 1 + Math.floor(rng() * 30) : null };
     if (view.sceneIds.length > 0) return { kind: "hover-prewarm", doc: index, sourceId: pick(view.sceneIds, rng) };
   }
+  // A drawing tool or a shape's click picks a layer on the slide shown.
+  if (view.isDeck && /^frame:\d+$/u.test(doc.root ?? "")) return { kind: "layer", doc: index, root: pick(drawingLayerChoices(doc, view), rng) };
   return { kind: "render", doc: index };
 }
 
@@ -770,7 +896,7 @@ export async function generateOps(documents: readonly FuzzDocument[], seed: numb
   const rng = makeRng(seed);
   const docs = documents.map((document, index) => initialDocState(document, index));
   const ops: FuzzOp[] = [];
-  const focus = { doc: 0 };
+  const focus: Focus = { doc: 0 };
   const profile: Profile = { wild: seed % 2 === 0 ? 0.1 : 0.5 };
   for (let step = 0; step < steps; step += 1) {
     const op = await generateOp(docs, rng, focus, profile);
@@ -785,7 +911,13 @@ function advanceModel(docs: DocState[], op: FuzzOp): void {
   const doc = docs[op.doc % docs.length];
   switch (op.kind) {
     case "edit":
-      applyEdit(doc, op.edit, op.origin, op.changedSourceIds, op.drag);
+      applyEdit(doc, op.edit, op.origin, op.changedSourceIds, op.drag, op.layer);
+      break;
+    case "layer":
+      if (!isDeckSource(doc.source)) break;
+      doc.drawingLayer = op.root;
+      doc.mask = null;
+      doc.dragViewBox = null;
       break;
     case "race":
       applyEdit(doc, op.edit, "source-editor", null, false);
@@ -802,6 +934,7 @@ function advanceModel(docs: DocState[], op: FuzzOp): void {
       break;
     }
     case "navigate":
+      if (op.root !== doc.root) doc.drawingLayer = null;
       doc.root = op.root;
       doc.step = op.step;
       doc.mask = null;

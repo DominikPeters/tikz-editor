@@ -34,6 +34,7 @@ import {
   beamerDrawingLayerInsertions,
   beamerOverlayPicturesIn,
   BEAMER_TIKZ_LAYER_OPTIONS,
+  type BeamerOverlayPicture,
   beamerTikzLayerPreambleInsertion,
   beamerTikzFontCommand,
   createBeamerTexMathFontProfile,
@@ -49,8 +50,8 @@ import { sameSyntaxTree } from "@tikz-editor/core/text/tex/syntax-index";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { translationMatrix } from "@tikz-editor/core/semantic/transform";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
-import { composeOverlayPage, overlayPageRetainedBytes, rebindOverlayPage } from "./beamer-overlay-page";
-import { deckDrawingLayerRootId, insertDrawingLayer, type DrawingLayerInsertion } from "./drawing-layer";
+import { composeOverlayPage, undrawnLayerPageStands } from "./beamer-overlay-page";
+import { insertDrawingLayer, pageDrawingLayerRootId, type DrawingLayerInsertion } from "./drawing-layer";
 import { prepareDocumentGraphicsContext, getImageAssetCacheGeneration, type PreparedDocumentGraphicsContext } from "./image-asset-cache";
 import { getActiveEditorPlatformGeneration } from "./platform/current";
 import { BoundedLru } from "./bounded-lru";
@@ -94,8 +95,8 @@ export type OverlayLayerSnapshot = {
   rootId: string;
   frameIndex: number;
   step: number;
-  /** The slide without this picture: an SVG of the page. */
-  backdropSvg: string;
+  /** The slide without this picture: an SVG of the page; null on a slide, which paints itself. */
+  backdropSvg: string | null;
   /** The picture's origin on the page (pt, y down). */
   origin: { x: number; y: number };
   /** What the picture is evaluated with: the page for `current page`, and the font of the text around it. */
@@ -235,7 +236,8 @@ type ComputeCache = {
   /** Text in the cache was rendered under this glyph outline generation. */
   outlineGeneration: number;
   renderContextKey?: string;
-  overlayPage?: { source: string; contextKey: string; frame: DeckActiveFrame; rootId: string };
+  /** The last page laid out with a drawing layer undrawn (drawingLayerPage). */
+  overlayPage?: { source: string; contextKey: string; frame: DeckActiveFrame; rootId: string; span: { from: number; to: number }; rememberPicture: boolean };
 };
 type TikzRenderContext = {
   key: string;
@@ -633,7 +635,9 @@ export function isDeckSnapshotCurrent(snapshot: SessionSnapshot, request: Comput
     frame.layout.frameId === frame.frameId && frame.layout.step === frame.step &&
     (!request.includeDrawingLayer || snapshot.overlayLayer?.pageCoordinates === true ||
       !frame.layout.embeddedTikz.some(entry => entry.overlay)) &&
-    (!request.drawingLayerRootId || snapshot.overlayLayer?.rootId === request.drawingLayerRootId));
+    // Without a layer asked for, the one shown is the page's default, never one still to come.
+    (request.drawingLayerRootId ? snapshot.overlayLayer?.rootId === request.drawingLayerRootId
+      : !snapshot.overlayLayer || (!snapshot.overlayLayer.insertion && snapshot.overlayLayer.rootId === pageDrawingLayerRootId(frame.layout))));
 }
 
 function deckSnapshot(session: DeckComputeSession, frame: DeckActiveFrame, revision: number): SessionSnapshot {
@@ -743,9 +747,9 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): { layout: BeamerF
   return { layout: result, bytes };
 }
 
-async function renderDeckPage(session: DeckComputeSession, frameIndex: number, step: number, work?: CooperativeWorkOptions) {
+async function renderDeckPage(session: DeckComputeSession, frameIndex: number, step: number, work?: CooperativeWorkOptions, drawingLayer?: string) {
   const result = await session.prepared.renderFrame({ frameIndex, step,
-    graphicsResolver: session.graphicsContext.resolver, cooperative: work });
+    graphicsResolver: session.graphicsContext.resolver, cooperative: work, drawingLayer });
   work?.signal?.throwIfAborted();
   const clone = makeBeamerLayoutCloneSafe(result.layout);
   const frame: DeckActiveFrame = { frameId: result.frame.id, frameIndex, step, stepCount: result.layout.stepCount,
@@ -753,6 +757,30 @@ async function renderDeckPage(session: DeckComputeSession, frameIndex: number, s
     editingEnvironment: session.prepared.frameEditingEnvironment(frameIndex) };
   const bytes = clone.bytes + (frame.svg.length + frame.svgModel.parts.reduce((sum, part) => sum + part.markup.length, 0)) * 2;
   return { frame, bytes };
+}
+
+/**
+ * The page with a drawing layer left undrawn, for its own render to paint
+ * (composeOverlayPage): the last one while it stands (undrawnLayerPageStands),
+ * else laid out again. Null when the layer is not on this step.
+ */
+async function drawingLayerPage(session: DeckComputeSession, cache: ComputeCache, request: ComputeRequest, frameIndex: number, step: number,
+  rootId: string, picture: BeamerOverlayPicture, work?: CooperativeWorkOptions): Promise<{ frame: DeckActiveFrame; reused: boolean } | null> {
+  const contextKey = deckContextKey(request, false, false);
+  const mask = request.textEditMaskSpan;
+  const reusable = !mask || (picture.span.from <= mask.from && mask.to <= picture.span.to);
+  const previous = cache.overlayPage;
+  if (previous && reusable && previous.rootId === rootId && previous.contextKey === contextKey &&
+    previous.frame.frameIndex === frameIndex && previous.frame.step === step && previous.frame.stepCount === session.frames[frameIndex].stepCount &&
+    previous.rememberPicture === picture.rememberPicture && undrawnLayerPageStands(previous, request.source, picture.span)) {
+    return { frame: previous.frame, reused: true };
+  }
+  const { frame } = await renderDeckPage(session, frameIndex, step, work, rootId);
+  if (!frame.layout.embeddedTikz.some((entry) => entry.overlay?.rootId === rootId)) return null;
+  cache.overlayPage = reusable
+    ? { source: request.source, contextKey, frame, rootId, span: picture.span, rememberPicture: picture.rememberPicture }
+    : undefined;
+  return { frame, reused: false };
 }
 
 function resolveDeckFrameIndex(
@@ -851,37 +879,52 @@ async function computeDeckSnapshot(
   const frameIndex = resolveDeckFrameIndex(session.frames, request.activeRootId);
   let activeFrame: DeckActiveFrame | null = null;
   let deckLayoutReused = false;
+  /** The drawing layer the page leaves undrawn, painted from its own render below. */
+  let paintedLayer: string | null = null;
+  let virtualLayer: string | null = null;
+  let plainPage: (() => Promise<DeckActiveFrame>) | null = null;
   if (frameIndex != null) {
     const stepCount = session.frames[frameIndex].stepCount;
     const step = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, stepCount));
     const pageKey = `${frameIndex}:${step}`;
-    const cached = session.renderedPages.get(pageKey);
-    if (cached) {
-      activeFrame = cached;
+    // Pages as TeX draws them, every picture included; thumbnails and claims share them.
+    plainPage = async () => {
+      const cached = session.renderedPages.get(pageKey);
+      if (cached) return cached;
+      const rendered = await renderDeckPage(session, frameIndex, step, work);
+      session.renderedPages.set(pageKey, rendered.frame, rendered.bytes);
+      return rendered.frame;
+    };
+    if (!request.includeDrawingLayer) {
+      activeFrame = await plainPage();
     } else {
-      const previous = cache.overlayPage;
-      const ref = parseDocumentRootId(request.drawingLayerRootId ?? "");
-      if (request.includeDrawingLayer && previous?.contextKey === deckContextKey(request, false, false) && previous.frame.frameIndex === frameIndex &&
-        previous.frame.step === step && previous.frame.stepCount === stepCount &&
-        ref?.kind === "beamer-frame-tikz" && ref.layer && formatDocumentRootId(ref) === previous.rootId) {
-        const before = previous.frame.layout.embeddedTikz.find(entry => entry.overlay?.rootId === previous.rootId);
-        const picture = beamerOverlayPicturesIn({ source: request.source, syntax: session.prepared.syntax }, session.prepared.document.frames[frameIndex].bodySpan)[ref.index];
-        if (before?.overlay && picture) {
-          const mask = request.textEditMaskSpan;
-          if ((!mask || (picture.span.from <= mask.from && mask.to <= picture.span.to)) &&
-            picture.rememberPicture === before.overlay.rememberPicture &&
-            previous.source.slice(0, before.sourceSpan.from) === request.source.slice(0, picture.span.from) &&
-            previous.source.slice(before.sourceSpan.to) === request.source.slice(picture.span.to)) {
-            activeFrame = rebindOverlayPage(previous.frame, before.sourceSpan, picture.span);
-            deckLayoutReused = true;
-          }
+      const pictures = beamerOverlayPicturesIn({ source: request.source, syntax: session.prepared.syntax }, session.prepared.document.frames[frameIndex].bodySpan);
+      const requested = parseDocumentRootId(request.drawingLayerRootId ?? "");
+      const asked = requested?.kind === "beamer-frame-tikz" && requested.layer && requested.frameIndex === frameIndex ? requested : null;
+      if (asked?.index === pictures.length) virtualLayer = formatDocumentRootId(asked);
+      const candidates: string[] = asked && asked.index < pictures.length ? [formatDocumentRootId(asked)] : [];
+      // Otherwise the layer a drawing tool would pick on the page as drawn.
+      const fallback = async () => virtualLayer ? null : pageDrawingLayerRootId((await plainPage!()).layout);
+      if (candidates.length === 0) {
+        const rootId = await fallback();
+        if (rootId) candidates.push(rootId);
+      }
+      for (const rootId of candidates) {
+        const index = parseDocumentRootId(rootId)!;
+        const picture = index.kind === "beamer-frame-tikz" ? pictures[index.index] : undefined;
+        if (!picture) continue;
+        const layered = await drawingLayerPage(session, cache, request, frameIndex, step, rootId, picture, work);
+        if (layered) {
+          activeFrame = layered.frame;
+          deckLayoutReused = layered.reused;
+          paintedLayer = rootId;
+          break;
         }
+        // Not on this step: the page's own default, if another.
+        const other = await fallback();
+        if (other && other !== rootId && !candidates.includes(other)) candidates.push(other);
       }
-      if (!activeFrame) {
-        const rendered = await renderDeckPage(session, frameIndex, step, work);
-        activeFrame = rendered.frame;
-        session.renderedPages.set(pageKey, activeFrame, rendered.bytes);
-      }
+      activeFrame ??= await plainPage();
     }
   }
   work?.signal?.throwIfAborted();
@@ -908,31 +951,19 @@ async function computeDeckSnapshot(
       exactParse: session.parseExact
     }
   };
-  if (activeFrame && request.includeDrawingLayer) {
-    // A layer still to come is laid out only when a drawing tool asks for it.
-    const nextRoot = deckDrawingLayerRootId(activeFrame.frameId, snapshot);
-    const defaultRoot = activeFrame.layout.embeddedTikz.some(entry => entry.overlay?.rootId === nextRoot) ? nextRoot : null;
-    const wantedRoot = request.drawingLayerRootId ?? defaultRoot;
-    const ref = parseDocumentRootId(wantedRoot ?? "");
-    const selected = ref?.kind === "beamer-frame-tikz" && ref.layer && ref.frameIndex === activeFrame.frameIndex
-      ? await computeOverlayLayerSnapshot(request, revision, requestKind, computeStartedAt, ref, cache, work, true, { frame: activeFrame, graphicsContext, prepared: session.prepared, deckLayoutReused }) : null;
-    const fallbackRef = !selected && defaultRoot ? parseDocumentRootId(defaultRoot) : null;
-    const layer = selected ?? (fallbackRef?.kind === "beamer-frame-tikz"
-      ? await computeOverlayLayerSnapshot(request, revision, requestKind, computeStartedAt, fallbackRef, cache, work, true, { frame: activeFrame, graphicsContext, prepared: session.prepared, deckLayoutReused }) : null);
-    if (layer) {
+  if (activeFrame && request.includeDrawingLayer && (paintedLayer || virtualLayer)) {
+    const ref = parseDocumentRootId((paintedLayer ?? virtualLayer)!) as Extract<DocumentRootRef, { kind: "beamer-frame-tikz" }>;
+    const layer = await computeOverlayLayerSnapshot(request, revision, requestKind, computeStartedAt, ref, cache, work, true,
+      { frame: activeFrame, graphicsContext, prepared: session.prepared, deckLayoutReused });
+    if (layer && paintedLayer) {
       if (layer.snapshot.incremental) layer.snapshot.incremental.deckLayoutReused = deckLayoutReused;
-      activeFrame = composeOverlayPage(activeFrame, layer.snapshot);
-      snapshot.deck!.activeFrame = activeFrame;
-      Object.assign(snapshot, layer.snapshot, { deck: snapshot.deck, activeRootId: activeFrame.frameId });
-      const span = layer.snapshot.parseResult?.figure.span;
-      const mask = request.textEditMaskSpan;
-      if (!layer.snapshot.overlayLayer?.insertion && span && (!mask || (span.from <= mask.from && mask.to <= span.to))) {
-        cache.overlayPage = { source: request.source, contextKey: deckContextKey(request, false, false), frame: activeFrame,
-          rootId: layer.snapshot.overlayLayer!.rootId };
-      } else cache.overlayPage = undefined;
-      session.renderedPages.set(`${frameIndex}:${activeFrame.step}`, activeFrame,
-        overlayPageRetainedBytes(activeFrame));
-    } else cache.overlayPage = undefined;
+      activeFrame = composeOverlayPage(activeFrame, layer.snapshot, layer.diagnostics);
+    } else if (paintedLayer) {
+      // The page left the layer undrawn; without its render, show the page as drawn.
+      activeFrame = await plainPage!();
+    }
+    snapshot.deck!.activeFrame = activeFrame;
+    if (layer) Object.assign(snapshot, layer.snapshot, { deck: snapshot.deck, activeRootId: activeFrame.frameId });
   }
   work?.signal?.throwIfAborted();
   if (revision === revisionCounter) deckComputeSession = session;
@@ -1062,7 +1093,7 @@ type OverlayLayerPlacement = {
   span: { from: number; to: number };
   origin: { x: number; y: number };
   rememberPicture: boolean;
-  backdropSvg: string;
+  backdropSvg: string | null;
   page: { width: number; height: number };
   initialFont: string;
 };
@@ -1099,27 +1130,43 @@ function keepsTextGeometry(before: ReadonlyMap<string, string>, after: ReadonlyM
  * The first insertion that, on every step, moves none of the frame's text and
  * shows the layer; else the last (a paragraph of its own).
  */
-async function chooseLayerInsertion(source: string, frameIndex: number, rootId: string, graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions) {
-  const key = `${frameIndex}:${graphicsContext.resolver.cacheKey}:${source}`;
-  if (overlayLayerInsertions.has(key)) return overlayLayerInsertions.get(key) ?? null;
-  const frame = scanBeamerDocument(source).frames[frameIndex];
+async function chooseLayerInsertion(source: string, frameIndex: number, step: number, rootId: string, prepared: PreparedBeamerDocument,
+  graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions) {
+  const document = prepared.document.source === source ? prepared.document : scanBeamerDocument(source);
+  const frame = document.frames[frameIndex];
   if (!frame) return null;
+  // Only the preamble and the frame's own text decide; offsets keep relative to the frame.
+  const key = `${frameIndex}:${step}:${graphicsContext.resolver.cacheKey}:${source.slice(document.preamble.span.from, document.preamble.span.to)}\u0000` +
+    source.slice(frame.span.from, frame.span.to);
+  if (overlayLayerInsertions.has(key)) {
+    const kept = overlayLayerInsertions.get(key);
+    return kept ? { ...kept, at: kept.at + frame.span.from } : null;
+  }
   const candidates: DrawingLayerInsertion[] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(source), frame.bodySpan)
     .map(({ definesLayer, ...candidate }) => ({ ...candidate, preamble: beamerTikzLayerPreambleInsertion(source, definesLayer === true) }));
-  const steps = Array.from({ length: Math.max(1, (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source)).frameStepCount(frameIndex)) }, (_, index) => index + 1);
-  const baselines: Map<string, string>[] = [];
-  for (const step of steps) baselines.push(frameTextGeometry((await renderLayerFrame(source, frameIndex, step, graphicsContext, work)).layout));
+  const stepCount = Math.max(1, (prepared.document.source === source ? prepared : prepareBeamerDocument(source)).frameStepCount(frameIndex));
+  // Every step of an ordinary frame; of a long build, its ends and the step shown.
+  const allSteps = stepCount <= 8 ? Array.from({ length: stepCount }, (_, index) => index + 1) : [...new Set([1, step, stepCount])];
+  const baselines = new Map<number, Map<string, string>>();
+  const baseline = async (at: number) => {
+    if (!baselines.has(at)) baselines.set(at, frameTextGeometry((await renderLayerFrame(source, frameIndex, at, graphicsContext, work)).layout));
+    return baselines.get(at)!;
+  };
   let chosen = candidates.at(-1) ?? null;
   candidates: for (const candidate of candidates.slice(0, -1)) {
     const inserted = insertDrawingLayer(source, candidate);
-    for (const [index, step] of steps.entries()) {
-      const layout = (await renderLayerFrame(inserted, frameIndex, step, graphicsContext, work)).layout;
-      if (!keepsTextGeometry(baselines[index], frameTextGeometry(layout)) || !layout.embeddedTikz.some(entry => entry.overlay?.rootId === rootId)) continue candidates;
+    // A tikzlayer is TeX-checked to move no text and, at the top level after an
+    // \onslide<1-> reset, to show on every step: the step shown suffices. The
+    // joins of a plain picture depend on what precedes them: every step.
+    const steps = candidate.text.includes("\\begin{tikzlayer}") ? [step] : allSteps;
+    for (const at of steps) {
+      const layout = (await renderLayerFrame(inserted, frameIndex, at, graphicsContext, work)).layout;
+      if (!keepsTextGeometry(await baseline(at), frameTextGeometry(layout)) || !layout.embeddedTikz.some(entry => entry.overlay?.rootId === rootId)) continue candidates;
     }
     chosen = candidate;
     break;
   }
-  overlayLayerInsertions.set(key, chosen, source.length * 2);
+  overlayLayerInsertions.set(key, chosen && { ...chosen, at: chosen.at - frame.span.from }, key.length * 2);
   return chosen;
 }
 
@@ -1148,28 +1195,39 @@ async function computeOverlayLayerSnapshot(
     return { id: request.id, documentId: request.documentId, snapshot: makeEmptySnapshot(request.source), diagnostics: [] };
   }
   const source = request.source;
-  const document = scanBeamerDocument(source);
+  const prepared = pageContext?.prepared ?? (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source));
+  // The deck's own scan and syntax index, when they are this source's: a
+  // fresh parse of the whole document per drag frame is most of a layer edit.
+  const own = prepared.document.source === source;
+  const document = own ? prepared.document : scanBeamerDocument(source);
+  const context = own ? { source, syntax: prepared.syntax } : createBeamerSyntaxContext(source);
   const frame = document.frames[ref.frameIndex];
   if (!frame) return null;
   const graphicsContext = pageContext?.graphicsContext ?? await prepareDocumentGraphicsContext({ source, documentFileRef: request.documentFileRef ?? null });
-  const prepared = pageContext?.prepared ?? (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source));
   const step = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, prepared.frameStepCount(ref.frameIndex)));
-  const pictures = beamerOverlayPicturesIn(createBeamerSyntaxContext(source), frame.bodySpan);
+  const pictures = beamerOverlayPicturesIn(context, frame.bodySpan);
   let insertion: DrawingLayerInsertion | null = null;
   if (ref.index >= pictures.length) {
     if (ref.index !== pictures.length) return null;
-    insertion = await chooseLayerInsertion(source, ref.frameIndex, formatDocumentRootId(ref), graphicsContext, work);
+    insertion = await chooseLayerInsertion(source, ref.frameIndex, step, formatDocumentRootId(ref), prepared, graphicsContext, work);
     if (!insertion) return null;
   }
   const working = insertion ? insertDrawingLayer(source, insertion) : source;
-  const picture = beamerOverlayPicturesIn(createBeamerSyntaxContext(working), scanBeamerDocument(working).frames[ref.frameIndex]?.bodySpan ?? frame.bodySpan)[ref.index];
+  const picture = insertion
+    ? beamerOverlayPicturesIn(createBeamerSyntaxContext(working), scanBeamerDocument(working).frames[ref.frameIndex]?.bodySpan ?? frame.bodySpan)[ref.index]
+    : pictures[ref.index];
   if (!picture) return null;
-  const placementKey = `${ref.frameIndex}:${ref.index}:${step}:${picture.rememberPicture}:${graphicsContext.resolver.cacheKey}:` +
-    working.slice(0, picture.span.from) + "\u0000" + working.slice(picture.span.to);
-  let placement = overlayLayerPlacements.get(placementKey);
+  // On a slide its place is read off the page just laid out. Otherwise from a
+  // layout kept by the source outside the picture (the backdrop's offsets
+  // after it move with its length) and the text-edit mask.
+  const placementKey = `${ref.frameIndex}:${ref.index}:${step}:${picture.rememberPicture}:${pageCoordinates}:${graphicsContext.resolver.cacheKey}:` +
+    `${request.textEditMaskSpan?.from ?? ""}-${request.textEditMaskSpan?.to ?? ""}:` +
+    working.slice(0, picture.span.from) + `\u0000${pageCoordinates ? "" : picture.span.to - picture.span.from}\u0000` + working.slice(picture.span.to);
+  const onPage = !insertion && pageContext ? pageContext.frame : null;
+  let placement = onPage ? undefined : overlayLayerPlacements.get(placementKey);
   if (!placement) {
-    const rendered = !insertion && pageContext
-      ? { layout: pageContext.frame.layout, svg: { model: pageContext.frame.svgModel } }
+    const rendered = onPage
+      ? { layout: onPage.layout, svg: { model: onPage.svgModel } }
       : await renderLayerFrame(working, ref.frameIndex, step, graphicsContext, work);
     const layerRootId = formatDocumentRootId(ref);
     const entry = rendered.layout.embeddedTikz.find((candidate) => candidate.overlay?.rootId === layerRootId);
@@ -1179,11 +1237,12 @@ async function computeOverlayLayerSnapshot(
       span: picture.span,
       origin: entry.overlay.origin,
       rememberPicture: entry.overlay.rememberPicture,
-      backdropSvg: serializeSvgModel({ ...model, parts: model.parts.filter((part) => part.sourceId !== entry.itemId && !part.partId.startsWith(`${entry.itemId}/`)) }),
+      backdropSvg: pageCoordinates ? null
+        : serializeSvgModel({ ...model, parts: model.parts.filter((part) => part.sourceId !== entry.itemId && !part.partId.startsWith(`${entry.itemId}/`)) }),
       page: { width: rendered.layout.page.page.width, height: rendered.layout.page.page.height },
       initialFont: beamerTikzFontCommand(resolveBeamerTheme(document).fonts["normal-text"])
     };
-    overlayLayerPlacements.set(placementKey, placement, placementKey.length * 2 + placement.backdropSvg.length * 2);
+    if (!onPage) overlayLayerPlacements.set(placementKey, placement, placementKey.length * 2 + (placement.backdropSvg?.length ?? 0) * 2);
   }
   const { origin, page } = placement;
   // With `remember picture`, PGF knows where the picture is on the page;
@@ -1209,13 +1268,16 @@ async function computeOverlayLayerSnapshot(
   const masked = maskTikzPictureSource(working, picture.span);
   const patches = cache.warmSource && request.patches && patchesMatchSourceTransition(cache.warmSource, masked, request.patches)
     ? request.patches : null;
-  const result = await computeSnapshotWithCache({ ...request, source: masked, activeRootId: "figure:0", renderViewBox: viewBox,
+  // Text being edited on the slide beside the picture is no part of it.
+  const mask = request.textEditMaskSpan;
+  const pictureMask = mask && picture.span.from <= mask.from && mask.to <= picture.span.to ? mask : null;
+  const result = await computeSnapshotWithCache({ ...request, source: masked, activeRootId: "figure:0", renderViewBox: viewBox, textEditMaskSpan: pictureMask,
     // Preserve exact statement patches when they also reconstruct the masked
     // source. Coalesced/virtual edits infer their transition from the baseline.
     patches, patchBaseRevision: patches ? request.patchBaseRevision : null, inferSourceChanges: true }, revision, cache, work, {
     key: JSON.stringify([formatDocumentRootId(ref), step, pageCoordinates, evaluate, graphicsContext.resolver.cacheKey]),
     textEngine, graphicsContext, evaluate, padding: 0, startedAt: computeStartedAt,
-    structuralMasks: request.textEditMaskSpan ? [request.textEditMaskSpan] : undefined,
+    structuralMasks: pictureMask ? [pictureMask] : undefined,
     deckLayoutReused: pageContext?.deckLayoutReused
   });
   result.snapshot.source = source;

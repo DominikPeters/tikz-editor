@@ -177,6 +177,30 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
     }
 
     const fallback = decideFallbackReason(hints, cached, statementIds);
+    // Only text around the picture changed: every evaluated statement stands,
+    // moved. Restore the end of the last run and rebind it to the new source.
+    const moved = fallback === "missing-changed-source-ids" && cached ? movedOnlyPatches(cached, run, input, statementIds) : null;
+    const endCheckpoint = moved && cached?.checkpointCache.checkpointsBeforeStatement.get(statementCount);
+    if (moved && endCheckpoint) {
+      try {
+        const shifted = yield* evaluateIncrementalSuffix({
+          run,
+          previous: cached!,
+          resolveSpan: createSourceSpanResolver(moved),
+          statementIds,
+          restoreIndex: statementCount,
+          checkpointInterval: cached!.checkpointInterval,
+          previousCheckpoints: cached!.checkpointCache,
+          startCheckpoint: endCheckpoint,
+          affectedStatementCount: 0,
+          checkpointPreparation: "reused"
+        });
+        if (version === runVersion) cached = shifted.cached;
+        return shifted.output;
+      } catch {
+        // Evaluate in full below.
+      }
+    }
     if (fallback) {
       const full = yield* evaluateFullyAndCache(
         run,
@@ -788,6 +812,27 @@ function countFragmentEditHandles(
     count += fragments[index]?.editHandles.length ?? 0;
   }
   return count;
+}
+
+/**
+ * The patches between the last run's source and this one when they touch
+ * neither the picture nor any statement it evaluates (its context
+ * definitions included), else null.
+ */
+function movedOnlyPatches(
+  previous: CachedSemanticRun,
+  run: ReturnType<typeof createSemanticEvaluationRun>,
+  input: IncrementalSemanticEvaluateInput,
+  statementIds: readonly string[]
+): readonly SourcePatch[] | null {
+  if (previous.source === input.source || !sameStatementIds(previous.statementIds, statementIds)) return null;
+  const supplied = input.hints?.sourcePatches as readonly SourcePatch[] | undefined;
+  const patches = supplied?.length && supplied.every(patch => patch.oldSpan && patch.newSpan) &&
+    patchesMatchSourceTransition(previous.source, input.source, supplied)
+    ? supplied : [computeMinimalReplacementPatch(previous.source, input.source)];
+  const touches = (left: Span, right: Span) => left.from <= right.to && right.from <= left.to;
+  const spans = [input.figure.span, ...run.sourceStatementSpanById.values()];
+  return patches.some(patch => spans.some(span => touches(patch.newSpan, span))) ? null : patches;
 }
 
 function decideFallbackReason(

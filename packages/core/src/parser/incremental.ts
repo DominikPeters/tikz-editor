@@ -21,6 +21,7 @@ export type IncrementalParseTrigger = "drag-element" | "drag-handle" | "other";
 
 export type IncrementalParseFallbackReason =
   | "structural-mask-changed"
+  | "context-definitions-changed"
   | "missing-patches"
   | "no-previous-cache"
   | "source-unchanged-active-figure-mismatch"
@@ -196,7 +197,16 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
     if (cached?.source === input.source && !sameSpans(cached.structuralMasks, structuralMasks)) {
       return fallbackToFull("structural-mask-changed");
     }
-    const fallback = decideFallbackReason({
+    // Text changed only outside the picture and the statements it reads (its
+    // context definitions): every statement stands, only where they stand moved.
+    const figureSpan = cached?.activeFigureSpan;
+    const shiftOnly = cached != null && figureSpan != null && changedSourceIds.length === 0 && patches.length > 0 &&
+      cached.activeFigureId === (activeFigureId === undefined ? cached.activeFigureId : activeFigureId) &&
+      cached.includeContextDefinitions === includeContextDefinitions &&
+      cached.diagnosticPartition.global.length === 0 &&
+      patches.every((patch) => (patch.oldSpan.to <= figureSpan.from || patch.oldSpan.from >= figureSpan.to) &&
+        ![...cached!.statementRefsBySourceId.values()].some((ref) => ref.span.from <= patch.oldSpan.to && patch.oldSpan.from <= ref.span.to));
+    const fallback = shiftOnly ? null : decideFallbackReason({
       cached,
       inputSource: input.source,
       activeFigureId,
@@ -218,7 +228,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         changedRefs.set(sourceId, ref);
       }
 
-      for (const patch of patches) {
+      for (const patch of shiftOnly ? [] : patches) {
         const owner = findContainingStatementRef(cached.statementRefsBySourceId, patch.oldSpan);
         if (!owner) {
           return fallbackToFull("patch-overlaps-unknown-statement");
@@ -248,6 +258,18 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       );
       if (!nextActiveFigureSpan) {
         return fallbackToFull("active-figure-unresolved");
+      }
+      const contextDefinitions = includeContextDefinitions
+        ? getCachedContextDefinitions(input.source.slice(0, nextActiveFigureSpan.from), collectContextDefinitions)
+        : [];
+      if (shiftOnly && includeContextDefinitions) {
+        // Definitions are statements of the picture; none may appear, go or change.
+        const before = cached.contextDefinitions;
+        if (before.length !== contextDefinitions.length || before.some((definition, index) =>
+          cached!.source.slice(definition.span.from, definition.span.to) !==
+            input.source.slice(contextDefinitions[index].span.from, contextDefinitions[index].span.to))) {
+          return fallbackToFull("context-definitions-changed");
+        }
       }
 
       const nextFigure = shiftFigure(cached.figure, patches);
@@ -317,9 +339,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         structuralMasks,
         figures: nextFigures,
         activeFigureSpan: nextActiveFigureSpan,
-        contextDefinitions: includeContextDefinitions
-          ? getCachedContextDefinitions(input.source.slice(0, nextActiveFigureSpan.from), collectContextDefinitions)
-          : [],
+        contextDefinitions,
         figure: nextFigure,
         statementRefsBySourceId: nextIndex,
         diagnosticPartition: nextDiagnosticPartition,

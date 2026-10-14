@@ -18,6 +18,8 @@ const notesBySyntax = new WeakMap<TexSyntaxIndex, { source: string; notes: reado
 
 /** Literal standard Beamer notes, including both orders of [] and <>. */
 export function scanBeamerNoteCommands(source: string, syntax?: TexSyntaxIndex): readonly BeamerNoteCommand[] {
+  // Most decks have no notes; spare them a parse of the whole document per edit.
+  if (!/\\(?:note|AtBeginNote|AtEndNote)(?![A-Za-z@])/u.test(source)) return [];
   const context = beamerSyntaxContext(source, syntax);
   const cached = notesBySyntax.get(context.syntax);
   if (cached?.source === source) return cached.notes;

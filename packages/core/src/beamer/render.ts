@@ -512,6 +512,7 @@ export function prepareBeamerDocument(
         continuation: options.continuation,
         frameCounter: { beforeFrame: counters.beforeFrames[frameIndex], totalFrames: counters.totalFrames },
         graphicsResolver: options.graphicsResolver,
+        drawingLayer: options.drawingLayer,
         work,
       });
     },
@@ -580,6 +581,7 @@ async function renderBeamerFrameStep(params: {
   continuation?: number;
   frameCounter?: { beforeFrame: number; totalFrames: number };
   graphicsResolver?: DocumentGraphicsResolver;
+  drawingLayer?: string;
   work?: BeamerRenderWork;
 }): Promise<RenderBeamerFrameResult> {
   const { context, frame, frameIndex, bodyIr, step } = params;
@@ -633,6 +635,7 @@ async function renderBeamerFrameStep(params: {
   const references: BeamerReferenceContext = {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
     tikzLayer: beamerTikzLayerState(source) === "ours",
+    overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
     crampedLists: shrink != null || frame.options?.entries.some(entry => entry.key === "squeeze"),
     continuationBreaks: allowFrameBreaks == null ? undefined : collectBeamerContinuationBreaks(context.syntax, frame),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
@@ -939,6 +942,7 @@ async function renderBeamerFrameStep(params: {
     embeddedTikz,
     modelBuilder,
     graphicsResolver: params.graphicsResolver,
+    drawingLayer: params.drawingLayer,
     work: params.work,
   });
   const model = modelBuilder.build({
@@ -3482,6 +3486,7 @@ async function emitBeamerOverlayPictures(params: {
   embeddedTikz: BeamerEmbeddedTikzLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   graphicsResolver?: DocumentGraphicsResolver;
+  drawingLayer?: string;
   work?: BeamerRenderWork;
 }): Promise<void> {
   const pictures = beamerOverlayPicturesIn(params.context, params.bodySpan);
@@ -3500,6 +3505,19 @@ async function emitBeamerOverlayPictures(params: {
     if (!intrinsic) continue;
     // A shrunk body scales its boxes; the picture is drawn at its box's place.
     const origin = params.bodyTransform ? transformBeamerPoint(params.bodyTransform, intrinsic) : intrinsic;
+    const rootId = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: params.frameIndex, index, layer: true });
+    if (rootId === params.drawingLayer) {
+      // Its editor paints it; an empty group keeps its place in the page's order.
+      emitEmbeddedTikz({
+        tikz: { kind: "tikzpicture", visibility: "visible", id: `${params.frameId}:overlay-picture:${index}`, sourceSpan: picture.span,
+          horizontalAlignment: "left", width: 0, height: 0, viewBox: { x: 0, y: 0, width: 1, height: 1 },
+          model: { viewBox: { x: 0, y: 0, width: 1, height: 1 }, defs: [], defsFingerprint: "", parts: [], diagnostics: [] } },
+        x: origin.x, y: origin.y, parentId: null, items: params.items, embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder,
+      });
+      Object.assign(params.items[params.items.length - 1], { overlayPicture: true, rootId });
+      params.embeddedTikz[params.embeddedTikz.length - 1].overlay = { rootId, origin, rememberPicture: picture.rememberPicture, elements: [], sourceOffset: 0 };
+      continue;
+    }
     const rendered = await renderTikzToSvgAsync(
       maskTikzPictureSource(params.context.source, picture.span),
       {
@@ -3543,7 +3561,6 @@ async function emitBeamerOverlayPictures(params: {
       embeddedTikz: params.embeddedTikz,
       modelBuilder: params.modelBuilder,
     });
-    const rootId = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: params.frameIndex, index, layer: true });
     Object.assign(params.items[params.items.length - 1], { overlayPicture: true, rootId });
     params.embeddedTikz[params.embeddedTikz.length - 1].overlay = {
       rootId,
@@ -3755,7 +3772,7 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
-  params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped), params.references.tikzLayer === true) };
+  params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped), params.references.tikzLayer === true, params.references.overlayPictures) };
   // A size declaration preceding the list is an ambient font selection,
   // not an empty paragraph (and must apply to its generated labels too).
   const leadingSize = activeBeamerNamedSize(params.mapped.text, params.references.theme);

@@ -1,3 +1,4 @@
+import type { BeamerOverlayPicture } from "./overlay-pictures.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -53,6 +54,8 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   theme?: ResolvedBeamerTheme;
   /** The document's `tikzlayer` is the editor's drawing layer (beamerTikzLayerState). */
   tikzLayer?: boolean;
+  /** The frame's overlay pictures, by document span: paragraphs set each as an empty box. */
+  overlayPictures?: readonly BeamerOverlayPicture[];
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];
 };

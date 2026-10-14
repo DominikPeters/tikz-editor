@@ -5,7 +5,7 @@ import { createBeamerSyntaxContext } from "../packages/core/src/beamer/syntax.js
 import { formatDocumentRootId, parseDocumentRootId } from "../packages/core/src/document/root-id.js";
 import { worldPoint } from "../packages/core/src/coords/points.js";
 import { pt } from "../packages/core/src/coords/scalars.js";
-import { computeSnapshot } from "../packages/app/src/compute";
+import { computeSnapshot, isDeckSnapshotCurrent } from "../packages/app/src/compute";
 import { deckDrawingLayerRootId } from "../packages/app/src/drawing-layer";
 import { executeDocumentEdit } from "../packages/app/src/edit-execution";
 import { patchesMatchSourceTransition } from "../packages/core/src/edit/source-patches.js";
@@ -293,7 +293,7 @@ describe("drawing layer snapshots", () => {
     // The backdrop is the slide without the picture.
     expect(deck.snapshot.deck!.activeFrame!.svg).toContain(`data-source-id="path:0"`);
     expect(layer.backdropSvg).not.toContain(`data-source-id="path:0"`);
-    expect(layer.backdropSvg.length).toBeGreaterThan(1000);
+    expect(layer.backdropSvg!.length).toBeGreaterThan(1000);
   });
 
   it("show a frame without one its layer still to come, and the first shape inserts it in one edit", async () => {
@@ -327,6 +327,19 @@ describe("drawing layer snapshots", () => {
     const source = DEFINED.replace("Some text here.\n", "");
     const { snapshot } = await computeSnapshot({ id: "empty", documentId: "doc-empty", source, activeRootId: "frame:1:overlay:0" });
     expect(snapshot.overlayLayer?.insertion?.text).toBe("\n" + BEAMER_TIKZ_LAYER);
+  });
+
+  it("show a layer still to come only while it is asked for (compute fuzz)", async () => {
+    const request = { id: "to-come", documentId: "doc-to-come", source: DEFINED, sourceRevision: 0, activeRootId: "frame:0",
+      includeDrawingLayer: true, drawingLayerRootId: "frame:0:overlay:1" };
+    const { snapshot } = await computeSnapshot(request);
+    expect(snapshot.overlayLayer?.insertion).not.toBeNull();
+    expect(isDeckSnapshotCurrent(snapshot, request)).toBe(true);
+    // The tool is put down: the page's own layer, not the one still to come.
+    expect(isDeckSnapshotCurrent(snapshot, { ...request, drawingLayerRootId: null })).toBe(false);
+    const settled = await computeSnapshot({ ...request, id: "settled", drawingLayerRootId: null });
+    expect(settled.snapshot.overlayLayer?.rootId).toBe("frame:0:overlay:0");
+    expect(isDeckSnapshotCurrent(settled.snapshot, { ...request, drawingLayerRootId: null })).toBe(true);
   });
 
   it("fall back to the deck for a layer that is neither there nor next", async () => {

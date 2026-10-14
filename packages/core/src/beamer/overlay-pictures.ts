@@ -144,10 +144,12 @@ export function readBeamerOverlayPicture(
  * for it. The box keeps the picture's source range, so the laid-out
  * paragraph reports where the picture's origin is.
  */
-export function projectBeamerOverlayPictureBoxes(mapped: MappedText, tikzLayer: boolean): MappedText {
+export function projectBeamerOverlayPictureBoxes(mapped: MappedText, tikzLayer: boolean,
+  /** The document's overlay pictures, found through the text's source map before parsing it. */
+  documentPictures?: readonly BeamerOverlayPicture[]): MappedText {
   if (!mapped.text.includes("tikzpicture") && !(tikzLayer && mapped.text.includes("tikzlayer"))) return mapped;
-  const context = beamerSyntaxContext(mapped.text);
-  const pictures = beamerOverlayPicturesIn(context, { from: 0, to: mapped.text.length }, tikzLayer);
+  const pictures = (documentPictures && locateOverlayPictures(mapped, documentPictures, tikzLayer)) ??
+    beamerOverlayPicturesIn(beamerSyntaxContext(mapped.text), { from: 0, to: mapped.text.length }, tikzLayer);
   if (pictures.length === 0) return mapped;
   const parts: MappedText[] = [];
   let cursor = 0;
@@ -176,6 +178,31 @@ export function projectBeamerOverlayPictureBoxes(mapped: MappedText, tikzLayer: 
   }
   parts.push(sliceMappedText(mapped, cursor, mapped.text.length));
   return concatMappedText(parts);
+}
+
+/**
+ * The document's overlay pictures in a paragraph's text, where its source map
+ * shows them; null unless every picture the text begins is one of them.
+ */
+function locateOverlayPictures(mapped: MappedText, documentPictures: readonly BeamerOverlayPicture[], tikzLayer: boolean): BeamerOverlayPicture[] | null {
+  const origins = mapped.sourceMap.charOrigins;
+  const byStart = new Map(documentPictures.map((picture) => [picture.span.from, picture]));
+  const found: BeamerOverlayPicture[] = [];
+  for (let index = 0; index < origins.length; index += 1) {
+    const origin = origins[index];
+    const picture = origin?.kind === "direct" ? byStart.get(origin.from) : undefined;
+    if (!picture) continue;
+    let end = index;
+    while (end < origins.length && !(origins[end]?.kind === "direct" && (origins[end] as { to: number }).to === picture.span.to)) end += 1;
+    if (end === origins.length) return null;
+    found.push({ ...picture, span: { from: index, to: end + 1 } });
+    index = end;
+  }
+  for (const match of mapped.text.matchAll(/\\begin\s*\{(tikzpicture|tikzlayer)\}/gu)) {
+    if (match[1] === "tikzlayer" && !tikzLayer) continue;
+    if (!found.some((picture) => picture.span.from <= match.index && match.index < picture.span.to)) return null;
+  }
+  return found;
 }
 
 function pictureOptionBooleans(
