@@ -754,9 +754,59 @@ function shiftFigure(figure: TikzFigure, patches: readonly SourcePatch[]): TikzF
   const firstChange = Math.min(...patches.map((patch) => patch.oldSpan.from));
   const { body, ...rest } = figure;
   return {
-    ...shiftSpansDeep(structuredClone(rest), patches),
-    body: body.map((statement) => statement.span.to < firstChange ? statement : shiftSpansDeep(structuredClone(statement), patches))
+    ...cloneShiftingSpans(rest, patches),
+    body: body.map((statement) => statement.span.to < firstChange || standsThroughPatches(statement.span, patches)
+      ? statement : cloneShiftingSpans(statement, patches))
   };
+}
+
+/**
+ * A statement no patch reaches whose place the patches keep (they add and
+ * remove as much before it): every span in it stands, so it is shared, not
+ * copied. Statements on the path to a patch are always copied, as the patched
+ * statement is replaced in its parent's body.
+ */
+function standsThroughPatches(span: Span, patches: readonly SourcePatch[]): boolean {
+  if (patches.some((patch) => patch.oldSpan.from <= span.to && span.from <= patch.oldSpan.to)) return false;
+  const next = shiftSpanThroughPatches(span, patches);
+  return next.from === span.from && next.to === span.to;
+}
+
+/**
+ * A copy of an AST value with every span shifted through the patches, in one
+ * pass (as structuredClone and then shiftSpansDeep: any object with numeric
+ * `from` and `to` is a span). Anything but plain objects and arrays falls
+ * back to that pair.
+ */
+function cloneShiftingSpans<T>(value: T, patches: readonly SourcePatch[]): T {
+  const copies = new Map<object, unknown>();
+  const copy = (current: unknown): unknown => {
+    if (!current || typeof current !== "object") return current;
+    const known = copies.get(current);
+    if (known !== undefined) return known;
+    if (Array.isArray(current)) {
+      const result: unknown[] = [];
+      copies.set(current, result);
+      for (const entry of current) result.push(copy(entry));
+      return result;
+    }
+    if (Object.getPrototypeOf(current) !== Object.prototype) {
+      const result = shiftSpansDeep(structuredClone(current), patches);
+      copies.set(current, result);
+      return result;
+    }
+    const record = current as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    copies.set(current, result);
+    for (const key of Object.keys(record)) result[key] = copy(record[key]);
+    if (typeof record.from === "number" && typeof record.to === "number") {
+      const next = shiftSpanThroughPatches({ from: record.from, to: record.to }, patches);
+      result.from = next.from;
+      result.to = next.to;
+    }
+    return result;
+  };
+  return copy(value) as T;
 }
 
 function shiftSpansDeep<T>(value: T, patchesOrDelta: readonly SourcePatch[] | number): T {
