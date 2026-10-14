@@ -50,7 +50,7 @@ SceneElement
 import type { SvgRenderModel } from "@tikz-editor/core/svg";
 import type { SvgDiffHints, SvgViewBox } from "@tikz-editor/core/svg/index";
 import { createTexNodeTextEngine } from "@tikz-editor/core/text/tex-node-text-engine";
-import { createTextLayoutContext } from "@tikz-editor/core/text/layout-context";
+import { createTextLayoutContext, getTextLayoutReportProvider } from "@tikz-editor/core/text/layout-context";
 import type { NodeTextEngine,NodeTextLayoutKind } from "@tikz-editor/core/text/types";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMenuCommandId } from "../../app-menu";
@@ -61,9 +61,9 @@ import { GRID_SIZE_MINOR_TARGET_PX } from "../../settings/types";
 import { useSettingsStore } from "../../settings/useSettingsStore";
 import { useEditorStore } from "../../store/store";
 import type { CanvasDragKind,CanvasTransform } from "../../store/types";
-import { rootKey } from "../../root-key";
+import { deckStepRootKey, rootKey } from "../../root-key";
 import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
-import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { recordDragPatchModeFullReason } from "./drag-patch-mode-debug";
 import { DeckResizeOverlay } from "./DeckResizeOverlay";
 import { CanvasPanelView } from "./CanvasPanelView";
@@ -491,11 +491,10 @@ export const CanvasPanel = memo(function CanvasPanel({
   })));
   const gridMinorTargetPx = GRID_SIZE_MINOR_TARGET_PX[gridSize];
 
-  // Deck mode: the canvas shows the active frame's rendered page through the
-  // same SVG pipeline. Scene and edit handles are empty, so tikz
-  // interactions are inert; the reducer additionally rejects edit actions.
+  // The frame paints the slide; its overlay scene supplies editing geometry.
   const deckActiveFrame = snapshot.deck?.activeFrame ?? null;
-  const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const activeDeckStep = useEditorStore(s => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const drawingLayerRootId = useEditorStore(s => s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null);
   const deckFrameFresh = !!deckActiveFrame && snapshot.source === source && deckActiveFrame.frameId === activeRootId &&
     deckActiveFrame.step === Math.min(activeDeckStep, Math.max(1, deckActiveFrame.stepCount));
   const deckBuildSelection = useEditorStore((s) => s.deckBuildSelection);
@@ -526,8 +525,19 @@ export const CanvasPanel = memo(function CanvasPanel({
       });
     });
   }, [deckActiveFrame, snapshot.source]);
-  const textLayoutContext =
-    deckTextLayoutContext ?? snapshot.textLayoutContext ?? null;
+  const textLayoutContext = useMemo(() => {
+    if (!deckTextLayoutContext || !snapshot.textLayoutContext) return deckTextLayoutContext ?? snapshot.textLayoutContext ?? null;
+    const deck = getTextLayoutReportProvider(deckTextLayoutContext);
+    const picture = getTextLayoutReportProvider(snapshot.textLayoutContext);
+    if (!deck || !picture) return deckTextLayoutContext;
+    return createTextLayoutContext({
+      getParagraphReport: id => picture.getParagraphReport?.(id) ?? deck.getParagraphReport?.(id) ??
+        picture.getParagraphReports().find(report => report.paragraphId === id) ?? deck.getParagraphReports().find(report => report.paragraphId === id) ?? null,
+      getParagraphReports: () => [...deck.getParagraphReports(), ...picture.getParagraphReports()],
+      getVListLayouts: () => [...deck.getVListLayouts(), ...picture.getVListLayouts()],
+      getVListLayout: id => picture.getVListLayout(id) ?? deck.getVListLayout(id),
+    });
+  }, [deckTextLayoutContext, snapshot.textLayoutContext]);
   const deckSvgResult = useMemo(
     () =>
       deckActiveFrame
@@ -700,13 +710,14 @@ export const CanvasPanel = memo(function CanvasPanel({
   const isNestedFigureMode =
     nestedFigureRef != null && documentKind === "beamer" && snapshot.deck == null;
   /** A drawing layer, edited in place over its slide (`frame:i:overlay:j`). */
-  const overlayLayer = isNestedFigureMode && nestedFigureRef?.layer ? snapshot.overlayLayer ?? null : null;
+  const overlayLayer = snapshot.overlayLayer ?? null;
   /** The slide a drawing layer is on: the layer shares its view. */
   const viewportRootId = nestedFigureRef?.layer
     ? formatDocumentRootId({ kind: "beamer-frame", index: nestedFigureRef.frameIndex })
     : activeRootId;
   /** The parsed picture's span while nested — the maskable region. */
   const nestedFigureSpan = useMemo(() => {
+    if (snapshot.overlayLayer?.pageCoordinates) return snapshot.parseResult?.figure.span ?? null;
     if (!isNestedFigureMode) {
       return null;
     }
@@ -724,8 +735,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         // Nested figure edits parse the masked document (statement ids and
         // spans then match the snapshot's edit handles exactly) under the
         // snapshot's own tikz root id.
-        source: nestedFigureSpan ? maskSourceOutsideSpan(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
-        activeRootId: nestedFigureSpan ? snapshot.activeRootId : activeRootId,
+        source: nestedFigureSpan ? maskTikzPictureSource(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
+        activeRootId: nestedFigureSpan ? snapshot.parseResult?.activeFigureId : activeRootId,
         snapshot,
         analysis: "shared"
       }),
@@ -770,8 +781,11 @@ export const CanvasPanel = memo(function CanvasPanel({
   const suppressNextBackgroundClickRef = useRef(false);
   const pathDraftRef = useRef<PathToolDraft | null>(null);
   const freehandDraftRef = useRef<FreehandToolDraft | null>(null);
-  const previousCanvasContextKeyRef = useRef(rootKey(activeDocumentId, activeRootId));
+  const previousCanvasContextKeyRef = useRef(`${rootKey(activeDocumentId, activeRootId)}:${drawingLayerRootId ?? ""}`);
   const pendingAddedSelectionRef = useRef<PendingAddedSelection | null>(null);
+  const pendingLayerSelectionRef = useRef<{
+    documentId: string; source: string; rootId: string; sourceId: string; frameRootId: string | null;
+  } | null>(null);
   const canvasTransformRef = useRef(canvasTransform);
   const selectedElementIdsRef = useRef(selectedElementIds);
   const svgResultRef = useRef(svgResult);
@@ -856,7 +870,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [pathDraft]);
 
   useLayoutEffect(() => {
-    const nextContextKey = rootKey(activeDocumentId, activeRootId);
+    const nextContextKey = `${rootKey(activeDocumentId, activeRootId)}:${drawingLayerRootId ?? ""}`;
     if (previousCanvasContextKeyRef.current === nextContextKey) {
       return;
     }
@@ -898,6 +912,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [
     activeDocumentId,
     activeRootId,
+    drawingLayerRootId,
     clearPendingNodePositionTargetPick,
     dispatch,
     setContextMenuState,
@@ -1047,7 +1062,7 @@ export const CanvasPanel = memo(function CanvasPanel({
   const prepareEditGeometry = useStableCallback(() => {
     if (!snapshot.parseResult || !snapshot.semanticResult || snapshot.source !== source) return;
     return createEditGeometrySession({
-      source: nestedFigureSpan ? maskSourceOutsideSpan(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
+      source: nestedFigureSpan ? maskTikzPictureSource(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
       parsed: snapshot.parseResult,
       semantic: snapshot.semanticResult
     }, { textEngine: textEngineRef.current, ...snapshot.overlayLayer?.evaluate }, editParseOptions);
@@ -1614,20 +1629,22 @@ export const CanvasPanel = memo(function CanvasPanel({
         over.push(regionFor(node, `deck-object:${node.id}`, node.bounds));
       }
     }
-    // A drawing layer's shapes, over the text: a press opens the layer with the shape selected.
+    // Other pictures' shapes can request their editing geometry without changing slides.
     // Their regions are built in the layer's own SVG coordinates (the page as its view box,
     // as in the layer's editor) and shifted onto the page.
     const page = layout.page.page;
     for (const picture of layout.embeddedTikz) {
       const layer = picture.overlay;
       if (!layer) continue;
-      const viewBox = { x: -layer.origin.x, y: layer.origin.y - page.height, width: page.width, height: page.height };
+      if (snapshot.overlayLayer?.pageCoordinates && layer.rootId === snapshot.overlayLayer.rootId) continue;
+      const viewBox = { x: layer.pageCoordinates ? 0 : -layer.origin.x,
+        y: layer.pageCoordinates ? 0 : layer.origin.y - page.height, width: page.width, height: page.height };
       for (const region of buildHitRegions([...layer.elements], viewBox, canvasTransform.scale)) {
         over.push({
           // A node's text is part of its shape here: entering the layer comes first.
           ...(region.shape === "rect" ? { ...region, interactionMode: undefined, sceneTextKey: undefined } : region),
           key: `deck-layer:${layer.rootId}:${region.key}`,
-          offset: { x: layer.origin.x, y: page.height - layer.origin.y },
+          offset: layer.pageCoordinates ? { x: 0, y: 0 } : { x: layer.origin.x, y: page.height - layer.origin.y },
           layerEntry: { rootId: layer.rootId, sourceId: region.targetId }
         });
       }
@@ -1644,7 +1661,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       over.push(regionFor(node, `deck-object-marker:${item.id}`, item.bounds));
     }
     return { under, over };
-  }, [canvasTransform.scale, deckActiveFrame, deckObjectIndex]);
+  }, [canvasTransform.scale, deckActiveFrame, deckObjectIndex, snapshot.overlayLayer]);
 
   const hitRegions = useMemo<HitRegion[]>(() => {
     if (!deckActiveFrame) {
@@ -1805,7 +1822,8 @@ export const CanvasPanel = memo(function CanvasPanel({
         const toPicture = worldToPictureCoordinates(snapshot.scene);
         action = { ...action, at: toPicture(action.at), template: templateInPictureCoordinates(action.template, toPicture) };
       }
-      const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot }, action, {
+      const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot,
+        drawingLayerRootId: useEditorStore.getState().documents[activeDocumentId]?.drawingLayerRootId }, action, {
         geometry,
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame" },
         evaluateOptions: { textEngine: textEngineRef.current },
@@ -2685,8 +2703,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     onDeckObjectSelect: selectDeckObject,
     onLayerEnter: ({ rootId, sourceId }) => {
       selectDeckObject(null);
-      dispatch({ type: "SET_ACTIVE_ROOT", rootId });
-      dispatch({ type: "SELECT", id: sourceId, additive: false });
+      pendingLayerSelectionRef.current = { documentId: activeDocumentId, source, rootId, sourceId, frameRootId: activeRootId };
+      dispatch({ type: "SET_DRAWING_LAYER", rootId });
     },
     onDeckObjectActivate: (objectId: string) => {
       const node = deckObjectIndex?.byId.get(objectId);
@@ -3186,6 +3204,18 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [closeTextEditingSession, setDragState, toolMode]);
 
   useEffect(() => {
+    const pending = pendingLayerSelectionRef.current;
+    if (!pending) return;
+    if (pending.documentId !== activeDocumentId || pending.frameRootId !== activeRootId || pending.source !== source) {
+      pendingLayerSelectionRef.current = null;
+      return;
+    }
+    if (snapshot.overlayLayer?.rootId !== pending.rootId || snapshot.source !== source) return;
+    pendingLayerSelectionRef.current = null;
+    dispatch({ type: "SELECT", id: pending.sourceId, additive: false });
+  }, [activeDocumentId, activeRootId, dispatch, snapshot, source]);
+
+  useEffect(() => {
     const pending = pendingAddedSelectionRef.current;
     if (!pending) {
       return;
@@ -3312,7 +3342,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   // In a drawing layer, a click where it draws nothing is a click on the slide: back to it.
   const onEmptyClick = useStableCallback((additive: boolean) => {
-    if (overlayLayer && !additive) exitNestedFigure();
+    if (overlayLayer && !overlayLayer.pageCoordinates && !additive) exitNestedFigure();
   });
   cancelCanvasGestureRef.current = useCanvasDragController({ ...dragControllerConfig, setFreehandDraft, onEmptyClick });
 
@@ -3585,7 +3615,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             : null
         }
         nestedFigureBreadcrumb={nestedFigureBreadcrumb}
-        layerBackdropSvg={overlayLayer?.backdropSvg ?? null}
+        layerBackdropSvg={overlayLayer?.pageCoordinates ? null : overlayLayer?.backdropSvg ?? null}
         RULER_SIZE={RULER_SIZE}
       />
       {deckOverlayMenu.menu}

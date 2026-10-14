@@ -13,13 +13,14 @@ import {
   resolveParseWindowSource,
   scanFigureSpans
 } from "./shared.js";
-import { parseTikz } from "./index.js";
+import { applyStructuralMasks, parseTikz } from "./index.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import { buildLineStarts, lineForOffset } from "../text/line-map.js";
 
 export type IncrementalParseTrigger = "drag-element" | "drag-handle" | "other";
 
 export type IncrementalParseFallbackReason =
+  | "structural-mask-changed"
   | "missing-patches"
   | "no-previous-cache"
   | "source-unchanged-active-figure-mismatch"
@@ -55,6 +56,7 @@ export type IncrementalParseEvaluateInput = {
   /** Infer a source edit against the last evaluated revision, after coalescing. */
   inferChanges?: boolean;
   nodeTextValidator?: ParseTikzOptions["nodeTextValidator"];
+  structuralMasks?: ParseTikzOptions["structuralMasks"];
 };
 
 export type IncrementalParseEvaluateResult = {
@@ -66,7 +68,7 @@ export type IncrementalParseEvaluateResult = {
 
 export type IncrementalParseSession = {
   evaluate: (input: IncrementalParseEvaluateInput) => IncrementalParseEvaluateResult;
-  prime: (parse: ParseTikzResult, options?: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions"> & { sourceRevision?: number | null }) => void;
+  prime: (parse: ParseTikzResult, options?: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions" | "structuralMasks"> & { sourceRevision?: number | null }) => void;
   fork: () => IncrementalParseSession;
   reset: () => void;
 };
@@ -88,6 +90,7 @@ type CachedIncrementalParseState = {
   sourceRevision: number | null;
   activeFigureId: string | null;
   includeContextDefinitions: boolean;
+  structuralMasks: readonly Span[];
   figures: TikzFigureInventoryItem[];
   activeFigureSpan: Span | null;
   contextDefinitions: Statement[];
@@ -110,11 +113,12 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
 
   const prime = (
     parse: ParseTikzResult,
-    options: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions"> & { sourceRevision?: number | null } = {}
+    options: Pick<ParseTikzOptions, "activeFigureId" | "includeContextDefinitions" | "structuralMasks"> & { sourceRevision?: number | null } = {}
   ): void => {
     cached = buildCache(parse, {
       activeFigureId: options.activeFigureId ?? parse.activeFigureId,
       includeContextDefinitions: options.includeContextDefinitions ?? false,
+      structuralMasks: options.structuralMasks ?? [],
       sourceRevision: options.sourceRevision ?? null
     });
   };
@@ -122,6 +126,8 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
   const evaluate = (input: IncrementalParseEvaluateInput): IncrementalParseEvaluateResult => {
     const activeFigureId = input.activeFigureId;
     const includeContextDefinitions = input.includeContextDefinitions ?? false;
+    const structuralMasks = input.structuralMasks ?? [];
+    const structuralSource = applyStructuralMasks(input.source, structuralMasks);
     let patches = normalizePatches(input.patches ?? []);
     let patchApplication: IncrementalParseStats["patchApplication"] =
       patches.length > 0 ? "direct" : undefined;
@@ -156,7 +162,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       cached?.source === input.source &&
       cached.activeFigureId === (activeFigureId === undefined ? cached.activeFigureId : activeFigureId) &&
       cached.includeContextDefinitions === includeContextDefinitions &&
-      patches.length === 0
+      patches.length === 0 && sameSpans(cached.structuralMasks, structuralMasks)
     ) {
       cached = {
         ...cached,
@@ -175,11 +181,11 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
     const fallbackToFull = (reason: IncrementalParseFallbackReason): IncrementalParseEvaluateResult => {
       const parse = parseTikz(input.source, {
         recover: true, activeFigureId, includeContextDefinitions,
-        nodeTextValidator: input.nodeTextValidator
+        nodeTextValidator: input.nodeTextValidator, structuralMasks
       });
       cached = buildCache(parse, {
         activeFigureId: activeFigureId ?? parse.activeFigureId,
-        includeContextDefinitions, sourceRevision: input.sourceRevision ?? null
+        includeContextDefinitions, structuralMasks, sourceRevision: input.sourceRevision ?? null
       });
       return { parse, stats: {
         strategy: "full", fallbackReason: reason, patchApplication,
@@ -187,6 +193,9 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       } };
     };
 
+    if (cached?.source === input.source && !sameSpans(cached.structuralMasks, structuralMasks)) {
+      return fallbackToFull("structural-mask-changed");
+    }
     const fallback = decideFallbackReason({
       cached,
       inputSource: input.source,
@@ -219,11 +228,18 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         }
       }
 
-      const nextFigures = shiftFigureInventory(cached.figures, patches, input.source);
+      const rebasedMasks = cached.structuralMasks.map(mask => shiftSpanThroughPatches(mask, patches));
+      if (!sameSpans(rebasedMasks, structuralMasks)) {
+        const changedSpans = [...changedRefs.values()].map(ref => shiftSpanThroughPatches(ref.span, patches));
+        if ([...rebasedMasks, ...structuralMasks].some(mask => !changedSpans.some(span => span.from <= mask.from && mask.to <= span.to))) {
+          return fallbackToFull("structural-mask-changed");
+        }
+      }
+      const nextFigures = shiftFigureInventory(cached.figures, patches, structuralSource);
       // Typing a delimiter, comment or verbatim text can move where figures
       // begin and end, which shifting the old inventory cannot show.
       if (patches.some((patch) => figureScanMayChange(cached!.source, input.source, patch)) &&
-        !sameSpans(scanFigureSpans(input.source), nextFigures.map((figure) => figure.span))) {
+        !sameSpans(scanFigureSpans(structuralSource), nextFigures.map((figure) => figure.span))) {
         return fallbackToFull("patch-touches-figure-delimiter");
       }
       const nextActiveFigureSpan = resolveActiveFigureSpan(
@@ -245,7 +261,9 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         }
         const nextSpan = shiftSpanThroughPatches(previousRef.span, patches);
         const snippet = input.source.slice(nextSpan.from, nextSpan.to);
-        const parsedSnippet = parseStatementSnippet(snippet, input.nodeTextValidator);
+        const snippetMasks = structuralMasks.filter(mask => nextSpan.from <= mask.from && mask.to <= nextSpan.to)
+          .map(mask => ({ from: mask.from - nextSpan.from + SNIPPET_PREFIX.length, to: mask.to - nextSpan.from + SNIPPET_PREFIX.length }));
+        const parsedSnippet = parseStatementSnippet(snippet, input.nodeTextValidator, snippetMasks);
         if (parsedSnippet.parse.figure.body.length !== 1) {
           return fallbackToFull("statement-structure-changed");
         }
@@ -296,6 +314,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         sourceRevision: input.sourceRevision ?? null,
         activeFigureId: activeFigureId ?? cached.activeFigureId,
         includeContextDefinitions,
+        structuralMasks,
         figures: nextFigures,
         activeFigureSpan: nextActiveFigureSpan,
         contextDefinitions: includeContextDefinitions
@@ -304,7 +323,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         figure: nextFigure,
         statementRefsBySourceId: nextIndex,
         diagnosticPartition: nextDiagnosticPartition,
-        tree: lazy(() => parseSyntax(resolveParseWindowSource(input.source, nextActiveFigureSpan)))
+        tree: lazy(() => parseSyntax(resolveParseWindowSource(structuralSource, nextActiveFigureSpan)))
       };
       cached = nextCache;
       return {
@@ -528,12 +547,12 @@ function decideFallbackReason(input: {
   return null;
 }
 
-function parseStatementSnippet(snippet: string, nodeTextValidator?: ParseTikzOptions["nodeTextValidator"]): {
+function parseStatementSnippet(snippet: string, nodeTextValidator?: ParseTikzOptions["nodeTextValidator"], structuralMasks?: ParseTikzOptions["structuralMasks"]): {
   parse: ParseTikzResult;
   hasParseError: boolean;
 } {
   const source = `${SNIPPET_PREFIX}${snippet}\n${SNIPPET_SUFFIX.slice(1)}`;
-  const parse = parseTikz(source, { recover: true, nodeTextValidator });
+  const parse = parseTikz(source, { recover: true, nodeTextValidator, structuralMasks });
   return {
     parse,
     hasParseError: parse.diagnostics.some((diagnostic) => diagnostic.severity === "error")
@@ -564,6 +583,7 @@ function buildCache(
   options: {
     activeFigureId: string | null | undefined;
     includeContextDefinitions: boolean;
+    structuralMasks: readonly Span[];
     sourceRevision: number | null;
   }
 ): CachedIncrementalParseState {
@@ -578,6 +598,7 @@ function buildCache(
     sourceRevision: options.sourceRevision,
     activeFigureId,
     includeContextDefinitions: options.includeContextDefinitions,
+    structuralMasks: options.structuralMasks,
     figures: structuredClone(parse.figures),
     activeFigureSpan,
     contextDefinitions:

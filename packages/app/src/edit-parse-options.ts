@@ -40,12 +40,17 @@ export function buildEditParseOptions(
  * the same figure/fingerprint recipe without mutating the analysis cache.
  */
 export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditParseOptions {
+  if (input.snapshot.overlayLayer?.pageCoordinates && input.snapshot.parseResult) {
+    input = { ...input, activeRootId: input.snapshot.parseResult.activeFigureId };
+  }
   const activeRootId = parseWindowRootId(
     input.activeRootId,
     input.snapshot.figures.length
   );
   const options: EditParseOptions = {
     activeFigureId: activeRootId,
+    ...(input.snapshot.overlayLayer && input.snapshot.parseResult && (input.source === input.snapshot.source || input.source === input.snapshot.parseResult.source)
+      ? { preparedParse: { source: input.source, activeFigureId: activeRootId, result: input.snapshot.parseResult } } : {}),
     ...input.overrides,
     sourceFingerprint: buildSnapshotEditSourceFingerprint({
       documentId: input.documentId,

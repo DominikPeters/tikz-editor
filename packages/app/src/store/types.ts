@@ -133,6 +133,8 @@ export type ExternalChangeStatus = "none" | "changed" | "missing" | "permission-
 export type SourceChangeOrigin = "source-editor" | "assistant" | "disk" | "history" | "edit-command";
 
 export type DocumentSession = {
+  /** The overlay providing editing geometry while the active root remains a slide. */
+  drawingLayerRootId?: string | null;
   deckSlideSelection?: DeckSlideSelection;
   /** Session-only identities for every figure visited in this document. */
   editingIdentityRoots?: Record<string, EditingIdentityState>;
@@ -397,6 +399,7 @@ export type EditorAction =
   // Document
   | { type: "CODE_EDITED"; source: string }
   | { type: "SET_ACTIVE_ROOT"; rootId: string | null; documentId?: string }
+  | { type: "SET_DRAWING_LAYER"; rootId: string }
   | { type: "NEW_DOCUMENT"; source?: string; title?: string }
   | { type: "SWITCH_DOCUMENT"; documentId: string }
   | { type: "CLOSE_DOCUMENT"; documentId?: string }

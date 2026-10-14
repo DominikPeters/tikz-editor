@@ -8,7 +8,7 @@ import {
   resolveTransformInspectorMutationContextFromOptionEntries
 } from "@tikz-editor/core/edit/property-write-builders";
 import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
-import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { preparePathRectangleResize } from "@tikz-editor/core/edit/actions/resize-element";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import type { EditHandle, NodeAnchorTarget, SceneElement, ScenePath } from "@tikz-editor/core/semantic/types";
@@ -348,7 +348,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       );
       const frameAspectRatio = aspectRatioForResizeFrame(initialFrame);
       const rectangleBaseline = preparePathRectangleResize(
-        nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
+        nestedFigureSpan ? maskTikzPictureSource(source, nestedFigureSpan) : source,
         statements ?? [], snapshot.scene?.elements ?? [], snapshot.editHandles, sourceId
       );
       const snapContext = snapshot.scene

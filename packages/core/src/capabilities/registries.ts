@@ -16,6 +16,7 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Stock figure/table captions share their source-backed flow capability.
   // Automatic frame splitting and stock continuation titles share one ID.
   // Frame, column and nested block/theorem source cards share the placeholder ID.
+  // Embedded picture context and isolated SVG definitions share the overlay picture ID.
   // Headings/class sizes/columns, preamble color roles and basic tcolorbox
   // composition have separate document-renderer contracts.
   return FEATURE_IDS.filter((featureId) => {
@@ -27,5 +28,5 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
 export const parserFeatureRegistry = featuresSupportedBy("parser");
 export const semanticFeatureRegistry = featuresSupportedBy("semantic");
 export const svgFeatureRegistry = featuresSupportedBy("svg");
-// Includes source-based Beamer slide management and clipboard edits with dependency and concrete macro effect analysis (unknown uses stay quiet), overlay edits and direct column/image/spacing resizing; these do not add a TikZ SVG feature.
+// Includes source-based Beamer slide management and clipboard edits with dependency and concrete macro effect analysis (unknown uses stay quiet), overlay timing, drawing-layer creation/editing and direct column/image/spacing resizing; these do not add a TikZ SVG feature.
 export const editFeatureRegistry = featuresSupportedBy("edit");

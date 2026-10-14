@@ -46,6 +46,7 @@ export const COLOR_HEX: Record<string, string> = {
 };
 
 export const NON_STYLE_OPTION_KEYS = new Set([
+  "remember picture",
   "start angle",
   "end angle",
   "delta angle",

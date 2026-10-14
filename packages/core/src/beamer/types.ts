@@ -408,9 +408,11 @@ export type BeamerOverlayPictureLayout = {
   /** Its origin, TikZ's (0,0), on the page (pt, y down). */
   origin: { x: number; y: number };
   rememberPicture: boolean;
-  /** What it draws, in its own coordinates; source spans are relative to `sourceOffset`. */
+  /** What it draws; normally in picture coordinates, unless `pageCoordinates` is set. Source spans are relative to `sourceOffset`. */
   elements: readonly SceneElement[];
   sourceOffset: number;
+  /** Incrementally edited layers may expose geometry directly in page coordinates. */
+  pageCoordinates?: true;
 };
 
 export type BeamerGraphicsLayout = {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { parseTikz } from "../packages/core/src/parser/index.js";
+import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
+import { computeMinimalReplacementPatch } from "../packages/core/src/edit/patch.js";
 
 const PICTURE_PREFIX = "\\begin{tikzpicture}\n";
 
@@ -138,5 +139,63 @@ describe("parseTikz structural masks", () => {
         structuralMasks: [{ from: -5, to: source.length + 100 }]
       })
     ).not.toThrow();
+  });
+});
+
+describe("incremental structural masks", () => {
+  const initial = wrap("\\node at (0,0) {hello};\n\\node at (2,0) {world};\n\\draw (0,0) -- (2,0);");
+
+  it("contains unfinished text and picture delimiters while reusing the following statements", () => {
+    const session = createIncrementalParseSession();
+    session.evaluate({ source: initial, sourceRevision: 0 });
+    let source = initial;
+    for (const [index, text] of ["hello \\textbf{", "hello \\end{tikzpicture}\n{{{", "finished"].entries()) {
+      const oldText = index === 0 ? "hello" : index === 1 ? "hello \\textbf{" : "hello \\end{tikzpicture}\n{{{";
+      const next = source.replace(oldText, text);
+      const masks = [nodeTextSpan(next, text)];
+      const result = session.evaluate({ source: next, sourceRevision: index + 1,
+        structuralMasks: masks, changedSourceIds: ["path:0"],
+        patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: index });
+      const cold = parseTikz(next, { recover: true, structuralMasks: masks });
+      expect(result.stats).toMatchObject({ strategy: "incremental", reparsedStatementCount: 1, reusedStatementCount: 2 });
+      expect(result.parse.figure).toEqual(cold.figure);
+      expect(result.parse.figures).toEqual(cold.figures);
+      expect(result.parse.diagnostics).toEqual(cold.diagnostics);
+      expect(result.parse.tree).toMatchObject({ length: cold.tree.length, topNode: { name: cold.tree.topNode.name } });
+      source = next;
+    }
+  });
+
+  it("reparses when a mask is removed without a source change", () => {
+    const source = initial.replace("hello", "hello \\textbf{");
+    const session = createIncrementalParseSession();
+    session.evaluate({ source, structuralMasks: [nodeTextSpan(source, "hello \\textbf{")] });
+    const result = session.evaluate({ source });
+    expect(result.stats).toMatchObject({ strategy: "full", fallbackReason: "structural-mask-changed" });
+    expect(result.parse.figure).toEqual(parseTikz(source, { recover: true }).figure);
+    expect(result.parse.figure.body).toHaveLength(1);
+  });
+
+  it("invalidates a mask change outside the edited statement", () => {
+    const session = createIncrementalParseSession();
+    session.evaluate({ source: initial, sourceRevision: 0 });
+    const source = initial.replace("hello", "longer");
+    const masks = [nodeTextSpan(source, "world")];
+    const result = session.evaluate({ source, sourceRevision: 1, structuralMasks: masks,
+      changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(initial, source)], patchBaseRevision: 0 });
+    expect(result.stats).toMatchObject({ strategy: "full", fallbackReason: "structural-mask-changed" });
+    expect(result.parse.figure).toEqual(parseTikz(source, { recover: true, structuralMasks: masks }).figure);
+  });
+
+  it("rebases an unchanged mask past an earlier edit", () => {
+    const source = initial.replace("world", "world \\textbf{");
+    const session = createIncrementalParseSession();
+    session.evaluate({ source, sourceRevision: 0, structuralMasks: [nodeTextSpan(source, "world \\textbf{")] });
+    const next = source.replace("hello", "a much longer first label");
+    const masks = [nodeTextSpan(next, "world \\textbf{")];
+    const result = session.evaluate({ source: next, sourceRevision: 1, structuralMasks: masks,
+      changedSourceIds: ["path:0"], patches: [computeMinimalReplacementPatch(source, next)], patchBaseRevision: 0 });
+    expect(result.stats.strategy).toBe("incremental");
+    expect(result.parse.figure).toEqual(parseTikz(next, { recover: true, structuralMasks: masks }).figure);
   });
 });

@@ -310,7 +310,9 @@ export function scanBeamerFrameOverlays(
         sourceOrder: command.from,
         span: {
           from: command.from,
-          to: optional?.span.to ?? command.to,
+          // The optional-argument lookahead eats spaces after a bare \pause.
+          // A blank line is a \par token and must survive projection.
+          to: optional?.span.to ?? command.to + (/^[ \t]*(?:\n(?![ \t]*\n)[ \t]*)?/u.exec(source.slice(command.to, frame.bodySpan.to))?.[0].length ?? 0),
         },
         requestedStep: requested,
       });
@@ -462,7 +464,10 @@ export function scanBeamerFrameOverlays(
     ...pause,
     contentSpan: {
       from: pause.span.to,
-      to: pauseStarts[index + 1]?.span.from ?? frame.bodySpan.to,
+      // \pause is an \onslide declaration in Beamer. A later declaration
+      // closes its cover, including a bare \onslide that restores visibility.
+      to: Math.min(pauseStarts[index + 1]?.span.from ?? frame.bodySpan.to,
+        declarations.find(declaration => declaration.from > pause.span.from)?.from ?? frame.bodySpan.to),
     },
   }));
 

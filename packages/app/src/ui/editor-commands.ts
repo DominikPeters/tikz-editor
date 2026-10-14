@@ -30,7 +30,7 @@ import type { EditorAction, EditorState } from "../store/types";
 import { beginDocumentEdit, canContinueDocumentEdit, type DocumentEditSession } from "../edit-session";
 import { executeDocumentEdit, nestedEditBaseSource, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
 import { buildEditParseOptions } from "../edit-parse-options";
-import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { useEditorStore } from "../store/store";
 import {
   buildSelectionPngBase64,
@@ -105,10 +105,11 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
   const document = state.documents[session.documentId];
   const editContext: EditExecutionContext = {
     documentId: session.documentId, source: session.latestSource, sourceRevision: session.latestRevision,
-    activeRootId: session.activeRootId, snapshot: document.snapshot
+    activeRootId: session.activeRootId, snapshot: document.snapshot,
+    drawingLayerRootId: document.drawingLayerRootId
   };
   const nestedSpan = resolveNestedEditSpan(editContext);
-  const parseSource = nestedSpan ? maskSourceOutsideSpan(nestedEditBaseSource(context.source, document.snapshot), nestedSpan) : context.source;
+  const parseSource = nestedSpan ? maskTikzPictureSource(nestedEditBaseSource(context.source, document.snapshot), nestedSpan) : context.source;
   return {
     ...context,
     getState,
@@ -118,7 +119,7 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
     activeRootId: session.activeRootId,
     parseOptions: buildEditParseOptions({
       ...editContext, source: parseSource,
-      activeRootId: nestedSpan ? document.snapshot.activeRootId : session.activeRootId,
+      activeRootId: nestedSpan ? document.snapshot.parseResult?.activeFigureId : session.activeRootId,
       analysis: "none", overrides: { indentSize: context.parseOptions?.indentSize }
     }),
     dispatch: action => {

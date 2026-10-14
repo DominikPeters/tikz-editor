@@ -40,6 +40,7 @@ export function computeSchedulingPolicy(
   // unrendered or belongs to a different document with typing provenance.
   if (before.documentId !== next.documentId) return immediate("document-switch");
   if (before.activeRootId !== next.activeRootId) return immediate("root-switch");
+  if (before.drawingLayerRootId !== next.drawingLayerRootId) return immediate("root-switch");
   if (before.deckStep !== next.deckStep) return immediate("overlay-step");
   if (before.documentFileRef !== next.documentFileRef) return immediate("file-context");
   if (previous.assetRefreshToken !== current.assetRefreshToken) return immediate("asset-refresh");

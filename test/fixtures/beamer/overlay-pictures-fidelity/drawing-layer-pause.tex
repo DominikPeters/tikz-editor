@@ -1,0 +1,11 @@
+\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{Drawing}
+First.\pause Second.%
+\onslide<1->%
+\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]
+\node at (2,3) {Added};
+\end{tikzpicture}
+\end{frame}
+\end{document}

@@ -778,9 +778,9 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "partial",
     semantic: "not-applicable",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["beamer_overlay_pictures"],
-    notes: "A tikzpicture with `overlay` among its own options is set as TeX sets it, an empty box in the paragraph around it, and drawn from that place over the page; with `remember picture` its `current page` node is the page. Paragraph glue, the picture's origin and its text are checked against LuaLaTeX in frames, lists, columns, blocks and under \\only/\\uncover. The `\\tikz` command form, references between remembered pictures, `remember picture` set through styles, scaling by frame shrink and drawing covered pictures invisibly are not implemented; the pictures are not yet editable on the slide.",
+    notes: "A tikzpicture with `overlay` among its own options is set as TeX sets it, an empty box in the paragraph around it, and drawn from that place over the page; with `remember picture` its `current page` node is the page. Explicit true/false options respect source order. Paragraph glue, the picture's origin and its text are checked against LuaLaTeX in frames, lists, columns, blocks and under \\only/\\uncover. Shapes can be selected and edited directly on the slide without changing the active frame or text-editing surface. Drawing tools reuse a visible layer or create a top-level picture at the end of the frame with the first drawing, including the TikZ package when needed, in one undo step. Deleting the last drawing removes the empty picture. The viewed overlay step and slide viewport are shared with the layer. Pictures inherit visible preamble/frame styles, colors and macros, and have separate SVG IDs for clips, gradients and patterns. Drags, inspector scrubs and structurally masked node typing reuse parsing, semantic checkpoints, per-object SVG paint and the slide body layout; 500-object, text-heavy layers and resize/rotate/paste/cancellation are covered by regressions. The `\\tikz` command form, references between remembered pictures, `remember picture` set through styles, scaling by frame shrink and drawing covered pictures invisibly are not implemented.",
   },
   beamer_float_captions: {
     parser: "partial",

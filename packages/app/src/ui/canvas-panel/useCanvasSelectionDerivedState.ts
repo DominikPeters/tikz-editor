@@ -509,7 +509,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     }
     const statements = snapshot.parseResult?.figure.body;
     const geometry = snapshot.parseResult && snapshot.semanticResult && scopeResizeSourceIds.size > 0
-      ? createEditGeometrySession({ source: snapshot.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { textEngine: args.textEngine, ...snapshot.overlayLayer?.evaluate })
+      ? createEditGeometrySession({ source: snapshot.parseResult.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { textEngine: args.textEngine, ...snapshot.overlayLayer?.evaluate })
       : null;
     for (const sourceId of resizeFrameSourceIds) {
       if (scopeResizeSourceIds.has(sourceId)) {
@@ -540,7 +540,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
       frames.set(sourceId, frame);
     }
     return frames;
-  }, [args.textEngine, resizeFrameSourceIds, scopeOverlay.ancestorScopeIdsBySourceId, scopeResizeSourceIds, snapshot.editHandles, snapshot.parseResult, snapshot.semanticResult, snapshot.source, snapshot.scene, svgResult]);
+  }, [args.textEngine, resizeFrameSourceIds, scopeOverlay.ancestorScopeIdsBySourceId, scopeResizeSourceIds, snapshot.editHandles, snapshot.parseResult, snapshot.semanticResult, snapshot.scene, snapshot.overlayLayer?.evaluate, svgResult]);
 
   const selectionBoxes = useMemo<SelectionBoxDisplay[]>(() => {
     const textOnlyNodeSelectionSourceIds = new Set<string>();

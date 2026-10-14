@@ -705,10 +705,40 @@ Two modes, matching Beamer idiom:
   corner at the picture's origin). Checked against LuaLaTeX in
   `test/fixtures/beamer/overlay-pictures-fidelity` (frames, lists, columns,
   blocks, `\only`/`\uncover`). 7 of the 11 corpus authors use such pictures,
-  mostly a node at a `current page` anchor. Interim interaction: the picture
-  is selectable only where no text is (its hit region sits under the text);
-  step 2 hit-tests its shapes and edits them on the slide, step 3 creates the
-  picture from the drawing tools.
+  mostly a node at a `current page` anchor.
+
+  Steps 2 and 3 (editing and creation) are implemented. Overlay shapes are
+  selected and edited directly on the slide. The frame remains the active
+  document root, with text editing, step controls and the same viewport.
+  A drawing tool reuses the last visible remembered
+  picture (else the last visible layer), or prepares a new layer when none is
+  visible. Its first drawing inserts the layer and, if needed, loads TikZ in
+  the preamble, as one undoable edit. Generated pictures are inserted at the
+  frame's top level, after its content, outside lists, columns and blocks,
+  joined so they move no text (LuaLaTeX: `drawing-layer-joins.tex`): after
+  text a `%` line keeps the empty box in the last paragraph, after a list or
+  block `\nointerlineskip` drops its line's baseline glue. Each step is laid
+  out to check; else a paragraph of its own. A preceding `\pause`/`\onslide` cover is closed so the new drawing is visible
+  on every step. Deleting the last drawing removes the empty picture and the
+  lines that joined it in the same undoable edit. Clicking empty canvas clears
+  selection. Changes confined to an overlay picture reuse the slide's text
+  layout and rebind document source offsets. Drags, inspector scrubs and node
+  typing use the existing TikZ incremental parser, semantic checkpoints, and
+  per-object SVG patches. Structural masks keep unfinished node text contained
+  while typing; changing those masks invalidates any affected parse baseline.
+  Statement insertion/deletion can reparse the picture without laying out the
+  slide body again. Source edits outside the picture and step changes invalidate
+  the reused slide layout.
+  Inspector queries reuse the picture's scoped parse with absolute spans.
+  Both flow and overlay pictures inherit visible preamble/frame definitions
+  (styles, colors and macros) with TeX group lifetimes. Embedded pictures have
+  separate SVG definition IDs, including clips, gradients and patterns.
+  Regression coverage is in `test/beamer-drawing-layer.spec.ts`,
+  `test/beamer-overlay-incremental.spec.ts`, `test/beamer-picture-context.spec.ts`,
+  `test/svg-namespace.spec.ts` and `apps/web/e2e/beamer-drawing-layer.spec.ts`.
+  The browser tests include a 500-object/text-heavy layer, inspector scrubs,
+  node typing, resizing, rotation, paste, undo and canceled drags, and save
+  compute/SVG patch profiles for the interactive cases.
 
 The slide canvas is a composition root: theme chrome (non-editable) + flow
 blocks (block layout engine) + embedded figure boxes (existing renderer) +

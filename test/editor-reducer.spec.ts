@@ -909,6 +909,11 @@ describe("editorReducer – selection", () => {
 // ── SET_TOOL_MODE ──────────────────────────────────────────────────────────────
 
 describe("editorReducer – SET_TOOL_MODE", () => {
+  it("keeps a legacy overlay-root navigation on its owning slide", () => {
+    const state = editorReducer(makeInitialState(), { type: "SET_ACTIVE_ROOT", rootId: "frame:2:overlay:1" });
+    expect(state.activeRootId).toBe("frame:2");
+    expect(state.documents[state.activeDocumentId].drawingLayerRootId).toBe("frame:2:overlay:1");
+  });
   it("updates tool mode", () => {
     const state = applyActions([{ type: "SET_TOOL_MODE", mode: "addNode" }]);
     expect(state.toolMode).toBe("addNode");
@@ -945,8 +950,26 @@ Text.
       expect(editorReducer(shown, { type: "SET_TOOL_MODE", mode: "magnify" }).activeRootId).toBe(frame);
       const drawing = editorReducer(shown, { type: "SET_TOOL_MODE", mode: "addRect" });
       expect(drawing.toolMode).toBe("addRect");
-      expect(drawing.activeRootId).toBe(layer);
+      expect(drawing.activeRootId).toBe(frame);
+      expect(drawing.documents[drawing.activeDocumentId].drawingLayerRootId).toBe(layer);
     }
+  });
+
+  it("shares the slide's current step when entering, changing, and leaving its drawing layer", () => {
+    const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}A\pause B\end{frame}\end{document}`;
+    const initial = applyActions([
+      { type: "CODE_EDITED", source },
+      { type: "SET_ACTIVE_ROOT", rootId: "frame:0" },
+      { type: "SET_DECK_STEP", rootId: "frame:0", step: 2 },
+      { type: "SET_TOOL_MODE", mode: "addRect" }
+    ]);
+    expect(initial.activeRootId).toBe("frame:0");
+    expect(initial.documents[initial.activeDocumentId].drawingLayerRootId).toBe("frame:0:overlay:0");
+    const changed = editorReducer(initial, { type: "SET_DECK_STEP", rootId: initial.activeRootId!, step: 3 });
+    expect(changed.deckStepByRootKey[`${changed.activeDocumentId}::frame:0`]).toBe(3);
+    expect(changed.deckStepByRootKey[`${changed.activeDocumentId}::frame:0:overlay:0`]).toBeUndefined();
+    const back = editorReducer(changed, { type: "SET_ACTIVE_ROOT", rootId: "frame:0" });
+    expect(back.deckStepByRootKey[`${back.activeDocumentId}::frame:0`]).toBe(3);
   });
 });
 

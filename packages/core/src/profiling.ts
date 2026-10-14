@@ -12,6 +12,7 @@ export type TikzEditorProfilingComputeTiming = {
   durationMs: number;
   changedSourceCount?: number;
   incremental?: boolean;
+  deckLayoutReused?: boolean;
   parseStrategy?: string | null;
   parseFallbackReason?: string | null;
   parsePatchApplication?: string | null;

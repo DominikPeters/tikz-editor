@@ -4,7 +4,7 @@ import type { DocumentFileRef, DocumentSession, EditorAction, EditorState, Works
 import { loadWorkspaceSeed, saveWorkspace } from "./workspace-storage";
 import { workspaceStateFromEditorState } from "./workspace-state";
 import { claimCachedDeckSnapshot, cancelDeckPrewarm } from "../compute";
-import { rootKey } from "../root-key";
+import { deckStepRootKey } from "../root-key";
 
 const HIGH_FREQUENCY_WORKSPACE_SAVE_DELAY_MS = 1000;
 
@@ -21,8 +21,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
       next.activeCanvasDragKind != null || next.activeSourceScrubSourceId != null ||
       next.activeCanvasTextEditSourceId != null || next.activeInspectorEditDocumentId != null) cancelDeckPrewarm();
     const navigated = next.activeDocumentId !== state.activeDocumentId || next.activeRootId !== state.activeRootId ||
-      (next.deckStepByRootKey[rootKey(next.activeDocumentId, next.activeRootId)] ?? 1) !==
-      (state.deckStepByRootKey[rootKey(state.activeDocumentId, state.activeRootId)] ?? 1);
+      (next.deckStepByRootKey[deckStepRootKey(next.activeDocumentId, next.activeRootId)] ?? 1) !==
+      (state.deckStepByRootKey[deckStepRootKey(state.activeDocumentId, state.activeRootId)] ?? 1);
     if ((action.type === "SET_ACTIVE_ROOT" || action.type === "SELECT_DECK_SLIDES" || action.type === "SET_DECK_STEP" ||
       action.type === "SWITCH_DOCUMENT") && navigated && next.documentKind === "beamer" &&
       next.activeCanvasDragKind == null && next.activeSourceScrubSourceId == null &&
@@ -31,7 +31,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const doc = next.documents[next.activeDocumentId];
       const snapshot = claimCachedDeckSnapshot({ id: requestId, documentId: doc.id, source: doc.source,
         sourceRevision: doc.sourceRevision, documentFileRef: doc.fileRef, activeRootId: doc.activeRootId,
-        deckStep: next.deckStepByRootKey[rootKey(doc.id, doc.activeRootId)] ?? 1,
+        drawingLayerRootId: doc.drawingLayerRootId, includeDrawingLayer: true,
+        deckStep: next.deckStepByRootKey[deckStepRootKey(doc.id, doc.activeRootId)] ?? 1,
         schedulingTrigger: action.type === "SET_DECK_STEP" ? "overlay-step" : action.type === "SWITCH_DOCUMENT" ? "document-switch" : "root-switch" });
       if (snapshot) {
         // These reducers run within one Zustand update: no observer can see

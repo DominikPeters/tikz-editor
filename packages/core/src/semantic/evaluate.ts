@@ -248,7 +248,7 @@ export function createSemanticEvaluationRun(
   const initialFont = opts.initialFont ? parseFontStyle(opts.initialFont) : null;
   const context = createSemanticContext(
     initialFont ? { ...defaultStyle(), ...initialFont } : defaultStyle(),
-    identityMatrix(),
+    opts.initialTransform ?? identityMatrix(),
     opts.textEngine ?? null,
     source,
     opts.sourceFingerprint,

@@ -1,4 +1,4 @@
-import { reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
+import { editingIdentityRootId, reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
 import { executeDocumentEdit } from "../edit-execution";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
 import { editBeamerSlides, isDeckEditAction } from "@tikz-editor/core/beamer/index";
@@ -29,7 +29,7 @@ import {
   type WorkspaceSeed
 } from "./workspace-state";
 import { reconcileActiveRootSelection, snapshotRoots } from "../root-inventory";
-import { rootKey } from "../root-key";
+import { deckStepRootKey, rootKey } from "../root-key";
 export { DEFAULT_SOURCE, WORKSPACE_VERSION } from "./workspace-state";
 const FREEHAND_SMOOTHING_MIN_PX = 4;
 const FREEHAND_SMOOTHING_MAX_PX = 32;
@@ -392,16 +392,27 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
     case "SET_ACTIVE_ROOT": {
       const documentId = activeDocumentIdFromAction(state, action.documentId);
+      const ref = parseDocumentRootId(action.rootId ?? "");
+      const layer = ref?.kind === "beamer-frame-tikz" && ref.layer ? ref : null;
+      const rootId = layer ? formatDocumentRootId({ kind: "beamer-frame", index: layer.frameIndex }) : action.rootId;
       workspace = updateDocument(workspace, documentId, (doc) =>
-        doc.activeRootId === action.rootId
+        doc.activeRootId === rootId && (!layer || doc.drawingLayerRootId === action.rootId)
           ? doc
           : {
               ...doc,
-              activeRootId: action.rootId,
+              activeRootId: rootId,
+              drawingLayerRootId: layer ? action.rootId : null,
+              selectedElementIds: new Set(),
               deckSlideSelection: undefined,
               hasInitializedRootSelection: true
             }
       );
+      break;
+    }
+
+    case "SET_DRAWING_LAYER": {
+      workspace = updateDocument(workspace, activeId, doc => ({ ...doc, drawingLayerRootId: action.rootId,
+        selectedElementIds: new Set(), focusedScopeId: null }));
       break;
     }
 
@@ -569,10 +580,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         if (!isCurrentPendingRequest && !canApplyIntermediateDragSnapshot) {
           return doc;
         }
+        if (action.snapshot.overlayLayer?.pageCoordinates &&
+          (doc.drawingLayerRootId ?? null) !== (action.snapshot.overlayLayer.requestedRootId ?? null)) return doc;
         const page = action.snapshot.deck?.activeFrame;
         if (page) {
           const expected = action.snapshot.deck?.frames.find(frame => frame.id === doc.activeRootId);
-          const step = Math.min(Math.max(1, ui.deckStepByRootKey[rootKey(documentId, doc.activeRootId)] ?? 1), Math.max(1, page.stepCount));
+          const step = Math.min(Math.max(1, ui.deckStepByRootKey[deckStepRootKey(documentId, doc.activeRootId)] ?? 1), Math.max(1, page.stepCount));
           if (action.snapshot.source !== doc.source || page.layout.frameId !== page.frameId || page.layout.step !== page.step ||
             (expected && (page.frameId !== expected.id || page.step !== step))) return doc;
         }
@@ -598,7 +611,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
               roots: snapshotRoots(action.snapshot)
             });
         const matchesCurrent = action.snapshot.source === doc.source;
-        const identities = matchesCurrent ? reconcileEditingIdentities(doc.editingIdentityRoots?.[action.snapshot.activeRootId ?? ""] ?? doc.editingIdentities, action.snapshot, doc.id, doc.nextEditingIdentityId) : undefined;
+        const identities = matchesCurrent ? reconcileEditingIdentities(doc.editingIdentityRoots?.[editingIdentityRootId(action.snapshot) ?? ""] ?? doc.editingIdentities, action.snapshot, doc.id, doc.nextEditingIdentityId) : undefined;
         const byIdentity = new Map(identities?.entries.map(entry => [entry.id, entry.sourceId]));
         const roots = identities ? { ...doc.editingIdentityRoots, [identities.rootId ?? ""]: { ...identities, selection: null } } : doc.editingIdentityRoots;
         const history = [...doc.history];
@@ -624,6 +637,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
             ? byIdentity.get(doc.editingIdentities.focused) ?? null : doc.focusedScopeId,
           snapshot: identities ? withEditingHandleIdentities(action.snapshot, identities) : action.snapshot,
           activeRootId: rootSelection.activeRootId,
+          drawingLayerRootId: action.snapshot.overlayLayer?.pageCoordinates ? action.snapshot.overlayLayer.rootId : doc.drawingLayerRootId,
           hasInitializedRootSelection: rootSelection.hasInitializedRootSelection,
           pendingRequestId: isCurrentPendingRequest ? null : doc.pendingRequestId,
           activeHandleId:
@@ -846,7 +860,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         isBeamerDocument &&
         parseDocumentRootId(activeDoc.activeRootId ?? "")?.kind === "beamer-frame-tikz";
       const isDeckMode = isBeamerDocument && !nestedTikzRootActive;
-      if (isDeckMode && !isDeckEditAction(action.action)) {
+      if (isDeckMode && !isDeckEditAction(action.action) && !activeDoc.snapshot.overlayLayer) {
         // Tikz edit actions would corrupt the deck source; decks accept only
         // the deck action family.
         workspace = updateDocument(workspace, documentId, (doc) =>
@@ -1398,14 +1412,17 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       if (doc?.assistantLockReason) return state;
       // A drawing tool on a slide opens the slide's drawing layer.
       const layerRootId = doc && action.mode !== "select" && action.mode !== "magnify" && documentKindForSource(doc.source) === "beamer"
-        ? deckDrawingLayerRootId(doc.activeRootId, doc.snapshot)
+        ? deckDrawingLayerRootId(doc.activeRootId, doc.snapshot, doc.source)
         : null;
       if (ui.toolMode === action.mode && !layerRootId) return state;
       ui = { ...ui, toolMode: action.mode };
       if (layerRootId) {
         workspace = updateDocument(workspace, activeId, (current) => ({
-          ...current, activeRootId: layerRootId, deckSlideSelection: undefined, hasInitializedRootSelection: true
+          ...current, drawingLayerRootId: layerRootId, deckSlideSelection: undefined
         }));
+      } else if (doc?.snapshot.overlayLayer?.insertion) {
+        // Putting the tool down drops a layer still to come.
+        workspace = updateDocument(workspace, activeId, (current) => ({ ...current, drawingLayerRootId: null }));
       }
       break;
     }
@@ -1505,7 +1522,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
 
     case "SET_DECK_STEP": {
-      const key = rootKey(workspace.activeDocumentId, action.rootId);
+      const key = deckStepRootKey(workspace.activeDocumentId, action.rootId);
       const step = Math.max(1, Math.round(action.step));
       if (ui.deckStepByRootKey[key] === step) return state;
       ui = {

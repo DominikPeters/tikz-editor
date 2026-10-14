@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { beamerOverlayPicturesIn, renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { createBeamerSyntaxContext } from "../packages/core/src/beamer/syntax.js";
 import { renderTikzToSvgAsync } from "../packages/core/src/index.js";
 import { computerModernTexMetricProvider } from "../packages/core/src/text/tex/index.js";
 import { buildNativeBeamerPageTrace, compareBeamerPageTraces, type OracleBeamerPageTrace } from "../scripts/lib/beamer-frame-compare.mjs";
@@ -11,8 +12,62 @@ const oracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-pictur
   sourceSha256: string;
   pages: Array<OracleBeamerPageTrace & { frame: number; step: number }>;
 };
+const pauseSource = readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-pause.tex", import.meta.url), "utf8");
+const pauseOracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-pause.oracle.json", import.meta.url), "utf8")) as {
+  sourceSha256: string;
+  pages: Array<{ step: number; trace: OracleBeamerPageTrace }>;
+};
+const joinsSource = readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-joins.tex", import.meta.url), "utf8");
+const joinsOracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-joins.oracle.json", import.meta.url), "utf8")) as {
+  sourceSha256: string;
+  pages: Array<{ frame: number; trace: OracleBeamerPageTrace }>;
+};
 
 describe("Beamer overlay pictures", () => {
+  it.each(pauseOracle.pages)("matches LuaLaTeX for a drawing layer after a closed pause, step $step", async ({ step, trace }) => {
+    expect(createHash("sha256").update(pauseSource).digest("hex")).toBe(pauseOracle.sourceSha256);
+    const rendered = await renderBeamerFrame(pauseSource, { step });
+    expect(rendered.diagnostics).toEqual([]);
+    const native = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    const comparison = compareBeamerPageTraces(native, trace);
+    expect(comparison.summary.glyphCodeMatch).toBe(true);
+    expect(comparison.summary.fontMatch).toBe(true);
+    expect(comparison.summary.unmatchedNativeTextLines).toBe(0);
+    expect(comparison.summary.unmatchedOracleTextLines).toBe(0);
+    expect(native.coveredLines?.some(line => line.text === "Second.") ?? false).toBe(step === 1);
+    expect(native.lines.some(line => line.text === "Added")).toBe(true);
+    expect(comparison.summary.maxAbsoluteGlyphDxPt).toBeLessThan(.001);
+    expect(comparison.summary.maxAbsoluteGlyphDyPt).toBeLessThan(.001);
+    expect(rendered.layout.embeddedTikz[0].overlay?.rootId).toBe("frame:0:overlay:0");
+  });
+  it.each(joinsOracle.pages)("matches LuaLaTeX for a new drawing layer joined to frame $frame", async ({ frame, trace }) => {
+    expect(createHash("sha256").update(joinsSource).digest("hex")).toBe(joinsOracle.sourceSha256);
+    const rendered = await renderBeamerFrame(joinsSource, { frameIndex: frame - 1 });
+    expect(rendered.diagnostics).toEqual([]);
+    const comparison = compareBeamerPageTraces(buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider), trace);
+    expect(comparison.summary.glyphCodeMatch).toBe(true);
+    expect(comparison.summary.unmatchedNativeTextLines).toBe(0);
+    expect(comparison.summary.unmatchedOracleTextLines).toBe(0);
+    expect(comparison.summary.maxAbsoluteGlyphDxPt).toBeLessThan(.001);
+    expect(comparison.summary.maxAbsoluteGlyphDyPt).toBeLessThan(.001);
+  });
+  it.each([
+    ["overlay=true, remember picture=true", true, true],
+    ["overlay={true}, remember picture={true}", true, true],
+    ["overlay, overlay=false, remember picture", false, false],
+    ["overlay=false, overlay, remember picture, remember picture=false", true, false],
+    ["/tikz/overlay=true, /tikz/remember picture=true", true, true],
+  ] as const)("respects the ordered boolean picture options %s", (options, overlay, rememberPicture) => {
+    const source = String.raw`\begin{tikzpicture}[${options}]\draw (0,0) -- (1,1);\end{tikzpicture}`;
+    const pictures = beamerOverlayPicturesIn(createBeamerSyntaxContext(source), { from: 0, to: source.length });
+    expect(pictures).toEqual(overlay ? [{ span: { from: 0, to: source.length }, rememberPicture }] : []);
+  });
+
+  it("renders explicit boolean overlay options as a page layer", async () => {
+    const rendered = await renderBeamerFrame(source.replaceAll("remember picture, overlay", "remember picture=true, overlay=true"), { frameIndex: 0 });
+    expect(rendered.diagnostics).toEqual([]);
+    expect(rendered.layout.embeddedTikz[0].overlay?.rememberPicture).toBe(true);
+  });
   it.each(oracle.pages.map(page => [page.frame, page.step] as const))("matches the pinned LuaLaTeX glyphs of frame %i, step %i", async (frame, step) => {
     expect(createHash("sha256").update(source).digest("hex")).toBe(oracle.sourceSha256);
     const rendered = await renderBeamerFrame(source, { frameIndex: frame - 1, step });
@@ -50,6 +105,15 @@ describe("Beamer overlay pictures", () => {
 });
 
 describe("TikZ overlay and current page", () => {
+  it("allows overlay=false to restore bounding-box participation inside an overlay scope", async () => {
+    const rendered = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}[overlay=true]
+\draw (0,0) -- (9,9);
+\draw[overlay=false] (0,0) rectangle (1,1);
+\end{tikzpicture}`, { svg: { padding: 0 } });
+    expect([...rendered.parse.diagnostics, ...rendered.semantic.diagnostics]).toEqual([]);
+    expect(rendered.semantic.scene.bounds?.maxX).toBeCloseTo(28.6528, 3);
+    expect(rendered.semantic.scene.bounds?.maxY).toBeCloseTo(28.6528, 3);
+  });
   it("leaves overlay material out of the picture's size", async () => {
     const rendered = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}[remember picture]
 \draw (0,0) rectangle (1,1);

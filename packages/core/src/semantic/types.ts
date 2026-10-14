@@ -524,6 +524,8 @@ export type EvaluateOptions = {
   currentPage?: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
   /** The font the picture's surroundings set (a `font=` value), before its own options. */
   initialFont?: string;
+  /** Placement of the picture's origin in an enclosing scene. */
+  initialTransform?: WorldTransform;
 };
 
 export type { CoordinateForm };

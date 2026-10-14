@@ -123,7 +123,7 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
   };
 }
 
-function applyStructuralMasks(
+export function applyStructuralMasks(
   source: string,
   masks: readonly StructuralMaskSpan[] | undefined
 ): string {

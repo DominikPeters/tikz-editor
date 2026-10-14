@@ -10,6 +10,7 @@ import type {
 } from "./types";
 import { makeEmptySnapshot } from "../compute";
 import { detectDocumentKind, documentKindDependencySource, type DocumentKind } from "@tikz-editor/core/document/kind";
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 
 export const DEFAULT_SOURCE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;
@@ -92,12 +93,15 @@ export function createDocumentSession(params: {
 }): DocumentSession {
   const trimmedTitle = params.title?.trim();
   const title = trimmedTitle === undefined || trimmedTitle.length === 0 ? "Untitled" : trimmedTitle;
+  const ref = parseDocumentRootId(params.activeRootId ?? "");
+  const layer = ref?.kind === "beamer-frame-tikz" && ref.layer ? ref : null;
   return {
     id: createDocumentId(),
     title,
     source: params.source,
     sourceRevision: 0,
-    activeRootId: params.activeRootId ?? null,
+    activeRootId: layer ? formatDocumentRootId({ kind: "beamer-frame", index: layer.frameIndex }) : params.activeRootId ?? null,
+    drawingLayerRootId: layer ? params.activeRootId : null,
     hasInitializedRootSelection: false,
     snapshot: makeEmptySnapshot(params.source),
     pendingRequestId: null,

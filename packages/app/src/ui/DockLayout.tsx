@@ -423,7 +423,8 @@ const MemoBuildsPanel = memo(BuildsPanel);
 function InspectorPanelSwitch() {
   const documentKind = useEditorStore((s) => s.documentKind);
   const nestedFigureActive = useEditorStore(
-    (s) => parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz"
+    (s) => parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz" ||
+      (s.snapshot.overlayLayer != null && (s.selectedElementIds.size > 0 || (s.toolMode !== "select" && s.toolMode !== "magnify")))
   );
   return documentKind === "beamer" && !nestedFigureActive
     ? <MemoDeckInspectorPanel />

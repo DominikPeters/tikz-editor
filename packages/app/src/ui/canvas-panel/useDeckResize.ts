@@ -4,7 +4,7 @@ import { beamerColumnResizePatches, beamerImageResizePatches, beamerSpacingResiz
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { beginDocumentEdit, canContinueDocumentEdit, restoreDocumentEdit, trackDocumentEdit, type DocumentEditSession } from "../../edit-session";
 import { useEditorStore } from "../../store/store";
-import { rootKey } from "../../root-key";
+import { deckStepRootKey } from "../../root-key";
 import { clientToSvgPoint } from "./geometry";
 
 export type DeckResizeTarget = { kind: "columns"; divider: BeamerColumnDivider }
@@ -44,7 +44,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
   const valid = useCallback((current: Session) => {
     const state = useEditorStore.getState();
     return canContinueDocumentEdit(current.edit, state) &&
-      (state.deckStepByRootKey[rootKey(current.edit.documentId, current.edit.activeRootId)] ?? 1) === current.step &&
+      (state.deckStepByRootKey[deckStepRootKey(current.edit.documentId, current.edit.activeRootId)] ?? 1) === current.step &&
       !state.activeCanvasTextEditSourceId && !state.documents[current.edit.documentId]?.assistantLockReason;
   }, []);
 
@@ -89,7 +89,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     if (session.current || !layout) return null;
     const initial = useEditorStore.getState();
     if (initial.source !== source || initial.snapshot.source !== source || initial.activeRootId !== layout.frameId ||
-      Math.min(initial.deckStepByRootKey[rootKey(initial.activeDocumentId, layout.frameId)] ?? 1, layout.stepCount) !== layout.step ||
+      Math.min(initial.deckStepByRootKey[deckStepRootKey(initial.activeDocumentId, layout.frameId)] ?? 1, layout.stepCount) !== layout.step ||
       initial.activeInspectorEditDocumentId || initial.documents[initial.activeDocumentId]?.assistantLockReason) return null;
     closeText();
     const state = useEditorStore.getState();
@@ -97,7 +97,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     pendingSelection.current = null;
     const edit = beginDocumentEdit(state, []);
     const imageFrom = target.kind === "image" ? layout.graphics.find((item) => item.itemId === target.image.objectId)?.sourceSpan.from : undefined;
-    return { edit, imageFrom, step: state.deckStepByRootKey[rootKey(edit.documentId, layout.frameId)] ?? 1,
+    return { edit, imageFrom, step: state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1,
       patches: [], cleanup: () => {} };
   };
 

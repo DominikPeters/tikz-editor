@@ -24,7 +24,7 @@ export function getSharedEditAnalysisView(params: {
   const analysisSource = params.snapshot.source === params.source
     ? params.source
     : params.snapshot.source;
-  const key = rootKey(params.documentId, params.activeRootId);
+  const key = rootKey(params.documentId, params.snapshot.overlayLayer?.rootId ?? params.activeRootId);
 
   if (cachedEntry?.rootKey !== key) {
     cachedEntry = {
@@ -41,7 +41,12 @@ export function getSharedEditAnalysisView(params: {
     snapshotParseResult.activeFigureId === params.activeRootId &&
     cachedEntry.primedSnapshotRevision !== params.snapshot.revision
   ) {
-    session.primeFromParse(snapshotParseResult, params.snapshot.source, {
+    // A layer's AST has absolute spans but was parsed from a masked document.
+    // Inspector queries use the complete source; retain that scoped AST under
+    // the complete source rather than parsing Beamer as an ordinary figure.
+    const parse = params.snapshot.overlayLayer
+      ? { ...snapshotParseResult, source: params.snapshot.source } : snapshotParseResult;
+    session.primeFromParse(parse, params.snapshot.source, {
       activeFigureId: params.activeRootId ?? snapshotParseResult.activeFigureId
     });
     cachedEntry.primedSnapshotRevision = params.snapshot.revision;

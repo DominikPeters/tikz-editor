@@ -164,7 +164,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
     const statementCount = run.expandedFigureBody.length;
     const statementIds = run.expandedFigureBody.map((statement) => statement.id);
     const hints = input.hints ?? {};
-    const statefulGraphicsState = resolveContainsStatefulGraphicsState(input.source, hints, cached);
+    const statefulGraphicsState = resolveContainsStatefulGraphicsState(input.source, hints, cached, input.figure);
 
     if (statefulGraphicsState) {
       const full = yield* evaluateFullyAndCache(
@@ -381,7 +381,7 @@ function* evaluateFullyAndCache(
   );
   const nextCached: CachedSemanticRun = {
     source: run.source,
-    containsStatefulGraphicsState: containsStatefulGraphicsState(run.source),
+    containsStatefulGraphicsState: containsStatefulGraphicsState(run.source, run.figure),
     statementIds,
     statementFragments,
     editHandles: semantic.editHandles,
@@ -822,7 +822,15 @@ function sameStatementIds(
   return true;
 }
 
-function containsStatefulGraphicsState(source: string): boolean {
+function containsStatefulGraphicsState(source: string, figure?: TikzFigure): boolean {
+  // A picture-wide overlay flag is constant across its statements. Checkpoints
+  // already retain that inherited state. Per-path/scope overlay changes still
+  // require a full replay to rebuild the picture's bounding-box state.
+  for (const entry of figure?.options?.entries ?? []) {
+    if (entry.kind !== "unknown" && entry.key.trim().replace(/^\/tikz\//u, "") === "overlay") {
+      source = source.slice(0, entry.span.from) + " ".repeat(entry.span.to - entry.span.from) + source.slice(entry.span.to);
+    }
+  }
   return (
     /\\clip\b/.test(source) ||
     /\\useasboundingbox\b/.test(source) ||
@@ -839,14 +847,15 @@ function containsStatefulGraphicsState(source: string): boolean {
 function resolveContainsStatefulGraphicsState(
   source: string,
   hints: IncrementalSemanticHints,
-  previous: CachedSemanticRun | null
+  previous: CachedSemanticRun | null,
+  figure: TikzFigure
 ): boolean {
   if (!previous || previous.containsStatefulGraphicsState) {
-    return containsStatefulGraphicsState(source);
+    return containsStatefulGraphicsState(source, figure);
   }
   const patches = hints.sourcePatches;
   if (!patches || patches.length === 0) {
-    return containsStatefulGraphicsState(source);
+    return containsStatefulGraphicsState(source, figure);
   }
   return patches.some((patch) => {
     if (containsStatefulGraphicsStateToken(patch.replacement)) {
@@ -857,7 +866,7 @@ function resolveContainsStatefulGraphicsState(
     }
     const from = Math.max(0, patch.newSpan.from - 32);
     const to = Math.min(source.length, patch.newSpan.to + 32);
-    return containsStatefulGraphicsStateToken(source.slice(from, to));
+    return containsStatefulGraphicsState(source, figure) && containsStatefulGraphicsStateToken(source.slice(from, to));
   });
 }
 

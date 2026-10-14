@@ -39,7 +39,7 @@ type ToolbarProps = {
 
 export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarProps) {
   const documentId = useEditorStore(s => s.activeDocumentId);
-  const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "")?.kind === "beamer-frame-tikz");
+  const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "") != null);
   const toolMode = useEditorStore((s) => s.toolMode);
   const bucketFillColor = useEditorStore((s) => s.bucketFillColor);
   const selectedAddShape = useEditorStore((s) => s.selectedAddShape);
@@ -59,7 +59,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
   const isDesktop = getActiveEditorPlatform().id.startsWith("desktop");
   const isMacDesktop = isDesktop && isMacLikePlatform();
   const showAppTitle = !isDesktop;
-  // On a slide a drawing tool opens its drawing layer; leaving the layer puts the tool down.
+  // Drawing tools operate directly on slides and on standalone pictures.
   useEffect(() => {
     if (!drawingSurface && toolMode !== "select" && toolMode !== "magnify") dispatch({ type: "SET_TOOL_MODE", mode: "select" });
   }, [drawingSurface, toolMode, dispatch]);

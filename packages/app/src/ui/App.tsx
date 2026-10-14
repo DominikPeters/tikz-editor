@@ -8,7 +8,7 @@ import {
   type AppMenuPlatformTarget
 } from "../app-menu";
 import { flushPendingWorkspaceSave, useEditorStore } from "../store/store";
-import { rootKey } from "../root-key";
+import { deckStepRootKey } from "../root-key";
 import { useWorkspaceListStore } from "../store/workspace-list-store";
 import { computeSnapshot, makeEmptySnapshot, deckPageCacheStats, type ComputeRequest, type ComputeResponse } from "../compute";
 import { invalidateImageAssetPath } from "../image-asset-cache";
@@ -246,6 +246,7 @@ function EditorApp() {
     sourceRevision,
     snapshot,
     activeRootId,
+    drawingLayerRootId,
     selectedElementIds,
     activeDocumentId,
     activeDocumentFileRef,
@@ -269,9 +270,10 @@ function EditorApp() {
     canvasTextEditActive: s.activeCanvasTextEditSourceId != null,
     snapshot: s.snapshot,
     activeRootId: s.activeRootId,
+    drawingLayerRootId: s.documents[s.activeDocumentId]?.drawingLayerRootId ?? null,
     activeDeckStep:
       s.documentKind === "beamer"
-        ? s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? null
+        ? s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? null
         : null,
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
@@ -303,7 +305,7 @@ function EditorApp() {
   const platform = getActiveEditorPlatform();
   const menuTarget = menuTargetFromPlatformId(platform.id);
   const documentKind = useEditorStore(s => s.documentKind);
-  const nestedDrawing = parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz";
+  const nestedDrawing = parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz" || snapshot.overlayLayer != null;
   const presenting = !!presentation.snapshot;
   const menuFocus = platform.menu?.usesNativeMenuBar ? presentation.focus : "editor";
   const menuDefinition = useMemo(() => appMenuForDocument(filterAppMenuDefinitionForTarget(APP_MENU_DEFINITION, menuTarget), {
@@ -901,6 +903,8 @@ function EditorApp() {
       documentFileRef: activeDocumentFileRef,
       activeRootId,
       deckStep: activeDeckStep,
+      drawingLayerRootId,
+      includeDrawingLayer: true,
       changedSourceIds,
       patches: lastEditPatches ? [...lastEditPatches] : null,
       patchBaseRevision: lastEditPatchBaseRevision,
@@ -917,7 +921,7 @@ function EditorApp() {
     assetRefreshToken: imageAssetRefreshToken,
     publishedDeckSnapshot
   }), [activeCanvasDragKind, activeDeckStep, activeDocumentFileRef, activeDocumentId, activeInspectorEditDocumentId,
-    activeRootId, activeSourceScrubSourceId, canvasTextEditActive, changedSourceIds, exactParse, imageAssetRefreshToken,
+    activeRootId, drawingLayerRootId, activeSourceScrubSourceId, canvasTextEditActive, changedSourceIds, exactParse, imageAssetRefreshToken,
     lastEditPatchBaseRevision, lastEditPatches, renderViewBox, source, sourceChangeOrigin, sourceRevision, textEditMaskSpan, trigger, publishedDeckSnapshot]);
   useScheduledCompute(computeSchedulerRef, computeInput);
   useDeckNeighborPrewarm();

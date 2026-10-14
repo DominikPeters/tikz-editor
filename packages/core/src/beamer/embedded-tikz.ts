@@ -1,4 +1,5 @@
 import { formatSvgNumber as fmt } from "../svg/format.js";
+import { namespaceSvgModel } from "../svg/namespace.js";
 import type { createSvgModelBuilder } from "../svg/model.js";
 import type { PreparedColumnFlowItem } from "./render-model.js";
 import type {
@@ -25,16 +26,17 @@ export function emitEmbeddedTikz(params: {
   const scale = tikz.width / tikz.viewBox.width;
   const translateX = params.x - tikz.viewBox.x * scale;
   const translateY = params.y - tikz.viewBox.y * scale;
-  const innerDefs = tikz.model.defs.length > 0
-    ? `<defs>${tikz.model.defs.join("")}</defs>`
+  const model = namespaceSvgModel(tikz.model, tikz.id);
+  const innerDefs = model.defs.length > 0
+    ? `<defs>${model.defs.join("")}</defs>`
     : "";
-  const innerBody = tikz.model.parts.map((part) => part.markup).join("");
+  const innerBody = model.parts.map((part) => part.markup).join("");
   params.embeddedTikz.push({
     itemId: tikz.id,
     sourceSpan: tikz.sourceSpan,
     bounds,
     viewBox: tikz.viewBox,
-    model: tikz.model,
+    model,
   });
   params.items.push({
     id: tikz.id,

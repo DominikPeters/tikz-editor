@@ -149,6 +149,9 @@ export function parseBeamerFrameBody(
       // An ordinary center environment remains owned by the generic TeX
       // vlist frontend. Only extract a center whose sole material is one
       // TikZ picture.
+      // Overlay pictures stay in the paragraph as one zero-sized box.
+      // Their inner environments belong to TikZ, not to frame flow.
+      if (token.name === "tikzpicture") index = endIndex;
       continue;
     }
     pushTextNode(source, { from: cursor, to: token.span.from }, frame.id, children);
@@ -1264,6 +1267,7 @@ function isInsideNativeTextFlow(
       if (
         boundary &&
         (LIST_ENVIRONMENTS.has(boundary.name) || [
+          "tikzpicture",
           "minipage",
           "quote",
           "quotation",

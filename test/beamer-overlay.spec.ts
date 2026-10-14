@@ -56,6 +56,19 @@ function listMarkerPaint(page: Awaited<ReturnType<typeof renderBeamerFramePages>
 }
 
 describe("Beamer overlays", () => {
+  it("a bare pause consumes following control-word whitespace without inserting a text gap", async () => {
+    const result = await renderBeamerFramePages(deck(String.raw`First.\pause Second.`));
+    const paragraph = result.pages[1].layout.paragraphs.find(paragraph => paragraph.paragraphId === "frame:0:paragraph:0")!;
+    expect(paragraph.report.lines[0].segments.map(segment => segment.text).join("")).toBe("First.Second.");
+  });
+  it.each(["\\onslide", "\\onslide<1->"])("a declaration %s closes a preceding pause cover", async declaration => {
+    const result = await renderBeamerFramePages(deck(`Before.\\pause Covered.${declaration}\\relax After.`));
+    expect(result.pages).toHaveLength(2);
+    expect(tracedText(result.pages[0])).toContain("Before.");
+    expect(tracedText(result.pages[0])).toContain("After.");
+    expect(tracedText(result.pages[0])).not.toContain("Covered.");
+    expect(tracedText(result.pages[1])).toContain("Covered.");
+  });
   it.each(["only", "uncover", "visible", "invisible", "alt", "temporal"])("uses all steps when %s has no angle specification", async command => {
     const extra = command === "alt" ? "{Other}" : command === "temporal" ? "{Before}{After}" : "";
     const body = command === "temporal" ? String.raw`\temporal{Before}{Selected}{After}`

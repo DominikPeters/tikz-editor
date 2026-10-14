@@ -13,6 +13,35 @@ import type { Statement } from "../../packages/core/src/ast/types.js";
 import { wp } from "../coords-helpers.js";
 
 describe("semantic incremental evaluation", () => {
+  it.each(["overlay", "overlay=false", "/tikz/overlay={true}"])("replays a constant picture flag incrementally (%s)", flag => {
+    const source = `\\begin{tikzpicture}[${flag}]\n` +
+      Array.from({ length: 24 }, (_, index) => `\\draw (${index},0) -- (${index},1);`).join("\n") + "\n\\end{tikzpicture}";
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ source, figure: parseTikz(source).figure });
+    const next = source.replace("(0,1)", "(0,2)");
+    const parsed = parseTikz(next);
+    const result = session.evaluate({ source: next, figure: parsed.figure, hints: { trigger: "drag-element", changedSourceIds: ["path:0"] } });
+    expect(result.stats.strategy).toBe("incremental");
+    expect(result.stats.reusedStatementCount).toBeGreaterThan(8);
+    const full = evaluateTikzFigure(parsed.figure, next);
+    expect(result.semantic.scene).toEqual(full.scene);
+  });
+
+  it.each(["\\draw[overlay=false] (2,2) -- (3,3);", "\\begin{scope}[overlay=false]\\draw (2,2) -- (3,3);\\end{scope}",
+    "\\draw[clip] (2,2) rectangle (3,3);"])("keeps stateful per-statement graphics on the full path: %s", body => {
+    const source = String.raw`\begin{tikzpicture}[overlay]
+\draw (0,0) -- (1,1);
+${body}
+\end{tikzpicture}`;
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ source, figure: parseTikz(source).figure });
+    const next = source.replace("(1,1)", "(1,2)");
+    const parsed = parseTikz(next);
+    const result = session.evaluate({ source: next, figure: parsed.figure, hints: { trigger: "drag-element", changedSourceIds: ["path:0"] } });
+    expect(result.stats).toMatchObject({ strategy: "full", fallbackReason: "stateful-graphics-state" });
+    expect(result.semantic.scene).toEqual(evaluateTikzFigure(parsed.figure, next).scene);
+  });
+
   it("rejects direct statement evaluation indexes outside the expanded body", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);

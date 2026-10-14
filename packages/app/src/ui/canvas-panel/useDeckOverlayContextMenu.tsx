@@ -8,7 +8,7 @@ import { APP_MENU_COMMAND_IDS as IDS, type AppMenuCommandId, type AppMenuItem } 
 import { CANVAS_CONTEXT_MENU_DEFINITION } from "../../context-menu";
 import { getActiveEditorPlatform } from "../../platform/current";
 import { useEditorStore } from "../../store/store";
-import { rootKey } from "../../root-key";
+import { deckStepRootKey } from "../../root-key";
 import { CanvasContextMenu } from "../CanvasContextMenu";
 import { getDockLayoutHandle } from "../DockLayout";
 import type { CommandBindings } from "../editor-command-runtime";
@@ -51,7 +51,7 @@ export function useDeckOverlayContextMenu({ index, selected, frame, viewportRef,
       const state = useEditorStore.getState();
       return state.activeDocumentId === documentId && state.activeRootId === frame.frameId && state.sourceRevision === revision &&
         state.source === source && !state.activeCanvasTextEditSourceId && !state.documents[documentId]?.assistantLockReason &&
-        Math.min(state.deckStepByRootKey[rootKey(documentId, frame.frameId)] ?? 1, model.stepCount) === frame.step;
+        Math.min(state.deckStepByRootKey[deckStepRootKey(documentId, frame.frameId)] ?? 1, model.stepCount) === frame.step;
     };
     const revealRule = (rowId: string, nextSource: string, step: number, openPanel: boolean) => {
       if (openPanel) {

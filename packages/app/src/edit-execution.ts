@@ -4,12 +4,16 @@ import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import { createEditGeometrySession, type EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
-import type { Span } from "@tikz-editor/core/ast/types";
-import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import type { Span, Statement } from "@tikz-editor/core/ast/types";
+import { maskSourceOutsideSpan, maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
-import { applySourcePatches } from "@tikz-editor/core/edit/source-patches";
+import { applySourcePatches, composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
+import type { SourcePatch } from "@tikz-editor/core/edit/types";
+import { drawingLayerPackageInsertion } from "./drawing-layer";
 import { buildEditParseOptions } from "./edit-parse-options";
 import { documentKindForSource } from "./store/workspace-state";
+import { parseTikz } from "@tikz-editor/core/parser/index";
+import { beamerDrawingLayerRemovalSpan } from "@tikz-editor/core/beamer/overlay-pictures";
 import type { SessionSnapshot } from "./compute";
 
 export type EditExecutionContext = {
@@ -17,6 +21,7 @@ export type EditExecutionContext = {
   source: string;
   sourceRevision: number;
   activeRootId: string | null;
+  drawingLayerRootId?: string | null;
   snapshot: SessionSnapshot;
 };
 
@@ -32,20 +37,24 @@ export function executeDocumentEdit(
   } = {}
 ): EditActionResult {
   const { source, snapshot, activeRootId } = context;
-  const nested = documentKindForSource(source) === "beamer" && parseDocumentRootId(activeRootId ?? "")?.kind === "beamer-frame-tikz";
-  const deck = documentKindForSource(source) === "beamer" && !nested;
-  if (deck !== isDeckEditAction(action)) {
-    return { kind: "unsupported", reason: "The edit does not apply to the active document view." };
-  }
+  const ref = parseDocumentRootId(activeRootId ?? "");
+  const slideOverlay = ref?.kind === "beamer-frame" && snapshot.overlayLayer?.pageCoordinates === true && snapshot.overlayLayer.frameIndex === ref.index;
+  const nested = documentKindForSource(source) === "beamer" && (ref?.kind === "beamer-frame-tikz" || slideOverlay);
+  const deck = documentKindForSource(source) === "beamer" && ref?.kind !== "beamer-frame-tikz";
   if (isDeckEditAction(action)) {
     const frame = snapshot.deck?.activeFrame;
-    return frame && snapshot.source === source
+    return deck && frame && snapshot.source === source
       ? applyDeckEditAction(source, frame.layout, action)
       : { kind: "unsupported", reason: "The slide layout is still catching up." };
   }
+  if (deck && !slideOverlay) return { kind: "unsupported", reason: "The slide's drawing geometry is still catching up." };
   // Element ids and handles name things in the picture the snapshot shows. Right
   // after switching pictures they would resolve against the new one instead.
   if (!nested && activeRootId != null && snapshot.activeRootId != null && snapshot.activeRootId !== activeRootId) {
+    return { kind: "unsupported", reason: "The figure is still catching up." };
+  }
+  if ((ref?.kind === "beamer-frame-tikz" && ref.layer && snapshot.overlayLayer?.rootId !== activeRootId) ||
+    (slideOverlay && context.drawingLayerRootId && context.drawingLayerRootId !== snapshot.overlayLayer?.rootId)) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
   const span = options.nestedFigureSpan ?? (nested ? resolveNestedEditSpan(context) : null);
@@ -60,10 +69,10 @@ export function executeDocumentEdit(
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
   const working = insertion ? insertLayer(source, insertion) : source;
-  const editSource = span ? maskSourceOutsideSpan(working, span) : source;
-  const parseOptions = buildEditParseOptions({ ...context, source: editSource, activeRootId: span ? snapshot.activeRootId : activeRootId, analysis: "none", overrides: options.parseOptions });
+  const editSource = span ? maskTikzPictureSource(working, span) : source;
+  const parseOptions = buildEditParseOptions({ ...context, source: editSource, activeRootId: span ? snapshot.parseResult?.activeFigureId : activeRootId, analysis: "none", overrides: options.parseOptions });
   const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, sourceFingerprint: parseOptions.sourceFingerprint };
-  const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.activeRootId === parseOptions.activeFigureId;
+  const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.parseResult?.activeFigureId === parseOptions.activeFigureId;
   const geometry = options.geometry ?? (snapshotMatchesRoot && snapshot.source === source && snapshot.parseResult && snapshot.semanticResult
     ? createEditGeometrySession({ source: editSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, evaluateOptions, parseOptions)
     : undefined);
@@ -71,19 +80,48 @@ export function executeDocumentEdit(
   if (!span || (result.kind !== "success" && result.kind !== "partial")) return result;
   const replay = applySourcePatches(working, result.patches);
   if (replay.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
-  if (!insertion) return { ...result, newSource: replay.source };
+  if (!insertion) {
+    if (layer && (action.kind === "deleteElement" || action.kind === "deleteElements")) {
+      const editedSpan = { from: span.from, to: span.to + replay.source.length - working.length };
+      const parsed = parseTikz(maskSourceOutsideSpan(replay.source, editedSpan), { recover: true });
+      if (onlyEmptyScopes(parsed.figure.body) && !parsed.diagnostics.some(diagnostic => diagnostic.severity === "error")) {
+        const removal = beamerDrawingLayerRemovalSpan(replay.source, editedSpan);
+        const removalPatch = { oldSpan: removal, newSpan: { from: removal.from, to: removal.from }, replacement: "" };
+        const removed = applySourcePatches(replay.source, [removalPatch]);
+        if (removed.kind === "success") return { ...result, newSource: removed.source,
+          patches: composeSourcePatches(source, [result.patches, [removalPatch]]), changedSourceIds: undefined };
+      }
+    }
+    return { ...result, newSource: replay.source };
+  }
   // The first drawing inserts the layer: one patch, the layer as drawn on.
   const end = insertion.at + insertion.text.length;
   if (result.patches.some((patch) => patch.oldSpan.from < insertion.at || patch.oldSpan.to > end)) {
     return { kind: "error", message: "The figure edit did not apply cleanly." };
   }
   const replacement = replay.source.slice(insertion.at, end + replay.source.length - working.length);
+  let patches: SourcePatch[] = [{ oldSpan: { from: insertion.at, to: insertion.at }, newSpan: { from: insertion.at, to: insertion.at + replacement.length }, replacement }];
+  const packageInsertion = drawingLayerPackageInsertion(source);
+  if (packageInsertion) {
+    const packagePatch = {
+      oldSpan: { from: packageInsertion.at, to: packageInsertion.at },
+      newSpan: { from: packageInsertion.at, to: packageInsertion.at + packageInsertion.text.length },
+      replacement: packageInsertion.text
+    };
+    patches = composeSourcePatches(source, [patches, [packagePatch]]);
+  }
+  const committed = applySourcePatches(source, patches);
+  if (committed.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
   return {
     ...result,
-    newSource: replay.source,
-    patches: [{ oldSpan: { from: insertion.at, to: insertion.at }, newSpan: { from: insertion.at, to: insertion.at + replacement.length }, replacement }],
+    newSource: committed.source,
+    patches,
     changedSourceIds: undefined
   };
+}
+
+function onlyEmptyScopes(statements: readonly Statement[]): boolean {
+  return statements.every(statement => statement.kind === "Scope" && onlyEmptyScopes(statement.body));
 }
 
 /**
@@ -101,11 +139,21 @@ function insertLayer(source: string, insertion: { at: number; text: string }): s
 
 /** Property previews can outpace rendering; resolve their current picture span. */
 export function resolveNestedEditSpan(context: EditExecutionContext): Span | null {
-  const ref = parseDocumentRootId(context.activeRootId ?? "");
+  const active = parseDocumentRootId(context.activeRootId ?? "");
+  const ref = active?.kind === "beamer-frame" && context.snapshot.overlayLayer?.pageCoordinates
+    ? parseDocumentRootId(context.snapshot.overlayLayer.rootId) : active;
   if (ref?.kind !== "beamer-frame-tikz") return null;
   const { snapshot, source } = context;
   if (snapshot.source === source) {
-    return snapshot.figures.find(figure => figure.id === snapshot.activeRootId)?.span ?? null;
+    const span = snapshot.parseResult?.figure.span;
+    if (ref.layer) {
+      const layerId = snapshot.overlayLayer?.rootId;
+      if (!layerId) return null;
+      return layerId === (active?.kind === "beamer-frame" ? context.drawingLayerRootId ?? layerId : context.activeRootId) ? span ?? null : null;
+    }
+    const expected = scanBeamerDocument(source).frames[ref.frameIndex]?.children[ref.index]?.span;
+    if (!span || !expected) return null;
+    return span.from === expected.from && span.to === expected.to ? span : null;
   }
   const frame = scanBeamerDocument(source).frames[ref.frameIndex];
   if (!frame) return null;

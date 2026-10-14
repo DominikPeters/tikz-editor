@@ -19,6 +19,11 @@ export type EditingIdentityState = {
   focused: string | null;
 };
 
+/** Layer parser roots are local (figure:0); identity ownership is document-wide. */
+export function editingIdentityRootId(snapshot: SessionSnapshot): string | null {
+  return snapshot.overlayLayer?.rootId ?? snapshot.activeRootId;
+}
+
 /** Map only edits whose ownership is known. Ambiguous replacements keep text
  * evidence for later unique matching, but never inherit a positional parser ID. */
 export function advanceEditingIdentities(
@@ -55,7 +60,8 @@ export function reconcileEditingIdentities(
     const ref = element.identityRef ?? element.sourceRef;
     add(ref.sourceId, element.kind, ref.sourceSpan);
   }
-  let baseline = previous?.rootId === snapshot.activeRootId ? previous : undefined;
+  const rootId = editingIdentityRootId(snapshot);
+  let baseline = previous?.rootId === rootId ? previous : undefined;
   if (baseline && baseline.source !== snapshot.source) baseline = advanceEditingIdentities(baseline, snapshot.source, identityPatches(baseline.source, snapshot.source));
   const oldEntries = baseline?.entries ?? [];
   const bySpan = new Map(oldEntries.flatMap(entry => entry.span ? [[key(entry.kind, entry.span), entry] as const] : []));
@@ -77,8 +83,8 @@ export function reconcileEditingIdentities(
   }
   let nextId = Math.max(previous?.nextId ?? 0, nextAvailableId);
   return {
-    source: snapshot.source, rootId: snapshot.activeRootId, nextId: nextId + candidates.filter(c => !assigned.has(c.sourceId)).length,
-    entries: candidates.map(candidate => ({ ...candidate, id: assigned.get(candidate.sourceId)?.id ?? `${documentId}:${snapshot.activeRootId ?? "root"}:object:${nextId++}` })),
+    source: snapshot.source, rootId, nextId: nextId + candidates.filter(c => !assigned.has(c.sourceId)).length,
+    entries: candidates.map(candidate => ({ ...candidate, id: assigned.get(candidate.sourceId)?.id ?? `${documentId}:${rootId ?? "root"}:object:${nextId++}` })),
     selection: baseline?.selection ?? null, focused: baseline?.focused ?? null
   };
 }

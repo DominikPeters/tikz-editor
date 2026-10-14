@@ -14,6 +14,7 @@ import {
   remapTexVListLayoutSourceMap,
   remapSimpleTexListStructureSourceMap,
 } from "../text/tex/source-map-report.js";
+import { maskTikzPictureSource } from "../document/masking.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import type { Span } from "../ast/types.js";
 import { projectBeamerCaptions } from "./captions.js";
@@ -3417,17 +3418,15 @@ async function prepareEmbeddedTikz(params: {
 }): Promise<Extract<PreparedColumnFlowItem, {
   kind: "tikzpicture";
 }> | null> {
-  const snippet = params.source.slice(
-    params.node.root.span.from,
-    params.node.root.span.to
-  );
   const textEngine = await createTexNodeTextEngine({
     mathFontProfile: createBeamerTexMathFontProfile(params.bodyFont),
   });
   const rendered = await renderTikzToSvgAsync(
-    applyThemeFamilyToTikz(snippet, params.bodyFont),
+    maskTikzPictureSource(params.source, params.node.root.span),
     {
       textEngine,
+      parse: { includeContextDefinitions: true },
+      evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont) },
       graphicsResolver: params.graphicsResolver,
       cooperative: params.work?.options,
       // A TikZ picture contributes its natural PGF bounding box to the
@@ -3501,9 +3500,10 @@ async function emitBeamerOverlayPictures(params: {
     // A shrunk body scales its boxes; the picture is drawn at its box's place.
     const origin = params.bodyTransform ? transformBeamerPoint(params.bodyTransform, intrinsic) : intrinsic;
     const rendered = await renderTikzToSvgAsync(
-      params.context.source.slice(picture.span.from, picture.span.to),
+      maskTikzPictureSource(params.context.source, picture.span),
       {
         textEngine,
+        parse: { includeContextDefinitions: true },
         graphicsResolver: params.graphicsResolver,
         cooperative: params.work?.options,
         svg: { padding: 0 },
@@ -3548,7 +3548,7 @@ async function emitBeamerOverlayPictures(params: {
       origin,
       rememberPicture: picture.rememberPicture,
       elements: rendered.semantic.scene.elements,
-      sourceOffset: picture.span.from,
+      sourceOffset: 0,
     };
   }
 }
@@ -4571,17 +4571,6 @@ function resolveFrameVerticalPacking(
   return { topOffset: fillUnit, fillUnit };
 }
 
-function applyThemeFamilyToTikz(
-  source: string,
-  font: BeamerThemeFont
-): string {
-  const command = beamerTikzFontCommand(font);
-  return source.replace(
-    /\\begin\s*\{tikzpicture\}(?:\s*\[([^\]]*)\])?/,
-    (_whole, options: string | undefined) =>
-      `\\begin{tikzpicture}[${options ? `${options},` : ""}font=${command}]`
-  );
-}
 
 /**
  * The font a TikZ picture in Beamer text starts with, as a `font=` value. It

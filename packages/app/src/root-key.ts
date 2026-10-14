@@ -1,3 +1,5 @@
+import { formatDocumentRootId, parseDocumentRootId } from "@tikz-editor/core/document/root-id";
+
 /**
  * Canonical key for per-root ephemeral state maps (canvas viewport,
  * canvas interaction context, edit-analysis cache). One wire shape
@@ -27,4 +29,12 @@ export function rootKey(
 export function documentIdFromRootKey(key: string): string {
   const delimiter = key.indexOf("::");
   return delimiter >= 0 ? key.slice(0, delimiter) : key;
+}
+
+/** A nested picture shares the overlay step of the slide it is edited on. */
+export function deckStepRootKey(documentId: string, rootId: string | null | undefined): string {
+  const ref = parseDocumentRootId(rootId ?? "");
+  return rootKey(documentId, ref?.kind === "beamer-frame-tikz"
+    ? formatDocumentRootId({ kind: "beamer-frame", index: ref.frameIndex })
+    : rootId);
 }

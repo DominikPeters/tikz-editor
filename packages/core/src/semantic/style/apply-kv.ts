@@ -131,6 +131,15 @@ export function applyKvEntry(
 
 const EXACT_KV_HANDLERS = createKvHandlerMap([
   {
+    keys: ["overlay"],
+    handle: ({ valueRaw, style, transform }) => {
+      const value = normalizeOptionValue(valueRaw);
+      return value === "true" || value === "false"
+        ? { style: { ...style, overlay: value === "true" }, transform, diagnostics: [] }
+        : { style, transform, diagnostics: [`invalid-overlay:${valueRaw}`] };
+    }
+  },
+  {
     keys: ["pic type", "label position", "pin position", "label distance", "pin distance", "pin edge", "quotes mean label", "quotes mean pin"],
     handle: ({ style, transform }) => ({ style, transform, diagnostics: [] })
   },

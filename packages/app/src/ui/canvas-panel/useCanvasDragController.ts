@@ -1447,6 +1447,7 @@ export function useCanvasDragController(params: UseCanvasDragControllerParams) {
     interactionSvgRef,
     liveResizeFramesRef,
     logSnapDebug,
+    onEmptyClick,
     onSnapFeedback,
     pendingAddedSelectionRef,
     queueSelectionForAddedElement,

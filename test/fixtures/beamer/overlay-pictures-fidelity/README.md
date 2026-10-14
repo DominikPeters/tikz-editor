@@ -7,3 +7,14 @@ To refresh the traces, run `scripts/compare-beamer-frame.mjs --structural-only` 
 ```
 node test/fixtures/beamer/overlay-pictures-fidelity/capture-oracles.mjs
 ```
+
+`drawing-layer-pause.tex` pins both steps of an authored layer following
+`\pause` and `\onslide<1->`: existing text keeps its glyph origins while the
+drawing is visible on both steps. LuaLaTeX also traces the covered `Second.`
+on step 1. Refresh its oracle with `compare-beamer-frame.mjs --structural-only`
+for pages 1 and 2; retain the source SHA256 and compiler provenance.
+
+`drawing-layer-joins.tex` pins the two ways the editor joins a new layer to a
+frame without moving its text: after a list, `\nointerlineskip` (the picture's
+paragraph then adds no baseline glue); after text, a `%` line (it stays in
+the last paragraph). Refresh as above for frames 1 and 2 (last page).

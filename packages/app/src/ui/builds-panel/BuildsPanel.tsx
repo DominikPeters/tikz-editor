@@ -17,7 +17,7 @@ import {
 } from "@tikz-editor/core/beamer/index";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { useEditorStore } from "../../store/store";
-import { rootKey } from "../../root-key";
+import { deckStepRootKey } from "../../root-key";
 import { getDockLayoutHandle } from "../DockLayout";
 import { SidePanel } from "../SidePanel";
 import inspector from "../inspector-panel/InspectorPanel.module.css";
@@ -34,7 +34,7 @@ export function BuildsPanel() {
   const documentId = useEditorStore((s) => s.activeDocumentId);
   const frameId = useEditorStore((s) => s.activeRootId);
   const activeSelection = useEditorStore((s) => s.deckBuildSelection);
-  const requestedStep = useEditorStore((s) => s.deckStepByRootKey[rootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
+  const requestedStep = useEditorStore((s) => s.deckStepByRootKey[deckStepRootKey(s.activeDocumentId, s.activeRootId)] ?? 1);
   const locked = useEditorStore((s) => s.documents[s.activeDocumentId]?.assistantLockReason != null || s.activeCanvasTextEditSourceId != null);
   const dispatch = useEditorStore((s) => s.dispatch);
   const model = useMemo(() => frameId ? buildBeamerBuildModel(source, frameId) : null, [frameId, source]);

@@ -83,6 +83,7 @@ export {
 export {
   BEAMER_DRAWING_LAYER,
   beamerDrawingLayerInsertions,
+  beamerDrawingLayerRemovalSpan,
   beamerOverlayPicturesIn,
   type BeamerOverlayPicture,
 } from "./overlay-pictures.js";

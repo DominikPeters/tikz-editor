@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, typ
 import { clientPoint, px, pt, worldVector } from "@tikz-editor/core/coords/index";
 import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
 import type { Span } from "@tikz-editor/core/ast/types";
-import { maskSourceOutsideSpan } from "@tikz-editor/core/document/masking";
+import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import type { EditHandle, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { ClientPoint, WorldBounds, WorldPoint } from "../coords/types";
 import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "@tikz-editor/core/edit/path-editing";
@@ -72,7 +72,7 @@ export type UseCanvasElementInteractionsArgs = {
   onDeckObjectSelect?: (objectId: string) => void;
   /** Double-click on a deck object region (nested figure entry). */
   onDeckObjectActivate?: (objectId: string) => void;
-  /** A press on a drawing layer's shape on a slide: open the layer with it selected. */
+  /** Select a shape whose picture has not supplied the current editing geometry yet. */
   onLayerEnter?: (entry: NonNullable<HitRegion["layerEntry"]>) => void;
 };
 
@@ -195,7 +195,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
             : undefined,
         lastAppliedTotalDelta: worldVector(pt(0), pt(0)),
         baseline: {
-          source: nestedFigureSpan ? maskSourceOutsideSpan(source, nestedFigureSpan) : source,
+          source: nestedFigureSpan ? maskTikzPictureSource(source, nestedFigureSpan) : source,
           editHandles: snapshot.editHandles,
           sourceFingerprint: parseOptions.sourceFingerprint
         },
