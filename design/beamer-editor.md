@@ -732,8 +732,11 @@ Two modes, matching Beamer idiom:
   spacing); otherwise it is the author's environment, rendered as TeX reads
   it, and new layers are plain overlay pictures joined so they move no text
   (after text a `%` line, after a list or block `\nointerlineskip`;
-  `drawing-layer-joins.tex`). An undefined `tikzlayer` (a slide pasted from
-  another deck) is an unknown environment, as in TeX. The definition stays
+  `drawing-layer-joins.tex`). Copied slides that use it carry the definition
+  on the clipboard; pasting adds it to a deck without one (in the same undo
+  step), and into a deck with a `tikzlayer` of its own each layer becomes the
+  plain picture it stands for. An undefined `tikzlayer` is an unknown
+  environment, as in TeX. The definition stays
   when the last layer goes. Each step is laid out to check the insertion;
   else a paragraph of its own. A preceding `\pause`/`\onslide` cover is
   closed so the new drawing is visible on every step. Deleting the last drawing removes the empty picture and the

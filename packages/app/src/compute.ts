@@ -34,6 +34,7 @@ import {
   beamerDrawingLayerInsertions,
   beamerOverlayPicturesIn,
   BEAMER_TIKZ_LAYER_OPTIONS,
+  beamerTikzLayerPreambleInsertion,
   beamerTikzFontCommand,
   createBeamerTexMathFontProfile,
   prepareBeamerDocument,
@@ -49,7 +50,7 @@ import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { translationMatrix } from "@tikz-editor/core/semantic/transform";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
 import { composeOverlayPage, overlayPageRetainedBytes, rebindOverlayPage } from "./beamer-overlay-page";
-import { deckDrawingLayerRootId, drawingLayerPreambleInsertion, insertDrawingLayer, type DrawingLayerInsertion } from "./drawing-layer";
+import { deckDrawingLayerRootId, insertDrawingLayer, type DrawingLayerInsertion } from "./drawing-layer";
 import { prepareDocumentGraphicsContext, getImageAssetCacheGeneration, type PreparedDocumentGraphicsContext } from "./image-asset-cache";
 import { getActiveEditorPlatformGeneration } from "./platform/current";
 import { BoundedLru } from "./bounded-lru";
@@ -1104,7 +1105,7 @@ async function chooseLayerInsertion(source: string, frameIndex: number, rootId: 
   const frame = scanBeamerDocument(source).frames[frameIndex];
   if (!frame) return null;
   const candidates: DrawingLayerInsertion[] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(source), frame.bodySpan)
-    .map(({ definesLayer, ...candidate }) => ({ ...candidate, preamble: drawingLayerPreambleInsertion(source, definesLayer === true) }));
+    .map(({ definesLayer, ...candidate }) => ({ ...candidate, preamble: beamerTikzLayerPreambleInsertion(source, definesLayer === true) }));
   const steps = Array.from({ length: Math.max(1, (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source)).frameStepCount(frameIndex)) }, (_, index) => index + 1);
   const baselines: Map<string, string>[] = [];
   for (const step of steps) baselines.push(frameTextGeometry((await renderLayerFrame(source, frameIndex, step, graphicsContext, work)).layout));

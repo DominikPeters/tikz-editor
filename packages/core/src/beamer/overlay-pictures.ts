@@ -49,6 +49,10 @@ const TIKZ_LAYER_DEFINITIONS = new RegExp([
 ].join("|"), "gu");
 const withoutSpace = (text: string) => text.replace(/\s+/gu, "");
 const OUR_DEFINITION = withoutSpace(BEAMER_TIKZ_LAYER_DEFINITION);
+/** Whether a text is exactly the editor's `tikzlayer` definition (up to spacing). */
+export function isBeamerTikzLayerDefinition(text: string): boolean {
+  return withoutSpace(text) === OUR_DEFINITION;
+}
 let tikzLayerState: { source: string; state: BeamerTikzLayerState } | null = null;
 
 /**

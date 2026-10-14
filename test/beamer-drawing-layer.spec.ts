@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BEAMER_DRAWING_LAYER, BEAMER_TIKZ_LAYER, BEAMER_TIKZ_LAYER_DEFINITION, beamerDrawingLayerInsertions, beamerTikzLayerState, renderBeamerFrame, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { BEAMER_DRAWING_LAYER, BEAMER_TIKZ_LAYER, BEAMER_TIKZ_LAYER_DEFINITION, beamerDrawingLayerInsertions, beamerTikzLayerPreambleInsertion, beamerTikzLayerState, renderBeamerFrame, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { createBeamerSyntaxContext } from "../packages/core/src/beamer/syntax.js";
 import { formatDocumentRootId, parseDocumentRootId } from "../packages/core/src/document/root-id.js";
 import { worldPoint } from "../packages/core/src/coords/points.js";
@@ -9,7 +9,7 @@ import { computeSnapshot } from "../packages/app/src/compute";
 import { deckDrawingLayerRootId } from "../packages/app/src/drawing-layer";
 import { executeDocumentEdit } from "../packages/app/src/edit-execution";
 import { patchesMatchSourceTransition } from "../packages/core/src/edit/source-patches.js";
-import { drawingLayerPreambleInsertion } from "../packages/app/src/drawing-layer";
+
 import { reconcileEditingIdentities } from "../packages/app/src/editing-identities";
 
 const LAYER = String.raw`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]
@@ -120,15 +120,15 @@ describe("where a new drawing layer goes", () => {
   });
 
   it("puts the definition after TikZ, loading TikZ only where no package does", () => {
-    expect(drawingLayerPreambleInsertion(DEFINED, false)).toBeNull();
-    const after = drawingLayerPreambleInsertion(SOURCE, true)!;
+    expect(beamerTikzLayerPreambleInsertion(DEFINED, false)).toBeNull();
+    const after = beamerTikzLayerPreambleInsertion(SOURCE, true)!;
     expect(SOURCE.slice(0, after.at).endsWith("\\usepackage{tikz}\n")).toBe(true);
     expect(after.text).toBe(BEAMER_TIKZ_LAYER_DEFINITION + "\n");
     for (const packageSource of [String.raw`\usepackage[foo]{tikz}`, String.raw`\RequirePackage{amsmath,tikz}`, String.raw`\usepackage{pgfplots}`]) {
-      expect(drawingLayerPreambleInsertion(SOURCE.replace(String.raw`\usepackage{tikz}`, packageSource), false)).toBeNull();
+      expect(beamerTikzLayerPreambleInsertion(SOURCE.replace(String.raw`\usepackage{tikz}`, packageSource), false)).toBeNull();
     }
     const missing = SOURCE.replace(String.raw`\usepackage{tikz}`, "% \\usepackage{tikz}");
-    expect(drawingLayerPreambleInsertion(missing, true)?.text).toBe("\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION + "\n");
+    expect(beamerTikzLayerPreambleInsertion(missing, true)?.text).toBe("\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION + "\n");
   });
 });
 

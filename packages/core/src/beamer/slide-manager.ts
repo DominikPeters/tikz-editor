@@ -2,9 +2,11 @@ import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { analyzeBeamerSlideMove } from "./slide-move-analysis.js";
 import { beamerSlideIsEditable, beamerSlideSourceSpan, beamerSlideInsertionPoint } from "./slide-source.js";
+import { BEAMER_TIKZ_LAYER_DEFINITION, BEAMER_TIKZ_LAYER_OPTIONS, beamerOverlayPicturesIn, beamerTikzLayerState, isBeamerTikzLayerDefinition } from "./overlay-pictures.js";
+import { beamerTikzLayerPreambleInsertion } from "./tikz-layer-preamble.js";
 export { beamerSlideIsEditable, beamerSlideSourceSpan } from "./slide-source.js";
 import { scanBeamerDocument } from "./scan.js";
-import { createBeamerSyntaxContext } from "./syntax.js";
+import { beamerEnvironmentBoundariesIn, beamerOptionalArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerDocumentModel, BeamerFrameModel } from "./types.js";
 
 export type BeamerSlideDestination =
@@ -97,15 +99,50 @@ function duplicateReplacements(document: BeamerDocumentModel, frames: readonly B
   return replacements;
 }
 
-/** Copy authored frames as ordinary LaTeX, preserving their attached comments. */
+/**
+ * Copy authored frames as ordinary LaTeX, preserving their attached comments.
+ * Frames drawn on with the editor's `tikzlayer` come with its definition.
+ */
 export function copyBeamerSlides(source: string, frameIds: readonly string[]): string | null {
   const document = scanBeamerDocument(source), wanted = new Set(frameIds);
   const frames = document.frames.filter(frame => wanted.has(frame.id));
   if (!frames.length || frames.length !== wanted.size || frames.some(frame => !beamerSlideIsEditable(source, frame))) return null;
-  return frames.map(frame => {
+  const text = frames.map(frame => {
     const span = beamerSlideSourceSpan(source, frame), text = source.slice(span.from, span.to);
     return text + (text.endsWith("\n") ? "" : "\n");
   }).join("");
+  const context = createBeamerSyntaxContext(source);
+  const layered = frames.some(frame => beamerOverlayPicturesIn(context, frame.span).some(picture => picture.tikzLayer));
+  return layered ? BEAMER_TIKZ_LAYER_DEFINITION + "\n" + text : text;
+}
+
+/**
+ * The editor's `tikzlayer` in pasted frames, where the destination does not
+ * define it the same way: the definition for a deck without one, else (the
+ * author's own `tikzlayer`) each layer as the plain picture it stands for.
+ */
+function pastedTikzLayers(source: string, origin: BeamerDocumentModel, frames: readonly BeamerFrameModel[]): { preamble: Replacement | null; replacements: Replacement[] } {
+  const none = { preamble: null, replacements: [] };
+  const state = beamerTikzLayerState(source);
+  if (state === "ours") return none;
+  const context = createBeamerSyntaxContext(origin.source);
+  const layers = frames.flatMap(frame => beamerOverlayPicturesIn(context, frame.span).filter(picture => picture.tikzLayer));
+  if (!layers.length) return none;
+  if (state === "none") {
+    const insertion = beamerTikzLayerPreambleInsertion(source, true);
+    return { preamble: insertion && { span: { from: insertion.at, to: insertion.at }, text: insertion.text }, replacements: [] };
+  }
+  return { preamble: null, replacements: layers.flatMap(({ span }) => {
+    const boundaries = beamerEnvironmentBoundariesIn(context, span);
+    const begin = boundaries[0], end = boundaries.at(-1)!.span;
+    const options = beamerOptionalArgumentAfter(context, begin.span.to, span.to);
+    const own = options ? origin.source.slice(options.contentSpan.from, options.contentSpan.to).trim() : "";
+    return [
+      { span: { from: begin.span.from, to: options?.span.to ?? begin.span.to },
+        text: String.raw`\par\nointerlineskip\begin{tikzpicture}[` + BEAMER_TIKZ_LAYER_OPTIONS + (own ? ", " + own : "") + "]" },
+      { span: end, text: String.raw`\end{tikzpicture}` },
+    ];
+  }) };
 }
 
 function clipboardDocument(source: string): BeamerDocumentModel | null {
@@ -117,7 +154,9 @@ function clipboardDocument(source: string): BeamerDocumentModel | null {
   // unrelated commands whose scope would change when inserted at the destination.
   let remainder = source;
   for (const frame of [...document.frames].reverse()) remainder = remainder.slice(0, frame.span.from - prefix.length) + remainder.slice(frame.span.to - prefix.length);
-  if (remainder.replace(/%[^\n]*/gu, "").trim()) return null;
+  // Besides frames, only the editor's tikzlayer definition, which copying adds.
+  const rest = remainder.replace(/%[^\n]*/gu, "").trim();
+  if (rest && !isBeamerTikzLayerDefinition(rest)) return null;
   return document;
 }
 
@@ -143,9 +182,11 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
     const containing = removals.find(span => span.from <= at! && at! < span.to);
     if (containing) at = containing.from;
   }
-  const rename = edit.kind === "duplicate" ? duplicateReplacements(document, frames) : edit.kind === "paste"
+  const renamed = edit.kind === "duplicate" ? duplicateReplacements(document, frames) : edit.kind === "paste"
     ? duplicateReplacements(origin, frames, new Set(labelSpans(document).map(label => label.name))) : [];
-  if (!rename) return null;
+  if (!renamed) return null;
+  const layers = edit.kind === "paste" ? pastedTikzLayers(source, origin, frames) : null;
+  const rename = [...renamed, ...layers?.replacements ?? []];
   let payload = "";
   const inserted: { oldId: string | null; offset: number }[] = [];
   if (at != null) {
@@ -169,7 +210,7 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
       });
     }
   }
-  const edits: Replacement[] = removals.map(span => ({ span, text: "" }));
+  const edits: Replacement[] = [...removals.map(span => ({ span, text: "" })), ...layers?.preamble ? [layers.preamble] : []];
   if (at != null) {
     const same = edits.find(edit => edit.span.from === at);
     if (same) same.text = payload;

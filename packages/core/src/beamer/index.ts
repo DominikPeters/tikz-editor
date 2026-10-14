@@ -92,6 +92,7 @@ export {
   beamerOverlayPicturesIn,
   type BeamerOverlayPicture,
 } from "./overlay-pictures.js";
+export { beamerTikzLayerPreambleInsertion } from "./tikz-layer-preamble.js";
 export { scanBeamerDocument, scanBeamerDocumentClass } from "./scan.js";
 export { scanBeamerNoteCommands, beamerSpeakerNotes, type BeamerNoteCommand } from "./notes.js";
 export {

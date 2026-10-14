@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { copyBeamerSlides, editBeamerSlides, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
+import { BEAMER_TIKZ_LAYER_DEFINITION, copyBeamerSlides, editBeamerSlides, renderBeamerFrame, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
 import { applySourcePatches } from "../packages/core/src/edit/source-patches.js";
 const frame = (title: string, body = title, options = "") => `\\begin{frame}${options}{${title}}\n${body}\n\\end{frame}\n`;
 const deck = (body: string) => `\\documentclass{beamer}\n\\begin{document}\n${body}\\end{document}\n`;
@@ -137,6 +137,46 @@ describe("slide clipboard source operations", () => {
   });
   it("pastes into an empty deck", () => {
     expect(edit(deck(""), { kind: "paste", source: frame("A"), destination: { kind: "end" } }).selectedFrameIds).toEqual(["frame:0"]);
+  });
+  describe("the editor's tikzlayer", () => {
+    const layered = frame("L", "Text.\n\n\\begin{tikzlayer}[thick]\n  \\node at (2,3) {Added};\n\\end{tikzlayer}");
+    const withTikz = (body: string, definition = BEAMER_TIKZ_LAYER_DEFINITION + "\n") =>
+      `\\documentclass{beamer}\n\\usepackage{tikz}\n${definition}\\begin{document}\n${body}\\end{document}\n`;
+
+    it("comes with its definition when copied", () => {
+      const source = withTikz(frame("A") + layered);
+      expect(copyBeamerSlides(source, ["frame:1"])).toBe(BEAMER_TIKZ_LAYER_DEFINITION + "\n" + layered);
+      expect(copyBeamerSlides(source, ["frame:0"])).toBe(frame("A"));
+      // An author's own tikzlayer is theirs to carry.
+      expect(copyBeamerSlides(withTikz(layered, "\\newenvironment{tikzlayer}{}{}\n"), ["frame:0"])).toBe(layered);
+    });
+
+    it("brings the definition into a deck without one, in the same edit, and draws there", async () => {
+      const copied = copyBeamerSlides(withTikz(layered), ["frame:0"])!;
+      const result = edit(deck(frame("A")), { kind: "paste", source: copied, destination: { kind: "end" } });
+      expect(result.source).toBe(`\\documentclass{beamer}\n\\usepackage{tikz}\n${BEAMER_TIKZ_LAYER_DEFINITION}\n\\begin{document}\n${frame("A") + layered}\\end{document}\n`);
+      expect(result.selectedFrameIds).toEqual(["frame:1"]);
+      const rendered = await renderBeamerFrame(result.source, { frameIndex: 1 });
+      expect(rendered.diagnostics).toEqual([]);
+      expect(rendered.layout.embeddedTikz.map(picture => picture.overlay?.rootId)).toEqual(["frame:1:overlay:0"]);
+    });
+
+    it("adds nothing to a deck that has it", () => {
+      const copied = copyBeamerSlides(withTikz(layered), ["frame:0"])!;
+      expect(edit(withTikz(frame("A")), { kind: "paste", source: copied, destination: { kind: "end" } }).source).toBe(withTikz(frame("A") + layered));
+    });
+
+    it("becomes the plain picture it stands for in a deck with a tikzlayer of its own", () => {
+      const theirs = "\\newenvironment{tikzlayer}{\\begin{center}}{\\end{center}}\n";
+      const copied = copyBeamerSlides(withTikz(layered), ["frame:0"])!;
+      const result = edit(withTikz(frame("A"), theirs), { kind: "paste", source: copied, destination: { kind: "end" } });
+      expect(result.source).toBe(withTikz(frame("A") + frame("L", "Text.\n\n" + String.raw`\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, thick]` +
+        "\n  \\node at (2,3) {Added};\n\\end{tikzpicture}"), theirs));
+    });
+
+    it("pastes as it is without the definition", () => {
+      expect(edit(deck(frame("A")), { kind: "paste", source: layered, destination: { kind: "end" } }).source).toBe(deck(frame("A") + layered));
+    });
   });
   it.each(["Not a slide", "\\begin{frame}Incomplete", deck(frame("A")), "\\def\\x{1}\n" + frame("A"), "{" + frame("A") + "}"])("rejects non-frame or incomplete clipboard text: %s", payload => {
     expect(editBeamerSlides(deck(frame("A")), { kind: "paste", source: payload, destination: { kind: "end" } })).toBeNull();
