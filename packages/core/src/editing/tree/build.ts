@@ -927,19 +927,21 @@ class Binder {
   /**
    * The environment begun at `at`: the syntax index's match, else a direct
    * `\begin`/`\end` name match (the index's error recovery can lose a
-   * match after a stray token, e.g. `->` read as an overlay closer).
+   * match after a stray token, e.g. `->` read as an overlay closer). A `%`
+   * is never part of a name: in `\begin{name%` it comments out the rest of
+   * the line, `\end` included.
    */
   private matchEnvironment(at: number, limit: number): { name: string; beginEnd: number; endFrom: number; endTo: number } | null {
     const matched = this.environments.get(at);
     if (matched && matched.span.to <= limit) {
       return { name: matched.name, beginEnd: matched.begin.span.to, endFrom: matched.end.span.from, endTo: matched.span.to };
     }
-    const head = /^\\begin\s*\{([^{}]*)\}/u.exec(this.text.slice(at, Math.min(limit, at + 200)));
+    const head = /^\\begin\s*\{([^{}%]*)\}/u.exec(this.text.slice(at, Math.min(limit, at + 200)));
     if (!head) {
       return null;
     }
     const name = head[1];
-    const pattern = /\\(begin|end)\s*\{([^{}]*)\}|%[^\n]*|\\[\\%{}]/gu;
+    const pattern = /\\(begin|end)\s*\{([^{}%]*)\}|%[^\n]*|\\[\\%{}]/gu;
     pattern.lastIndex = at + head[0].length;
     let depth = 1;
     for (let match = pattern.exec(this.text); match && match.index < limit; match = pattern.exec(this.text)) {

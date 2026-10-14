@@ -59,6 +59,12 @@ describe("edit tree binding", () => {
     expect(built.diagnostics.map((diagnostic) => diagnostic.code)).toContain("unclosed-group");
   });
 
+  it("reads a % in an environment's name as a comment, its \\end included (keystroke fuzz)", () => {
+    const built = tree(R`Before.\begin{table}\caption*{A table.}\begin{tabular%}{lr}a&b\end{tabular}\end{table}After.` + "\n");
+    expect(printEditTree(built)).toBe(R`(scope (paragraph "Before." ⟨\begin{table}⟩ (style:caption "A" ␣ "table.") ⟨\begin{tabular⟩ %))`);
+    expect(built.diagnostics.map((diagnostic) => diagnostic.code)).toContain("unclosed-environment");
+  });
+
   it("stops at a blank line after a comment, a paragraph end to TeX", () => {
     const built = tree("\\textbf% content\n\n{x}");
     expect(printEditTree(built)).toBe(`(scope (paragraph (style:textbf) %) (paragraph (group "x")))`);
