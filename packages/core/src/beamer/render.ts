@@ -101,7 +101,7 @@ import { scanBeamerDocumentWithSyntax } from "./scan.js";
 import { formatDocumentRootId } from "../document/root-id.js";
 import { createBeamerSyntaxContext, type BeamerSyntaxContext } from "./syntax.js";
 import { beamerSpeakerNotes, projectBeamerSpeakerNotes, scanBeamerNoteCommands, type BeamerNoteCommand } from "./notes.js";
-import { beamerOverlayPictureOrigin, beamerOverlayPicturesIn, projectBeamerOverlayPictureBoxes } from "./overlay-pictures.js";
+import { BEAMER_TIKZ_LAYER_OPTIONS, beamerOverlayPictureOrigin, beamerOverlayPicturesIn, beamerTikzLayerState, projectBeamerOverlayPictureBoxes } from "./overlay-pictures.js";
 import { getTexSyntaxIndex, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import { texFragmentParser } from "@tikz-editor/lezer-tex";
 import type { NodeTextColorResolver } from "../text/types.js";
@@ -632,6 +632,7 @@ async function renderBeamerFrameStep(params: {
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
   const references: BeamerReferenceContext = {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
+    tikzLayer: beamerTikzLayerState(source) === "ours",
     crampedLists: shrink != null || frame.options?.entries.some(entry => entry.key === "squeeze"),
     continuationBreaks: allowFrameBreaks == null ? undefined : collectBeamerContinuationBreaks(context.syntax, frame),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
@@ -3511,6 +3512,7 @@ async function emitBeamerOverlayPictures(params: {
         // without, `current page` takes the picture's origin for the page's corner.
         evaluate: {
           initialFont: beamerTikzFontCommand(params.font),
+          ...(picture.tikzLayer && { pictureOptions: BEAMER_TIKZ_LAYER_OPTIONS }),
           currentPage: picture.rememberPicture
             ? { minX: -origin.x, minY: origin.y - params.page.height, maxX: params.page.width - origin.x, maxY: origin.y }
             : { minX: 0, minY: 0, maxX: params.page.width, maxY: params.page.height },
@@ -3753,7 +3755,7 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
-  params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped)) };
+  params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped), params.references.tikzLayer === true) };
   // A size declaration preceding the list is an ambient font selection,
   // not an empty paragraph (and must apply to its generated labels too).
   const leadingSize = activeBeamerNamedSize(params.mapped.text, params.references.theme);

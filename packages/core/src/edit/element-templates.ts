@@ -179,7 +179,7 @@ function resolveTikzpictureEndToken(source: string, figureSpan: Span | undefined
   const from = Math.max(0, Math.min(source.length, figureSpan.from));
   const to = Math.max(from, Math.min(source.length, figureSpan.to));
   const figureSource = source.slice(from, to);
-  const endPattern = /\\end\{tikzpicture\*?\}/gu;
+  const endPattern = /\\end\{(?:tikzpicture\*?|tikzlayer)\}/gu;
   let lastMatch: RegExpExecArray | null = null;
   for (const match of figureSource.matchAll(endPattern)) {
     lastMatch = match;

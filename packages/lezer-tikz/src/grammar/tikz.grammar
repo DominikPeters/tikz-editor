@@ -907,8 +907,8 @@ ForeachKw { @specialize<Identifier, "foreach"> }
 
   Comment { "%" ![\n\r]* }
 
-  BeginTikz { "\\begin{tikzpicture}" | "\\begin{tikzpicture*}" }
-  EndTikz { "\\end{tikzpicture}" | "\\end{tikzpicture*}" }
+  BeginTikz { "\\begin{tikzpicture}" | "\\begin{tikzpicture*}" | "\\begin{tikzlayer}" }
+  EndTikz { "\\end{tikzpicture}" | "\\end{tikzpicture*}" | "\\end{tikzlayer}" }
 
   DrawCmd { "\\draw" }
   GraphCmd { "\\graph" }

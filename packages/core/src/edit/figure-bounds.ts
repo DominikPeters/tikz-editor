@@ -147,7 +147,7 @@ function resolveFigureBoundsInsertOffset(source: string, figure: TikzFigure): nu
     return source.lastIndexOf("\n", figure.body[0].span.from - 1) + 1;
   }
   const slice = source.slice(figure.span.from, figure.span.to);
-  const endMatch = /\\end\{tikzpicture\*?\}/g;
+  const endMatch = /\\end\{(?:tikzpicture\*?|tikzlayer)\}/g;
   let lastMatch: RegExpExecArray | null = null;
   for (let match = endMatch.exec(slice); match !== null; match = endMatch.exec(slice)) {
     lastMatch = match;

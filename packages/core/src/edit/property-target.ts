@@ -1593,7 +1593,7 @@ function resolveInsertOffset(source: string, span: Span, tokenRegex: RegExp): nu
 }
 
 function resolveFigureInsertOffset(source: string, span: Span): number | null {
-  const figureEnvOffset = resolveInsertOffset(source, span, /\\begin\{tikzpicture\*?\}/);
+  const figureEnvOffset = resolveInsertOffset(source, span, /\\begin\{(?:tikzpicture\*?|tikzlayer)\}/);
   if (figureEnvOffset !== span.from) {
     return figureEnvOffset;
   }

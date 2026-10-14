@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BEAMER_DRAWING_LAYER, beamerDrawingLayerInsertions, renderBeamerFrame, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { BEAMER_DRAWING_LAYER, BEAMER_TIKZ_LAYER, BEAMER_TIKZ_LAYER_DEFINITION, beamerDrawingLayerInsertions, beamerTikzLayerState, renderBeamerFrame, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 import { createBeamerSyntaxContext } from "../packages/core/src/beamer/syntax.js";
 import { formatDocumentRootId, parseDocumentRootId } from "../packages/core/src/document/root-id.js";
 import { worldPoint } from "../packages/core/src/coords/points.js";
@@ -9,7 +9,7 @@ import { computeSnapshot } from "../packages/app/src/compute";
 import { deckDrawingLayerRootId } from "../packages/app/src/drawing-layer";
 import { executeDocumentEdit } from "../packages/app/src/edit-execution";
 import { patchesMatchSourceTransition } from "../packages/core/src/edit/source-patches.js";
-import { drawingLayerPackageInsertion } from "../packages/app/src/drawing-layer";
+import { drawingLayerPreambleInsertion } from "../packages/app/src/drawing-layer";
 import { reconcileEditingIdentities } from "../packages/app/src/editing-identities";
 
 const LAYER = String.raw`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]
@@ -55,31 +55,80 @@ describe("drawing layer root ids", () => {
   });
 });
 
+const DEFINED = SOURCE.replace("\\usepackage{tikz}\n", "\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION + "\n");
+const THEIRS = SOURCE.replace("\\usepackage{tikz}\n", "\\usepackage{tikz}\n\\newenvironment{tikzlayer}{\\begin{center}}{\\end{center}}\n");
+
+describe("the tikzlayer environment", () => {
+  it.each([
+    ["no definition", SOURCE, "none"],
+    ["the editor's definition", DEFINED, "ours"],
+    ["the editor's definition, spaced differently", SOURCE.replace("\\usepackage{tikz}\n", "\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION.replace(/\n\s*/gu, "") + "\n"), "ours"],
+    ["a definition of the author's", THEIRS, "theirs"],
+    ["the editor's, later redefined", DEFINED.replace("\\begin{document}", "\\renewenvironment{tikzlayer}{}{}\n\\begin{document}"), "theirs"],
+    ["a command of that name", SOURCE.replace("\\begin{document}", "\\newcommand\\tikzlayer{x}\n\\begin{document}"), "theirs"],
+    ["a definition commented out", SOURCE.replace("\\begin{document}", "% \\newenvironment{tikzlayer}{}{}\n\\begin{document}"), "none"],
+  ])("is the editor's only when every definition is its own: %s", (_, source, state) => {
+    expect(beamerTikzLayerState(source)).toBe(state);
+  });
+
+  it("is a drawing layer only when it is the editor's", async () => {
+    const layer = String.raw`\begin{tikzlayer}
+\node at (2,3) {Added};
+\end{tikzlayer}`;
+    const ours = await renderBeamerFrame(DEFINED.replace("Some text here.", "Some text here.\n\n" + layer), { frameIndex: 1 });
+    expect(ours.diagnostics).toEqual([]);
+    expect(ours.layout.embeddedTikz.map(picture => picture.overlay?.rootId)).toEqual(["frame:1:overlay:0"]);
+    // As TeX reads the author's own environment, not as a drawing.
+    const theirs = await renderBeamerFrame(THEIRS.replace("Some text here.", "Some text here.\n\n" + layer), { frameIndex: 1 });
+    expect(theirs.layout.embeddedTikz.some(picture => picture.overlay)).toBe(false);
+  });
+});
+
 describe("where a new drawing layer goes", () => {
-  it("goes at the frame's top level: after a list with \\nointerlineskip, after text with a % line", () => {
-    const context = createBeamerSyntaxContext(SOURCE);
-    const [list] = beamerDrawingLayerInsertions(context, bodyOf(SOURCE, 2));
-    expect(SOURCE.slice(0, list.at).endsWith("\\end{itemize}")).toBe(true);
-    expect(list.text).toBe("\n\\nointerlineskip\n" + BEAMER_DRAWING_LAYER);
-    const [plain] = beamerDrawingLayerInsertions(context, bodyOf(SOURCE, 1));
-    expect(SOURCE.slice(0, plain.at).endsWith("Some text here.")).toBe(true);
-    expect(plain.text).toBe("\n%\n" + BEAMER_DRAWING_LAYER);
+  it("is a tikzlayer at the end of the frame's top level, defined with the first one", () => {
+    for (const frameIndex of [1, 2, 3]) {
+      const [first] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(SOURCE), bodyOf(SOURCE, frameIndex));
+      expect(first).toEqual({ at: expect.any(Number), text: "\n\n" + BEAMER_TIKZ_LAYER, definesLayer: true });
+      expect(SOURCE.slice(first.at, bodyOf(SOURCE, frameIndex).to).trim()).toBe("");
+    }
+    const [defined] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(DEFINED), bodyOf(DEFINED, 2));
+    expect(defined.definesLayer).toBeUndefined();
   });
 
   it("moves none of the frame's text (LuaLaTeX agrees: test/fixtures/beamer/overlay-pictures-fidelity)", async () => {
-    for (const frameIndex of [1, 2]) {
-      const [joined] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(SOURCE), bodyOf(SOURCE, frameIndex));
-      const inserted = SOURCE.slice(0, joined.at) + joined.text + SOURCE.slice(joined.at);
-      const before = await renderBeamerFrame(SOURCE, { frameIndex });
+    for (const [source, frameIndex] of [[DEFINED, 1], [DEFINED, 2], [DEFINED, 3], [THEIRS, 1], [THEIRS, 2]] as const) {
+      const [joined] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(source), bodyOf(source, frameIndex));
+      const inserted = source.slice(0, joined.at) + joined.text + source.slice(joined.at);
+      const before = await renderBeamerFrame(source, { frameIndex });
       const after = await renderBeamerFrame(inserted, { frameIndex });
-      expect(after.layout.paragraphs.map(paragraph => paragraph.bounds)).toEqual(before.layout.paragraphs.map(paragraph => paragraph.bounds));
+      // To 0.001pt: a paragraph that gains the layer's empty line adds 0pt to its height.
+      const bounds = (layout: typeof before.layout) => layout.paragraphs.map(({ bounds }) => [bounds.x, bounds.y, bounds.width, bounds.height].map(value => value.toFixed(3)));
+      expect({ frameIndex, theirs: source === THEIRS, bounds: bounds(after.layout) }).toEqual({ frameIndex, theirs: source === THEIRS, bounds: bounds(before.layout) });
       expect(after.layout.embeddedTikz.some(entry => entry.overlay)).toBe(true);
     }
   });
 
-  it("offers a paragraph of its own as the fallback", () => {
-    const candidates = beamerDrawingLayerInsertions(createBeamerSyntaxContext(SOURCE), bodyOf(SOURCE, 3));
-    expect(candidates.at(-1)?.text).toBe("\n\n" + BEAMER_DRAWING_LAYER);
+  it("is a plain picture where the document has a tikzlayer of its own: after a list \\nointerlineskip, after text a % line", () => {
+    const context = createBeamerSyntaxContext(THEIRS);
+    const [list] = beamerDrawingLayerInsertions(context, bodyOf(THEIRS, 2));
+    expect(THEIRS.slice(0, list.at).endsWith("\\end{itemize}")).toBe(true);
+    expect(list.text).toBe("\n\\nointerlineskip\n" + BEAMER_DRAWING_LAYER);
+    const [plain] = beamerDrawingLayerInsertions(context, bodyOf(THEIRS, 1));
+    expect(THEIRS.slice(0, plain.at).endsWith("Some text here.")).toBe(true);
+    expect(plain.text).toBe("\n%\n" + BEAMER_DRAWING_LAYER);
+    expect(beamerDrawingLayerInsertions(context, bodyOf(THEIRS, 3)).at(-1)?.text).toBe("\n\n" + BEAMER_DRAWING_LAYER);
+  });
+
+  it("puts the definition after TikZ, loading TikZ only where no package does", () => {
+    expect(drawingLayerPreambleInsertion(DEFINED, false)).toBeNull();
+    const after = drawingLayerPreambleInsertion(SOURCE, true)!;
+    expect(SOURCE.slice(0, after.at).endsWith("\\usepackage{tikz}\n")).toBe(true);
+    expect(after.text).toBe(BEAMER_TIKZ_LAYER_DEFINITION + "\n");
+    for (const packageSource of [String.raw`\usepackage[foo]{tikz}`, String.raw`\RequirePackage{amsmath,tikz}`, String.raw`\usepackage{pgfplots}`]) {
+      expect(drawingLayerPreambleInsertion(SOURCE.replace(String.raw`\usepackage{tikz}`, packageSource), false)).toBeNull();
+    }
+    const missing = SOURCE.replace(String.raw`\usepackage{tikz}`, "% \\usepackage{tikz}");
+    expect(drawingLayerPreambleInsertion(missing, true)?.text).toBe("\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION + "\n");
   });
 });
 
@@ -121,12 +170,14 @@ describe("drawing layer snapshots", () => {
     const added = executeDocumentEdit(context, { kind: "addElement", at: worldPoint(pt(60), pt(60)), template: { kind: "node", text: "Added" } });
     expect(added.kind).toBe("success");
     if (added.kind !== "success") return;
-    expect(added.newSource).toContain("\\end{itemize}\n\\nointerlineskip\n" + BEAMER_DRAWING_LAYER.split("\n")[0]);
+    expect(added.newSource).toContain("\\end{itemize}\n\n\\begin{tikzlayer}\n");
+    expect(added.newSource).toContain("\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION + "\n");
     const rendered = await computeSnapshot({ id: "slide-created", source: added.newSource, activeRootId: "frame:2", includeDrawingLayer: true });
     const removed = executeDocumentEdit({ ...context, source: added.newSource, snapshot: rendered.snapshot }, { kind: "deleteElements", elementIds: ["path:0"] });
     expect(removed.kind).toBe("success");
     if (removed.kind !== "success") return;
-    expect(removed.newSource).toBe(SOURCE);
+    // The definition stays.
+    expect(removed.newSource).toBe(DEFINED);
     expect(patchesMatchSourceTransition(added.newSource, removed.newSource, removed.patches)).toBe(true);
   });
 
@@ -158,16 +209,10 @@ describe("drawing layer snapshots", () => {
     );
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain("\\usepackage{tikz}\n\\begin{document}");
+    expect(result.newSource).toContain("\\usepackage{tikz}\n" + BEAMER_TIKZ_LAYER_DEFINITION + "\n\\begin{document}");
     expect(result.patches).toHaveLength(2);
     expect(patchesMatchSourceTransition(source, result.newSource, result.patches)).toBe(true);
   });
-
-  it.each([String.raw`\usepackage[foo]{tikz}`, String.raw`\RequirePackage{amsmath,tikz}`, String.raw`\usepackage{pgfplots}`])(
-    "does not reload TikZ already supplied by %s", (packageSource) => {
-      expect(drawingLayerPackageInsertion(SOURCE.replace(String.raw`\usepackage{tikz}`, packageSource))).toBeNull();
-    }
-  );
 
   it.each(["only", "uncover"])("creates a visible layer after existing pictures hidden by %s on this step", async command => {
     const source = SOURCE.replace(LAYER, `\\${command}<2>{${LAYER}}`);
@@ -252,28 +297,36 @@ describe("drawing layer snapshots", () => {
   });
 
   it("show a frame without one its layer still to come, and the first shape inserts it in one edit", async () => {
-    const deck = await computeSnapshot({ id: "deck", documentId: "doc-layer", source: SOURCE, activeRootId: "frame:1" });
+    const deck = await computeSnapshot({ id: "deck", documentId: "doc-layer", source: DEFINED, activeRootId: "frame:1" });
     expect(deckDrawingLayerRootId("frame:1", deck.snapshot)).toBe("frame:1:overlay:0");
-    const { snapshot } = await computeSnapshot({ id: "virtual", documentId: "doc-layer", source: SOURCE, activeRootId: "frame:1:overlay:0" });
+    const { snapshot } = await computeSnapshot({ id: "virtual", documentId: "doc-layer", source: DEFINED, activeRootId: "frame:1:overlay:0" });
     const layer = snapshot.overlayLayer!;
-    expect(layer.insertion?.text).toBe("\n%\n" + BEAMER_DRAWING_LAYER);
+    expect(layer.insertion?.text).toBe("\n\n" + BEAMER_TIKZ_LAYER);
+    expect(layer.insertion?.preamble).toBeNull();
+    expect(layer.evaluate.pictureOptions).toBe("remember picture, overlay, shift={(current page.south west)}");
     // A rectangle from (2,3) to (4,4) cm on the page, given in the picture's world.
     const world = (x: number, y: number) => worldPoint(pt(x * PT_PER_CM + layer.evaluate.currentPage.minX), pt(y * PT_PER_CM + layer.evaluate.currentPage.minY));
     const toPicture = (point: ReturnType<typeof world>) => worldPoint(pt(point.x - layer.evaluate.currentPage.minX), pt(point.y - layer.evaluate.currentPage.minY));
     const result = executeDocumentEdit(
-      { documentId: "doc-layer", source: SOURCE, sourceRevision: 1, activeRootId: "frame:1:overlay:0", snapshot },
+      { documentId: "doc-layer", source: DEFINED, sourceRevision: 1, activeRootId: "frame:1:overlay:0", snapshot },
       { kind: "addElement", at: toPicture(world(2, 3)), template: { kind: "rectangle", corner: toPicture(world(4, 4)) } }
     );
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
     expect(result.patches).toHaveLength(1);
-    expect(result.newSource).toContain("Some text here.\n%\n" + String.raw`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]`);
+    expect(result.newSource).toContain("Some text here.\n\n\\begin{tikzlayer}\n");
     expect(result.newSource).toContain(String.raw`\draw (2,3) rectangle (4,4);`);
-    expect(result.newSource.match(/tikzpicture\}\[remember/gu)).toHaveLength(2);
+    expect(result.newSource.match(/\\begin\{tikzlayer\}/gu)).toHaveLength(1);
     // Then the layer exists: the same root id addresses it.
     const after = await computeSnapshot({ id: "after", documentId: "doc-layer", source: result.newSource, activeRootId: "frame:1:overlay:0" });
     expect(after.snapshot.overlayLayer?.insertion).toBeNull();
     expect(after.snapshot.scene!.elements.length).toBeGreaterThan(0);
+  });
+
+  it("make the layer of an empty frame a tikzlayer too, though it adds the frame's only paragraph", async () => {
+    const source = DEFINED.replace("Some text here.\n", "");
+    const { snapshot } = await computeSnapshot({ id: "empty", documentId: "doc-empty", source, activeRootId: "frame:1:overlay:0" });
+    expect(snapshot.overlayLayer?.insertion?.text).toBe("\n" + BEAMER_TIKZ_LAYER);
   });
 
   it("fall back to the deck for a layer that is neither there nor next", async () => {

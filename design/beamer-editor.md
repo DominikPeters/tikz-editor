@@ -713,13 +713,30 @@ Two modes, matching Beamer idiom:
   A drawing tool reuses the last visible remembered
   picture (else the last visible layer), or prepares a new layer when none is
   visible. Its first drawing inserts the layer and, if needed, loads TikZ in
-  the preamble, as one undoable edit. Generated pictures are inserted at the
-  frame's top level, after its content, outside lists, columns and blocks,
-  joined so they move no text (LuaLaTeX: `drawing-layer-joins.tex`): after
-  text a `%` line keeps the empty box in the last paragraph, after a list or
-  block `\nointerlineskip` drops its line's baseline glue. Each step is laid
-  out to check; else a paragraph of its own. A preceding `\pause`/`\onslide` cover is closed so the new drawing is visible
-  on every step. Deleting the last drawing removes the empty picture and the
+  the preamble, as one undoable edit. The generated layer is a `tikzlayer`
+  environment at the end of the frame's top level, defined once in the
+  preamble (after TikZ):
+
+  ```tex
+  \newenvironment{tikzlayer}[1][]
+    {\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, #1]}
+    {\end{tikzpicture}}
+  ```
+
+  `\par\nointerlineskip` makes the picture's empty box a line of its own that
+  adds no space (Beamer's `\parskip` is 0pt), after text, a list, a block or
+  a display alike (LuaLaTeX: `drawing-layer-tikzlayer.tex`). The name is free
+  in TeX Live (`tikzoverlay` is a command in beautybook.cls, and "overlay"
+  means steps to Beamer users). It is the editor's only while every
+  definition of the name in the document is exactly this one (up to
+  spacing); otherwise it is the author's environment, rendered as TeX reads
+  it, and new layers are plain overlay pictures joined so they move no text
+  (after text a `%` line, after a list or block `\nointerlineskip`;
+  `drawing-layer-joins.tex`). An undefined `tikzlayer` (a slide pasted from
+  another deck) is an unknown environment, as in TeX. The definition stays
+  when the last layer goes. Each step is laid out to check the insertion;
+  else a paragraph of its own. A preceding `\pause`/`\onslide` cover is
+  closed so the new drawing is visible on every step. Deleting the last drawing removes the empty picture and the
   lines that joined it in the same undoable edit. Clicking empty canvas clears
   selection. Changes confined to an overlay picture reuse the slide's text
   layout and rebind document source offsets. Drags, inspector scrubs and node

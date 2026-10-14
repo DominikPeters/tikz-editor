@@ -82,6 +82,11 @@ export {
 } from "./render.js";
 export {
   BEAMER_DRAWING_LAYER,
+  BEAMER_TIKZ_LAYER,
+  BEAMER_TIKZ_LAYER_DEFINITION,
+  BEAMER_TIKZ_LAYER_OPTIONS,
+  beamerTikzLayerState,
+  type BeamerTikzLayerState,
   beamerDrawingLayerInsertions,
   beamerDrawingLayerRemovalSpan,
   beamerOverlayPicturesIn,

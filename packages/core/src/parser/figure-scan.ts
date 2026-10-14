@@ -7,8 +7,16 @@ import {
   skipTexWhitespaceAndComments
 } from "./tex-lexical.js";
 
+/**
+ * Environments that are a TikZ picture. `tikzlayer` is the editor's drawing
+ * layer on a slide (beamer/overlay-pictures.ts): a tikzpicture with implied
+ * options, which the caller supplies when evaluating it.
+ */
+export const TIKZ_PICTURE_ENVIRONMENTS: ReadonlySet<string> = new Set(["tikzpicture", "tikzpicture*", "tikzlayer"]);
+
 export type ScannedFigure = {
   span: { from: number; to: number };
+  environment: string;
   beginSpan: { from: number; to: number };
   endSpan: { from: number; to: number };
   isTemplate: boolean;
@@ -45,7 +53,7 @@ export function scanTikzFigures(source: string): ScannedFigure[] {
       continue;
     }
     cursor = environment.to;
-    if (environment.name !== "tikzpicture" && environment.name !== "tikzpicture*") {
+    if (!TIKZ_PICTURE_ENVIRONMENTS.has(environment.name)) {
       continue;
     }
     if (environment.kind === "begin") {
@@ -62,6 +70,7 @@ export function scanTikzFigures(source: string): ScannedFigure[] {
 
     candidates.push({
       span: { from: begin.from, to: environment.to },
+      environment: begin.name,
       beginSpan: { from: begin.from, to: begin.to },
       endSpan: { from: environment.from, to: environment.to },
       containsUnresolvedPlaceholder

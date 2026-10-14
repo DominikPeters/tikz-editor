@@ -38,6 +38,7 @@ describe("CST to AST transform edge cases", () => {
     const scanned = fromCst(parseSyntax(source), source);
     const fakeFigure: ScannedFigure = {
       span: { from: 0, to: 5 },
+      environment: "tikzpicture",
       beginSpan: { from: 0, to: 5 },
       endSpan: { from: 0, to: 5 },
       isTemplate: false

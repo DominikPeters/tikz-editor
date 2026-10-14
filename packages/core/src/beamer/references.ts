@@ -51,6 +51,8 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   footnotes?: BeamerFootnoteIndex;
   continuationBreaks?: BeamerContinuationBreaks;
   theme?: ResolvedBeamerTheme;
+  /** The document's `tikzlayer` is the editor's drawing layer (beamerTikzLayerState). */
+  tikzLayer?: boolean;
   /** Owned by the current render; the prepared document index stays immutable. */
   renderDiagnostics: Diagnostic[];
 };

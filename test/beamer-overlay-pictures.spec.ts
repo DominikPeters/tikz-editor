@@ -17,6 +17,11 @@ const pauseOracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-p
   sourceSha256: string;
   pages: Array<{ step: number; trace: OracleBeamerPageTrace }>;
 };
+const tikzLayerSource = readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex", import.meta.url), "utf8");
+const tikzLayerOracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.oracle.json", import.meta.url), "utf8")) as {
+  sourceSha256: string;
+  pages: Array<{ frame: number; step: number; trace: OracleBeamerPageTrace }>;
+};
 const joinsSource = readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-joins.tex", import.meta.url), "utf8");
 const joinsOracle = JSON.parse(readFileSync(new URL("./fixtures/beamer/overlay-pictures-fidelity/drawing-layer-joins.oracle.json", import.meta.url), "utf8")) as {
   sourceSha256: string;
@@ -39,6 +44,20 @@ describe("Beamer overlay pictures", () => {
     expect(comparison.summary.maxAbsoluteGlyphDxPt).toBeLessThan(.001);
     expect(comparison.summary.maxAbsoluteGlyphDyPt).toBeLessThan(.001);
     expect(rendered.layout.embeddedTikz[0].overlay?.rootId).toBe("frame:0:overlay:0");
+  });
+  it.each(tikzLayerOracle.pages)("matches LuaLaTeX for the editor's tikzlayer in frame $frame, step $step", async ({ frame, step, trace }) => {
+    expect(createHash("sha256").update(tikzLayerSource).digest("hex")).toBe(tikzLayerOracle.sourceSha256);
+    const rendered = await renderBeamerFrame(tikzLayerSource, { frameIndex: frame - 1, step });
+    expect(rendered.diagnostics).toEqual([]);
+    const native = buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider);
+    const comparison = compareBeamerPageTraces(native, trace);
+    expect(comparison.summary.glyphCodeMatch).toBe(true);
+    expect(comparison.summary.unmatchedNativeTextLines).toBe(0);
+    expect(comparison.summary.unmatchedOracleTextLines).toBe(0);
+    // The drawing, at (2,3) cm from the page's lower-left corner, as the text around it.
+    expect(native.lines.some(line => line.text === "Added")).toBe(true);
+    expect(comparison.summary.maxAbsoluteGlyphDxPt).toBeLessThan(.001);
+    expect(comparison.summary.maxAbsoluteGlyphDyPt).toBeLessThan(.001);
   });
   it.each(joinsOracle.pages)("matches LuaLaTeX for a new drawing layer joined to frame $frame", async ({ frame, trace }) => {
     expect(createHash("sha256").update(joinsSource).digest("hex")).toBe(joinsOracle.sourceSha256);

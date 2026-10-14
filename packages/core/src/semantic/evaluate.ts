@@ -295,7 +295,7 @@ export function createSemanticEvaluationRun(
     sourceKind: "figure-options",
     label: "figure"
   };
-  const rootOptionLayers = buildRootPictureOptionLayers(figure, parent, context, figureSourceRef);
+  const rootOptionLayers = buildRootPictureOptionLayers(figure, parent, context, figureSourceRef, opts.pictureOptions);
   const rootFramePushed = rootOptionLayers.length > 0;
   if (rootFramePushed) {
     markFeature(featureUsage, "options_structured", "supported");
@@ -622,7 +622,8 @@ function buildRootPictureOptionLayers(
   figure: TikzFigure,
   parent: ReturnType<typeof currentFrame>,
   context: SemanticContext,
-  figureSourceRef: StyleSourceRef
+  figureSourceRef: StyleSourceRef,
+  pictureOptions: string | undefined
 ): StyleTraceLayerInput[] {
   const layers: StyleTraceLayerInput[] = [];
   if (parent.customStyles.has("every picture")) {
@@ -639,6 +640,16 @@ function buildRootPictureOptionLayers(
         rawOptions: [everyPictureOptions]
       });
     }
+  }
+
+  // Options the picture's environment implies (a tikzlayer's), before its own.
+  const implied = pictureOptions ? parseStyleValueAsOptionList(pictureOptions) : null;
+  if (implied) {
+    layers.push({
+      kind: "scope",
+      sourceRef: { sourceId: figureSourceRef.sourceId, sourceSpan: figure.span, sourceKind: "figure-options", label: "environment" },
+      rawOptions: [implied]
+    });
   }
 
   if (figure.options) {

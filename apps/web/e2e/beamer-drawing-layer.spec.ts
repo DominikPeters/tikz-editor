@@ -27,6 +27,12 @@ Some text here.
 \end{frame}
 \end{document}`;
 
+// The editor's drawing layer environment (BEAMER_TIKZ_LAYER_DEFINITION).
+const TIKZ_LAYER_DEFINITION = String.raw`\newenvironment{tikzlayer}[1][]
+  {\par\nointerlineskip\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}, #1]}
+  {\end{tikzpicture}}`;
+const defined = (source: string) => source.replace("\\usepackage{tikz}\n", "\\usepackage{tikz}\n" + TIKZ_LAYER_DEFINITION + "\n");
+
 type TestApi = {
   getCanvasTransform?: () => { translateX: number; translateY: number; scale: number };
   getSelectedSourceIds?: () => string[];
@@ -104,7 +110,9 @@ test("overlay shapes select and drag directly on the slide, and empty clicks cle
 test("a drawing tool on a slide without a layer draws into a new one, inserted with the first shape in one undo step", async ({ page }, testInfo) => {
   await setSource(page, PLAIN);
   await page.getByRole("button", { name: "1. Plain", exact: true }).click();
-  await expect(page.locator('[data-hit-region-interaction-mode="text"]').first()).toBeAttached({ timeout: 30_000 });
+  const text = page.locator('[data-hit-region-interaction-mode="text"]').first();
+  await expect(text).toBeAttached({ timeout: 30_000 });
+  const textBefore = await text.boundingBox();
   await page.getByRole("button", { name: "Rect", exact: true }).click();
   await expect(page.getByRole("button", { name: "Back to Slide 1" })).toHaveCount(0);
   await expect.poll(async () => (await canvasState(page)).rootId).toBe("frame:0");
@@ -115,8 +123,11 @@ test("a drawing tool on a slide without a layer draws into a new one, inserted w
   await page.mouse.down();
   await page.mouse.move(stage.x + stage.width * 0.7, stage.y + stage.height * 0.8, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(() => readStoreSource(page)).toContain("Some text here.\n%\n" + String.raw`\begin{tikzpicture}[remember picture, overlay, shift={(current page.south west)}]`);
+  await expect.poll(() => readStoreSource(page)).toContain("Some text here.\n\n\\begin{tikzlayer}\n");
   const drawn = await readStoreSource(page);
+  expect(drawn).toContain("\\usepackage{tikz}\n" + TIKZ_LAYER_DEFINITION + "\n");
+  // The slide's text stays where it was.
+  await expect.poll(async () => JSON.stringify(await text.boundingBox())).toBe(JSON.stringify(textBefore));
   // Page coordinates in cm from the lower-left corner: on the page (12.8 x 9.6 cm).
   const match = /\\draw \(([\d.]+),([\d.]+)\) rectangle \(([\d.]+),([\d.]+)\);/u.exec(drawn);
   expect(match).not.toBeNull();
@@ -165,10 +176,10 @@ for (const [label, body] of [["empty", ""], ["paused", String.raw`First.\pause S
     await page.mouse.down();
     await page.mouse.move(stage.x + stage.width * .55, stage.y + stage.height * .7, { steps: 5 });
     await page.mouse.up();
-    await expect.poll(() => readStoreSource(page)).toContain("\\usepackage{tikz}\n\\begin{document}");
+    await expect.poll(() => readStoreSource(page)).toContain("\\usepackage{tikz}\n" + TIKZ_LAYER_DEFINITION + "\n\\begin{document}");
     const drawn = await readStoreSource(page);
     expect(drawn).toContain(body);
-    expect(drawn.match(/\\begin\{tikzpicture\}/gu)).toHaveLength(1);
+    expect(drawn.match(/\\begin\{tikzlayer\}/gu)).toHaveLength(1);
     await page.keyboard.press(`${PRIMARY_MOD}+z`);
     await expect.poll(() => readStoreSource(page)).toBe(source);
     await page.keyboard.press(`${PRIMARY_MOD}+Shift+z`);
@@ -221,9 +232,10 @@ test("deleting the last drawing removes its picture after the list and undo rest
   await page.mouse.up();
   await expect.poll(async () => (await canvasState(page)).selected).toEqual(["path:0"]);
   const drawn = await readStoreSource(page);
-  expect(drawn).toContain("\\end{itemize}\n\\nointerlineskip\n\\begin{tikzpicture}");
+  expect(drawn).toContain("\\end{itemize}\n\n\\begin{tikzlayer}");
   await page.keyboard.press("Backspace");
-  await expect.poll(() => readStoreSource(page)).toBe(source);
+  // The definition stays for the next drawing.
+  await expect.poll(() => readStoreSource(page)).toBe(defined(source));
   expect((await canvasState(page)).rootId).toBe("frame:0");
   await page.keyboard.press(`${PRIMARY_MOD}+z`);
   await expect.poll(() => readStoreSource(page)).toBe(drawn);

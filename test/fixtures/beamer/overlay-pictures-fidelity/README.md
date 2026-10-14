@@ -14,7 +14,11 @@ drawing is visible on both steps. LuaLaTeX also traces the covered `Second.`
 on step 1. Refresh its oracle with `compare-beamer-frame.mjs --structural-only`
 for pages 1 and 2; retain the source SHA256 and compiler provenance.
 
-`drawing-layer-joins.tex` pins the two ways the editor joins a new layer to a
-frame without moving its text: after a list, `\nointerlineskip` (the picture's
-paragraph then adds no baseline glue); after text, a `%` line (it stays in
-the last paragraph). Refresh as above for frames 1 and 2 (last page).
+`drawing-layer-tikzlayer.tex` pins the editor's `tikzlayer` environment
+(`\par\nointerlineskip` and a remembered overlay picture) after a list, after
+text, after a display and after a `\pause` (both steps): the text does not
+move and the drawing lands at its page coordinates. `drawing-layer-joins.tex`
+pins the plain pictures the editor writes where a document has a `tikzlayer`
+of its own: after a list, `\nointerlineskip` (the picture's paragraph then
+adds no baseline glue); after text, a `%` line (it stays in the last
+paragraph). Refresh both as above, with `--page` for each step.

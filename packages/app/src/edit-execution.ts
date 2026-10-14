@@ -9,7 +9,7 @@ import { maskSourceOutsideSpan, maskTikzPictureSource } from "@tikz-editor/core/
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { applySourcePatches, composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
-import { drawingLayerPackageInsertion } from "./drawing-layer";
+import { drawingLayerOffset, insertDrawingLayer } from "./drawing-layer";
 import { buildEditParseOptions } from "./edit-parse-options";
 import { documentKindForSource } from "./store/workspace-state";
 import { parseTikz } from "@tikz-editor/core/parser/index";
@@ -68,7 +68,7 @@ export function executeDocumentEdit(
   if (insertion && snapshot.source !== source) {
     return { kind: "unsupported", reason: "The figure is still catching up." };
   }
-  const working = insertion ? insertLayer(source, insertion) : source;
+  const working = insertion ? insertDrawingLayer(source, insertion) : source;
   const editSource = span ? maskTikzPictureSource(working, span) : source;
   const parseOptions = buildEditParseOptions({ ...context, source: editSource, activeRootId: span ? snapshot.parseResult?.activeFigureId : activeRootId, analysis: "none", overrides: options.parseOptions });
   const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, sourceFingerprint: parseOptions.sourceFingerprint };
@@ -94,21 +94,23 @@ export function executeDocumentEdit(
     }
     return { ...result, newSource: replay.source };
   }
-  // The first drawing inserts the layer: one patch, the layer as drawn on.
-  const end = insertion.at + insertion.text.length;
-  if (result.patches.some((patch) => patch.oldSpan.from < insertion.at || patch.oldSpan.to > end)) {
+  // The first drawing inserts the layer (and what the preamble needs for
+  // it): one edit, the layer as drawn on.
+  const layerAt = drawingLayerOffset(insertion);
+  const end = layerAt + insertion.text.length;
+  if (result.patches.some((patch) => patch.oldSpan.from < layerAt || patch.oldSpan.to > end)) {
     return { kind: "error", message: "The figure edit did not apply cleanly." };
   }
-  const replacement = replay.source.slice(insertion.at, end + replay.source.length - working.length);
+  const replacement = replay.source.slice(layerAt, end + replay.source.length - working.length);
   let patches: SourcePatch[] = [{ oldSpan: { from: insertion.at, to: insertion.at }, newSpan: { from: insertion.at, to: insertion.at + replacement.length }, replacement }];
-  const packageInsertion = drawingLayerPackageInsertion(source);
-  if (packageInsertion) {
-    const packagePatch = {
-      oldSpan: { from: packageInsertion.at, to: packageInsertion.at },
-      newSpan: { from: packageInsertion.at, to: packageInsertion.at + packageInsertion.text.length },
-      replacement: packageInsertion.text
+  const preamble = insertion.preamble;
+  if (preamble) {
+    const preamblePatch = {
+      oldSpan: { from: preamble.at, to: preamble.at },
+      newSpan: { from: preamble.at, to: preamble.at + preamble.text.length },
+      replacement: preamble.text
     };
-    patches = composeSourcePatches(source, [patches, [packagePatch]]);
+    patches = composeSourcePatches(source, [patches, [preamblePatch]]);
   }
   const committed = applySourcePatches(source, patches);
   if (committed.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
@@ -130,11 +132,7 @@ function onlyEmptyScopes(statements: readonly Statement[]): boolean {
  */
 export function nestedEditBaseSource(source: string, snapshot: SessionSnapshot): string {
   const insertion = snapshot.overlayLayer?.insertion;
-  return insertion && snapshot.source === source ? insertLayer(source, insertion) : source;
-}
-
-function insertLayer(source: string, insertion: { at: number; text: string }): string {
-  return source.slice(0, insertion.at) + insertion.text + source.slice(insertion.at);
+  return insertion && snapshot.source === source ? insertDrawingLayer(source, insertion) : source;
 }
 
 /** Property previews can outpace rendering; resolve their current picture span. */

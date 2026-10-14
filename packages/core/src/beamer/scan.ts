@@ -3,6 +3,7 @@ import type { Diagnostic } from "../diagnostics/types.js";
 import { formatDocumentRootId } from "../document/root-id.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { scanTikzFigures } from "../parser/figure-scan.js";
+import { beamerTikzLayerState } from "./overlay-pictures.js";
 import { collectContextDefinitions } from "../transform/cst-to-ast.js";
 import { scanBeamerNoteCommands } from "./notes.js";
 import {
@@ -397,8 +398,10 @@ function scanFrameTikzPictures(
   privateSpans: readonly Span[]
 ): BeamerTikzPictureRoot[] {
   const body = source.slice(bodySpan.from, bodySpan.to);
+  // A tikzlayer is a picture only when it is the editor's.
+  const tikzLayer = body.includes("tikzlayer") && beamerTikzLayerState(source) === "ours";
   return scanTikzFigures(body)
-    .filter((figure) => !figure.isTemplate && !privateSpans.some(span => figure.span.from + bodySpan.from >= span.from && figure.span.to + bodySpan.from <= span.to))
+    .filter((figure) => !figure.isTemplate && (figure.environment !== "tikzlayer" || tikzLayer) && !privateSpans.some(span => figure.span.from + bodySpan.from >= span.from && figure.span.to + bodySpan.from <= span.to))
     .map((figure, index) => ({
       kind: "tikzpicture",
       id: formatDocumentRootId({

@@ -35,7 +35,7 @@ import type {
   ParseBeamerFrameBodyParams,
 } from "./content-types.js";
 import { scanBeamerFrameOverlays, type BeamerOverlayModel } from "./overlay.js";
-import { readBeamerOverlayPicture } from "./overlay-pictures.js";
+import { beamerTikzLayerState, readBeamerOverlayPicture } from "./overlay-pictures.js";
 import {
   resolveBeamerTheoremOccurrences,
   type BeamerTheoremOccurrence,
@@ -87,9 +87,18 @@ export function parseBeamerFrameBody(
   const children: BeamerFrameBodyNode[] = [];
   let cursor = frame.bodySpan.from;
   let nodeIndex = 0;
+  const tikzLayer = beamerTikzLayerState(source) === "ours";
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    // The editor's drawing layer stays in the paragraph, as an overlay picture does.
+    if (tikzLayer && token.kind === "begin" && token.name === "tikzlayer") {
+      const endIndex = matchingEnvironmentEnd(tokens, index);
+      if (endIndex >= 0) {
+        index = endIndex;
+        continue;
+      }
+    }
     const unsupportedEndIndex = findUnsupportedEnvironmentEndIndex(
       context,
       tokens,
@@ -1268,6 +1277,7 @@ function isInsideNativeTextFlow(
         boundary &&
         (LIST_ENVIRONMENTS.has(boundary.name) || [
           "tikzpicture",
+          "tikzlayer",
           "minipage",
           "quote",
           "quotation",

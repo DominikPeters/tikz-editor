@@ -905,7 +905,7 @@ function resolveDisplayMathVerticalGlueInItems(
             item.origin.baselineSkip ?? options.lineHeight
           )
         ));
-      } else if (item.origin.side === "below" && previousDisplayMaterialMetrics) {
+      } else if (item.origin.side === "below" && previousDisplayMaterialMetrics && !nointerlineskipFollows(sourceItems, index)) {
         const nextParagraph = nextParagraphMeasurement(
           sourceItems,
           index,
@@ -1099,6 +1099,17 @@ function shouldInsertParagraphBoundaryInterlineGlue(
       return false;
     }
     return item.kind === "paragraph";
+  }
+  return false;
+}
+
+/** Whether a \nointerlineskip comes before the next box: no baseline glue then. */
+function nointerlineskipFollows(items: readonly TexVListItem[], index: number): boolean {
+  for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+    const item = items[nextIndex];
+    if (!item) continue;
+    if (item.kind === "glue" && item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") return true;
+    if (item.kind !== "glue" && item.kind !== "penalty" && !isBoundaryTransparentHBox(item)) return false;
   }
   return false;
 }

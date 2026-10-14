@@ -33,6 +33,7 @@ import { createBeamerSyntaxContext } from "@tikz-editor/core/beamer/syntax";
 import {
   beamerDrawingLayerInsertions,
   beamerOverlayPicturesIn,
+  BEAMER_TIKZ_LAYER_OPTIONS,
   beamerTikzFontCommand,
   createBeamerTexMathFontProfile,
   prepareBeamerDocument,
@@ -48,7 +49,7 @@ import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
 import { translationMatrix } from "@tikz-editor/core/semantic/transform";
 import type { EvaluateOptions } from "@tikz-editor/core/semantic/types";
 import { composeOverlayPage, overlayPageRetainedBytes, rebindOverlayPage } from "./beamer-overlay-page";
-import { deckDrawingLayerRootId } from "./drawing-layer";
+import { deckDrawingLayerRootId, drawingLayerPreambleInsertion, insertDrawingLayer, type DrawingLayerInsertion } from "./drawing-layer";
 import { prepareDocumentGraphicsContext, getImageAssetCacheGeneration, type PreparedDocumentGraphicsContext } from "./image-asset-cache";
 import { getActiveEditorPlatformGeneration } from "./platform/current";
 import { BoundedLru } from "./bounded-lru";
@@ -97,7 +98,7 @@ export type OverlayLayerSnapshot = {
   /** The picture's origin on the page (pt, y down). */
   origin: { x: number; y: number };
   /** What the picture is evaluated with: the page for `current page`, and the font of the text around it. */
-  evaluate: Required<Pick<EvaluateOptions, "currentPage" | "initialFont">> & Pick<EvaluateOptions, "initialTransform">;
+  evaluate: Required<Pick<EvaluateOptions, "currentPage" | "initialFont">> & Pick<EvaluateOptions, "initialTransform" | "pictureOptions">;
   /** Its geometry is expressed in slide coordinates. */
   pageCoordinates?: boolean;
   requestedRootId?: string | null;
@@ -106,7 +107,7 @@ export type OverlayLayerSnapshot = {
    * this inserted (its spans count in that source), and the first drawing
    * inserts it.
    */
-  insertion: { at: number; text: string } | null;
+  insertion: DrawingLayerInsertion | null;
 };
 
 /** One frame of a deck's root inventory, in render order. */
@@ -1080,14 +1081,17 @@ async function renderLayerFrame(source: string, frameIndex: number, step: number
 }
 
 /** Where a frame's new layer goes, by source and frame. */
-const overlayLayerInsertions = new BoundedLru<string, { at: number; text: string } | null>(8, 1024 * 1024);
+const overlayLayerInsertions = new BoundedLru<string, DrawingLayerInsertion | null>(8, 1024 * 1024);
 
-/** The paragraphs a frame sets, as a comparable string: what an inserted layer must leave alone. */
-function frameTextGeometry(layout: BeamerFrameLayout): string {
-  return layout.paragraphs.map((paragraph) =>
-    [paragraph.paragraphId, paragraph.bounds.x, paragraph.bounds.y, paragraph.bounds.width, paragraph.bounds.height]
-      .map((value) => typeof value === "number" ? value.toFixed(3) : value).join(",")
-  ).join(";");
+/** Where a frame sets its paragraphs, by id: what an inserted layer must leave alone. */
+function frameTextGeometry(layout: BeamerFrameLayout): Map<string, string> {
+  return new Map(layout.paragraphs.map((paragraph) => [paragraph.paragraphId,
+    [paragraph.bounds.x, paragraph.bounds.y, paragraph.bounds.width, paragraph.bounds.height].map((value) => value.toFixed(3)).join(",")]));
+}
+
+/** The paragraphs that were there stay where they were (the layer may add its own). */
+function keepsTextGeometry(before: ReadonlyMap<string, string>, after: ReadonlyMap<string, string>): boolean {
+  return [...before].every(([id, bounds]) => after.get(id) === bounds);
 }
 
 /**
@@ -1099,16 +1103,17 @@ async function chooseLayerInsertion(source: string, frameIndex: number, rootId: 
   if (overlayLayerInsertions.has(key)) return overlayLayerInsertions.get(key) ?? null;
   const frame = scanBeamerDocument(source).frames[frameIndex];
   if (!frame) return null;
-  const candidates = beamerDrawingLayerInsertions(createBeamerSyntaxContext(source), frame.bodySpan);
+  const candidates: DrawingLayerInsertion[] = beamerDrawingLayerInsertions(createBeamerSyntaxContext(source), frame.bodySpan)
+    .map(({ definesLayer, ...candidate }) => ({ ...candidate, preamble: drawingLayerPreambleInsertion(source, definesLayer === true) }));
   const steps = Array.from({ length: Math.max(1, (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source)).frameStepCount(frameIndex)) }, (_, index) => index + 1);
-  const baselines: string[] = [];
+  const baselines: Map<string, string>[] = [];
   for (const step of steps) baselines.push(frameTextGeometry((await renderLayerFrame(source, frameIndex, step, graphicsContext, work)).layout));
   let chosen = candidates.at(-1) ?? null;
   candidates: for (const candidate of candidates.slice(0, -1)) {
-    const inserted = source.slice(0, candidate.at) + candidate.text + source.slice(candidate.at);
+    const inserted = insertDrawingLayer(source, candidate);
     for (const [index, step] of steps.entries()) {
       const layout = (await renderLayerFrame(inserted, frameIndex, step, graphicsContext, work)).layout;
-      if (frameTextGeometry(layout) !== baselines[index] || !layout.embeddedTikz.some(entry => entry.overlay?.rootId === rootId)) continue candidates;
+      if (!keepsTextGeometry(baselines[index], frameTextGeometry(layout)) || !layout.embeddedTikz.some(entry => entry.overlay?.rootId === rootId)) continue candidates;
     }
     chosen = candidate;
     break;
@@ -1149,13 +1154,13 @@ async function computeOverlayLayerSnapshot(
   const prepared = pageContext?.prepared ?? (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source));
   const step = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, prepared.frameStepCount(ref.frameIndex)));
   const pictures = beamerOverlayPicturesIn(createBeamerSyntaxContext(source), frame.bodySpan);
-  let insertion: { at: number; text: string } | null = null;
+  let insertion: DrawingLayerInsertion | null = null;
   if (ref.index >= pictures.length) {
     if (ref.index !== pictures.length) return null;
     insertion = await chooseLayerInsertion(source, ref.frameIndex, formatDocumentRootId(ref), graphicsContext, work);
     if (!insertion) return null;
   }
-  const working = insertion ? source.slice(0, insertion.at) + insertion.text + source.slice(insertion.at) : source;
+  const working = insertion ? insertDrawingLayer(source, insertion) : source;
   const picture = beamerOverlayPicturesIn(createBeamerSyntaxContext(working), scanBeamerDocument(working).frames[ref.frameIndex]?.bodySpan ?? frame.bodySpan)[ref.index];
   if (!picture) return null;
   const placementKey = `${ref.frameIndex}:${ref.index}:${step}:${picture.rememberPicture}:${graphicsContext.resolver.cacheKey}:` +
@@ -1190,6 +1195,7 @@ async function computeOverlayLayerSnapshot(
     ? { minX: -origin.x, minY: origin.y - page.height, maxX: page.width - origin.x, maxY: origin.y }
     : { minX: 0, minY: 0, maxX: page.width, maxY: page.height };
   const evaluate = { currentPage, initialFont: placement.initialFont,
+    ...(picture.tikzLayer && { pictureOptions: BEAMER_TIKZ_LAYER_OPTIONS }),
     ...(pageCoordinates ? { initialTransform: translationMatrix(origin.x, page.height - origin.y) } : {}) };
   const theme = resolveBeamerTheme(document);
   const textEngine = await createTexNodeTextEngine({
