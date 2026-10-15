@@ -16,6 +16,70 @@
   margin-right: 6px;
 }
 
+.newSlideMain {
+  flex-direction: row;
+  padding: 4px 4px 4px 8px;
+}
+
+.gallery {
+  z-index: 1500;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 8px;
+  font-family: var(--font-ui);
+}
+
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, calc(var(--app-ui-scale, 1) * 128px)));
+  gap: 10px 8px;
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  cursor: default;
+}
+
+.layout:hover {
+  background: var(--btn-hover-bg);
+}
+
+.layout:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.layout[aria-current="true"] {
+  border-color: var(--accent);
+}
+
+.layoutPreview {
+  display: block;
+  width: 100%;
+  background: var(--bg-pane);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.layoutPreview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.layoutName {
+  text-align: center;
+}
+
 .presentButton {
   flex-direction: row;
   gap: 4px;

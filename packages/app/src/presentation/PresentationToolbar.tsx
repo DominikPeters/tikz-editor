@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { RiAddLine, RiPlayLine, RiSlideshow3Line } from "@remixicon/react";
-import { parseDocumentRootId, formatDocumentRootId } from "@tikz-editor/core/document/root-id";
-import { editBeamerSlides } from "@tikz-editor/core/beamer";
+import { RiPlayLine, RiSlideshow3Line } from "@remixicon/react";
 import { useEditorStore } from "../store/store";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { CaretDownIcon } from "../ui/tool-config";
@@ -11,18 +9,6 @@ import menuCss from "../ui/AppMenuBar.module.css";
 import { launchPresentation } from "./launch";
 import { presentationService } from "./service";
 import css from "./PresentationControls.module.css";
-
-export function NewSlideButton() {
-  const kind = useEditorStore(state => state.documentKind);
-  const locked = useEditorStore(state => !!state.documents[state.activeDocumentId]?.assistantLockReason);
-  if (kind !== "beamer") return null;
-  return <button type="button" className={[toolbarCss.btn, css.labelButton, css.newSlide].join(" ")} disabled={locked} onClick={() => {
-    const state = useEditorStore.getState(), root = parseDocumentRootId(state.activeRootId ?? "");
-    const frameId = root?.kind === "beamer-frame-tikz" ? formatDocumentRootId({ kind: "beamer-frame", index: root.frameIndex }) : state.activeRootId;
-    const edit = { kind: "insert" as const, destination: frameId ? { kind: "after" as const, frameId } : { kind: "end" as const } };
-    if (editBeamerSlides(state.source, edit)) state.dispatch({ type: "EDIT_DECK_SLIDES", documentId: state.activeDocumentId, baseRevision: state.sourceRevision, edit });
-  }}><RiAddLine size={18} aria-hidden="true" /><span>New Slide</span></button>;
-}
 
 export function PresentationToolbar({ onOptions }: { onOptions: () => void }) {
   const kind = useEditorStore(state => state.documentKind);

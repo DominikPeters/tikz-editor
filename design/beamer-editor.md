@@ -662,6 +662,19 @@ The analog is three mechanisms:
    missing), title+content, two columns, comparison (2×2), picture with
    caption, blank `[plain]`, outline (`\tableofcontents`), section header
    (inserts `\section{...}`, not a frame — see below), standout/closing.
+
+   Built (`beamer/slide-templates.ts`): Title (`\titlepage`, adding
+   `\title{…}` to a deck without one), Title & Bullets, Title Only, Two
+   Columns, Block, Theorem (where the class defines `theorem`), Statement,
+   Blank. Frames follow the deck's majority title form (`\begin{frame}{…}`
+   or `\frametitle`) and body indentation. The gallery draws each layout in
+   the deck's theme: a small deck of the preamble plus one frame per layout,
+   through the thumbnail worker. Unlike the ghost placeholders below, the
+   title is real placeholder text, selected in a text session as soon as the
+   slide shows, so typing replaces it. The button repeats the last layout
+   chosen (Title Only at first; never Title). Outline and section header wait
+   on `\tableofcontents` and `\sectionpage` rendering; picture with caption
+   waits on an image-insertion command.
 2. **Structural recognition**, not stored attributes: a frame whose body is
    one `columns` env is a two-content slide (gets divider drag + swap
    button); body `\titlepage` → title slide (inspector edits preamble
@@ -1621,7 +1634,7 @@ panel remains available for zero or one frame.
 Click opens a slide; Shift selects a range; Cmd/Ctrl toggles selection.
 Selected slides move together in source order by dragging, with an insertion
 marker on either side of a frame or section heading. Alt+arrow moves the
-selection from the keyboard. New slide inserts an empty frame after the
+selection from the keyboard. New Slide inserts a frame in a chosen layout after the
 selection; Duplicate and Delete are available in the context menu and via
 Cmd/Ctrl+D and Delete. Undo/redo restores the active frame, selection, and
 viewed overlay steps. Each operation is one source transaction.

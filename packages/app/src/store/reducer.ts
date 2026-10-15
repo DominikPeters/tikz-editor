@@ -81,6 +81,7 @@ function initialUiState(): WorkspaceEphemeralState {
     deckObjectSelection: null,
     deckBuildSelection: null,
     sourceReveal: null,
+    deckPlaceholderSelection: null,
     fitToContentRequestToken: 0,
     fitToContentModeActive: true,
     canvasFitToContentScale: null,
@@ -1134,6 +1135,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         selectedElementIds: new Set(), activeHandleId: null, dirty: result.source !== current.savedSource,
       }));
       ui = { ...ui, deckObjectSelection: null, deckBuildSelection: null,
+        deckPlaceholderSelection: result.placeholder ? { documentId: doc.id, sourceRevision: doc.sourceRevision + 1, span: result.placeholder } : null,
         deckStepByRootKey: { ...Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => !key.startsWith(prefix))), ...stepsAfter } };
       break;
     }

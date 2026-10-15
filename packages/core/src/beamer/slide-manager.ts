@@ -8,6 +8,7 @@ import { BEAMER_TIKZ_LAYER_DEFINITION, BEAMER_TIKZ_LAYER_OPTIONS, beamerOverlayP
 import { beamerTikzLayerPreambleInsertion } from "./tikz-layer-preamble.js";
 export { beamerSlideIsEditable, beamerSlideSourceSpan } from "./slide-source.js";
 import { scanBeamerDocument } from "./scan.js";
+import { beamerSlideTemplateFrame, type BeamerSlideTemplateId } from "./slide-templates.js";
 import { beamerEnvironmentBoundariesIn, beamerOptionalArgumentAfter, createBeamerSyntaxContext } from "./syntax.js";
 import type { BeamerDocumentModel, BeamerFrameModel } from "./types.js";
 
@@ -19,7 +20,8 @@ export type BeamerSlideEdit =
   | { kind: "move"; frameIds: readonly string[]; destination: BeamerSlideDestination }
   | { kind: "duplicate"; frameIds: readonly string[] }
   | { kind: "delete"; frameIds: readonly string[] }
-  | { kind: "insert"; destination: BeamerSlideDestination }
+  /** A new frame laid out as the template (by default blank). */
+  | { kind: "insert"; destination: BeamerSlideDestination; template?: BeamerSlideTemplateId }
   | { kind: "paste"; source: string; destination: BeamerSlideDestination };
 export type BeamerSlideEditResult = {
   source: string;
@@ -27,9 +29,12 @@ export type BeamerSlideEditResult = {
   /** Existing frames retain their identity even though their indexed IDs change. */
   frameIds: Partial<Record<string, string>>;
   selectedFrameIds: string[];
+  /** The placeholder to select in a new frame, or the title it adds to the preamble. */
+  placeholder?: Span;
 };
 
 type Replacement = { span: Span; text: string };
+const PRESENTATION_TITLE = "Presentation title";
 type NamedSpan = { span: Span; name: string; kind: "target" | "citation" };
 
 function labelSpans(document: BeamerDocumentModel): NamedSpan[] {
@@ -191,11 +196,14 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
   const rename = [...renamed, ...layers?.replacements ?? []];
   let payload = "";
   const inserted: { oldId: string | null; offset: number }[] = [];
+  let framePlaceholder: Span | null = null;
   if (at != null) {
     if (at > 0 && source[at - 1] !== "\n") payload += "\n";
     if (edit.kind === "insert") {
+      const frame = beamerSlideTemplateFrame(document, edit.template ?? "blank");
       inserted.push({ oldId: null, offset: payload.length });
-      payload += "\\begin{frame}\n\n\\end{frame}\n";
+      if (frame.placeholder) framePlaceholder = { from: payload.length + frame.placeholder.from, to: payload.length + frame.placeholder.to };
+      payload += frame.text;
     } else {
       frames.forEach((frame, i) => {
         for (const dependency of dependencies.filter(item => item.frameId === frame.id)) {
@@ -212,17 +220,21 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
       });
     }
   }
-  const edits: Replacement[] = [...removals.map(span => ({ span, text: "" })), ...layers?.preamble ? [layers.preamble] : []];
+  // A title page shows the deck's title, so a deck without one gets it.
+  const title = edit.kind === "insert" && edit.template === "title" && !document.preamble.metadata.title
+    ? { span: { from: document.documentSpan.from, to: document.documentSpan.from }, text: `${document.source[document.documentSpan.from - 1] === "\n" || !document.documentSpan.from ? "" : "\n"}\\title{${PRESENTATION_TITLE}}\n` } : null;
+  const edits: Replacement[] = [...removals.map(span => ({ span, text: "" })), ...layers?.preamble ? [layers.preamble] : [], ...title ? [title] : []];
   if (at != null) {
     const same = edits.find(edit => edit.span.from === at);
     if (same) same.text = payload;
     else edits.push({ span: { from: at, to: at }, text: payload });
   }
   edits.sort((a, b) => a.span.from - b.span.from);
-  let delta = 0, insertedAt = 0;
+  let delta = 0, insertedAt = 0, titleAt = 0;
   const patches: SourcePatch[] = edits.map(item => {
     const from = item.span.from + delta;
     if (item.text === payload && at === item.span.from) insertedAt = from;
+    if (item === title) titleAt = from + item.text.indexOf("{") + 1;
     delta += item.text.length - (item.span.to - item.span.from);
     return { oldSpan: item.span, newSpan: { from, to: from + item.text.length }, replacement: item.text };
   });
@@ -246,5 +258,7 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
     if (edit.kind === "move" && item.oldId) frameIds[item.oldId] = id;
   }
   if (edit.kind === "delete" && updated.frames.length) selectedFrameIds.push(requireArrayValue(updated.frames, Math.min(document.frames.indexOf(requireArrayValue(frames, 0)), updated.frames.length - 1)).id);
-  return { source: next, patches, frameIds, selectedFrameIds };
+  const placeholder = title ? { from: titleAt, to: titleAt + PRESENTATION_TITLE.length }
+    : framePlaceholder && { from: insertedAt + framePlaceholder.from, to: insertedAt + framePlaceholder.to };
+  return { source: next, patches, frameIds, selectedFrameIds, ...placeholder ? { placeholder } : {} };
 }

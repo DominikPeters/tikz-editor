@@ -21,7 +21,8 @@ import type { ToolMode } from "../store/types";
 import { isMacLikePlatform } from "./key-labels";
 import css from "./Toolbar.module.css";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
-import { NewSlideButton, PresentationToolbar } from "../presentation/PresentationToolbar";
+import { NewSlideButton } from "../presentation/NewSlideButton";
+import { PresentationToolbar } from "../presentation/PresentationToolbar";
 
 const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   id: option.value,

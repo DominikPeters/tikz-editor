@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BEAMER_TIKZ_LAYER_DEFINITION, copyBeamerSlides, editBeamerSlides, renderBeamerFrame, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
+import { BEAMER_TIKZ_LAYER_DEFINITION, beamerSlideTemplates, copyBeamerSlides, editBeamerSlides, renderBeamerFrame, scanBeamerDocument, type BeamerSlideEdit } from "../packages/core/src/beamer/index.js";
 import { applySourcePatches } from "../packages/core/src/edit/source-patches.js";
 const frame = (title: string, body = title, options = "") => `\\begin{frame}${options}{${title}}\n${body}\n\\end{frame}\n`;
 const deck = (body: string) => `\\documentclass{beamer}\n\\begin{document}\n${body}\\end{document}\n`;
@@ -75,6 +75,44 @@ real \ref{real}
     const result = edit(source, { kind: "insert", destination: { kind: "after", frameId: "frame:0" } });
     expect(titles(result.source)).toEqual(["A", undefined, "B"]);
     expect(result.frameIds).toEqual({ "frame:0": "frame:0", "frame:1": "frame:2" });
+  });
+  it("inserts each layout as a frame that renders, selecting its placeholder", async () => {
+    const source = deck(frame("A") + frame("B"));
+    const templates = beamerSlideTemplates(scanBeamerDocument(source));
+    expect(templates.map(template => template.id)).toEqual(["title", "title-and-bullets", "title-only", "two-columns", "block", "theorem", "statement", "blank"]);
+    for (const { id } of templates) {
+      const result = edit(source, { kind: "insert", destination: { kind: "after", frameId: "frame:0" }, template: id });
+      expect(result.selectedFrameIds).toEqual(["frame:1"]);
+      const selected = result.placeholder && result.source.slice(result.placeholder.from, result.placeholder.to);
+      const expected: Partial<Record<string, string | undefined>> = { title: "Presentation title", statement: "Statement", blank: undefined };
+      expect(selected).toBe(id in expected ? expected[id] : "Slide title");
+      const rendered = await renderBeamerFrame(result.source, { frameIndex: 1 });
+      expect(rendered.svg.svg, id).not.toContain("\\");
+    }
+    expect(edit(source, { kind: "insert", destination: { kind: "end" }, template: "title-and-bullets" }).source).toBe(deck(frame("A") + frame("B") +
+      "\\begin{frame}{Slide title}\n\\begin{itemize}\n\\item First point\n\\item Second point\n\\end{itemize}\n\\end{frame}\n"));
+  });
+  it("lays out a new frame as most of the deck's frames are written", () => {
+    const commandForm = (title: string) => `\\begin{frame}\n\t\\frametitle{${title}}\n\tText\n\\end{frame}\n`;
+    const source = deck(commandForm("A") + commandForm("B") + frame("C"));
+    const result = edit(source, { kind: "insert", destination: { kind: "end" }, template: "block" });
+    expect(result.source).toContain("\\begin{frame}\n\t\\frametitle{Slide title}\n\t\\begin{block}{Block title}\n\t\tBlock text\n\t\\end{block}\n\\end{frame}\n");
+    expect(result.source.slice(result.placeholder!.from, result.placeholder!.to)).toBe("Slide title");
+    expect(titles(result.source)).toEqual(["A", "B", "C", "Slide title"]);
+  });
+  it("gives a deck without a title one for a new title page, selecting it", () => {
+    const source = deck(frame("A"));
+    const result = edit(source, { kind: "insert", destination: { kind: "before", frameId: "frame:0" }, template: "title" });
+    expect(result.source).toBe(deck("\\begin{frame}\n\\titlepage\n\\end{frame}\n" + frame("A")).replace("\\begin{document}", "\\title{Presentation title}\n\\begin{document}"));
+    expect(result.source.slice(result.placeholder!.from, result.placeholder!.to)).toBe("Presentation title");
+    const titled = edit(result.source, { kind: "insert", destination: { kind: "end" }, template: "title" });
+    expect(titled.source.match(/\\title\{/gu)).toHaveLength(1);
+    expect(titled.placeholder).toBeUndefined();
+  });
+  it("offers a theorem layout only where the class defines theorems", () => {
+    const ids = (source: string) => beamerSlideTemplates(scanBeamerDocument(source)).map(template => template.id);
+    expect(ids(deck(frame("A")).replace("{beamer}", "[notheorems]{beamer}"))).not.toContain("theorem");
+    expect(ids(deck(frame("A")).replace("{beamer}", "[notheorems]{beamer}\n\\newtheorem{theorem}{Satz}"))).toContain("theorem");
   });
   it("keeps inline surrounding source intact and preserves identical frame identities", () => {
     const source = deck("\\def\\x{1}" + frame("A").trim() + frame("A").trim());

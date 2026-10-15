@@ -124,6 +124,7 @@ export { beamerColumnDividers, beamerColumnResizePatches, beamerImageResizeTarge
   type BeamerColumnDivider, type BeamerImageResizeTarget } from "./deck-resize.js";
 
 export { beamerSpacingTargets, beamerSpacingResizePatches, type BeamerSpacingTarget } from "./deck-spacing.js";
+export { BEAMER_SLIDE_TEMPLATES, beamerSlideTemplates, beamerSlideTemplateFrame, type BeamerSlideTemplate, type BeamerSlideTemplateId, type BeamerSlideTemplateFrame } from "./slide-templates.js";
 export { copyBeamerSlides, editBeamerSlides, beamerSlideIsEditable, beamerSlideSourceSpan, type BeamerSlideEdit, type BeamerSlideDestination, type BeamerSlideEditResult } from "./slide-manager.js";
 
 export { analyzeBeamerSlideMove, type BeamerSlideMoveAnalysis, type BeamerSlideMoveIssue, type BeamerSlideMoveExcerpt } from "./slide-move-analysis.js";

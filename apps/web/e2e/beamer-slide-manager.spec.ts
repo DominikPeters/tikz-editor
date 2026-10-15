@@ -113,6 +113,26 @@ test("mirrors the active overlay, shows other slides' final overlays, and keeps 
   expect(await readStoreSource(page)).toContain("\\begin{frame}\n\n\\end{frame}");
 });
 
+test("inserts a slide from the layout gallery, types over its title, and repeats the layout", async ({ page }) => {
+  await gotoApp(page); await setSource(page, SOURCE);
+  await card(page, "B").click();
+  await page.getByRole("button", { name: "Slide layouts", exact: true }).click();
+  const gallery = page.getByRole("menu", { name: "Slide layouts" });
+  await expect(gallery.getByRole("menuitem")).toHaveCount(8);
+  await expect(gallery.locator("img")).toHaveCount(8);
+  await gallery.getByRole("menuitem", { name: "Two Columns" }).click();
+  await expect(gallery).toHaveCount(0);
+  await expect(page.getByTestId("canvas-focus-input")).toBeFocused();
+  await page.keyboard.type("Results");
+  await expect.poll(() => readStoreSource(page)).toContain(String.raw`\begin{frame}{B}\hyperlink{a}{Back}\end{frame}
+\begin{frame}{Results}
+  \begin{columns}[T]`);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "New Slide", exact: true }).click();
+  await expect.poll(async () => (await readStoreSource(page)).match(/\\begin\{columns\}/gu)?.length).toBe(2);
+  await expect(card(page, "Slide title")).toBeVisible();
+});
+
 test("reuses the main render while editing without active-slide thumbnail requests or loading flashes", async ({ page }) => {
   await page.addInitScript(() => {
     const requests: number[] = [];

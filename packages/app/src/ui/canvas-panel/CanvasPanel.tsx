@@ -430,6 +430,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     activeCanvasDragKind,
     activeSourceScrubSourceId,
     deckObjectSelection,
+    deckPlaceholderSelection,
     lastEditChangedSourceIds,
     lastEditChangeToken,
     lastEditWarningMessage,
@@ -472,6 +473,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     activeCanvasDragKind: s.activeCanvasDragKind,
     activeSourceScrubSourceId: s.activeSourceScrubSourceId,
     deckObjectSelection: s.deckObjectSelection,
+    deckPlaceholderSelection: s.deckPlaceholderSelection,
     lastEditChangedSourceIds: s.lastEditChangedSourceIds,
     lastEditChangeToken: s.lastEditChangeToken,
     lastEditWarningMessage: s.documents[s.activeDocumentId]?.lastEditWarningMessage ?? null,
@@ -2493,6 +2495,21 @@ export const CanvasPanel = memo(function CanvasPanel({
     );
     selectDeckObject(node ? node.id : null);
   }, [deckActiveFrame, deckObjectIndex, selectDeckObject, snapshot.source, source]);
+
+  // A new slide opens with its placeholder selected once it is shown, so
+  // typing replaces it.
+  const handledPlaceholderSelectionRef = useRef(deckPlaceholderSelection);
+  useEffect(() => {
+    const request = deckPlaceholderSelection, layout = deckActiveFrame?.layout;
+    if (!request || handledPlaceholderSelectionRef.current === request || !layout || deckActiveFrame.frameId !== activeRootId ||
+      request.documentId !== activeDocumentId || request.sourceRevision !== sourceRevision || snapshot.source !== source) return;
+    handledPlaceholderSelectionRef.current = request;
+    const scope = resolveBeamerEditScopeAt(layout.editScopes, request.span.from);
+    const target = scope && resolveEditableTextTargetById(scope.id);
+    if (!target) return;
+    const local = (offset: number): number => Math.min(Math.max(offset - target.sourceSpan.from, 0), target.text.length);
+    startTextEditingSession(target, local(request.span.from), local(request.span.to));
+  }, [activeDocumentId, activeRootId, deckActiveFrame, deckPlaceholderSelection, resolveEditableTextTargetById, snapshot.source, source, sourceRevision, startTextEditingSession]);
 
   /**
    * Viewport keys while a deck object is selected: Esc walks up the parent

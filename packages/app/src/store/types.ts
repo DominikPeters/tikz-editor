@@ -268,6 +268,8 @@ export type WorkspaceEphemeralState = {
   deckObjectSelection: DeckObjectSelection | null;
   deckBuildSelection: DeckBuildSelection | null;
   sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
+  /** A new slide's placeholder, to select in a text session once the slide is shown. */
+  deckPlaceholderSelection: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
@@ -368,6 +370,8 @@ export type EditorState = {
   deckObjectSelection: DeckObjectSelection | null;
   deckBuildSelection: DeckBuildSelection | null;
   sourceReveal: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
+  /** A new slide's placeholder, to select in a text session once the slide is shown. */
+  deckPlaceholderSelection: { documentId: string; sourceRevision: number; span: { from: number; to: number } } | null;
   /** Monotonic token used to request a fit-to-content operation from CanvasPanel. */
   fitToContentRequestToken: number;
   /** Whether the canvas is tracking content bounds as the view changes. */
