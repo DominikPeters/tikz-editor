@@ -827,6 +827,94 @@ ${body}
   });
 });
 
+describe("selective replay past an unchanged corridor", () => {
+  // Named nodes early on, then a long run of plain shapes and edges between nodes.
+  const picture = (shape: string) => [
+    "\\begin{tikzpicture}",
+    "  \\colorlet{accent}{blue!30}",
+    "  \\node[draw] (a) at (0,0) {A};",
+    ...Array.from({ length: 7 }, (_, index) => `  \\draw (${index},1) -- (${index},2);`),
+    `  ${shape}`,
+    ...Array.from({ length: 40 }, (_, index) => index % 4 === 0
+      ? `  \\node[draw] (n${index}) at (${index},3) {${index}};`
+      : `  \\draw[->] (a) -- (${index},4);`),
+    "\\end{tikzpicture}"
+  ].join("\n");
+  const shapeId = (source: string) => parseTikz(source).figure.body[9]!.id;
+
+  function edit(session: ReturnType<typeof createIncrementalSemanticSession>, source: string, changedSourceIds: string[]) {
+    const parsed = parseTikz(source, { recover: true });
+    const incremental = session.evaluate({ figure: parsed.figure, source, hints: { trigger: "drag-element", changedSourceIds } });
+    expect(incremental.semantic).toEqual(evaluateTikzFigure(parsed.figure, source));
+    return incremental.stats;
+  }
+
+  it("takes the previous state after the corridor when a shape moves without changing what it names or uses", () => {
+    const source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    const stats = edit(session, source.replace("rectangle (1,1)", "rectangle (60,-9)"), [shapeId(source)]);
+    expect(stats).toMatchObject({ replayMode: "selective", suffixReplay: "skipped" });
+  });
+
+  it("keeps the bounds the corridor drew in the checkpoints past it, for a later edit that restores one", () => {
+    let source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    source = source.replace("rectangle (1,1)", "rectangle (60,-9)");
+    expect(edit(session, source, [shapeId(source)]).suffixReplay).toBe("skipped");
+    // Shrinking a late shape restores a checkpoint past the first corridor.
+    const late = parseTikz(source).figure.body.find((statement) => source.slice(statement.span.from, statement.span.to).includes("(37,4)"))!.id;
+    source = source.replace("(37,4);", "(37,5);");
+    expect(edit(session, source, [late]).recomputeFromStatementIndex).toBeGreaterThan(9);
+  });
+
+  it.each([
+    ["starts using a colour", "\\draw[fill=red] (0,0) rectangle (1,1);", "\\draw[fill=accent] (0,0) rectangle (1,1);"],
+    ["stops using a colour", "\\draw[fill=accent] (0,0) rectangle (1,1);", "\\draw[fill=red] (0,0) rectangle (1,1);"]
+  ])("replays the statements after a corridor that %s", (_, before, after) => {
+    const source = picture(before);
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    expect(edit(session, picture(after), [shapeId(source)])).toMatchObject({ replayMode: "selective", suffixReplay: "replayed" });
+  });
+
+  describe("random numbers", () => {
+    const randomPicture = (shape: string) => [
+      "\\begin{tikzpicture}",
+      ...Array.from({ length: 9 }, (_, index) => `  \\draw (${index},1) -- (${index},2);`),
+      `  ${shape}`,
+      ...Array.from({ length: 30 }, (_, index) => `  \\draw (${index},3) -- (rand,4);`),
+      "\\end{tikzpicture}"
+    ].join("\n");
+
+    it("evaluates the statements after a corridor that draws a different count of random numbers", () => {
+      const source = randomPicture("\\draw (0,0) -- (1,1);");
+      const session = createIncrementalSemanticSession();
+      session.evaluate({ figure: parseTikz(source).figure, source });
+      edit(session, randomPicture("\\draw (rand,0) -- (1,1);"), [parseTikz(source).figure.body[9]!.id]);
+    });
+
+    it("keeps the random seed in the checkpoints past a replayed corridor", () => {
+      let source = randomPicture("\\node (b) at (1,1) {B};");
+      const session = createIncrementalSemanticSession();
+      session.evaluate({ figure: parseTikz(source).figure, source });
+      source = source.replace("at (1,1)", "at (2,1)");
+      expect(edit(session, source, [parseTikz(source).figure.body[9]!.id]).suffixReplay).toBe("replayed");
+      const late = parseTikz(source).figure.body[35]!;
+      source = source.slice(0, late.span.from) + source.slice(late.span.from, late.span.to).replace("(rand,4)", "(rand,5)") + source.slice(late.span.to);
+      expect(edit(session, source, [late.id]).recomputeFromStatementIndex).toBeGreaterThan(9);
+    });
+  });
+
+  it("replays the statements after a corridor that moves a named node", () => {
+    const source = picture("\\node[draw] (b) at (1,1) {B};");
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    expect(edit(session, source.replace("at (1,1)", "at (2,1)"), [shapeId(source)]).suffixReplay).toBe("replayed");
+  });
+});
+
 function expectFullAndIncrementalEqualAfterMove(source: string): void {
   const session = createIncrementalSemanticSession();
   session.evaluate({

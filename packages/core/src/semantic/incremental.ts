@@ -7,6 +7,7 @@ import {
   listContextSymbolDependencyEdges,
   listContextUnresolvedSymbols,
   currentFrame,
+  extendPictureBounds,
   requireContextLibrary,
   restoreSemanticContext,
   retargetEditHandlesSourceFingerprint,
@@ -18,7 +19,7 @@ import {
 } from "./context.js";
 import type { StyleChainEntry, StyleSourceRef } from "./style-chain.js";
 import { collectGeometryInvalidation, replaceSourceDependencies } from "./dependencies.js";
-import { restoreSemanticSymbolUses } from "./symbol-resolver.js";
+import { restoreSemanticSymbolUses, type SemanticSymbolResolver, type SemanticSymbolResolverState } from "./symbol-resolver.js";
 import {
   collectNodeAnchorTargets,
   computeBounds,
@@ -40,6 +41,7 @@ import type {
 } from "./types.js";
 import { MAIN_SCENE_LAYER } from "./types.js";
 import type { SourcePatch } from "../edit/types.js";
+import type { WorldBounds } from "../coords/points.js";
 import { computeMinimalReplacementPatch } from "../edit/patch.js";
 import { patchesMatchSourceTransition } from "../edit/source-patches.js";
 import { createSceneSourceBinder, createSourceSpanResolver } from "./source-bindings.js";
@@ -84,6 +86,8 @@ export type IncrementalSemanticStats = {
   fallbackReason?: IncrementalSemanticFallbackReason;
   checkpointPreparation?: IncrementalSemanticCheckpointPreparation;
   checkpointCount?: number;
+  /** Whether a selective replay applied the reused statements' effects one by one, or took the previous run's state after them. */
+  suffixReplay?: "replayed" | "skipped";
 };
 
 export type IncrementalSemanticEvaluateInput = {
@@ -115,6 +119,8 @@ type SemanticStatementFragment = {
   diagnostics: Diagnostic[];
   effectSummary: SemanticStatementEffectSummary;
   featureUsage: FeatureUsage;
+  /** The random number generator's seed after the statement, which a replay of its effects does not advance. */
+  mathRandomSeed: number;
 };
 
 type CapturedSemanticCheckpoints = {
@@ -134,6 +140,7 @@ type CachedSemanticRun = {
   checkpointCache: SemanticCheckpointCache;
   dependencies: EvaluateTikzResult["dependencies"];
   sourceStatementFirstIndexBySourceId: Map<string, number>;
+  nodeAnchorTargets: EvaluateTikzResult["nodeAnchorTargets"];
 };
 
 type SelectiveReplayPlan = {
@@ -391,7 +398,7 @@ function* evaluateFullyAndCache(
       );
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
-    statementFragments.push(createStatementFragment(evaluated, run.context.sourceFingerprint));
+    statementFragments.push(createStatementFragment(evaluated, run.context));
     yield;
   }
   checkpointsBeforeStatement.set(
@@ -413,6 +420,7 @@ function* evaluateFullyAndCache(
     checkpointCache: { kind: "captured", checkpointsBeforeStatement },
     dependencies: semantic.dependencies,
     sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
+    nodeAnchorTargets: semantic.nodeAnchorTargets,
   };
   return {
     output: {
@@ -491,7 +499,7 @@ function* evaluateIncrementalSuffix(args: {
       );
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
-    nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
+    nextFragments[statementIndex] = createStatementFragment(evaluated, run.context);
     yield;
   }
   checkpointsBeforeStatement.set(
@@ -532,6 +540,7 @@ function* evaluateIncrementalSuffix(args: {
       },
       dependencies: semantic.dependencies,
       sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
+      nodeAnchorTargets: semantic.nodeAnchorTargets,
     }
   };
 }
@@ -592,7 +601,7 @@ function* evaluateSelectively(args: {
       );
     }
     const evaluated = evaluateSemanticStatementByIndex(run, statementIndex);
-    nextFragments[statementIndex] = createStatementFragment(evaluated, run.context.sourceFingerprint);
+    nextFragments[statementIndex] = createStatementFragment(evaluated, run.context);
     yield;
   }
   const previousCorridorHandleCount = countFragmentEditHandles(
@@ -603,39 +612,72 @@ function* evaluateSelectively(args: {
   if (run.context.editHandles.length !== previousCorridorHandleCount) {
     throw new Error("Selective replay changed the edit-handle count before the reused suffix");
   }
-
-  const reusedSourceIds = new Set<string>();
-  for (let statementIndex = corridorEndIndex + 1; statementIndex < statementCount; statementIndex += 1) {
-    const fragment = previous.statementFragments[statementIndex];
-    if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
-      checkpointsBeforeStatement.set(
-        statementIndex,
-        snapshotSemanticContext(run.context, { editHandlesMode: "length" })
-      );
-    }
-    if (fragment.effectSummary.entersScope) {
-      // Resolve the unchanged scope options against the current enclosing frame.
-      // Its graphical children can still reuse their recorded effects/geometry.
-      nextFragments[statementIndex] = createStatementFragment(evaluateSemanticStatementByIndex(run, statementIndex), run.context.sourceFingerprint);
-    } else {
-      // Dependencies are recorded per evaluated statement: a foreach iteration
-      // under its own id, not the foreach it came from (as withDependencySource).
-      applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.statementId, elementSourceId: fragment.sourceId });
-      run.context.editHandles.push(...fragment.editHandles);
-      mergeFeatureUsage(run.featureUsage, fragment.featureUsage);
-      reusedSourceIds.add(fragment.statementId);
-    }
-    yield;
+  // The corridor drew a different count of random numbers: those the reused
+  // statements drew would all change.
+  if (run.context.mathRandom.getSeed() !== previous.statementFragments[corridorEndIndex]?.mathRandomSeed) {
+    throw new Error("Selective replay changed the random numbers of the reused suffix");
   }
-  // The effect summaries replay what reused statements define, not what they
-  // look up: take their macro, style and library uses from the previous run.
+
   const previousFinal = previousCheckpoints.checkpointsBeforeStatement.get(statementCount);
-  if (previousFinal) restoreSemanticSymbolUses(run.context.symbolResolver, previousFinal.symbolResolverState, reusedSourceIds);
+  const suffixReplay = previousFinal
+    && corridorEndIndex + 1 < statementCount
+    && corridorEffectsStand(previous.statementFragments, nextFragments, restoreIndex, corridorEndIndex)
+    && corridorSymbolUsesStand(run.context.symbolResolver, previousFinal.symbolResolverState, nextFragments, restoreIndex, corridorEndIndex)
+    ? "skipped" : "replayed";
+  if (suffixReplay === "skipped") {
+    // The corridor left what the rest of the picture reads as it was: it
+    // produced and consumed the same names and looked up the same symbols. So
+    // the previous run's state after the last statement stands, as do its
+    // checkpoints past the corridor, but for the bounds drawn so far.
+    const editHandles = run.context.editHandles;
+    for (let statementIndex = corridorEndIndex + 1; statementIndex < statementCount; statementIndex += 1) {
+      const fragment = previous.statementFragments[statementIndex];
+      const checkpoint = previousCheckpoints.checkpointsBeforeStatement.get(statementIndex);
+      if (checkpoint) checkpointsBeforeStatement.set(statementIndex, withPictureBounds(bindCheckpoint(checkpoint), run.context.pictureBounds));
+      extendPictureBounds(run.context, fragment.effectSummary.extendsPictureBounds);
+      editHandles.push(...fragment.editHandles);
+      mergeFeatureUsage(run.featureUsage, fragment.featureUsage);
+    }
+    const pictureBounds = run.context.pictureBounds;
+    restoreSemanticContext(run.context, bindCheckpoint(previousFinal!), { editHandleSource: previous.editHandles });
+    run.context.pictureBounds = pictureBounds;
+    run.context.editHandles = editHandles;
+    checkpointsBeforeStatement.set(statementCount, withPictureBounds(bindCheckpoint(previousFinal!), pictureBounds));
+    yield;
+  } else {
+    const reusedSourceIds = new Set<string>();
+    for (let statementIndex = corridorEndIndex + 1; statementIndex < statementCount; statementIndex += 1) {
+      const fragment = previous.statementFragments[statementIndex];
+      if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
+        checkpointsBeforeStatement.set(
+          statementIndex,
+          snapshotSemanticContext(run.context, { editHandlesMode: "length" })
+        );
+      }
+      if (fragment.effectSummary.entersScope) {
+        // Resolve the unchanged scope options against the current enclosing frame.
+        // Its graphical children can still reuse their recorded effects/geometry.
+        nextFragments[statementIndex] = createStatementFragment(evaluateSemanticStatementByIndex(run, statementIndex), run.context);
+      } else {
+        // Dependencies are recorded per evaluated statement: a foreach iteration
+        // under its own id, not the foreach it came from (as withDependencySource).
+        applyStatementEffectSummary(run.context, fragment.effectSummary, { sourceId: fragment.statementId, elementSourceId: fragment.sourceId });
+        run.context.mathRandom.setSeed(fragment.mathRandomSeed);
+        run.context.editHandles.push(...fragment.editHandles);
+        mergeFeatureUsage(run.featureUsage, fragment.featureUsage);
+        reusedSourceIds.add(fragment.statementId);
+      }
+      yield;
+    }
+    // The effect summaries replay what reused statements define, not what they
+    // look up: take their macro, style and library uses from the previous run.
+    if (previousFinal) restoreSemanticSymbolUses(run.context.symbolResolver, previousFinal.symbolResolverState, reusedSourceIds);
+    checkpointsBeforeStatement.set(
+      statementCount,
+      snapshotSemanticContext(run.context, { editHandlesMode: "length" })
+    );
+  }
   const finalFeatureUsage = cloneFeatureUsage(run.featureUsage);
-  checkpointsBeforeStatement.set(
-    statementCount,
-    snapshotSemanticContext(run.context, { editHandlesMode: "length" })
-  );
 
   const currentFragments = yield* bindFragmentsToCurrentSource(run, nextFragments, resolveSpan);
   const recomputed = currentFragments.slice(restoreIndex, corridorEndIndex + 1);
@@ -654,7 +696,9 @@ function* evaluateSelectively(args: {
     fragments: currentFragments,
     featureUsage: finalFeatureUsage,
     dependencies,
-    sourceStatementFirstIndexBySourceId: previous.sourceStatementFirstIndexBySourceId
+    sourceStatementFirstIndexBySourceId: previous.sourceStatementFirstIndexBySourceId,
+    // The named nodes and coordinates are the previous run's.
+    nodeAnchorTargets: suffixReplay === "skipped" ? previous.nodeAnchorTargets : null
   });
 
   return {
@@ -669,7 +713,8 @@ function* evaluateSelectively(args: {
         corridorEndStatementIndex: corridorEndIndex,
         affectedStatementCount,
         checkpointPreparation,
-        checkpointCount: checkpointsBeforeStatement.size
+        checkpointCount: checkpointsBeforeStatement.size,
+        suffixReplay
       }
     },
     cached: {
@@ -685,6 +730,7 @@ function* evaluateSelectively(args: {
       },
       dependencies: semantic.dependencies,
       sourceStatementFirstIndexBySourceId: mapSourceStatementFirstIndices(semantic.sourceStatementFirstIndexBySourceId),
+      nodeAnchorTargets: semantic.nodeAnchorTargets,
     }
   };
 }
@@ -695,6 +741,7 @@ function assembleSelectiveSemanticResult(args: {
   featureUsage: FeatureUsage;
   dependencies: EvaluateTikzResult["dependencies"];
   sourceStatementFirstIndexBySourceId: ReadonlyMap<string, number>;
+  nodeAnchorTargets: EvaluateTikzResult["nodeAnchorTargets"] | null;
 }): EvaluateTikzResult {
   const { run, fragments, featureUsage, dependencies, sourceStatementFirstIndexBySourceId } = args;
   const elements: SceneElement[] = [];
@@ -734,7 +781,7 @@ function assembleSelectiveSemanticResult(args: {
     diagnostics,
     featureUsage: finalFeatureUsage,
     editHandles,
-    nodeAnchorTargets: collectNodeAnchorTargets(run.context),
+    nodeAnchorTargets: args.nodeAnchorTargets ?? collectNodeAnchorTargets(run.context),
     dependencies,
     sourceStatementFirstIndexBySourceId: unmapSourceStatementFirstIndices(sourceStatementFirstIndexBySourceId),
     colorAliases,
@@ -747,13 +794,14 @@ function assembleSelectiveSemanticResult(args: {
 
 function createStatementFragment(
   evaluated: ReturnType<typeof evaluateSemanticStatementByIndex>,
-  sourceFingerprint: string
+  context: { sourceFingerprint: string; mathRandom: { getSeed(): number } }
 ): SemanticStatementFragment {
   return {
     statementId: evaluated.statementId,
     sourceId: evaluated.sourceId,
     sourceSpan: { ...evaluated.sourceSpan },
-    sourceFingerprint,
+    sourceFingerprint: context.sourceFingerprint,
+    mathRandomSeed: context.mathRandom.getSeed(),
     elements: evaluated.elements,
     editHandles: evaluated.editHandles,
     diagnostics: evaluated.diagnostics,
@@ -800,6 +848,84 @@ function isSuffixFragmentSelectiveSafe(
     effectSummary.suffixSkipKind === "scope-safe" ||
     effectSummary.suffixSkipKind === "foreach-origin-safe"
   );
+}
+
+/**
+ * Whether the corridor's statements, evaluated again, did to the context what
+ * they did in the previous run, but for the bounds they drew and where they
+ * left the current point (which the next statement replaces).
+ */
+function corridorEffectsStand(
+  previous: readonly SemanticStatementFragment[],
+  next: readonly SemanticStatementFragment[],
+  fromIndex: number,
+  toIndex: number
+): boolean {
+  for (let index = fromIndex; index <= toIndex; index += 1) {
+    const before = previous[index];
+    const after = next[index];
+    if (before?.statementId !== after?.statementId) return false;
+    const left = before.effectSummary;
+    const right = after.effectSummary;
+    if (
+      !isSuffixFragmentSelectiveSafe(after)
+      || left.suffixSkipKind !== right.suffixSkipKind
+      || Boolean(left.entersScope) !== Boolean(right.entersScope)
+      || Boolean(left.exitsScope) !== Boolean(right.exitsScope)
+      || left.requiresSequentialContext !== right.requiresSequentialContext
+      // Named path elements carry the source they were bound to.
+      || left.appendsNamedPaths.length > 0
+      || right.appendsNamedPaths.length > 0
+      || !sameEffects(left, right)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameEffects(left: SemanticStatementEffectSummary, right: SemanticStatementEffectSummary): boolean {
+  const effects = (summary: SemanticStatementEffectSummary) => JSON.stringify([
+    summary.producesNamedCoordinates,
+    summary.producesNamedNodeGeometries,
+    summary.producesNamedPaths,
+    summary.consumesNamedResources,
+    summary.addsNamedNodeSetMembers,
+    summary.producesNamedCoordinateRewriteHandles,
+    summary.opaqueReasons
+  ]);
+  return effects(left) === effects(right);
+}
+
+/** Whether the corridor's statements looked up the same macros, styles, colours and libraries as in the previous run. */
+function corridorSymbolUsesStand(
+  resolver: SemanticSymbolResolver,
+  previous: SemanticSymbolResolverState,
+  fragments: readonly SemanticStatementFragment[],
+  fromIndex: number,
+  toIndex: number
+): boolean {
+  const consumers = new Set<string>();
+  for (let index = fromIndex; index <= toIndex; index += 1) consumers.add(fragments[index].statementId);
+  const uses = (
+    edges: Iterable<{ consumerStatementId: string; providerStatementId: string; kind: string; name: string }>,
+    unresolved: Iterable<{ consumerStatementId: string; kind: string; name: string }>
+  ) => {
+    const keys: string[] = [];
+    for (const edge of edges) {
+      if (consumers.has(edge.consumerStatementId)) keys.push(`${edge.consumerStatementId}\u0000${edge.providerStatementId}\u0000${edge.kind}\u0000${edge.name}`);
+    }
+    for (const entry of unresolved) {
+      if (consumers.has(entry.consumerStatementId)) keys.push(`${entry.consumerStatementId}\u0000\u0000${entry.kind}\u0000${entry.name}`);
+    }
+    return keys.sort().join("\u0001");
+  };
+  return uses(resolver.dependencyEdges.values(), resolver.unresolvedSymbols.values())
+    === uses(previous.dependencyEdges, previous.unresolvedSymbols);
+}
+
+function withPictureBounds(checkpoint: SemanticContextSnapshot, pictureBounds: WorldBounds | null): SemanticContextSnapshot {
+  return { ...checkpoint, pictureBounds: pictureBounds ? { ...pictureBounds } : null };
 }
 
 function countFragmentEditHandles(

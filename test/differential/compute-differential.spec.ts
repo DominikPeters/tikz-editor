@@ -38,7 +38,8 @@ const REQUIRED_REACH: [string, (reach: FuzzReach) => number][] = [
   ["racing renders", (reach) => reach.race ?? 0],
   ["drawing layers shown on a slide", (reach) => reach["layer:shown"] ?? 0],
   ["drawing layers still to come", (reach) => reach["layer:to-come"] ?? 0],
-  ["slide layouts reused under a layer edit", (reach) => reach["layer:slide-layout-reused"] ?? 0]
+  ["slide layouts reused under a layer edit", (reach) => reach["layer:slide-layout-reused"] ?? 0],
+  ["selective replays that took the previous state after the corridor", (reach) => reach["suffix:skipped"] ?? 0]
 ];
 
 describe("compute differential fuzzing", () => {

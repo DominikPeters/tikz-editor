@@ -195,6 +195,17 @@ sorted graph, dropping disconnected resources. Invalidation queries share an
 adjacency index and traverse a queue with a cursor instead of repeatedly removing
 its first entry.
 
+Selective replay normally applies each reused statement's recorded effects after
+the corridor, one statement at a time. When the corridor's statements produced
+and consumed the same names, looked up the same symbols and drew as many random
+numbers as before, it skips that: the previous run's final state stands, and so
+do its checkpoints past the corridor, with the bounds the corridor now draws.
+Moving an unnamed shape early in a 500-statement picture went from ~12.7 to
+~4 ms per frame. Each fragment records the random seed after its statement. A
+corridor that draws a different number of random numbers falls back to suffix
+replay, since every later `rand` changes. Effect replay sets the recorded seed,
+so checkpoints past the corridor keep the right one.
+
 Synchronous and cooperative semantic evaluation use the same generator, including
 full evaluation, suffix replay, selective replay and source rebinding. The app
 runs batches with an 8 ms budget and checks the budget between statements or

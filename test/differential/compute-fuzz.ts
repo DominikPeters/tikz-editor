@@ -264,6 +264,7 @@ function recordReach(reach: FuzzReach, snapshot: SessionSnapshot): void {
     count(reach, `parse:${incremental.parseStrategy}${incremental.parseFallbackReason ? `:${incremental.parseFallbackReason}` : ""}`);
     if (incremental.parsePatchApplication) count(reach, `patches:${incremental.parsePatchApplication}`);
     count(reach, `semantic:${incremental.strategy}${incremental.replayMode ? `:${incremental.replayMode}` : ""}`);
+    if (incremental.suffixReplay) count(reach, `suffix:${incremental.suffixReplay}`);
   } else if (snapshot.deck) {
     count(reach, "deck:render");
   } else {

@@ -162,6 +162,7 @@ export type SessionSnapshotIncrementalInfo = {
   parserReusedStatementCount: number;
   strategy: IncrementalSemanticStats["strategy"];
   replayMode?: IncrementalSemanticStats["replayMode"];
+  suffixReplay?: IncrementalSemanticStats["suffixReplay"];
   fallbackReason: IncrementalSemanticStats["fallbackReason"];
   recomputeFromStatementIndex: number | null;
   recomputedStatementCount: number;
@@ -404,6 +405,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
           parserReusedStatementCount: result.parseStats.reusedStatementCount,
           strategy: result.semanticStats.strategy,
           replayMode: result.semanticStats.replayMode,
+          suffixReplay: result.semanticStats.suffixReplay,
           fallbackReason: result.semanticStats.fallbackReason,
           recomputeFromStatementIndex: result.semanticStats.recomputeFromStatementIndex,
           recomputedStatementCount: result.semanticStats.recomputedStatementCount,
