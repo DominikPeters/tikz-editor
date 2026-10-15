@@ -403,20 +403,16 @@ function resolveTextareaLineHeightPx(textarea: HTMLTextAreaElement): number {
   return 16;
 }
 
-function resolveTextareaCaretClientRect(textarea: HTMLTextAreaElement, offset: number): DOMRect | null {
-  const documentRef = textarea.ownerDocument;
-  const windowRef = documentRef.defaultView;
-  if (!windowRef) {
-    return null;
-  }
+/**
+ * A hidden element laid out like the textarea, over it. Its width is the
+ * textarea's exact border-box width: the computed width is rounded, and a
+ * textarea sized to its content (`field-sizing: content`) is exactly as wide
+ * as its longest line, which then wraps in a mirror a fraction narrower.
+ */
+function createTextareaMirror(textarea: HTMLTextAreaElement, windowRef: Window): HTMLDivElement {
   const computed = windowRef.getComputedStyle(textarea);
   const textareaRect = textarea.getBoundingClientRect();
-  const mirror = documentRef.createElement("div");
-  const marker = documentRef.createElement("span");
-  const boundedOffset = clamp(offset, 0, textarea.value.length);
-  const beforeCaret = textarea.value.slice(0, boundedOffset);
-  const afterCaret = textarea.value.slice(boundedOffset);
-
+  const mirror = textarea.ownerDocument.createElement("div");
   mirror.style.position = "fixed";
   mirror.style.visibility = "hidden";
   mirror.style.pointerEvents = "none";
@@ -430,6 +426,22 @@ function resolveTextareaCaretClientRect(textarea: HTMLTextAreaElement, offset: n
   for (const property of TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES) {
     mirror.style.setProperty(property, computed.getPropertyValue(property));
   }
+  mirror.style.boxSizing = "border-box";
+  mirror.style.width = `${textareaRect.width}px`;
+  return mirror;
+}
+
+function resolveTextareaCaretClientRect(textarea: HTMLTextAreaElement, offset: number): DOMRect | null {
+  const documentRef = textarea.ownerDocument;
+  const windowRef = documentRef.defaultView;
+  if (!windowRef) {
+    return null;
+  }
+  const mirror = createTextareaMirror(textarea, windowRef);
+  const marker = documentRef.createElement("span");
+  const boundedOffset = clamp(offset, 0, textarea.value.length);
+  const beforeCaret = textarea.value.slice(0, boundedOffset);
+  const afterCaret = textarea.value.slice(boundedOffset);
 
   marker.style.display = "inline-block";
   marker.style.width = "0";
@@ -481,24 +493,9 @@ function resolveTextareaRangeClientRects(
   if (boundedStart === boundedEnd) {
     return [];
   }
-  const computed = windowRef.getComputedStyle(textarea);
   const textareaRect = textarea.getBoundingClientRect();
-  const mirror = documentRef.createElement("div");
+  const mirror = createTextareaMirror(textarea, windowRef);
   const rangeSpan = documentRef.createElement("span");
-
-  mirror.style.position = "fixed";
-  mirror.style.visibility = "hidden";
-  mirror.style.pointerEvents = "none";
-  mirror.style.whiteSpace = "pre-wrap";
-  mirror.style.wordWrap = "break-word";
-  mirror.style.wordBreak = "break-word";
-  mirror.style.overflowWrap = "break-word";
-  mirror.style.overflow = "hidden";
-  mirror.style.left = `${textareaRect.left}px`;
-  mirror.style.top = `${textareaRect.top}px`;
-  for (const property of TEXTAREA_CARET_MIRROR_STYLE_PROPERTIES) {
-    mirror.style.setProperty(property, computed.getPropertyValue(property));
-  }
   rangeSpan.textContent = textarea.value.slice(boundedStart, boundedEnd);
 
   try {

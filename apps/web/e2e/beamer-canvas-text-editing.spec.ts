@@ -318,6 +318,38 @@ test("keeps structure stable through transiently invalid source and supports str
   ]);
 });
 
+test("the unfocused bar draws a selection over the text it covers, in a buffer as wide as its longest line", async ({ page }) => {
+  // The bar is sized to its content, so its longest line fills it exactly;
+  // a mirror measured at the rounded computed width wrapped that line and
+  // drew the selection a line lower, at the left edge.
+  await setSource(page, String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}
+  \begin{center}
+    \Large Statement
+  \end{center}
+\end{frame}
+\end{document}`);
+  const textarea = await openScopeContaining(page, "Statement");
+  const text = await textarea.inputValue();
+  const start = text.indexOf("Statement");
+  await page.getByTestId("canvas-focus-input").evaluate((element, [from, to]) => {
+    const input = element as HTMLTextAreaElement;
+    input.focus();
+    input.setSelectionRange(from, to);
+    input.dispatchEvent(new Event("select", { bubbles: true }));
+  }, [start, start + "Statement".length]);
+  const rects = page.getByTestId("canvas-text-edit-inactive-selection-rect");
+  await expect(rects).toHaveCount(1);
+  const [lineHeight, rect] = await Promise.all([
+    textarea.evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight)),
+    rects.evaluate((element) => ({ left: Number.parseFloat((element as HTMLElement).style.left), top: Number.parseFloat((element as HTMLElement).style.top), width: Number.parseFloat((element as HTMLElement).style.width) }))
+  ]);
+  const line = text.slice(0, start).split("\n").length - 1, column = start - text.lastIndexOf("\n", start) - 1;
+  expect(Math.round(rect.top / lineHeight)).toBe(line);
+  expect(Math.round(rect.left / (rect.width / "Statement".length))).toBe(column);
+});
+
 test("canvas focus: types on the slide, focusing the bar and Esc walk the surfaces, indication follows", async ({ page }) => {
   const textarea = await openScopeContaining(page, "Body typo.");
   const hiddenInput = page.getByTestId("canvas-focus-input");
