@@ -607,7 +607,7 @@ export function evaluateNodeItem(
         handleType: "node-positioning",
         kind: "node-position",
         world: center,
-        transform: frame?.transform ?? { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+        transform: frame.transform,
         sourceText,
         coordinateForm: "cartesian",
         rewriteMode: "positioning",
@@ -645,9 +645,6 @@ export function evaluateNodeItem(
     !expandedNodeOptions?.entries.some((entry) => entry.kind === "kv" && entry.key === "at")
       ? (() => {
           const regime = resolvePathAttachedNodeRegime(expandedNodeOptions, effectiveBaseStyleChain);
-          if (!regime) {
-            return null;
-          }
           const pos = resolvePathPositionFraction(expandedNodeOptions) ?? 0.5;
           return {
             hostPathSourceId: statement.id,
@@ -673,7 +670,7 @@ export function evaluateNodeItem(
         handleType: "path-attachment",
         kind: "node-position",
         world: center,
-        transform: frame?.transform ?? { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+        transform: frame.transform,
       sourceText,
       coordinateForm: "cartesian",
       rewriteMode: "positioning",

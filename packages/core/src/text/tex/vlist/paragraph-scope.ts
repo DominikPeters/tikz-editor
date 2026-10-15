@@ -192,7 +192,7 @@ function texParagraphScopeLayout(
     ...(scopedLineWidth !== undefined
       ? {
           ...(scopedWidth !== undefined ? { scopedWidth: scopedWidth } : {}),
-          ...(scopedLineWidth !== undefined ? { scopedLineWidth: scopedLineWidth } : {}),
+          scopedLineWidth,
           scopedLeftMarginWidth,
           scopedRightMarginWidth,
         }

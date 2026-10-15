@@ -64,7 +64,8 @@ export function BuildsPanel() {
     let row = model.rows.find((candidate) => candidate.id === activeSelection.rowId);
     while (row?.parentId) {
       parents.add(row.parentId);
-      row = model.rows.find((candidate) => candidate.id === row!.parentId);
+      const parentId = row.parentId;
+      row = model.rows.find((candidate) => candidate.id === parentId);
     }
     if (parents.size) setCollapsed((current) => new Set([...current].filter((id) => !parents.has(id))));
     // External canvas selection should reveal its row, including collapsed owners.
@@ -92,7 +93,7 @@ export function BuildsPanel() {
   }, [dispatch, documentId, model, sourceRevision, step]);
 
   useEffect(() => {
-    if (selected && selection?.model !== model) setSelection({ documentId, model: model!, rowId: selected.id });
+    if (selected && model && selection?.model !== model) setSelection({ documentId, model, rowId: selected.id });
     if (selected) {
       if (activeSelection?.sourceRevision !== sourceRevision || activeSelection.rowId !== selected.id || activeSelection.step !== step) publishSelection(selected);
     } else dispatch({ type: "SET_DECK_BUILD_SELECTION", selection: null });

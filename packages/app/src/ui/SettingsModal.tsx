@@ -4,7 +4,6 @@ import { useSettingsStore } from "../settings/useSettingsStore";
 import {
   CANVAS_HANDLE_SIZE_OPTIONS, CANVAS_ZOOM_SPEED_MIN, CANVAS_ZOOM_SPEED_MAX, CANVAS_ZOOM_SPEED_STEP,
   EDITOR_FONT_SIZE_OPTIONS, UI_FONT_SIZE_OPTIONS, MIN_FORMATTER_MAX_LINE_LENGTH, MAX_FORMATTER_MAX_LINE_LENGTH,
-  type CanvasTextEditPlacement, type ColorPickerAccuracy, type ColorScheme, type GridSize
 } from "../settings/types";
 import { Modal } from "./Modal";
 import css from "./SettingsModal.module.css";
@@ -129,7 +128,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-color-scheme"
                       className={css.select}
                       value={settings.general.colorScheme}
-                      onChange={(e) => { updateGeneralSettings({ colorScheme: e.target.value as ColorScheme }); }}
+                      onChange={(e) => { const colorScheme = e.target.value; if (colorScheme === "system" || colorScheme === "light" || colorScheme === "dark") updateGeneralSettings({ colorScheme }); }}
                     >
                       <option value="system">System (default)</option>
                       <option value="light">Light</option>
@@ -164,7 +163,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-color-picker-accuracy"
                       className={css.select}
                       value={settings.colorPicker.accuracy}
-                      onChange={(e) => { updateColorPickerSettings({ accuracy: e.target.value as ColorPickerAccuracy }); }}
+                      onChange={(e) => { const accuracy = e.target.value; if (accuracy === "approximate" || accuracy === "exact") updateColorPickerSettings({ accuracy }); }}
                     >
                       <option value="approximate">Approximate (default)</option>
                       <option value="exact">Exact</option>
@@ -244,7 +243,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-indent-size"
                       className={css.select}
                       value={settings.editor.indentSize}
-                      onChange={(e) => { updateEditorSettings({ indentSize: Number(e.target.value) as 2 | 4 }); }}
+                      onChange={(e) => { const indentSize = Number(e.target.value); if (indentSize === 2 || indentSize === 4) updateEditorSettings({ indentSize }); }}
                     >
                       <option value={2}>2 spaces</option>
                       <option value={4}>4 spaces</option>
@@ -316,7 +315,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       id="setting-grid-size"
                       className={css.select}
                       value={settings.canvas.gridSize}
-                      onChange={(e) => { updateCanvasSettings({ gridSize: e.target.value as GridSize }); }}
+                      onChange={(e) => { const gridSize = e.target.value; if (gridSize === "fine" || gridSize === "standard" || gridSize === "coarse") updateCanvasSettings({ gridSize }); }}
                     >
                       <option value="fine">Fine</option>
                       <option value="standard">Standard</option>
@@ -353,9 +352,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       className={css.select}
                       value={settings.canvas.textEditPlacement}
                       onChange={(e) => {
-                        updateCanvasSettings({
-                          textEditPlacement: e.target.value as CanvasTextEditPlacement
-                        });
+                        const textEditPlacement = e.target.value;
+                        if (textEditPlacement === "popup" || textEditPlacement === "bar") updateCanvasSettings({ textEditPlacement });
                       }}
                     >
                       <option value="popup">Floating popup</option>

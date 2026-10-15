@@ -44,7 +44,7 @@ type MoveElementsResultLike =
 type PasteDuplicateDeps = {
   applyMoveElements: (
     source: string,
-    editHandles: EditHandle[],
+    editHandles: readonly EditHandle[],
     elementIds: readonly string[],
     delta: WorldPoint,
     parseOptions?: EditParseOptions
@@ -63,7 +63,7 @@ type OffsetSnippetsResult = {
 type OffsetPreparation = {
   wrappedSource: string;
   rootIds: string[];
-  editHandles: EditHandle[];
+  editHandles: readonly EditHandle[];
 };
 
 type PasteDuplicateCaches = {

@@ -846,7 +846,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     );
   }
 
-  if (property.kind === "shadowPreset") {
+  {
     const writable = property.writes.some((write) => write.writable && write.elementId.length > 0);
     const dropdownValue = property.mixed ? SHADOW_PRESET_MIXED_OPTION_VALUE : property.value;
     return (
@@ -880,5 +880,4 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
     );
   }
 
-  return null;
 }

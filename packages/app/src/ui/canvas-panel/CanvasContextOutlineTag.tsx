@@ -20,7 +20,7 @@ export function ContextOutlineTag(props: { outline: CanvasContextOutline; onPick
       return;
     }
     const close = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) {
+      if (!root.current?.contains(event.target instanceof Node ? event.target : null)) {
         setOpen(false);
       }
     };

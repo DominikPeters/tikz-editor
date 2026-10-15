@@ -5,7 +5,7 @@ import { getActiveEditorPlatform, setActiveEditorPlatform } from "../packages/ap
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer";
 import { useEditorStore } from "../packages/app/src/store/store";
 import { BoundedLru } from "../packages/app/src/bounded-lru";
-import { deckPageDerived } from "../packages/app/src/deck-page-derived-cache";
+import { deckPageDerived, DeckPageDerivedKey } from "../packages/app/src/deck-page-derived-cache";
 
 let sequence = 0;
 function request(): ComputeRequest {
@@ -30,6 +30,12 @@ describe("validated complete deck pages", () => {
     expect(isDeckSnapshotCurrent(hit, { ...req, deckStep: 2 })).toBe(false);
     const mixed = { ...hit, deck: { ...hit.deck!, activeFrame: { ...hit.deck!.activeFrame!, layout: second.snapshot.deck!.activeFrame!.layout } } };
     expect(isDeckSnapshotCurrent(mixed, req)).toBe(false);
+  });
+  it("publishes cloneable display-math geometry without partial font profiles", async () => {
+    const req = { ...request(), source: String.raw`\documentclass{beamer}\begin{document}\begin{frame}\[\frac{x}{2}\]\end{frame}\end{document}` };
+    const { snapshot } = await computeSnapshot(req);
+    expect(snapshot.deck?.activeFrame?.layout.paragraphs.length).toBeGreaterThan(0);
+    expect(() => structuredClone(snapshot.deck?.activeFrame?.layout)).not.toThrow();
   });
   it("misses for document, source, revision, file, mask, nested-root and asset changes", async () => {
     const req = request(); await computeSnapshot(req);
@@ -110,12 +116,13 @@ describe("bounded retention and derived page data", () => {
   it("reuses immutable interaction data when revisiting a page, and invalidates changed source", async () => {
     const req = request(), a = (await computeSnapshot(req)).snapshot.deck!.activeFrame!;
     const b = (await computeSnapshot({ ...req, activeRootId: "frame:1" })).snapshot.deck!.activeFrame!;
+    const key = new DeckPageDerivedKey<{ id: number }>();
     let builds = 0;
-    const value = deckPageDerived(a, req.source, "test", () => ({ id: ++builds }));
-    deckPageDerived(b, req.source, "test", () => ({ id: ++builds }));
-    expect(deckPageDerived(a, req.source, "test", () => ({ id: ++builds }))).toBe(value);
+    const value = deckPageDerived(a, req.source, key, () => ({ id: ++builds }));
+    deckPageDerived(b, req.source, key, () => ({ id: ++builds }));
+    expect(deckPageDerived(a, req.source, key, () => ({ id: ++builds }))).toBe(value);
     expect(builds).toBe(2);
-    expect(deckPageDerived(a, req.source + "edited", "test", () => ({ id: ++builds }))).not.toBe(value);
+    expect(deckPageDerived(a, req.source + "edited", key, () => ({ id: ++builds }))).not.toBe(value);
   });
 });
 

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -45,13 +46,13 @@ export type DistributeElementsAction = { elementIds: string[]; axis: DistributeA
 /** Immutable source and handles captured at the start of an element drag. */
 export type MoveElementsBaseline = {
   source: string;
-  editHandles: EditHandle[];
+  editHandles: readonly EditHandle[];
   sourceFingerprint?: string;
 };
 
 export function applyMoveElementsAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   elementIds: readonly string[],
   delta: WorldPoint,
   formatPrecision: DragFormatPrecision | undefined,
@@ -299,7 +300,7 @@ export function applyDistributeElementsAction(
 
 function applyMoveElementsUsingHandleRewrites(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   elementIds: readonly string[],
   delta: WorldPoint,
   parseOptions: EditParseOptions = {},
@@ -334,7 +335,7 @@ function applyMoveElementsUsingHandleRewrites(
     spanCounts.set(key, (spanCounts.get(key) ?? 0) + 1);
   }
   if (rewritable.some((handle) =>
-    spanCounts.get(`${handle.sourceRef.sourceSpan.from}:${handle.sourceRef.sourceSpan.to}`)! > 1)) {
+    requireDefined(spanCounts.get(`${handle.sourceRef.sourceSpan.from}:${handle.sourceRef.sourceSpan.to}`), "Missing required spanCounts.get(`${handle.sourceRef.sourceSpan.from}:${handle.sourceRef.sourceSpan.to}`)") > 1)) {
     return { kind: "unsupported", reason: "Handle span is shared by expanded statements (foreach/macro), cannot move safely." };
   }
 
@@ -860,7 +861,7 @@ function rewriteSingleTreeRootPlacement(
 
 function applyElementDeltaMapStrict(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   elementIds: readonly string[],
   deltasBySource: ReadonlyMap<string, WorldPoint>,
   parseOptions: EditParseOptions = {},

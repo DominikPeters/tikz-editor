@@ -18,7 +18,7 @@ export function beamerSpacingTargets(source: string, layout: BeamerFrameLayout):
   const context = createBeamerSyntaxContext(source);
   const targets: BeamerSpacingTarget[] = [];
   const seen = new Set<number>();
-  for (const spacing of layout.spacing ?? []) {
+  for (const spacing of layout.spacing) {
     if (seen.has(spacing.sourceSpan.from)) continue;
     const command = beamerControlSequencesIn(context, spacing.sourceSpan)[0];
     if (command?.from !== spacing.sourceSpan.from || command.name !== spacing.command) continue;

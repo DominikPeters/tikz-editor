@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import {
@@ -136,7 +137,7 @@ function applySetPropertyCommentToggle(
   const format = target.optionsFormat ?? "bracketed";
   const parsedItems = parseCommentToggleItems(rawSite, format);
   const primaryKey = normalizeOptionKey(action.key);
-  const commentMode = action.commentMode!;
+  const commentMode = requireDefined(action.commentMode, "Missing required action.commentMode");
   if (primaryKey.length === 0) {
     return { kind: "error", message: "Cannot toggle an empty option key" };
   }
@@ -151,7 +152,8 @@ function applySetPropertyCommentToggle(
     if (index !== matchingIndex) {
       return item;
     }
-    const toggleItem = item as Extract<CommentToggleItem, { kind: "entry" | "disabled-entry" }>;
+    if (item.kind !== "entry" && item.kind !== "disabled-entry") return item;
+    const toggleItem = item;
     if (commentMode === "disable") {
       return { kind: "disabled-entry", text: toggleItem.text, normalizedKey: toggleItem.normalizedKey };
     }
@@ -422,7 +424,7 @@ function resolveCommentToggleSerializationContext(
       continue;
     }
     const indentMatch = line.match(/^[\t ]*/u);
-    return { lineIndent: indentMatch![0], hadNewline: true };
+    return { lineIndent: requireDefined(indentMatch, "Missing required indentMatch")[0], hadNewline: true };
   }
   return { lineIndent: preferredIndent, hadNewline: true };
 }
@@ -542,8 +544,8 @@ function applyMatrixCellSetProperty(
 
   const mutations = createOptionMutationsFromSetProperty(action, key);
 
-  const cellSpan = target.cellSpan!;
-  const textSpan = target.textSpan!;
+  const cellSpan = requireDefined(target.cellSpan, "Missing required target.cellSpan");
+  const textSpan = requireDefined(target.textSpan, "Missing required target.textSpan");
 
   if (target.optionSpan) {
     const optionSpan = target.optionSpan;

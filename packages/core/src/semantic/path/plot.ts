@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { OptionListAst } from "../../options/types.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
 import type { MacroBinding } from "../../macros/index.js";
@@ -48,7 +49,7 @@ export function createDefaultPlotSettings(): PlotSettings {
     variable: "\\x",
     mark: null,
     tension: 0.55,
-    barWidth: parseLength("10pt", "pt")!,
+    barWidth: requireDefined(parseLength("10pt", "pt"), "Expected an internal plot value"),
     barShift: 0,
     barIntervalWidth: 1,
     barIntervalShift: 0.5
@@ -91,9 +92,6 @@ function applyPlotOptionList(
       continue;
     }
 
-    if (entry.kind !== "kv" && entry.kind !== "unknown") {
-      continue;
-    }
     if (entry.kind === "unknown") {
       continue;
     }

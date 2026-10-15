@@ -1,3 +1,5 @@
+import { isRecord } from "../validation";
+import { isAppMenuCommandId } from "../app-menu";
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { listDocumentSessions } from "../store/document-sessions";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
@@ -793,6 +795,7 @@ function EditorApp() {
       return;
     }
 
+    const previewSvg = snapshot.svg;
     let cancelled = false;
     void computeSnapshot({
       id: crypto.randomUUID(),
@@ -811,7 +814,7 @@ function EditorApp() {
       setRepeatPreviewModel(
         emitSvgModel(previewScene, {
           padding: 18,
-          viewBox: snapshot.svg!.viewBox
+          viewBox: previewSvg.viewBox
         })
       );
     }).catch(() => {
@@ -990,7 +993,8 @@ function EditorApp() {
       return;
     }
     const assistantApi = platform.assistant;
-    const bindAssistantEvents = assistantApi.bindEvents!;
+    const bindAssistantEvents = assistantApi.bindEvents;
+    if (!bindAssistantEvents) return;
 
     async function respondToDynamicTool(event: Extract<AssistantEvent, { type: "dynamic-tool-call" }>): Promise<void> {
       const doc = useEditorStore.getState().documents[event.documentId];
@@ -999,7 +1003,7 @@ function EditorApp() {
       }
       const sourceForDoc = event.documentId === activeDocumentIdRef.current ? sourceRef.current : doc.source;
       const snapshotForDoc = event.documentId === activeDocumentIdRef.current ? snapshotRef.current : doc.snapshot;
-      const args = (event.arguments ?? {}) as Record<string, unknown>;
+      const args = isRecord(event.arguments) ? event.arguments : {};
 
       const respond = async (success: boolean, text: string, imageUrl?: string) => {
         if (useEditorStore.getState().documents[event.documentId]?.assistantSessionGeneration !== (event.sessionGeneration ?? 0)) return;
@@ -1078,9 +1082,26 @@ function EditorApp() {
       }
 
       // ── get_latest_preview_png ────────────────────────────────────────
-      const hasOverlayCode = typeof args.overlay_code === "string" && args.overlay_code.length > 0;
-      const hasGrid = args.show_grid != null;
-      const hasZoom = args.zoom_region != null;
+      const overlayCode = typeof args.overlay_code === "string" ? args.overlay_code : "";
+      const hasOverlayCode = overlayCode.length > 0;
+      let showGrid: { spacing?: number; color?: string } | undefined;
+      if (args.show_grid != null) {
+        const grid = args.show_grid;
+        if (!isRecord(grid) || (grid.spacing !== undefined && (typeof grid.spacing !== "number" || !Number.isFinite(grid.spacing) || grid.spacing <= 0)) || (grid.color !== undefined && typeof grid.color !== "string")) {
+          await respond(false, "Invalid coordinate grid options.");
+          return;
+        }
+        showGrid = { ...(typeof grid.spacing === "number" ? { spacing: grid.spacing } : {}), ...(typeof grid.color === "string" ? { color: grid.color } : {}) };
+      }
+      let zoomRegion: { min_x: number; min_y: number; max_x: number; max_y: number } | undefined;
+      if (args.zoom_region != null) {
+        const zoom = args.zoom_region;
+        if (!isRecord(zoom) || typeof zoom.min_x !== "number" || typeof zoom.min_y !== "number" || typeof zoom.max_x !== "number" || typeof zoom.max_y !== "number" || ![zoom.min_x, zoom.min_y, zoom.max_x, zoom.max_y].every(Number.isFinite) || zoom.min_x >= zoom.max_x || zoom.min_y >= zoom.max_y) {
+          await respond(false, "Invalid preview zoom region.");
+          return;
+        }
+        zoomRegion = { min_x: zoom.min_x, min_y: zoom.min_y, max_x: zoom.max_x, max_y: zoom.max_y };
+      }
 
       let svgToRender = targetSnapshot.svg;
       let sourceMatches = targetSnapshot.source === sourceForDoc;
@@ -1090,7 +1111,7 @@ function EditorApp() {
         try {
           const { injectOverlayCode } = await import("./assistant-tool-handlers");
           const targetFig = targetSnapshot.figures.find((f) => f.id === targetFigureId);
-          const modifiedSource = injectOverlayCode(sourceForDoc, args.overlay_code as string, targetFig?.span);
+          const modifiedSource = injectOverlayCode(sourceForDoc, overlayCode, targetFig?.span);
           const result = await computeSnapshot({
             id: crypto.randomUUID(),
             documentId: event.documentId,
@@ -1120,10 +1141,10 @@ function EditorApp() {
         const { renderPngExport } = await import("./export-commands");
 
         let enhancedSvg = svgToRender;
-        if (hasGrid || hasZoom) {
+        if (showGrid || zoomRegion) {
           enhancedSvg = applyPreviewEnhancements(svgToRender, {
-            ...(hasGrid ? { showGrid: (args.show_grid as { spacing?: number; color?: string }) } : {}),
-            ...(hasZoom ? { zoomRegion: (args.zoom_region as { min_x: number; min_y: number; max_x: number; max_y: number }) } : {})
+            ...(showGrid ? { showGrid } : {}),
+            ...(zoomRegion ? { zoomRegion } : {})
           });
         }
 
@@ -1133,9 +1154,9 @@ function EditorApp() {
 
         let description = "Rendered an updated PNG preview";
         if (hasOverlayCode) description += " with overlay code";
-        if (hasGrid) description += " with coordinate grid";
-        if (hasZoom) {
-          const z = args.zoom_region as { min_x: number; min_y: number; max_x: number; max_y: number };
+        if (showGrid) description += " with coordinate grid";
+        if (zoomRegion) {
+          const z = zoomRegion;
           description += ` zoomed to (${z.min_x},${z.min_y})–(${z.max_x},${z.max_y})`;
         }
         description += ".";
@@ -1439,14 +1460,14 @@ function EditorApp() {
         return menuDefinition;
       },
       getCommandState: (commandId) => {
-        const binding = commandRuntimeRef.current.bindings[commandId as keyof typeof commandRuntimeRef.current.bindings];
+        const binding = isAppMenuCommandId(commandId) ? commandRuntimeRef.current.bindings[commandId] : undefined;
         return {
           enabled: binding?.enabled ?? false,
           known: binding != null
         };
       },
       runCommand: (commandId) => {
-        return commandRuntimeRef.current.runCommand(commandId as keyof typeof commandRuntimeRef.current.bindings, "platform");
+        return isAppMenuCommandId(commandId) && commandRuntimeRef.current.runCommand(commandId, "platform");
       },
       selectFirstFigure: () => {
         const firstFigureId = snapshotRef.current.figures[0]?.id ?? null;
@@ -1584,7 +1605,7 @@ function EditorApp() {
       return [commandId, state] as const;
     });
     return {
-      commandStates: Object.fromEntries(entries) as Record<keyof typeof commandRuntime.bindings, { enabled: boolean; checked?: boolean }>,
+      commandStates: Object.fromEntries(entries),
       signature: entries.map(([commandId, state]) =>
         `${commandId}:${state.enabled ? "1" : "0"}:${state.checked === true ? "1" : "0"}`
       ).join("|")
@@ -1840,10 +1861,10 @@ function EditorApp() {
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, [dispatch]);
 
-  const appStyle = {
+  const appStyle: CSSProperties & { [key: `--${string}`]: string | number } = {
     "--app-ui-font-size": `${uiFontSizePx}px`,
     "--app-ui-scale": `${uiFontSizePx / 11}`
-  } as CSSProperties;
+  };
 
   const loadExampleIntoEditor = (example: TikzOpenExample) => {
     dispatch({ type: "NEW_DOCUMENT", source: example.source, title: example.title });
@@ -1979,7 +2000,7 @@ function EditorApp() {
 
   function onAppDragLeave(e: React.DragEvent<HTMLDivElement>) {
     // Only clear when leaving the app root entirely
-    if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+    if (e.currentTarget.contains(e.relatedTarget instanceof Node ? e.relatedTarget : null)) {
       return;
     }
     setIsDragOver(false);

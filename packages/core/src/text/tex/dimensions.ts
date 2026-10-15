@@ -99,11 +99,8 @@ export function parseTexDimensionExpression(
     );
   if (registerMatch) {
     const factor = contextualDimensionFactor(registerMatch[1] ?? "");
-    const reference = registerMatch[2] as
-      | "linewidth"
-      | "textwidth"
-      | "columnwidth"
-      | "paperwidth";
+    const reference = registerMatch[2];
+    if (reference !== "linewidth" && reference !== "textwidth" && reference !== "columnwidth" && reference !== "paperwidth") return null;
     return factor === null
       ? null
       : {
@@ -119,13 +116,15 @@ export function parseTexDimensionExpression(
   if (!fontUnitMatch) {
     return null;
   }
+  const reference = fontUnitMatch[2];
+  if (reference !== "em" && reference !== "ex") return null;
   const factor = Number(fontUnitMatch[1]);
   return Number.isFinite(factor)
     ? {
         kind: "contextual",
         raw,
         factor,
-        reference: fontUnitMatch[2] as "em" | "ex",
+        reference,
       }
     : null;
 }

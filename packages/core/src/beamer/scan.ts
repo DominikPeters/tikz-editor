@@ -55,14 +55,6 @@ const THEME_COMMANDS = new Map<string, BeamerThemeKind>([
   ["useoutertheme", "outer-theme"],
 ]);
 
-const METADATA_COMMANDS = new Set<BeamerMetadataFieldName>([
-  "title",
-  "subtitle",
-  "author",
-  "institute",
-  "date",
-]);
-
 /**
  * Scan source syntax only; this does not execute TeX.
  *
@@ -535,8 +527,8 @@ function scanPreamble(
       }
       continue;
     }
-    if (METADATA_COMMANDS.has(command.name as BeamerMetadataFieldName)) {
-      const name = command.name as BeamerMetadataFieldName;
+    if (command.name === "title" || command.name === "subtitle" || command.name === "author" || command.name === "institute" || command.name === "date") {
+      const name = command.name;
       if (!metadata[name]) {
         const field = readMetadataField(context, command, name, span.to);
         if (field) {

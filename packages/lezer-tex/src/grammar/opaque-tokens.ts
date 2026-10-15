@@ -46,10 +46,10 @@ export const opaqueEnvironmentTokens = new ExternalTokenizer(
       const begin = `${BEGIN_ENVIRONMENT_PREFIX}${name}}`;
       advanceExact(input, begin);
       const end = `\\end{${name}}`;
-      while (input.next >= 0 && !matchesExact(input, end)) {
+      while (hasInput(input) && !matchesExact(input, end)) {
         input.advance();
       }
-      if (input.next >= 0) {
+      if (hasInput(input)) {
         advanceExact(input, end);
         if (canComplete) {
           input.acceptToken(OpaqueEnvironmentToken);
@@ -80,4 +80,9 @@ function matchesExact(
     }
   }
   return true;
+}
+
+// advance() mutates next; read it afresh rather than retain TypeScript's initial character narrowing.
+function hasInput(input: InputStream): boolean {
+  return input.next >= 0;
 }

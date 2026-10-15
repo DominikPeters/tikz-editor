@@ -1,3 +1,4 @@
+import { isObjectRecord } from "../utils/records.js";
 import type { Tree } from "@lezer/common";
 import { parseSyntax } from "@tikz-editor/lezer-tikz";
 
@@ -811,7 +812,8 @@ function cloneShiftingSpans<T>(value: T, patches: readonly SourcePatch[]): T {
       copies.set(current, result);
       return result;
     }
-    const record = current as Record<string, unknown>;
+    if (!isObjectRecord(current)) return current;
+    const record = current;
     const result: Record<string, unknown> = {};
     copies.set(current, result);
     for (const key of Object.keys(record)) result[key] = copy(record[key]);
@@ -822,6 +824,7 @@ function cloneShiftingSpans<T>(value: T, patches: readonly SourcePatch[]): T {
     }
     return result;
   };
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This internal AST clone preserves every field and only replaces numeric span endpoints with numbers.
   return copy(value) as T;
 }
 
@@ -846,13 +849,13 @@ function shiftSpansDeep<T>(value: T, patchesOrDelta: readonly SourcePatch[] | nu
     if (
       "from" in current &&
       "to" in current &&
-      typeof (current as { from?: unknown }).from === "number" &&
-      typeof (current as { to?: unknown }).to === "number"
+      typeof current.from === "number" &&
+      typeof current.to === "number"
     ) {
-      const span = current as { from: number; to: number };
+      const span = { from: current.from, to: current.to };
       const next = patches ? shiftSpanThroughPatches(span, patches) : shiftSpan(span, delta);
-      span.from = next.from;
-      span.to = next.to;
+      current.from = next.from;
+      current.to = next.to;
     }
     for (const child of Object.values(current)) {
       visit(child);

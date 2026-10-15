@@ -117,6 +117,7 @@ export function createDesktopPresentationApi(): PlatformPresentationApi {
         url.searchParams.set("presentation", role); url.searchParams.set("session", sessionId);
         const child = new WebviewWindow(label, { url: url.pathname + url.search, title: role === "audience" ? "Presentation" : "Presenter View",
           width: role === "audience" ? 1100 : 1180, height: role === "audience" ? 720 : 820, visible: false, focus: false,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Tauri exports this wire enum only as a type; its disabled runtime value is documented in window.d.ts.
           backgroundThrottling: "disabled" as BackgroundThrottlingPolicy,
           resizable: true, dragDropEnabled: false, ...(role === "audience" ? { backgroundColor: "#000000" } : {}) });
         await waitForCreated(child);
@@ -158,11 +159,11 @@ export function createDesktopPresentationApi(): PlatformPresentationApi {
         void (async () => {
           const current = (await monitors()).displays;
           const target = matchingDisplay(audienceDisplay, current);
-          if (!target && audience) {
+          if (!target) {
             const fallback = current.find(display => display.primary) ?? current[0];
             if (fallback) await place(audience, fallback, false);
             audienceDisplay = null; audienceFullscreen = false; lastGeometry = ""; onOutputLost();
-          } else if (target && JSON.stringify(target) !== lastGeometry && audience) {
+          } else if (JSON.stringify(target) !== lastGeometry) {
             lastGeometry = JSON.stringify(target);
             audienceDisplay = target.id;
             await place(audience, target, audienceFullscreen);

@@ -19,6 +19,10 @@ import {
 } from "@tikz-editor/tex-fuzz";
 
 describe("TeX fuzz semantic coverage", () => {
+  it("rejects incompatible report versions at the merge boundary", () => {
+    const report = measureTexFuzzCoverage([]);
+    expect(() => mergeTexFuzzCoverage([{ ...report, version: 999 }])).toThrow(/Unsupported.*schema/);
+  });
   it("counts exact symbol co-occurrences across membership word boundaries", () => {
     const cases = Array.from({ length: 70 }, (_, index) => ({
       ast: [], source: "", features: ["always", "always", ...(index % 2 ? ["a"] : []),
@@ -204,8 +208,10 @@ describe("TeX fuzz integer profiles", () => {
 
   it("boosts unseen features using integer-only adaptive weights", () => {
     const adapted = adaptTexFuzzWeights({ seen: 100, unseen: 100 }, { seen: 99 }, { noveltyBudget: 10, scale: 1000 });
-    expect(adapted.unseen).toBeGreaterThan(adapted.seen);
-    expect(adapted.seen + adapted.unseen).toBe(1000);
+    const { seen, unseen } = adapted;
+    if (seen === undefined || unseen === undefined) throw new Error("Expected both normalized feature weights.");
+    expect(unseen).toBeGreaterThan(seen);
+    expect(seen + unseen).toBe(1000);
     expect(Object.values(adapted).every(Number.isSafeInteger)).toBe(true);
   });
 

@@ -1,4 +1,4 @@
-import { deckPageDerived } from "../../deck-page-derived-cache";
+import { deckPageDerived, deckObjectIndexKey } from "../../deck-page-derived-cache";
 import { deckStepRootKey } from "../../root-key";
 import { useCallback, useMemo, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import {
@@ -45,7 +45,7 @@ export function DeckInspectorPanel(): JSX.Element {
     activeFrame.step === Math.min(activeStep, Math.max(1, activeFrame.stepCount));
 
   const selectedNode = useMemo(() => {
-    if (!fresh || !activeFrame || deckObjectSelection == null) {
+    if (!fresh || deckObjectSelection == null) {
       return null;
     }
     if (
@@ -54,7 +54,7 @@ export function DeckInspectorPanel(): JSX.Element {
     ) {
       return null;
     }
-    const index = deckPageDerived(activeFrame, source, "object-index", () => buildBeamerObjectIndex({
+    const index = deckPageDerived(activeFrame, source, deckObjectIndexKey, () => buildBeamerObjectIndex({
       items: activeFrame.layout.items,
       paragraphs: activeFrame.layout.paragraphs,
       source,
@@ -63,7 +63,7 @@ export function DeckInspectorPanel(): JSX.Element {
   }, [activeDocumentId, activeFrame, deckObjectSelection, fresh, source]);
 
   const model = useMemo<DeckInspectorModel | null>(() => {
-    if (!fresh || !activeFrame) {
+    if (!fresh) {
       return null;
     }
     if (selectedNode) {
@@ -131,7 +131,7 @@ export function DeckInspectorPanel(): JSX.Element {
       event: ReactPointerEvent<HTMLElement>,
       field: Extract<DeckInspectorField, { kind: "number" }>
     ): void => {
-      if (!fresh || !activeFrame || field.value == null) {
+      if (!fresh || field.value == null) {
         return;
       }
       const base = { source, layout: activeFrame.layout };
@@ -196,7 +196,7 @@ export function DeckInspectorPanel(): JSX.Element {
       <SidePanel.Header>{rendered.title}</SidePanel.Header>
       <SidePanel.Content className={css.content ?? ""}>
         <SidePanel.SectionBody>
-          <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame?.step !== Math.min(activeStep, Math.max(1, activeFrame?.stepCount ?? 1))}
+          <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame.step !== Math.min(activeStep, Math.max(1, activeFrame.stepCount))}
             style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           {rendered.fields.length === 0 ? (
             <p className={css.hint}>This object has no editable properties yet.</p>

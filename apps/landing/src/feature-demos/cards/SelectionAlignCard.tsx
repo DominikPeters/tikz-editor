@@ -243,12 +243,13 @@ export function SelectionAlignCard() {
       return;
     }
 
-    mountRenderedScene(sceneRef.current, selectionAlignInitial.innerSvg);
+    const scene = sceneRef.current;
+    mountRenderedScene(scene, selectionAlignInitial.innerSvg);
 
-    const leftNodePaths = leftInitial.map((node) => queryNodePath(sceneRef.current!, node));
-    const leftLabels = leftInitial.map((node) => queryNodeLabel(sceneRef.current!, node));
-    const rightNodePaths = rightInitial.map((node) => queryNodePath(sceneRef.current!, node));
-    const rightLabels = rightInitial.map((node) => queryNodeLabel(sceneRef.current!, node));
+    const leftNodePaths = leftInitial.map((node) => queryNodePath(scene, node));
+    const leftLabels = leftInitial.map((node) => queryNodeLabel(scene, node));
+    const rightNodePaths = rightInitial.map((node) => queryNodePath(scene, node));
+    const rightLabels = rightInitial.map((node) => queryNodeLabel(scene, node));
     const leftNodeGroups = leftNodePaths.map((path, index) =>
       path && leftLabels[index] ? wrapRenderedElements([path, leftLabels[index]], "animatedNodeGroup") : null
     );

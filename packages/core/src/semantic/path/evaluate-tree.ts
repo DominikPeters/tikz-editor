@@ -501,9 +501,9 @@ export function handleChildOperationCluster(params: {
         kind: "EdgeOperation",
         id: `${child.id}:edge-from-parent:${childIndexOneBased}`,
         span: edgeSpec?.span ?? child.span,
-        ...(edgeSpec?.optionsSpan === undefined ? {} : { optionsSpan: edgeSpec?.optionsSpan }),
-        ...(edgeSpec?.options === undefined ? {} : { options: edgeSpec?.options }),
-        ...(edgeSpec?.nodes === undefined ? {} : { nodes: edgeSpec?.nodes }),
+        ...(edgeSpec?.optionsSpan === undefined ? {} : { optionsSpan: edgeSpec.optionsSpan }),
+        ...(edgeSpec?.options === undefined ? {} : { options: edgeSpec.options }),
+        ...(edgeSpec?.nodes === undefined ? {} : { nodes: edgeSpec.nodes }),
         target: {
           kind: "coordinate",
           // The endpoint is already world-space; encode it in the active

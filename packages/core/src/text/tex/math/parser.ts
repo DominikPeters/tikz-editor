@@ -963,12 +963,7 @@ class TexMathParser {
     const denominator = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} denominator`);
     const sourceSpan = spanUnion(
       command.sourceSpan,
-      denominator?.sourceSpan ??
-        numerator?.sourceSpan ??
-        style.sourceSpan ??
-        thickness.sourceSpan ??
-        rightDelimiter.sourceSpan ??
-        leftDelimiter.sourceSpan
+      denominator?.sourceSpan ?? numerator?.sourceSpan ?? style.sourceSpan
     );
     const nucleus: TexMathNucleus = {
       kind: "fraction",
@@ -2508,7 +2503,7 @@ class TexMathParser {
     return this.parseAlignedBody({
       beginSourceSpan,
       initialSourceSpan: spanUnion(initialSourceSpan, pairCount?.sourceSpan ?? initialSourceSpan),
-      ...(pairCount?.sourceSpan !== undefined ? { preambleSourceSpan: pairCount?.sourceSpan } : {}),
+      ...(pairCount?.sourceSpan !== undefined ? { preambleSourceSpan: pairCount.sourceSpan } : {}),
       stopAtEnvironmentEnd: environmentName.name,
       columnSeparation: "none",
       ...(pairCount ? { maxFields: pairCount.value * 2 } : {}),
@@ -2536,7 +2531,7 @@ class TexMathParser {
     return this.parseAlignedBody({
       beginSourceSpan,
       initialSourceSpan: spanUnion(initialSourceSpan, pairCount?.sourceSpan ?? initialSourceSpan),
-      ...(pairCount?.sourceSpan !== undefined ? { preambleSourceSpan: pairCount?.sourceSpan } : {}),
+      ...(pairCount?.sourceSpan !== undefined ? { preambleSourceSpan: pairCount.sourceSpan } : {}),
       stopAtEnvironmentEnd: environmentName.name,
       columnSeparation: "none",
       ...(pairCount ? { maxFields: pairCount.value * 2 } : {}),
@@ -2851,7 +2846,7 @@ class TexMathParser {
         });
         if (metadata.sourceSpan) {
           sourceSpan = spanUnion(sourceSpan, metadata.sourceSpan);
-          pendingRowSourceSpan = spanUnion(pendingRowSourceSpan ?? metadata.sourceSpan, metadata.sourceSpan);
+          pendingRowSourceSpan = spanUnion(pendingRowSourceSpan, metadata.sourceSpan);
         }
         suppressTag = suppressTag || metadata.suppressTag;
         labels.push(...metadata.labels);
@@ -2973,7 +2968,7 @@ class TexMathParser {
         const end = this.consumeEnvironmentEnd(environmentName);
         sourceSpan = spanUnion(sourceSpan ?? end, end);
         return {
-          ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
+          sourceSpan,
           ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan: extraAlignmentTabSourceSpan } : {}),
         };
       }
@@ -2991,7 +2986,7 @@ class TexMathParser {
       }
     }
     return {
-      ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
+      ...(sourceSpan ? { sourceSpan } : {}),
       ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan: extraAlignmentTabSourceSpan } : {}),
     };
   }
@@ -3112,7 +3107,7 @@ class TexMathParser {
     return {
       suppressTag,
       labels,
-      ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
+      ...(sourceSpan ? { sourceSpan } : {}),
     };
   }
 
@@ -4342,7 +4337,7 @@ class TexMathParser {
         "error",
         "missing-group",
         `Expected a braced ${label}.`,
-        next?.sourceSpan ?? fallbackSpan
+        next.sourceSpan
       );
       return null;
     }
@@ -4557,7 +4552,7 @@ class TexMathParser {
   }
 
   private parseOptionalBracketMathArgument(
-    fallbackSpan: TexMathSourceSpan
+    _fallbackSpan: TexMathSourceSpan
   ): { list: TexMathList; sourceSpan: TexMathSourceSpan } | null {
     this.skipSpaces();
     const next = this.peek();
@@ -4581,7 +4576,7 @@ class TexMathParser {
       "error",
       "missing-delimiter",
       "Expected a closing bracket in optional math argument.",
-      next?.sourceSpan ?? fallbackSpan
+      next.sourceSpan
     );
     return {
       list,
@@ -4629,7 +4624,7 @@ class TexMathParser {
       "error",
       "missing-delimiter",
       `Expected a closing bracket in optional ${label}.`,
-      next?.sourceSpan ?? fallbackSpan
+      next.sourceSpan
     );
     return {
       text: tokens.map((part) => part.text).join(""),
@@ -4742,7 +4737,7 @@ class TexMathParser {
       "error",
       "missing-delimiter",
       "Expected a closing bracket in optional dimension argument.",
-      next?.sourceSpan ?? fallbackSpan
+      next.sourceSpan
     );
     return {
       valuePt: 0,
@@ -4976,7 +4971,7 @@ class TexMathParser {
         "error",
         "empty-script",
         "Expected a math atom or braced group after script marker.",
-        next?.sourceSpan ?? operatorSpan
+        next.sourceSpan
       );
       return null;
     }
@@ -5015,7 +5010,7 @@ class TexMathParser {
     let subscript: TexMathScript | undefined;
     let superscript: TexMathScript | undefined;
     let sourceSpan = atom.sourceSpan;
-    while (true) {
+    for (;;) {
       const token = this.peek();
       if (!token || (token.kind !== "subscript" && token.kind !== "superscript" && !(token.kind === "character" && token.text === "'"))) {
         break;
@@ -6460,7 +6455,7 @@ function phantomCommandName(text: string): "phantom" | "hphantom" | "vphantom" |
     : null;
 }
 
-const simpleTexFontCommandNames = new Set<SimpleTexFontCommandName>([
+const simpleTexFontCommandNames: ReadonlySet<string> = new Set([
   "textit",
   "textbf",
   "textmd",
@@ -6475,7 +6470,7 @@ const simpleTexFontCommandNames = new Set<SimpleTexFontCommandName>([
 ] satisfies readonly SimpleTexFontCommandName[]);
 
 function isSimpleTexFontCommandName(name: string): name is SimpleTexFontCommandName {
-  return simpleTexFontCommandNames.has(name as SimpleTexFontCommandName);
+  return simpleTexFontCommandNames.has(name);
 }
 
 function mathTextPlainText(nodes: readonly SimpleTexInlineNode[]): string {

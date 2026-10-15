@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { CommandSchema, CommandTable } from "../commands/table.js";
@@ -66,11 +67,11 @@ export function commitCommand(
   }
   if (held && mandatory.length > 0) {
     // The selection goes into an argument of its own mode only (not math into `\emph{…}`).
-    const target = schema!.args.find((arg) => arg.kind === "mandatory" && arg.rendered);
+    const target = requireDefined(schema, "Missing required schema").args.find((arg) => arg.kind === "mandatory" && arg.rendered);
     if (target && (target.mode ?? (mode === "verbatim" ? "text" : mode)) !== mode) {
       return { outcome: { kind: "none" } };
     }
-    const wrapped = wrapSelection(tree.text, schema!, command, held);
+    const wrapped = wrapSelection(tree.text, requireDefined(schema, "Missing required schema"), command, held);
     if (wrapped) {
       return { outcome: wrapped };
     }
@@ -169,7 +170,7 @@ export function commitAcrossModes(
   let inside: number | null = null;
   if (name === "left") {
     // With its `\right`, pending, as in math (M14).
-    inner = `\\left${delimiter}\\right${matchingRightDelimiter(delimiter ?? "") ?? "."}`;
+    inner = `\\left${delimiter}\\right${matchingRightDelimiter(delimiter) ?? "."}`;
     inside = `\\left${delimiter}`.length;
   } else if (key === "bracket" && schema.args.find((arg) => arg.kind !== "overlay")?.kind === "optional") {
     inner = `${command}[]${"{}".repeat(mandatory)}`;

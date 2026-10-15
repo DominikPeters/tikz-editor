@@ -30,6 +30,7 @@ function createTransform<Brand extends string>(
   brand: Brand
 ): AffineTransform<Brand> {
   void brand;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes a phantom coordinate brand without changing its runtime representation.
   return { a, b, c, d, e, f } as AffineTransform<Brand>;
 }
 

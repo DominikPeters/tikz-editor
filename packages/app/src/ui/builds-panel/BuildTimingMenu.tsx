@@ -41,7 +41,7 @@ export function BuildTimingMenu({ anchor, step, onApply, onClose }: {
   return createPortal(<div ref={ref} className={`${css.root} ${css.menu}`} style={{ left: position.x, top: position.y }} role="menu" aria-label="Overlay timing"
     onKeyDown={(event) => {
       const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
-      const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const current = buttons.findIndex(button => button === document.activeElement);
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         event.preventDefault(); event.stopPropagation();
         const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;

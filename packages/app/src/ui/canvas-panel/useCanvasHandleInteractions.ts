@@ -190,7 +190,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: [handle.sourceRef.sourceId],
-            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult?.dependencies } : {}),
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult.dependencies } : {}),
             guides: snapGuideInput,
             settings: { ...snapSettingsPatch, gaps: { enabled: false } },
             zoom: canvasTransform.scale,
@@ -330,7 +330,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         ? resolveTransformInspectorMutationContext(source, sourceId, parseOptions).values
         : null;
       const initialFrame =
-        resizeFramesBySource?.get(sourceId) ??
+        resizeFramesBySource.get(sourceId) ??
         resolveResizeFrameForSource(
           snapshot.scene?.elements ?? [],
           snapshot.editHandles,
@@ -356,7 +356,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: collectSnapExcludedSourceIds([sourceId], scopeOverlay, snapshot.scene.elements),
-            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult?.dependencies } : {}),
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult.dependencies } : {}),
             guides: snapGuideInput,
             // Resize snaps the moving point; equal-gap candidates are unused.
             settings: { ...snapSettingsPatch, gaps: { enabled: false } },
@@ -449,7 +449,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       let fallbackTargetId: string | null = null;
       for (const element of candidates) {
         const commandEntry = [...element.styleChain].reverse().find((entry) => entry.kind === "command");
-        const targetId = commandEntry?.sourceRef?.sourceId?.trim();
+        const targetId = commandEntry?.sourceRef?.sourceId.trim();
         if (!targetId) {
           continue;
         }

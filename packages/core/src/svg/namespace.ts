@@ -1,10 +1,11 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { SvgRenderModel } from "./types.js";
 
 /** Give each embedded picture its own SVG definitions and fragment references. */
 export function namespaceSvgModel(model: SvgRenderModel, namespace: string): SvgRenderModel {
   // Escape underscores too, making this encoding injective for arbitrary names.
-  const prefix = `tikz-${namespace.replace(/[^A-Za-z0-9-]/gu, char => `_${char.codePointAt(0)!.toString(16)}_`)}-`;
+  const prefix = `tikz-${namespace.replace(/[^A-Za-z0-9-]/gu, char => `_${requireDefined(char.codePointAt(0), "Expected an internal namespace value").toString(16)}_`)}-`;
   const ids = new Map<string, string>();
   const idAttribute = /(\s)id\s*=\s*(["'])([^"']+)\2/gu;
   for (const markup of [...model.defs, ...model.parts.map(part => part.markup)]) {
@@ -14,9 +15,9 @@ export function namespaceSvgModel(model: SvgRenderModel, namespace: string): Svg
   const rewrite = (markup: string): string => markup
     .replace(idAttribute, (_, space: string, quote: string, id: string) => `${space}id=${quote}${ids.get(id) ?? id}${quote}`)
     .replace(/url\(\s*(["']?)#([^\s"'()]+)\1\s*\)/gu,
-      (whole: string, quote: string, id: string) => ids.has(id) ? `url(${quote}#${ids.get(id)!}${quote})` : whole)
+      (whole: string, quote: string, id: string) => ids.has(id) ? `url(${quote}#${requireDefined(ids.get(id), "Expected an internal namespace value")}${quote})` : whole)
     .replace(/(\s(?:xlink:)?href\s*=\s*)(["'])#([^"']+)\2/gu,
-      (whole: string, attribute: string, quote: string, id: string) => ids.has(id) ? `${attribute}${quote}#${ids.get(id)!}${quote}` : whole)
+      (whole: string, attribute: string, quote: string, id: string) => ids.has(id) ? `${attribute}${quote}#${requireDefined(ids.get(id), "Expected an internal namespace value")}${quote}` : whole)
     .replace(/(\saria-(?:labelledby|describedby)\s*=\s*)(["'])([^"']+)\2/gu,
       (_, attribute: string, quote: string, references: string) => `${attribute}${quote}${references.replace(/\S+/gu, id => ids.get(id) ?? id)}${quote}`);
   const defs = model.defs.map(rewrite);

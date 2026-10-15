@@ -965,7 +965,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         templateRaw: resolvedCell.cell.raw,
         ...(namedCell.name === undefined ? {} : { name: namedCell.name }),
         ...(namedCell.aliases === undefined ? {} : { aliases: namedCell.aliases }),
-        ...(resolvedCell.options?.span === undefined ? {} : { optionsSpan: resolvedCell.options?.span }),
+        ...(resolvedCell.options?.span === undefined ? {} : { optionsSpan: resolvedCell.options.span }),
         ...(resolvedCell.options === undefined ? {} : { options: resolvedCell.options }),
         textSource: "group",
         textSpan: resolvedCell.cell.textSpan,
@@ -1247,7 +1247,7 @@ function parseMatrixRows(input: string, cellSeparator: string, baseOffset: numbe
         continue;
       }
 
-      cursor += structure.charAt(cursor + 1) != null ? 2 : 1;
+      cursor += cursor + 1 < structure.length ? 2 : 1;
       continue;
     }
 
@@ -1337,7 +1337,7 @@ function splitMatrixRowCells(
 
     const char = structure.charAt(cursor);
     if (char === "\\") {
-      cursor += structure.charAt(cursor + 1) != null ? 2 : 1;
+      cursor += cursor + 1 < structure.length ? 2 : 1;
       continue;
     }
 

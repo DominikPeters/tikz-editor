@@ -306,16 +306,16 @@ function nodeElementsForSource(elements: readonly SceneElement[], sourceId: stri
   return index.get(sourceId) ?? [];
 }
 
-const itemIndexes = new WeakMap<readonly object[], ReadonlyMap<string, readonly object[]>>();
+type SourceItem = SceneElement | EditHandle;
+const itemIndexes = new WeakMap<readonly SourceItem[], ReadonlyMap<string, readonly SourceItem[]>>();
 
 /** A scene's elements or edit handles for one source, indexed once per array. */
-export function itemsForSource<T extends { readonly sourceRef: { readonly sourceId: string } }>(
-  items: readonly T[],
-  sourceId: string
-): readonly T[] {
-  let index = itemIndexes.get(items) as ReadonlyMap<string, readonly T[]> | undefined;
+export function itemsForSource(items: readonly SceneElement[], sourceId: string): readonly SceneElement[];
+export function itemsForSource(items: readonly EditHandle[], sourceId: string): readonly EditHandle[];
+export function itemsForSource(items: readonly SourceItem[], sourceId: string): readonly SourceItem[] {
+  let index = itemIndexes.get(items);
   if (!index) {
-    const next = new Map<string, T[]>();
+    const next = new Map<string, SourceItem[]>();
     for (const item of items) {
       const group = next.get(item.sourceRef.sourceId);
       if (group) group.push(item);
@@ -674,9 +674,6 @@ export function sourceHasSingleResizablePathShape(
   }
   if (shapeElement.kind === "Ellipse") {
     return true;
-  }
-  if (shapeElement.kind !== "Path") {
-    return false;
   }
 
   const pathHandles = editHandles.filter(
@@ -1200,16 +1197,7 @@ export function dragCursorForState(drag: DragState | null): string | null {
   if (drag.kind === "pan") {
     return "grabbing";
   }
-  if (
-    drag.kind === "marquee" ||
-    drag.kind === "tool-create" ||
-    drag.kind === "tool-bezier-bend" ||
-    drag.kind === "tool-path-segment" ||
-    drag.kind === "tool-freehand"
-  ) {
-    return "crosshair";
-  }
-  return null;
+  return "crosshair";
 }
 
 export function resizeCursorForRole(role: ResizeRole): string {

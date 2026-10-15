@@ -173,9 +173,10 @@ function rotateTypedPointAroundCenter<TPoint extends SvgPoint | TextRectLocalPoi
   const dx = point.x - cx;
   const dy = point.y - cy;
   return {
-    x: cx + dx * cos - dy * sin,
-    y: cy + dx * sin + dy * cos
-  } as TPoint;
+    ...point,
+    x: pt(cx + dx * cos - dy * sin),
+    y: pt(cy + dx * sin + dy * cos)
+  };
 }
 
 export function viewportToSvgPoint(
@@ -203,7 +204,7 @@ export function toViewportYFromWorld(worldY: number, viewBox: SvgViewBox, transf
 }
 
 export function worldToSvgPoint(point: WorldPoint, viewBox: Pick<SvgViewBox, "y" | "height">): SvgPoint {
-  return typedWorldToSvg(point, viewBox as SvgViewBox);
+  return typedWorldToSvg(point, viewBox);
 }
 
 export function worldToSvgY(worldY: number, viewBox: Pick<SvgViewBox, "y" | "height">): number {
@@ -211,7 +212,7 @@ export function worldToSvgY(worldY: number, viewBox: Pick<SvgViewBox, "y" | "hei
 }
 
 export function svgToWorldPoint(point: SvgPoint, viewBox: Pick<SvgViewBox, "y" | "height">): WorldPoint {
-  return typedSvgToWorld(point, viewBox as SvgViewBox);
+  return typedSvgToWorld(point, viewBox);
 }
 
 export function resolveOverlayGridSteps(scale: number, minorTargetPx: number = GRID_MINOR_TARGET_PX): OverlayGridSteps {

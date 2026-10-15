@@ -415,5 +415,42 @@ function expandBounds(bounds: DraftPreviewBounds | null, point: DraftPreviewPoin
 }
 
 function normalizeNodeShape(shapeRaw: string): NodeShape {
-  return (shapeRaw || "rectangle") as NodeShape;
+  switch (shapeRaw) {
+    case "rectangle":
+    case "rounded rectangle":
+    case "chamfered rectangle":
+    case "cross out":
+    case "strike out":
+    case "circle":
+    case "magnifying glass":
+    case "circle split":
+    case "circle solidus":
+    case "ellipse split":
+    case "diamond split":
+    case "rectangle split":
+    case "ellipse":
+    case "diamond":
+    case "trapezium":
+    case "semicircle":
+    case "regular polygon":
+    case "star":
+    case "isosceles triangle":
+    case "kite":
+    case "dart":
+    case "circular sector":
+    case "cylinder":
+    case "cloud":
+    case "starburst":
+    case "signal":
+    case "tape":
+    case "rectangle callout":
+    case "ellipse callout":
+    case "cloud callout":
+    case "single arrow":
+    case "double arrow":
+    case "coordinate":
+      return shapeRaw;
+    default:
+      return "rectangle";
+  }
 }

@@ -899,11 +899,15 @@ describe("editor-commands", () => {
   });
 
   it("detects CodeMirror targets so keyboard commands can bail out", () => {
-    const target = {
+    const target = Object.assign(new EventTarget(), {
       closest: vi.fn((selector: string) => (selector === ".cm-editor" ? {} : null))
-    };
+    });
 
-    expect(isCodeMirrorEventTarget(target as unknown as EventTarget)).toBe(true);
+    expect(isCodeMirrorEventTarget(target)).toBe(true);
+    expect(target.closest.mock.contexts[0]).toBe(target);
     expect(isCodeMirrorEventTarget(null)).toBe(false);
+    expect(isCodeMirrorEventTarget(new EventTarget())).toBe(false);
+    expect(isCodeMirrorEventTarget(Object.assign(new EventTarget(), { closest: 42 }))).toBe(false);
+    expect(isCodeMirrorEventTarget(Object.assign(new EventTarget(), { closest: () => null }))).toBe(false);
   });
 });

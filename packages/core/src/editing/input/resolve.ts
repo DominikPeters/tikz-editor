@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import {
@@ -426,9 +427,10 @@ function outsideUnbracedScript(view: EditView, position: Position, offset: numbe
  * text-level helper are refused when they would.
  */
 function gluesControlWords(before: string, after: string): boolean {
-  const names = (text: string) => new Set([...text.matchAll(/\\([A-Za-z@]+)/gu)].map((match) => match[1]));
+  const names = (text: string) => new Set([...text.matchAll(/\\([A-Za-z@]+)/gu)].map((match) => requireArrayValue(match, 1)));
   const known = names(before);
-  return [...names(after)].some((name) => !known.has(name) && !Object.values(WRAP_COMMANDS).includes(name as never) && name !== "textcolor");
+  const wrappingNames: readonly string[] = Object.values(WRAP_COMMANDS);
+  return [...names(after)].some((name) => !known.has(name) && !wrappingNames.includes(name) && name !== "textcolor");
 }
 
 /** Whether an offset follows an unescaped backslash (an odd run of them). */
@@ -511,7 +513,7 @@ class Resolver {
   private outcome(view: EditView, outcome: EditOutcome, typingRun?: string): IntentResolution {
     switch (outcome.kind) {
       case "patch": {
-        const structure = this.context.structure!;
+        const structure = requireDefined(this.context.structure, "Missing required this.context.structure");
         // After a structural edit, snap forward over a gap (`$ax‸ $` is
         // `$ax ‸$`), never back. Typed text keeps the caret right after
         // it: a space just typed at a paragraph's end is not a stop yet,
@@ -520,8 +522,8 @@ class Resolver {
         const nextView = run === "insert" || outcome.exact ? null
           : structure(applyPatches(this.context.text, outcome.patches), this.context.revealCodes === true ? { revealCodes: true } : undefined);
         const found = nextView?.stopAt(outcome.caret) ?? null;
-        const stop = found && nextView!.offset(found) >= outcome.caret ? found : null;
-        const caret = stop ? nextView!.offset(stop) : outcome.caret;
+        const stop = found && requireDefined(nextView, "Missing required nextView").offset(found) >= outcome.caret ? found : null;
+        const caret = stop ? requireDefined(nextView, "Missing required nextView").offset(stop) : outcome.caret;
         const focus = outcome.selectionEnd ?? caret;
         const literal = outcome.literal;
         return this.transaction(
@@ -801,7 +803,7 @@ class Resolver {
     const caret = this.caretPosition(view);
     const at = this.context.positions ? insertionOffset(view.tree, caret) : this.from;
     const typed = typeCharacter(view, caret, text, this.context.interaction, at, this.context.title);
-    return this.outcome(view, (keyboard && !this.context.title ? this.transform(view, caret, at, text, typed) : null) ?? typed);
+    return this.outcome(view, (!this.context.title ? this.transform(view, caret, at, text, typed) : null) ?? typed);
   }
 
   /** The input rules that transform a typed key after the fact (R12): smart quotes (P3), list autoformat (P10). */
@@ -834,7 +836,7 @@ class Resolver {
       return NONE;
     }
     const middle = applyPatches(this.context.text, deleted.patches);
-    const middleView = this.context.structure!(middle);
+    const middleView = requireDefined(this.context.structure, "Missing required this.context.structure")(middle);
     const pasted = pasteAt(middleView, caretAt(middleView, deleted.caret), deleted.caret, payload, commands, title);
     if (pasted.kind !== "patch") {
       return NONE;
@@ -1047,7 +1049,7 @@ class Resolver {
       return NONE;
     }
     const middle = applyPatches(this.context.text, deleted.patches);
-    const middleView = this.context.structure!(middle);
+    const middleView = requireDefined(this.context.structure, "Missing required this.context.structure")(middle);
     const broken = enter(middleView, caretAt(middleView, deleted.caret), deleted.caret, key);
     if (broken.kind !== "patch") {
       return NONE;
@@ -1082,7 +1084,7 @@ class Resolver {
     }
     if (id === "select") {
       const index = childIndex(tree, node.id);
-      return this.selectPositions(view, { anchor: { slot: node.parent!, index }, focus: { slot: node.parent!, index: index + 1 } });
+      return this.selectPositions(view, { anchor: { slot: requireDefined(node.parent, "Missing required node.parent"), index }, focus: { slot: requireDefined(node.parent, "Missing required node.parent"), index: index + 1 } });
     }
     const edit = constructMenuEdit(view, node.id, id, commands, this.from, this.context.title);
     return edit ? this.outcome(view, edit) : NONE;
@@ -1099,7 +1101,7 @@ class Resolver {
       return NONE;
     }
     if (kind === "sup" || kind === "sub") {
-      const after = { slot: editNodeAt(view.tree.nodes, ghost.node).parent!, index: childIndex(view.tree, ghost.node) + 1 };
+      const after = { slot: requireDefined(editNodeAt(view.tree.nodes, ghost.node).parent, "Missing required editNodeAt(view.tree.nodes, ghost.node).parent"), index: childIndex(view.tree, ghost.node) + 1 };
       return this.outcome(view, typeCharacter(view, after, kind === "sup" ? "^" : "_", NO_INTERACTION, at));
     }
     return this.outcome(view, { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: null, exact: true });
@@ -1146,7 +1148,7 @@ class Resolver {
       return NONE;
     }
     const middle = applyPatches(this.context.text, deleted.patches);
-    const middleView = this.context.structure!(middle);
+    const middleView = requireDefined(this.context.structure, "Missing required this.context.structure")(middle);
     const interaction = deleted.placeholder != null ? { placeholder: deleted.placeholder } : NO_INTERACTION;
     const typed = typeCharacter(middleView, caretAt(middleView, deleted.caret), char, interaction, deleted.caret, this.context.title);
     const final = typed.kind === "patch" ? applyPatches(middle, typed.patches) : middle;
@@ -1303,7 +1305,7 @@ class Resolver {
   private openPicker(view: EditView, commands: CommandTable, chip: ChipState, name: string, key: CommitKey, then?: string): IntentResolution {
     const mode = editSlotAt(view.tree.slots, caretAt(view, chip.at).slot).mode === "math" ? "math" : "text";
     const own = commands.command(name, mode);
-    const schema = own ?? commands.command(name, mode === "math" ? "text" : "math")!;
+    const schema = own ?? requireDefined(commands.command(name, mode === "math" ? "text" : "math"), "Missing required commands.command(name, mode === \"math\" ? \"text\" : \"math\")");
     const target = schema.args.find((arg) => arg.kind === "mandatory" && arg.rendered);
     if (chip.held && (!own || (target && (target.mode ?? mode) !== mode))) {
       // A selection does not go into another mode, nor into a command of another mode.
@@ -1553,7 +1555,7 @@ class Resolver {
     const token = requireArrayValue(pair.delimiters, 1);
     const closer = text.slice(token.from, token.to);
     const unwrapped = text.slice(0, token.from) + text.slice(token.to);
-    const loose = this.context.structure!(unwrapped);
+    const loose = requireDefined(this.context.structure, "Missing required this.context.structure")(unwrapped);
     // Without the `\right`, the `\left` runs on to its slot's end (or to a `\right` further on): its content's stops are where the `\right` may go.
     const open = loose.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters[0]?.from === requireArrayValue(pair.delimiters, 0).from);
     if (!open) {
@@ -1736,7 +1738,7 @@ class Resolver {
     }
     // The character after the name, typed into the committed source.
     const middle = applyPatches(this.context.text, commit.outcome.patches);
-    const middleView = this.context.structure!(middle);
+    const middleView = requireDefined(this.context.structure, "Missing required this.context.structure")(middle);
     const at = commit.outcome.caret;
     const typed = typeCharacter(middleView, caretAt(middleView, at), then, { ...(commit.pending === undefined ? {} : { pending: commit.pending }) }, at, this.context.title);
     if (typed.kind === "move") {
@@ -1931,15 +1933,15 @@ class Resolver {
     const ends = promoteSelection(view, selectionEndsAt(view, from, to));
     const chain = (slot: number) => {
       const slots = [slot];
-      for (let node = editSlotAt(tree.slots, slot).node; editNodeAt(tree.nodes, node).parent != null; node = editSlotAt(tree.slots, editNodeAt(tree.nodes, node).parent!).node) {
-        slots.push(editNodeAt(tree.nodes, node).parent!);
+      for (let node = editSlotAt(tree.slots, slot).node; editNodeAt(tree.nodes, node).parent != null; node = editSlotAt(tree.slots, requireDefined(editNodeAt(tree.nodes, node).parent, "Missing required editNodeAt(tree.nodes, node).parent")).node) {
+        slots.push(requireDefined(editNodeAt(tree.nodes, node).parent, "Missing required editNodeAt(tree.nodes, node).parent"));
       }
       return slots;
     };
     const startChain = chain(ends.anchor.slot);
     const endChain = chain(ends.focus.slot);
     const meet = startChain.find((slot) => endChain.includes(slot));
-    const throughWrappers = (slots: number[]) => slots.slice(0, slots.indexOf(meet!)).every((slot) => view.role(editSlotAt(tree.slots, slot).node) === "transparent");
+    const throughWrappers = (slots: number[]) => slots.slice(0, slots.indexOf(requireDefined(meet, "Missing required meet"))).every((slot) => view.role(editSlotAt(tree.slots, slot).node) === "transparent");
     if (meet == null || !throughWrappers(startChain) || !throughWrappers(endChain)) {
       return true;
     }

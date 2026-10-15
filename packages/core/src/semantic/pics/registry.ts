@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { PicOperationItem, Span } from "../../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { stripWrappingBraces } from "../../utils/braces.js";
@@ -131,7 +132,7 @@ export function resolvePicCode(item: PicOperationItem, registry: PicDefinitionRe
   if (codes.size === 0 && !foundDefinition) {
     return [{ kind: "not-found", reason: typeRaw.length === 0 ? "Pic type is empty." : `Unknown pic type '${typeRaw}'.` }];
   }
-  return PIC_CODE_EXECUTION_ORDER.flatMap((layer) => codes.has(layer) ? [codes.get(layer)!] : []);
+  return PIC_CODE_EXECUTION_ORDER.flatMap((layer) => codes.has(layer) ? [requireDefined(codes.get(layer), "Expected an internal registry value")] : []);
 }
 
 export function isPicDefinitionOptionKey(key: string): boolean {
@@ -181,7 +182,7 @@ function makePicCodeBody(
   return {
     codeRaw: code.raw,
     ...(code.span === undefined ? {} : { codeSpan: code.span }),
-    sourceRef: { ...cloneStyleSourceRef(sourceRef)!, ...(optionalSourceSpan2 === undefined ? {} : { sourceSpan: optionalSourceSpan2 }) },
+    sourceRef: { ...requireDefined(cloneStyleSourceRef(sourceRef), "Expected an internal registry value"), ...(optionalSourceSpan2 === undefined ? {} : { sourceSpan: optionalSourceSpan2 }) },
     parameterized: containsParameterPlaceholder(code.raw),
     codeLayer
   };
@@ -202,7 +203,7 @@ function findPicCodeEntries(entries: readonly OptionEntry[]): Array<{ entry: Ext
   for (const entry of entries) {
     if (entry.kind === "kv" && isPicCodeOptionKey(entry.key)) byLayer.set(picCodeLayerForKey(entry.key), entry);
   }
-  return PIC_CODE_EXECUTION_ORDER.flatMap((layer) => byLayer.has(layer) ? [{ entry: byLayer.get(layer)!, layer }] : []);
+  return PIC_CODE_EXECUTION_ORDER.flatMap((layer) => byLayer.has(layer) ? [{ entry: requireDefined(byLayer.get(layer), "Expected an internal registry value"), layer }] : []);
 }
 
 function picCodeLayerForKey(key: string): PicCodeLayer {

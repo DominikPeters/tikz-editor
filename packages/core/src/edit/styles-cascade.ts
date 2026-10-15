@@ -1,6 +1,7 @@
 import { requireArrayValue } from "../utils/collections.js";
+import { isObjectRecord } from "../utils/records.js";
 import type { OptionEntry } from "../options/types.js";
-import type { StyleChainEntry, StyleSourceRef } from "../semantic/style-chain.js";
+import { RESOLVED_STYLE_KEYS, type StyleChainEntry, type StyleSourceRef } from "../semantic/style-chain.js";
 import type { SceneElement, ResolvedStyle } from "../semantic/types.js";
 import type { EditAction, StyleLevel } from "./actions.js";
 import {
@@ -404,7 +405,9 @@ function buildSectionDeclarations(
     return declarations;
   }
 
-  for (const key of Object.keys(entry.resolvedContributions) as Array<keyof ResolvedStyle>) {
+  for (const contributionKey of Object.keys(entry.resolvedContributions)) {
+    const key = RESOLVED_STYLE_KEYS.find(candidate => candidate === contributionKey);
+    if (key === undefined) continue;
     const matched = mapContributionToDeclaration(key, entry.after, propertyMap, writeTarget, entry);
     if (!matched || seen.has(matched.priorityKey)) {
       continue;
@@ -579,14 +582,17 @@ function mapContributionToDeclaration(
   if (!template) {
     return null;
   }
-  const property = overrideInspectorPropertyValue(template, styleValueForProperty(template, style), { ...writeTarget, writable: false });
+  const nextValue = styleValueForProperty(template, style);
+  const property = overrideInspectorPropertyValue(template, nextValue, { ...writeTarget, writable: false });
+  // Show raw string contributions even when no typed inspector preset represents them.
+  const cssValue = typeof nextValue === "string" ? nextValue : formatCssValue(property);
   return {
     id: `default:${propertyId}:${entry.kind}:${entry.sourceRef?.sourceKind ?? "unknown"}`,
     propertyId,
     label: template.label,
-    cssValue: formatCssValue(property),
+    cssValue,
     property,
-    sourceText: `${template.label}: ${formatCssValue(property)}`,
+    sourceText: `${template.label}: ${cssValue}`,
     writeTarget: { ...writeTarget, writable: false },
     priorityKey: propertyId,
     defaultLike: true,
@@ -1130,28 +1136,28 @@ function overrideInspectorPropertyValue(
     case "lineWidth":
       return { ...property, value: typeof nextValue === "number" ? nextValue : property.value, presetLabel: lineWidthPresetLabel(typeof nextValue === "number" ? nextValue : property.value), write: { ...writeTarget, key: property.write.key } };
     case "dashStyle":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, DASH_STYLE_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "lineCap":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, LINE_CAP_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "lineJoin":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, LINE_JOIN_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "fillMode":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, FILL_MODE_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "fillShading":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, FILL_SHADING_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "fillPattern":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, FILL_PATTERN_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "roundedCorners": {
-      const next = (nextValue && typeof nextValue === "object") ? nextValue as { enabled?: boolean; radius?: number } : null;
+      const next = isObjectRecord(nextValue) ? nextValue : null;
       return {
         ...property,
-        enabled: next?.enabled ?? property.enabled,
-        radius: next?.radius ?? property.radius,
+        enabled: typeof next?.enabled === "boolean" ? next.enabled : property.enabled,
+        radius: typeof next?.radius === "number" ? next.radius : property.radius,
         write: { ...writeTarget, key: property.write.key }
       };
     }
     case "nodeShape":
-      return { ...property, value: coerceInspectorStringValue(nextValue, property.value), write: { ...writeTarget, key: property.write.key } };
+      return { ...property, value: coerceInspectorStringValue(nextValue, property.value, NODE_SHAPE_OPTIONS), write: { ...writeTarget, key: property.write.key } };
     case "arrowTip":
     case "boolean":
     case "enum":
@@ -1168,8 +1174,9 @@ function overrideInspectorPropertyValue(
   }
 }
 
-function coerceInspectorStringValue<T extends string>(nextValue: unknown, fallback: T): T {
-  return typeof nextValue === "string" ? nextValue as T : fallback;
+function coerceInspectorStringValue<T extends string>(nextValue: unknown, fallback: T, options: readonly { value: T }[]): T | "custom" {
+  const known = options.find(option => option.value === nextValue);
+  return known?.value ?? (typeof nextValue === "string" ? "custom" : fallback);
 }
 
 function formatCssValue(property: InspectorProperty | null): string {

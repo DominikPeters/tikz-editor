@@ -226,7 +226,7 @@ const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
   const from = line.from + beginIndex + beginMatch[0].length;
 
   let searchPos = beginIndex + beginMatch[0].length;
-  while (true) {
+  for (;;) {
     const nextBegin = text.indexOf(beginToken, searchPos);
     const nextEnd = text.indexOf(endToken, searchPos);
 
@@ -253,7 +253,7 @@ const tikzEnvironmentFolding = foldService.of((state, lineStart) => {
     let lineSearchPos = 0;
     const lineText = searchLine.text;
 
-    while (true) {
+    for (;;) {
       const nextBegin = lineText.indexOf(beginToken, lineSearchPos);
       const nextEnd = lineText.indexOf(endToken, lineSearchPos);
 

@@ -94,7 +94,7 @@ function collectNodePartDirectives(text: string): readonly NodePartDirective[] {
   for (let index = 0; index < items.length; index += 1) {
     const command = requireArrayValue(items, index);
     if (
-      command?.name !== "GenericCommand" ||
+      command.name !== "GenericCommand" ||
       text.slice(command.from, command.to) !== String.raw`\nodepart`
     ) {
       continue;

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../../utils/invariants.js";
 import { requireArrayValue } from "../../../utils/collections.js";
 import { concatMappedText, createGeneratedMappedText, createIdentityMappedText, type MappedText } from "../../source-map.js";
 import { texHBoxLocalX, texHBoxLocalY, texHBoxX, texHBoxY, texLength, type TexLength } from "../coordinates.js";
@@ -121,7 +122,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
     const declarationFont = assignment ? params.textFontProfile.resolveTextFont({ family: assignment.font.family ?? params.textFontProfile.defaultFontState.family, series: assignment.font.series ?? params.textFontProfile.defaultFontState.series, shape: assignment.font.shape ?? params.textFontProfile.defaultFontState.shape, ...(assignment.font.sizePt !== undefined ? { sizePt: texLength(assignment.font.sizePt) } : {}) }, texLength(params.tabularProfile?.booktabsFontSizePt ?? params.atPt), metricProvider) : font;
     const parsed = parseTexDimensionExpression(typeof raw === "string" ? raw : raw.value);
     const resolved = parsed && resolveTexDimensionExpression(parsed, assignment ? texDimensionContextForFont(context, declarationFont) : context);
-    if (resolved === null || resolved === undefined || !Number.isFinite(resolved)) throw new Error(`Unsupported table dimension ${typeof raw === "string" ? raw : raw.value}.`);
+    if (resolved === null || !Number.isFinite(resolved)) throw new Error(`Unsupported table dimension ${typeof raw === "string" ? raw : raw.value}.`);
     return scaledPt(resolved);
   };
   const registers: TexTabularRegisters = { ...params.tabularProfile?.registers, ...params.fontState.tabularRegisters };
@@ -176,7 +177,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
   for (const row of rows.values()) for (const { cell, box, index } of row) {
     if (cell.span <= 1) continue;
     const start = index; const end = index + cell.span;
-    const replacement = cell.preamble!;
+    const replacement = requireDefined(cell.preamble, "Multicolumn cells require a preamble.");
     const left = requireArrayValue(replacement.boundaries, 0).replace === undefined ? sep : dimension("0pt", 0); const right = requireArrayValue(replacement.boundaries, 1).replace === undefined ? sep : 0;
     const existing = widths.slice(start, end).reduce((sum, n) => sum + n, 0) + boundaryWidths.slice(start + 1, end).reduce((sum, n) => sum + n, 0) + requireArrayValue(boundaryWidths, start) / (start === 0 ? 1 : 2) + requireArrayValue(boundaryWidths, end) / (end === widths.length ? 1 : 2);
     const deficit = box.width + left + right - existing;
@@ -184,7 +185,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
   }
   const cellStarts: number[] = []; const boundaryStarts: number[] = []; let width = 0;
   for (let i = 0; i < widths.length; i++) { boundaryStarts.push(width); width += requireArrayValue(boundaryWidths, i); cellStarts.push(width); width += requireArrayValue(widths, i); }
-  boundaryStarts.push(width); width += boundaryWidths.at(-1)!;
+  boundaryStarts.push(width); width += requireArrayValue(boundaryWidths, boundaryWidths.length - 1);
   const logicalColumnEdge = (index: number): number => index === 0 ? 0 : index === widths.length ? width : requireArrayValue(cellStarts, index) - (requireArrayValue(boundaries, index).replace !== undefined ? 0 : sep);
   const items: TexMathHListItem[] = []; let y = 0; let firstBaseline = 0; let lastDepth = 0; let lastBookClass = 0;
   const rectangle = (x: number, top: number, w: number, h: number, source: { start: number; end: number }): TexMathRuleLayoutItem => ({ kind: "rule", role: "array-rule", x: texHBoxLocalX(x), y: texHBoxLocalY(top), width: texLength(Math.max(0, w)), height: texLength(h), sourceSpan: source });
@@ -219,7 +220,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
       lastBookClass = nextBookRule ? item.command === "specialrule" ? 2 : 1 : 0;
       continue;
     }
-    const row = rows.get(index)!;
+    const row = requireDefined(rows.get(index), "Measured table row is required.");
     let height: number = strutHeight; let depth: number = strutDepth;
     for (const cell of row) { height = Math.max(height, cell.box.height); depth = Math.max(depth, cell.box.depth); }
     const extra = dimension(item.extraDepth, 0); if (extra > 0) depth = Math.max(depth, strutDepth + extra);

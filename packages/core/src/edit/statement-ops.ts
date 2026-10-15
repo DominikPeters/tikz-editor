@@ -48,12 +48,10 @@ export function buildStatementSnapshotFromStatements(
     depth: number
   ): void => {
     const refs: StatementRef[] = [];
-    for (const [index, statement] of nestedStatements.entries()) {
-
-      if (!statement) {
-        continue;
-      }
-
+    // Synthetic statement inventories can contain holes; indexed reads retain that possibility.
+    for (let index = 0; index < nestedStatements.length; index += 1) {
+      const statement = nestedStatements[index];
+      if (!statement) continue;
       const ref: StatementRef = {
         id: statement.id,
         span: statement.span,

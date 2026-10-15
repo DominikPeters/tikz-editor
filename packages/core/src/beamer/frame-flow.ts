@@ -261,7 +261,7 @@ export function trailingBeamerTrivlistSkip(source: string, topsepPt = 9): number
   const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/gu;
   let lastEnd = -1;
   for (const match of source.matchAll(endPattern)) {
-    lastEnd = (match.index ?? 0) + match[0].length;
+    lastEnd = match.index + match[0].length;
   }
   if (lastEnd < 0) {
     return 0;
@@ -275,7 +275,7 @@ export function trailingBeamerListSkip(source: string): number {
     /\\end\s*\{\s*(?:itemize|enumerate|description)\s*\}/gu;
   let lastEnd = -1;
   for (const match of source.matchAll(endPattern)) {
-    lastEnd = (match.index ?? 0) + match[0].length;
+    lastEnd = match.index + match[0].length;
   }
   if (lastEnd < 0) {
     return 0;

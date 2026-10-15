@@ -206,7 +206,7 @@ function displayMathItemFromSimpleTexDisplayMath(
   ) {
     const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
       ...(item.fontSizePt !== undefined ? { atPt: item.fontSizePt } : {}),
-      ...(item.baselineSkip !== undefined ? { ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}) } : {}),
+      ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
       source: item.text,
       content: item.content,
       delimiter: item.delimiter,
@@ -236,7 +236,7 @@ function displayMathItemFromSimpleTexDisplayMath(
   }
   const box = options.mathBoxProvider?.getDisplayMathBox?.({
     ...(item.fontSizePt !== undefined ? { atPt: item.fontSizePt } : {}),
-    ...(item.baselineSkip !== undefined ? { ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}) } : {}),
+    ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
     source: item.text,
     content: item.content,
     delimiter: item.delimiter,
@@ -434,9 +434,9 @@ function glueItemFromSimpleTexVerticalGlue(
       command: item.command,
     },
     ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
-    size: relativeUnitPt == null
+    size: relativeUnitPt == null || item.relativeSize === undefined
       ? item.size
-      : texLength(item.relativeSize!.value * relativeUnitPt),
+      : texLength(item.relativeSize.value * relativeUnitPt),
     ...(relativeUnitPt != null ? { relativeUnitPt: texLength(relativeUnitPt) } : {}),
     ...(item.stretch !== undefined ? { stretch: item.stretch } : {}),
     ...(item.shrink !== undefined ? { shrink: item.shrink } : {}),

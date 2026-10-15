@@ -948,7 +948,7 @@ export function NodeAnchorOverlay({
         const radiusScale = anchorOverlay.radiusScale ?? 1;
         const snapped =
           anchorOverlay.snappedAnchor?.nodeName === anchor.nodeName &&
-          anchorOverlay.snappedAnchor?.nodeSourceId === anchor.nodeSourceId &&
+          anchorOverlay.snappedAnchor.nodeSourceId === anchor.nodeSourceId &&
           anchorOverlay.snappedAnchor.anchor === anchor.anchor;
         return (
           <circle

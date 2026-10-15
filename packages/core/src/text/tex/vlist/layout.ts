@@ -76,9 +76,6 @@ export function layoutTexVListItems(
   const positioned: PositionedTexVListItem[] = [];
   let cursor = startCursor;
   for (const [index, item] of items.entries()) {
-    if (!item) {
-      continue;
-    }
     const path = [...pathPrefix, index];
     if (item.kind === "glue") {
       const size = texVListAdjustedGlueSize(item, glueSet);

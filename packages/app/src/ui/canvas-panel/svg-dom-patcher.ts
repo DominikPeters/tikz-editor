@@ -84,7 +84,8 @@ export class SvgDomPatcher {
     const parsed = this.parsePartElements(model.parts);
     const content = document.createDocumentFragment();
     for (const part of model.parts) {
-      const element = parsed.get(part)!;
+      const element = parsed.get(part);
+      if (!element) throw new Error(`Missing SVG element for part ${part.partId}`);
       content.appendChild(element);
       this.elementByPartId.set(part.partId, element);
       this.fingerprintByPartId.set(part.partId, part.fingerprint);

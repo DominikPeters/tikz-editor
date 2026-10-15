@@ -1,3 +1,4 @@
+import { isRecord } from "../../validation";
 import type { EditingHint } from "@tikz-editor/core/editing/input/index";
 
 /**
@@ -15,8 +16,13 @@ function load(): Record<string, number> {
     return counts;
   }
   try {
-    const stored = JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) ?? "{}") as unknown;
-    counts = stored && typeof stored === "object" ? stored as Record<string, number> : {};
+    const stored = JSON.parse(globalThis.localStorage.getItem(STORAGE_KEY) ?? "{}") as unknown;
+    counts = {};
+    if (isRecord(stored)) {
+      for (const [key, count] of Object.entries(stored)) {
+        if (typeof count === "number" && Number.isFinite(count) && count >= 0) counts[key] = count;
+      }
+    }
   } catch {
     counts = {};
   }
@@ -32,7 +38,7 @@ export function hintAppears(hint: EditingHint): boolean {
   }
   seen[hint.id] = times + 1;
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(seen));
+    globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(seen));
   } catch {
     // Not stored: it shows again next time.
   }

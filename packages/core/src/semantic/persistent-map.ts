@@ -1,7 +1,7 @@
-const DELETED = Symbol("persistent-map-deleted");
+const DELETED = { kind: "deleted" } as const;
 const MAX_LOOKUP_LAYERS = 64;
 
-type EntryValue<V> = V | typeof DELETED;
+type EntryValue<V> = { kind: "value"; value: V } | typeof DELETED;
 
 type PersistentMapState<K, V> = {
   parent: PersistentMapState<K, V> | null;
@@ -35,7 +35,7 @@ export class PersistentMap<K, V> implements Map<K, V> {
 
   set(key: K, value: V): this {
     const writable = this.ensureWritable();
-    writable.entries.set(key, value);
+    writable.entries.set(key, { kind: "value", value });
     writable.materialized = null;
     return this;
   }
@@ -114,21 +114,15 @@ export class PersistentMap<K, V> implements Map<K, V> {
       // A materialized map already folds in this layer and all ancestors, so
       // it caps the chain walk for maps that fork once per drag frame.
       if (state.materialized) {
-        if (state.materialized.has(key)) {
-          return { found: true, value: state.materialized.get(key) as V };
-        }
-        return { found: false };
+        return mapEntry(state.materialized, key);
       }
-      if (state.entries.has(key)) {
-        const entry = state.entries.get(key);
-        if (entry === DELETED) {
-          return { found: false };
-        }
-        return { found: true, value: entry as V };
+      const entry = state.entries.get(key);
+      if (entry) {
+        return entry.kind === "deleted" ? { found: false } : { found: true, value: entry.value };
       }
       if (++layers >= MAX_LOOKUP_LAYERS) {
         const map = this.materialize();
-        return map.has(key) ? { found: true, value: map.get(key) as V } : { found: false };
+        return mapEntry(map, key);
       }
       state = state.parent;
     }
@@ -167,13 +161,22 @@ function materializeState<K, V>(state: PersistentMapState<K, V>): Map<K, V> {
       continue;
     }
     for (const [key, entry] of layer.entries) {
-      if (entry === DELETED) {
+      if (entry.kind === "deleted") {
         materialized.delete(key);
       } else {
-        materialized.set(key, entry);
+        materialized.set(key, entry.value);
       }
     }
   }
   state.materialized = materialized;
   return materialized;
+}
+
+function mapEntry<K, V>(map: ReadonlyMap<K, V>, key: K): { found: true; value: V } | { found: false } {
+  const value = map.get(key);
+  if (value !== undefined) return { found: true, value };
+  if (!map.has(key)) return { found: false };
+  // Map.has proves this is a stored undefined value; TypeScript cannot correlate has/get for generic V.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+  return { found: true, value: value as V };
 }

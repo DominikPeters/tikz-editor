@@ -195,27 +195,39 @@ export function StylesPanel() {
           applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-width-value", value: `${nextValue}pt` }));
           return;
         case "dashStyle": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "dash-style", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "dash-style", value: selected.value }));
           return;
         }
         case "lineCap": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-cap", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-cap", value: selected.value }));
           return;
         }
         case "lineJoin": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-join", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "line-join", value: selected.value }));
           return;
         }
         case "fillMode": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-mode", value: String(nextValue) as Exclude<typeof property.value, "custom">, context: property.context }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-mode", value: selected.value, context: property.context }));
           return;
         }
         case "fillShading": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-shading", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-shading", value: selected.value }));
           return;
         }
         case "fillPattern": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-pattern", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "fill-pattern", value: selected.value }));
           return;
         }
         case "roundedCorners": {
@@ -228,7 +240,9 @@ export function StylesPanel() {
           return;
         }
         case "nodeShape": {
-          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "node-shape", value: String(nextValue) as Exclude<typeof property.value, "custom"> }));
+          const selected = property.options.find(option => option.value === nextValue);
+          if (!selected) return;
+          applyRegistryMutations(writeTargets, buildPropertyMutationsFromRequest({ kind: "node-shape", value: selected.value }));
           return;
         }
         case "arrowTip":
@@ -296,13 +310,15 @@ export function StylesPanel() {
         ? section.addPropertyTemplates[templateId] ?? null
         : Object.values(section.addPropertyTemplates).find(
             (t) => {
-              if ("write" in t && t.write?.key === keyName) return true;
+              const write = "write" in t ? t.write : undefined;
+              if (write?.key === keyName) return true;
               return t.label.toLowerCase() === keyName.toLowerCase();
             }
           ) ?? null;
       if (template) {
         // Add the property with a sensible default value via raw key=value
-        const writeKey = ("write" in template && template.write) ? template.write.key : keyName;
+        const write = "write" in template ? template.write : undefined;
+        const writeKey = write?.key ?? keyName;
         let defaultValue: string;
         switch (template.kind) {
           case "color":
@@ -686,7 +702,7 @@ function RawValueInput({
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          (e.target as HTMLInputElement).blur();
+          e.currentTarget.blur();
         }
         if (e.key === "Escape") {
           setEditText(value);
@@ -773,14 +789,8 @@ function AddPropertyRow({
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toPropertyKey(declaration: StylesCascadeDeclaration): string {
-  if (
-    declaration.property
-    && "write" in declaration.property
-    && declaration.property.write
-    && declaration.property.write.key.length > 0
-  ) {
-    return declaration.property.write.key;
-  }
+  const write = declaration.property && "write" in declaration.property ? declaration.property.write : undefined;
+  if (write && write.key.length > 0) return write.key;
   const raw = declaration.sourceText.trim();
   const eqIndex = raw.indexOf("=");
   if (eqIndex > 0) {

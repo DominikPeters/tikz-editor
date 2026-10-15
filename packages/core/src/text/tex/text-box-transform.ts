@@ -1,3 +1,4 @@
+import { isSimpleTexInlineNode } from "./ir.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import { createIdentityMappedText } from "../source-map.js";
 import { texHBoxX, texHBoxY, texLength, type TexLength } from "./coordinates.js";
@@ -81,7 +82,10 @@ function contents(params: TransformLayoutParams): { hlist: TexMathHList; carets:
   };
   for (const node of params.node.children) {
     if (node.kind === "paragraph-break") continue; // \par is inert in restricted horizontal mode.
-    if (node.kind !== "box") { inline.push(node as SimpleTexInlineNode); continue; }
+    if (node.kind !== "box") {
+      if (!isSimpleTexInlineNode(node)) throw new Error("Unsupported transformed inline material.");
+      inline.push(node); continue;
+    }
     flush(); const box = paragraphBox(node, params, fontState);
     items.push({ kind: "text-box", command: "mbox", text: node.text, content: node.content, sourceStart: node.sourceStart, sourceEnd: node.sourceEnd, contentStart: node.contentStart, contentEnd: node.contentEnd, box });
   }
@@ -93,7 +97,7 @@ function contents(params: TransformLayoutParams): { hlist: TexMathHList; carets:
     for (const child of children) {
       if (child.kind === "hlist") {
         const owner = items.find(item => item.kind === "text-box" && item.sourceStart === child.sourceSpan.start && item.sourceEnd === child.sourceSpan.end);
-        if (child.svgBody && owner?.kind === "text-box") for (const entry of owner.box.caretMap?.entries ?? []) carets.push({ ...entry, x: texHBoxX(entry.x + x + child.x), y: texHBoxY(entry.y + y + child.y), ...(entry.hitBounds ? { hitBounds: { xStart: texHBoxX(entry.hitBounds.xStart + x + child.x), xEnd: texHBoxX(entry.hitBounds.xEnd + x + child.x), yStart: texHBoxY(entry.hitBounds.yStart + y + child.y), yEnd: texHBoxY(entry.hitBounds.yEnd + y + child.y) } } : {}) });
+        if (child.svgBody && owner?.kind === "text-box") for (const entry of owner.box.caretMap?.entries ?? []) carets.push({ ...entry, x: texHBoxX(entry.x + x + child.x), y: texHBoxY(entry.y + y + child.y), hitBounds: { xStart: texHBoxX(entry.hitBounds.xStart + x + child.x), xEnd: texHBoxX(entry.hitBounds.xEnd + x + child.x), yStart: texHBoxY(entry.hitBounds.yStart + y + child.y), yEnd: texHBoxY(entry.hitBounds.yEnd + y + child.y) } });
         walk(child.items, x + child.x, y + child.y); continue;
       }
       if (child.kind !== "glyph") continue;
@@ -111,7 +115,7 @@ function geometry(params: TransformLayoutParams, body: TexMathHList): Geometry {
     const boxReference = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)?)\\(width|height|depth|totalheight)$/u.exec(raw.trim());
     if (boxReference) { const factor = boxReference[1] ? Number(boxReference[1]) : 1; const extent = ({ width: body.width, height: body.height, depth: body.depth, totalheight: body.height + body.depth } as Record<string, number>)[boxReference[2] ?? ""]; if (extent === undefined) throw new Error("Missing graphicx box dimension."); return factorProduct(extent, factor); }
     const parsed = parseTexDimensionExpression(raw); const value = parsed && resolveTexDimensionExpression(parsed, context);
-    if (value === null || value === undefined || !Number.isFinite(value)) throw new Error(`Unsupported graphicx dimension ${raw}.`);
+    if (value === null || !Number.isFinite(value)) throw new Error(`Unsupported graphicx dimension ${raw}.`);
     return scaled(value);
   };
   const spec = params.node.parameters;
@@ -135,11 +139,12 @@ function geometry(params: TransformLayoutParams, body: TexMathHList): Geometry {
       }
       return Number((numerator / 65536).toFixed(5));
     };
-    let x = spec.kind === "scale" ? spec.x : spec.width.trim() === "!" ? undefined : ratio(spec.width, body.width);
-    let y = spec.kind === "scale" ? spec.y : spec.height.trim() === "!" ? undefined : ratio(spec.height, spec.totalHeight ? body.height + body.depth : body.height);
-    if (x === undefined && y === undefined) x = y = 1; else { x ??= y; y ??= x; }
-    const width = factorProduct(body.width, Math.abs(x!));
-    return { width, height: factorProduct(y! >= 0 ? body.height : body.depth, Math.abs(y!)), depth: factorProduct(y! >= 0 ? body.depth : body.height, Math.abs(y!)), matrix: [x!, 0, 0, y!, x! < 0 ? width : 0, 0] };
+    const x = spec.kind === "scale" ? spec.x : spec.width.trim() === "!" ? undefined : ratio(spec.width, body.width);
+    const y = spec.kind === "scale" ? spec.y : spec.height.trim() === "!" ? undefined : ratio(spec.height, spec.totalHeight ? body.height + body.depth : body.height);
+    const scaleX = x ?? y ?? 1;
+    const scaleY = y ?? x ?? 1;
+    const width = factorProduct(body.width, Math.abs(scaleX));
+    return { width, height: factorProduct(scaleY >= 0 ? body.height : body.depth, Math.abs(scaleY)), depth: factorProduct(scaleY >= 0 ? body.depth : body.height, Math.abs(scaleY)), matrix: [scaleX, 0, 0, scaleY, scaleX < 0 ? width : 0, 0] };
   }
   let pivotX: number = spec.options ? factorProduct(body.width, .5) : 0;
   let pivotY: number = spec.options ? factorProduct(body.height - body.depth, .5) : 0;
@@ -159,14 +164,14 @@ function geometry(params: TransformLayoutParams, body: TexMathHList): Geometry {
   const rotation: Matrix = [Math.abs(cosine) < 1e-12 ? 0 : cosine, Math.abs(sine) < 1e-12 ? 0 : -sine, Math.abs(sine) < 1e-12 ? 0 : sine, Math.abs(cosine) < 1e-12 ? 0 : cosine, 0, 0];
   const relative = bounds(rotation, -Number(pivotX), pivotY - body.height, body.width, body.height + body.depth);
   const pivot = point(rotation, pivotX, -Number(pivotY));
-  const matrix: Matrix = [...rotation.slice(0, 4), -pivot.x - relative.left, -pivot.y - pivotY] as unknown as Matrix;
+  const matrix: Matrix = [rotation[0], rotation[1], rotation[2], rotation[3], -pivot.x - relative.left, -pivot.y - pivotY];
   return { width: scaled(relative.right - relative.left), height: scaled(-relative.top + pivotY), depth: scaled(relative.bottom - pivotY), matrix };
 }
 
 export function layoutTexTransformBox(params: TransformLayoutParams): TexMathBox {
   const { hlist, carets } = contents(params); const transformed = geometry(params, hlist); const matrix = transformed.matrix;
   const entries = carets.map((entry): TexMathCaretEntry => {
-    const origin = point(matrix, entry.x, entry.y); const extent = entry.hitBounds ? bounds(matrix, entry.hitBounds.xStart, entry.hitBounds.yStart, entry.hitBounds.xEnd - entry.hitBounds.xStart, entry.hitBounds.yEnd - entry.hitBounds.yStart) : bounds(matrix, entry.x, entry.y - entry.height, 0, entry.height + entry.depth);
+    const origin = point(matrix, entry.x, entry.y); const extent = bounds(matrix, entry.hitBounds.xStart, entry.hitBounds.yStart, entry.hitBounds.xEnd - entry.hitBounds.xStart, entry.hitBounds.yEnd - entry.hitBounds.yStart);
     return { ...entry, x: texHBoxX(origin.x), y: texHBoxY(origin.y), height: texLength(origin.y - extent.top), depth: texLength(extent.bottom - origin.y), hitBounds: { xStart: texHBoxX(extent.left), xEnd: texHBoxX(extent.right), yStart: texHBoxY(extent.top), yEnd: texHBoxY(extent.bottom) } };
   });
   const svgMatrix = [...matrix.slice(0, 4), matrix[4] * 100, matrix[5] * 100].map(value => Math.abs(value) < 1e-12 ? 0 : Number(value.toFixed(10))).join(" ");

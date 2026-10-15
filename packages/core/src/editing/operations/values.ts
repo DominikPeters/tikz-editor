@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt } from "../tree/lookup.js";
 import type { CommandSchema, CommandTable } from "../commands/table.js";
@@ -41,10 +42,10 @@ export function valueFields(schema: CommandSchema, key?: CommitKey): ValueField[
   const firstOptional = schema.args.findIndex((arg) => arg.kind !== "overlay");
   const required = REQUIRED_OPTIONAL[schema.name];
   return schema.args.flatMap((arg, argument): ValueField[] => {
-    const kind = arg.role as ValueKind;
     if (arg.rendered) {
       return [];
     }
+    const kind = arg.role;
     if (required != null && arg.kind === required) {
       return [{ argument, kind, optional: false, open: arg.kind === "overlay" ? "<" : "[", close: arg.kind === "overlay" ? ">" : "]" }];
     }
@@ -305,7 +306,7 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
       : open === "" && !/^(?:\\[A-Za-z@]+|\\.|[^\\{}\s])$/u.test(source)
         ? { from: value.span.from, to: value.span.to, insert: `{${source}}` }
         : { from: value.contentSpan.from, to: value.contentSpan.to, insert: source });
-    modes.set(patches.at(-1)!.from, node.mode);
+    modes.set(requireDefined(patches.at(-1), "Missing required patches.at(-1)").from, node.mode);
   }
   // A colour is an xcolor expression unless a model (`[rgb]`) stands before it, as the edits leave them.
   const final = (value: EditValue) => edits.find((edit) => edit.span.from === value.contentSpan.from && edit.span.to === value.contentSpan.to)?.text.trim() ??
@@ -326,7 +327,7 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
   for (const [index, patch] of patches.entries()) {
 
     const seam = patch.from + delta + patch.insert.length;
-    patches = withTerminator(text, patches, seam, modes.get(patch.from)!);
+    patches = withTerminator(text, patches, seam, requireDefined(modes.get(patch.from), "Missing required modes.get(patch.from)"));
     delta += requireArrayValue(patches, index).insert.length - (patch.to - patch.from);
   }
   return patches;

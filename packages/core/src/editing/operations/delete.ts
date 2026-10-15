@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { ARGUMENT_ROLES } from "../ownership/kinds.js";
@@ -66,7 +67,7 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
       if (edge.kind !== "walk-out") {
         return edge.outcome;
       }
-      slot = editNodeAt(tree.nodes, owner).parent!;
+      slot = requireDefined(editNodeAt(tree.nodes, owner).parent, "Missing required editNodeAt(tree.nodes, owner).parent");
       at = childIndex(tree, owner);
       continue;
     }
@@ -97,7 +98,7 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
         // selected first, as ⌦ does from before it.
         if (record.role === "base" && record.children.every((other) => other === child || view.role(other) === "invisible")) {
           const scripted = editNodeAt(tree.nodes, owner);
-          const parent = scripted.parent!;
+          const parent = requireDefined(scripted.parent, "Missing required scripted.parent");
           const index = childIndex(tree, owner);
           return { kind: "select", anchor: { slot: parent, index: index + 1 }, focus: { slot: parent, index } };
         }
@@ -128,7 +129,7 @@ export function deleteForward(view: EditView, caret: Position): EditOutcome {
       if (edge.kind !== "walk-out") {
         return edge.outcome;
       }
-      slot = editNodeAt(tree.nodes, owner).parent!;
+      slot = requireDefined(editNodeAt(tree.nodes, owner).parent, "Missing required editNodeAt(tree.nodes, owner).parent");
       at = childIndex(tree, owner) + 1;
       continue;
     }
@@ -230,7 +231,7 @@ function neighbouringRow(view: EditView, row: NodeId, edge: "start" | "end"): Ed
     return joined;
   }
   const { tree } = view;
-  const parent = editSlotAt(tree.slots, editNodeAt(tree.nodes, row).parent!);
+  const parent = editSlotAt(tree.slots, requireDefined(editNodeAt(tree.nodes, row).parent, "Missing required editNodeAt(tree.nodes, row).parent"));
   const rows = parent.children.filter((child) => editNodeAt(tree.nodes, child).kind === "row");
   const neighbour = rows[rows.indexOf(row) + (edge === "start" ? -1 : 1)];
   if (neighbour == null) {
@@ -263,7 +264,7 @@ function deleteItem(view: EditView, node: NodeId, direction: "backward" | "forwa
   const { tree } = view;
   const record = editNodeAt(tree.nodes, node);
   let span: Span = record.span;
-  const slot = editSlotAt(tree.slots, record.parent!);
+  const slot = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent"));
   if (slot.mode === "math" && /^\\[A-Za-z@]+$/u.test(tree.text.slice(span.from, span.to))) {
     span = { from: span.from, to: gapEnd(view, slot.id, span.to) };
   }

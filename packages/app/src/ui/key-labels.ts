@@ -20,7 +20,7 @@ export function readCurrentPlatformName(): string {
   if (userAgentPlatform?.trim()) {
     return userAgentPlatform;
   }
-  return navigator.platform ?? "";
+  return navigator.platform;
 }
 
 export function isMacLikePlatform(platformName: string = readCurrentPlatformName()): boolean {

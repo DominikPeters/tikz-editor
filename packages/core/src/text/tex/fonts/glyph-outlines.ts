@@ -72,7 +72,10 @@ const COMMON_FONTS = ["lmroman10-regular", "cmr10", "cmr7", "cmmi10", "cmmi7", "
  * loading without waiting for them.
  */
 export async function preloadTexGlyphOutlines(): Promise<void> {
-  if (typeof process !== "undefined" && process.versions?.node) {
+  const runtimeProcess: unknown = Reflect.get(globalThis, "process");
+  const versions: unknown = runtimeProcess !== null && typeof runtimeProcess === "object"
+    ? Reflect.get(runtimeProcess, "versions") : undefined;
+  if (versions !== null && typeof versions === "object" && Reflect.get(versions, "node")) {
     await loadAllTexGlyphOutlines();
   } else {
     void loadTexGlyphOutlines(COMMON_FONTS);

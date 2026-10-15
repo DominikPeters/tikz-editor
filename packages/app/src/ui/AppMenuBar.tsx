@@ -25,7 +25,7 @@ function MenuPopup({
   const hasWorkspaceList = items.some((item) => item.kind === "workspace-list");
   const hasCheckItems =
     hasWorkspaceList ||
-    items.some((item) => item.kind === "command" && bindings[item.commandId].checked != null);
+    items.some((item) => item.kind === "command" && bindings[item.commandId]?.checked != null);
 
   return (
     <div className={[css.popup, nested ? css.popupNested : ""].filter(Boolean).join(" ")} role="menu" data-select="chrome">
@@ -110,18 +110,18 @@ function MenuPopup({
         }
 
         const binding = bindings[item.commandId];
-        const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
+        const role = binding?.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
             key={`${itemKey}-${item.commandId}`}
             type="button"
             role={role}
-            aria-checked={binding.checked}
-            disabled={!binding.enabled}
+            aria-checked={binding?.checked}
+            disabled={!binding?.enabled}
             className={[css.item, hasCheckItems ? "" : css.itemNoCheck].filter(Boolean).join(" ")}
             data-testid={`menu-cmd-${item.commandId}`}
             onClick={() => {
-              if (!binding.enabled) {
+              if (!binding?.enabled) {
                 return;
               }
               void Promise.resolve(binding.run("menu")).then(() => {
@@ -129,7 +129,7 @@ function MenuPopup({
               });
             }}
           >
-            {hasCheckItems ? <span className={css.check}>{binding.checked ? "✓" : ""}</span> : null}
+            {hasCheckItems ? <span className={css.check}>{binding?.checked ? "✓" : ""}</span> : null}
             <span className={css.label}>{item.label}</span>
             <span className={css.shortcut}>{formatAccelerator(item.accelerator)}</span>
           </button>
@@ -151,7 +151,7 @@ export function AppMenuBar({
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }

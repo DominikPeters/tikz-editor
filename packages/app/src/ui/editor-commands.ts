@@ -144,8 +144,9 @@ export function isClipboardEditCurrent(context: SelectionCommandContext): boolea
 }
 
 export function isCodeMirrorEventTarget(target: EventTarget | null): boolean {
-  const element = target as { closest?: (selector: string) => unknown } | null;
-  return element?.closest?.(".cm-editor") != null;
+  if (!target || !("closest" in target) || typeof target.closest !== "function") return false;
+  const match: unknown = Reflect.apply(target.closest, target, [".cm-editor"]);
+  return match != null;
 }
 
 export async function copySelection(
@@ -351,11 +352,11 @@ function runPasteFromPayload(context: PasteCommandContext, payload: TikzClipboar
   };
   const activeFigureId = resolvedContextActiveFigureId(context);
   const precomputedResult = context.clipboardEditContext
-    ? executeDocumentEdit(context.clipboardEditContext, action, { parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions?.indentSize }) } })
-    : applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+    ? executeDocumentEdit(context.clipboardEditContext, action, { parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions.indentSize }) } })
+    : applyEditAction(context.source, context.editHandles, action, {
     parseOptions: {
       ...(activeFigureId === undefined ? {} : { activeFigureId }),
-      ...((context.parseOptions?.sourceFingerprint) === undefined ? {} : { sourceFingerprint: context.parseOptions?.sourceFingerprint })
+      ...((context.parseOptions?.sourceFingerprint) === undefined ? {} : { sourceFingerprint: context.parseOptions.sourceFingerprint })
     }
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -455,7 +456,7 @@ export function flattenForeachSelection(context: SelectionCommandContext): boole
     target: { kind: "span" as const, span: target.loopSpan },
     recursive: true
   };
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const precomputedResult = applyEditAction(context.source, context.editHandles, action, {
     parseOptions: parseOptionsForContext(context)
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -479,7 +480,7 @@ export function groupSelection(context: SelectionCommandContext): boolean {
     kind: "groupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  context.dispatch({ type: "APPLY_EDIT_ACTION", action, parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions?.indentSize }) } });
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action, parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions.indentSize }) } });
   return true;
 }
 
@@ -492,7 +493,7 @@ export function ungroupSelection(context: SelectionCommandContext): boolean {
     kind: "ungroupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  const precomputedResult = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const precomputedResult = applyEditAction(context.source, context.editHandles, action, {
     parseOptions: parseOptionsForContext(context)
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -616,7 +617,7 @@ export function canFlattenForeachSelection(context: SelectionCommandContext): bo
   if (!target) {
     return false;
   }
-  const result = applyEditAction(context.source, context.editHandles as EditHandle[], {
+  const result = applyEditAction(context.source, context.editHandles, {
     kind: "flattenForeach",
     target: { kind: "span", span: target.loopSpan },
     recursive: true
@@ -686,7 +687,7 @@ export function canAddTreeChild(context: SelectionCommandContext): boolean {
   if (target.kind === "child") {
     return !target.foreach;
   }
-  return target.kind === "root";
+  return true;
 }
 
 export function canAddMatrixRowAtEnd(context: SelectionCommandContext): boolean {
@@ -1500,7 +1501,7 @@ function canApplyMatrixAction(
   if (cached != null) {
     return cached;
   }
-  const result = applyEditAction(context.source, context.editHandles as EditHandle[], action, {
+  const result = applyEditAction(context.source, context.editHandles, action, {
     parseOptions: parseOptionsForContext(context)
   });
   const canApply = result.kind === "success" || result.kind === "partial";

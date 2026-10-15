@@ -159,7 +159,8 @@ export function readClipboardPayloadFromDataTransfer(
 export async function readClipboardPayloadFromSystemClipboard(): Promise<
   { kind: "success"; payload: TikzClipboardPayload } | { kind: "failure"; reason: ClipboardReadFailureReason }
 > {
-  if (typeof navigator === "undefined" || !navigator.clipboard) {
+  const clipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!clipboard) {
     return { kind: "failure", reason: "unavailable" };
   }
 
@@ -274,8 +275,8 @@ export async function buildSelectionPngBase64(svgText: string | null): Promise<s
   try {
     const image = await loadSvgImage(svgUrl);
     const dimensions = parseSvgDimensions(svgText);
-    const width = Math.max(1, Math.ceil((dimensions?.width ?? image.naturalWidth ?? image.width) * 4));
-    const height = Math.max(1, Math.ceil((dimensions?.height ?? image.naturalHeight ?? image.height) * 4));
+    const width = Math.max(1, Math.ceil((dimensions?.width ?? image.naturalWidth) * 4));
+    const height = Math.max(1, Math.ceil((dimensions?.height ?? image.naturalHeight) * 4));
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -301,7 +302,7 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
   }
   const parsed = new DOMParser().parseFromString(svgText, "image/svg+xml");
   const root = parsed.documentElement;
-  if (root?.nodeName.toLowerCase() !== "svg") {
+  if (root.nodeName.toLowerCase() !== "svg") {
     return null;
   }
 
@@ -390,7 +391,8 @@ export async function writeClipboardPayload(
   payload: TikzClipboardPayload,
   options: { svgText?: string | null } = {}
 ): Promise<boolean> {
-  if (typeof navigator === "undefined" || !navigator.clipboard) {
+  const clipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!clipboard) {
     logClipboardDebug("Clipboard write unavailable: navigator.clipboard missing.");
     return false;
   }

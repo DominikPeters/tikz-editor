@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { worldBounds, worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
@@ -125,7 +126,7 @@ export function planDistributeDeltas(
       }
     }
 
-    return order.get(left.sourceId)! - order.get(right.sourceId)!;
+    return requireDefined(order.get(left.sourceId), "Missing required order.get(left.sourceId)") - requireDefined(order.get(right.sourceId), "Missing required order.get(right.sourceId)");
   });
 
   const deltas = new Map<string, WorldPoint>();

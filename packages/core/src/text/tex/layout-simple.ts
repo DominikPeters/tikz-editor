@@ -5,7 +5,6 @@ import type { TextSourceMap } from "../source-map.js";
 import type { SourceCoordinateSpace } from "../source-coordinates.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type { NodeTextColorResolver } from "../types.js";
-import { computerModernTexMetricProvider } from "./fonts/computer-modern.js";
 import {
   defaultTexTextFontProfile,
   type TexTextFontProfile,
@@ -112,7 +111,7 @@ export function layoutSimpleTexParagraph(
   options: TexParagraphLayoutOptions
 ): TexParagraphLayoutResult {
   const textFontProfile = options.textFontProfile ?? defaultTexTextFontProfile;
-  const metricProvider = options.metricProvider ?? textFontProfile.metricProvider ?? computerModernTexMetricProvider;
+  const metricProvider = options.metricProvider ?? textFontProfile.metricProvider;
   const defaultAtPt = metricProvider.resolveFont().atPt;
   const font = options.font ?? textFontProfile.resolveTextFont(
     textFontProfile.defaultFontState,
@@ -124,11 +123,11 @@ export function layoutSimpleTexParagraph(
     options.width,
     options.colorResolver?.resolve.bind(options.colorResolver),
     {
-      ...(options.listProfile?.leftMarginEmByDepth !== undefined ? { listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth } : {}),
-      ...(options.listProfile?.bibliographyMargins !== undefined ? { bibliographyMargins: options.listProfile?.bibliographyMargins } : {}),
-      ...(options.listProfile?.descriptionLabelWidthPt !== undefined ? { descriptionLabelWidthPt: options.listProfile?.descriptionLabelWidthPt } : {}),
-      ...(options.listProfile?.descriptionLabelWidths !== undefined ? { descriptionLabelWidths: options.listProfile?.descriptionLabelWidths } : {}),
-      ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver?.cacheKey } : {}),
+      ...(options.listProfile?.leftMarginEmByDepth !== undefined ? { listLeftMarginEmByDepth: options.listProfile.leftMarginEmByDepth } : {}),
+      ...(options.listProfile?.bibliographyMargins !== undefined ? { bibliographyMargins: options.listProfile.bibliographyMargins } : {}),
+      ...(options.listProfile?.descriptionLabelWidthPt !== undefined ? { descriptionLabelWidthPt: options.listProfile.descriptionLabelWidthPt } : {}),
+      ...(options.listProfile?.descriptionLabelWidths !== undefined ? { descriptionLabelWidths: options.listProfile.descriptionLabelWidths } : {}),
+      ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver.cacheKey } : {}),
       fontSizePt: font.atPt,
       ...(options.baselineSkip !== undefined ? { baselineSkipPt: options.baselineSkip } : {}),
       ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}),
@@ -226,7 +225,7 @@ export function layoutSimpleTexParagraph(
   try {
     const layoutPreparation = prepareSimpleTexLayoutScope({
       blocks,
-      ...(analysis.ir?.items !== undefined ? { items: analysis.ir?.items } : {}),
+      ...(analysis.ir?.items !== undefined ? { items: analysis.ir.items } : {}),
       defaultAlignment,
       font,
       metricProvider,

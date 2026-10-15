@@ -198,6 +198,8 @@ export function buildHitRegions(
         contentHeight: textGeometry.height
       });
     }
+    const nodeWidth = element.nodeVisualWidth;
+    const nodeHeight = element.nodeVisualHeight;
     const hasNodeVisualBounds =
       Number.isFinite(element.nodeVisualWidth) &&
       Number.isFinite(element.nodeVisualHeight) &&
@@ -207,9 +209,7 @@ export function buildHitRegions(
       !element.adornment &&
       !element.matrixCell &&
       !sourceHasNonAdornmentNonText.has(sourceId);
-    if (isTextOnlyNodeSource && hasNodeVisualBounds) {
-      const nodeWidth = element.nodeVisualWidth!;
-      const nodeHeight = element.nodeVisualHeight!;
+    if (isTextOnlyNodeSource && hasNodeVisualBounds && nodeWidth !== undefined && nodeHeight !== undefined) {
       const hasExtraNodeArea =
         nodeWidth > textGeometry.width + 1e-6 ||
         nodeHeight > textGeometry.height + 1e-6;

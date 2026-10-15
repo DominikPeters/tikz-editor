@@ -211,7 +211,7 @@ export function TikzJaxModal({
     output.appendChild(container);
 
     const onFinished = (e: Event) => {
-      if (output.contains(e.target as Node)) {
+      if (output.contains(e.target instanceof Node ? e.target : null)) {
         const svg = output.querySelector("svg");
         if (svg) {
           svg.removeAttribute("width");

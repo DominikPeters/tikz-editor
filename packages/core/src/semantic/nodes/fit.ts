@@ -186,8 +186,8 @@ function isBareNodeReference(nameRaw: string): boolean {
 
 function resolveScopedNamedNodeGeometry(name: string, context: SemanticContext) {
   const frame = currentFrame(context);
-  const prefix = frame?.namePrefix ?? "";
-  const suffix = frame?.nameSuffix ?? "";
+  const prefix = frame.namePrefix;
+  const suffix = frame.nameSuffix;
   const scoped = applyRawNameScope(name, prefix, suffix);
   return readNamedNodeGeometry(context, scoped) ?? readNamedNodeGeometry(context, name);
 }

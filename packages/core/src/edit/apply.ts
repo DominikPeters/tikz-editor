@@ -67,22 +67,23 @@ function findPathItem(statements: Statement[], targetId: string): PathItem | nul
   return null;
 }
 
+const SUPPORTED_EDIT_INTENT_KINDS: ReadonlySet<string> = new Set(["move"]);
+
 export function applyEditIntent(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   intent: EditIntent,
   parseOptions: EditParseOptions = {}
 ): EditIntentResult {
-  if (intent.kind === "move") {
-    return applyMoveIntent(source, editHandles, intent, parseOptions);
+  if (!SUPPORTED_EDIT_INTENT_KINDS.has(intent.kind)) {
+    return { kind: "error", message: `Unknown intent kind: ${intent.kind}` };
   }
-
-  return { kind: "error", message: `Unknown intent kind: ${(intent as { kind: string }).kind}` };
+  return applyMoveIntent(source, editHandles, intent, parseOptions);
 }
 
 function applyMoveIntent(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   intent: Extract<EditIntent, { kind: "move" }>,
   parseOptions: EditParseOptions = {}
 ): EditIntentResult {
@@ -306,7 +307,7 @@ function normalizeSignedDegrees(value: number): number {
 
 function resolveRewriteHandle(
   handle: EditHandle,
-  editHandles: EditHandle[]
+  editHandles: readonly EditHandle[]
 ): EditHandle | null {
   if (!handle.rewriteTargetHandleId) {
     return handle;
@@ -318,7 +319,7 @@ function resolveRewriteHandle(
 function isConflictingRewriteTarget(
   candidate: EditHandle,
   rewriteHandle: EditHandle,
-  editHandles: EditHandle[]
+  editHandles: readonly EditHandle[]
 ): boolean {
   const candidateRewriteHandle = resolveRewriteHandle(candidate, editHandles);
   if (!candidateRewriteHandle) {

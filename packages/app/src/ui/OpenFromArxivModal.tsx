@@ -154,7 +154,7 @@ export function OpenFromArxivModal({
   }, [candidates]);
 
   async function loadPaper(): Promise<void> {
-    if (!mountedRef.current || !canLoad || !fetchArxivSource) {
+    if (!mountedRef.current || !canLoad) {
       return;
     }
     const nextInput = input.trim();

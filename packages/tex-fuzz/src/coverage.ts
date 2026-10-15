@@ -92,7 +92,10 @@ function bitCount(value: number): number {
   return Math.imul((value + (value >>> 4)) & 0x0f0f0f0f, 0x01010101) >>> 24;
 }
 
-export function mergeTexFuzzCoverage(reports: readonly TexFuzzCoverage[]): TexFuzzCoverage {
+/** Inputs may carry another numeric schema version; merging validates compatibility. */
+type TexFuzzCoverageInput = Omit<TexFuzzCoverage, "version"> & { readonly version: number };
+
+export function mergeTexFuzzCoverage(reports: readonly TexFuzzCoverageInput[]): TexFuzzCoverage {
   const merged = emptyMutableCoverage();
   for (const report of reports) {
     if (report.version !== TEX_FUZZ_COVERAGE_SCHEMA_VERSION) {

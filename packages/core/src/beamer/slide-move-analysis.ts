@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { isTexMathTypesettingCommand } from "../text/tex/math/parser.js";
@@ -218,10 +219,10 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
     return finish();
   }
   const frameSpans = frames.map(frame => beamerSlideSourceSpan(source, frame));
-  at = frameSpans.find(span => contains(span, at!))?.from ?? at;
+  at = frameSpans.find(span => contains(span, requireDefined(at, "Expected an internal slide-move-analysis value")))?.from ?? at;
   const destination = at;
   if (frameSpans.every((span, i) => i === 0 || requireArrayValue(frameSpans, i - 1).to === span.from) &&
-    requireArrayValue(frameSpans, 0).from <= at && at <= frameSpans.at(-1)!.to) return finish();
+    requireArrayValue(frameSpans, 0).from <= at && at <= requireDefined(frameSpans.at(-1), "Expected an internal slide-move-analysis value").to) return finish();
   const { definitions: defs, stored } = definitions(syntax);
   const structure = scopes(syntax, stored);
   const path = (position: number, kind?: Scope["kind"]) => structure.scopes.filter(scope => (!kind || scope.kind === kind) && contains(scope.span, position));
@@ -229,7 +230,7 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
   const affected = { from: Math.min(at, ...frameSpans.map(span => span.from)), to: Math.max(at, ...frameSpans.map(span => span.to)) };
   for (const frame of frames) {
     const from = path(frame.span.from), to = path(at);
-    const end = path(frame.endSpan!.from);
+    const end = path(requireDefined(frame.endSpan, "Expected an internal slide-move-analysis value").from);
     const boundary = [...from, ...to, ...end].find(scope => !from.includes(scope) || !to.includes(scope) || !end.includes(scope));
     if (boundary) issue("blocked", boundary.kind === "conditional" ? "This move crosses a conditional branch." : "This move crosses a TeX group boundary.", [excerpt(boundary.opening, "Boundary"), excerpt(frame.beginSpan, "Slide")]);
   }
@@ -348,17 +349,17 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
       const uses = resolveUses();
       let added = false;
       for (const use of uses.filter(use => use.before && use.before !== use.after)) {
-        const def = use.before!, consumers = uses.filter(item => item.name === def.name);
+        const def = requireDefined(use.before, "Expected an internal slide-move-analysis value"), consumers = uses.filter(item => item.name === def.name);
         const owners = consumers.map(item => movedFrame(item.at) ?? frames.find(frame => dependencies.some(dependency => dependency.frameId === frame.id && contains(dependency.span, item.at))));
         if (owners.some(owner => !owner) || !owners.length || movedFrame(def.span.from) || dependencies.some(item => inside(item.span, def.span)) ||
           defs.some(other => other.references.includes(def.name) && !movedFrame(other.span.from) && !dependencies.some(item => inside(item.span, other.span))) ||
           !canRelocate(def) || defs.filter(item => item.name === def.name).length !== 1 || def.span.from < document.documentBodySpan.from ||
-          !sameScope(def.span.from, destination) || !sameScope(def.span.from, owners[0]!.span.from)) continue;
+          !sameScope(def.span.from, destination) || !sameScope(def.span.from, requireDefined(owners[0], "Expected an internal slide-move-analysis value").span.from)) continue;
         // Carry exact declaration lines and attached comments, only when they do
         // not include another declaration/frame. Shared aliases count as consumers.
         const span = beamerSlideSourceSpan(source, { span: def.span });
         if (frameSpans.some(item => item.from < span.to && span.from < item.to) || dependencies.some(item => item.span.from < span.to && span.from < item.span.to)) continue;
-        const owner = frames.find(frame => owners.includes(frame))!;
+        const owner = requireDefined(frames.find(frame => owners.includes(frame)), "Expected an internal slide-move-analysis value");
         dependencies.push({ frameId: owner.id, span }); added = true;
       }
       dependencies.sort((a, b) => a.span.from - b.span.from);
@@ -368,7 +369,7 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
   for (const use of resolveUses()) {
     if (use.before === use.after) continue;
     const frame = document.frames.find(frame => contains(frame.span, use.at));
-    const subject = frame ? `“${frame.title?.value?.trim() ? frame.title.value : `Slide ${document.frames.indexOf(frame) + 1}`}”` : "This source";
+    const subject = frame ? `“${frame.title?.value.trim() ? frame.title.value : `Slide ${document.frames.indexOf(frame) + 1}`}”` : "This source";
     const excerpts = [excerpt(use.span, "Use"), ...(use.before ? [excerpt(use.before.span, "Current definition")] : []), ...(use.after ? [excerpt(use.after.span, "Definition after move")] : [])];
     issue(use.before && !use.after ? "blocked" : "review", use.before && !use.after ? `${subject} would lose the definition of \\${use.name}.` : `${subject} would use a different definition of \\${use.name}.`, excerpts);
   }

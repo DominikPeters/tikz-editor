@@ -118,18 +118,7 @@ function createCache(
   const propertyTargetCache = new Map<string, PropertyTargetResolution>();
   const pathStatementCache = new Map<string, PathStatement | null>();
 
-  const cache: EditAnalysisCache = {
-    source,
-    activeFigureId,
-    parseResult,
-    statementSnapshot,
-    propertyTargetCache,
-    pathStatementCache,
-    figureTargetCache: null,
-    view: null as unknown as EditAnalysisView
-  };
-
-  cache.view = {
+  const view: EditAnalysisView = {
     source,
     activeFigureId,
     parseResult,
@@ -161,6 +150,10 @@ function createCache(
     }
   };
 
+  const cache: EditAnalysisCache = {
+    source, activeFigureId, parseResult, statementSnapshot,
+    propertyTargetCache, pathStatementCache, figureTargetCache: null, view
+  };
   return cache;
 }
 

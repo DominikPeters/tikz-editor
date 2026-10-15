@@ -106,10 +106,7 @@ export function remapTexVListLayoutSourceMap(
       if ("paragraphId" in report) {
         return remapParagraphLayoutReportSourceMap(report, sourceMap);
       }
-      if (report.kind === "tex-vlist-boxes") {
-        return remapTexVListBoxLayoutReport(report, sourceMap);
-      }
-      return report;
+      return remapTexVListBoxLayoutReport(report, sourceMap);
     })
   };
 }
@@ -252,11 +249,12 @@ function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
     }
   }
 
+  const rawSourceStart = segment.sourceStartRaw;
   return groups.map(({ start, end }) => {
     const sourceProjection = mapInputSpanWithPolicy(
       sourceMap,
-      segment.sourceStartRaw! + start,
-      segment.sourceStartRaw! + end
+      rawSourceStart + start,
+      rawSourceStart + end
     );
     const xStart = segment.caretStops?.[start] ?? segment.x;
     const xEnd = segment.caretStops?.[end] ?? xStart;
@@ -614,11 +612,12 @@ function remapOptionEntry(
   entry: OptionEntry,
   sourceMap: TextSourceMap
 ): OptionEntry {
+  const keySpan = "keySpan" in entry ? entry.keySpan : undefined;
   return {
     ...entry,
     span: mapOptionSpan(entry.span, sourceMap),
-    ...("keySpan" in entry && entry.keySpan
-      ? { keySpan: mapOptionSpan(entry.keySpan, sourceMap) }
+    ...(keySpan !== undefined
+      ? { keySpan: mapOptionSpan(keySpan, sourceMap) }
       : {}),
     ...(entry.kind === "kv" && entry.valueSpan
       ? { valueSpan: mapOptionSpan(entry.valueSpan, sourceMap) }

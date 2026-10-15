@@ -108,7 +108,7 @@ function flashChangedToken(tokenElement: HTMLElement): void {
 
 function flashLineTokens(lineElement: HTMLElement): void {
   lineElement.querySelectorAll<HTMLElement>(".sourceToken").forEach((tokenElement) => {
-    if (tokenElement.textContent?.trim()) {
+    if (tokenElement.textContent.trim()) {
       flashChangedToken(tokenElement);
     }
   });

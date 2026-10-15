@@ -71,7 +71,8 @@ export async function exportStandaloneLatexDownload(
     if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
       return reportExportFailure("Standalone LaTeX export requires object URL support.");
     }
-    if (!document.body) {
+    const documentBody: unknown = document.body;
+    if (!documentBody) {
       return reportExportFailure("Standalone LaTeX export requires an active document.");
     }
 
@@ -149,7 +150,8 @@ export async function exportPngDownload(
   if (typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
     return reportExportFailure("PNG export requires object URL support.");
   }
-  if (!document.body) {
+  const documentBody: unknown = document.body;
+    if (!documentBody) {
     return reportExportFailure("PNG export requires an active document.");
   }
 
@@ -207,7 +209,8 @@ export async function exportPdfDownload(
     if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
       return reportExportFailure("PDF export requires object URL support.");
     }
-    if (!document.body) {
+    const documentBody: unknown = document.body;
+    if (!documentBody) {
       return reportExportFailure("PDF export requires an active document.");
     }
 
@@ -276,7 +279,8 @@ export async function downloadSvgMarkup(
     if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof URL.revokeObjectURL !== "function") {
       return reportExportFailure("SVG export requires object URL support.");
     }
-    if (!document.body) {
+    const documentBody: unknown = document.body;
+    if (!documentBody) {
       return reportExportFailure("SVG export requires an active document.");
     }
 
@@ -318,7 +322,8 @@ export async function copySvgText(svgMarkup: string): Promise<boolean> {
     }
   }
 
-  if (typeof navigator === "undefined" || typeof navigator.clipboard?.writeText !== "function") {
+  const browserClipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!browserClipboard || typeof navigator.clipboard.writeText !== "function") {
     return reportExportFailure("Clipboard access is unavailable; SVG was not copied.");
   }
 
@@ -337,12 +342,12 @@ export function validateSvgMarkup(svgMarkup: string): { valid: true } | { valid:
   const parsed = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
   if (parsed.getElementsByTagName("parsererror").length > 0) {
     const parserError = parsed.getElementsByTagName("parsererror")[0];
-    const parserMessage = parserError?.textContent?.trim() ?? "";
+    const parserMessage = parserError?.textContent.trim() ?? "";
     const message = parserMessage.length > 0 ? parserMessage : "The SVG markup could not be parsed.";
     return { valid: false, message };
   }
   const root = parsed.documentElement;
-  if (root?.nodeName.toLowerCase() !== "svg") {
+  if (root.nodeName.toLowerCase() !== "svg") {
     return { valid: false, message: "The document must contain a single <svg> root element." };
   }
   return { valid: true };
@@ -426,8 +431,13 @@ function parseSvgDocument(text: string): SVGSVGElement | null {
   }
   const parsed = new DOMParser().parseFromString(text, "image/svg+xml");
   const svgElement = parsed.documentElement;
-  if (svgElement?.nodeName.toLowerCase() !== "svg") {
+  if (svgElement.nodeName.toLowerCase() !== "svg") {
     return null;
   }
-  return svgElement as unknown as SVGSVGElement;
+  if (!isSvgRootElement(svgElement)) throw new Error("The SVG root has an unsupported namespace.");
+  return svgElement;
+}
+
+function isSvgRootElement(element: Element): element is SVGSVGElement {
+  return element.namespaceURI === "http://www.w3.org/2000/svg" && element.localName === "svg";
 }

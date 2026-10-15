@@ -72,9 +72,6 @@ function attachTexHBoxesBeforeVListParagraphItems(
   const outputItems: TexVListItem[] = [];
   const paragraphPathRemaps: TexVListPathRemap[] = [];
   for (const [index, item] of items.entries()) {
-    if (!item) {
-      continue;
-    }
     const originalPath = [...originalPathPrefix, index];
     if (item.kind === "vbox") {
       const outputPath = [...outputPathPrefix, outputItems.length];

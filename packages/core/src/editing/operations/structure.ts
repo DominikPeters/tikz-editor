@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import { capabilityChain, decideOwner, inTitle, type ChainLink } from "../ownership/keys.js";
@@ -140,8 +141,8 @@ function wrapperEdge(view: EditView, link: ChainLink, at: number): { position: P
   }
   const index = childIndex(tree, node.id);
   return before
-    ? { position: { slot: node.parent!, index: index + 1 }, offset: node.span.to }
-    : { position: { slot: node.parent!, index }, offset: node.span.from };
+    ? { position: { slot: requireDefined(node.parent, "Missing required node.parent"), index: index + 1 }, offset: node.span.to }
+    : { position: { slot: requireDefined(node.parent, "Missing required node.parent"), index }, offset: node.span.from };
 }
 
 function visibleOffsets(view: EditView, slot: SlotId): Span[] {
@@ -154,7 +155,7 @@ export function inkOnLine(view: EditView, slot: SlotId, at: number): boolean {
   // From the block the caret's line is in, so that ink before a wrapper around the caret counts.
   let from = slot;
   for (let node = editSlotAt(tree.slots, from).node; !LINE_STARTS.has(editNodeAt(tree.nodes, node).kind) && editNodeAt(tree.nodes, node).parent != null; node = editSlotAt(tree.slots, from).node) {
-    from = editNodeAt(tree.nodes, node).parent!;
+    from = requireDefined(editNodeAt(tree.nodes, node).parent, "Missing required editNodeAt(tree.nodes, node).parent");
   }
   return lineBefore(view, from, at) === "ink";
 }
@@ -285,7 +286,7 @@ function protectBreak(insert: string, text: string, after: number): string {
 function leaveDisplay(view: EditView, display: NodeId): EditOutcome {
   const { tree } = view;
   const node = editNodeAt(tree.nodes, display);
-  const siblings = editSlotAt(tree.slots, node.parent!).children;
+  const siblings = editSlotAt(tree.slots, requireDefined(node.parent, "Missing required node.parent")).children;
   const next = siblings[siblings.indexOf(display) + 1];
   if (next != null && editNodeAt(tree.nodes, next).kind === "paragraph") {
     return { kind: "move", to: { slot: requireArrayValue(editNodeAt(tree.nodes, next).slots, 0), index: 0 } };
@@ -377,7 +378,7 @@ function nextSlot(view: EditView, owner: NodeId, slot: SlotId, back: boolean): E
   }
   const node = editNodeAt(tree.nodes, owner);
   const index = childIndex(tree, owner);
-  return { kind: "move", to: { slot: node.parent!, index: back ? index : index + 1 } };
+  return { kind: "move", to: { slot: requireDefined(node.parent, "Missing required node.parent"), index: back ? index : index + 1 } };
 }
 
 /** The next cell (adding one with `&` at a row's end, unless the column count is fixed), or the previous. */
@@ -389,7 +390,7 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
   if (target) {
     return { kind: "move", to: { slot: target.id, index: back ? target.children.length : 0 } };
   }
-  const rows = editSlotAt(tree.slots, editNodeAt(tree.nodes, row).parent!).children.filter((child) => editNodeAt(tree.nodes, child).kind === "row");
+  const rows = editSlotAt(tree.slots, requireDefined(editNodeAt(tree.nodes, row).parent, "Missing required editNodeAt(tree.nodes, row).parent")).children.filter((child) => editNodeAt(tree.nodes, child).kind === "row");
   const neighbour = rows[rows.indexOf(row) + (back ? -1 : 1)];
   if (back || rowIsFull(view, cell)) {
     if (neighbour == null) {
@@ -543,7 +544,7 @@ function nestable(view: EditView, list: NodeId, from: number, to: number): boole
   const { tree } = view;
   const depth = (id: NodeId) => {
     let lists = 0;
-    for (let node: NodeId | null = id; node != null; node = editNodeAt(tree.nodes, node).parent == null ? null : editSlotAt(tree.slots, editNodeAt(tree.nodes, node).parent!).node) {
+    for (let node: NodeId | null = id; node != null; node = editNodeAt(tree.nodes, node).parent == null ? null : editSlotAt(tree.slots, requireDefined(editNodeAt(tree.nodes, node).parent, "Missing required editNodeAt(tree.nodes, node).parent")).node) {
       lists += editNodeAt(tree.nodes, node).kind === "list" ? 1 : 0;
     }
     return lists;
@@ -601,7 +602,7 @@ export function joinBackward(view: EditView, caret: Position): EditOutcome {
     return patch ? patchOutcome(patch) : { kind: "none" };
   }
   const node = editNodeAt(tree.nodes, block);
-  const siblings = editSlotAt(tree.slots, node.parent!).children;
+  const siblings = editSlotAt(tree.slots, requireDefined(node.parent, "Missing required node.parent")).children;
   const previous = siblings[siblings.indexOf(block) - 1];
   if (previous != null && editNodeAt(tree.nodes, previous).kind === "paragraph" && node.kind === "paragraph") {
     const from = trimmedEnd(tree.text, editNodeAt(tree.nodes, previous).span);
@@ -630,7 +631,7 @@ export function joinForward(view: EditView, caret: Position): EditOutcome {
     return patch ? patchOutcome(patch) : { kind: "none" };
   }
   const node = editNodeAt(tree.nodes, block);
-  const siblings = editSlotAt(tree.slots, node.parent!).children;
+  const siblings = editSlotAt(tree.slots, requireDefined(node.parent, "Missing required node.parent")).children;
   const next = siblings[siblings.indexOf(block) + 1];
   if (next != null && editNodeAt(tree.nodes, next).kind === "paragraph" && node.kind === "paragraph") {
     const from = trimmedEnd(tree.text, node.span);
@@ -669,12 +670,12 @@ function blockAt(view: EditView, slot: SlotId): NodeId | null {
 
 function firstBlockOf(view: EditView, block: NodeId): boolean {
   const node = editNodeAt(view.tree.nodes, block);
-  return node.kind === "item" || editSlotAt(view.tree.slots, node.parent!).children[0] === block;
+  return node.kind === "item" || editSlotAt(view.tree.slots, requireDefined(node.parent, "Missing required node.parent")).children[0] === block;
 }
 
 function lastBlockOf(view: EditView, block: NodeId): boolean {
   const node = editNodeAt(view.tree.nodes, block);
-  return node.kind === "item" || editSlotAt(view.tree.slots, node.parent!).children.at(-1) === block;
+  return node.kind === "item" || editSlotAt(view.tree.slots, requireDefined(node.parent, "Missing required node.parent")).children.at(-1) === block;
 }
 
 function patchOutcome(patch: StructuralPatch): EditOutcome {

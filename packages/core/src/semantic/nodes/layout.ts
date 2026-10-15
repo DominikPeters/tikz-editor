@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import type {
@@ -56,12 +57,12 @@ export function resolveNodeLayout(
   const parseNodeLength = (raw: string): number | null =>
     parseLength(raw, "pt", { unitFactors: { em: fontSize } });
 
-  const defaultInner = parseNodeLength(".3333em")!;
+  const defaultInner = requireDefined(parseNodeLength(".3333em"), "Expected an internal layout value");
   let innerXSep = defaultInner;
   let innerYSep = defaultInner;
   let textWidth: number | null = null;
-  let minWidth = parseNodeLength("1pt")!;
-  let minHeight = parseNodeLength("1pt")!;
+  let minWidth = requireDefined(parseNodeLength("1pt"), "Expected an internal layout value");
+  let minHeight = requireDefined(parseNodeLength("1pt"), "Expected an internal layout value");
   let minSize: number | null = null;
   let textHeightOverride: number | null = null;
   let textDepthOverride: number | null = null;
@@ -469,14 +470,13 @@ function getPlainTextMeasureContext(): CanvasRenderingContext2D | null {
     return plainTextMeasureContext;
   }
 
-  const documentLike = (globalThis as { document?: { createElement?: (tagName: string) => unknown } }).document;
-  if (typeof documentLike?.createElement !== "function") {
+  if (typeof document === "undefined" || typeof document.createElement !== "function") {
     return null;
   }
 
-  const canvas = documentLike.createElement("canvas") as { getContext?: (contextId: "2d") => CanvasRenderingContext2D | null };
+  const canvas = document.createElement("canvas");
   try {
-    plainTextMeasureContext = typeof canvas?.getContext === "function" ? canvas.getContext("2d") : null;
+    plainTextMeasureContext = typeof canvas.getContext === "function" ? canvas.getContext("2d") : null;
   } catch {
     plainTextMeasureContext = null;
   }
@@ -525,10 +525,7 @@ function resolveParagraphAlignment(
   if (explicitAlign === "left" || explicitAlign === "flush left") {
     return "ragged-right";
   }
-  if (explicitAlign === "center" || explicitAlign === "flush center") {
-    return "center";
-  }
-  return "ragged-right";
+  return "center";
 }
 
 function parseAlignOption(valueRaw: string): ResolvedStyle["textAlign"] | null {

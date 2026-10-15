@@ -78,6 +78,6 @@ export function isPresentationMessage(value: unknown, sessionId: string): value 
   if (command.type === "jump" || command.type === "thumbnail") return Number.isSafeInteger(command.frame) && command.frame >= 0;
   if (command.type === "blank") return ["none", "black", "white"].includes(command.value);
   if (command.type === "timer") return ["start", "pause", "reset"].includes(command.action);
-  if (command.type === "close-view") return command.role === "audience" || command.role === "presenter";
+  if (command.type === "close-view") return command.role === "presenter";
   return ["next", "previous", "next-frame", "previous-frame", "stop", "show-presenter", "recover-output", "swap-displays"].includes(command.type);
 }

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../../utils/invariants.js";
 import { requireArrayValue } from "../../../utils/collections.js";
 import {
   getOrBuildTextSegmentCaretStops,
@@ -111,6 +112,7 @@ function lineReportY(value: number): TexLineY {
 }
 
 function mathBaselineCoord(value: number): MathBaselineCoord {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Named constructor establishes the math-baseline coordinate frame.
   return value as MathBaselineCoord;
 }
 
@@ -612,12 +614,12 @@ type CaretMappingErrorFactory<T extends ResultBase> = (
   message: string
 ) => T;
 
-function createCaretMappingErrorFactory<T extends ResultBase>(
+function createCaretMappingErrorFactory<T extends object>(
   paragraphId: string,
-  base: Omit<T, keyof ResultBase>
-): CaretMappingErrorFactory<T> {
+  base: T
+): CaretMappingErrorFactory<T & ResultBase> {
   return (code, message) => ({
-    ...(base as object),
+    ...base,
     ok: false,
     paragraphId,
     error: {
@@ -625,7 +627,7 @@ function createCaretMappingErrorFactory<T extends ResultBase>(
       paragraphId,
       message,
     },
-  } as T);
+  });
 }
 
 function findReportByParagraphId(
@@ -2083,14 +2085,14 @@ function buildRunRawRanges(
       return false;
     }
     const start = nextTextStart();
-    if (!Number.isFinite(start)) {
+    if (start === null || !Number.isFinite(start)) {
       return false;
     }
     if (run.kind === 'space') {
-      return /\s/.test(sourceText.charAt(start as number)) || consumeTeXLinebreakCommand(start as number) != null;
+      return /\s/.test(sourceText.charAt(start)) || consumeTeXLinebreakCommand(start) != null;
     }
     const text = String(run.text ?? '');
-    return text.length > 0 && sourceText.startsWith(text, start as number);
+    return text.length > 0 && sourceText.startsWith(text, start);
   };
 
   for (let runIndex = 0; runIndex < runs.length; runIndex++) {
@@ -3109,26 +3111,26 @@ function displayMathSourceForHBox(item: TexHBoxItem): TexMathBox | null {
     return null;
   }
   if (
-    !Number.isFinite(hitMap.sourceStart) ||
-    !Number.isFinite(hitMap.sourceEnd) ||
-    !Number.isFinite(hitMap.contentStart) ||
-    !Number.isFinite(hitMap.contentEnd) ||
-    !Number.isFinite(hitMap.width) ||
-    !Number.isFinite(hitMap.height) ||
-    !Number.isFinite(hitMap.depth)
+    typeof hitMap.sourceStart !== 'number' || !Number.isFinite(hitMap.sourceStart) ||
+    typeof hitMap.sourceEnd !== 'number' || !Number.isFinite(hitMap.sourceEnd) ||
+    typeof hitMap.contentStart !== 'number' || !Number.isFinite(hitMap.contentStart) ||
+    typeof hitMap.contentEnd !== 'number' || !Number.isFinite(hitMap.contentEnd) ||
+    typeof hitMap.width !== 'number' || !Number.isFinite(hitMap.width) ||
+    typeof hitMap.height !== 'number' || !Number.isFinite(hitMap.height) ||
+    typeof hitMap.depth !== 'number' || !Number.isFinite(hitMap.depth)
   ) {
     return null;
   }
   return {
     source: '',
     content: '',
-    sourceStart: hitMap.sourceStart as number,
-    sourceEnd: hitMap.sourceEnd as number,
-    contentStart: hitMap.contentStart as number,
-    contentEnd: hitMap.contentEnd as number,
-    width: texLength(hitMap.width as number),
-    height: texLength(hitMap.height as number),
-    depth: texLength(hitMap.depth as number),
+    sourceStart: hitMap.sourceStart,
+    sourceEnd: hitMap.sourceEnd,
+    contentStart: hitMap.contentStart,
+    contentEnd: hitMap.contentEnd,
+    width: texLength(hitMap.width),
+    height: texLength(hitMap.height),
+    depth: texLength(hitMap.depth),
     ...(hitMap.caretMap !== undefined ? { caretMap: hitMap.caretMap } : {}),
     ...(hitMap.caretStops !== undefined ? { caretStops: hitMap.caretStops } : {}),
     ...(hitMap.constructRanges !== undefined ? { constructRanges: hitMap.constructRanges } : {}),
@@ -4038,7 +4040,7 @@ function inferLineByClientPoint(
     }
   }
 
-  return best!;
+  return requireDefined(best, "Hit map must contain at least one line.");
 }
 
 function mapBuildFailureCode(message: string): CaretMappingErrorCode {
@@ -4130,7 +4132,7 @@ export async function getKnuthPlassCaretFromPoint(
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<CaretHitResult> {
   const paragraphId = String(params?.paragraphId ?? '');
-  const createError = createCaretMappingErrorFactory<CaretHitResult>(paragraphId, {
+  const createError = createCaretMappingErrorFactory(paragraphId, {
     offset: null,
     lineIndex: null,
     kind: null,
@@ -4200,7 +4202,7 @@ export async function getKnuthPlassPointFromOffset(
   params: Partial<PointFromOffsetParams> | null | undefined
 ): Promise<CaretPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
-  const createError = createCaretMappingErrorFactory<CaretPointResult>(paragraphId, {
+  const createError = createCaretMappingErrorFactory(paragraphId, {
     offset: null,
     lineIndex: null,
     lineLocalX: null,
@@ -4305,7 +4307,7 @@ export async function getKnuthPlassSelectionRects(
 ): Promise<SelectionRectsResult> {
   const paragraphId = String(params?.paragraphId ?? '');
   const sourceCoordinateSpace = params?.sourceCoordinateSpace ?? 'layout';
-  const createError = createCaretMappingErrorFactory<SelectionRectsResult>(paragraphId, {
+  const createError = createCaretMappingErrorFactory(paragraphId, {
     startOffset: sourceOffsetForSpace(0, sourceCoordinateSpace),
     endOffset: sourceOffsetForSpace(0, sourceCoordinateSpace),
     rects: [],
@@ -4440,7 +4442,7 @@ export async function getKnuthPlassLineRangeFromPoint(
   params: Partial<CaretFromPointParams> | null | undefined
 ): Promise<LineRangeFromPointResult> {
   const paragraphId = String(params?.paragraphId ?? '');
-  const createError = createCaretMappingErrorFactory<LineRangeFromPointResult>(paragraphId, {
+  const createError = createCaretMappingErrorFactory(paragraphId, {
     lineIndex: null,
     lineStartOffset: null,
     lineEndOffset: null,

@@ -36,9 +36,9 @@ export const TEX_FUZZ_MATH_LAYOUT_ORACLE_FORMULAS = [
 
 export type TexFuzzMathSymbol = typeof TEX_FUZZ_MATH_SYMBOLS[number];
 
-const symbolSet = new Set<string>(TEX_FUZZ_MATH_SYMBOLS);
 export function texFuzzMathSymbolFeature(value: string): `math.symbol.${TexFuzzMathSymbol}` | null {
-  return symbolSet.has(value) ? `math.symbol.${value as TexFuzzMathSymbol}` : null;
+  const symbol = TEX_FUZZ_MATH_SYMBOLS.find(symbol => symbol === value);
+  return symbol === undefined ? null : `math.symbol.${symbol}`;
 }
 
 /** These small cases must pass the glyph oracle independently of random sampling. */

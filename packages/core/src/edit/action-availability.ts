@@ -185,7 +185,7 @@ export function getEditActionAvailability(
   const facts = deriveFacts(input);
   const requested = actionIds ? new Set(actionIds) : null;
 
-  const availability = {} as EditActionAvailability;
+  const availability: Partial<EditActionAvailability> = {};
   for (const actionId of EDIT_ACTION_IDS) {
     if (requested && !requested.has(actionId)) {
       // Keep the interface unified by returning all actions even when the caller
@@ -196,7 +196,12 @@ export function getEditActionAvailability(
     availability[actionId] = evaluateRule(actionId, facts);
   }
 
+  if (!hasAllActionAvailability(availability)) throw new Error("Incomplete edit action availability");
   return availability;
+}
+
+function hasAllActionAvailability(value: Partial<EditActionAvailability>): value is EditActionAvailability {
+  return EDIT_ACTION_IDS.every(actionId => value[actionId] !== undefined);
 }
 
 function evaluateRule(actionId: EditActionId, facts: AvailabilityFacts): ActionAvailability {
@@ -461,14 +466,14 @@ function collectAnchorSegmentKinds(analysis: ExplicitPathAnalysis, anchorIndex: 
     if (segment.startAnchorIndex === anchorIndex) {
       if (segment.kind === "line") {
         summary.hasNextLine = true;
-      } else if (segment.kind === "cubic") {
+      } else {
         summary.hasNextCubic = true;
       }
     }
     if (segment.endAnchorIndex === anchorIndex) {
       if (segment.kind === "line") {
         summary.hasPreviousLine = true;
-      } else if (segment.kind === "cubic") {
+      } else {
         summary.hasPreviousCubic = true;
       }
     }

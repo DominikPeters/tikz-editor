@@ -22,7 +22,7 @@ export function undrawnLayerPageStands(before: { source: string; span: { from: n
 export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapshot, diagnostics: readonly { code: string; message: string }[]): DeckActiveFrame {
   const rootId = layer.overlayLayer?.rootId;
   const entry = frame.layout.embeddedTikz.find(picture => picture.overlay?.rootId === rootId);
-  if (!entry || !layer.svgModel || !layer.parseResult || !layer.scene) return frame;
+  if (!entry?.overlay || !layer.svgModel || !layer.parseResult || !layer.scene) return frame;
   const model = namespaceSvgModel(layer.svgModel, entry.itemId);
   // Keep each object as a separate DOM part. A drag then patches only the
   // moved objects, instead of replacing the entire embedded picture group.
@@ -43,7 +43,7 @@ export function composeOverlayPage(frame: DeckActiveFrame, layer: SessionSnapsho
     bounds: bounds ? { x: bounds.minX, y: model.viewBox.height - bounds.maxY,
       width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY } : entry.bounds,
     viewBox: model.viewBox, model,
-    overlay: { ...entry.overlay!, elements: layer.scene.elements, sourceOffset: 0, pageCoordinates: true } };
+    overlay: { ...entry.overlay, elements: layer.scene.elements, sourceOffset: 0, pageCoordinates: true } };
   return { ...frame, svgModel, svg: serializeSvgModel(svgModel), layout: { ...frame.layout,
     items: frame.layout.items.map(item => item.id === entry.itemId ? { ...item, sourceSpan: updated.sourceSpan, bounds: updated.bounds } : item),
     embeddedTikz: frame.layout.embeddedTikz.map(picture => picture === entry ? updated : picture) } };

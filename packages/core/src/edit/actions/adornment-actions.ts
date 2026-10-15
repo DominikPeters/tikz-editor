@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { extractNodeAdornmentPlan } from "../../semantic/path/label-quotes.js";
@@ -51,7 +52,7 @@ export function applyDuplicateAdornmentAction(
       }
     ],
     selectedSourceIds: [targetId],
-    changedSourceIds: [resolved.target.ownerSourceId!]
+    changedSourceIds: [requireDefined(resolved.target.ownerSourceId, "Missing required resolved.target.ownerSourceId")]
   };
 }
 

@@ -35,7 +35,7 @@ export function PresentationToolbar({ onOptions }: { onOptions: () => void }) {
   useEffect(() => {
     if (!open) return;
     menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    const close = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) setOpen(false); };
+    const close = (event: PointerEvent) => { if (!ref.current?.contains(event.target instanceof Node ? event.target : null) && !menuRef.current?.contains(event.target instanceof Node ? event.target : null)) setOpen(false); };
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); ref.current?.querySelector<HTMLButtonElement>('[aria-label="Presentation actions"]')?.focus(); } };
     window.addEventListener("pointerdown", close); window.addEventListener("keydown", escape);
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("keydown", escape); };
@@ -56,7 +56,7 @@ export function PresentationToolbar({ onOptions }: { onOptions: () => void }) {
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
       event.preventDefault();
       const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
-      const index = items.indexOf(event.target as HTMLButtonElement);
+      const index = items.findIndex(button => button === event.target);
       const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
       items[next]?.focus();
     }}>

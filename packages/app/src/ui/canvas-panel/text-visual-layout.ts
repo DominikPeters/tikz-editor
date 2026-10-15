@@ -220,7 +220,7 @@ export function buildRenderLinePrefixWidths(
         continue;
       }
 
-      if (syntax === "tex" && /[A-Za-z]/.test(nextChar)) {
+      if (/[A-Za-z]/.test(nextChar)) {
         const commandEnd = findControlWordEnd(lineText, cursor);
         const command = lineText.slice(cursor + 1, commandEnd);
         const commandWidth =

@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -49,11 +50,9 @@ const LIST_ENVIRONMENTS = new Set([
   "enumerate",
   "description",
 ]);
-const BLOCK_ENVIRONMENTS = new Set<BeamerBlockEnvironment>([
-  "block",
-  "alertblock",
-  "exampleblock",
-]);
+function isBlockEnvironment(name: string): name is BeamerBlockEnvironment {
+  return name === "block" || name === "alertblock" || name === "exampleblock";
+}
 const PROOF_ENVIRONMENTS = new Map<string, string>([
   ["proof", "Proof"],
   ["Proof", "Proof"],
@@ -127,7 +126,7 @@ export function parseBeamerFrameBody(
         token.name !== "tcolorbox" &&
         !isProofEnvironment(token.name) &&
         !theoremOccurrences.has(token.span.from) &&
-        !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment))
+        !isBlockEnvironment(token.name))
     ) {
       continue;
     }
@@ -710,9 +709,9 @@ function parseBlock(params: {
     if (setup) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-setup",
       span: { from: setup.from, to: setup.to }, message: "Global tcolorbox style declarations are not supported in this preview." });
     const lowerPart = beamerControlSequencesIn(context, bodySpan).find(command => ["tcblower", "tcbsubtitle"].includes(command.name));
-    const nestedBox = beamerEnvironmentBoundariesIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)));
+    const nestedBox = beamerEnvironmentBoundariesIn(context, bodySpan).find(token => token.kind === "begin" && (token.name === "tcolorbox" || isBlockEnvironment(token.name)));
     if (lowerPart || nestedBox) parsed.diagnostics.push({ severity: "warning", code: "beamer-tcolorbox-unsupported-content",
-      span: nestedBox?.span ?? { from: lowerPart!.from, to: lowerPart!.to }, message: "Lower, subtitle and nested package boxes are not supported in this tcolorbox preview." });
+      span: nestedBox?.span ?? { from: requireDefined(lowerPart, "Expected an internal content value").from, to: requireDefined(lowerPart, "Expected an internal content value").to }, message: "Lower, subtitle and nested package boxes are not supported in this tcolorbox preview." });
     diagnostics.push(...parsed.diagnostics);
     const id = `${ownerId}:tcolorbox:${nodeIndex}`;
     if (parsed.diagnostics.length) return { kind: "unsupported", id, span: { from: begin.span.from, to: end.span.to }, message: requireArrayValue(parsed.diagnostics, 0).message };
@@ -748,6 +747,8 @@ function parseBlock(params: {
       span: begin.span,
     });
   }
+  const blockEnvironment = begin.name;
+  if (!isBlockEnvironment(blockEnvironment)) throw new Error("Expected a Beamer block environment");
   const fallbackTitle: BeamerBlockBodyNode["title"] = title ?? {
     span: { from: begin.span.to, to: begin.span.to },
     contentSpan: { from: begin.span.to, to: begin.span.to },
@@ -762,7 +763,7 @@ function parseBlock(params: {
   return {
     kind: "block",
     id: `${ownerId}:block:${nodeIndex}`,
-    environment: begin.name as BeamerBlockEnvironment,
+    environment: blockEnvironment,
     span: { from: begin.span.from, to: end.span.to },
     beginSpan: begin.span,
     endSpan: end.span,
@@ -1044,7 +1045,7 @@ function parseColumnFlow(
         !isProofEnvironment(token.name) &&
         token.name !== "tcolorbox" &&
         !theoremOccurrences.has(token.span.from) &&
-        !BLOCK_ENVIRONMENTS.has(token.name as BeamerBlockEnvironment)
+        !isBlockEnvironment(token.name)
       )
     ) {
       continue;
@@ -1086,7 +1087,7 @@ function parseColumnFlow(
     const token = requireArrayValue(tokens, index);
     if (
       token.kind !== "begin" ||
-      !LIST_ENVIRONMENTS.has(token.name)
+      !(token.name === "itemize" || token.name === "enumerate" || token.name === "description")
     ) {
       continue;
     }
@@ -1101,7 +1102,7 @@ function parseColumnFlow(
       node: {
         kind: "list",
         id: `${frameId}:column:${columnIndex}:list:${nodeIndex}`,
-        environment: token.name as "itemize" | "enumerate" | "description",
+        environment: token.name,
         span,
       },
     });
@@ -1321,7 +1322,7 @@ function findUnsupportedEnvironmentEndIndex(
       "invisibleenv",
       "thebibliography",
     ].includes(begin.name) ||
-    BLOCK_ENVIRONMENTS.has(begin.name as BeamerBlockEnvironment) ||
+    isBlockEnvironment(begin.name) ||
     isProofEnvironment(begin.name) ||
     theoremOccurrences.has(begin.span.from) ||
     isInsideNativeTextFlow(context, begin.span.from, overlays)

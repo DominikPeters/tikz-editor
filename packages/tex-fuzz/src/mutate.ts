@@ -167,7 +167,7 @@ export function texFuzzMalformedMutations(caseData: TexFuzzCase): readonly TexFu
 
   const controlWord = /\\[A-Za-z@]+/gu;
   for (const match of source.matchAll(controlWord)) {
-    const start = (match.index ?? 0) + 1;
+    const start = match.index + 1;
     const end = start + match[0].length - 1;
     const offset = start + Math.floor((end - start) / 2);
     add("control-word-corrupt", { kind: "replace", start: offset, end: offset + 1, text: "?" });
@@ -175,7 +175,7 @@ export function texFuzzMalformedMutations(caseData: TexFuzzCase): readonly TexFu
 
   const environmentEnd = /\\end\{([^}]*)\}/gu;
   for (const match of source.matchAll(environmentEnd)) {
-    const nameStart = (match.index ?? 0) + "\\end{".length;
+    const nameStart = match.index + "\\end{".length;
     add("environment-end-mismatch", {
       kind: "replace",
       start: nameStart,

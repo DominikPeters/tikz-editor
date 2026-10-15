@@ -188,7 +188,7 @@ class Parser {
       return left;
     }
 
-    while (true) {
+    for (;;) {
       const operator = this.peekOp(["==", "!=", "<", "<=", ">", ">="]);
       if (operator == null) {
         return left;
@@ -213,7 +213,7 @@ class Parser {
       return left;
     }
 
-    while (true) {
+    for (;;) {
       const operator = this.peekOp(["+", "-"]);
       if (operator == null) {
         return left;
@@ -244,7 +244,7 @@ class Parser {
       return left;
     }
 
-    while (true) {
+    for (;;) {
       const operator = this.peekOp(["*", "/"]);
       if (operator == null) {
         return left;
@@ -354,7 +354,7 @@ class Parser {
       return current;
     }
 
-    while (true) {
+    for (;;) {
       if (this.matchOp("!")) {
         if (current.quantity.kind !== "scalar") {
           return this.error("invalid-operation", "Factorial requires a scalar argument.");
@@ -465,7 +465,7 @@ class Parser {
       if (this.matchOp("(")) {
         const args: PgfMathQuantity[] = [];
         if (this.matchOp(")") === false) {
-          while (true) {
+          for (;;) {
             const argument = this.parseTernary();
             if (argument.ok === false) {
               return argument;

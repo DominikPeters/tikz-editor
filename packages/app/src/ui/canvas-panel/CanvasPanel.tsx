@@ -1,5 +1,6 @@
+import type { DeckActiveFrame } from "../../compute";
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
-import { deckPageDerived } from "../../deck-page-derived-cache";
+import { deckPageDerived, DeckPageDerivedKey, deckObjectIndexKey, deckTextContextKey } from "../../deck-page-derived-cache";
 import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit, nestedEditBaseSource } from "../../edit-execution";
 import { useStableCallback } from "../hooks/useStableCallback";
@@ -391,6 +392,21 @@ function computeAutoScaleForImportedTikz(
   return formatScopeScale(clampedScale);
 }
 
+type DeckParagraph = DeckActiveFrame["layout"]["paragraphs"][number];
+type DeckScopeEntry = {
+  scope: DeckActiveFrame["layout"]["editScopes"][number];
+  scopeParagraphs: ScopeParagraphRef[];
+  maskRanges: Span[];
+  anchorBounds: SvgBounds | null;
+};
+type DeckEditingTopology = {
+  scopesById: Map<string, DeckScopeEntry>;
+  paragraphById: Map<string, DeckParagraph>;
+  regions: HitRegion[];
+  atomSpanByRegionKey: Map<string, Span>;
+};
+const deckEditingKey = new DeckPageDerivedKey<DeckEditingTopology>();
+
 export const CanvasPanel = memo(function CanvasPanel({
   repeatPreviewModel = null
 }: {
@@ -511,7 +527,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!deckActiveFrame) {
       return null;
     }
-    return deckPageDerived(deckActiveFrame, snapshot.source, "text-context", () => {
+    return deckPageDerived(deckActiveFrame, snapshot.source, deckTextContextKey, () => {
       const paragraphs = deckActiveFrame.layout.paragraphs;
       const reports = paragraphs.map((paragraph) => paragraph.report);
       const layouts = paragraphs.map((paragraph) => ({
@@ -1253,7 +1269,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       links.push({
         key: `selected:${handle.id}`,
         sourceId: handle.sourceRef.sourceId,
-        ...(targetCenterAnchor?.nodeSourceId !== undefined ? { targetSourceId: targetCenterAnchor?.nodeSourceId } : {}),
+        ...(targetCenterAnchor?.nodeSourceId !== undefined ? { targetSourceId: targetCenterAnchor.nodeSourceId } : {}),
         from: endpoints.from,
         to: endpoints.to
       });
@@ -1354,24 +1370,17 @@ export const CanvasPanel = memo(function CanvasPanel({
   // grouped by the scope owning each directly-authored run, per
   // design/beamer-canvas-editing.md.
   const deckEditing = useMemo(() => {
-    type DeckParagraph = NonNullable<typeof deckActiveFrame>["layout"]["paragraphs"][number];
-    type DeckScopeEntry = {
-      scope: NonNullable<typeof deckActiveFrame>["layout"]["editScopes"][number];
-      scopeParagraphs: ScopeParagraphRef[];
-      maskRanges: Span[];
-      anchorBounds: SvgBounds | null;
-    };
     const layout = deckActiveFrame?.layout;
     if (!layout) {
       return { scopesById: new Map<string, DeckScopeEntry>(), paragraphById: new Map<string, DeckParagraph>(),
         regions: [] as HitRegion[], atomSpanByRegionKey: new Map<string, Span>() };
     }
-    return deckPageDerived(deckActiveFrame, snapshot.source, "editing-topology", () => {
+    return deckPageDerived(deckActiveFrame, snapshot.source, deckEditingKey, () => {
       const scopesById = new Map<string, DeckScopeEntry>();
       const paragraphById = new Map<string, DeckParagraph>();
       const regions: HitRegion[] = [];
       const atomSpanByRegionKey = new Map<string, Span>();
-      const editScopes = layout.editScopes ?? [];
+      const editScopes = layout.editScopes;
       for (const scope of editScopes) {
         scopesById.set(scope.id, {
           scope,
@@ -1444,7 +1453,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           });
         }
         // Atomic renders (macro output) select their invocation span.
-        for (const atom of paragraph.atomicRenderSpans ?? []) {
+        for (const atom of paragraph.atomicRenderSpans) {
           atom.hitBounds.forEach((bounds, index) => {
             const key = `deck-atom:${atom.id}:${index}`;
             atomSpanByRegionKey.set(key, atom.span);
@@ -1521,7 +1530,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!layout) {
       return null;
     }
-    return deckPageDerived(deckActiveFrame, snapshot.source, "object-index", () => buildBeamerObjectIndex({
+    return deckPageDerived(deckActiveFrame, snapshot.source, deckObjectIndexKey, () => buildBeamerObjectIndex({
       items: layout.items,
       paragraphs: layout.paragraphs,
       source: snapshot.source
@@ -1807,7 +1816,8 @@ export const CanvasPanel = memo(function CanvasPanel({
     if (!warning) {
       return;
     }
-    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    const clipboard: unknown = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+    if (!clipboard || typeof navigator.clipboard.writeText !== "function") {
       return;
     }
     void navigator.clipboard.writeText(warning);
@@ -2354,7 +2364,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   const nestedFigureBreadcrumb = useMemo(
     () =>
-      isNestedFigureMode && nestedFigureRef
+      isNestedFigureMode
         ? {
             slideLabel: `Slide ${nestedFigureRef.frameIndex + 1}`,
             figureLabel: nestedFigureRef.layer ? "Drawing" : `Figure ${nestedFigureRef.index + 1}`,
@@ -2380,7 +2390,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!layout) {
         return;
       }
-      const scope = resolveBeamerEditScopeAt(layout.editScopes ?? [], node.sourceSpan.from);
+      const scope = resolveBeamerEditScopeAt(layout.editScopes, node.sourceSpan.from);
       if (!scope) {
         return;
       }
@@ -2494,7 +2504,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!deckSelectedObject) {
         return false;
       }
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof HTMLElement ? event.target : null;
       if (
         target?.isContentEditable ||
         target?.tagName === "INPUT" ||

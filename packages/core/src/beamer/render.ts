@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
 import { projectBeamerOverprints } from "./overprint.js";
@@ -485,9 +486,9 @@ export function prepareBeamerDocument(
     theme: context.theme,
     syntax: context.syntax,
     frameStepCount: (frameIndex) => {
-      return context.overlaysByFrameId.get(requireFrame(frameIndex).id)!.stepCount;
+      return requireDefined(context.overlaysByFrameId.get(requireFrame(frameIndex).id), "Expected an internal render value").stepCount;
     },
-    speakerNotes: (frameIndex, step) => beamerSpeakerNotes(context.document, context.noteCommands, frameIndex, step, context.overlaysByFrameId.get(requireFrame(frameIndex).id)!),
+    speakerNotes: (frameIndex, step) => beamerSpeakerNotes(context.document, context.noteCommands, frameIndex, step, requireDefined(context.overlaysByFrameId.get(requireFrame(frameIndex).id), "Expected an internal render value")),
     frameEditingEnvironment: (frameIndex) => {
       const frame = requireFrame(frameIndex);
       quotes ??= /[“”]/u.test(source) && !source.includes("``") ? "unicode" : "tex";
@@ -707,7 +708,7 @@ async function renderBeamerFrameStep(params: {
     plain: frame.options?.plain ?? false, factor: allowFrameBreaks,
     paperHeight: page.page.height, textHeight: page.page.height - chrome.headlineInset - chrome.bottomInset,
     titleHeight: chrome.frameTitleInset, alignment: frame.options?.alignment ?? "center",
-    footnoteHeight: footnoteInsertion.height, breaks: references.continuationBreaks!,
+    footnoteHeight: footnoteInsertion.height, breaks: requireDefined(references.continuationBreaks, "Expected an internal render value"),
     plainExitHeight: frame.options?.plain ? chrome.bottomInset : 0,
   });
   const continuationCount = continuationPages?.length ?? 1;
@@ -1021,7 +1022,7 @@ function collectBeamerGraphicsLayout(
   const paragraphItemById = new Map(
     items
       .filter((item) => item.paragraphId)
-      .map((item) => [item.paragraphId!, item])
+      .map((item) => [requireDefined(item.paragraphId, "Expected an internal render value"), item])
   );
   const graphics: BeamerGraphicsLayout[] = [];
   for (const paragraph of paragraphs) {
@@ -2606,7 +2607,7 @@ function proofQedRectangles(params: {
   if (!body) {
     return [];
   }
-  const lastLine = body?.layout.report.lines.at(-1);
+  const lastLine = body.layout.report.lines.at(-1);
   const placement = lastLine
     ? body.layout.vlistLayout.linePlacements.find(
         (candidate) => candidate.lineIndex === lastLine.lineIndex
@@ -2958,7 +2959,7 @@ async function emitPreparedColumns(params: {
     )
   );
   const positions = resolveBeamerColumnPositions({
-    ...(params.prepared.node.options?.value !== undefined ? { options: params.prepared.node.options?.value } : {}),
+    ...(params.prepared.node.options?.value !== undefined ? { options: params.prepared.node.options.value } : {}),
     widths: prepared.map(column => column.width),
     textWidth: params.bounds.width,
     paperWidth: params.paperWidth,
@@ -3427,7 +3428,7 @@ async function prepareEmbeddedTikz(params: {
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont) },
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-      ...(params.work?.options !== undefined ? { cooperative: params.work?.options } : {}),
+      ...(params.work?.options !== undefined ? { cooperative: params.work.options } : {}),
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
       // is useful for an isolated SVG, but it is not part of that box.
@@ -3518,7 +3519,7 @@ async function emitBeamerOverlayPictures(params: {
         textEngine,
         parse: { includeContextDefinitions: true },
         ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-        ...(params.work?.options !== undefined ? { cooperative: params.work?.options } : {}),
+        ...(params.work?.options !== undefined ? { cooperative: params.work.options } : {}),
         svg: { padding: 0 },
         // With `remember picture`, PGF knows where the picture is on the page;
         // without, `current page` takes the picture's origin for the page's corner.
@@ -3893,8 +3894,8 @@ function layoutParagraph(params: {
       ...(params.references.arrayPackage !== undefined ? { arrayPackage: params.references.arrayPackage } : {}),
       ...(params.references.tableRegisters !== undefined ? { registers: params.references.tableRegisters } : {}),
       baselineSkipPt: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
-      booktabsFontSizePt: params.references?.theme?.fonts["normal-text"].sizePt ?? params.font.sizePt,
-      booktabsXHeightPt: fontXHeightPt(params.references?.theme?.fonts["normal-text"] ?? params.font),
+      booktabsFontSizePt: params.references.theme?.fonts["normal-text"].sizePt ?? params.font.sizePt,
+      booktabsXHeightPt: fontXHeightPt(params.references.theme?.fonts["normal-text"] ?? params.font),
     },
     ...(params.initialPreviousDepth !== undefined ? { initialPreviousDepth: params.initialPreviousDepth } : {}),
     listProfile: {
@@ -3913,7 +3914,7 @@ function layoutParagraph(params: {
           } }
         : BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
     ...(params.disableAutomaticHyphenation ? { hyphenator: { hyphenate: () => [] } } : {}),
-    ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
+    graphicsResolver,
     ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}),
     dimensionContext: {
       linewidth: texLength(params.bounds.width),
@@ -4119,7 +4120,7 @@ function layoutParagraph(params: {
                   0,
                   Math.min(
                     role.labelDepth - 1,
-                    (listProfile.itemizeMarkersByDepth?.length ?? 1) - 1
+                    listProfile.itemizeMarkersByDepth.length - 1
                   )
                 )
               ]

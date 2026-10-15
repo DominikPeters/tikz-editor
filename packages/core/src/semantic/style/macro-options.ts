@@ -12,16 +12,8 @@ export function expandOptionListMacros(
   }
 
   return optionLists.map((list) => {
-    let changed = false;
-    const entries = list.entries.map((entry) => {
-      const expanded = expandOptionEntryMacro(entry, macroBindings, trace);
-      if (expanded !== entry) {
-        changed = true;
-      }
-      return expanded;
-    });
-
-    if (!changed) {
+    const entries = list.entries.map(entry => expandOptionEntryMacro(entry, macroBindings, trace));
+    if (entries.every((entry, index) => entry === list.entries[index])) {
       return list;
     }
 

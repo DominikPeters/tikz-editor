@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { worldPoint as makeWorldPoint, worldVector as makeWorldVector, type WorldPoint, type WorldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import { worldTransform, type WorldTransform } from "../../coords/transforms.js";
@@ -191,8 +192,8 @@ export function extractNodeAdornmentPlan(
     quoteMode: baseDefaults?.quoteMode ?? "label",
     labelPosition: baseDefaults?.labelPosition ?? "above",
     pinPosition: baseDefaults?.pinPosition ?? "above",
-    labelDistancePt: baseDefaults?.labelDistancePt ?? parseLength("0pt", "pt")!,
-    pinDistancePt: baseDefaults?.pinDistancePt ?? parseLength("3ex", "pt")!,
+    labelDistancePt: baseDefaults?.labelDistancePt ?? requireDefined(parseLength("0pt", "pt"), "Expected an internal label-quotes value"),
+    pinDistancePt: baseDefaults?.pinDistancePt ?? requireDefined(parseLength("3ex", "pt"), "Expected an internal label-quotes value"),
     pinEdgeRaw: baseDefaults?.pinEdgeRaw ?? null
   };
 
@@ -407,7 +408,7 @@ export function materializeNodeAdornment(params: {
     raw: spec.text,
     templateRaw: spec.text,
     ...(resolvedName === undefined ? {} : { name: resolvedName }),
-    ...(options?.span === undefined ? {} : { optionsSpan: options?.span }),
+    ...(options?.span === undefined ? {} : { optionsSpan: options.span }),
     ...(options === undefined ? {} : { options: options }),
     textSource: "group",
     textSpan: spec.textSpan,
@@ -980,7 +981,7 @@ function makeSyntheticOperationNode(
     raw,
     templateRaw: raw,
     ...(name === undefined ? {} : { name: name }),
-    ...(options?.span === undefined ? {} : { optionsSpan: options?.span }),
+    ...(options?.span === undefined ? {} : { optionsSpan: options.span }),
     ...(options === undefined ? {} : { options: options }),
     textSource: "group",
     textSpan: span,

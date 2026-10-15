@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editNodeAt, editSlotAt } from "./lookup.js";
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
@@ -288,7 +289,7 @@ class Binder {
       }
       return { name: text.slice(at + 1, end), end };
     }
-    const codePoint = text.codePointAt(at + 1)!;
+    const codePoint = requireDefined(text.codePointAt(at + 1), "Missing required text.codePointAt(at + 1)");
     return { name: String.fromCodePoint(codePoint), end: at + 1 + (codePoint > 0xffff ? 2 : 1) };
   }
 
@@ -399,7 +400,7 @@ class Binder {
     if (this.text[at] === "\\") {
       return this.controlAt(at).end;
     }
-    const codePoint = this.text.codePointAt(at)!;
+    const codePoint = requireDefined(this.text.codePointAt(at), "Missing required this.text.codePointAt(at)");
     return at + (codePoint > 0xffff ? 2 : 1);
   }
 
@@ -844,7 +845,7 @@ class Binder {
       }
       if (!span) {
         if (arg.rendered) {
-          this.slot(node, arg.role as SlotRole, { from: cursor, to: cursor }, { mode, presence: "absent" });
+          this.slot(node, arg.role, { from: cursor, to: cursor }, { mode, presence: "absent" });
         }
         return cursor;
       }
@@ -867,7 +868,7 @@ class Binder {
     } else {
       this.diagnose("missing-argument", cursor, cursor, `\\${editNodeAt(this.nodes, node).command ?? ""} is missing an argument`);
       if (arg.rendered) {
-        this.slot(node, arg.role as SlotRole, { from: cursor, to: cursor }, { mode });
+        this.slot(node, arg.role, { from: cursor, to: cursor }, { mode });
       }
       return cursor;
     }
@@ -876,12 +877,12 @@ class Binder {
       return cursor;
     }
     if (arg.rendered) {
-      const slot = this.slot(node, arg.role as SlotRole, content, { mode, braced });
+      const slot = this.slot(node, arg.role, content, { mode, braced });
       this.delimiter(node, span.from, content.from);
       this.scanSlot(slot, mode, content.from, content.to);
       this.delimiter(node, content.to, span.to);
     } else {
-      editNodeAt(this.nodes, node).values.push({ role: arg.role as EditValue["role"], span, contentSpan: content });
+      editNodeAt(this.nodes, node).values.push({ role: arg.role, span, contentSpan: content });
       this.delimiter(node, span.from, span.to);
     }
     return span.to;
@@ -1084,7 +1085,7 @@ class Binder {
     const stray = editSlotAt(this.slots, slot).children.slice(before).map((id) => editNodeAt(this.nodes, id))
       .filter((node) => !["invisible", "declaration", "atom", "space", "vertical"].includes(node.kind));
     if (stray.length > 0) {
-      this.diagnose("text-before-first-item", requireArrayValue(stray, 0).span.from, stray.at(-1)!.span.to, "Content before the first \\item");
+      this.diagnose("text-before-first-item", requireArrayValue(stray, 0).span.from, requireDefined(stray.at(-1), "Missing required stray.at(-1)").span.to, "Content before the first \\item");
     }
   }
 

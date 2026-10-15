@@ -194,7 +194,11 @@ function locateOverlayPictures(mapped: MappedText, documentPictures: readonly Be
     const picture = origin?.kind === "direct" ? byStart.get(origin.from) : undefined;
     if (!picture) continue;
     let end = index;
-    while (end < origins.length && !(origins[end]?.kind === "direct" && (origins[end] as { to: number }).to === picture.span.to)) end += 1;
+    while (end < origins.length) {
+      const origin = origins[end];
+      if (origin?.kind === "direct" && origin.to === picture.span.to) break;
+      end += 1;
+    }
     if (end === origins.length) return null;
     found.push({ ...picture, span: { from: index, to: end + 1 } });
     index = end;

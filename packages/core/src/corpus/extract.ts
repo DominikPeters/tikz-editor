@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { buildLineStarts, lineBreakWidthAt, lineForOffset } from "../text/line-map.js";
@@ -80,7 +81,7 @@ function collectTexFiles(rootDir: string): string[] {
   const stack = [rootDir];
 
   while (stack.length > 0) {
-    const currentDir = stack.pop()!;
+    const currentDir = requireDefined(stack.pop(), "Missing required stack.pop()");
     const entries = readdirSync(currentDir, { withFileTypes: true });
 
     for (const entry of entries) {

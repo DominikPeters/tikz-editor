@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { CommandTable } from "../commands/table.js";
@@ -188,7 +189,7 @@ function plainText(view: EditView, from: number, to: number): string {
       parts.push(symbolText(source));
       return;
     }
-    if ((record.kind === "paragraph" || record.kind === "item") && parts.length > 0 && !/\n$/u.test(parts.at(-1)!)) {
+    if ((record.kind === "paragraph" || record.kind === "item") && parts.length > 0 && !/\n$/u.test(requireDefined(parts.at(-1), "Missing required parts.at(-1)"))) {
       parts.push(record.kind === "paragraph" ? "\n\n" : "\n");
     }
     if (record.kind === "link" && record.slots.length === 0) {
@@ -414,8 +415,8 @@ function recognizedTex(place: Place, plain: string, commands: CommandTable | nul
   }
   // Space at the edges is one space in prose, as in a literal paste; a comment on the last line would take what follows the paste.
   const edge = (space: string) => (space === "" || place.mode === "math" ? "" : " ");
-  const lead = edge(/^\s*/u.exec(normalized)![0]);
-  return /(?:^|[^\\])(?:\\\\)*%[^\n]*$/u.test(text) ? `${lead}${text}\n` : `${lead}${text}${edge(/\s*$/u.exec(normalized)![0])}`;
+  const lead = edge(requireDefined(/^\s*/u.exec(normalized), "Missing required /^\\s*/u.exec(normalized)")[0]);
+  return /(?:^|[^\\])(?:\\\\)*%[^\n]*$/u.test(text) ? `${lead}${text}\n` : `${lead}${text}${edge(requireDefined(/\s*$/u.exec(normalized), "Missing required /\\s*$/u.exec(normalized)")[0])}`;
 }
 
 /** Whether TeX accepts the source in the mode: balanced, nothing out of its mode, no `#`, no percentage (`50%`). */

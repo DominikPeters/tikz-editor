@@ -315,7 +315,7 @@ export function useCanvasContextMenuController({
       nativeEffectiveTarget,
       pendingNativeContextMenuRequest.clickedSourceId
     );
-    const includeFlattenForeach = commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH].enabled;
+    const includeFlattenForeach = (commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false);
     const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(nativeEffectiveTarget, selectedElementIds);
 
     pendingNativeContextMenuTimeoutRef.current = setTimeout(() => {
@@ -433,7 +433,7 @@ export function useCanvasContextMenuController({
       const includeEditEquationForSingleNode = resolveIncludeEditEquationForSingleNode(effectiveTarget, equationSourceId);
       const nodePositioningAction = resolveNodePositioningAction(effectiveTarget, equationSourceId);
       const includePathSubmenuForSingleSelection = resolveIncludePathSubmenuForSingleSelection(effectiveTarget, equationSourceId);
-      const includeFlattenForeach = commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH].enabled;
+      const includeFlattenForeach = (commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false);
       const matrixMultiOptions = resolveMatrixMultiContextMenuOptions(effectiveTarget, selectedElementIds);
 
       const nextContextMenuState: CanvasContextMenuState = {

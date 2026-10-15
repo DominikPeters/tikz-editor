@@ -524,7 +524,7 @@ export function retargetEditHandlesSourceFingerprint(
   sourceFingerprint: string
 ): void {
   for (const [index, handle] of handles.entries()) {
-    if (!handle || handle.sourceRef.sourceFingerprint === sourceFingerprint) {
+    if (handle.sourceRef.sourceFingerprint === sourceFingerprint) {
       continue;
     }
     handles[index] = {
@@ -685,7 +685,7 @@ export function resolveContextColorAliasValue(
   }
 
   const seen = new Set<string>([initialKey]);
-  while (true) {
+  for (;;) {
     const nextKey = normalizeColorAliasKey(resolved);
     if (!nextKey || seen.has(nextKey)) {
       break;

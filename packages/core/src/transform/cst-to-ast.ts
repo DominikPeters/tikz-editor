@@ -729,7 +729,7 @@ function tryParseNewCommandStatement(
     if (!parsedName) {
       return null;
     }
-    const nameFrom = (nameGroup.from + 1) + (parsedName.index ?? 0);
+    const nameFrom = (nameGroup.from + 1) + parsedName.index;
     nameRaw = parsedName[0];
     nameSpan = { from: nameFrom, to: nameFrom + nameRaw.length };
     cursor = nameGroup.to;

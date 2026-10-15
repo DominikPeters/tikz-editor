@@ -157,7 +157,7 @@ export function RenderedTooltip({
   }
 
   function handleBlur(event: FocusEvent<HTMLElement>): void {
-    const nextFocusedTarget = event.relatedTarget as Node | null;
+    const nextFocusedTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
     if (nextFocusedTarget && event.currentTarget.contains(nextFocusedTarget)) {
       return;
     }

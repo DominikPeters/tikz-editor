@@ -118,6 +118,7 @@ export function useDocumentFileOperations({ dispatch, showMessage }: {
   ): Promise<boolean> {
     const doc = useEditorStore.getState().documents[documentId];
     const files = getActiveEditorPlatform().files;
+    const isActive = () => activeRef.current;
     if (!activeRef.current || !doc || !files?.saveText) return false;
     // A refresh started before this write cannot overwrite its eventual baseline.
     readsRef.current.delete(documentId);
@@ -168,7 +169,7 @@ export function useDocumentFileOperations({ dispatch, showMessage }: {
           fileRef: result.fileRef, diskRevision: null, lastKnownDiskSource: doc.source });
         const current = useEditorStore.getState().documents[documentId];
         if (current) await readLinkedDocument(current, "save", true);
-        return activeRef.current && !!useEditorStore.getState().documents[documentId];
+        return isActive() && !!useEditorStore.getState().documents[documentId];
       }
       if (result.status === "failed") await showMessage("Save Failed", result.reason ?? "Save failed.", "error");
       return false;

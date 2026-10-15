@@ -88,6 +88,7 @@ function checkedSourceOffset<Space extends SourceCoordinateSpace>(
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`Invalid ${space} source offset ${value}.`);
   }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as SourceOffset<Space>;
 }
 

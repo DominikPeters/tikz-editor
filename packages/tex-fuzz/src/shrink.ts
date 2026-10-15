@@ -54,12 +54,27 @@ function replaceAt(nodes: readonly TexFuzzNode[], index: number, replacements: r
   return [...nodes.slice(0, index), ...replacements, ...nodes.slice(index + 1)];
 }
 
+type MathChildKey = "body" | "base" | "numerator" | "denominator" | "degree" | "subscript" | "superscript" | "script" | "above" | "below";
+function mathChild(node: TexFuzzMathNode, key: MathChildKey): TexFuzzMathNode | undefined {
+  if (key === "body" && "body" in node) return node.body;
+  if (key === "base" && "base" in node) return node.base;
+  if (key === "numerator" && "numerator" in node) return node.numerator;
+  if (key === "denominator" && "denominator" in node) return node.denominator;
+  if (key === "degree" && "degree" in node) return node.degree;
+  if (key === "subscript" && "subscript" in node) return node.subscript;
+  if (key === "superscript" && "superscript" in node) return node.superscript;
+  if (key === "script" && "script" in node) return node.script;
+  if (key === "above" && "above" in node) return node.above;
+  if (key === "below" && "below" in node) return node.below;
+  return undefined;
+}
+
 function mathCandidates(node: TexFuzzMathNode): readonly TexFuzzMathNode[] {
   const candidates: TexFuzzMathNode[] = [];
   if (node.kind !== "atom") candidates.push({ kind: "atom", value: "x" });
   for (const key of ["body", "base", "numerator", "denominator", "degree", "subscript", "superscript", "script", "above", "below"] as const) {
     if (!(key in node)) continue;
-    const child = (node as unknown as Record<string, TexFuzzMathNode | undefined>)[key];
+    const child = mathChild(node, key);
     if (!child) continue;
     candidates.push(child);
     for (const reduced of mathCandidates(child)) candidates.push({ ...node, [key]: reduced });
@@ -204,7 +219,7 @@ export async function shrinkTexFuzzCase(
   let candidatesEvaluated = 0;
   let oracleEvaluations = 0;
 
-  while (true) {
+  for (;;) {
     if (performance.now() - started >= maxTimeMs) {
       return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "time-budget" };
     }

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { Span } from "../../ast/types.js";
 import type { Diagnostic } from "../../diagnostics/types.js";
@@ -65,7 +66,7 @@ export function scanBeamerColorDeclarations(document: BeamerDocumentModel): Beam
     } else if (command.name === "colorlet") {
       events.push({ kind: "color-alias", name: first, expression: second, span });
     } else {
-      events.push({ kind: "define-color", name: first, model: second, specification: third!, provide: command.name === "providecolor", span });
+      events.push({ kind: "define-color", name: first, model: second, specification: requireDefined(third, "Expected an internal color-declarations value"), provide: command.name === "providecolor", span });
     }
   }
   return events;
@@ -129,8 +130,8 @@ export function applyBeamerColorDeclaration(state: BeamerColorDeclarationState, 
       : resolveColorToCss(event.expression.value, { resolveAlias: alias => state.colorAliases[alias.toLowerCase()] ?? null });
     if (color) {
       const channels = event.kind === "define-color"
-        ? definedColorRgb(event.model.value, event.specification.value, alias => state.colorAliasRgb[alias.toLowerCase()] ?? null) ?? colorRgb(color)!
-        : resolveBeamerColorExpressionRgb(event.expression.value, alias => state.colorAliasRgb[alias.toLowerCase()] ?? null) ?? colorRgb(color)!;
+        ? definedColorRgb(event.model.value, event.specification.value, alias => state.colorAliasRgb[alias.toLowerCase()] ?? null) ?? requireDefined(colorRgb(color), "Expected an internal color-declarations value")
+        : resolveBeamerColorExpressionRgb(event.expression.value, alias => state.colorAliasRgb[alias.toLowerCase()] ?? null) ?? requireDefined(colorRgb(color), "Expected an internal color-declarations value");
       state.colorAliasRgb[name] = channels;
       state.colorAliases[name] = beamerColorRgbToCss(channels);
     }

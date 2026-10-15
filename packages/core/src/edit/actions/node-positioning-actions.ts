@@ -3,7 +3,7 @@ import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
-import type { FrameTransform } from "../../coords/transforms.js";
+import { frameTransform, type FrameTransform } from "../../coords/transforms.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
 import { resolveMatrixMode } from "../../semantic/nodes/matrix.js";
@@ -67,18 +67,6 @@ const DIRECTION_ANCHORS: Record<PositioningDirection, { target: string; current:
   "below left": { target: "south west", current: "north east" },
   "below right": { target: "south east", current: "north west" }
 };
-
-const BASIC_ANCHORS = [
-  "center",
-  "north",
-  "south",
-  "east",
-  "west",
-  "north east",
-  "north west",
-  "south east",
-  "south west"
-] as const;
 
 const PLACEMENT_OPTION_KEYS = new Set(["at", "xshift", "yshift"]);
 const CARDINAL_SNAP_RATIO = 0.25;
@@ -234,9 +222,10 @@ export function applyConvertNodePositionToAbsoluteAction(
     return { kind: "unsupported", reason: absolutePoint.reason };
   }
 
+  const { a, b, c, d, e, f } = positioningHandle.transform;
   const coordinate = formatPlacementCoordinateFromWorld(
     absolutePoint.world,
-    positioningHandle.transform as unknown as FrameTransform
+    frameTransform(a, b, c, d, e, f)
   );
   const rewritten = rewriteNodePlacementSource({
     source,
@@ -682,10 +671,7 @@ function resolveExplicitAnchor(options: OptionListAst | undefined): string | nul
     }
     anchor = normalizeAnchorName(normalizeOptionValue(entry.valueRaw));
   }
-  if (!anchor || anchor === "base" || anchor === "mid") {
-    return anchor;
-  }
-  return BASIC_ANCHORS.includes(anchor as (typeof BASIC_ANCHORS)[number]) ? anchor : anchor;
+  return anchor;
 }
 
 function normalizeAnchorName(anchor: string): string {
@@ -805,7 +791,7 @@ function formatPlacementCoordinateFromWorld(world: WorldPoint, transform?: Frame
 
 function hasPathAttachment(elements: ReturnType<typeof evaluateTikzFigure>["scene"]["elements"], sourceId: string): boolean {
   return elements.some(
-    (element) => element.sourceRef.sourceId === sourceId && "pathAttachment" in element && element.pathAttachment != null
+    (element) => element.sourceRef.sourceId === sourceId && "pathAttachment" in element
   );
 }
 

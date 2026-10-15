@@ -1011,7 +1011,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               {textSelectionOverlay.rects.map((rect: TextSelectionOverlayBox, index: number) => {
                 const width = rect.bounds.maxX - rect.bounds.minX;
                 const height = rect.bounds.maxY - rect.bounds.minY;
-                const hasRotatedPlacement = Number.isFinite(rect.rotationDeg) && rect.center != null;
+                const rotatedCenter = Number.isFinite(rect.rotationDeg) ? rect.center : null;
+                const hasRotatedPlacement = rotatedCenter != null;
                 return (
                   <div
                     key={`${textSelectionOverlay.sourceId}:rect:${index}:${rect.bounds.minX}:${rect.bounds.minY}:${rect.bounds.maxX}:${rect.bounds.maxY}:${rect.center?.x ?? ""}:${rect.center?.y ?? ""}:${rect.rotationDeg ?? ""}`}
@@ -1023,8 +1024,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                       .join(" ")}
                     data-testid="canvas-text-selection-rect"
                     style={{
-                      left: hasRotatedPlacement ? rect.center!.x : rect.bounds.minX,
-                      top: hasRotatedPlacement ? rect.center!.y : rect.bounds.minY,
+                      left: rotatedCenter ? rotatedCenter.x : rect.bounds.minX,
+                      top: rotatedCenter ? rotatedCenter.y : rect.bounds.minY,
                       width,
                       height,
                       ...(hasRotatedPlacement ? { transform: `translate(-50%, -50%) rotate(${rect.rotationDeg}deg)` } : {}),
@@ -1036,7 +1037,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               {textSelectionOverlay.caret ? (
                 (() => {
                   const caret = textSelectionOverlay.caret;
-                  const hasRotatedPlacement = Number.isFinite(caret.rotationDeg) && caret.center != null;
+                  const rotatedCenter = Number.isFinite(caret.rotationDeg) ? caret.center : null;
+                const hasRotatedPlacement = rotatedCenter != null;
                   const height = caret.bounds.maxY - caret.bounds.minY;
                   return (
                     <div
@@ -1049,8 +1051,8 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                         .join(" ")}
                       data-testid="canvas-text-selection-caret"
                       style={{
-                        left: hasRotatedPlacement ? caret.center!.x : caret.bounds.minX,
-                        top: hasRotatedPlacement ? caret.center!.y : caret.bounds.minY,
+                        left: rotatedCenter ? rotatedCenter.x : caret.bounds.minX,
+                        top: rotatedCenter ? rotatedCenter.y : caret.bounds.minY,
                         height,
                         animation: "none",
                         // The unfocused surface holds a static, lower-contrast

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import { childIndex, slotChain } from "../tree/navigate.js";
 import type { NodeId, SlotId } from "../tree/types.js";
@@ -32,7 +33,7 @@ export function promoteSelection(view: EditView, raw: SelectionEnds): SelectionE
     if (construct == null) {
       return end;
     }
-    const parent = editNodeAt(tree.nodes, construct).parent!;
+    const parent = requireDefined(editNodeAt(tree.nodes, construct).parent, "Missing required editNodeAt(tree.nodes, construct).parent");
     const at = childIndex(tree, construct);
     return { slot: parent, index: isStart ? at : at + 1 };
   };

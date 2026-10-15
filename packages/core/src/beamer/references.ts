@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { BeamerOverlayPicture } from "./overlay-pictures.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
@@ -109,7 +110,7 @@ export function buildBeamerReferenceIndex(
         if (argument?.complete) equationLabels.set(source.slice(argument.contentSpan.from, argument.contentSpan.to).trim(), value);
       }
     }
-    const overlays = overlaysByFrameId.get(frame.id)!;
+    const overlays = requireDefined(overlaysByFrameId.get(frame.id), "Expected an internal references value");
     const visibilitySteps = overlayVisibilitySteps(overlays);
     for (const entry of overlays.referenceSpecs) specs.set(entry.sourceStart, entry.spec);
     const destination = (step: number): BeamerLinkDestination => ({ kind: "frame", frameId: frame.id, step });
@@ -223,7 +224,7 @@ export function projectBeamerReferences(mapped: MappedText, context: BeamerRefer
   const warn = (code: string, message: string, span: Span) => {
     const projected = sourceSpan(span);
     if (!projected) return;
-    if (!context.renderDiagnostics.some((entry) => entry.code === code && entry.span?.from === projected?.from && entry.message === message)) {
+    if (!context.renderDiagnostics.some((entry) => entry.code === code && entry.span.from === projected.from && entry.message === message)) {
       context.renderDiagnostics.push({ severity: "warning", code, message, span: projected });
     }
   };

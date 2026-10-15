@@ -118,7 +118,8 @@ export function scanTextFormatWrappers(text: string): readonly TextFormatWrapper
     if (isEscapedBackslashAt(text, from)) {
       continue;
     }
-    const name = match[1] as TextFormatCommandName;
+    const name = match[1];
+    if (name !== "textbf" && name !== "textit" && name !== "underline" && name !== "texttt" && name !== "alert" && name !== "textcolor") continue;
     let cursor = skipSpaces(text, from + match[0].length);
     if (name === "alert" && text[cursor] === "<") {
       const specEnd = text.indexOf(">", cursor + 1);

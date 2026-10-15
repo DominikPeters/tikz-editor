@@ -121,8 +121,5 @@ function resolveImplicitNodePlacementInsertionOffset(
 export const resolveNodePositionFraction = resolvePathPositionFraction;
 
 function pointAtSegmentEnd(segment: PlacementSegment): WorldPoint {
-  if (segment.kind === "line" || segment.kind === "hv" || segment.kind === "cubic" || segment.kind === "arc") {
-    return segment.to;
-  }
-  return pointAtPlacementSegment(segment, 1);
+  return segment.to;
 }

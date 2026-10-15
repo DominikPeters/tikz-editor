@@ -103,7 +103,7 @@ export function useCanvasGuideEffects(args: UseCanvasGuideEffectsArgs) {
         if (drag.overViewport) {
           setGuides((current) => addGuide(current, drag.orientation, drag.value));
         }
-      } else if (drag.source === "guide" && drag.sourceValue != null) {
+      } else if (drag.sourceValue !== undefined) {
         const sourceValue = drag.sourceValue;
         if (drag.overDeleteZone) {
           setGuides((current) => removeGuide(current, drag.orientation, sourceValue));

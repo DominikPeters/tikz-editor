@@ -1,3 +1,4 @@
+import { isRecord } from "../validation";
 import { getActiveEditorPlatform } from "../platform/current";
 import { useEditorStore } from "../store/store";
 import type { DocumentSession } from "../store/types";
@@ -12,7 +13,8 @@ const DEFAULT_OPTIONS: PresentationOptions = { mode: "display", audienceDisplay:
 export function loadPresentationOptions(): PresentationOptions {
   try {
     const raw = getActiveEditorPlatform().persistence.load(OPTIONS_KEY);
-    const saved = raw ? JSON.parse(raw) as Partial<PresentationOptions> : {};
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    const saved = isRecord(parsed) ? parsed : {};
     return { mode: saved.mode === "window" || saved.mode === "rehearse" ? saved.mode : "display",
       audienceDisplay: typeof saved.audienceDisplay === "string" ? saved.audienceDisplay : null,
       presenterDisplay: typeof saved.presenterDisplay === "string" ? saved.presenterDisplay : null,
@@ -106,7 +108,7 @@ export class PresentationService {
         const current = state.documents[document.id];
         if (!current) { void this.stop(); return; }
         controller.setTitle(current.title);
-        if (current.source !== this.observedDocument?.source || current.fileRef !== this.observedDocument?.fileRef) {
+        if (current.source !== this.observedDocument?.source || current.fileRef !== this.observedDocument.fileRef) {
           this.observedDocument = current;
           this.refresh();
         }

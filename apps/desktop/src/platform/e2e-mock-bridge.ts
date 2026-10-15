@@ -15,7 +15,8 @@ type E2eExportPayload = {
 
 type E2eUnsavedDecision = "save" | "discard" | "cancel";
 
-type DesktopE2eWindow = Window & {
+declare global {
+interface Window {
   __DESKTOP_E2E_CONSOLE_CAPTURE_INSTALLED__?: boolean;
   __DESKTOP_E2E_WRITES__: E2eWrite[];
   __DESKTOP_E2E_EXPORTS__: string[];
@@ -31,11 +32,12 @@ type DesktopE2eWindow = Window & {
   __TIKZ_EDITOR_DESKTOP_TEST_API__: {
     setBridgeOverride: (bridge: DesktopBridge | null) => void;
   };
-};
+}
+}
 
 /** Runs inside the WebView through WebDriver's `execute` serialization. */
 export function installDeterministicBridgeInPage(): void {
-  const e2eWindow = window as unknown as DesktopE2eWindow;
+  const e2eWindow = window;
   const writes: E2eWrite[] = [];
   const exports: string[] = [];
   const exportPayloads: E2eExportPayload[] = [];

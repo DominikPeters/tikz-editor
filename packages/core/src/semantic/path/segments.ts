@@ -14,7 +14,7 @@ function worldVector(x: number, y: number): WorldVector {
 
 export function appendPathPoint(
   commands: ScenePathCommand[],
-  operator: "--" | "-|" | "|-" | null,
+  operator: string | null,
   current: WorldPoint | null,
   next: WorldPoint,
   previousSegmentRoundedCorners: number | null,

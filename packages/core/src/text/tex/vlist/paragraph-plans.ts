@@ -148,7 +148,8 @@ export function prepareTexLayoutParagraphsFromVList(
     const materialAncestor = materialAncestors.at(-1);
     let currentParagraphState = paragraphState;
     if (materialAncestor) {
-      const outerMaterialState = materialParagraphStates.get(materialAncestors.at(-2)!);
+      const outerMaterialAncestor = materialAncestors.at(-2);
+      const outerMaterialState = outerMaterialAncestor ? materialParagraphStates.get(outerMaterialAncestor) : undefined;
       currentParagraphState = materialParagraphStates.get(materialAncestor) ?? (outerMaterialState ?? paragraphState).forkMaterialContext();
       materialParagraphStates.set(materialAncestor, currentParagraphState);
     }

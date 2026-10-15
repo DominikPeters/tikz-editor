@@ -763,7 +763,7 @@ function MagnifyToolPreview({ svg, label }: { svg: string; label: string }) {
     frameWidth: 0,
     frameHeight: 0
   });
-  const style = {
+  const style: CSSProperties & { [key: `--${string}`]: string | number } = {
     "--landingMagnifyX": `${center.x}px`,
     "--landingMagnifyY": `${center.y}px`,
     "--landingMagnifyFrameWidth": `${center.frameWidth}px`,
@@ -771,7 +771,7 @@ function MagnifyToolPreview({ svg, label }: { svg: string; label: string }) {
     "--landingMagnifyContentX": `${lensRadiusPx - center.x * magnifyScale}px`,
     "--landingMagnifyContentY": `${lensRadiusPx - center.y * magnifyScale}px`,
     "--landingMagnifyScale": magnifyScale
-  } as CSSProperties;
+  };
 
   const setCenterFromFrame = useCallback((xPx: number, yPx: number, frameWidth: number, frameHeight: number): void => {
     setCenter({

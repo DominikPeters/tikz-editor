@@ -1,3 +1,4 @@
+import { isRecord } from "../../validation";
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import {
   useCallback,
@@ -331,7 +332,8 @@ function currentInteraction(state: CanvasTextEditState): InteractionState {
 /** A canvas copy read back from the clipboard, if it is one (it may come from another window). */
 function readCanvasClip(data: DataTransfer): CanvasClip | undefined {
   try {
-    const clip = JSON.parse(data.getData(CANVAS_CLIP_TYPE)) as Partial<CanvasClip>;
+    const clip: unknown = JSON.parse(data.getData(CANVAS_CLIP_TYPE));
+    if (!isRecord(clip)) return undefined;
     return typeof clip.source === "string" && (clip.mode === "text" || clip.mode === "math") &&
       (clip.shape === "fragment" || clip.shape === "whole")
       ? { source: clip.source, mode: clip.mode, shape: clip.shape }
@@ -699,7 +701,7 @@ function estimateTextOffsetFromClient(
   applyTextMeasureFont(ctx, target.style);
   const layout = createVisualTextLayout(
     target.text,
-    target.renderSourceText ?? target.text,
+    target.renderSourceText,
     (text) => ctx?.measureText(text).width ?? Number.NaN,
     { syntax: target.usesTex ? "tex" : "plain" }
   );
@@ -830,9 +832,6 @@ export function useCanvasTextEditSession(
     stateRef.current = reduced.state;
     setState(reduced.state);
     for (const effect of reduced.effects) {
-      if (effect.type !== "apply_source_patch") {
-        continue;
-      }
       dispatch({
         type: "APPLY_SOURCE_PATCHES",
         baseRevision: sourceRevisionRef.current,
@@ -1531,8 +1530,8 @@ export function useCanvasTextEditSession(
     ) {
       dispatchCanvasTextEditAction({
         type: "textarea_selection",
-        selectionStart: textarea.selectionStart ?? 0,
-        selectionEnd: textarea.selectionEnd ?? 0
+        selectionStart: textarea.selectionStart,
+        selectionEnd: textarea.selectionEnd
       });
     }
     if (intent.type === "compose") {
@@ -1577,8 +1576,8 @@ export function useCanvasTextEditSession(
     const textarea = event.currentTarget;
     dispatchCanvasTextEditAction({
       type: "textarea_selection",
-      selectionStart: textarea.selectionStart ?? 0,
-      selectionEnd: textarea.selectionEnd ?? 0
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd
     });
   }, [dispatchCanvasTextEditAction]);
 
@@ -1760,9 +1759,8 @@ export function useCanvasTextEditSession(
     }
     const cleanups = inputs.map((input) => {
       const handleBeforeInput = (event: Event) => {
-        const inputEvent = event as InputEvent;
-        if (typeof inputEvent.inputType === "string") {
-          dispatchTextEditBeforeInputIntent(inputEvent, input);
+        if (event instanceof InputEvent && typeof event.inputType === "string") {
+          dispatchTextEditBeforeInputIntent(event, input);
         }
       };
       input.addEventListener("beforeinput", handleBeforeInput);
@@ -1832,8 +1830,8 @@ export function useCanvasTextEditSession(
       }
       dispatchCanvasTextEditAction({
         type: "textarea_selection",
-        selectionStart: input.selectionStart ?? 0,
-        selectionEnd: input.selectionEnd ?? 0
+        selectionStart: input.selectionStart,
+        selectionEnd: input.selectionEnd
       });
     };
     const handleDocumentSelectionChange = () => {
@@ -2074,7 +2072,7 @@ export function useCanvasTextEditSession(
     const recorded = state.treeSelection;
     const matches = recorded?.text === textEditingSession.text && recorded.ends &&
       ((recorded.anchor === start && recorded.focus === end) || (recorded.anchor === end && recorded.focus === start));
-    return { view, position: matches && recorded.ends ? recorded.ends.focus : view.positionAt(end) };
+    return { view, position: matches ? recorded.ends.focus : view.positionAt(end) };
   }, [editCommands, state.treeSelection, textEditingSession]);
   const caretCrumbs = useMemo<readonly ContextCrumb[] | null>(
     () => (caretFocus ? caretContext(caretFocus.view, caretFocus.position) : null),

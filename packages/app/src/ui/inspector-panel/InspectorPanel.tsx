@@ -618,16 +618,16 @@ export function InspectorPanel() {
     if (!write.shadowContext || !write.writable || write.elementId.length === 0) return;
     const ctx = write.shadowContext;
     let nextContext: ShadowMutationContext;
-    if (propertyId === "shadow-xshift") {
-      nextContext = { ...ctx, xshiftPt: value as number };
-    } else if (propertyId === "shadow-yshift") {
-      nextContext = { ...ctx, yshiftPt: value as number };
-    } else if (propertyId === "shadow-scale") {
-      nextContext = { ...ctx, scale: value as number };
-    } else if (propertyId === "shadow-opacity") {
-      nextContext = { ...ctx, opacity: value as number };
-    } else if (propertyId === "shadow-color") {
-      nextContext = { ...ctx, color: value as string | null };
+    if (propertyId === "shadow-xshift" && typeof value === "number") {
+      nextContext = { ...ctx, xshiftPt: value };
+    } else if (propertyId === "shadow-yshift" && typeof value === "number") {
+      nextContext = { ...ctx, yshiftPt: value };
+    } else if (propertyId === "shadow-scale" && typeof value === "number") {
+      nextContext = { ...ctx, scale: value };
+    } else if (propertyId === "shadow-opacity" && typeof value === "number") {
+      nextContext = { ...ctx, opacity: value };
+    } else if (propertyId === "shadow-color" && (typeof value === "string" || value === null)) {
+      nextContext = { ...ctx, color: value };
     } else {
       return;
     }

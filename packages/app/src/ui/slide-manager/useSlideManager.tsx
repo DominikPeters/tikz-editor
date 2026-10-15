@@ -10,7 +10,7 @@ import { getActiveEditorPlatform } from "../../platform/current";
 import { SlideMoveReview } from "./SlideMoveReview";
 import { getDockLayoutHandle } from "../DockLayout";
 import { CanvasContextMenu } from "../CanvasContextMenu";
-import type { CommandBinding, CommandBindings } from "../editor-command-runtime";
+import type { CommandBindings } from "../editor-command-runtime";
 
 export function useSlideManager(model: BeamerDocumentModel | null, containerRef: RefObject<HTMLDivElement | null>) {
   const documentId = useEditorStore(s => s.activeDocumentId);
@@ -75,7 +75,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
   };
   const pasteText = (source: string, chosen = ids) => {
     if (!enabled) return;
-    const last = model?.frames.filter(frame => chosen.includes(frame.id)).at(-1);
+    const last = model.frames.filter(frame => chosen.includes(frame.id)).at(-1);
     const destination: BeamerSlideDestination = last ? { kind: "after", frameId: last.id } : { kind: "end" };
     edit({ kind: "paste", source, destination });
   };
@@ -99,7 +99,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
   const contextMenu = (event: MouseEvent, frameId: string) => {
     if (!model) return;
     event.preventDefault(); event.stopPropagation();
-    (event.currentTarget as HTMLElement).focus();
+    if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
     const chosen = ids.includes(frameId) ? ids : [frameId];
     if (!ids.includes(frameId)) select(frameId);
     const valid = () => {
@@ -107,7 +107,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
       return state.activeDocumentId === documentId && state.sourceRevision === doc.sourceRevision;
     };
     const available = enabled && chosen.every(id => editable.includes(id));
-    const bindings = Object.fromEntries<CommandBinding>(Object.values(IDS).map(id => [id, { enabled: false, run: () => {} }])) as CommandBindings;
+    const bindings: CommandBindings = {};
     bindings[IDS.COPY] = { enabled: available, run: () => { if (valid()) void copy(chosen); } };
     bindings[IDS.PASTE] = { enabled, run: () => { if (valid()) void paste(chosen); } };
     bindings[IDS.DUPLICATE] = { enabled: available && editBeamerSlides(doc.source, { kind: "duplicate", frameIds: chosen }) != null,
@@ -118,7 +118,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
     const platform = getActiveEditorPlatform();
     if (platform.menu?.usesNativeContextMenus && platform.menu.showNativeContextMenu) {
       void platform.menu.showNativeContextMenu({ items: MENU_ITEMS, commandStates: bindings,
-        onCommandRun: (id, origin) => { if (valid() && bindings[id].enabled) void bindings[id].run(origin); } });
+        onCommandRun: (id, origin) => { const binding = bindings[id]; if (valid() && binding?.enabled) void binding.run(origin); } });
     } else {
       const box = containerRef.current?.getBoundingClientRect();
       setMenu({ revision: doc.sourceRevision, documentId, anchor: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) }, bindings });
@@ -141,7 +141,7 @@ export function useSlideManager(model: BeamerDocumentModel | null, containerRef:
     menu: menu?.documentId === documentId && menu.revision === doc.sourceRevision ?
       <CanvasContextMenu open anchor={menu.anchor} target="selection-multi" containerRef={containerRef} bindings={menu.bindings}
         definition={{ ...CANVAS_CONTEXT_MENU_DEFINITION, "selection-multi": MENU_ITEMS }} onClose={closeMenu}
-        onCommandRun={(id, origin) => { if (menu.bindings[id].enabled) void menu.bindings[id].run(origin); }} /> : null };
+        onCommandRun={(id, origin) => { const binding = menu.bindings[id]; if (binding?.enabled) void binding.run(origin); }} /> : null };
 }
 const MENU_ITEMS: readonly AppMenuItem[] = [
   { kind: "command", commandId: IDS.COPY, label: "Copy" },

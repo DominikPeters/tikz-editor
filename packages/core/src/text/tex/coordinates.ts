@@ -46,6 +46,7 @@ export type TexHBoxOffsetY = CoordinateBrand<"TexHBoxOffsetY">;
 export type TexMuLength = CoordinateBrand<"TexMuLength">;
 
 export function texLength(value: number): TexLength {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexLength;
 }
 
@@ -54,59 +55,73 @@ export function texLength(value: number): TexLength {
  * Keep calls at parsing, measurement, and report boundaries.
  */
 export function texVListX(value: number): TexVListX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexVListX;
 }
 
 /** Marks an inline displacement relative to the current vertical-list box. */
 export function texVListLocalX(value: number): TexVListLocalX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexVListLocalX;
 }
 
 export function texVListY(value: number): TexVListY {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexVListY;
 }
 
 export function texVListLocalY(value: number): TexVListLocalY {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexVListLocalY;
 }
 
 export function texLineX(value: number): TexLineX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexLineX;
 }
 
 export function texLineLocalX(value: number): TexLineLocalX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexLineLocalX;
 }
 
 export function texLineY(value: number): TexLineY {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexLineY;
 }
 
 export function texHBoxX(value: number): TexHBoxX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexHBoxX;
 }
 
 export function texHBoxY(value: number): TexHBoxY {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexHBoxY;
 }
 
 export function texHBoxLocalX(value: number): TexHBoxLocalX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexHBoxLocalX;
 }
 
 export function texHBoxLocalY(value: number): TexHBoxLocalY {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexHBoxLocalY;
 }
 
 export function texHBoxOffsetX(value: number): TexHBoxOffsetX {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexHBoxOffsetX;
 }
 
 export function texHBoxOffsetY(value: number): TexHBoxOffsetY {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexHBoxOffsetY;
 }
 
 export function texMuLength(value: number): TexMuLength {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the coordinate frame after arithmetic erased its brand.
   return value as TexMuLength;
 }
 

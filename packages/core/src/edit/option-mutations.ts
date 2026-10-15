@@ -640,7 +640,7 @@ function resolveOptionSerializationContext(target: PropertyTarget): OptionSerial
     return DEFAULT_OPTION_SERIALIZATION_CONTEXT;
   }
 
-  const normalizedPathCommand = target.pathCommand?.trim().toLowerCase();
+  const normalizedPathCommand = target.pathCommand.trim().toLowerCase();
   if (normalizedPathCommand === "draw" || normalizedPathCommand === "fill") {
     return {
       bareColorKey: normalizedPathCommand

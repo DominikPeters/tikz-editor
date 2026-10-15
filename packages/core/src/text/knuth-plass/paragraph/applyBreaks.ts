@@ -44,20 +44,22 @@ interface TextMutationToken {
   text: string;
 }
 
-interface MtextBreakAction {
+interface MtextBreakActionBase {
   lineIndex: number;
-  kind: 'space' | 'hyphen';
   runIndex: number;
   sourceOffset: number;
   visibleHyphen: boolean;
   wrapper: AnyWrapper;
   childIndex: number;
   wordIndex: number;
-  splitOffset?: number;
 }
 
-const MTEXT_INDENT_PATCHED = Symbol('kp-mtext-indent-patched');
-const MTEXT_INDENT_PATCH_ORIGINAL = Symbol('kp-mtext-indent-original');
+type MtextBreakAction = MtextBreakActionBase & (
+  | { kind: 'space'; splitOffset?: never }
+  | { kind: 'hyphen'; splitOffset: number }
+);
+
+const indentPatchedWrappers = new WeakSet<object>();
 function alignmentToHorizontalAlign(alignment: ParagraphAlignment): 'left' | 'right' | 'center' {
   if (alignment === 'ragged-left') {
     return 'right';
@@ -299,7 +301,7 @@ function patchMtextIndentBehavior(wrapper: AnyWrapper | null | undefined): void 
   if (!wrapper || typeof wrapper !== 'object') {
     return;
   }
-  if ((wrapper as Record<symbol, unknown>)[MTEXT_INDENT_PATCHED]) {
+  if (indentPatchedWrappers.has(wrapper)) {
     return;
   }
   if (typeof wrapper.computeLineBBox !== 'function') {
@@ -307,8 +309,7 @@ function patchMtextIndentBehavior(wrapper: AnyWrapper | null | undefined): void 
   }
 
   const original = wrapper.computeLineBBox.bind(wrapper);
-  (wrapper as Record<symbol, unknown>)[MTEXT_INDENT_PATCH_ORIGINAL] = original;
-  (wrapper as Record<symbol, unknown>)[MTEXT_INDENT_PATCHED] = true;
+  indentPatchedWrappers.add(wrapper);
 
   wrapper.computeLineBBox = function patchedComputeLineBBox(this: AnyWrapper, i: number) {
     const bbox = original(i);
@@ -766,7 +767,7 @@ export function applyBreaks(
         : mappedIndexForHyphen(
           childSplits,
           action.wordIndex,
-          action.splitOffset as number
+          action.splitOffset
         );
 
       if (mutatedWordIndex === null) {

@@ -124,7 +124,9 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
             choices={SHAPE_POPUP_CHOICES}
             selectedId={selectedAddShape}
             onSelect={(id) => {
-              dispatch({ type: "SET_ADD_SHAPE_PRESET", value: id as typeof selectedAddShape });
+              const shape = NODE_SHAPE_OPTIONS.find(option => option.value === id);
+              if (!shape) return;
+              dispatch({ type: "SET_ADD_SHAPE_PRESET", value: shape.value });
               // Activate the shape tool and close popup
               dispatch({ type: "SET_TOOL_MODE", mode: "addShape" });
               setOpenPopupMode(null);
@@ -134,7 +136,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
         </ToolbarPopupSection>
       );
     }
-    if (popupKind === "matrix-picker") {
+    {
       const maxColumns = 10;
       const maxRows = 8;
       const isSelected = (row: number, column: number): boolean =>
@@ -175,12 +177,12 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
         </ToolbarPopupSection>
       );
     }
-    return null;
   };
 
   const renderBucketButton = () => {
     const mode = "addBucket" as const;
-    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode)!;
+    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode);
+    if (!toolDef) throw new Error(`Missing tool definition for ${mode}`);
     const capability = getToolCapabilityStatus(mode);
     const unsupported = capability.status === "unsupported";
     const buttonTitle = unsupported
@@ -243,7 +245,8 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
 
   const renderShapeButton = () => {
     const mode = "addShape" as const;
-    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode)!;
+    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode);
+    if (!toolDef) throw new Error(`Missing tool definition for ${mode}`);
     const capability = getToolCapabilityStatus(mode);
     const unsupported = capability.status === "unsupported";
     const buttonTitle = unsupported
@@ -282,7 +285,8 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
 
   const renderMatrixButton = () => {
     const mode = "addMatrix" as const;
-    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode)!;
+    const toolDef = TOOL_BUTTONS.find((b) => b.mode === mode);
+    if (!toolDef) throw new Error(`Missing tool definition for ${mode}`);
     const capability = getToolCapabilityStatus(mode);
     const unsupported = capability.status === "unsupported";
     const buttonTitle = unsupported

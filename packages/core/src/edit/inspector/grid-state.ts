@@ -67,9 +67,6 @@ function collectGridKeywords(
 
   for (const [index, item] of items.entries()) {
 
-    if (!item) {
-      continue;
-    }
     if (item.kind === "PathKeyword" && item.keyword === "grid") {
       const next = items[index + 1];
       collected.push({

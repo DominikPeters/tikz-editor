@@ -158,7 +158,7 @@ export function resolveNodeTransformShape(options: OptionListAst | undefined, in
     if (entry.kind === "unknown" || entry.key !== "transform shape") continue;
     if (entry.kind === "flag") {
       transformShape = true;
-    } else if (entry.kind === "kv") {
+    } else {
       const parsed = parseBooleanishNormalized(normalizeOptionValue(entry.valueRaw));
       if (parsed != null) transformShape = parsed;
     }

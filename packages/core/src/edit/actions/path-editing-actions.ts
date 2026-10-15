@@ -4,7 +4,7 @@ import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import type { EditHandle } from "../../semantic/types.js";
-import type { PathStatement, Span } from "../../ast/types.js";
+import type { Span } from "../../ast/types.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
 import { CM_PER_PT, formatNumber } from "../format.js";
@@ -52,7 +52,7 @@ function wv(x: number, y: number): WorldVector {
 
 export function applySplitPathAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: SplitPathAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -140,8 +140,13 @@ export function applyJoinPathsAction(
     return { kind: "unsupported", reason: "Join requires two path statements in the same scope." };
   }
 
-  const firstResolved = analyzeExplicitPathStatement(source, requireArrayValue(refs, 0).statement as PathStatement);
-  const secondResolved = analyzeExplicitPathStatement(source, requireArrayValue(refs, 1).statement as PathStatement);
+  const firstStatement = requireArrayValue(refs, 0).statement;
+  const secondStatement = requireArrayValue(refs, 1).statement;
+  if (firstStatement.kind !== "Path" || secondStatement.kind !== "Path") {
+    return { kind: "unsupported", reason: "Join requires two path statements in the same scope." };
+  }
+  const firstResolved = analyzeExplicitPathStatement(source, firstStatement);
+  const secondResolved = analyzeExplicitPathStatement(source, secondStatement);
   if (firstResolved.kind !== "eligible") {
     return { kind: "unsupported", reason: firstResolved.reason };
   }
@@ -273,7 +278,7 @@ export function applyToggleClosedPathAction(
 
 export function applyDeletePathPointAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: DeletePathPointAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -335,7 +340,7 @@ export function applyDeletePathPointAction(
 
 export function applySetPathPointKindAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: SetPathPointKindAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -833,7 +838,7 @@ export function applyAppendToPathAction(
 
 export function applyInsertPathPointAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: InsertPathPointAction,
   parseOptions: EditParseOptions = {}
 ): EditActionResultLike {
@@ -863,7 +868,7 @@ export function applyInsertPathPointAction(
     const newPt = closest.point;
     const endAnchorRaw = segment.closesPath ? "cycle" : requireArrayValue(analysis.anchors, segment.endAnchorIndex).raw;
     replacementSegments = `-- ${formatPt(newPt)} -- ${endAnchorRaw}`;
-  } else if (segment.kind === "cubic") {
+  } else {
     const control1Item = analysis.statement.items[segment.control1Index];
     const control2Item = analysis.statement.items[segment.control2Index];
     if (control1Item?.kind !== "Coordinate" || control2Item?.kind !== "Coordinate") {
@@ -884,8 +889,6 @@ export function applyInsertPathPointAction(
     replacementSegments =
       `.. controls ${formatPt(left[1])} and ${formatPt(left[2])} .. ${formatPt(left[3])}` +
       ` .. controls ${formatPt(right[1])} and ${formatPt(right[2])} .. ${endAnchorRaw}`;
-  } else {
-    return { kind: "unsupported", reason: "Unsupported segment kind for point insertion." };
   }
 
   // Rebuild the path body with the segment replaced

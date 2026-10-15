@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { Span } from "../../ast/types.js";
 
@@ -72,7 +73,8 @@ export function scanTexRecovery(text: string): TexRecovery {
   const recovery = scan(text);
   cache.set(text, recovery);
   if (cache.size > CACHE_LIMIT) {
-    cache.delete(cache.keys().next().value!);
+    const oldest = cache.keys().next();
+    if (!oldest.done) cache.delete(oldest.value);
   }
   return recovery;
 }
@@ -156,7 +158,7 @@ function scan(text: string): TexRecovery {
   };
   const popTo = (index: number, at: number) => {
     while (stack.length > index) {
-      unclosed(stack.pop()!, at);
+      unclosed(requireDefined(stack.pop(), "Recovery stack frame is required."), at);
     }
   };
   /** A paragraph or item ends: math cannot outlast it, and a group still open there ends its run. */
@@ -253,7 +255,9 @@ function scan(text: string): TexRecovery {
           stack.push({ kind: "env", name: envName });
         } else {
           let open = stack.length - 1;
-          while (open >= 0 && !(requireArrayValue(stack, open).kind === "env" && (stack[open] as { name: string }).name === envName)) {
+          while (open >= 0) {
+            const frame = requireArrayValue(stack, open);
+            if (frame.kind === "env" && frame.name === envName) break;
             open -= 1;
           }
           if (open >= 0) {
@@ -268,7 +272,7 @@ function scan(text: string): TexRecovery {
         // Past the name and parameters (`\foo`, `[2]`, `#1`) and every braced argument, the body last.
         let cursor = end;
         for (;;) {
-          const lead = /^[^{}%\n]*\n?[ \t]*/u.exec(text.slice(cursor, cursor + 80))![0];
+          const lead = requireDefined(/^[^{}%\n]*\n?[ \t]*/u.exec(text.slice(cursor, cursor + 80)), "Recovery definition prefix always matches.")[0];
           const close = text[cursor + lead.length] === "{" ? groupEnd(cursor + lead.length) : null;
           if (close == null) {
             break;
@@ -361,7 +365,8 @@ function scan(text: string): TexRecovery {
       const double = text[index + 1] === "$";
       const math = nearest((frame) => frame.kind === "math");
       if (math >= 0) {
-        const frame = stack[math] as Extract<Frame, { kind: "math" }>;
+        const frame = requireArrayValue(stack, math);
+        if (frame.kind !== "math") throw new Error("Expected the nearest math frame.");
         const length = frame.closer === "$$" && double ? 2 : 1;
         if (frame.closer === "$" || (frame.closer === "$$" && double)) {
           // `$\frac{a}{$`: groups opened in the math end with it.

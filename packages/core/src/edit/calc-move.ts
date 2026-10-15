@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import type { EditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import { worldPoint, worldVector } from "../coords/points.js";
@@ -54,11 +55,11 @@ export function correctMovedCoordinateDependencies(
   // second control depends on its endpoint. Resolve the endpoints first in
   // each statement, then the controls, regardless of their source order.
   const orderedHandles = [...dependentHandles].sort((left, right) =>
-    baseline.indices.get(left.id)! - baseline.indices.get(right.id)! ||
+    requireDefined(baseline.indices.get(left.id), "Missing required baseline.indices.get(left.id)") - requireDefined(baseline.indices.get(right.id), "Missing required baseline.indices.get(right.id)") ||
     Number(left.kind === "path-control") - Number(right.kind === "path-control") ||
     left.sourceRef.sourceSpan.from - right.sourceRef.sourceSpan.from);
   for (const original of orderedHandles) {
-    const targetIndex = baseline.indices.get(original.id)!;
+    const targetIndex = requireDefined(baseline.indices.get(original.id), "Missing required baseline.indices.get(original.id)");
     for (; index <= targetIndex; index++) {
       beforeStatement = snapshotSemanticContext(run.context, { editHandlesMode: "length" });
       beforeHandles = run.context.editHandles.slice();
@@ -76,7 +77,7 @@ export function correctMovedCoordinateDependencies(
     // references still need correction if they did not follow the frame.
     const delta = inheritedSourceIds.has(original.sourceRef.sourceId)
       ? worldPoint(pt(currentFrame.e - originalFrame.e), pt(currentFrame.f - originalFrame.f))
-      : deltas.get(original.sourceRef.sourceId)!;
+      : requireDefined(deltas.get(original.sourceRef.sourceId), "Missing required deltas.get(original.sourceRef.sourceId)");
     // Both measurements use the same evaluator, so native text metrics do not
     // introduce offsets when a calc expression refers to a named node anchor.
     const target = worldPoint(pt(originalGeometry.world.x + delta.x), pt(originalGeometry.world.y + delta.y));
@@ -99,7 +100,7 @@ export function correctMovedCoordinateDependencies(
     // Generated instances may share an authored span. A selected scope can
     // still carry all of them safely when their inherited movement is already
     // correct; only an actual coordinate rewrite requires unique ownership.
-    if (spanCounts.get(spanKey(original))! > 1) return null;
+    if (requireDefined(spanCounts.get(spanKey(original)), "Missing required spanCounts.get(spanKey(original))") > 1) return null;
     const replacement = rewriteCoordinate(target, currentGeometry, currentSource, parseOptions.bypassSnapping);
     if (replacement == null) return null;
     const next = replaceSpan(currentSource, currentGeometry.sourceRef.sourceSpan, replacement).source;
@@ -138,7 +139,7 @@ function prepareBaseline(source: string, selected: readonly EditHandle[], depend
   const movedScopes = run.expandedFigureBody.flatMap((statement, index) =>
     run.scopeSteps.get(statement) === "enter" && deltas.has(statement.id) ? [index] : []);
   const firstIndex = Math.min(...indices.values(), ...movedScopes);
-  const lastIndex = Math.max(...dependent.map(handle => indices.get(handle.id)!));
+  const lastIndex = Math.max(...dependent.map(handle => requireDefined(indices.get(handle.id), "Missing required indices.get(handle.id)")));
   for (let i = 0; i < firstIndex; i++) evaluateSemanticStatementByIndex(run, i);
   const checkpoint = snapshotSemanticContext(run.context, { editHandlesMode: "length" });
   const prefixHandles = run.context.editHandles.slice();

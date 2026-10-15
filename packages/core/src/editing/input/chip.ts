@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { CommandCategory, CommandTable } from "../commands/table.js";
 import type { EditMode } from "../tree/types.js";
@@ -64,7 +65,7 @@ export function chipCandidates(table: CommandTable, mode: EditMode, prefix: stri
       left.localeCompare(right))
     .slice(0, CHIP_CANDIDATE_LIMIT)
     .map((name) => {
-      const schema = table.command(base(name), resolved)!;
+      const schema = requireDefined(table.command(base(name), resolved), "Missing required table.command(base(name), resolved)");
       return { name, category: schema.category, user: schema.userMacro === true };
     });
 }

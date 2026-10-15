@@ -113,15 +113,15 @@ export function resolveBeamerTheme(
 
   return {
     id: state.id,
-    colors: freezeRecord(state.colors),
+    colors: freezeColors(state.colors),
     colorAliases: Object.freeze({ ...state.colorAliases }),
     colorAliasRgb: Object.freeze(Object.fromEntries(Object.entries(state.colorAliasRgb).map(([name, channels]) => [name, freezeColorChannels(channels)]))),
-    fonts: freezeRecord(state.fonts),
+    fonts: freezeFonts(state.fonts),
     dimensions: Object.freeze({
       ...state.dimensions,
       listLeftMarginEmByDepth: Object.freeze([
-        ...state.dimensions.listLeftMarginEmByDepth,
-      ]) as unknown as readonly [number, number, number],
+        state.dimensions.listLeftMarginEmByDepth[0], state.dimensions.listLeftMarginEmByDepth[1], state.dimensions.listLeftMarginEmByDepth[2],
+      ] as const),
       sidebarWidthLeft: Object.freeze({
         ...state.dimensions.sidebarWidthLeft,
       }),
@@ -149,7 +149,8 @@ function resolveBeamerColorRecord(colors: Readonly<Record<string, BeamerThemeCol
   const expressionRgb = (raw: string, seen: ReadonlySet<string>): BeamerColorRgb | null => resolveBeamerColorExpressionRgb(raw, alias => {
     const match = /^(.*)\.(fg|bg)$/u.exec(alias);
     const roleName = match && roleNameForAlias(requireArrayValue(match, 1));
-    if (match && roleName) return roleRgb(roleName, requireArrayValue(match, 2) as "fg" | "bg", seen);
+    const field = match?.[2];
+    if (roleName && (field === "fg" || field === "bg")) return roleRgb(roleName, field, seen);
     return aliasRgb[alias] ?? (aliases[alias] ? resolveBeamerColorExpressionRgb(aliases[alias], () => null) : null);
   });
   const roleRgb = (name: string, field: "fg" | "bg", ancestors: ReadonlySet<string>): BeamerColorRgb | null => {
@@ -1923,40 +1924,24 @@ function freezeColorChannels(channels: BeamerColorRgb): BeamerColorRgb {
   return Object.freeze([channels[0], channels[1], channels[2]]);
 }
 
-function freezeRecord<T extends Record<string, object>>(record: T): Readonly<T> {
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(record).map(([key, value]) => [
-        key,
-        Object.freeze({
-          ...value,
-          ...(hasRgbChannels(value)
-            ? { fgRgb: Object.freeze([...value.fgRgb]) }
-            : {}),
-          ...("parents" in value && Array.isArray(value.parents) ? { parents: Object.freeze(value.parents.map((role: unknown) => String(role))) } : {}),
-          ...("use" in value && Array.isArray(value.use) ? { use: Object.freeze(value.use.map((role: unknown) => String(role))) } : {}),
-          ...("fgExpression" in value && value.fgExpression ? { fgExpression: Object.freeze({ ...value.fgExpression }) } : {}),
-          ...("bgExpression" in value && value.bgExpression ? { bgExpression: Object.freeze({ ...value.bgExpression }) } : {}),
-          ...("fgMix" in value && value.fgMix
-            ? { fgMix: Object.freeze({ ...value.fgMix }) }
-            : {}),
-          ...("bgMix" in value && value.bgMix
-            ? { bgMix: Object.freeze({ ...value.bgMix }) }
-            : {}),
-        }),
-      ])
-    )
-  ) as Readonly<T>;
+function freezeColors(record: Readonly<Record<string, BeamerThemeColor>>): Readonly<Record<string, BeamerThemeColor>> {
+  return Object.freeze(Object.fromEntries(Object.entries(record).map(([key, value]) => [key, Object.freeze({
+    ...value,
+    ...(value.fgRgb ? { fgRgb: freezeColorChannels(value.fgRgb) } : {}),
+    ...(value.parents ? { parents: Object.freeze([...value.parents]) } : {}),
+    ...(value.use ? { use: Object.freeze([...value.use]) } : {}),
+    ...(value.fgExpression ? { fgExpression: Object.freeze({ ...value.fgExpression }) } : {}),
+    ...(value.bgExpression ? { bgExpression: Object.freeze({ ...value.bgExpression }) } : {}),
+    ...(value.fgMix ? { fgMix: Object.freeze({ ...value.fgMix }) } : {}),
+    ...(value.bgMix ? { bgMix: Object.freeze({ ...value.bgMix }) } : {})
+  })] as const)));
 }
 
-function hasRgbChannels(
-  value: object
-): value is { fgRgb: readonly number[] } {
-  return (
-    "fgRgb" in value &&
-    Array.isArray(value.fgRgb) &&
-    value.fgRgb.every((channel: unknown) => typeof channel === "number")
-  );
+function freezeFonts(record: Readonly<Record<BeamerThemeFontRole, BeamerThemeFont>>): Readonly<Record<BeamerThemeFontRole, BeamerThemeFont>> {
+  const fonts = { ...record };
+  const roles: readonly BeamerThemeFontRole[] = ["normal-text", "title", "subtitle", "author", "institute", "date", "frame-title", "frame-subtitle", "headline", "section-in-head-foot", "subsection-in-head-foot", "title-in-sidebar", "author-in-sidebar", "section-in-sidebar", "subsection-in-sidebar", "footline", "block-title", "block-body"];
+  for (const role of roles) fonts[role] = Object.freeze({ ...record[role] });
+  return Object.freeze(fonts);
 }
 
 function freezeTemplates(templates: BeamerThemeTemplates): BeamerThemeTemplates {
@@ -1974,10 +1959,7 @@ function freezeTemplates(templates: BeamerThemeTemplates): BeamerThemeTemplates 
     titlePage: freezeRef(templates.titlePage),
     sectionPage: freezeRef(templates.sectionPage),
     block: freezeRef(templates.block),
-    bullets: Object.freeze(templates.bullets.map(freezeRef)) as unknown as
-      BeamerThemeTemplates["bullets"],
-    enumerations: Object.freeze(
-      templates.enumerations.map(freezeRef)
-    ) as unknown as BeamerThemeTemplates["enumerations"],
+    bullets: Object.freeze([freezeRef(templates.bullets[0]), freezeRef(templates.bullets[1]), freezeRef(templates.bullets[2])] as const),
+    enumerations: Object.freeze([freezeRef(templates.enumerations[0]), freezeRef(templates.enumerations[1]), freezeRef(templates.enumerations[2])] as const),
   });
 }

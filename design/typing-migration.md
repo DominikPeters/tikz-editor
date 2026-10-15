@@ -15,11 +15,19 @@ The options are also enabled in the standalone package configs:
 - `packages/core`
 - `packages/app`
 
-The Lezer, language, and fuzz packages reject non-null assertions in production
-lint; the Lezer and language packages additionally reject unsafe type assertions.
-Core's parsing modules retain their non-null assertion ban. These lint bans are
-scoped independently of the compiler options; existing assertions elsewhere are
-still candidates for a future audit.
+Production lint rejects non-null assertions, unsafe narrowing assertions, and
+unnecessary conditions throughout all packages and app shells. Hook dependencies
+and useless assignments are errors throughout production too. These rules share
+one production configuration rather than directory-specific rollouts.
+
+Prefer precise discriminated unions and readonly input contracts to narrowing
+casts. Validate serialized font and fuzz data before assigning domain types.
+The remaining assertion exceptions are documented at the individual operation:
+phantom unit constructors, internal shape-preserving transformations, generic
+container relationships that TypeScript cannot express, and a platform wire enum
+without a runtime export. Serialized layout copies omit optional executable
+metadata rather than retain objects missing their required methods. Keep
+exceptions local rather than excluding a whole file or directory.
 
 `typecheck:strict-packages` builds dependencies before checking production and
 standalone fuzz types, so clean checkouts do not rely on stale declarations.

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { InteractionState } from "../input/interaction.js";
@@ -55,7 +56,7 @@ export function typeCharacter(
     // would end it (LaTeX takes the first one, even inside `$…$`).
     const open = state.placeholder != null ? placeholderAt(view, state.placeholder, at) : null;
     // Placeholder braces are replaced, so they protect nothing: look from what holds them.
-    const from = open ? editNodeAt(tree.nodes, open.formula ?? editSlotAt(tree.slots, open.slot!).node).parent : caret.slot;
+    const from = open ? editNodeAt(tree.nodes, open.formula ?? editSlotAt(tree.slots, requireDefined(open.slot, "Missing required open.slot")).node).parent : caret.slot;
     // A frame title is read as an optional argument too, on the continuation frames of `allowframebreaks`.
     if (from != null && (title || insideOptional(view, from))) {
       return open
@@ -493,11 +494,11 @@ export function abandonPlaceholder(view: EditView, placeholder: Placeholder): Ed
   if (placeholder.formula != null) {
     span = editNodeAt(tree.nodes, placeholder.formula).span;
   } else {
-    const role = editSlotAt(tree.slots, placeholder.slot!).role;
+    const role = editSlotAt(tree.slots, requireDefined(placeholder.slot, "Missing required placeholder.slot")).role;
     if (role !== "sup" && role !== "sub") {
       return null;
     }
-    span = slotOuterSpan(tree, placeholder.slot!);
+    span = slotOuterSpan(tree, requireDefined(placeholder.slot, "Missing required placeholder.slot"));
   }
   // R5 at the seam: `\gamma_{}w` leaves `\gamma w`, not `\gammaw`.
   const patches = withTerminator(tree.text, new PatchSet().delete(span).patches(), span.from, "math");

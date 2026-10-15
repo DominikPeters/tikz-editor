@@ -62,8 +62,8 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
         baseRevision: current.edit.latestRevision, patches: current.patches, changedSourceIds: [] });
     }
     const document = useEditorStore.getState().documents[current.edit.documentId];
-    if (restored && document && current.imageFrom != null) {
-      pendingSelection.current = { documentId: current.edit.documentId, frameId: current.edit.activeRootId!,
+    if (restored && document && current.imageFrom != null && current.edit.activeRootId != null) {
+      pendingSelection.current = { documentId: current.edit.documentId, frameId: current.edit.activeRootId,
         source: document.source, from: current.imageFrom };
     }
     setDragging(null);
@@ -109,7 +109,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     const state = useEditorStore.getState();
     state.dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: current.edit.documentId,
       baseRevision: current.edit.latestRevision, patches, changedSourceIds: [] });
-    if (current.imageFrom != null) pendingSelection.current = { documentId: current.edit.documentId, frameId: layout!.frameId,
+    if (current.imageFrom != null && layout) pendingSelection.current = { documentId: current.edit.documentId, frameId: layout.frameId,
       source: useEditorStore.getState().source, from: current.imageFrom };
   };
 
@@ -120,6 +120,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     const current = prepare(target);
     const svg = svgRef.current;
     if (!current || !svg) return;
+    const pointerCapture: Partial<Pick<SVGSVGElement, "setPointerCapture" | "hasPointerCapture" | "releasePointerCapture">> = svg;
     const origin = clientToSvgPoint(clientPoint(px(event.clientX), px(event.clientY)), svg);
     if (!origin) return;
     // Freeze the view transform as well as the source: reflow must not move the drag origin.
@@ -173,10 +174,10 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
       window.removeEventListener("blur", blur);
       window.removeEventListener("keydown", key, true);
       svg.removeEventListener("wheel", wheel, true);
-      if (svg.hasPointerCapture?.(pointerId)) svg.releasePointerCapture(pointerId);
+      if (pointerCapture.hasPointerCapture?.(pointerId)) pointerCapture.releasePointerCapture?.(pointerId);
     };
     session.current = current;
-    svg.setPointerCapture?.(pointerId);
+    pointerCapture.setPointerCapture?.(pointerId);
     useEditorStore.getState().dispatch({ type: "SET_ACTIVE_INSPECTOR_EDIT", documentId: current.edit.documentId });
     setDragging(target);
   };

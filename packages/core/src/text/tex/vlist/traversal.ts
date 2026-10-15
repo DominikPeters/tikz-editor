@@ -32,9 +32,6 @@ function collectTexVListParagraphEntries(
   entries: TexVListParagraphEntry[]
 ): void {
   for (const [index, item] of items.entries()) {
-    if (!item) {
-      continue;
-    }
     const path = [...pathPrefix, index];
     if (item.kind === "paragraph") {
       entries.push({ item, path, ancestors });

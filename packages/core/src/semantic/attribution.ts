@@ -242,7 +242,7 @@ export function finalizeExpandedStatementHandles(args: {
     const pathItem = pathItemsById ? resolvePathItemForSourceRef(handle.sourceRef.sourceId, handle.sourceRef.sourceSpan, pathItemsById) : undefined;
     const itemSourceMap = pathItem ? pathItemSourceMaps.get(pathItem) : undefined;
     const effectiveSourceMap = composePathItemSourceMap(itemSourceMap, statementSourceMap);
-    if (!effectiveSourceMap && (!shouldOverrideSource || !attribution)) {
+    if (!effectiveSourceMap && !shouldOverrideSource) {
       continue;
     }
     const mappedSpan = effectiveSourceMap ? mapExpansionSpan(effectiveSourceMap, handle.sourceRef.sourceSpan) : handle.sourceRef.sourceSpan;

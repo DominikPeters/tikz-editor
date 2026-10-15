@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { Span } from "../../ast/types.js";
@@ -132,7 +133,7 @@ export function applyReorderElementsAction(
   return {
     kind: "success",
     newSource: currentSource,
-    identityMoves: initialSnapshot.all.map(ref => ({ oldSpan: ref.span, newSpan: identitySpans.get(ref.id)! })),
+    identityMoves: initialSnapshot.all.map(ref => ({ oldSpan: ref.span, newSpan: requireDefined(identitySpans.get(ref.id), "Missing required identitySpans.get(ref.id)") })),
     patches,
     ...(selectedSourceIds.length > 0 ? { selectedSourceIds } : {}),
     changedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : normalizedIds

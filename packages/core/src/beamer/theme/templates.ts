@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type {
   BeamerChromeTemplatePlan,
   BeamerFrameChromePlan,
@@ -208,7 +209,7 @@ function planDefaultFrameTitle(
     titleBaseline = DEFAULT_FRAME_TITLE_SEP_PT - measured.xHeight + firstAdvance;
     let materialExtent = firstAdvance + measured.extent - measured.firstHeight;
     if (hasSubtitle) {
-      const subtitle = context.measureFrameHeading?.(context.frame.subtitle!, "frame-subtitle", width);
+      const subtitle = context.measureFrameHeading?.(requireDefined(context.frame.subtitle, "Expected an internal templates value"), "frame-subtitle", width);
       if (subtitle) {
         const skip = subtitle.baselineSkip - measured.endingDepth - subtitle.firstHeight;
         const glue = skip >= 0 ? skip : 1;
@@ -278,14 +279,14 @@ function planDefaultFrameTitle(
       ...(hasSubtitle ? [{
         kind: "text" as const,
         id: `${context.frame.id}:frame-subtitle:text`,
-        sourceSpan: context.frame.subtitle!.contentSpan,
+        sourceSpan: requireDefined(context.frame.subtitle, "Expected an internal templates value").contentSpan,
         bounds: {
           x: context.page.frameArea.x + DEFAULT_FRAME_TITLE_SEP_PT,
           y: DEFAULT_FRAME_TITLE_TEXT_TOP_PT + subtitleBaselineAdvance,
           width: context.page.frameArea.width - 2 * DEFAULT_FRAME_TITLE_SEP_PT,
           height: subtitleFont.lineHeightPt,
         },
-        source: { kind: "mapped" as const, value: context.frame.subtitle! },
+        source: { kind: "mapped" as const, value: requireDefined(context.frame.subtitle, "Expected an internal templates value") },
         fontRole: "frame-subtitle" as const,
         colorRole: "framesubtitle",
         alignment: ref.options.alignment === "center" ? "center" as const

@@ -243,7 +243,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
   }) : null, [needsPointSnapContext, snapshot.scene, snapGuideInput, snapSettingsPatch, canvasTransform.scale, viewportWorldBounds]);
 
   const onInteractionPointerDown = useCallback(
-    (event: ReactPointerEvent<SVGSVGElement>) => {
+    (event: ReactPointerEvent<SVGSVGElement | HTMLDivElement>) => {
       viewportRef.current?.focus({ preventScroll: true });
       closeTextEditingSession();
       const additiveSelection = event.shiftKey || event.ctrlKey || event.metaKey;
@@ -414,7 +414,8 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
             setPathSegmentDraft(null);
             setToolDraft(null);
             setBezierBendDraft(null);
-            setSnapLines(toolSnapContext && "targets" in startSnapResult && startSnapResult.targets ? pointerSnapLines(toolSnapContext, draftStart, startSnapResult.targets) : []);
+            const targets = "targets" in startSnapResult ? startSnapResult.targets : undefined;
+            setSnapLines(toolSnapContext && targets ? pointerSnapLines(toolSnapContext, draftStart, targets) : []);
             logSnapDebug({
               phase: "tool-path-start",
               snapshotMatchesSource: true,
@@ -441,7 +442,8 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
 
           const segmentStart = pathToolCurrentPoint(activeDraft);
           if (distanceSquared(segmentStart, resolvedStart) <= 1e-6) {
-            setSnapLines(toolSnapContext && "targets" in startSnapResult && startSnapResult.targets ? pointerSnapLines(toolSnapContext, resolvedStart, startSnapResult.targets) : []);
+            const targets = "targets" in startSnapResult ? startSnapResult.targets : undefined;
+            setSnapLines(toolSnapContext && targets ? pointerSnapLines(toolSnapContext, resolvedStart, targets) : []);
             return;
           }
 
@@ -536,7 +538,8 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
             toolCursorWorld != null &&
             distanceSquared(world, toolCursorWorld) <= previewToleranceWorld * previewToleranceWorld;
           const nodeAt = previewMatchesClick ? toolCursorWorld : snapResult.snappedPoint ?? world;
-          setSnapLines(toolSnapContext && "targets" in snapResult && snapResult.targets ? pointerSnapLines(toolSnapContext, nodeAt, snapResult.targets) : []);
+          const targets = "targets" in snapResult ? snapResult.targets : undefined;
+          setSnapLines(toolSnapContext && targets ? pointerSnapLines(toolSnapContext, nodeAt, targets) : []);
           logSnapDebug({
             phase: "tool-add-node",
             snapshotMatchesSource: true,
@@ -705,7 +708,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       }
       if (toolMode !== "select") {
         if (toolMode !== "magnify") {
-          onInteractionPointerDown(event as unknown as ReactPointerEvent<SVGSVGElement>);
+          onInteractionPointerDown(event);
         }
         return;
       }
@@ -810,7 +813,6 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       const showNodeAnchors =
         !toolDraft &&
         !bezierBendDraft &&
-        !pathSegmentDraft &&
         (toolMode === "addLine" || toolMode === "addArrow" || toolMode === "addPath");
       const hoverEndpointAnchorOverlay = showNodeAnchors
         ? resolveEndpointAnchorSnap({
@@ -823,7 +825,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         : null;
       const hoverEndpointAnchor = hoverEndpointAnchorOverlay?.snappedAnchor ?? null;
       const hoverPathEndpoint =
-        toolMode === "addPath" && !pathDraft && !pathSegmentDraft
+        toolMode === "addPath" && !pathDraft
           ? resolvePathEndpointSnap({
               bypass: event.ctrlKey || event.metaKey,
               pointerWorld: snapped.snappedPoint ?? world,
@@ -853,13 +855,13 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       const cursorWorld = closeCandidateWorld ?? hoverPathEndpoint?.world ?? hoverEndpointAnchor?.world ?? snapped.snappedPoint ?? world;
       setToolCursorWorld(cursorWorld);
       updateInitialPlacementTooltip(event, cursorWorld);
-      if (!toolDraft && !bezierBendDraft && !pathSegmentDraft) {
+      if (!toolDraft && !bezierBendDraft) {
         setSnapLines(snapped.targets ? pointerSnapLines(snapContext, cursorWorld, snapped.targets) : []);
       }
       logSnapDebug({
         phase: "tool-hover-move",
         snapshotMatchesSource: true,
-        dragKind: toolDraft ? "tool-create" : bezierBendDraft ? "tool-bezier-bend" : pathSegmentDraft ? "tool-path-segment" : null,
+        dragKind: toolDraft ? "tool-create" : bezierBendDraft ? "tool-bezier-bend" : null,
         context: snapContext,
         rawPoint: world,
         snappedPoint: snapped.snappedPoint ?? world,
@@ -990,7 +992,6 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       const showNodeAnchorsEnter =
         !toolDraft &&
         !bezierBendDraft &&
-        !pathSegmentDraft &&
         (toolMode === "addLine" || toolMode === "addArrow" || toolMode === "addPath");
       const hoverEndpointAnchorOverlay = showNodeAnchorsEnter
         ? resolveEndpointAnchorSnap({
@@ -1003,7 +1004,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
         : null;
       const hoverEndpointAnchor = hoverEndpointAnchorOverlay?.snappedAnchor ?? null;
       const hoverPathEndpointEnter =
-        toolMode === "addPath" && !pathDraft && !pathSegmentDraft
+        toolMode === "addPath" && !pathDraft
           ? resolvePathEndpointSnap({
               bypass: event.ctrlKey || event.metaKey,
               pointerWorld: snapped.snappedPoint ?? world,
@@ -1033,13 +1034,13 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
       const cursorWorld = closeCandidateWorld ?? hoverPathEndpointEnter?.world ?? hoverEndpointAnchor?.world ?? snapped.snappedPoint ?? world;
       setToolCursorWorld(cursorWorld);
       updateInitialPlacementTooltip(event, cursorWorld);
-      if (!toolDraft && !bezierBendDraft && !pathSegmentDraft) {
+      if (!toolDraft && !bezierBendDraft) {
         setSnapLines(snapped.targets ? pointerSnapLines(snapContext, cursorWorld, snapped.targets) : []);
       }
       logSnapDebug({
         phase: "tool-hover-enter",
         snapshotMatchesSource: true,
-        dragKind: toolDraft ? "tool-create" : bezierBendDraft ? "tool-bezier-bend" : pathSegmentDraft ? "tool-path-segment" : null,
+        dragKind: toolDraft ? "tool-create" : bezierBendDraft ? "tool-bezier-bend" : null,
         context: snapContext,
         rawPoint: world,
         snappedPoint: snapped.snappedPoint ?? world,

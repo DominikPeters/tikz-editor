@@ -502,8 +502,8 @@ function DependenciesTab({
           <div className={css.itemList}>
             {resources.slice(0, MAX_LIST_ROWS).map((node) => (
               <div key={node.id} className={css.compactRow}>
-                <code>{node.kind === "resource" ? node.resourceKind : node.id}</code>
-                <span>{node.kind === "resource" ? node.resourceKey : ""}</span>
+                <code>{node.resourceKind}</code>
+                <span>{node.resourceKey}</span>
               </div>
             ))}
           </div>
@@ -693,8 +693,8 @@ function HandleList({ activeHandleId, handles }: { activeHandleId: string | null
               ["world", formatPoint(handle.world)],
               ["source text", truncate(handle.sourceText, 80)],
               ["rewrite target", handle.rewriteTargetHandleId ?? "none"],
-              ["positioning", "positioningContext" in handle && handle.positioningContext ? `${handle.positioningContext.direction} of ${handle.positioningContext.targetNodeName}` : "none"],
-              ["path attachment", "pathAttachmentContext" in handle && handle.pathAttachmentContext ? `${handle.pathAttachmentContext.hostPathSourceId} @ ${handle.pathAttachmentContext.pos}` : "none"]
+              ["positioning", formatPositioningContext("positioningContext" in handle ? handle.positioningContext : undefined)],
+              ["path attachment", formatPathAttachmentContext("pathAttachmentContext" in handle ? handle.pathAttachmentContext : undefined)]
             ]}
           />
         </article>
@@ -797,7 +797,7 @@ function summarizeFeatureUsage(featureUsage: FeatureUsage | null): FeatureSummar
     if (state === "used-supported") {
       supported.push(formatFeature(feature));
     } else if (state === "used-unsupported") {
-      unsupported.push(formatCapabilityFeature(feature, capabilityMatrix[feature as keyof typeof capabilityMatrix]));
+      unsupported.push(formatCapabilityFeature(feature, Object.entries(capabilityMatrix).find(([id]) => id === feature)?.[1]));
     }
   }
   return {
@@ -941,4 +941,12 @@ function stringifyDebug(value: unknown): string {
     replacer,
     2
   );
+}
+
+function formatPositioningContext(context: { direction: string; targetNodeName: string } | undefined): string {
+  return context ? `${context.direction} of ${context.targetNodeName}` : "none";
+}
+
+function formatPathAttachmentContext(context: { hostPathSourceId: string; pos: number } | undefined): string {
+  return context ? `${context.hostPathSourceId} @ ${context.pos}` : "none";
 }

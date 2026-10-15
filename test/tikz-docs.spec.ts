@@ -67,4 +67,19 @@ describe("tikz docs lookup", () => {
     const entry = await lookupTikzDocEntry(["not-a-key"]);
     expect(entry).toBeNull();
   });
+  it("rejects malformed index values before constructing a chunk URL", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ "line width": 42 }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await lookupTikzDocEntry(["line width"])).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects malformed chunk entries before exposing documentation HTML", async () => {
+    const fetchMock = vi.fn(async (input: string | URL) => ({ ok: true, json: async () =>
+      String(input).endsWith("index.json") ? { "line width": "tikz-actions" } : { "line width": { type: "key", snippetHtml: 42 } }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await lookupTikzDocEntry(["line width"])).toBeNull();
+  });
+
 });

@@ -28,35 +28,49 @@ export function createSourceSpanResolver(patches: readonly SourcePatch[]): (span
 export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourceFingerprint: string) {
   const rebound = new WeakMap<object, unknown>();
 
-  // Used only on source metadata, never on the scene's geometry/style graph.
+  // Metadata consists of source spans, fingerprints and containers with unchanged schemas.
   function metadata<T>(value: T): T {
+    // The recursive walker preserves every container/key and changes only numeric spans/string fingerprints.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    return metadataValue(value) as T;
+  }
+
+  function metadataValue(value: unknown): unknown {
     if (!value || typeof value !== "object") return value;
     const known = rebound.get(value);
-    if (known) return known as T;
-    const record = value as Record<string, unknown>;
-    if (typeof record.from === "number" && typeof record.to === "number" && Object.keys(record).length === 2) {
-      const result = resolveSpan(value as unknown as Span);
+    if (known !== undefined) return known;
+    if (Array.isArray(value)) {
+      const entries: readonly unknown[] = value;
+      const next = entries.map(entry => metadataValue(entry));
+      const result = next.every((entry, index) => entry === entries[index]) ? value : next;
       rebound.set(value, result);
-      return result as T;
+      return result;
+    }
+    if ("from" in value && typeof value.from === "number" && "to" in value && typeof value.to === "number" && Object.keys(value).length === 2) {
+      const result = resolveSpan({ from: value.from, to: value.to });
+      rebound.set(value, result);
+      return result;
     }
     let result: Record<string, unknown> | undefined;
-    for (const key of Object.keys(record)) {
+    const entries: [string, unknown][] = Object.entries(value);
+    for (const [key, previous] of entries) {
       // Generated identity coordinates address the expansion, not the document.
       if (key === "identityRef") continue;
-      const next = key === "sourceFingerprint" ? sourceFingerprint : metadata(record[key]);
-      if (next !== record[key]) {
-        result ??= (Array.isArray(value) ? [...value] : { ...record }) as Record<string, unknown>;
+      const next = key === "sourceFingerprint" ? sourceFingerprint : metadataValue(previous);
+      if (next !== previous) {
+        result ??= { ...value };
         result[key] = next;
       }
     }
-    const bound = (result ?? value) as T;
+    const bound = result ?? value;
     rebound.set(value, bound);
     return bound;
   }
 
+  const reboundStyleChains = new WeakMap<StyleChainEntry[], StyleChainEntry[]>();
   function styleChain(chain: StyleChainEntry[]): StyleChainEntry[] {
-    const known = rebound.get(chain);
-    if (known) return known as StyleChainEntry[];
+    const known = reboundStyleChains.get(chain);
+    if (known) return known;
     const result = chain.map(entry => {
       const sourceRef = metadata(entry.sourceRef);
       const rawOptions = entry.sourceRef?.identityRef ? entry.rawOptions : metadata(entry.rawOptions);
@@ -64,7 +78,7 @@ export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourc
         ? entry : { ...entry, ...(sourceRef === undefined ? {} : { sourceRef: sourceRef }), rawOptions };
     });
     const bound = result.every((entry, index) => entry === chain[index]) ? chain : result;
-    rebound.set(chain, bound);
+    reboundStyleChains.set(chain, bound);
     return bound;
   }
 
@@ -102,14 +116,14 @@ export function sceneSourceExtent(elements: readonly SceneElement[], diagnostics
   function visit(value: unknown): void {
     if (!value || typeof value !== "object" || seen.has(value)) return;
     seen.add(value);
-    const record = value as Record<string, unknown>;
-    if (typeof record.from === "number" && typeof record.to === "number" && Object.keys(record).length === 2) {
-      from = Math.min(from, record.from);
-      to = Math.max(to, record.to);
+    if ("from" in value && typeof value.from === "number" && "to" in value && typeof value.to === "number" && Object.keys(value).length === 2) {
+      from = Math.min(from, value.from);
+      to = Math.max(to, value.to);
       return;
     }
-    for (const key of Object.keys(record)) {
-      if (key !== "identityRef") visit(record[key]);
+    const entries: [string, unknown][] = Object.entries(value);
+    for (const [key, nested] of entries) {
+      if (key !== "identityRef") visit(nested);
     }
   }
   for (const element of elements) {

@@ -193,12 +193,22 @@ test("a line drawn into a scaled and rotated page layer lands at its canvas endp
   const source = LAYERED.replace("shift={(current page.south west)}", "shift={(current page.south west)}, scale=1.5, rotate=30");
   await setSource(page, source);
   await page.getByRole("button", { name: "1. Layer", exact: true }).click();
+  // The root switches before its page is ready; the drawing tool needs the
+  // rendered picture inventory to reuse this layer instead of creating one.
+  await waitForSlideSnapshot(page, 2);
+  await expect(page.locator('[data-hit-region-target-id="path:0"]').first()).toBeAttached();
   await page.getByRole("button", { name: "Line", exact: true }).click();
   await expect.poll(async () => (await canvasState(page)).rootId).toBe("frame:0");
   await page.evaluate(() => {
     const api = (globalThis as unknown as { __TIKZ_EDITOR_APP_TEST_API__: { runCommand: (id: string) => void } }).__TIKZ_EDITOR_APP_TEST_API__;
     for (const mode of ["grid", "guides", "object-points", "object-gaps"]) api.runCommand(`view.toggle-snap-${mode}`);
   });
+  // This fixture's fitted page uses a non-identity transform. Measure only
+  // after the initial fit so gesture coordinates stay fixed during the drag.
+  await expect.poll(async () => {
+    const transform = (await canvasState(page)).transform;
+    return transform !== undefined && transform.scale !== 1;
+  }).toBe(true);
   const stage = (await page.getByTestId("canvas-world-stage").boundingBox())!;
   const start = { x: stage.x + stage.width * .4, y: stage.y + stage.height * .55 };
   const end = { x: stage.x + stage.width * .65, y: stage.y + stage.height * .7 };

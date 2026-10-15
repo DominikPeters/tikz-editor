@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
@@ -98,7 +99,7 @@ export function applyDeleteAdornmentAction(
         replacement: ""
       }
     ],
-    changedSourceIds: [resolved.target.ownerSourceId!]
+    changedSourceIds: [requireDefined(resolved.target.ownerSourceId, "Missing required resolved.target.ownerSourceId")]
   };
 }
 
@@ -314,7 +315,7 @@ function pruneFitReferencesAfterDelete(
     } else {
       mutations.set("fit", { kind: "set", value: nextFitValue.value });
     }
-    const rewritten = applyOptionMutationsToTarget(currentSource, resolved.target, mutations)!;
+    const rewritten = requireDefined(applyOptionMutationsToTarget(currentSource, resolved.target, mutations), "Missing required applyOptionMutationsToTarget(currentSource, resolved.target, mutations)");
     currentSource = rewritten.source;
     patches.push(rewritten.patch);
     changedSourceIds.add(fitNodeId);

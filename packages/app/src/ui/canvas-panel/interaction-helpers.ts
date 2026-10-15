@@ -179,7 +179,7 @@ export function createBezierTemplateFromBend(
     to: controls.endWorld,
     control1: controls.control1,
     control2: controls.control2,
-    ...(options?.strokeColor !== undefined ? { strokeColor: options?.strokeColor } : {})
+    ...(options?.strokeColor !== undefined ? { strokeColor: options.strokeColor } : {})
   };
 }
 

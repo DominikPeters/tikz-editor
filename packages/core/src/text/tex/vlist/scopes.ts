@@ -33,9 +33,6 @@ export function groupSimpleTexVListScopes(
   const stack: ScopeFrame[] = [];
 
   for (const [index, rawItem] of vlist.items.entries()) {
-    if (!rawItem) {
-      continue;
-    }
     const item = normalizeExistingVBoxScopes(rawItem, font, listProfile);
     const path = scopePathForItem(item, vlist.items[index + 1]);
     const commonPrefixLength = commonScopePrefixLength(stack, path);
@@ -92,17 +89,7 @@ function scopePathForItem(
     return texVBoxScopePathForParagraph(item.paragraph);
   }
   if (
-    (
-      item.kind === "glue" ||
-      item.kind === "penalty" ||
-      item.kind === "rule" ||
-      item.kind === "hbox" ||
-      item.kind === "vbox" ||
-      item.kind === "display-math" ||
-      item.kind === "display-alignment" ||
-      item.kind === "placeholder"
-    ) &&
-    item.scopePath
+item.scopePath
   ) {
     return item.scopePath.map(texVBoxScopeForRole);
   }

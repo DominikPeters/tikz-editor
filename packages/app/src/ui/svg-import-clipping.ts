@@ -66,7 +66,7 @@ function prepareTransform(element: Element): void {
     if (!counts.includes(values.length)) unsupported("the clipping transform has unsupported arguments");
     const numbers = values.map(Number);
     let next: Matrix;
-    if (match[1] === "matrix") next = numbers as Matrix;
+    if (match[1] === "matrix") next = [requireArrayValue(numbers, 0), requireArrayValue(numbers, 1), requireArrayValue(numbers, 2), requireArrayValue(numbers, 3), requireArrayValue(numbers, 4), requireArrayValue(numbers, 5)];
     else if (match[1] === "translate") next = [1, 0, 0, 1, requireArrayValue(numbers, 0), numbers[1] ?? 0];
     else if (match[1] === "scale") next = [requireArrayValue(numbers, 0), 0, 0, numbers[1] ?? requireArrayValue(numbers, 0), 0, 0];
     else {
@@ -160,11 +160,13 @@ function clipSource(svg: Element, definition: Element, convert: Converter): stri
 
   // Resolve only the clip definition's transforms. Ancestor/reference transforms
   // are applied once by the scope in which the resulting clip is inserted.
-  const isolated = svg.cloneNode(false) as Element;
+  const isolated = svg.cloneNode(false);
+  if (!isElementNode(isolated)) unsupported("the SVG root could not be cloned");
   isolated.removeAttribute("style"); isolated.removeAttribute("class");
   const group = svg.ownerDocument.createElementNS(SVG_NS, "g");
   group.setAttribute("transform", definition.getAttribute("transform") ?? "");
-  const copy = shape.cloneNode(false) as Element;
+  const copy = shape.cloneNode(false);
+  if (!isElementNode(copy)) unsupported("the clip shape could not be cloned");
   copy.removeAttribute("class"); copy.removeAttribute("style");
   copy.setAttribute("fill", "black"); copy.setAttribute("stroke", "none");
   copy.setAttribute("fill-rule", rule);
@@ -202,7 +204,7 @@ function referencesClippedContent(element: Element, visited = new Set<Element>()
 export function convertSvgWithClipping(svg: Element, convert: Converter): string {
   const all = [svg, ...Array.from(svg.querySelectorAll("*"))];
   for (const style of Array.from(svg.querySelectorAll("style"))) {
-    if (/\bclip(?:-path|-rule)?\s*:/iu.test(style.textContent ?? "")) unsupported("stylesheet clipping is not supported");
+    if (/\bclip(?:-path|-rule)?\s*:/iu.test(style.textContent)) unsupported("stylesheet clipping is not supported");
   }
   if (all.some(element => {
     const value = property(element, "clip");
@@ -210,7 +212,7 @@ export function convertSvgWithClipping(svg: Element, convert: Converter): string
   })) unsupported("legacy CSS clip regions are not supported");
   const referenced = all.filter(element => activeClip(element));
   if (referenced.length === 0) return convert(svg, { standalone: false });
-  if (Array.from(svg.querySelectorAll("style")).some(style => /\btransform\s*:/iu.test(style.textContent ?? ""))) {
+  if (Array.from(svg.querySelectorAll("style")).some(style => /\btransform\s*:/iu.test(style.textContent))) {
     unsupported("stylesheet transforms on clipped content are not supported");
   }
   const viewBox = svg.getAttribute("viewBox");
@@ -248,7 +250,8 @@ export function convertSvgWithClipping(svg: Element, convert: Converter): string
     }
     for (let current: Element | null = element; current; current = current === svg ? null : current.parentElement) prepareTransform(current);
     if (svg.getAttribute("transform")) unsupported("a transformed root SVG clip is not supported");
-    const reference = activeClip(element)!;
+    const reference = activeClip(element);
+    if (reference === null) continue;
     const match = /^url\(\s*['"]?#([^\s'"()]+)['"]?\s*\)$/u.exec(reference);
     if (!match) unsupported(`clip-path=${reference} is not a supported local clip reference`);
     const definition = svg.ownerDocument.getElementById(requireArrayValue(match, 1));
@@ -259,7 +262,9 @@ export function convertSvgWithClipping(svg: Element, convert: Converter): string
       container = svg.ownerDocument.createElementNS(SVG_NS, "g");
       const transform = element.getAttribute("transform");
       if (transform) { container.setAttribute("transform", transform); element.removeAttribute("transform"); }
-      element.parentNode!.replaceChild(container, element); container.appendChild(element);
+      const parent = element.parentNode;
+      if (!parent) unsupported("the clipped element has no parent");
+      parent.replaceChild(container, element); container.appendChild(element);
     }
     const start = `${prefix}START${serial}`, end = `${prefix}END${serial++}`;
     const marker = (text: string) => {
@@ -288,4 +293,9 @@ export function convertSvgWithClipping(svg: Element, convert: Converter): string
     if (emitted.has(`${prefix}START${index}`) !== emitted.has(`${prefix}END${index}`)) unsupported("the clip scope could not be balanced safely");
   }
   return result;
+}
+
+/** Native DOM nodeType also works across browser realms and the Node SVG DOM. */
+function isElementNode(node: Node): node is Element {
+  return node.nodeType === 1;
 }

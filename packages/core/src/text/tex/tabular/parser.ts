@@ -68,7 +68,8 @@ export function parseTexTabularPreamble(source: string, sourceOffset = 0): TexTa
       }
       i = group.end; continue;
     }
-    const alignment = ({ l: "left", c: "center", r: "right", p: "paragraph", m: "middle", b: "bottom" } as const)[char as "l"];
+    const alignments: Readonly<Record<string, TexTabularColumn["alignment"]>> = { l: "left", c: "center", r: "right", p: "paragraph", m: "middle", b: "bottom" };
+    const alignment = alignments[char];
     if (!alignment) throw new Error(`Unsupported tabular column type ${char}.`);
     const width = "pmb".includes(char) ? tabularGroup(source, i) : null;
     if ("pmb".includes(char) && !width) throw new Error("Missing tabular paragraph column width.");
@@ -95,7 +96,9 @@ function cell(source: string, from: number, to: number, sourceOffset: number): T
 function rule(source: string, start: number, offset: number): { rule: TexTabularRule; end: number } | null {
   const command = /^\\(hline|cline|toprule|midrule|bottomrule|cmidrule|specialrule|addlinespace|morecmidrules)\b/u.exec(source.slice(start));
   if (!command) return null;
-  const name = command[1] as TexTabularRule["command"]; let end = start + command[0].length;
+  const name = command[1];
+  if (name !== "hline" && name !== "cline" && name !== "toprule" && name !== "midrule" && name !== "bottomrule" && name !== "cmidrule" && name !== "specialrule" && name !== "addlinespace" && name !== "morecmidrules") return null;
+  let end = start + command[0].length;
   let width: string | undefined; let above: string | undefined; let below: string | undefined; let trimLeft: string | undefined; let trimRight: string | undefined; let from: number | undefined; let to: number | undefined;
   const optional = tabularGroup(source, end, "[", "]"); if (optional) { end = optional.end; if (name === "addlinespace") below = optional.content; else width = optional.content; }
   if (name === "cmidrule") {
@@ -116,7 +119,7 @@ function rule(source: string, start: number, offset: number): { rule: TexTabular
     const a = tabularGroup(source, end); const b = a && tabularGroup(source, a.end); const c = b && tabularGroup(source, b.end);
     if (!a || !b || !c) throw new Error("Malformed specialrule."); width = a.content; above = b.content; below = c.content; end = c.end;
   }
-  return { rule: { kind: "rule", command: name, ...(width ? { width: width } : {}), ...(above ? { above: above } : {}), ...(below ? { below: below } : {}), ...(from ? { ...(from !== undefined ? { from: from } : {}), ...(to !== undefined ? { to: to } : {}) } : {}), ...(trimLeft ? { trimLeft: trimLeft } : {}), ...(trimRight ? { trimRight: trimRight } : {}), sourceStart: offset + start, sourceEnd: offset + end }, end };
+  return { rule: { kind: "rule", command: name, ...(width ? { width: width } : {}), ...(above ? { above: above } : {}), ...(below ? { below: below } : {}), ...(from ? { from, ...(to !== undefined ? { to: to } : {}) } : {}), ...(trimLeft ? { trimLeft: trimLeft } : {}), ...(trimRight ? { trimRight: trimRight } : {}), sourceStart: offset + start, sourceEnd: offset + end }, end };
 }
 
 export function parseTexTabular(source: string, from: number, bodyEnd: number, offset = 0): TexTabular {

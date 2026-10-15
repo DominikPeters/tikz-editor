@@ -299,8 +299,8 @@ async function computeSnapshotOnce(request: ComputeRequest, work?: CooperativeWo
   const previous = committed && committed.documentId === request.documentId && committed.outlineGeneration === outlineGeneration ? committed : null;
   const cache: ComputeCache = {
     outlineGeneration,
-    ...((previous?.renderContextKey) === undefined ? {} : { renderContextKey: previous?.renderContextKey }),
-    ...((previous?.overlayPage) === undefined ? {} : { overlayPage: previous?.overlayPage }),
+    ...((previous?.renderContextKey) === undefined ? {} : { renderContextKey: previous.renderContextKey }),
+    ...((previous?.overlayPage) === undefined ? {} : { overlayPage: previous.overlayPage }),
     ...((request.documentId) === undefined ? {} : { documentId: request.documentId }),
     semantic: previous?.semantic.fork() ?? createIncrementalSemanticSession(),
     parse: previous?.parse.fork() ?? createIncrementalParseSession(),
@@ -429,7 +429,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
         durationMs: performance.now() - computeStartedAt,
         changedSourceCount: result.changedSourceIds.length,
         incremental: true,
-        ...((renderContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: renderContext?.deckLayoutReused }),
+        ...((renderContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: renderContext.deckLayoutReused }),
         parseStrategy: result.parseStats.strategy,
         parseFallbackReason: result.parseStats.fallbackReason ?? null,
         parsePatchApplication: result.parseStats.patchApplication ?? null,
@@ -500,7 +500,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       parseSession.prime(result.parse, {
         activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
         includeContextDefinitions: true,
-        ...((renderContext?.structuralMasks) === undefined ? {} : { structuralMasks: renderContext?.structuralMasks }),
+        ...((renderContext?.structuralMasks) === undefined ? {} : { structuralMasks: renderContext.structuralMasks }),
         sourceRevision: request.sourceRevision ?? null
       });
       cache.svg = result.svg.model;
@@ -532,7 +532,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       durationMs: performance.now() - computeStartedAt,
       changedSourceCount: changedSourceIds.length,
       incremental: false,
-      ...((renderContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: renderContext?.deckLayoutReused }),
+      ...((renderContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: renderContext.deckLayoutReused }),
       phaseDurationsMs: phases
     });
 
@@ -662,7 +662,7 @@ export function claimCachedDeckSnapshot(request: ComputeRequest): SessionSnapsho
   const started = performance.now();
   const session = matchingDeckSession(request);
   const page = session && requestedDeckPage(session, request);
-  const frame = page && session?.renderedPages.get(page.key);
+  const frame = page && session.renderedPages.get(page.key);
   // A page prewarmed while outlines load may have blank glyphs; render it afresh.
   if (!session || !frame || texGlyphOutlinesLoading()) return null;
   cancelDeckPrewarm();
@@ -723,7 +723,7 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): { layout: BeamerF
 
   const copy = (value: unknown): unknown => {
     if (typeof value === "function" || typeof value === "symbol") {
-      return undefined;
+      throw new TypeError("Unexpected executable value in published Beamer geometry");
     }
     if (value === null || typeof value !== "object") {
       bytes += typeof value === "string" ? value.length * 2 : 8;
@@ -746,13 +746,16 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): { layout: BeamerF
     bytes += 48 + Object.keys(value).length * 16;
     copies.set(value, result);
     for (const [key, entry] of Object.entries(value)) {
-      if (typeof entry !== "function" && typeof entry !== "symbol") {
-        result[key] = copy(entry);
-      }
+      // TexMathBox.fontProfile is optional layout metadata; omit the entire
+      // profile so no object survives with required resolver methods missing.
+      if (key !== "fontProfile") result[key] = copy(entry);
     }
     return result;
   };
 
+  // The recursive transport copy preserves data fields and removes only the
+  // optional TexMathBox.fontProfile container; unexpected callables throw.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Recursive cloning cannot express preservation of the known layout schema.
   const result = copy(layout) as BeamerFrameLayout;
   return { layout: result, bytes };
 }
@@ -849,21 +852,22 @@ async function computeDeckSnapshot(
     ? `${structuralMask.from}:${structuralMask.to}`
     : "";
   let session: DeckComputeSession;
-  const sameContext = deckComputeSession?.source === request.source &&
-    deckComputeSession.contextKey === contextKey &&
-    deckComputeSession.resolverCacheKey === graphicsResolver.cacheKey &&
-    deckComputeSession.structuralMaskKey === structuralMaskKey;
+  const previousSession = deckComputeSession;
+  const sameSession = previousSession?.source === request.source &&
+    previousSession.contextKey === contextKey &&
+    previousSession.resolverCacheKey === graphicsResolver.cacheKey &&
+    previousSession.structuralMaskKey === structuralMaskKey ? previousSession : null;
   // Parsed afresh, a deck whose structure is unchanged keeps its rendered pages.
-  const exact = sameContext && request.exactParse && !deckComputeSession!.parseExact
+  const exact = sameSession && request.exactParse && !sameSession.parseExact
     ? prepareBeamerDocument(request.source, { ...(structuralMask ? { structuralMasks: [structuralMask] } : {}), exactSyntax: true })
     : null;
-  if (exact && sameSyntaxTree(exact.syntax.tree, deckComputeSession!.prepared.syntax.tree)) {
-    session = { ...deckComputeSession!, parseExact: true, renderedPages: deckComputeSession!.renderedPages.fork() };
-  } else if (!sameContext || exact) {
+  if (sameSession && exact && sameSyntaxTree(exact.syntax.tree, sameSession.prepared.syntax.tree)) {
+    session = { ...sameSession, parseExact: true, renderedPages: sameSession.renderedPages.fork() };
+  } else if (!sameSession || exact) {
     // Any earlier document reparses correctly: what changed is found by diffing.
     const prepared = exact ?? prepareBeamerDocument(request.source, {
       ...(structuralMask ? { structuralMasks: [structuralMask] } : {}),
-      ...((deckComputeSession?.prepared.syntax) === undefined ? {} : { previousSyntax: deckComputeSession?.prepared.syntax }),
+      ...((deckComputeSession?.prepared.syntax) === undefined ? {} : { previousSyntax: deckComputeSession.prepared.syntax }),
       ...((request.exactParse) === undefined ? {} : { exactSyntax: request.exactParse })
     });
     session = {
@@ -885,7 +889,7 @@ async function computeDeckSnapshot(
   } else {
     // A suspended render owns its page writes. Aborted or older requests must
     // not replace the newest completed deck baseline, even for the same source.
-    session = { ...deckComputeSession!, renderedPages: deckComputeSession!.renderedPages.fork() };
+    session = { ...sameSession, renderedPages: sameSession.renderedPages.fork() };
   }
   const frameIndex = resolveDeckFrameIndex(session.frames, request.activeRootId);
   let activeFrame: DeckActiveFrame | null = null;
@@ -919,14 +923,15 @@ async function computeDeckSnapshot(
       if (asked?.index === pictures.length) virtualLayer = formatDocumentRootId(asked);
       const candidates: string[] = asked && asked.index < pictures.length ? [formatDocumentRootId(asked)] : [];
       // Otherwise the layer a drawing tool would pick on the page as drawn.
-      const fallback = async () => virtualLayer ? null : pageDrawingLayerRootId((await plainPage!()).layout);
+      const renderPlainPage = plainPage;
+      const fallback = async () => virtualLayer ? null : pageDrawingLayerRootId((await renderPlainPage()).layout);
       if (candidates.length === 0) {
         const rootId = await fallback();
         if (rootId) candidates.push(rootId);
       }
       for (const rootId of candidates) {
-        const index = parseDocumentRootId(rootId)!;
-        const picture = index.kind === "beamer-frame-tikz" ? pictures[index.index] : undefined;
+        const index = parseDocumentRootId(rootId);
+        const picture = index?.kind === "beamer-frame-tikz" ? pictures[index.index] : undefined;
         if (!picture) continue;
         const layered = await drawingLayerPage(session, cache, request, frameIndex, step, rootId, picture, work);
         if (layered) {
@@ -966,8 +971,9 @@ async function computeDeckSnapshot(
       exactParse: session.parseExact
     }
   };
-  if (activeFrame && request.includeDrawingLayer && (paintedLayer || virtualLayer)) {
-    const ref = parseDocumentRootId((paintedLayer ?? virtualLayer)!) as Extract<DocumentRootRef, { kind: "beamer-frame-tikz" }>;
+  const drawingRootId = paintedLayer ?? virtualLayer;
+  const ref = drawingRootId ? parseDocumentRootId(drawingRootId) : null;
+  if (activeFrame && request.includeDrawingLayer && ref?.kind === "beamer-frame-tikz") {
     const layer = await computeOverlayLayerSnapshot(request, revision, requestKind, computeStartedAt, ref, cache, work, true,
       { frame: activeFrame, graphicsContext, prepared: session.prepared, deckLayoutReused });
     if (layer && paintedLayer) {
@@ -975,9 +981,12 @@ async function computeDeckSnapshot(
       activeFrame = composeOverlayPage(activeFrame, layer.snapshot, layer.diagnostics);
     } else if (paintedLayer) {
       // The page left the layer undrawn; without its render, show the page as drawn.
-      activeFrame = await plainPage!();
+      if (!plainPage) throw new Error("Missing drawing layer page renderer");
+      activeFrame = await plainPage();
     }
-    snapshot.deck!.activeFrame = activeFrame;
+    const deck = snapshot.deck;
+    if (!deck) throw new Error("Missing deck snapshot");
+    deck.activeFrame = activeFrame;
     if (layer) Object.assign(snapshot, layer.snapshot, { deck: snapshot.deck, activeRootId: activeFrame.frameId });
   }
   work?.signal?.throwIfAborted();
@@ -1164,8 +1173,11 @@ async function chooseLayerInsertion(source: string, frameIndex: number, step: nu
   const allSteps = stepCount <= 8 ? Array.from({ length: stepCount }, (_, index) => index + 1) : [...new Set([1, step, stepCount])];
   const baselines = new Map<number, Map<string, string>>();
   const baseline = async (at: number) => {
-    if (!baselines.has(at)) baselines.set(at, frameTextGeometry((await renderLayerFrame(source, frameIndex, at, graphicsContext, work)).layout));
-    return baselines.get(at)!;
+    const cached = baselines.get(at);
+    if (cached) return cached;
+    const geometry = frameTextGeometry((await renderLayerFrame(source, frameIndex, at, graphicsContext, work)).layout);
+    baselines.set(at, geometry);
+    return geometry;
   };
   let chosen = candidates.at(-1) ?? null;
   candidates: for (const candidate of candidates.slice(0, -1)) {
@@ -1293,7 +1305,7 @@ async function computeOverlayLayerSnapshot(
     key: JSON.stringify([formatDocumentRootId(ref), step, pageCoordinates, evaluate, graphicsContext.resolver.cacheKey]),
     textEngine, graphicsContext, evaluate, padding: 0, startedAt: computeStartedAt,
     ...(pictureMask ? { structuralMasks: [pictureMask] } : {}),
-    ...((pageContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: pageContext?.deckLayoutReused })
+    ...((pageContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: pageContext.deckLayoutReused })
   });
   result.snapshot.source = source;
   result.snapshot.overlayLayer = { rootId: formatDocumentRootId(ref), frameIndex: ref.frameIndex, step,
@@ -1420,7 +1432,7 @@ async function computeSnapshotIncremental(
   reusePreviousModel = svgResult.model;
 
   phaseStartedAt = performance.now();
-  const flushedPendingTextKeys = await textEngine?.flushPending?.();
+  const flushedPendingTextKeys = await textEngine.flushPending?.();
   work?.signal?.throwIfAborted();
   phases.flushText = performance.now() - phaseStartedAt;
   if (flushedPendingTextKeys && flushedPendingTextKeys.length > 0) {
@@ -1650,12 +1662,12 @@ function collectGeneratedDescendantSourceIdsForChangedSources(
       descendants.add(element.sourceRef.sourceId);
       descendants.add(treeChild.childSourceId);
     }
-    const matrixSourceId = element.matrixCell?.matrixSourceId?.trim();
+    const matrixSourceId = element.matrixCell?.matrixSourceId.trim();
     if (!matrixSourceId || !changed.has(matrixSourceId)) {
       continue;
     }
     descendants.add(element.sourceRef.sourceId);
-    const cellSourceId = element.matrixCell?.cellSourceId?.trim();
+    const cellSourceId = element.matrixCell?.cellSourceId.trim();
     if (cellSourceId) {
       descendants.add(cellSourceId);
     }

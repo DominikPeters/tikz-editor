@@ -1,3 +1,4 @@
+import { isObjectRecord } from "../utils/records.js";
 import type { EditActionResultLike } from "./result-types.js";
 import type { Span } from "../ast/types.js";
 import type { SceneElement } from "../semantic/types.js";
@@ -517,10 +518,10 @@ function sanitizeSemanticValue(value: unknown, geometricStyle = false): unknown 
   if (typeof value === "number") {
     return normalizeSignatureNumber(value);
   }
-  if (!value || typeof value !== "object") {
+  if (!isObjectRecord(value)) {
     return value;
   }
-  const input = value as Record<string, unknown>;
+  const input = value;
   const output: Record<string, unknown> = {};
   const isGeometricElement = input.kind === "Path" || input.kind === "Circle" || input.kind === "Ellipse";
   for (const [key, entryValue] of Object.entries(input)) {
@@ -578,18 +579,18 @@ function normalizeSignatureNumber(value: number): number {
 }
 
 function isInvisibleSceneElement(value: unknown): boolean {
-  if (!value || typeof value !== "object") {
+  if (!isObjectRecord(value)) {
     return false;
   }
-  const element = value as Record<string, unknown>;
+  const element = value;
   if (element.kind !== "Path" && element.kind !== "Circle" && element.kind !== "Ellipse") {
     return false;
   }
   const style = element.style;
-  if (!style || typeof style !== "object") {
+  if (!isObjectRecord(style)) {
     return false;
   }
-  const styleRecord = style as Record<string, unknown>;
+  const styleRecord = style;
   return (
     !hasRenderableStroke(styleRecord) &&
     !hasRenderableFill(styleRecord) &&
@@ -637,7 +638,7 @@ function numericStyleValue(value: unknown, fallback: number): number {
 }
 
 function hasEnabledDecoration(value: unknown): boolean {
-  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>).enabled === true);
+  return isObjectRecord(value) && value.enabled === true;
 }
 
 function hasNonEmptyArray(value: unknown): boolean {

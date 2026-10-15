@@ -89,7 +89,7 @@ export function ColorPickerField({
     }
 
     function onPointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }

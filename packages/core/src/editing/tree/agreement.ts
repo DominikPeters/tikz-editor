@@ -1,4 +1,5 @@
 import { requireArrayValue } from "../../utils/collections.js";
+import { isObjectRecord } from "../../utils/records.js";
 import { editSlotAt, editNodeAt } from "./lookup.js";
 import { parseSimpleTexInlineNodes, SIMPLE_TEX_FONT_COMMAND_NAMES, type SimpleTexInlineNode } from "../../text/tex/ir.js";
 import { parseTexMath } from "../../text/tex/math/parser.js";
@@ -156,12 +157,12 @@ function mathFacts(source: string, offset: number): Set<string> {
       for (const item of value) visit(item, insideText);
       return;
     }
-    if (value == null || typeof value !== "object") return;
-    const record = value as Record<string, unknown> & { kind?: string; sourceSpan?: { start: number; end: number } };
+    if (!isObjectRecord(value)) return;
+    const record = value;
     // Formulas nested in \text are their own comparison.
     if (record.kind === "text") return;
     const span = record.sourceSpan;
-    if (span && !insideText) {
+    if (isObjectRecord(span) && typeof span.start === "number" && typeof span.end === "number" && !insideText) {
       if (record.kind === "fraction") facts.add(`fraction@${span.start}-${span.end}`);
       if (record.kind === "radical") facts.add(`radical@${span.start}-${span.end}`);
       if (record.kind === "atom" && (record.subscript || record.superscript)) {

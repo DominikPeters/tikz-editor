@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { EditNode, EditTree, NodeId, Span } from "../tree/types.js";
@@ -67,7 +68,7 @@ export function listShapes(tree: EditTree): readonly ListShape[] {
         }
         const slots = item.slots.map((slot) => editSlotAt(tree.slots, slot));
         const label = slots.find((slot) => slot.role === "label");
-        const content = slots.find((slot) => slot.role === "flow")!;
+        const content = requireDefined(slots.find((slot) => slot.role === "flow"), "Missing required slots.find((slot) => slot.role === \"flow\")");
         return [{
           node: item.id,
           commandSpan: { from: item.span.from, to: content.contentSpan.from },

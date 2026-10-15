@@ -756,6 +756,9 @@ describe("styles cascade model", () => {
         [property]
       );
       expect(model.sections[0]?.declarations[0]?.cssValue).toBe(expected);
+      if (property.kind === "lineCap" && expected === "rect") {
+        expect(model.sections[0]?.declarations[0]?.property).toMatchObject({ kind: "lineCap", value: "custom" });
+      }
     }
   });
 

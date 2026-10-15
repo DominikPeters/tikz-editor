@@ -123,7 +123,7 @@ export function createGeneratedMappedText(
   owner?: TextSourceRange
 ): MappedText {
   const projection: TextSourceProjection = owner
-    ? { kind: "generated", reason, ...(owner !== undefined ? { owner: owner } : {}) }
+    ? { kind: "generated", reason, owner }
     : { kind: "generated", reason };
   const anchor: TextSourceAnchor = owner
     ? { kind: "range", from: owner.from, to: owner.to, policy: "generated", projection }
@@ -251,7 +251,7 @@ export function projectInputOffset(sourceMap: TextSourceMap | undefined, inputOf
   }
 
   const anchor = sourceMap.boundaryOrigins[clampInteger(inputOffset, 0, sourceMap.inputText.length)];
-  return anchorToHit(anchor, "caret");
+  return anchorToHit(anchor);
 }
 
 export function projectInputRange(
@@ -375,7 +375,7 @@ function projectionToAnchor(
       from: projection.invocation.from,
       to: projection.invocation.to,
       policy: "macro",
-      ...(projection !== undefined ? { projection: projection } : {})
+      projection
     };
   }
   if (projection.kind === "generated") {
@@ -385,7 +385,7 @@ function projectionToAnchor(
           from: projection.owner.from,
           to: projection.owner.to,
           policy: "generated",
-          ...(projection !== undefined ? { projection: projection } : {})
+          projection
         }
       : { kind: "unmapped", reason: projection.reason };
   }
@@ -450,7 +450,7 @@ function anchorRange(anchor: TextSourceAnchor): { from: number; to: number; poli
   return null;
 }
 
-function anchorToHit(anchor: TextSourceAnchor | undefined, fallbackPolicy: TextSourceRangePolicy): TextSourceHit {
+function anchorToHit(anchor: TextSourceAnchor | undefined): TextSourceHit {
   if (!anchor) {
     return { kind: "unmapped", reason: "Missing source boundary." };
   }
@@ -462,7 +462,7 @@ function anchorToHit(anchor: TextSourceAnchor | undefined, fallbackPolicy: TextS
       kind: "source-range",
       from: anchor.from,
       to: anchor.to,
-      policy: anchor.policy ?? fallbackPolicy,
+      policy: anchor.policy,
       ...(anchor.projection?.kind === "macro-generated" && anchor.projection.macroName
         ? { macroName: anchor.projection.macroName }
         : {}),

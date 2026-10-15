@@ -159,7 +159,7 @@ function sameRanges(left: readonly SourceRange[], right: readonly SourceRange[])
   for (let index = 0; index < left.length; index += 1) {
     const leftRange = requireArrayValue(left, index);
     const rightRange = requireArrayValue(right, index);
-    if (leftRange?.from !== rightRange?.from || leftRange.to !== rightRange.to) {
+    if (leftRange.from !== rightRange.from || leftRange.to !== rightRange.to) {
       return false;
     }
   }

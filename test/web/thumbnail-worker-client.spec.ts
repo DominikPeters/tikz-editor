@@ -97,6 +97,18 @@ describe("thumbnail-worker-client", () => {
     });
   });
 
+  it("ignores malformed worker results without consuming the pending request", async () => {
+    const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
+    const pending = client.requestThumbnail({ type: "render", requestId: "checked", groupId: "group",
+      source: "", figureId: "figure:0", figureSignature: "signature", parseOptions: { activeRootId: "figure:0", includeContextDefinitions: true }, svgOptions: {} });
+    const worker = FakeWorker.instances[0];
+    expect(worker).toBeDefined();
+    worker.emitMessage({ type: "result", ok: true, requestId: "checked", svg: 42 });
+    worker.emitMessage({ type: "result", ok: true, requestId: "checked", groupId: "group",
+      figureId: "figure:0", figureSignature: "signature", svg: "<svg />" });
+    await expect(pending).resolves.toMatchObject({ ok: true, svg: "<svg />" });
+  });
+
   it("cancels a whole request group and rejects pending promises", async () => {
     const client = await import("../../packages/app/src/ui/workers/thumbnail-worker-client");
 

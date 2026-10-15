@@ -23,7 +23,7 @@ export function deriveCurveControlLines(
       selectedSourcesWithPathControlHandles.add(handle.sourceRef.sourceId);
       continue;
     }
-    if (handle.kind === "path-bend" && handle.curveEdit?.kind === "to-bend") {
+    if (handle.kind === "path-bend" && handle.curveEdit.kind === "to-bend") {
       bendLines.push(
         {
           key: `curve-bend:${handle.id}:start`,

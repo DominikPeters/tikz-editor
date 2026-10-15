@@ -16,6 +16,10 @@ type MathFieldElementLike = HTMLElement & {
   value: string;
 };
 
+function isMathFieldElement(element: HTMLElement): element is MathFieldElementLike {
+  return "value" in element && typeof element.value === "string";
+}
+
 type LibraryPhase = "loading" | "ready" | "error";
 
 let mathLiveLoadPromise: Promise<void> | null = null;
@@ -108,7 +112,8 @@ export function EquationModal({ mode, initialLatex = "", onClose, onConfirm, onV
     }
 
     host.innerHTML = "";
-    const field = document.createElement("math-field") as MathFieldElementLike;
+    const field = document.createElement("math-field");
+    if (!isMathFieldElement(field)) throw new Error("MathLive did not register its equation field");
     field.className = css.mathField ?? "";
     field.value = value;
 

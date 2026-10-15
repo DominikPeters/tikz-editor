@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { parseTexTabular, tabularGroup } from "./tabular/parser.js";
 import type { TexTabular, TexTabularAssignmentFont, TexTabularRegisters } from "./tabular/types.js";
@@ -1056,11 +1057,11 @@ function collectSimpleTexPolicyRanges(
 ): SimpleTexPolicySourceRange[] {
   for (const [index, node] of nodes.entries()) {
     const matches =
-      (target === "line-break" && node?.kind === "line-break") ||
+      (target === "line-break" && node.kind === "line-break") ||
       (target === "control-paragraph-break" &&
-        node?.kind === "paragraph-break" &&
+        node.kind === "paragraph-break" &&
         node.breakKind === "control");
-    if (node && matches) {
+    if (matches) {
       const previous = nodes[index - 1];
       const next = nodes[index + 1];
       ranges.push({
@@ -1070,9 +1071,6 @@ function collectSimpleTexPolicyRanges(
             : node.sourceStart,
         end: next?.kind === "space" ? next.sourceEnd : node.sourceEnd,
       });
-    }
-    if (!node) {
-      continue;
     }
     if (
       node.kind === "font-command" ||
@@ -2039,9 +2037,9 @@ function simpleTexMathNodeFromSyntax(
     return null;
   }
   if (text.slice(syntax.from, syntax.to).includes(String.raw`\intertext`)) {
-    let malformed = false;
-    syntax.node.cursor().iterate(node => { if (node.type.isError) malformed = true; });
-    if (malformed) return null;
+    const validation = { malformed: false };
+    syntax.node.cursor().iterate(node => { if (node.type.isError) validation.malformed = true; });
+    if (validation.malformed) return null;
   }
   const beginText = text.slice(begin.from, begin.to);
   const nameMatch = /^\\begin\{(equation|align|flalign|gather|multline)(\*)?\}$/u.exec(
@@ -2054,8 +2052,10 @@ function simpleTexMathNodeFromSyntax(
   if (!name) {
     return null;
   }
-  const delimiter = `${name}${nameMatch[2] ? "-star" : ""}` as
-    SimpleTexDisplayMathDelimiter;
+  if (name !== "equation" && name !== "align" && name !== "flalign" && name !== "gather" && name !== "multline") return null;
+  const delimiter: SimpleTexDisplayMathDelimiter = nameMatch[2]
+    ? name === "equation" ? "equation-star" : name === "align" ? "align-star" : name === "flalign" ? "flalign-star" : name === "gather" ? "gather-star" : "multline-star"
+    : name;
   const expectedEnd = `\\end{${name}${nameMatch[2] ?? ""}}`;
   if (text.slice(end.from, end.to) !== expectedEnd) {
     return null;
@@ -2459,7 +2459,7 @@ function scanSimpleTexVerticalGlueCommand(
 
   const vskipMatch = vskipGluePattern.exec(text.slice(start));
   if (vskipMatch) {
-    const full = vskipMatch[0] ?? "";
+    const full = vskipMatch[0];
     const size = parseTexSemanticLength(vskipMatch[1] ?? "");
     const stretch = vskipMatch[2] ? parseTexSemanticLength(vskipMatch[2]) : undefined;
     const shrink = vskipMatch[3] ? parseTexSemanticLength(vskipMatch[3]) : undefined;
@@ -2513,7 +2513,8 @@ function scanSimpleTexVerticalRuleCommand(
     if (!keywordMatch) {
       break;
     }
-    const keyword = keywordMatch[1]?.toLowerCase() as "width" | "height" | "depth";
+    const keyword = keywordMatch[1]?.toLowerCase();
+    if (keyword !== "width" && keyword !== "height" && keyword !== "depth") return null;
     cursor += keyword.length;
     cursor = skipSimpleTexControlWordSpaces(text, cursor);
     const lengthMatch = new RegExp(`^(${texLengthPattern})`, "i").exec(text.slice(cursor));
@@ -2543,8 +2544,6 @@ function scanSimpleTexVerticalRuleCommand(
     parsedAnyDimension &&
     typeof dimensions.width === "number" &&
     typeof dimensions.height === "number" &&
-    dimensions.width !== null &&
-    dimensions.height !== null &&
     dimensions.depth !== null;
   return {
     node: {
@@ -2591,7 +2590,7 @@ function scanSimpleTexPenaltyCommand(
     };
   }
 
-  const rawValue = valueMatch[0] ?? "";
+  const rawValue = valueMatch[0];
   const end = valueStart + rawValue.length;
   return {
     node: {
@@ -2609,18 +2608,39 @@ function scanSimpleTexPenaltyCommand(
 function scanSimpleTexTransformCommand(text: string, start: number, sourceOffset: number, resolveColorAlias?: ColorAliasResolver): { node: SimpleTexTransformNode | SimpleTexLiteralNode; end: number } | null {
   const command = /^\\(rotatebox|scalebox|resizebox|reflectbox)\b/u.exec(text.slice(start));
   if (!command) return null;
-  const name = command[1] as SimpleTexTransformCommandName;
-  let cursor = start + command[0].length; let parameters: SimpleTexTransformNode["parameters"];
-  const star = name === "resizebox" && text[cursor] === "*"; if (star) cursor++;
-  const optional = name === "rotatebox" ? tabularGroup(text, cursor, "[", "]") : null; if (optional) cursor = optional.end;
-  const first = name !== "reflectbox" ? tabularGroup(text, cursor) : null; if (name !== "reflectbox" && !first) return null; if (first) cursor = first.end;
-  if (name === "rotatebox") parameters = { kind: "rotate", angle: Number(first!.content), ...(optional ? { options: parseOptionListRaw(text.slice(optional.start - 1, optional.end), sourceOffset + optional.start - 1) } : {}) };
-  else if (name === "resizebox") { const height = tabularGroup(text, cursor); if (!height) return null; cursor = height.end; parameters = { kind: "resize", width: first!.content, height: height.content, totalHeight: star }; }
-  else { const vertical = name === "scalebox" ? tabularGroup(text, cursor, "[", "]") : null; if (vertical) cursor = vertical.end; parameters = { kind: "scale", x: name === "reflectbox" ? -1 : Number(first!.content), y: name === "reflectbox" ? 1 : /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test((vertical?.content ?? first!.content).trim()) ? Number(vertical?.content ?? first!.content) : Number.NaN }; }
+  const name = command[1];
+  if (name !== "rotatebox" && name !== "scalebox" && name !== "resizebox" && name !== "reflectbox") return null;
+  let cursor = start + command[0].length;
+  let parameters: SimpleTexTransformNode["parameters"];
+  const star = name === "resizebox" && text[cursor] === "*";
+  if (star) cursor++;
+  const optional = name === "rotatebox" ? tabularGroup(text, cursor, "[", "]") : null;
+  if (optional) cursor = optional.end;
+  const first = name !== "reflectbox" ? tabularGroup(text, cursor) : null;
+  if (name !== "reflectbox" && !first) return null;
+  if (first) cursor = first.end;
+  if (name === "reflectbox") {
+    parameters = { kind: "scale", x: -1, y: 1 };
+  } else {
+    if (!first) return null;
+    if (name === "rotatebox") {
+      parameters = { kind: "rotate", angle: Number(first.content), ...(optional ? { options: parseOptionListRaw(text.slice(optional.start - 1, optional.end), sourceOffset + optional.start - 1) } : {}) };
+    } else if (name === "resizebox") {
+      const height = tabularGroup(text, cursor);
+      if (!height) return null;
+      cursor = height.end;
+      parameters = { kind: "resize", width: first.content, height: height.content, totalHeight: star };
+    } else {
+      const vertical = tabularGroup(text, cursor, "[", "]");
+      if (vertical) cursor = vertical.end;
+      const verticalScale = vertical?.content ?? first.content;
+      parameters = { kind: "scale", x: Number(first.content), y: /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(verticalScale.trim()) ? Number(verticalScale) : Number.NaN };
+    }
+  }
   const body = tabularGroup(text, cursor); if (!body) return null;
   const scan = scanSimpleTexIrNodes(body.content, sourceOffset + body.start, resolveColorAlias);
   const numeric = (value: string) => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u.test(value.trim());
-  const finite = parameters.kind === "rotate" ? numeric(first!.content) : parameters.kind === "scale" ? name === "reflectbox" || numeric(first!.content) && Number.isFinite(parameters.y) : true;
+  const finite = parameters.kind === "rotate" ? (first !== null && numeric(first.content)) : parameters.kind === "scale" ? name === "reflectbox" || (first !== null && numeric(first.content)) && Number.isFinite(parameters.y) : true;
   const rotationOptions = parameters.kind !== "rotate" || (parameters.options?.entries ?? []).every((option) => {
     if (option.kind !== "kv") return false;
     const value = option.valueRaw.trim().replace(/^\{(.*)\}$/u, "$1");
@@ -3411,7 +3431,9 @@ function parseSimpleTexGraphicsQuad(raw: string): [TexLength, TexLength, TexLeng
   if (parsed.includes(null)) {
     return null;
   }
-  return parsed as [TexLength, TexLength, TexLength, TexLength];
+  const [left, bottom, right, top] = parsed;
+  if (left == null || bottom == null || right == null || top == null) return null;
+  return [left, bottom, right, top];
 }
 
 function parseSimpleTexGraphicsDimension(raw: string): TexLength | null {
@@ -3816,7 +3838,8 @@ function scanSimpleTexUrl(text: string, start: number, sourceOffset: number): { 
     if (atom.mathClass === 2 && (!previous || [2, 3, 4].includes(previous.mathClass))) atom.mathClass = 0;
     if (atom.mathClass === 3 && previous?.mathClass === 2) previous.mathClass = 0;
   }
-  if (atoms.at(-1)?.mathClass === 2) atoms.at(-1)!.mathClass = 0;
+  const lastAtom = atoms.at(-1);
+  if (lastAtom?.mathClass === 2) lastAtom.mathClass = 0;
   for (let index = 0; index < atoms.length; index++) {
     const atom = requireArrayValue(atoms, index);
     const next = atoms[index + 1];
@@ -4253,9 +4276,8 @@ export function scanSimpleTexLineBreak(
   }
   if (command.kind === "word" && command.name === "linebreak") {
     const option = scanSimpleTexOptionalBracketArgument(text, commandEnd);
-    const priority = option && /^[0-4]$/u.test(option.content.trim())
-      ? Number.parseInt(option.content.trim(), 10) as 0 | 1 | 2 | 3 | 4
-      : 4;
+    const rawPriority = option?.content.trim();
+    const priority = rawPriority === "0" ? 0 : rawPriority === "1" ? 1 : rawPriority === "2" ? 2 : rawPriority === "3" ? 3 : 4;
     return {
       end: priority !== 4 || option?.content.trim() === "4"
         ? option?.end ?? commandEnd
@@ -4374,7 +4396,7 @@ function scanUnsupportedControlSequenceArgumentsEnd(text: string, start: number)
   return end;
 }
 
-function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode {
+export function isSimpleTexInlineNode(node: SimpleTexNode): node is SimpleTexInlineNode {
   return (
     node.kind === "text" ||
     node.kind === "space" ||
@@ -4437,7 +4459,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const resolveSizeNodes = (nodes: readonly SimpleTexNode[]): SimpleTexNode[] => nodes.map(node => {
     if (node.kind === "group") {
       const outer = sizeState;
-      const children = resolveSizeNodes(node.children) as SimpleTexInlineNode[];
+      const children = resolveSizeNodes(node.children).filter(isSimpleTexInlineNode);
       sizeState = outer;
       sizeHistory.push({ from: node.sourceEnd, state: outer });
       return { ...node, children };
@@ -4455,8 +4477,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
       const selected = options?.namedFontSizes?.[name];
       sizeState = { ...sizeState, sizePt: texLength(selected?.sizePt ?? defaultSizes[name] ?? node.sizePt ?? initialSize),
         baselineSkip: texLength(selected?.baselineSkipPt ?? defaultBaselines[name] ?? initialBaseline ?? 12),
-        ...(["normalsize", "small", "footnotesize"].includes(name)
-          ? { displaySkipCommand: name as "normalsize" | "small" | "footnotesize" } : {}) };
+        ...((name === "normalsize" || name === "small" || name === "footnotesize")
+          ? { displaySkipCommand: name } : {}) };
     } else if (node.sizePt != null) {
       const baselineSkip = node.baselineSkipPt ?? sizeState.baselineSkip;
       sizeState = { ...sizeState, sizePt: node.sizePt, ...(baselineSkip !== undefined ? { baselineSkip } : {}) };
@@ -4485,7 +4507,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const blocks: SimpleTexParagraphBlock[] = [];
   const items: SimpleTexBlockItem[] = [];
   let unsupportedCommand = false;
-  let abortScan = false;
+  const scanState = { aborted: false };
   interface ActiveSimpleTexList {
     readonly sourceStart: number;
     readonly kind: SimpleTexListKind;
@@ -4961,11 +4983,11 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const node = sourceNodes[index];
     if (!node) {
       unsupportedCommand = true;
-      abortScan = true;
+      scanState.aborted = true;
       break;
     }
     if (node.kind === "style-declaration" && node.listRegisters && listStack.length > 0) {
-      const list = listStack.at(-1)!;
+      const list = requireDefined(listStack.at(-1), "An active list is required.");
       const assignments = Object.fromEntries(Object.entries(node.listRegisters).flatMap(([name, value]) => {
         const glue = resolveListGlue(value, sizeAt(node.sourceStart).sizePt);
         return glue ? [[name, glue]] : [];
@@ -4976,7 +4998,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     if (node.kind === "unsupported-command") {
       if (hasNonSpaceSourceText(text, blockStart, node.sourceStart, sourceOffset)) {
         unsupportedCommand = true;
-        abortScan = true;
+        scanState.aborted = true;
         break;
       }
       items.push({
@@ -5007,7 +5029,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignmentProfile,
         true
       );
-      if (abortScan) {
+      if (scanState.aborted) {
         break;
       }
       const displayState = sizeAt(node.sourceStart);
@@ -5066,7 +5088,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignmentProfile,
         node.boundary === "end" && isSimpleTexListEnvironmentName(node.name)
       );
-      if (abortScan) {
+      if (scanState.aborted) {
         break;
       }
       if (node.boundary === "begin") {
@@ -5085,7 +5107,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           });
         } else {
           unsupportedCommand = true;
-          abortScan = true;
+          scanState.aborted = true;
           break;
         }
         environmentStack.push({ name: node.name, scopeRole });
@@ -5094,20 +5116,20 @@ function buildSimpleTexParagraphBlocksFromNodes(
         const openEnvironment = environmentStack.pop();
         if (openEnvironment?.name !== node.name) {
           unsupportedCommand = true;
-          abortScan = true;
+          scanState.aborted = true;
           break;
         }
         const openScope = scopeStack.pop();
         if (openScope !== openEnvironment.scopeRole) {
           unsupportedCommand = true;
-          abortScan = true;
+          scanState.aborted = true;
           break;
         }
         if (isSimpleTexQuoteEnvironmentName(node.name)) {
           endQuote(node.name);
           if (currentQuoteDepth < 0) {
             unsupportedCommand = true;
-            abortScan = true;
+            scanState.aborted = true;
             break;
           }
         } else if (isSimpleTexListEnvironmentName(node.name)) {
@@ -5135,7 +5157,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
           pendingListShowLabel = false;
         } else if (!isSimpleTexTrivlistEnvironmentName(node.name)) {
           unsupportedCommand = true;
-          abortScan = true;
+          scanState.aborted = true;
           break;
         }
       }
@@ -5159,13 +5181,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
         prefix.alignmentProfile,
         true
       );
-      if (abortScan) {
+      if (scanState.aborted) {
         break;
       }
       const activeList = listStack.at(-1);
       if (!activeList) {
         unsupportedCommand = true;
-        abortScan = true;
+        scanState.aborted = true;
         break;
       }
       activeList.itemIndex += 1;
@@ -5221,7 +5243,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
         // LaTeX defines the named skips as \vspace of their skip registers.
         if (!["vspace", "smallskip", "medskip", "bigskip"].includes(node.command)) {
           unsupportedCommand = true;
-          abortScan = true;
+          scanState.aborted = true;
           break;
         }
         // `\vspace` is special in LaTeX: in horizontal mode it emits a
@@ -5247,7 +5269,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     if (node.kind === "vertical-rule") {
       if (hasNonSpaceSourceText(text, blockStart, node.sourceStart, sourceOffset)) {
         unsupportedCommand = true;
-        abortScan = true;
+        scanState.aborted = true;
         break;
       }
       items.push({
@@ -5270,7 +5292,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     if (node.kind === "penalty") {
       if (hasNonSpaceSourceText(text, blockStart, node.sourceStart, sourceOffset)) {
         unsupportedCommand = true;
-        abortScan = true;
+        scanState.aborted = true;
         break;
       }
       items.push({
@@ -5291,7 +5313,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
     if (node.kind === "box") {
       if (hasNonSpaceSourceText(text, blockStart, node.sourceStart, sourceOffset)) {
         unsupportedCommand = true;
-        abortScan = true;
+        scanState.aborted = true;
         break;
       }
       const body = rebaseSimpleTexBoxBody(node.body, blocks.length);
@@ -5320,13 +5342,13 @@ function buildSimpleTexParagraphBlocksFromNodes(
 
     if (node.kind === "noindent" || node.kind === "alignment") {
       unsupportedCommand = true;
-      abortScan = true;
+      scanState.aborted = true;
       break;
     }
 
     index += 1;
   }
-  if (!abortScan) {
+  if (!scanState.aborted) {
     if (
       currentQuoteDepth !== 0 ||
       listStack.length !== 0 ||
@@ -5334,10 +5356,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       scopeStack.length !== 0
     ) {
       unsupportedCommand = true;
-      abortScan = true;
+      scanState.aborted = true;
     }
   }
-  if (!abortScan) {
+  if (!scanState.aborted) {
     pushBlock(
       blockStart,
       sourceEnd,
@@ -5354,9 +5376,9 @@ function buildSimpleTexParagraphBlocksFromNodes(
   return {
     blocks,
     items,
-    partialFallbackSupported: unsupportedCommand && !abortScan,
+    partialFallbackSupported: unsupportedCommand && !scanState.aborted,
     unsupportedCommand,
-    ...(abortScan || completedListTopologies.length === 0
+    ...(scanState.aborted || completedListTopologies.length === 0
       ? {}
       : { listStructure: completedListTopologies }),
   };
@@ -5372,7 +5394,7 @@ function parseSimpleTexRelativeLength(
   }
   return {
     value: Number(match[1]),
-    unit: match[2].toLowerCase() as "em" | "ex",
+    unit: match[2].toLowerCase() === "em" ? "em" : "ex",
   };
 }
 
@@ -5585,14 +5607,14 @@ export function simpleTexInlineNodesToTokens(
       while (tokens.at(-1)?.kind === "space") {
         tokens.pop();
       }
-      if (node.priority !== undefined && node.priority < 4) {
+      if (node.priority === 0 || node.priority === 1 || node.priority === 2 || node.priority === 3) {
         const penalties = [0, -51, -151, -301] as const;
         tokens.push({
           kind: "penalty",
           text: node.text,
           sourceStart: node.sourceStart,
           sourceEnd: node.sourceEnd,
-          penalty: penalties[node.priority as 0 | 1 | 2 | 3],
+          penalty: penalties[node.priority],
           fontState: activeFontState,
         });
       } else {

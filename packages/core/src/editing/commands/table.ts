@@ -19,11 +19,12 @@ import type { EditMode, EditNodeKind, EditValue, SlotRole } from "../tree/types.
 export type ArgSchema = {
   readonly kind: "mandatory" | "optional" | "overlay";
   /** A slot (rendered content) or a value (picker-edited, not rendered as text). */
-  readonly rendered: boolean;
-  readonly role: SlotRole | EditValue["role"];
   /** Content mode of a rendered slot; defaults to the command's mode. */
   readonly mode?: EditMode;
-};
+} & (
+  | { readonly rendered: true; readonly role: SlotRole }
+  | { readonly rendered: false; readonly role: EditValue["role"] }
+);
 
 export type CommandCategory =
   | "style"

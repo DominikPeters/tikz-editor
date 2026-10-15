@@ -9,8 +9,8 @@ export function wrapRenderedElements(elements: Element[], className?: string): S
     return null;
   }
 
-  const namespace = first.namespaceURI ?? "http://www.w3.org/2000/svg";
-  const wrapper = document.createElementNS(namespace, "g") as SVGGElement;
+  if (first.namespaceURI !== null && first.namespaceURI !== "http://www.w3.org/2000/svg") return null;
+  const wrapper = document.createElementNS("http://www.w3.org/2000/svg", "g");
   if (className) {
     wrapper.setAttribute("class", className);
   }
@@ -53,7 +53,8 @@ function copyImagePresentationAttributes(source: SVGSVGElement, target: SVGImage
 }
 
 function texSvgDataUrl(source: SVGSVGElement): string {
-  const clone = source.cloneNode(true) as SVGSVGElement;
+  const clone = source.cloneNode(true);
+  if (!(clone instanceof SVGSVGElement)) throw new Error("SVG root clone changed element type");
   clone.removeAttribute("x");
   clone.removeAttribute("y");
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");

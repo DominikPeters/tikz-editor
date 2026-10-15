@@ -64,8 +64,8 @@ export function beamerBibliographyGraphicsResolver(parent?: DocumentGraphicsReso
     cacheKey: `beamer-bibliography-icons-v1:${parent?.cacheKey ?? ""}`,
     resolve(request) {
       if (request.filename.startsWith(iconPrefix)) {
-        const name = request.filename.slice(iconPrefix.length) as keyof typeof bibliographyIcons;
-        const icon = Object.hasOwn(bibliographyIcons, name) ? bibliographyIcons[name] : undefined;
+        const name = request.filename.slice(iconPrefix.length);
+        const icon = Object.entries(bibliographyIcons).find(([key]) => key === name)?.[1];
         if (icon) return {
           status: "resolved", mimeType: "image/svg+xml", dataBase64: icon.data,
           naturalWidthPt: icon.width, naturalHeightPt: icon.height,

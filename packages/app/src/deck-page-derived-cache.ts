@@ -1,15 +1,24 @@
 import type { DeckActiveFrame } from "./compute";
+import type { buildBeamerObjectIndex } from "@tikz-editor/core/beamer/index";
+import type { createTextLayoutContext } from "@tikz-editor/core/text/layout-context";
 
-// Weak ownership follows the bounded render cache and currently displayed
-// frames. Selection/cursor state must never be put in this cache.
-const entries = new WeakMap<DeckActiveFrame, { source: string; values: Map<string, unknown> }>();
+// Each typed key owns its values, preventing callers from interpreting the
+// same string key as unrelated types. Frames retain weak ownership.
+export class DeckPageDerivedKey<T> {
+  private readonly entries = new WeakMap<DeckActiveFrame, { source: string; value: T }>();
 
-export function deckPageDerived<T>(frame: DeckActiveFrame, source: string, key: string, build: () => T): T {
-  let entry = entries.get(frame);
-  if (entry?.source !== source) {
-    entry = { source, values: new Map() }; entries.set(frame, entry);
-  }
-  if (entry.values.has(key)) return entry.values.get(key) as T;
-  const value = build(); entry.values.set(key, value);
-  return value;
+  readonly derive = (frame: DeckActiveFrame, source: string, build: () => T): T => {
+    const entry = this.entries.get(frame);
+    if (entry?.source === source) return entry.value;
+    const value = build();
+    this.entries.set(frame, { source, value });
+    return value;
+  };
+}
+
+export const deckObjectIndexKey = new DeckPageDerivedKey<ReturnType<typeof buildBeamerObjectIndex>>();
+export const deckTextContextKey = new DeckPageDerivedKey<ReturnType<typeof createTextLayoutContext>>();
+
+export function deckPageDerived<T>(frame: DeckActiveFrame, source: string, key: DeckPageDerivedKey<T>, build: () => T): T {
+  return key.derive(frame, source, build);
 }

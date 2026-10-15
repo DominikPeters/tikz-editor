@@ -16,7 +16,7 @@ export function finishWork<T>(work: Generator<void, T, void>): T {
 export async function runCooperatively<T>(work: Generator<void, T, void>, options: CooperativeWorkOptions): Promise<T> {
   const run = options.run ?? (operation => operation());
   try {
-    while (true) {
+    for (;;) {
       options.signal?.throwIfAborted();
       const deadline = performance.now() + (options.budgetMs ?? 8);
       const step = run(() => {
@@ -30,6 +30,8 @@ export async function runCooperatively<T>(work: Generator<void, T, void>, option
   } finally {
     // Cancellation closes the private run without throwing through semantic
     // fallback handlers or publishing its unfinished cache.
+    // Iterator cancellation ignores its completion value; the generator API still requires generic T.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     work.return(undefined as T);
   }
 }

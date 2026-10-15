@@ -93,8 +93,7 @@ export function freezeTexCacheValue(value: object): number {
   const seen = new Set<object>();
   const pending: object[] = [value];
   let bytes = 0;
-  while (pending.length) {
-    const current = pending.pop()!;
+  for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
     if (seen.has(current)) continue;
     seen.add(current);
     const values: unknown[] = Object.values(current);

@@ -151,16 +151,10 @@ function closeEnough(a: number, b: number): boolean {
   return Math.abs(a - b) <= DASH_PATTERN_EPSILON;
 }
 
-export function lineCapPresetFromStyle(value: "butt" | "round" | "square"): LineCapPresetId {
-  if (value === "butt" || value === "round" || value === "square") {
-    return value;
-  }
-  return "custom";
+export function lineCapPresetFromStyle(value: unknown): LineCapPresetId {
+  return value === "butt" || value === "round" || value === "square" ? value : "custom";
 }
 
-export function lineJoinPresetFromStyle(value: "miter" | "round" | "bevel"): LineJoinPresetId {
-  if (value === "miter" || value === "round" || value === "bevel") {
-    return value;
-  }
-  return "custom";
+export function lineJoinPresetFromStyle(value: unknown): LineJoinPresetId {
+  return value === "miter" || value === "round" || value === "bevel" ? value : "custom";
 }

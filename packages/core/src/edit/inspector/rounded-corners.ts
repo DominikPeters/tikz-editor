@@ -136,9 +136,7 @@ export function computeLineBasedPathRoundedCornersMax(commands: ScenePathCommand
       continue;
     }
 
-    if (command.kind === "Z") {
-      flushSubpath(true, index);
-    }
+    flushSubpath(true, index);
   }
   flushSubpath(false);
 
@@ -189,20 +187,18 @@ export function computeGenericPathRoundedCornersMax(commands: ScenePathCommand[]
       continue;
     }
 
-    if (command.kind === "Z") {
-      if (current && start) {
-        const closingLength = pointDistance(current, start);
-        if (Number.isFinite(closingLength) && closingLength > EPSILON) {
-          lengths.push(closingLength);
-        }
+    if (current && start) {
+      const closingLength = pointDistance(current, start);
+      if (Number.isFinite(closingLength) && closingLength > EPSILON) {
+        lengths.push(closingLength);
       }
-      if (lengths.length > 0) {
-        subpaths.push({ lengths, closed: true });
-      }
-      lengths = [];
-      start = null;
-      current = null;
     }
+    if (lengths.length > 0) {
+      subpaths.push({ lengths, closed: true });
+    }
+    lengths = [];
+    start = null;
+    current = null;
   }
   flushOpenSubpath();
 
@@ -408,15 +404,13 @@ function extractCornerSubpaths(commands: readonly ScenePathCommand[]): Array<{ s
       continue;
     }
 
-    if (command.kind === "Z") {
-      if (current && start) {
-        const closingLength = pointDistance(current, start);
-        if (closingLength > EPSILON) {
-          segments.push({ kind: "L", from: current, to: start });
-        }
+    if (current && start) {
+      const closingLength = pointDistance(current, start);
+      if (closingLength > EPSILON) {
+        segments.push({ kind: "L", from: current, to: start });
       }
-      flushSubpath(true);
     }
+    flushSubpath(true);
   }
 
   flushSubpath(false);

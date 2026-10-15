@@ -1,3 +1,4 @@
+import { isObjectRecord } from "../utils/records.js";
 import type { PathItem, Span, Statement } from "../ast/types.js";
 import { parseTikz, type ParseTikzResult } from "../parser/index.js";
 import { isWrappedBySingleBracePair } from "../utils/braces.js";
@@ -217,6 +218,7 @@ function preparePathFragmentSnippet(pathFragmentRaw: string, fragmentSpan: Span)
 }
 
 function remapSpansInPathItems(items: PathItem[], sourceMapper: ForeachSnippetSourceMapper): PathItem[] {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- The internal mapper preserves AST node shapes and only maps numeric span endpoints to numbers.
   return remapSpansDeep(items, sourceMapper.mapOffset) as PathItem[];
 }
 
@@ -224,11 +226,11 @@ function remapSpansDeep(value: unknown, mapOffset: (offset: number) => number | 
   if (Array.isArray(value)) {
     return value.map((entry) => remapSpansDeep(entry, mapOffset));
   }
-  if (!value || typeof value !== "object") {
+  if (!isObjectRecord(value)) {
     return value;
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   let nextRecord: Record<string, unknown> | null = null;
 
   const fromCandidate = record.from;

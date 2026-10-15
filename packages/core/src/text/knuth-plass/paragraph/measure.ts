@@ -63,10 +63,11 @@ export function createMeasurementService(): MeasurementService {
 
   const getWrapperId = (wrapper: AnyWrapper | null | undefined): number => {
     if (!wrapper || typeof wrapper !== 'object') return 0;
-    if (!wrapperIds.has(wrapper)) {
-      wrapperIds.set(wrapper, nextWrapperId++);
-    }
-    return wrapperIds.get(wrapper) as number;
+    const existing = wrapperIds.get(wrapper);
+    if (existing !== undefined) return existing;
+    const id = nextWrapperId++;
+    wrapperIds.set(wrapper, id);
+    return id;
   };
 
   const textKey = (text: string, wrapper: AnyWrapper | null | undefined): string => {

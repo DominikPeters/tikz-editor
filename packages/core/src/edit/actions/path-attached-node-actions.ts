@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -128,7 +129,7 @@ export function applyPathAttachedNodeInspectorAction(
       return { kind: "error", message: "Path-attached node position must be a finite number." };
     }
     applyPositionMutations(mutations, parsed);
-  } else if (action.key === PATH_ATTACHED_NODE_SIDE_KEY) {
+  } else {
     if (regime.kind === "neutral") {
       return { kind: "unsupported", reason: "Path-attached neutral placement does not support side editing." };
     }
@@ -237,7 +238,7 @@ function applyDistanceMutations(
   if (!Number.isFinite(action.distanceUpdatePt)) {
     return;
   }
-  const resolvedDistance = Math.max(0, action.distanceUpdatePt!);
+  const resolvedDistance = Math.max(0, requireDefined(action.distanceUpdatePt, "Missing required action.distanceUpdatePt"));
   const resolvedDirection =
     action.sideUpdate?.kind === "explicit-direction"
       ? action.sideUpdate.direction

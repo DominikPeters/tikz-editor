@@ -175,6 +175,6 @@ function resolveNodeSourceId(statement: PathStatement, node: NodeItem, tree: boo
 
 function hasPathAttachment(elements: readonly SceneElement[], sourceId: string): boolean {
   return elements.some(
-    (element) => element.sourceRef.sourceId === sourceId && "pathAttachment" in element && element.pathAttachment != null
+    (element) => element.sourceRef.sourceId === sourceId && "pathAttachment" in element
   );
 }

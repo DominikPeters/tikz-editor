@@ -46,7 +46,7 @@ export function collectBeamerParagraphSpacing(paragraphs: readonly BeamerParagra
         const owner = [...lines].reverse().find(line => line.from <= offset && offset <= line.to) ??
           [...lines].reverse().find(line => line.to <= offset) ?? lines[0];
         const line = owner && paragraph.vlistLayout.linePlacements.find(item => item.lineIndex === owner.line.lineIndex);
-        if (!line || !owner) continue;
+        if (!line) continue;
         const before = precedingSpace.get(line.lineIndex) ?? 0;
         push(glue, Number(line.x), Number(line.y) + Number(owner.line.ascent) + Number(owner.line.descent) + before, Number(glue.size), true);
         precedingSpace.set(line.lineIndex, before + Number(glue.size));

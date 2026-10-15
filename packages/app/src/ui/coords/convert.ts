@@ -31,11 +31,11 @@ export function svgToViewport(point: SvgPoint, transform: CanvasTransform, viewB
   );
 }
 
-export function svgToWorld(point: SvgPoint, viewBox: SvgViewBox): WorldPoint {
+export function svgToWorld(point: SvgPoint, viewBox: Pick<SvgViewBox, "y" | "height">): WorldPoint {
   return coreSvgToWorldPoint(point, viewBox);
 }
 
-export function worldToSvg(point: WorldPoint, viewBox: SvgViewBox): SvgPoint {
+export function worldToSvg(point: WorldPoint, viewBox: Pick<SvgViewBox, "y" | "height">): SvgPoint {
   return coreWorldToSvgPoint(point, viewBox);
 }
 

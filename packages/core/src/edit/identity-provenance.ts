@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import type { Span, Statement } from "../ast/types.js";
 import { walkStatements } from "../ast/walk.js";
 import type { EditGeometrySession } from "./geometry-session.js";
@@ -59,7 +60,7 @@ export function geometryIdentityMoves(
   const current = currentSource === geometry.source ? cache.baseline : cache.revisions.get(currentSource);
   const next = advanceIdentityMoves(cache.baseline, baselinePatches, relocations);
   cache.revisions.set(newSource, next);
-  if (cache.revisions.size > 24) cache.revisions.delete(cache.revisions.keys().next().value!);
+  if (cache.revisions.size > 24) cache.revisions.delete(requireDefined(cache.revisions.keys().next().value, "Missing required cache.revisions.keys().next().value"));
   if (!current) return;
   const byOriginalSpan = new Map(current.map(move => [key(move.oldSpan), move.newSpan]));
   return next.flatMap(move => {

@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import type { Span } from "../ast/types.js";
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 import { getTexSyntaxIndex, matchTexSyntaxEnvironments } from "../text/tex/syntax-index.js";
@@ -75,7 +76,7 @@ export function projectBeamerCaptions(mapped: MappedText, source: string, theme?
       const separatorName = templateAt("caption label separator", sourceStart, "colon");
       const separator = ({ none: "", colon: ":\\ ", period: ".\\ ", space: "\\ ", quad: "\\quad\\ ", endash: "\\ --\\ " } as Record<string, string>)[separatorName] ?? ":\\ ";
       // \caption applies \ignorespaces, including leading comments/newlines.
-      const leadingTrivia = /^(?:\s|%[^\r\n]*(?:\r\n|\r|\n|$))*/u.exec(mapped.text.slice(argument.contentSpan.from, argument.contentSpan.to))![0].length;
+      const leadingTrivia = requireDefined(/^(?:\s|%[^\r\n]*(?:\r\n|\r|\n|$))*/u.exec(mapped.text.slice(argument.contentSpan.from, argument.contentSpan.to)), "Expected an internal captions value")[0].length;
       const content = sliceMappedText(mapped, argument.contentSpan.from + leadingTrivia, argument.contentSpan.to);
       const label = unnumbered ? "" : `{\\color{${captionColor}}${name}${numbered ? `~${number}` : ""}${captionPackage && content.text === "" ? "" : separator}}`;
       if (captionPackage && layout) {

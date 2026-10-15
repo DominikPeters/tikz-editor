@@ -66,8 +66,8 @@ export function shouldCaptureStandaloneNodeNameCoordinate(items: PathItem[], coo
 
 export function applyNameScope(name: string, context: SemanticContext): string {
   const frame = currentFrame(context);
-  const prefix = frame?.namePrefix ?? "";
-  const suffix = frame?.nameSuffix ?? "";
+  const prefix = frame.namePrefix;
+  const suffix = frame.nameSuffix;
   if (prefix.length === 0 && suffix.length === 0) {
     return name.trim();
   }

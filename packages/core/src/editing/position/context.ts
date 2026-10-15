@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { isDeclarationGroup } from "../ownership/kinds.js";
@@ -85,7 +86,7 @@ function nodeLabel(view: EditView, node: EditNode): string | null {
 
 /** `\\name` for a command written as one; an environment's name bare. */
 function commandLabel(text: string, node: EditNode): string {
-  const command = node.command!;
+  const command = requireDefined(node.command, "Missing required node.command");
   return text.startsWith(`\\${command}`, node.span.from) ? `\\${command}` : command;
 }
 

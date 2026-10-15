@@ -11,7 +11,6 @@ import { parseFontStyle, stripEnclosingBraces } from "../../semantic/style/optio
 import type { ResolvedStyle, SceneElement } from "../../semantic/types.js";
 import { colorOptionsForValue, normalizeInspectorColorValue, resolveColorSyntaxValue } from "./color-syntax.js";
 import {
-  CURATED_NODE_SHAPE_SET,
   NODE_FONT_CUSTOM_NOTE,
   NODE_FONT_SIZE_EPSILON,
   NODE_FONT_SIZE_PRESETS,
@@ -395,8 +394,9 @@ function resolveNodeInspectorState(context: InspectorSectionBuildContext): NodeI
   }
 
   if (rawShape != null) {
-    if (CURATED_NODE_SHAPE_SET.has(rawShape as Exclude<NodeShapePresetId, "custom">)) {
-      state.shape = rawShape as Exclude<NodeShapePresetId, "custom">;
+    const curated = NODE_SHAPE_OPTIONS.find(option => option.value === rawShape);
+    if (curated) {
+      state.shape = curated.value;
     } else {
       state.shape = "custom";
       state.shapeNote = NODE_SHAPE_CUSTOM_NOTE;
@@ -426,16 +426,16 @@ function resolveNodeInspectorState(context: InspectorSectionBuildContext): NodeI
       if (parsedFont.fontFamily) state.font.family = parsedFont.fontFamily;
       if (parsedFont.fontWeight) state.font.weight = parsedFont.fontWeight;
       if (parsedFont.fontStyle) state.font.style = parsedFont.fontStyle;
-      const parsedFontSize = Number.isFinite(parsedFont.fontSize) && (parsedFont.fontSize ?? 0) > 0
-        ? (parsedFont.fontSize as number)
+      const parsedFontSize = parsedFont.fontSize !== undefined && Number.isFinite(parsedFont.fontSize) && parsedFont.fontSize > 0
+        ? parsedFont.fontSize
         : fallbackFontSize;
       fallbackCustomSizePt = parsedFontSize;
       const parsedSizePreset = nodeFontSizePresetFromFontSize(parsedFontSize);
       state.font.sizePreset = parsedSizePreset;
       state.font.customSizePt = parsedSizePreset === "custom" ? parsedFontSize : null;
     }
-  } else if (state.font.sizePreset === "custom" && Number.isFinite(state.font.customSizePt)) {
-    fallbackCustomSizePt = state.font.customSizePt as number;
+  } else if (state.font.sizePreset === "custom" && state.font.customSizePt !== null && Number.isFinite(state.font.customSizePt)) {
+    fallbackCustomSizePt = state.font.customSizePt;
   }
 
   const preferredFontKey = selectedFontKey ?? "node font";

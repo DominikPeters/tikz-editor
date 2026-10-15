@@ -32,7 +32,6 @@ export const PATH_POSITION_PRESETS: ReadonlyArray<{ key: PathPositionPreset; t: 
   { key: "at end", t: 1, label: "End" }
 ] as const;
 
-const POSITION_PRESET_KEYS = new Set(PATH_POSITION_PRESETS.map((preset) => preset.key));
 const EXPLICIT_DIRECTIONS = new Set([
   "above",
   "below",
@@ -70,7 +69,7 @@ export function resolvePathPositionFraction(options: OptionListAst | undefined):
 
   let value: number | null = null;
   for (const entry of options.entries) {
-    if (entry.kind === "flag" && POSITION_PRESET_KEYS.has(entry.key as PathPositionPreset)) {
+    if (entry.kind === "flag" && PATH_POSITION_PRESETS.some(preset => preset.key === entry.key)) {
       value = PATH_POSITION_PRESETS.find((preset) => preset.key === entry.key)?.t ?? value;
       continue;
     }

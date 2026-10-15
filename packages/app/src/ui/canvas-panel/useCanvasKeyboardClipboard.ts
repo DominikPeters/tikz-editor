@@ -205,7 +205,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
 
   const onViewportKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof HTMLElement ? event.target : null;
       if (
         target?.isContentEditable ||
         target?.tagName === "INPUT" ||
@@ -431,7 +431,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
           try {
             const customTikz = await readCustomText(DESKTOP_TIKZ_CLIPBOARD_FORMATS);
             if (!isClipboardEditCurrent(pasteContext)) return;
-            if (customTikz?.text?.trim()) {
+            if (customTikz?.text.trim()) {
               const payload = parseClipboardPayloadJson(customTikz.text);
               if (payload && pasteSelectionFromPayload(pasteContext, payload).kind === "success") return;
             }
@@ -446,7 +446,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
           try {
             const custom = await readCustomBytes(DESKTOP_POWERPOINT_GVML_CLIPBOARD_FORMATS);
             if (!isClipboardEditCurrent(pasteContext)) return;
-            if (custom?.bytesBase64?.trim()) {
+            if (custom?.bytesBase64.trim()) {
               let decoded: Uint8Array;
               try { decoded = decodeBase64Bytes(custom.bytesBase64); }
               catch (error) {
@@ -472,7 +472,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
           try {
             const custom = await readCustomText(DESKTOP_SVG_CLIPBOARD_FORMATS);
             if (!isClipboardEditCurrent(pasteContext)) return;
-            if (custom?.text?.trim()) {
+            if (custom?.text.trim()) {
               const converted = await convertSvgToScopeSnippet(custom.text);
               if (!isClipboardEditCurrent(pasteContext)) return;
               if (converted.kind === "failure") { setWarning(converted.message); return; }
@@ -489,7 +489,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
           try {
             const custom = await readCustomText(DESKTOP_KEYNOTE_CLIPBOARD_FORMATS);
             if (!isClipboardEditCurrent(pasteContext)) return;
-            if (custom?.text?.trim()) {
+            if (custom?.text.trim()) {
               const converted = await convertKeynoteClipboardToScopeSnippet(custom.text);
               if (!isClipboardEditCurrent(pasteContext)) return;
               if (converted.kind === "failure") { setWarning(converted.message); return; }

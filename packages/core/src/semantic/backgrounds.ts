@@ -379,7 +379,7 @@ function withBackgroundLayer<T extends SceneElement>(element: T): T {
   return {
     ...element,
     layer: BACKGROUND_SCENE_LAYER,
-    runtimeId: element.runtimeId ?? element.id
+    runtimeId: element.runtimeId
   };
 }
 

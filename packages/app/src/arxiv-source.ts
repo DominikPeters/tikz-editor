@@ -41,7 +41,8 @@ function collectTikzPictureTokens(source: string): TokenMatch[] {
       cursor += 1;
       continue;
     }
-    const command = readTexControlSequence(source, cursor)!;
+    const command = readTexControlSequence(source, cursor);
+    if (!command) { cursor += 1; continue; }
     const verbatimEnd = skipTexVerbatim(source, command, true);
     if (verbatimEnd !== null) {
       cursor = verbatimEnd;

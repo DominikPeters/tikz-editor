@@ -228,7 +228,6 @@ const MIN_FORMATTER_MAX_LINE_LENGTH = 40;
 const MAX_FORMATTER_MAX_LINE_LENGTH = 240;
 
 const SOURCE_PICKER_COLORS = uniqueStrings(["none", ...NAMED_COLORS]);
-const ENABLE_TIKZ_AUTOCOMPLETE = true;
 
 function stripTikzPrefixInSignatureHtml(signatureHtml: string): string {
   const template = document.createElement("template");
@@ -985,13 +984,11 @@ export function SourcePanel() {
       }
     });
 
-    const completionExtension = ENABLE_TIKZ_AUTOCOMPLETE
-      ? autocompletion({
+    const completionExtension = autocompletion({
           override: [
             (context) => tikzCompletion(context, symbolsRef.current)
           ]
-        })
-      : autocompletion();
+        });
 
     const state = CMState.create({
       doc: source,
@@ -1322,7 +1319,7 @@ export function SourcePanel() {
     }
 
     function handlePointerDown(event: PointerEvent): void {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (!target) {
         return;
       }
@@ -1478,7 +1475,7 @@ export function SourcePanel() {
               >
                 <span className={css.diagnosticIcon}>{d.severity === "error" ? "\u2298" : "\u26A0"}</span>
                 <span className={css.diagnosticMessage} data-select="text">{d.message}</span>
-                {line != null && <span className={css.diagnosticLocation}>Ln {line}</span>}
+                {<span className={css.diagnosticLocation}>Ln {line}</span>}
               </div>
             );
           })}
@@ -1635,7 +1632,7 @@ function buildSourceSpanIndex(elements: readonly SceneElement[], statements: rea
   for (const element of elements) {
     const sourceId = element.sourceRef.sourceId.trim();
     const sourceSpan = element.sourceRef.sourceSpan;
-    if (!sourceId || !sourceSpan || sourceSpan.to <= sourceSpan.from) {
+    if (!sourceId || sourceSpan.to <= sourceSpan.from) {
       continue;
     }
     const existing = sceneSpansBySourceId.get(sourceId);
@@ -1713,12 +1710,12 @@ function collectTreeChildSpansBySourceId(elements: readonly SceneElement[]): Map
     if (!treeChild) {
       continue;
     }
-    const sourceId = treeChild.childSourceId?.trim() ?? "";
+    const sourceId = treeChild.childSourceId.trim();
     if (!sourceId) {
       continue;
     }
     const span = treeChild.bodySpan ?? treeChild.childOperationSpan;
-    if (!span || span.to <= span.from) {
+    if (span.to <= span.from) {
       continue;
     }
     const existing = spans.get(sourceId);

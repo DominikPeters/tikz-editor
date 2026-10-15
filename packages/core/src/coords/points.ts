@@ -92,6 +92,7 @@ type RectBrand =
 
 function createPoint<Unit, Brand extends PointBrand>(x: Unit, y: Unit, brand: Brand): Point2D<Unit, Brand extends `point:${infer Space}` ? Space : never> {
   void brand;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes a phantom coordinate brand without changing its runtime representation.
   return { x, y } as unknown as Point2D<Unit, Brand extends `point:${infer Space}` ? Space : never>;
 }
 
@@ -101,6 +102,7 @@ function createVector<Unit, Brand extends VectorBrand>(
   brand: Brand
 ): Vector2D<Unit, Brand extends `vector:${infer Space}` ? Space : never> {
   void brand;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes a phantom coordinate brand without changing its runtime representation.
   return { x, y } as unknown as Vector2D<Unit, Brand extends `vector:${infer Space}` ? Space : never>;
 }
 
@@ -112,6 +114,7 @@ function createBounds<Unit, Brand extends BoundsBrand>(
   brand: Brand
 ): Bounds2D<Unit, Brand extends `bounds:${infer Space}` ? Space : never> {
   void brand;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes a phantom coordinate brand without changing its runtime representation.
   return { minX, minY, maxX, maxY } as unknown as Bounds2D<
     Unit,
     Brand extends `bounds:${infer Space}` ? Space : never
@@ -126,6 +129,7 @@ function createRect<Unit, Brand extends RectBrand>(
   brand: Brand
 ): Rect2D<Unit, Brand extends `rect:${infer Space}` ? Space : never> {
   void brand;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes a phantom coordinate brand without changing its runtime representation.
   return { x, y, width, height } as unknown as Rect2D<
     Unit,
     Brand extends `rect:${infer Space}` ? Space : never

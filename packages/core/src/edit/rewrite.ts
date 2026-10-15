@@ -145,9 +145,6 @@ function rewriteDelta(
     return null;
   }
   const base = handle.relativeBase;
-  if (!base) {
-    return null;
-  }
   const delta = worldVector(pt(newWorld.x - base.x), pt(newWorld.y - base.y));
   const localDelta = worldDeltaToLocalDelta(delta, handle.frame);
   if (!localDelta) {
@@ -176,16 +173,12 @@ function applyInsertionSyntax(source: string, handle: EditHandle, coordinate: st
     return coordinate;
   }
 
-  if (handle.insertion.kind === "node-inline-at") {
-    const offset = handle.sourceRef.sourceSpan.from;
-    const previousChar = source.charAt(offset - 1);
-    const nextChar = source.charAt(offset);
-    const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
-    const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
-    return `${leading}at ${coordinate}${trailing}`;
-  }
-
-  return coordinate;
+  const offset = handle.sourceRef.sourceSpan.from;
+  const previousChar = source.charAt(offset - 1);
+  const nextChar = source.charAt(offset);
+  const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
+  const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
+  return `${leading}at ${coordinate}${trailing}`;
 }
 
 function toPolar(point: { x: number; y: number }): { angleDeg: number; radius: number } {
@@ -243,6 +236,10 @@ function anchorOffsetsForDirection(
     targetAnchor: wp(m.tx * targetHW, m.ty * targetHH),
     currentAnchor: wp(m.cx * currentHW, m.cy * currentHH)
   };
+}
+
+function directionSign(value: number): -1 | 0 | 1 {
+  return value < 0 ? -1 : value > 0 ? 1 : 0;
 }
 
 function cardinalDirectionFromSigns(signs: { x: -1 | 0 | 1; y: -1 | 0 | 1 }): string | null {
@@ -346,8 +343,8 @@ export function rewritePositioningFromContext(
 
   if (maxComp >= 1e-6) {
     const resolvedSigns = {
-      x: (absCx < 1e-6 ? currentSigns.x : Math.sign(c2cXcm)) as -1 | 0 | 1,
-      y: (absCy < 1e-6 ? currentSigns.y : Math.sign(c2cYcm)) as -1 | 0 | 1
+      x: absCx < 1e-6 ? currentSigns.x : directionSign(c2cXcm),
+      y: absCy < 1e-6 ? currentSigns.y : directionSign(c2cYcm)
     };
     const horizontalDominant = absCy <= Math.max(absCx * cardinalSnapRatio, 1e-6);
     const verticalDominant = absCx <= Math.max(absCy * cardinalSnapRatio, 1e-6);

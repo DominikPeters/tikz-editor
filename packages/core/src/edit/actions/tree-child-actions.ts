@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { ChildOperationItem, PathStatement, Span } from "../../ast/types.js";
@@ -43,7 +44,7 @@ export function applyAddTreeChildAction(
     if (resolvedParent.target.treeChildForeach) {
       return { kind: "unsupported", reason: "Tree child insertion is not supported for child foreach expansions." };
     }
-    const childBodySpan = resolvedParent.target.treeChildBodySpan!;
+    const childBodySpan = requireDefined(resolvedParent.target.treeChildBodySpan, "Missing required resolvedParent.target.treeChildBodySpan");
     const insertOffset = resolveBodyCloseInsertOffset(source, childBodySpan);
     const newline = detectPreferredNewline(source, insertOffset);
     const parentIndent = lineIndentAtOffset(source, resolvedParent.target.span.from);
@@ -58,7 +59,7 @@ export function applyAddTreeChildAction(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const rootStatement = findPathStatementById(parsed.figure.body, parentSourceId)!;
+  const rootStatement = requireDefined(findPathStatementById(parsed.figure.body, parentSourceId), "Missing required findPathStatementById(parsed.figure.body, parentSourceId)");
 
   const hasNode = rootStatement.items.some((item) => item.kind === "Node");
   if (!hasNode) {
@@ -132,7 +133,7 @@ export function applyRemoveTreeChildAction(
         replacement: ""
       }
     ],
-    selectedSourceIds: [resolvedChild.target.treeRootSourceId!],
+    selectedSourceIds: [requireDefined(resolvedChild.target.treeRootSourceId, "Missing required resolvedChild.target.treeRootSourceId")],
     changedSourceIds: [childSourceId]
   };
 }
@@ -171,7 +172,7 @@ function resolveRootInsertionAnchor(
   }
 
   if (Number.isInteger(afterChildIndexRaw)) {
-    const afterChildIndex = Math.max(0, afterChildIndexRaw!);
+    const afterChildIndex = Math.max(0, requireDefined(afterChildIndexRaw, "Missing required afterChildIndexRaw"));
     if (afterChildIndex < children.length) {
       const child = requireArrayValue(children, afterChildIndex);
       return {

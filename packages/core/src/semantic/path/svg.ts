@@ -112,15 +112,12 @@ export function parseSvgPathOperation(args: {
       continue;
     }
 
-    if (activeCommand == null) {
-      continue;
-    }
 
     const lower = activeCommand.toLowerCase();
     const relative = activeCommand === lower;
 
     if (lower === "z") {
-      if (subpathStartLocal) {
+      {
         const fromWorld = localToWorld(currentLocal);
         const toWorldPoint = localToWorld(subpathStartLocal);
         commands.push({ kind: "Z" });
@@ -359,7 +356,7 @@ export function parseSvgPathOperation(args: {
   return {
     commands,
     endPoint,
-    subpathStartPoint: subpathStartLocal ? localToWorld(subpathStartLocal) : null,
+    subpathStartPoint: localToWorld(subpathStartLocal),
     lastSegment,
     diagnostics
   };
@@ -389,9 +386,6 @@ function tokenizeSvgPathData(input: string): { tokens: SvgToken[]; diagnostics: 
 
   while (index < input.length) {
     const char = input.charAt(index);
-    if (char == null) {
-      break;
-    }
 
     if (isSvgSeparator(char)) {
       index += 1;

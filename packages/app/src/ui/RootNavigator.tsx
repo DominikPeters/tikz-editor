@@ -157,7 +157,8 @@ export function RootNavigator() {
         collapsedByDocument.set(documentId, next); return next;
       });
     }
-    buttons.current.get(activeRootId ?? "")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const scrolling: Partial<Pick<HTMLButtonElement, "scrollIntoView">> | undefined = buttons.current.get(activeRootId ?? "");
+    scrolling?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [activeRootId, arrangementKey, documentId, model, collapsed]);
   useEffect(() => {
     const releaseFocus = () => { ownsFocus.current = false; };
@@ -185,7 +186,7 @@ export function RootNavigator() {
   // scrub keeps its pre-edit viewBox, so its thumbnail waits for the edit's end.
   const mainFrame = snapshot.deck?.activeFrame;
   const mainSvg = rootRef?.kind === "beamer-frame"
-    ? mainFrame?.frameId === activeRootId ? mainFrame?.svg ?? null : null
+    ? mainFrame?.frameId === activeRootId ? mainFrame.svg : null
     : rootRef?.kind === "tikz-figure" && snapshot.activeRootId === activeRootId && !interactiveEdit
       ? snapshot.svg?.svg ?? null : null;
   const mainUrl = useMemo(() => mainSvg
@@ -253,7 +254,7 @@ export function RootNavigator() {
     const session = drag.current;
     if (session?.documentId !== documentId || session.revision !== revision) return;
     event.preventDefault(); event.dataTransfer.dropEffect = "move";
-    let target = (event.target as Element).closest<HTMLElement>("[data-slide-id], [data-section-id]");
+    let target = (event.target instanceof Element ? event.target : null)?.closest<HTMLElement>("[data-slide-id], [data-section-id]");
     // Gaps between cards are insertion targets too. Only the space after
     // the last row/card represents the end of the document.
     if (!target) {
@@ -273,8 +274,9 @@ export function RootNavigator() {
       const horizontal = layout === "strip" || (layout === "grid" && !target.dataset.sectionId);
       const edge = (horizontal ? event.clientX < rect.left + rect.width / 2 : event.clientY < rect.top + rect.height / 2) ? "before" : "after";
       const sectionId = target.dataset.sectionId;
-      next = sectionId ? { key: sectionId, edge, destination: { kind: "section", sectionId, edge } }
-        : { key: target.dataset.slideId!, edge, destination: { kind: edge, frameId: target.dataset.slideId! } };
+      const slideId = target.dataset.slideId;
+      if (sectionId) next = { key: sectionId, edge, destination: { kind: "section", sectionId, edge } };
+      else if (slideId) next = { key: slideId, edge, destination: { kind: edge, frameId: slideId } };
     }
     setDrop(next);
     const view = viewportRef.current;
@@ -285,7 +287,7 @@ export function RootNavigator() {
     }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if ((event.target as Element).closest('[role="menu"], dialog, [role="dialog"]')) return;
+    if ((event.target instanceof Element ? event.target : null)?.closest('[role="menu"], dialog, [role="dialog"]')) return;
     const command = event.ctrlKey || event.metaKey;
     const key = event.key.toLowerCase();
     const handled = () => { event.preventDefault(); event.stopPropagation(); };
@@ -305,7 +307,7 @@ export function RootNavigator() {
     if (deckMode && command && key === "d") { handled(); if (manager.canEditSelection) manager.edit({ kind: "duplicate", frameIds: manager.ids }); return; }
     if (deckMode && (key === "delete" || key === "backspace")) { handled(); if (manager.canEditSelection) manager.edit({ kind: "delete", frameIds: manager.ids }); return; }
     if (command && (key === "z" || key === "y")) { handled(); if (!locked) dispatch({ type: event.shiftKey || key === "y" ? "REDO" : "UNDO" }); return; }
-    const id = (event.target as HTMLElement).closest<HTMLElement>("[data-slide-id]")?.dataset.slideId;
+    const id = (event.target instanceof Element ? event.target : null)?.closest<HTMLElement>("[data-slide-id]")?.dataset.slideId;
     if (!id) return;
     if (key === " " && deckMode) { handled(); manager.select(id, { ctrlKey: true }, false); return; }
     const visible = entries.flatMap(entry => entry.kind === "frame" ? [entry.root.id] : []);
@@ -327,7 +329,7 @@ export function RootNavigator() {
       if (layout === "grid" && (key === "arrowup" || key === "arrowdown")) {
         const rect = buttons.current.get(id)?.getBoundingClientRect();
         if (rect) {
-          const candidates = visible.map(value => ({ value, rect: buttons.current.get(value)!.getBoundingClientRect() }))
+          const candidates = visible.flatMap(value => { const button = buttons.current.get(value); return button ? [{ value, rect: button.getBoundingClientRect() }] : []; })
             .filter(item => key === "arrowup" ? item.rect.top < rect.top - 1 : item.rect.top > rect.top + 1)
             .sort((a, b) => (Math.abs(a.rect.top - rect.top) * 10 + Math.abs(a.rect.left - rect.left)) - (Math.abs(b.rect.top - rect.top) * 10 + Math.abs(b.rect.left - rect.left)));
           if (candidates[0]) index = visible.indexOf(candidates[0].value);
@@ -347,13 +349,13 @@ export function RootNavigator() {
   return <div ref={panelRef} className={css.panel} data-testid="figure-navigator" data-slide-manager={deckMode || undefined}
     data-layout={layout} data-dragging={dragging || undefined} onKeyDown={onKeyDown} tabIndex={-1}
     onCopy={event => {
-      if (!deckMode || (event.target as Element).closest('[role="dialog"], [role="menu"]')) return;
+      if (!deckMode || (event.target instanceof Element ? event.target : null)?.closest('[role="dialog"], [role="menu"]')) return;
       event.preventDefault(); event.stopPropagation();
       const text = manager.copyText();
       if (text != null) event.clipboardData.setData("text/plain", text);
     }}
     onPaste={event => {
-      if (!deckMode || (event.target as Element).closest('[role="dialog"], [role="menu"]')) return;
+      if (!deckMode || (event.target instanceof Element ? event.target : null)?.closest('[role="dialog"], [role="menu"]')) return;
       event.preventDefault(); event.stopPropagation();
       manager.pasteText(event.clipboardData.getData("text/plain"));
     }}
@@ -366,7 +368,7 @@ export function RootNavigator() {
     }}>
     {deckMode && manager.ids.length > 1 ? <div className={css.toolbar}><span>{manager.ids.length} selected</span></div> : null}
     <div ref={viewportRef} className={css.viewport} data-testid="figure-navigator-strip" onDragOver={dragOver}
-      onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDrop(null); }}
+      onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) setDrop(null); }}
       onDrop={event => {
         event.preventDefault();
         const session = drag.current;

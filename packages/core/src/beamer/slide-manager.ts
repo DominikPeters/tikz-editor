@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
@@ -92,7 +93,7 @@ function duplicateReplacements(document: BeamerDocumentModel, frames: readonly B
       const original = source.slice(argument.contentSpan.from, argument.contentSpan.to);
       const replacement = original.replace(/[^,\s]+/gu, name => {
         const alias = /^(.*)(<\d+>)$/u.exec(name);
-        return renamed.get(`${kind}:${name}`) ?? (alias && renamed.has(`${kind}:${alias[1]}`) ? renamed.get(`${kind}:${alias[1]}`)! + alias[2] : name);
+        return renamed.get(`${kind}:${name}`) ?? (alias && renamed.has(`${kind}:${alias[1]}`) ? requireDefined(renamed.get(`${kind}:${alias[1]}`), "Expected an internal slide-manager value") + alias[2] : name);
       });
       if (replacement !== original) replacements.push({ span: argument.contentSpan, text: replacement });
     }
@@ -135,7 +136,7 @@ function pastedTikzLayers(source: string, origin: BeamerDocumentModel, frames: r
   }
   return { preamble: null, replacements: layers.flatMap(({ span }) => {
     const boundaries = beamerEnvironmentBoundariesIn(context, span);
-    const begin = requireArrayValue(boundaries, 0), end = boundaries.at(-1)!.span;
+    const begin = requireArrayValue(boundaries, 0), end = requireDefined(boundaries.at(-1), "Expected an internal slide-manager value").span;
     const options = beamerOptionalArgumentAfter(context, begin.span.to, span.to);
     const own = options ? origin.source.slice(options.contentSpan.from, options.contentSpan.to).trim() : "";
     return [
@@ -176,11 +177,11 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
   const spans = frames.map(frame => beamerSlideSourceSpan(origin.source, frame));
   const dependencies = analysis?.dependencies ?? [];
   let at = edit.kind === "delete" ? null : beamerSlideInsertionPoint(document, edit.kind === "duplicate"
-    ? { kind: "after", frameId: frames.at(-1)!.id } : edit.destination);
+    ? { kind: "after", frameId: requireDefined(frames.at(-1), "Expected an internal slide-manager value").id } : edit.destination);
   if (edit.kind !== "delete" && at == null) return null;
   const removals = edit.kind === "move" || edit.kind === "delete" ? [...spans, ...dependencies.map(item => item.span)] : [];
   if (at != null) {
-    const containing = removals.find(span => span.from <= at! && at! < span.to);
+    const containing = removals.find(span => span.from <= requireDefined(at, "Expected an internal slide-manager value") && requireDefined(at, "Expected an internal slide-manager value") < span.to);
     if (containing) at = containing.from;
   }
   const renamed = edit.kind === "duplicate" ? duplicateReplacements(document, frames) : edit.kind === "paste"

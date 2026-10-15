@@ -255,7 +255,7 @@ function glyphControlPointBounds(
 }
 
 function svgPathControlPoints(d: string): PathPoint[] {
-  const tokens = [...d.matchAll(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/gi)].map((match) => match[0] ?? "");
+  const tokens = [...d.matchAll(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+)(?:e[-+]?\d+)?/gi)].map((match) => match[0]);
   const points: PathPoint[] = [];
   let index = 0;
   let command = "";

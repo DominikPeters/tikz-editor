@@ -21,6 +21,7 @@ import type {
 } from "../platform/types";
 import { afterNextPaint } from "./frame-scheduling";
 import css from "./AssistantPanel.module.css";
+import { isRecord } from "../validation";
 
 type AssistantPanelProps = {
   onSubmitPrompt: (
@@ -121,7 +122,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     if (!metaRequested) {
       return;
     }
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    const isDisposed = () => lifecycle.disposed;
     async function loadAssistantMeta(): Promise<void> {
       setMetaLoading(true);
       try {
@@ -130,7 +132,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
           assistantApi?.listModels?.() ?? Promise.resolve([]),
           assistantApi?.readAccount?.() ?? Promise.resolve(null)
         ]);
-        if (disposed) {
+        if (isDisposed()) {
           return;
         }
         setModelOptions(models);
@@ -140,12 +142,12 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
 
         // Then, fetch rate limits in the background (slow)
         const rateLimits = await (assistantApi?.readRateLimits?.() ?? Promise.resolve(null));
-        if (disposed) {
+        if (isDisposed()) {
           return;
         }
         setAccountSnapshot((prev) => ({ ...prev, account: prev?.account ?? null, rateLimits }));
       } catch (error) {
-        if (disposed) {
+        if (isDisposed()) {
           return;
         }
         setMetaError(error instanceof Error ? error.message : String(error));
@@ -154,7 +156,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     }
     void loadAssistantMeta();
     return () => {
-      disposed = true;
+      lifecycle.disposed = true;
     };
   }, [assistantApi, metaRequested]);
 
@@ -182,24 +184,25 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   }, [groupedItems.length, assistantState.assistantPendingApprovals.length]);
 
   useEffect(() => {
-    if (!assistantAvailable || !assistantApi?.checkCodexStatus) {
+    if (!assistantAvailable || !assistantApi.checkCodexStatus) {
       setCodexStatusChecked(true);
       return;
     }
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    const isDisposed = () => lifecycle.disposed;
     void assistantApi.checkCodexStatus().then((status) => {
-      if (!disposed) {
+      if (!isDisposed()) {
         setCodexStatus(status);
         setCodexStatusError(null);
         setCodexStatusChecked(true);
       }
     }).catch((error: unknown) => {
-      if (!disposed) {
+      if (!isDisposed()) {
         setCodexStatusError(error instanceof Error ? error.message : String(error));
         setCodexStatusChecked(true);
       }
     });
-    return () => { disposed = true; };
+    return () => { lifecycle.disposed = true; };
   }, [assistantAvailable, assistantApi]);
 
   // Pre-warm the codex process and fetch account info once we know it's installed
@@ -207,20 +210,21 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     if (!codexStatusChecked || !codexStatus?.installed || !assistantApi?.warmUp) {
       return;
     }
-    let disposed = false;
+    const lifecycle = { disposed: false };
+    const isDisposed = () => lifecycle.disposed;
     void (async () => {
       try {
         await assistantApi.warmUp?.();
-        if (disposed) return;
+        if (isDisposed()) return;
         const account = await assistantApi.readAccount?.();
-        if (disposed) return;
+        if (isDisposed()) return;
         setAccountSnapshot((prev) => ({ ...prev, account, rateLimits: prev?.rateLimits ?? null }));
       } catch (error) {
         // Ignore warmup/account errors - will be handled when user interacts
         logAssistantDebug("Assistant warmup/account preload failed.", error);
       }
     })();
-    return () => { disposed = true; };
+    return () => { lifecycle.disposed = true; };
   }, [codexStatusChecked, codexStatus?.installed, assistantApi]);
 
   // Listen for account and rate limit updates
@@ -276,8 +280,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
       setInstallError(null);
       setInstallOutput(null);
       try {
-        const output = await assistantApi?.installCodex?.(method);
-        const status = await assistantApi?.checkCodexStatus?.();
+        const output = await assistantApi.installCodex?.(method);
+        const status = await assistantApi.checkCodexStatus?.();
         if (status?.installed) {
           setCodexStatus(status);
           setInstallOutput("Codex CLI installed successfully.");
@@ -993,10 +997,7 @@ function formatRateWindow(
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
+  return isRecord(value) ? value : null;
 }
 
 function asNumber(value: unknown): number | null {

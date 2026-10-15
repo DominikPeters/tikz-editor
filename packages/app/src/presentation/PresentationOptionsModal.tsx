@@ -53,13 +53,13 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
         {!active ? <div className={settingsCss.settingsGroup}>
           <div className={settingsCss.settingRow}>
             <label className={settingsCss.settingLabel} htmlFor="presentation-start-from">Start from</label>
-            <select id="presentation-start-from" className={settingsCss.select} value={from} onChange={event => { setFrom(event.target.value as "current" | "beginning"); }}>
+            <select id="presentation-start-from" className={settingsCss.select} value={from} onChange={event => { const value = event.target.value; if (value === "current" || value === "beginning") setFrom(value); }}>
               <option value="current">Current Slide</option><option value="beginning">Beginning</option>
             </select>
           </div>
           <div className={settingsCss.settingRow}>
             <label className={settingsCss.settingLabel} htmlFor="presentation-mode">Present</label>
-            <select id="presentation-mode" className={settingsCss.select} aria-label="Presentation mode" value={options.mode} onChange={event => { patch({ mode: event.target.value as PresentationOptions["mode"] }); }}>
+            <select id="presentation-mode" className={settingsCss.select} aria-label="Presentation mode" value={options.mode} onChange={event => { const mode = event.target.value; if (mode === "display" || mode === "window" || mode === "rehearse") patch({ mode }); }}>
               <option value="display">On a Display</option><option value="window">In a Window</option><option value="rehearse">Rehearse</option>
             </select>
           </div>

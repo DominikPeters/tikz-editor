@@ -204,8 +204,8 @@ function ModalPanel({
     if (!draggable) {
       return;
     }
-    const target = event.target as HTMLElement | null;
-    if (!target?.closest?.("[data-modal-drag-handle='true']")) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest("[data-modal-drag-handle='true']")) {
       return;
     }
     if (target.closest("button, input, textarea, [contenteditable='true']")) {
@@ -216,7 +216,8 @@ function ModalPanel({
       startX: event.clientX,
       startY: event.clientY
     };
-    panelRef.current?.setPointerCapture?.(event.pointerId);
+    const pointerCapture: Partial<Pick<HTMLDivElement, "setPointerCapture">> | null = panelRef.current;
+    pointerCapture?.setPointerCapture?.(event.pointerId);
   }
 
   const style = useMemo<CSSProperties>(() => {

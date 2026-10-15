@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
@@ -119,11 +120,12 @@ export function resolveTcolorboxPlan(args: { source: string; options: TcolorboxO
     if (COLOR_KEYS.has(entry.key)) {
       const color = normalizeColor(value, { ...(args.resolveColorAlias !== undefined ? { resolveAlias: args.resolveColorAlias } : {}) });
       const colorField = { colback: "backgroundColor", colframe: "frameColor", coltext: "textColor", colupper: "textColor", coltitle: "titleColor", colbacktitle: "titleBackgroundColor" } as const;
-      plan[colorField[entry.key as keyof typeof colorField]] = color;
+      const field = Object.entries(colorField).find(([key]) => key === entry.key)?.[1];
+      if (field) plan[field] = color;
       continue;
     }
     if (!DIMENSION_KEYS.has(entry.key)) continue;
-    const dimension = parseTexDimensionExpression(value)!;
+    const dimension = requireDefined(parseTexDimensionExpression(value), "Expected an internal tcolorbox value");
     const pt = Math.round(Number(resolveTexDimensionExpression(dimension, dimensions)) * 65536) / 65536;
     switch (entry.key) {
       case "width": plan.widthPt = pt; break;

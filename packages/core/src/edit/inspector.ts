@@ -325,15 +325,25 @@ function applyForeachVariableReadOnlyToSections(
 }
 
 function makeInspectorPropertyForeachReadOnly(property: InspectorProperty): InspectorProperty {
+  if (property.kind === "number") {
+    return {
+      ...property,
+      ...(property.write ? { write: { ...property.write, writable: false, reason: FOREACH_VARIABLE_READONLY_REASON } } : {}),
+      readOnlyReason: FOREACH_VARIABLE_READONLY_REASON
+    };
+  }
+  if (property.kind === "arrowTip") {
+    return { ...property, write: { ...property.write, writable: false, reason: FOREACH_VARIABLE_READONLY_REASON }, readOnlyReason: FOREACH_VARIABLE_READONLY_REASON };
+  }
   return {
-    ...(property as InspectorProperty & { readOnlyReason?: string }),
+    ...property,
     write: {
       ...property.write,
       writable: false,
       reason: FOREACH_VARIABLE_READONLY_REASON
     },
     readOnlyReason: FOREACH_VARIABLE_READONLY_REASON
-  } as InspectorProperty;
+  };
 }
 
 function inspectorPropertyDependsOnForeachVariables(
@@ -367,6 +377,7 @@ function inspectorPropertyDependsOnForeachVariables(
 
 function inspectorPropertyCandidateKeys(property: InspectorProperty): string[] {
   const write = "write" in property ? property.write : undefined;
+  const clearKeys = "clearKeys" in property ? property.clearKeys : undefined;
   const registryKeys = candidateKeysForProperty(write?.propertyId ?? property.id);
   if (registryKeys.length > 0) {
     return registryKeys;
@@ -408,13 +419,13 @@ function inspectorPropertyCandidateKeys(property: InspectorProperty): string[] {
       if (write?.transformContext) {
         return transformPropertyCandidateKeys(write.transformContext.key);
       }
-      return uniqueStrings([write?.key ?? "", ...("clearKeys" in property && property.clearKeys ? property.clearKeys : [])]);
+      return uniqueStrings([write?.key ?? "", ...(clearKeys ?? [])]);
     }
     case "length":
     case "optionalLength":
     case "slider":
     case "boolean":
-      return uniqueStrings([property.write.key, ...("clearKeys" in property && property.clearKeys ? property.clearKeys : [])]);
+      return uniqueStrings([property.write.key, ...(clearKeys ?? [])]);
     case "text":
     case "enum":
     case "color":

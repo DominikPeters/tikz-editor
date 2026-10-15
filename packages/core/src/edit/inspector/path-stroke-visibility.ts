@@ -17,7 +17,7 @@ export function computePathStrokeControlVisibility(
     } else if (command.kind === "L" || command.kind === "C" || command.kind === "A") {
       segmentCountInSubpath += 1;
       if (segmentCountInSubpath >= 2) hasJoin = true;
-    } else if (command.kind === "Z") {
+    } else {
       if (segmentCountInSubpath >= 1) hasJoin = true;
       segmentCountInSubpath = 0;
     }

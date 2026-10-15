@@ -88,14 +88,14 @@ const GENERATED_FEATURE_DEFINITIONS: readonly (readonly [TexFuzzFeatureId, TexFu
     const id = `math.node.${kind}` as const;
     return [id, definition(id, [], [`math:${kind}`], "math", "math")] as const;
   }),
-  ...MATH_FRACTION_COMMANDS.map((command) => mathCommandDefinition("fraction", command)),
-  ...MATH_ACCENT_COMMANDS.map((command) => mathCommandDefinition("accent", command)),
-  ...MATH_ALPHABET_COMMANDS.map((command) => mathCommandDefinition("alphabet", command)),
-  ...MATH_LINE_COMMANDS.map((command) => mathCommandDefinition("line", command)),
-  ...MATH_OPERATOR_COMMANDS.map((command) => mathCommandDefinition("operator", command)),
-  ...MATH_ARROW_COMMANDS.map((command) => mathCommandDefinition("xarrow", command)),
-  ...MATH_MATRIX_ENVIRONMENTS.map((environment) => mathCommandDefinition("matrix", environment)),
-  ...MATH_TEXT_COMMANDS.map((command) => mathCommandDefinition("text", command)),
+  ...MATH_FRACTION_COMMANDS.map((command) => mathCommandDefinition(`math.fraction.${command}`)),
+  ...MATH_ACCENT_COMMANDS.map((command) => mathCommandDefinition(`math.accent.${command}`)),
+  ...MATH_ALPHABET_COMMANDS.map((command) => mathCommandDefinition(`math.alphabet.${command}`)),
+  ...MATH_LINE_COMMANDS.map((command) => mathCommandDefinition(`math.line.${command}`)),
+  ...MATH_OPERATOR_COMMANDS.map((command) => mathCommandDefinition(`math.operator.${command}`)),
+  ...MATH_ARROW_COMMANDS.map((command) => mathCommandDefinition(`math.xarrow.${command}`)),
+  ...MATH_MATRIX_ENVIRONMENTS.map((environment) => mathCommandDefinition(`math.matrix.${environment}`)),
+  ...MATH_TEXT_COMMANDS.map((command) => mathCommandDefinition(`math.text.${command}`)),
   ...SIMPLE_TEX_FONT_COMMAND_NAMES.map((command) => {
     const id = `text.font-command.${command}` as const;
     return [id, definition(id, ["inline-kind:font-command", `font-command:${command}`], [`font:${command}`], "text", "style")] as const;
@@ -168,10 +168,9 @@ function definition(
 }
 
 function mathCommandDefinition(
-  family: "fraction" | "accent" | "alphabet" | "line" | "operator" | "xarrow" | "matrix" | "text",
-  command: string
+  id: Extract<TexFuzzFeatureId, `math.${"fraction" | "accent" | "alphabet" | "line" | "operator" | "xarrow" | "matrix" | "text"}.${string}`>
 ): readonly [TexFuzzFeatureId, TexFuzzFeatureDefinition] {
-  const id = `math.${family}.${command}` as TexFuzzFeatureId;
+  const [, family, command] = id.split(".");
   return [id, definition(id, [], [`math:${family}:${command}`], "math", "math")];
 }
 

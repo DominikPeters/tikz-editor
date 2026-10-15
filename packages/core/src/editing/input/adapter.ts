@@ -63,8 +63,8 @@ export function interpretKeyDown(stroke: KeyStroke, surface: InputSurface, pendi
       // "use selection for find" cannot fire mid-session.
       return surface === "canvas" ? { kind: "focusBar" } : BLOCK;
     }
-    if (!shift && lower in FORMAT_SHORTCUTS) {
-      return intent({ type: "format", command: FORMAT_SHORTCUTS[lower as keyof typeof FORMAT_SHORTCUTS] });
+    if (!shift && (lower === "b" || lower === "i" || lower === "u")) {
+      return intent({ type: "format", command: FORMAT_SHORTCUTS[lower] });
     }
     if (lower === "z") {
       return intent({ type: shift ? "redo" : "undo" });
@@ -91,7 +91,7 @@ export function interpretKeyDown(stroke: KeyStroke, surface: InputSurface, pendi
       return intent({ type: key === "Backspace" ? "deleteBackward" : "deleteForward", unit: "item" });
     case "ArrowLeft":
     case "ArrowRight":
-      if (alt && pendingCloser && surface === "canvas" && !primary) {
+      if (alt && pendingCloser && !primary) {
         return intent({ type: "move", dir: key === "ArrowLeft" ? "left" : "right", unit: "word", extend: shift });
       }
       if (alt) {

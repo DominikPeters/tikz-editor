@@ -56,9 +56,22 @@ export type BrowserPlatformEnvironment = {
   updates?: PlatformUpdateApi;
 };
 
+declare global {
+  var __TIKZ_EDITOR_BROWSER_PLATFORM_ENV__: BrowserPlatformEnvironment | undefined;
+  var showOpenFilePicker: FsApiLike["showOpenFilePicker"];
+  var showSaveFilePicker: FsApiLike["showSaveFilePicker"];
+}
+
 function readInjectedTestEnvironment(): BrowserPlatformEnvironment {
-  const globalLike = globalThis as unknown as { __TIKZ_EDITOR_BROWSER_PLATFORM_ENV__?: BrowserPlatformEnvironment };
-  return globalLike.__TIKZ_EDITOR_BROWSER_PLATFORM_ENV__ ?? {};
+  return globalThis.__TIKZ_EDITOR_BROWSER_PLATFORM_ENV__ ?? {};
+}
+
+function isCallable(value: unknown): value is (...args: unknown[]) => unknown {
+  return typeof value === "function";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 const BROWSER_FILE_PROVIDER = "browser-fsa";
@@ -94,9 +107,8 @@ function resolveClipboard(env: BrowserPlatformEnvironment): ClipboardLike | null
   if (env.clipboard) {
     return env.clipboard;
   }
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    return navigator.clipboard;
-  }
+  const host: Partial<Pick<Navigator, "clipboard">> | undefined = typeof navigator === "undefined" ? undefined : navigator;
+  if (host?.clipboard) return host.clipboard;
   return null;
 }
 
@@ -104,9 +116,8 @@ function resolveFsApi(env: BrowserPlatformEnvironment): FsApiLike | null {
   if (env.fsApi) {
     return env.fsApi;
   }
-  const globalLike = globalThis as unknown as FsApiLike;
-  if (typeof globalLike.showOpenFilePicker === "function" && typeof globalLike.showSaveFilePicker === "function") {
-    return globalLike;
+  if (typeof globalThis.showOpenFilePicker === "function" && typeof globalThis.showSaveFilePicker === "function") {
+    return { showOpenFilePicker: globalThis.showOpenFilePicker.bind(globalThis), showSaveFilePicker: globalThis.showSaveFilePicker.bind(globalThis) };
   }
   return null;
 }
@@ -203,7 +214,7 @@ function openFileWithInput<T extends object>(
   read: (file: File) => Promise<T>
 ): Promise<(T & { fileRef: DocumentFileRef }) | null> {
   return new Promise((resolve) => {
-    if (typeof document === "undefined" || !document.body) {
+    if (typeof document === "undefined" || !document.querySelector("body, frameset")) {
       resolve(null);
       return;
     }
@@ -272,7 +283,7 @@ function downloadTextFile(text: string, fileName: string): boolean {
     typeof URL === "undefined" ||
     typeof URL.createObjectURL !== "function" ||
     typeof URL.revokeObjectURL !== "function" ||
-    !document.body
+    !document.querySelector("body, frameset")
   ) {
     return false;
   }
@@ -293,19 +304,15 @@ function downloadTextFile(text: string, fileName: string): boolean {
 }
 
 async function requestHandlePermission(handle: unknown, mode: "read" | "readwrite"): Promise<boolean> {
-  const maybeHandle = handle as {
-    queryPermission?: (options: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
-    requestPermission?: (options: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
-  };
-  if (typeof maybeHandle?.queryPermission !== "function" || typeof maybeHandle?.requestPermission !== "function") {
+  if (!isRecord(handle) || !isCallable(handle.queryPermission) || !isCallable(handle.requestPermission)) {
     return true;
   }
   try {
-    const queried = await maybeHandle.queryPermission({ mode });
+    const queried: unknown = await handle.queryPermission({ mode });
     if (queried === "granted") {
       return true;
     }
-    const requested = await maybeHandle.requestPermission({ mode });
+    const requested: unknown = await handle.requestPermission({ mode });
     return requested === "granted";
   } catch (error) {
     logBrowserPlatformDebug("Browser file handle permission request failed.", error);
@@ -356,7 +363,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         multiple: false,
         types: ACCEPT_TYPES
       });
-      const handle = handles?.[0];
+      const handle = handles[0];
       if (!handle) {
         return null;
       }
@@ -390,7 +397,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         multiple: false,
         types: ACCEPT_PPTX_TYPES
       });
-      const handle = handles?.[0];
+      const handle = handles[0];
       if (!handle) {
         return null;
       }
@@ -422,12 +429,14 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
   }
 
   async function writeWithHandle(text: string, handle: unknown): Promise<boolean> {
-    const maybeHandle = handle as { createWritable?: () => Promise<{ write: (value: string) => Promise<void>; close: () => Promise<void> }> };
-    if (typeof maybeHandle.createWritable !== "function") {
+    if (!isRecord(handle) || !isCallable(handle.createWritable)) {
       return false;
     }
     try {
-      const writable = await maybeHandle.createWritable();
+      const writable: unknown = await handle.createWritable();
+      if (!isRecord(writable) || !isCallable(writable.write) || !isCallable(writable.close)) {
+        return false;
+      }
       await writable.write(text);
       await writable.close();
       return true;
@@ -446,11 +455,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     if (!handle) {
       return { status: "permission-needed" };
     }
-    const maybeHandle = handle as {
-      name?: string;
-      getFile?: () => Promise<{ text: () => Promise<string>; lastModified?: number; size?: number }>;
-    };
-    if (typeof maybeHandle.getFile !== "function") {
+    if (!isRecord(handle) || !isCallable(handle.getFile)) {
       return { status: "failed", reason: "Stored browser file handle is unavailable." };
     }
     const canRead = await requestHandlePermission(handle, "read");
@@ -458,15 +463,21 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
       return { status: "permission-needed" };
     }
     try {
-      const file = await maybeHandle.getFile();
-      const source = await file.text();
+      const file: unknown = await handle.getFile();
+      if (!isRecord(file) || !isCallable(file.text)) {
+        return { status: "failed", reason: "Stored browser file is unavailable." };
+      }
+      const source: unknown = await file.text();
+      if (typeof source !== "string") {
+        return { status: "failed", reason: "Stored browser file did not contain text." };
+      }
       return {
         status: "ok",
         source,
-        revision: revisionForText(source, { ...(file.lastModified === undefined ? {} : { mtimeMs: file.lastModified }), ...(file.size === undefined ? {} : { size: file.size }) }),
+        revision: revisionForText(source, { ...(typeof file.lastModified === "number" ? { mtimeMs: file.lastModified } : {}), ...(typeof file.size === "number" ? { size: file.size } : {}) }),
         fileRef: {
           ...fileRef,
-          name: maybeHandle.name ?? fileRef.name
+          name: typeof handle.name === "string" ? handle.name : fileRef.name
         }
       };
     } catch (error) {
@@ -566,9 +577,9 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
     id: mergedEnv.id ?? "web",
     presentation: createBrowserPresentationApi(),
     persistence: {
-      load: (key) => storage?.getItem(key) ?? null,
+      load: (key) => storage.getItem(key) ?? null,
       save: (key, value) => {
-        storage?.setItem(key, value);
+        storage.setItem(key, value);
       }
     },
     clipboard: {
@@ -674,7 +685,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
           typeof URL === "undefined" ||
           typeof URL.createObjectURL !== "function" ||
           typeof URL.revokeObjectURL !== "function" ||
-          !document.body
+          !document.querySelector("body, frameset")
         ) {
           return Promise.resolve(false);
         }

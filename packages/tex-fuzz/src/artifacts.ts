@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
-import { parseTexFuzzBundle } from "./case-format.js";
+import { isArrayOf, isRecord, isStringRecord, isTexFuzzCase, isTexFuzzFingerprint, isTexFuzzReplayBundle } from "./validation.js";
 import {
   normalizeTexFuzzFingerprint,
   texFuzzFindingId,
@@ -199,7 +199,7 @@ export function planTexFuzzArtifacts(
   return {
     manifest: {
       schemaVersion: TEX_FUZZ_ARTIFACT_SCHEMA_VERSION,
-      oracleEnvironment: canonicalize(oracleEnvironment) as TexFuzzOracleEnvironment,
+      oracleEnvironment: Object.fromEntries(Object.entries(oracleEnvironment).sort(([left], [right]) => left.localeCompare(right))),
       findings,
     },
     bundles: [...bundleByHash.values()].sort((left, right) =>
@@ -208,51 +208,62 @@ export function planTexFuzzArtifacts(
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function isWitness(value: unknown): value is TexFuzzArtifactWitness {
+  return isRecord(value) && typeof value.witnessId === "string" &&
+    typeof value.bundleHash === "string" && /^[0-9a-f]{64}$/.test(value.bundleHash) &&
+    typeof value.bundlePath === "string" && !value.bundlePath.startsWith("/") &&
+    !value.bundlePath.split("/").includes("..") && typeof value.sourceHash === "string" &&
+    (!("minimizedSourceHash" in value) || typeof value.minimizedSourceHash === "string");
+}
+function isFinding(value: unknown): value is TexFuzzArtifactFinding {
+  return isRecord(value) && typeof value.findingId === "string" &&
+    isTexFuzzFingerprint(value.fingerprint) && isArrayOf(value.witnesses, isWitness);
+}
+function isManifest(value: unknown): value is TexFuzzArtifactManifest {
+  return isRecord(value) && value.schemaVersion === TEX_FUZZ_ARTIFACT_SCHEMA_VERSION &&
+    isStringRecord(value.oracleEnvironment) && isArrayOf(value.findings, isFinding);
+}
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+function isContinuation(value: unknown): value is TexFuzzShrinkContinuation {
+  return isRecord(value) && isNonNegativeNumber(value.candidatesEvaluated) &&
+    isNonNegativeNumber(value.oracleEvaluations) && isNonNegativeNumber(value.elapsedMs) &&
+    isNonNegativeNumber(value.candidateBudgetRemaining) && isNonNegativeNumber(value.oracleBudgetRemaining) &&
+    isNonNegativeNumber(value.timeBudgetMsRemaining) && isArrayOf(value.remainingCandidates, isTexFuzzCase);
+}
+function isStoredBundle(value: unknown): value is TexFuzzStoredBundle {
+  return isTexFuzzReplayBundle(value) && isRecord(value) &&
+    value.artifactSchemaVersion === TEX_FUZZ_ARTIFACT_SCHEMA_VERSION &&
+    typeof value.findingId === "string" && typeof value.witnessId === "string" &&
+    (!("shrinkContinuation" in value) || isContinuation(value.shrinkContinuation));
 }
 
 export function parseTexFuzzArtifactManifest(value: string): TexFuzzArtifactManifest {
   const parsed: unknown = JSON.parse(value);
-  if (!isRecord(parsed) || parsed.schemaVersion !== TEX_FUZZ_ARTIFACT_SCHEMA_VERSION ||
-    !isRecord(parsed.oracleEnvironment) || !Array.isArray(parsed.findings)) {
-    throw new Error("Unsupported or malformed TeX fuzz artifact manifest.");
-  }
+  if (!isManifest(parsed)) throw new Error("Unsupported or malformed TeX fuzz artifact manifest.");
   const findingIds = new Set<string>();
   for (const finding of parsed.findings) {
-    if (!isRecord(finding) || typeof finding.findingId !== "string" ||
-      !isRecord(finding.fingerprint) || !Array.isArray(finding.witnesses)) {
-      throw new Error("Malformed TeX fuzz artifact finding.");
-    }
-    const fingerprint = finding.fingerprint as unknown as TexFuzzFingerprint;
-    if (finding.findingId !== texFuzzFindingId(fingerprint) || findingIds.has(finding.findingId)) {
+    if (finding.findingId !== texFuzzFindingId(finding.fingerprint) || findingIds.has(finding.findingId)) {
       throw new Error("Inconsistent or duplicate TeX fuzz artifact finding identity.");
     }
     findingIds.add(finding.findingId);
     const witnessIds = new Set<string>();
     for (const witness of finding.witnesses) {
-      if (!isRecord(witness) || typeof witness.witnessId !== "string" ||
-        typeof witness.bundleHash !== "string" || !/^[0-9a-f]{64}$/.test(witness.bundleHash) ||
-        typeof witness.bundlePath !== "string" || witness.bundlePath.startsWith("/") ||
-        witness.bundlePath.split("/").includes("..") || typeof witness.sourceHash !== "string" ||
-        witnessIds.has(witness.witnessId)) {
-        throw new Error("Malformed or duplicate TeX fuzz artifact witness.");
-      }
+      if (witnessIds.has(witness.witnessId)) throw new Error("Malformed or duplicate TeX fuzz artifact witness.");
       witnessIds.add(witness.witnessId);
     }
   }
-  return parsed as unknown as TexFuzzArtifactManifest;
+  return parsed;
 }
 
 export function parseTexFuzzStoredBundle(value: string): TexFuzzStoredBundle {
-  const base = parseTexFuzzBundle(value);
-  const parsed = JSON.parse(value) as Partial<TexFuzzStoredBundle>;
-  if (parsed.artifactSchemaVersion !== TEX_FUZZ_ARTIFACT_SCHEMA_VERSION ||
-    parsed.findingId !== texFuzzFindingId(base.observation.fingerprint) ||
-    parsed.witnessId !== texFuzzWitnessId(base)) {
+  const parsed: unknown = JSON.parse(value);
+  if (!isStoredBundle(parsed) || parsed.findingId !== texFuzzFindingId(parsed.observation.fingerprint) ||
+    parsed.witnessId !== texFuzzWitnessId(parsed)) {
     throw new Error("Malformed or inconsistent stored TeX fuzz bundle.");
   }
-  return parsed as TexFuzzStoredBundle;
+  return parsed;
 }
 
 function resolveBundlePath(manifestPath: string, relativePath: string): string {

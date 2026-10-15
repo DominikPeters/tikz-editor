@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type { Span, TikzFigure } from "../ast/types.js";
@@ -201,12 +202,12 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
       try {
         const shifted = yield* evaluateIncrementalSuffix({
           run,
-          previous: cached!,
+          previous: requireDefined(cached, "Expected an internal incremental value"),
           resolveSpan: createSourceSpanResolver(moved),
           statementIds,
           restoreIndex: statementCount,
-          checkpointInterval: cached!.checkpointInterval,
-          previousCheckpoints: cached!.checkpointCache,
+          checkpointInterval: requireDefined(cached, "Expected an internal incremental value").checkpointInterval,
+          previousCheckpoints: requireDefined(cached, "Expected an internal incremental value").checkpointCache,
           startCheckpoint: endCheckpoint,
           affectedStatementCount: 0,
           checkpointPreparation: "reused"
@@ -227,9 +228,9 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
       return full.output;
     }
 
-    const previous = cached!;
-    const suppliedPatches = hints.sourcePatches as readonly SourcePatch[] | undefined;
-    const patches = suppliedPatches?.every(patch => patch.oldSpan && patch.newSpan) &&
+    const previous = requireDefined(cached, "Expected an internal incremental value");
+    const suppliedPatches = hints.sourcePatches;
+    const patches = suppliedPatches?.every((patch): patch is SourcePatch => patch.oldSpan !== undefined && patch.newSpan !== undefined) &&
       patchesMatchSourceTransition(previous.source, run.source, suppliedPatches)
       ? suppliedPatches : [computeMinimalReplacementPatch(previous.source, run.source)];
     const resolveSpan = createSourceSpanResolver(patches);
@@ -298,7 +299,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
       return full.output;
     }
 
-    const startCheckpoint = preparedCheckpoints.checkpointsBeforeStatement.get(restoreIndex)!;
+    const startCheckpoint = requireDefined(preparedCheckpoints.checkpointsBeforeStatement.get(restoreIndex), "Expected an internal incremental value");
 
     const selectivePlan = planSelectiveReplay(previous.statementFragments, restoreIndex, affectedStatementIndices);
     if (selectivePlan) {
@@ -648,10 +649,10 @@ function* evaluateSelectively(args: {
       mergeFeatureUsage(run.featureUsage, fragment.featureUsage);
     }
     const pictureBounds = run.context.pictureBounds;
-    restoreSemanticContext(run.context, bindCheckpoint(previousFinal!), { editHandleSource: previous.editHandles });
+    restoreSemanticContext(run.context, bindCheckpoint(requireDefined(previousFinal, "Expected an internal incremental value")), { editHandleSource: previous.editHandles });
     run.context.pictureBounds = pictureBounds;
     run.context.editHandles = editHandles;
-    checkpointsBeforeStatement.set(statementCount, withPictureBounds(bindCheckpoint(previousFinal!), pictureBounds));
+    checkpointsBeforeStatement.set(statementCount, withPictureBounds(bindCheckpoint(requireDefined(previousFinal, "Expected an internal incremental value")), pictureBounds));
     yield;
   } else {
     const reusedSourceIds = new Set<string>();
@@ -875,7 +876,7 @@ function corridorEffectsStand(
   for (let index = fromIndex; index <= toIndex; index += 1) {
     const before = requireArrayValue(previous, index);
     const after = requireArrayValue(next, index);
-    if (before?.statementId !== after?.statementId) return false;
+    if (before.statementId !== after.statementId) return false;
     const left = before.effectSummary;
     const right = after.effectSummary;
     if (
@@ -963,8 +964,8 @@ function movedOnlyPatches(
   statementIds: readonly string[]
 ): readonly SourcePatch[] | null {
   if (previous.source === input.source || !sameStatementIds(previous.statementIds, statementIds)) return null;
-  const supplied = input.hints?.sourcePatches as readonly SourcePatch[] | undefined;
-  const patches = supplied?.length && supplied.every(patch => patch.oldSpan && patch.newSpan) &&
+  const supplied = input.hints?.sourcePatches;
+  const patches = supplied?.length && supplied.every((patch): patch is SourcePatch => patch.oldSpan !== undefined && patch.newSpan !== undefined) &&
     patchesMatchSourceTransition(previous.source, input.source, supplied)
     ? supplied : [computeMinimalReplacementPatch(previous.source, input.source)];
   const touches = (left: Span, right: Span) => left.from <= right.to && right.from <= left.to;

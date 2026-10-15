@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -264,20 +265,20 @@ export function applyResizeElementAction(
   let requestedWidth = 2 * Math.abs(localPointerDelta.x);
   let requestedHeight = 2 * Math.abs(localPointerDelta.y);
   if (action.preserveAspect && affectsWidth && affectsHeight) {
-    const initialSize = resolveNodeResizeLocalSize(semantic.scene.elements, elementId)!;
+    const initialSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
     const ratio = action.preserveAspectRatio ?? initialSize.height / initialSize.width;
     if (ratio > 0 && Number.isFinite(ratio)) {
       requestedWidth = Math.max(requestedWidth, requestedHeight / ratio);
       requestedHeight = requestedWidth * ratio;
     }
   }
-  const baselineSize = resolveNodeResizeLocalSize(semantic.scene.elements, elementId)!;
+  const baselineSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
   if (geometry && (!affectsWidth || Math.abs(requestedWidth - baselineSize.width) < 1e-6) &&
       (!affectsHeight || Math.abs(requestedHeight - baselineSize.height) < 1e-6)) {
     return { kind: "success", newSource: source, patches: [], changedSourceIds };
   }
   const intrinsicWorldWidth = floorBounds.maxX - floorBounds.minX;
-  const intrinsicLocal = resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId)!;
+  const intrinsicLocal = requireDefined(resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(floorSemantic.scene.elements, elementId)");
   const intrinsicWidth = intrinsicLocal.width;
   const intrinsicHeight = intrinsicLocal.height;
   const inferredTextWidthInset = resolveNodeTextWidthInsetLocal({
@@ -300,7 +301,7 @@ export function applyResizeElementAction(
       message: `Resize invariant failed: current bounds for ${elementId} are missing.`
     };
   }
-  const liveLocalSize = resolveNodeResizeLocalSize(semantic.scene.elements, elementId)!;
+  const liveLocalSize = requireDefined(resolveNodeResizeLocalSize(semantic.scene.elements, elementId), "Missing required resolveNodeResizeLocalSize(semantic.scene.elements, elementId)");
 
   if (isDiamondNodeShape && isSideResizeRole(action.role)) {
     const rewritten = rewriteDiamondSideResize({
@@ -677,7 +678,7 @@ function applyResizeScope(
   const mutations = new Map([...shiftMutations, ...scaleMutations]);
   const finalFrame = resolveStatementOptionFrame(source, action.elementId, mutateOrderedOptionEntries(entries, mutations),
     parseOptions, geometry, evaluateOptions, true);
-  if (!finalFrame || !["a", "b", "c", "d"].every(key => Math.abs(finalFrame[key as "a"] - desired[key as "a"]) < 1e-8)) {
+  if (!finalFrame || !(["a", "b", "c", "d"] as const).every(key => Math.abs(finalFrame[key] - desired[key]) < 1e-8)) {
     return unsupported("Scope resize cannot preserve the authored transform order.");
   }
   const rewritten = applyOptionMutationsToTarget(source, target, mutations);
@@ -884,7 +885,7 @@ export function projectPathRectangleResize(
   let minY = currentMinY;
   let maxY = currentMaxY;
 
-  let movingPoint = localPointer;
+  let movingPoint: FrameLocalPoint;
   let direction: WorldVector | null = null;
   if (isRectangleCornerRole(action.role)) {
     const fixedLocal = roleCorners[oppositeRectangleCornerRole(action.role)];
@@ -928,7 +929,7 @@ export function projectPathRectangleResize(
     direction = worldVector(pt(transform.a), pt(transform.b));
     minX = Math.min(fixedX, localPointer.x);
     maxX = Math.max(fixedX, localPointer.x);
-  } else if (action.role === "top" || action.role === "bottom") {
+  } else {
     const fixedY = action.role === "top"
       ? (roleCorners["bottom-left"].y + roleCorners["bottom-right"].y) / 2
       : (roleCorners["top-left"].y + roleCorners["top-right"].y) / 2;
@@ -1182,7 +1183,7 @@ function applyResizePathCircleOrEllipse(
     const nextRadius = affectsWidth && affectsHeight ? Math.max(localDx, localDy) : affectsWidth ? localDx : localDy;
     nextRxLocal = nextRadius;
     nextRyLocal = nextRadius;
-  } else if (context.shapeKind === "ellipse" && action.preserveAspect) {
+  } else if (action.preserveAspect) {
     const fallbackAspectRatio =
       currentLocalRadii && currentLocalRadii.rx > RESIZE_EPSILON && currentLocalRadii.ry > RESIZE_EPSILON
         ? currentLocalRadii.ry / currentLocalRadii.rx
@@ -1254,10 +1255,10 @@ function applyResizePathCircleOrEllipse(
   }
 
   const inserted = `[${entries.join(", ")}]`;
-  const rewritten = applySpanTextReplacement(source, {
+  const rewritten = requireDefined(applySpanTextReplacement(source, {
     from: context.syntax.keywordSpan.to,
     to: context.syntax.keywordSpan.to
-  }, inserted)!;
+  }, inserted), "Missing required applySpanTextReplacement(source, { from: context.syntax.keywordSpan.to, to: context.syntax.keywordSp");
 
   return {
     kind: "success",
@@ -1361,11 +1362,11 @@ function resolvePathShapeResizeSyntax(items: readonly PathItem[]): PathShapeResi
     if (next.kind === "PathComment") {
       continue;
     }
-    if (next.kind === "PathOption" && !payloadCoordinate) {
+    if (next.kind === "PathOption") {
       optionItems.push(next);
       continue;
     }
-    if (next.kind === "Coordinate" && !payloadCoordinate) {
+    if (next.kind === "Coordinate") {
       const parsed =
         keywordItem.keyword === "circle"
           ? parseCircleRadiusFromCoordinateRaw(next.raw) != null
@@ -1706,7 +1707,7 @@ function resolveNodeWidthResizeStrategy(target: PropertyTarget, affectsWidth: bo
 }
 
 function resolveNodeHorizontalInsetFallback(target: PropertyTarget): number {
-  const defaultInnerXSep = parseLength(".3333em", "pt")!;
+  const defaultInnerXSep = requireDefined(parseLength(".3333em", "pt"), "Missing required parseLength(\".3333em\", \"pt\")");
   let innerXSep = defaultInnerXSep;
   for (const entry of target.options?.entries ?? []) {
     if (entry.kind !== "kv") {
@@ -1934,8 +1935,8 @@ function resolveTargetMinimumDimensions(target: PropertyTarget): {
   hasExplicitMinimumWidth: boolean;
   hasExplicitMinimumHeight: boolean;
 } {
-  let minimumWidth = parseLength("1pt", "pt")!;
-  let minimumHeight = parseLength("1pt", "pt")!;
+  let minimumWidth = requireDefined(parseLength("1pt", "pt"), "Missing required parseLength(\"1pt\", \"pt\")");
+  let minimumHeight = requireDefined(parseLength("1pt", "pt"), "Missing required parseLength(\"1pt\", \"pt\")");
   let minimumSize: number | null = null;
   let hasExplicitMinimumWidth = false;
   let hasExplicitMinimumHeight = false;

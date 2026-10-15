@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { createBoundsIndex, createMutableBoundsIndex, createPointIndex } from "./spatial-index.js";
 import { worldPoint, worldBounds } from "../../coords/points.js";
@@ -43,8 +44,8 @@ export function buildVisibleGaps(
     const last = Math.min(sortedX.length - 1, i + maxPairsPerAxis - pairs);
     pairs += sortedX.length - i - 1;
     const candidates = query(worldBounds(start.maxX, start.minY, pt(Infinity), start.maxY))
-      .filter(end => xIndices.get(end)! > i && xIndices.get(end)! <= last)
-      .sort((a, b) => xIndices.get(a)! - xIndices.get(b)!);
+      .filter(end => requireDefined(xIndices.get(end), "Missing required xIndices.get(end)") > i && requireDefined(xIndices.get(end), "Missing required xIndices.get(end)") <= last)
+      .sort((a, b) => requireDefined(xIndices.get(a), "Missing required xIndices.get(a)") - requireDefined(xIndices.get(b), "Missing required xIndices.get(b)"));
     for (const end of candidates) {
       if (start.maxX >= end.minX) {
         continue;
@@ -85,8 +86,8 @@ export function buildVisibleGaps(
     const last = Math.min(sortedY.length - 1, i + maxPairsPerAxis - pairs);
     pairs += sortedY.length - i - 1;
     const candidates = query(worldBounds(start.minX, start.maxY, start.maxX, pt(Infinity)))
-      .filter(end => yIndices.get(end)! > i && yIndices.get(end)! <= last)
-      .sort((a, b) => yIndices.get(a)! - yIndices.get(b)!);
+      .filter(end => requireDefined(yIndices.get(end), "Missing required yIndices.get(end)") > i && requireDefined(yIndices.get(end), "Missing required yIndices.get(end)") <= last)
+      .sort((a, b) => requireDefined(yIndices.get(a), "Missing required yIndices.get(a)") - requireDefined(yIndices.get(b), "Missing required yIndices.get(b)"));
     for (const end of candidates) {
       if (start.maxY >= end.minY) {
         continue;
@@ -129,7 +130,7 @@ function mergeIntersectingBounds(referenceBounds: readonly SnapBounds[]): SnapBo
     let current = bounds;
     for (;;) {
       const other = index.query(current).filter(candidate => boundsIntersect(candidate, current))
-        .sort((a, b) => order.get(a)! - order.get(b)!)[0];
+        .sort((a, b) => requireDefined(order.get(a), "Missing required order.get(a)") - requireDefined(order.get(b), "Missing required order.get(b)"))[0];
       if (!other) break;
       index.delete(other); order.delete(other);
       current = { ...mergeBounds(other, current), sourceId: other.sourceId,
@@ -522,5 +523,5 @@ function queryGaps(gaps: readonly Gap[], bounds: WorldBounds, radius: number, ax
   const coordinates = axis === "x" ? [(bounds.minX + bounds.maxX) / 2, bounds.minX, bounds.maxX] : [(bounds.minY + bounds.maxY) / 2, bounds.maxY, bounds.minY];
   const found = new Set<Gap>();
   index.queries.forEach((query, i) => { for (const candidate of query(worldPoint(pt(requireArrayValue(coordinates, i)), pt(0)), radius + SNAP_EPSILON, -1)) found.add(candidate.gap); });
-  return [...found].sort((a, b) => index.order.get(a)! - index.order.get(b)!);
+  return [...found].sort((a, b) => requireDefined(index.order.get(a), "Missing required index.order.get(a)") - requireDefined(index.order.get(b), "Missing required index.order.get(b)"));
 }

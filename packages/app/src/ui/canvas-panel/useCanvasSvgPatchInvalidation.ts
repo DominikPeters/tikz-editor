@@ -123,12 +123,12 @@ function collectMatrixDescendantSourceIdsForChangedSources(
   const changed = new Set(changedSourceIds);
   const descendantSourceIds = new Set<string>();
   for (const element of elements) {
-    const matrixSourceId = element.matrixCell?.matrixSourceId?.trim();
+    const matrixSourceId = element.matrixCell?.matrixSourceId.trim();
     if (!matrixSourceId || !changed.has(matrixSourceId)) {
       continue;
     }
     descendantSourceIds.add(element.sourceRef.sourceId);
-    const cellSourceId = element.matrixCell?.cellSourceId?.trim();
+    const cellSourceId = element.matrixCell?.cellSourceId.trim();
     if (cellSourceId) {
       descendantSourceIds.add(cellSourceId);
     }

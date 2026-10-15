@@ -321,7 +321,7 @@ function renderTexReportLineSvg<Space extends SourceCoordinateSpace>(
       }
       continue;
     }
-    if (segment.kind !== "text" && segment.kind !== "space") {
+    if (segment.kind !== "text") {
       continue;
     }
     const text = segment.text ?? "";

@@ -41,7 +41,8 @@ function numericCoordinate(value: string | null): number | null {
 }
 
 async function rasterizeEffects(svg: SVGSVGElement): Promise<void> {
-  if (!document.body) throw new Error("PDF effects require an active document.");
+  const documentBody: unknown = document.body;
+  if (!documentBody) throw new Error("PDF effects require an active document.");
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-100000px;top:0;pointer-events:none;";
   document.body.appendChild(host);
@@ -58,7 +59,9 @@ async function rasterizeEffects(svg: SVGSVGElement): Promise<void> {
     }
     for (const element of affected) {
       const rootMatrix = svg.getCTM();
-      const parentMatrix = (element.parentElement as unknown as SVGGraphicsElement).getCTM();
+      const parent = element.parentElement;
+      if (!(parent instanceof SVGGraphicsElement)) throw new Error("PDF effects require an SVG graphics parent");
+      const parentMatrix = parent.getCTM();
       if (!rootMatrix || !parentMatrix) throw new Error("Cannot resolve the PDF effect coordinate frame.");
       const inverse = rootMatrix.inverse().multiply(parentMatrix).inverse();
       if (![inverse.a, inverse.b, inverse.c, inverse.d, inverse.e, inverse.f].every(Number.isFinite)) {
@@ -90,11 +93,13 @@ function isolateEffect(svg: SVGSVGElement, effect: Element): SVGSVGElement {
   const indices: number[] = [];
   let cursor: Element = effect;
   while (cursor !== svg) {
-    const parent = cursor.parentElement!;
+    const parent = cursor.parentElement;
+    if (!parent) throw new Error("PDF effect is outside its SVG root");
     indices.unshift(Array.from(parent.children).indexOf(cursor));
     cursor = parent;
   }
-  const clone = svg.cloneNode(true) as SVGSVGElement;
+  const clone = svg.cloneNode(true);
+  if (!(clone instanceof SVGSVGElement)) throw new Error("SVG root clone changed element type");
   cursor = clone;
   for (const index of indices) {
     const child = cursor.children.item(index);
@@ -104,7 +109,7 @@ function isolateEffect(svg: SVGSVGElement, effect: Element): SVGSVGElement {
     }
     // Ancestor opacity remains vector paint around the replacement image.
     cursor.setAttribute("opacity", "1");
-    (cursor as SVGElement).style.setProperty("opacity", "1", "important");
+    if (cursor instanceof SVGElement) cursor.style.setProperty("opacity", "1", "important");
     cursor = child;
   }
   return clone;

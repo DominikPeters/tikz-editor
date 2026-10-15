@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { CommandTable } from "../commands/table.js";
@@ -56,11 +57,11 @@ export function constructMenuEdit(view: EditView, node: NodeId, id: string, comm
     return null;
   }
   if (id === "unwrap") {
-    const slot = unwrapSlot(view, record)!;
+    const slot = requireDefined(unwrapSlot(view, record), "Missing required unwrapSlot(view, record)");
     const content = tree.text.slice(slot.contentSpan.from, slot.contentSpan.to);
     // R5: a control word before the construct stays one (`\alpha\sqrt{x}` is `\alpha x`).
     const terminated = /\\[A-Za-z@]+$/u.test(tree.text.slice(0, record.span.from)) && /^[A-Za-z@]/u.test(content);
-    const word = editSlotAt(tree.slots, record.parent!).mode === "math" ? " " : "{}";
+    const word = editSlotAt(tree.slots, requireDefined(record.parent, "Missing required record.parent")).mode === "math" ? " " : "{}";
     const terminator = terminated ? word : "";
     // And one the content ends with (`\textbf{\LaTeX}x`).
     const closing = /\\[A-Za-z@]+$/u.test(content) && /^[A-Za-z@]/u.test(tree.text.slice(record.span.to)) ? word : "";

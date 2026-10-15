@@ -1157,7 +1157,7 @@ function texRuleBox(params: {
   const strutPart = (factor: number) => Math.trunc(Math.round(Number(params.strutBaselineSkipPt) * 65536) * Math.round(factor * 65536) / 65536) / 65536;
   const strutHeight = params.strutBaselineSkipPt === undefined ? undefined : strutPart(.7);
   const strutDepth = params.strutBaselineSkipPt === undefined ? undefined : strutPart(.3);
-  const ruleHeight = strutHeight === undefined ? roundTexPt(params.height) : strutHeight + strutDepth!;
+  const ruleHeight = strutHeight === undefined ? roundTexPt(params.height) : strutHeight + (strutDepth ?? 0);
   const raise = strutDepth === undefined ? params.raise : 0 - strutDepth;
   const raisedHeight = ruleHeight + raise;
   const height = texLength(roundTexPt(Math.max(0, raisedHeight)));

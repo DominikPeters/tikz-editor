@@ -1,3 +1,4 @@
+import { isRecord } from "../../validation";
 import { createDocumentGraphicsResolverFromPreviewBundle } from "@tikz-editor/core/graphics/index";
 import { getDocumentGraphicsPreviewBundle } from "../../image-asset-cache";
 import type {
@@ -29,8 +30,8 @@ function getWorker(): Worker | null {
   }
   try {
     sharedWorker = new Worker(new URL("./thumbnail-render.worker.ts", import.meta.url), { type: "module" });
-    sharedWorker.addEventListener("message", onWorkerMessage as EventListener);
-    sharedWorker.addEventListener("error", onWorkerError as EventListener);
+    sharedWorker.addEventListener("message", onWorkerMessage);
+    sharedWorker.addEventListener("error", onWorkerError);
     return sharedWorker;
   } catch {
     workerInitFailed = true;
@@ -83,9 +84,10 @@ export function cancelGroup(groupId: string): void {
   }
 }
 
-function onWorkerMessage(event: MessageEvent<ThumbnailWorkerResponseMessage>): void {
-  const message = event.data;
-  if (message?.type !== "result") {
+function onWorkerMessage(event: MessageEvent<unknown>): void {
+  const value = event.data;
+  const message = parseWorkerResponse(value);
+  if (!message) {
     return;
   }
   const pending = pendingRequests.get(message.requestId);
@@ -125,7 +127,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
         },
         evaluate: { ...(graphicsResolver === undefined ? {} : { graphicsResolver }) },
         svg: {
-          ...((request.svgOptions?.padding) === undefined ? {} : { padding: request.svgOptions?.padding })
+          ...((request.svgOptions?.padding) === undefined ? {} : { padding: request.svgOptions.padding })
         }
       })).svg.svg;
     });
@@ -197,4 +199,14 @@ function dropPending(requestId: string, groupId: string): void {
   if (ids.size === 0) {
     requestIdsByGroup.delete(groupId);
   }
+}
+
+function parseWorkerResponse(value: unknown): ThumbnailWorkerResponseMessage | null {
+  if (!isRecord(value) || value.type !== "result" || typeof value.requestId !== "string" ||
+    typeof value.groupId !== "string" || typeof value.figureId !== "string" || typeof value.figureSignature !== "string") return null;
+  const identity = { type: "result" as const, requestId: value.requestId, groupId: value.groupId,
+    figureId: value.figureId, figureSignature: value.figureSignature };
+  if (value.ok === true && typeof value.svg === "string") return { ...identity, ok: true, svg: value.svg };
+  if (value.ok === false && typeof value.error === "string") return { ...identity, ok: false, error: value.error };
+  return null;
 }

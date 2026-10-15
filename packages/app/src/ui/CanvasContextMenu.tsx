@@ -21,7 +21,7 @@ function navigateMenu(event: ReactKeyboardEvent<HTMLDivElement>) {
   const menu = event.target.closest('[role="menu"]');
   const buttons = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? [])
     .filter((button) => !button.disabled && button.closest('[role="menu"]') === menu);
-  const index = buttons.indexOf(event.target as HTMLButtonElement);
+  const index = buttons.findIndex(button => button === event.target);
   if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
     event.preventDefault(); event.stopPropagation();
     const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
@@ -58,7 +58,7 @@ function ContextMenuPopup({
   onCommandRun: (commandId: AppMenuCommandId, origin: CommandOrigin) => void;
 }) {
   const hasCheckItems = items.some(
-    (item) => item.kind === "command" && bindings[item.commandId].checked != null
+    (item) => item.kind === "command" && bindings[item.commandId]?.checked != null
   );
 
   return (
@@ -110,24 +110,24 @@ function ContextMenuPopup({
         }
 
         const binding = bindings[item.commandId];
-        const role = binding.checked == null ? "menuitem" : "menuitemcheckbox";
+        const role = binding?.checked == null ? "menuitem" : "menuitemcheckbox";
         return (
           <button
             key={`${itemKey}-${item.commandId}`}
             type="button"
             role={role}
-            aria-checked={binding.checked}
-            disabled={!binding.enabled}
+            aria-checked={binding?.checked}
+            disabled={!binding?.enabled}
             className={[css.item, hasCheckItems ? "" : css.itemNoCheck].filter(Boolean).join(" ")}
             data-testid={`canvas-context-cmd-${item.commandId}`}
             onClick={() => {
-              if (!binding.enabled) {
+              if (!binding?.enabled) {
                 return;
               }
               onCommandRun(item.commandId, origin);
             }}
           >
-            {hasCheckItems ? <span className={css.check}>{binding.checked ? "✓" : ""}</span> : null}
+            {hasCheckItems ? <span className={css.check}>{binding?.checked ? "✓" : ""}</span> : null}
             <span className={css.label}>{item.label}</span>
             <span className={css.shortcut}>{formatAccelerator(item.accelerator)}</span>
           </button>
@@ -225,7 +225,7 @@ export function CanvasContextMenu({
     }
 
     function onPointerDown(event: PointerEvent) {
-      const targetNode = event.target as Node | null;
+      const targetNode = event.target instanceof Node ? event.target : null;
       if (!targetNode) {
         return;
       }

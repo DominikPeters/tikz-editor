@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { ArrowTipWriteContext } from "../property-write-builders.js";
 import { normalizeOptionKey } from "../option-key.js";
@@ -299,7 +300,7 @@ function arrowMarkerFallbackRaw(marker: ArrowMarker | null, side: ArrowTipSide):
   const preset = arrowPresetFromMarker(marker);
   return preset !== "custom"
     ? arrowPresetSideRaw(preset, side)
-    : marker!.tips.map((tip) => arrowKindCanonicalRaw(tip.kind, side)).join(" ");
+    : requireDefined(marker, "Missing required marker").tips.map((tip) => arrowKindCanonicalRaw(tip.kind, side)).join(" ");
 }
 
 function arrowKindCanonicalRaw(kind: ArrowTipKind, side: ArrowTipSide): string {
@@ -319,8 +320,7 @@ function arrowKindCanonicalRaw(kind: ArrowTipKind, side: ArrowTipSide): string {
   if (kind === "rays") return "Rays";
   if (kind === "round-cap") return "Round Cap";
   if (kind === "butt-cap") return "Butt Cap";
-  if (kind === "triangle-cap") return "Triangle Cap";
-  return "To";
+  return "Triangle Cap";
 }
 
 function arrowPresetSideRaw(preset: Exclude<ArrowTipPresetId, "custom">, side: ArrowTipSide): string {

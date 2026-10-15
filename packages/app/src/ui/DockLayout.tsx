@@ -1,3 +1,4 @@
+import { isRecord } from "../validation";
 import { Activity, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Layout, Model, Actions, DockLocation, type IJsonModel, type TabNode } from "flexlayout-react";
 import { useEditorStore } from "../store/store";
@@ -83,13 +84,6 @@ function isAssistantAvailable(): boolean {
   return typeof getActiveEditorPlatform().assistant?.startTurn === "function";
 }
 
-type LayoutJsonNode = {
-  type: string;
-  component?: string;
-  children?: LayoutJsonNode[];
-  [key: string]: unknown;
-};
-
 type FlexLayoutSelectionParent = {
   getSelectedNode(): { getId(): string } | null;
 };
@@ -165,8 +159,8 @@ function sanitizeLayout(json: IJsonModel): IJsonModel {
     global: normalizedGlobal
   };
 
-  function transform(node: LayoutJsonNode | null): LayoutJsonNode | null {
-    if (!node) return null;
+  function transform(node: unknown): unknown {
+    if (!isRecord(node)) return null;
     if (!isAssistantAvailable() && node.type === "tab" && node.component === "assistant") {
       return null;
     }
@@ -174,21 +168,20 @@ function sanitizeLayout(json: IJsonModel): IJsonModel {
     if (node.type === "tabset" && typeof node.id === "string" && (HOME_TABSET_IDS as readonly string[]).includes(node.id)) {
       next = { ...next, enableDeleteWhenEmpty: false };
     }
-    if (next.children) {
+    if (Array.isArray(next.children)) {
       next = {
         ...next,
         children: next.children
           .map(transform)
-          .filter((child): child is LayoutJsonNode => child != null)
+          .filter((child) => child != null)
       };
     }
     return next;
   }
 
-  return {
-    ...jsonWithNormalizedGlobal,
-    layout: transform(jsonWithNormalizedGlobal.layout as LayoutJsonNode) as IJsonModel["layout"]
-  };
+  const transformed: unknown = { ...jsonWithNormalizedGlobal, layout: transform(jsonWithNormalizedGlobal.layout) };
+  if (!isDockLayoutJson(transformed)) throw new Error("Invalid sanitized dock layout");
+  return transformed;
 }
 
 // ── Preset layouts ────────────────────────────────────────────────────────────
@@ -341,8 +334,8 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
   const rightPanelIds = ["inspector", "objects", "styles", "assistant", "builds"] as const;
   for (const id of rightPanelIds) {
     const node = model.getNodeById(id);
-    if (node?.getParent()) {
-      const parent = node.getParent()!;
+    const parent = node?.getParent();
+    if (parent) {
       if (isLayoutSelectionParent(parent)) {
         const selected = parent.getSelectedNode();
         if (selected?.getId() === id) {
@@ -643,7 +636,7 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
       const target = canvasTabset ? "canvas-tabset" : firstTabSetId;
       const added = Boolean(m.doAction(
         Actions.addNode(
-          { type: "tab", id: PANEL_IDS.figureNavigator, name: deckMode ? "Slides" : "Figures", component: "figure-navigator" },
+          { type: "tab", id: PANEL_IDS.figureNavigator, name: "Figures", component: "figure-navigator" },
           target,
           DockLocation.BOTTOM,
           -1

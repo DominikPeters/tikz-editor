@@ -141,7 +141,7 @@ function parseParabolaOptions(
       continue;
     }
     if (entry.key === "parabola height") {
-      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, frame?.macroBindings), "cm");
+      const parsed = parseLength(expandPathMacroBindings(entry.valueRaw, frame.macroBindings), "cm");
       if (parsed != null) {
         bendPos = 0.5;
         bend = { kind: "height", height: parsed };
@@ -149,7 +149,7 @@ function parseParabolaOptions(
       continue;
     }
     if (entry.key === "bend") {
-      const parsed = parseBendCoordinateValue(expandPathMacroBindings(entry.valueRaw, frame?.macroBindings));
+      const parsed = parseBendCoordinateValue(expandPathMacroBindings(entry.valueRaw, frame.macroBindings));
       if (parsed) {
         bend = { kind: "coordinate", raw: parsed.raw, ...(parsed.relativePrefix === undefined ? {} : { relativePrefix: parsed.relativePrefix }) };
       }

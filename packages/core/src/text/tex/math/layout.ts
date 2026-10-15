@@ -559,9 +559,6 @@ function layoutTexMathListContents(list: TexMathList, options: TexMathLayoutOpti
   let atomIndex = 0;
 
   for (const item of spaced.items) {
-    if (!item) {
-      continue;
-    }
     if (item.kind === "resolved-glue") {
       const textSpace = item.fixedTextSpace === true
         ? texMathTextSpaceWidth(fontProfile, baseAtPt)
@@ -1179,7 +1176,7 @@ function prepareOrdNoads(
       index -= 1; // TeX restarts on the replacement, permitting ff+i -> ffi.
       continue;
     }
-    if ((left.font.data.fontdimen.space ?? 0) !== 0) suppressItalic.add(atom.nucleus);
+    if (left.font.data.fontdimen.space !== 0) suppressItalic.add(atom.nucleus);
     if (rule?.[0] === "kern") kerns.set(atom.nucleus, {
       width: texLength(roundTexPt(tfmToPt(left.font, rule[3]))),
       sourceSpan: { start: atom.nucleus.sourceSpan.end, end: next.nucleus.sourceSpan.start },
@@ -1763,7 +1760,7 @@ function textNucleusMathBoxProvider(
         style,
         baseAtPt,
       });
-      if (!laidOut.supported || !laidOut.hlist) {
+      if (!laidOut.supported) {
         return null;
       }
       return {
@@ -1954,10 +1951,10 @@ function layoutAlignedNucleus(
   const rows = nucleus.rows.map((row) =>
     layoutAlignedRow(row, nucleus.columnSeparation, fontProfile, style, baseAtPt, alphabet)
   );
-  if (rows.some((row): row is null => row === null)) {
+  if (!rows.every((row) => row !== null)) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   if (concreteRows.length === 0) {
     return mathAtomLayout({
       items: [],
@@ -2084,10 +2081,10 @@ function layoutAlignedRow(
         }
       : null;
   });
-  if (cells.some((cell): cell is null => cell === null)) {
+  if (!cells.every((cell) => cell !== null)) {
     return null;
   }
-  const concreteCells = cells as readonly TexMathAlignedCellLayout[];
+  const concreteCells = cells;
   return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
@@ -2267,10 +2264,10 @@ function layoutSubstackNucleus(
   const rows = nucleus.rows.map((row) =>
     layoutSubstackRow(row, fontProfile, baseAtPt, alphabet)
   );
-  if (rows.some((row): row is null => row === null)) {
+  if (!rows.every((row) => row !== null)) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   if (concreteRows.length === 0) {
     return mathAtomLayout({
       items: [],
@@ -2340,10 +2337,8 @@ function layoutSubstackRow(
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
   const cell = requireArrayValue(row.cells, 0);
-  const result = cell
-    ? layoutTexMathList(cell.list, { fontProfile, style: TEX_SUBSTACK_STYLE, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) })
-    : null;
-  if (!result?.supported) {
+  const result = layoutTexMathList(cell.list, { fontProfile, style: TEX_SUBSTACK_STYLE, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
+  if (!result.supported) {
     return null;
   }
   return mathAlignedRowLayout({
@@ -2367,10 +2362,10 @@ function layoutSubarrayNucleus(
   const rows = nucleus.rows.map((row) =>
     layoutSubstackRow(row, fontProfile, baseAtPt, alphabet)
   );
-  if (rows.some((row): row is null => row === null)) {
+  if (!rows.every((row) => row !== null)) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   if (concreteRows.length === 0) {
     return mathAtomLayout({
       items: [],
@@ -2749,12 +2744,12 @@ function layoutCasesBody(
     )
   );
   if (
-    rows.some((row): row is null => row === null) ||
+    !rows.every(row => row !== null) ||
     nucleus.rows.some((row) => row.cells.length > 2)
   ) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   if (concreteRows.length === 0) {
     return mathAtomLayout({
       items: [],
@@ -2857,12 +2852,12 @@ function layoutArrayNucleus(
     layoutArrayRow(row, nucleus.cellInserts ?? [], cellInsertLayouts, fontProfile, baseAtPt, alphabet)
   );
   if (
-    rows.some((row): row is null => row === null) ||
+    !rows.every(row => row !== null) ||
     nucleus.rows.some((row) => row.cells.length > nucleus.columnAlignments.length)
   ) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   if (concreteRows.length === 0 || nucleus.columnAlignments.length === 0) {
     return mathAtomLayout({
       items: [],
@@ -3283,10 +3278,10 @@ function layoutSmallMatrixBody(
   const rows = nucleus.rows.map((row) =>
     layoutSmallMatrixRow(row, fontProfile, baseAtPt, alphabet)
   );
-  if (rows.some((row): row is null => row === null)) {
+  if (!rows.every((row) => row !== null)) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   const outerGap = muToPt(fontProfile, style, baseAtPt, 3);
   if (concreteRows.length === 0) {
     return mathAtomLayout({
@@ -3398,10 +3393,10 @@ function layoutMatrixBody(
   const rows = nucleus.rows.map((row) =>
     layoutMatrixRow(row, fontProfile, baseAtPt, alphabet)
   );
-  if (rows.some((row): row is null => row === null)) {
+  if (!rows.every((row) => row !== null)) {
     return null;
   }
-  const concreteRows = rows as readonly TexMathAlignedRowLayout[];
+  const concreteRows = rows;
   if (concreteRows.length === 0) {
     return mathAtomLayout({
       items: [],
@@ -3510,10 +3505,10 @@ function layoutSmallMatrixRow(
         }
       : null;
   });
-  if (cells.some((cell): cell is null => cell === null)) {
+  if (!cells.every((cell) => cell !== null)) {
     return null;
   }
-  const concreteCells = cells as readonly TexMathAlignedCellLayout[];
+  const concreteCells = cells;
   return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
@@ -3569,10 +3564,10 @@ function layoutMatrixRow(
         }
       : null;
   });
-  if (cells.some((cell): cell is null => cell === null)) {
+  if (!cells.every((cell) => cell !== null)) {
     return null;
   }
-  const concreteCells = cells as readonly TexMathAlignedCellLayout[];
+  const concreteCells = cells;
   return mathAlignedRowLayout({
     cells: concreteCells,
     sourceSpan: row.sourceSpan,
@@ -6689,7 +6684,7 @@ function resolveMathSymbolParts(
         : alphabetGlyph?.fontId;
     const font = profileAlphabetFont ??
       fontProfile.metricProvider.resolveFont({
-        fontId: opticalAlphabetFontId!,
+        ...(opticalAlphabetFontId !== undefined ? { fontId: opticalAlphabetFontId } : {}),
         atPt: alphabetAtPt,
       });
     const code = alphabetGlyph?.code ?? nucleus.text.charCodeAt(0);

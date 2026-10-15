@@ -169,7 +169,7 @@ function compactDeveloperLogData(value: unknown, depth: number): unknown {
     return compactDeveloperLogData([...value].slice(0, MAX_DEVELOPER_LOG_ARRAY_ITEMS), depth + 1);
   }
   const output: Record<string, unknown> = {};
-  const entries = Object.entries(value as Record<string, unknown>);
+  const entries = Object.entries(value);
   for (const [key, nested] of entries.slice(0, MAX_DEVELOPER_LOG_OBJECT_KEYS)) {
     output[key] = compactDeveloperLogData(nested, depth + 1);
   }
@@ -310,8 +310,8 @@ export function makeInitialState(seed?: WorkspaceSeed): EditorState {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   const previousWorkspace = workspaceStateFromEditorState(state);
   const previousUi = uiStateFromEditorState(state);
-  if (action.type.startsWith("ASSISTANT_") && action.type !== "ASSISTANT_NEW_CHAT") {
-    const assistantAction = action as Extract<EditorAction, { type: `ASSISTANT_${string}` }>;
+  if (action.type === "ASSISTANT_THREAD_READY" || action.type === "ASSISTANT_THREAD_LOADED" || action.type === "ASSISTANT_TURN_STATUS" || action.type === "ASSISTANT_ITEM_STARTED" || action.type === "ASSISTANT_ITEM_UPDATED" || action.type === "ASSISTANT_ITEM_COMPLETED" || action.type === "ASSISTANT_ITEM_DELTA" || action.type === "ASSISTANT_APPROVAL_REQUESTED" || action.type === "ASSISTANT_APPROVAL_CLEARED" || action.type === "ASSISTANT_SOURCE_UPDATED" || action.type === "ASSISTANT_SET_ERROR") {
+    const assistantAction = action;
     const documentId = assistantAction.documentId ?? state.activeDocumentId;
     const generation = "sessionGeneration" in assistantAction ? assistantAction.sessionGeneration ?? 0 : 0;
     if (readDocument(state.documents, documentId)?.assistantSessionGeneration !== generation) return state;

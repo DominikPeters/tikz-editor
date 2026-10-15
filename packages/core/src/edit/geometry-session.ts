@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import type { Statement } from "../ast/types.js";
@@ -65,7 +66,7 @@ export function createEditGeometrySession(
     if (!statement) throw new Error(`No statement at geometry index ${index}`);
     const checkpoints = getGeometryCheckpoints(snapshot.semantic);
     const restoreIndex = checkpoints ? Math.max(-1, ...[...checkpoints.keys()].filter(i => i <= index)) : -1;
-    if (restoreIndex >= 0) restoreSemanticContext(baseline.context, checkpoints!.get(restoreIndex)!, { editHandleSource: snapshot.semantic.editHandles });
+    if (restoreIndex >= 0) restoreSemanticContext(baseline.context, requireDefined(requireDefined(checkpoints, "Missing required checkpoints").get(restoreIndex), "Missing required checkpoints.get(restoreIndex)"), { editHandleSource: snapshot.semantic.editHandles });
     for (let i = Math.max(0, restoreIndex); i < index; i++) evaluateSemanticStatementByIndex(baseline, i);
     frames.set(index, createStatementFrameResolver(baseline.context, statement));
     const checkpoint = snapshotSemanticContext(baseline.context, { editHandlesMode: "length" });
@@ -96,7 +97,7 @@ export function createEditGeometrySession(
       }
       // Node resize tries several candidates per frame. Keep recent candidates,
       // without retaining every source string for the lifetime of a long drag.
-      if (cache.size >= 24) cache.delete(cache.keys().next().value!);
+      if (cache.size >= 24) cache.delete(requireDefined(cache.keys().next().value, "Missing required cache.keys().next().value"));
       cache.set(source, elements);
       return elements;
     });
@@ -123,7 +124,7 @@ export function createEditGeometrySession(
     },
     measureStatement(source, sourceId, parsed) {
       prepare(sourceId);
-      return evaluators.get(statementIndex(sourceId)!)!(source, parsed);
+      return requireDefined(evaluators.get(requireDefined(statementIndex(sourceId), "Missing required statementIndex(sourceId)")), "Missing required evaluators.get(statementIndex(sourceId))")(source, parsed);
     }
   };
 }

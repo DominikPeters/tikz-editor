@@ -123,8 +123,8 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       return;
     }
     const detailLines = failures.map((failure) => {
-      const pathLabel = failure.path?.trim() ? failure.path : "(unknown path)";
-      const message = failure.message?.trim() ? failure.message : "unknown error";
+      const pathLabel = failure.path.trim() ? failure.path : "(unknown path)";
+      const message = failure.message.trim() ? failure.message : "unknown error";
       return `• ${pathLabel}: ${message}`;
     });
     const summary = failures.length === 1
@@ -138,7 +138,8 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
       return;
     }
     while (pendingOpenedBuffer.length > 0) {
-      const opened = pendingOpenedBuffer.shift()!;
+      const opened = pendingOpenedBuffer.shift();
+      if (!opened) break;
       openRequestHandler(opened);
     }
     if (pendingOpenFailureBuffer.length > 0) {
@@ -421,10 +422,11 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         };
       },
       readLinkedText: async (fileRef): Promise<LinkedTextReadResult> => {
-        if (fileRef.provider !== "desktop-fs" || !fileRef.path || !getBridge().readLinkedText) {
+        const bridge = getBridge();
+        if (fileRef.provider !== "desktop-fs" || !fileRef.path || !bridge.readLinkedText) {
           return { status: "failed", reason: "File is not linked to a desktop path." };
         }
-        const result = await getBridge().readLinkedText!(fileRef.path);
+        const result = await bridge.readLinkedText(fileRef.path);
         if (result.status === "ok") {
           return {
             status: "ok",
@@ -443,10 +445,11 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         return await read(path);
       },
       writeLinkedText: async (fileRef, text, expectedRevision): Promise<LinkedTextWriteResult> => {
-        if (fileRef.provider !== "desktop-fs" || !fileRef.path || !getBridge().writeLinkedText) {
+        const bridge = getBridge();
+        if (fileRef.provider !== "desktop-fs" || !fileRef.path || !bridge.writeLinkedText) {
           return { status: "failed", reason: "File is not linked to a desktop path." };
         }
-        const result = await getBridge().writeLinkedText!({
+        const result = await bridge.writeLinkedText({
           path: fileRef.path,
           text,
           expectedRevision
@@ -476,7 +479,7 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         }
         const paths = fileRefs
           .filter((fileRef) => fileRef.provider === "desktop-fs" && typeof fileRef.path === "string")
-          .map((fileRef) => fileRef.path!)
+          .flatMap((fileRef) => fileRef.path === undefined ? [] : [fileRef.path])
           .filter((path, index, all) => path.trim().length > 0 && all.indexOf(path) === index);
         await sync(paths);
       },
@@ -586,12 +589,8 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
         await getBridge().assistantSyncSource?.(params);
       },
       respondToApproval: async (params) => {
-        await getBridge().assistantRespondToApproval?.(params as {
-          documentId: string;
-          sessionGeneration?: number;
-          requestId: string;
-          decision: "accept" | "acceptForSession" | "decline" | "cancel";
-        });
+        if (params.decision !== "accept" && params.decision !== "acceptForSession" && params.decision !== "decline" && params.decision !== "cancel") throw new Error("Unknown assistant approval decision");
+        await getBridge().assistantRespondToApproval?.({ ...params, decision: params.decision });
       },
       respondToDynamicToolCall: async (params) => {
         await getBridge().assistantRespondToDynamicToolCall?.(params);

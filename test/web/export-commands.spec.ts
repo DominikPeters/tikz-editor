@@ -135,6 +135,8 @@ describe("export commands", () => {
         return {
           documentElement: {
             nodeName: "svg",
+            localName: "svg",
+            namespaceURI: "http://www.w3.org/2000/svg",
             setAttribute: vi.fn(),
             querySelector: () => null,
             querySelectorAll: () => [],

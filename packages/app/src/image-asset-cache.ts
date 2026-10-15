@@ -560,7 +560,7 @@ function includeGraphicsPathDescriptor(
   }
   const extension = extensionForPath(path);
   if (extension) {
-    if (!SUPPORTED_EXTENSIONS.includes(extension as (typeof SUPPORTED_EXTENSIONS)[number])) {
+    if (!new Set<string>(SUPPORTED_EXTENSIONS).has(extension)) {
       return {
         kind: "unsupported",
         path,

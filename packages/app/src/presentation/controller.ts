@@ -154,7 +154,11 @@ export class PresentationController {
       // Keep published previews bounded too; a long filmstrip requests its visible region.
       const entries: Array<[string, string]> = [...Object.entries(this.snapshot.thumbnails).filter(([index]) => Number(index) !== frame).slice(-31), [String(frame), page.svg]];
       let bytes = entries.reduce((sum, entry) => sum + entry[1].length * 2, 0);
-      while (bytes > 8 * 1024 * 1024 && entries.length) bytes -= entries.shift()![1].length * 2;
+      while (bytes > 8 * 1024 * 1024 && entries.length) {
+        const oldest = entries.shift();
+        if (!oldest) break;
+        bytes -= oldest[1].length * 2;
+      }
       this.update({ thumbnails: Object.fromEntries(entries) });
     } catch { /* The live page reports failures; thumbnails are best effort. */ }
   }

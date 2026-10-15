@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import type { Span } from "../ast/types.js";
 import { concatMappedText, sliceMappedText, type MappedText } from "../text/source-map.js";
 import type { TexSyntaxIndex } from "../text/tex/syntax-index.js";
@@ -32,7 +33,7 @@ function collectNoteCommands(source: string, context: ReturnType<typeof beamerSy
   const result: BeamerNoteCommand[] = [];
   let consumed = -1;
   for (const command of context.syntax.controls) {
-    if (command.span.from < consumed || !["note", "AtBeginNote", "AtEndNote"].includes(command.name)) continue;
+    if (command.span.from < consumed || (command.name !== "note" && command.name !== "AtBeginNote" && command.name !== "AtEndNote")) continue;
     const limit = source.length;
     const overlay = context.syntax.argumentAfter(command.span.to, "overlay", limit);
     const optional = context.syntax.argumentAfter(overlay?.span.to ?? command.span.to, "optional", limit);
@@ -41,7 +42,7 @@ function collectNoteCommands(source: string, context: ReturnType<typeof beamerSy
     const body = context.syntax.argumentAfter(start, "required", limit);
     // An unfinished note is private too. Never expose its partial body on a slide.
     consumed = body?.span.to ?? start;
-    result.push({ kind: command.name as BeamerNoteCommand["kind"],
+    result.push({ kind: command.name,
       span: { from: command.span.from, to: consumed },
       bodySpan: body?.contentSpan ?? { from: start, to: start },
       text: body ? source.slice(body.contentSpan.from, body.contentSpan.to) : "",
@@ -80,8 +81,8 @@ export function beamerSpeakerNotes(document: BeamerDocumentModel, commands: read
   const outside = step === overlays.stepCount ? commands.filter(note => note.kind === "note" && note.span.from >= frame.span.to && note.span.from < nextFrameStart).at(-1) : undefined;
   const selected = outside ? [outside] : inside;
   if (!selected.length) return "";
-  const before = commands.filter(note => note.kind === "AtBeginNote" && note.span.from < selected.at(-1)!.span.from).at(-1)?.text ?? "";
-  const after = commands.filter(note => note.kind === "AtEndNote" && note.span.from < selected.at(-1)!.span.from).at(-1)?.text ?? "";
+  const before = commands.filter(note => note.kind === "AtBeginNote" && note.span.from < requireDefined(selected.at(-1), "Expected an internal notes value").span.from).at(-1)?.text ?? "";
+  const after = commands.filter(note => note.kind === "AtEndNote" && note.span.from < requireDefined(selected.at(-1), "Expected an internal notes value").span.from).at(-1)?.text ?? "";
   const prose = selected.filter(note => note.option !== "item").map(note => {
     const environment = outside && ["enumerate", "itemize"].includes(note.option) ? note.option : null;
     return environment ? `\\begin{${environment}}${note.text}\\end{${environment}}` : note.text;

@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import type { MacroBinding } from "../../macros/types.js";
 import { itemRole } from "../ownership/kinds.js";
@@ -58,7 +59,7 @@ function wrapsArgumentOnly(tree: EditTree, container: "paragraph" | "formula"): 
   }
   let child: NodeId = marker.id;
   for (;;) {
-    const slot = editSlotAt(tree.slots, editNodeAt(tree.nodes, child).parent!);
+    const slot = editSlotAt(tree.slots, requireDefined(editNodeAt(tree.nodes, child).parent, "Missing required editNodeAt(tree.nodes, child).parent"));
     const visible = slot.children.filter((id) => itemRole(tree, id) !== "invisible");
     if (visible.length !== 1 || visible[0] !== child) {
       return false;

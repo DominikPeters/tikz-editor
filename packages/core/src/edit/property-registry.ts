@@ -281,7 +281,8 @@ export function getPropertySemantics(propertyId: string | null | undefined): Pro
 }
 
 export function isSemanticPropertyId(value: string): value is SemanticPropertyId {
-  return PROPERTY_REGISTRY.has(value as SemanticPropertyId);
+  const registry: ReadonlyMap<string, PropertySemantics> = PROPERTY_REGISTRY;
+  return registry.has(value);
 }
 
 export function candidateKeysForProperty(propertyId: string | null | undefined): string[] {
@@ -482,13 +483,13 @@ export function buildPropertyMutations(context: PropertyWriteContext): PropertyW
       key,
       value: context.value,
       ...(context.clearKeys ? { clearKeys: uniqueStrings(context.clearKeys) } : {}),
-      ...(semantics?.id === undefined ? {} : { propertyId: semantics?.id })
+      ...(semantics?.id === undefined ? {} : { propertyId: semantics.id })
     }
   ];
 }
 
 export function buildPropertyMutationsFromRequest(request: PropertyMutationRequest): PropertyWriteMutation[] {
-  const mutations = (() => {
+  const mutations: PropertyWriteMutation[] = (() => {
     switch (request.kind) {
       case "dash-style":
         return [buildDashStyleSetPropertyMutation(request.value)];

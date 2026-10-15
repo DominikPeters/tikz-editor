@@ -31,7 +31,6 @@ import type {
   ValueSetter
 } from "./types";
 import type { HitRegion } from "./hit-regions";
-import { parseWindowRootId } from "../../root-inventory";
 import { collectElementDragGeometry } from "./element-drag-geometry";
 
 export type UseCanvasElementInteractionsArgs = {
@@ -114,7 +113,6 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
     scopeOverlay,
     focusedScopeId,
     applyActionWithFeedback,
-    activeRootId,
     parseOptions,
     onNodePositionTargetPick,
     onDeckObjectSelect,
@@ -171,7 +169,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: snapExcludedSourceIds,
-            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult?.dependencies } : {}),
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult.dependencies } : {}),
             guides: snapGuideInput,
             settings: snapSettingsPatch,
             zoom: canvasTransform.scale,
@@ -393,7 +391,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       event.stopPropagation();
       suppressNextBackgroundClickRef.current = true;
 
-      if (!additiveSelection && matrixEdgeSelection && event.button === 0) {
+      if (!additiveSelection && matrixEdgeSelection) {
         closeTextEditingSession();
         setExpandedDensePathSourceId(null);
         dispatch({ type: "SELECT_RANGE", ids: matrixEdgeSelection.selectionIds });
@@ -520,9 +518,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       const resolved = resolveEligibleExplicitPath(
         source,
         sourceId,
-        parseOptions ?? {
-          activeRootId: parseWindowRootId(activeRootId, snapshot.figures.length)
-        }
+        parseOptions
       );
       if (resolved.kind !== "eligible") return false;
       const analysis = resolved.analysis;
@@ -545,7 +541,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       });
       return true;
     },
-    [svgResult, snapshot, source, parseOptions, activeRootId, interactionSvgRef, canvasTransform.scale, applyActionWithFeedback]
+    [svgResult, snapshot, source, parseOptions, interactionSvgRef, canvasTransform.scale, applyActionWithFeedback]
   );
 
   const onElementDoubleClick = useCallback(
@@ -661,16 +657,14 @@ function findClosestSegmentWorldPoint(
     let closest: { point: WorldPoint };
     if (seg.kind === "line") {
       closest = closestPointOnLine(pointer, startW, endW);
-    } else if (seg.kind === "cubic") {
-      const c1Item = seg.control1Index != null ? analysis.statement.items[seg.control1Index] : null;
-      const c2Item = seg.control2Index != null ? analysis.statement.items[seg.control2Index] : null;
+    } else {
+      const c1Item = analysis.statement.items[seg.control1Index];
+      const c2Item = analysis.statement.items[seg.control2Index];
       if (c1Item?.kind !== "Coordinate" || c2Item?.kind !== "Coordinate") continue;
       const c1W = resolveControlWorld(editHandles, sourceId, c1Item.span);
       const c2W = seg.usedAnd ? resolveControlWorld(editHandles, sourceId, c2Item.span) : c1W;
       if (!c1W || !c2W) continue;
       closest = closestPointOnCubic(pointer, startW, c1W, c2W, endW);
-    } else {
-      continue;
     }
 
     const dist = Math.hypot(closest.point.x - pointer.x, closest.point.y - pointer.y);

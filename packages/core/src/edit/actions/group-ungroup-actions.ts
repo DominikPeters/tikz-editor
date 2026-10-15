@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -254,7 +255,7 @@ function totalSiblingMovement(
   let movement = 0;
   for (const [index, id] of expandedOrder.entries()) {
 
-    const oldIndex = oldIndexById.get(id)!;
+    const oldIndex = requireDefined(oldIndexById.get(id), "Missing required oldIndexById.get(id)");
     movement += Math.abs(index - oldIndex);
   }
   return movement;
@@ -272,8 +273,8 @@ function preservesDependencyOrder(
     indexById.set(requireArrayValue(expandedOrder, index), index);
   }
   for (const constraint of constraints) {
-    const beforeIndex = indexById.get(constraint.before)!;
-    const afterIndex = indexById.get(constraint.after)!;
+    const beforeIndex = requireDefined(indexById.get(constraint.before), "Missing required indexById.get(constraint.before)");
+    const afterIndex = requireDefined(indexById.get(constraint.after), "Missing required indexById.get(constraint.after)");
     if (beforeIndex >= afterIndex) {
       return false;
     }
@@ -304,9 +305,6 @@ function collectConstraintsFromDependencyGraph(
   const consumersByResourceId = new Map<string, Set<string>>();
 
   for (const edge of graph.edges) {
-    if (edge.category !== "geometry") {
-      continue;
-    }
     if (edge.relation === "producer") {
       const fromNode = nodesById.get(edge.from);
       const toNode = nodesById.get(edge.to);
@@ -322,18 +320,16 @@ function collectConstraintsFromDependencyGraph(
       continue;
     }
 
-    if (edge.relation === "consumer") {
-      const fromNode = nodesById.get(edge.from);
-      const toNode = nodesById.get(edge.to);
-      if (!fromNode || !toNode || fromNode.kind !== "resource" || toNode.kind !== "source") {
-        continue;
-      }
-      const consumers = consumersByResourceId.get(edge.from);
-      if (consumers) {
-        consumers.add(toNode.sourceId);
-      } else {
-        consumersByResourceId.set(edge.from, new Set([toNode.sourceId]));
-      }
+    const fromNode = nodesById.get(edge.from);
+    const toNode = nodesById.get(edge.to);
+    if (!fromNode || !toNode || fromNode.kind !== "resource" || toNode.kind !== "source") {
+      continue;
+    }
+    const consumers = consumersByResourceId.get(edge.from);
+    if (consumers) {
+      consumers.add(toNode.sourceId);
+    } else {
+      consumersByResourceId.set(edge.from, new Set([toNode.sourceId]));
     }
   }
 
@@ -408,7 +404,7 @@ function buildGroupReplacement(input: {
       scopeLocalTo = text.length;
       continue;
     }
-    text += snippetsById.get(item)!;
+    text += requireDefined(snippetsById.get(item), "Missing required snippetsById.get(item)");
   }
 
   return {
@@ -518,7 +514,7 @@ function reindentBlock(snippet: string, indent: string): string {
   const lines = normalized.split("\n");
   const nonEmpty = lines.filter((line) => line.trim().length > 0);
   const minIndent = nonEmpty.reduce((minimum, line) => {
-    const current = line.match(/^[ \t]*/u)![0].length;
+    const current = requireDefined(line.match(/^[ \t]*/u), "Missing required line.match(/^[ \\t]*/u)")[0].length;
     return Math.min(minimum, current);
   }, Number.POSITIVE_INFINITY);
   const trimIndent = minIndent;

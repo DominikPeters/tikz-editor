@@ -143,9 +143,6 @@ function planSimpleTexParagraphVerticalSkipsInto(
   pathPrefix: readonly number[]
 ): void {
   for (const [index, item] of items.entries()) {
-    if (!item) {
-      continue;
-    }
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
       if (isMaterialTexVBoxItem(item)) {
@@ -362,10 +359,10 @@ function paragraphScopeFromVListAncestors(
         totalLeftMarginEm: listRole.totalLeftMarginEm,
         showLabel: item.paragraph.listContext?.showLabel ??
           !state.emittedListItemKeys.has(listItemKey),
-        ...(item.paragraph.listContext?.label !== undefined ? { label: item.paragraph.listContext?.label } : {}),
-        ...(item.paragraph.listContext?.fontSizePt !== undefined ? { fontSizePt: item.paragraph.listContext?.fontSizePt } : {}),
-        ...(item.paragraph.listContext?.spacing !== undefined ? { spacing: item.paragraph.listContext?.spacing } : {}),
-        ...(item.paragraph.listContext?.listStart !== undefined ? { listStart: item.paragraph.listContext?.listStart } : {}),
+        ...(item.paragraph.listContext?.label !== undefined ? { label: item.paragraph.listContext.label } : {}),
+        ...(item.paragraph.listContext?.fontSizePt !== undefined ? { fontSizePt: item.paragraph.listContext.fontSizePt } : {}),
+        ...(item.paragraph.listContext?.spacing !== undefined ? { spacing: item.paragraph.listContext.spacing } : {}),
+        ...(item.paragraph.listContext?.listStart !== undefined ? { listStart: item.paragraph.listContext.listStart } : {}),
       },
     };
   }
@@ -392,9 +389,7 @@ function lastVListAncestorRole<K extends TexVBoxRole["kind"]>(
 ): Extract<TexVBoxRole, { kind: K }> | undefined {
   for (let index = ancestors.length - 1; index >= 0; index -= 1) {
     const role = ancestors[index];
-    if (role?.kind === kind) {
-      return role as Extract<TexVBoxRole, { kind: K }>;
-    }
+    if (role && roleHasKind(role, kind)) return role;
   }
   return undefined;
 }
@@ -425,9 +420,6 @@ function addParagraphVerticalGlueToItems(
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
   for (const [index, item] of sourceItems.entries()) {
-    if (!item) {
-      continue;
-    }
     const path = [...pathPrefix, index];
     if (item.kind === "vbox") {
       const skip = verticalSkipByPath.get(texVListPathKey(path));
@@ -526,9 +518,6 @@ function materializeDisplayMathVerticalGlueInItems(
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
   for (const [index, item] of sourceItems.entries()) {
-    if (!item) {
-      continue;
-    }
     if (item.kind === "vbox") {
       items.push({
         ...item,
@@ -736,9 +725,6 @@ function resolveDisplayMathVerticalGlueInItems(
     previousDisplayMaterialMetrics !== undefined);
   let paragraphBoundaryInterlineAlreadyInserted = false;
   for (const [index, item] of sourceItems.entries()) {
-    if (!item) {
-      continue;
-    }
     const path = [...pathPrefix, index];
     if (item.kind === "glue" && item.origin?.kind === "explicit-command" && item.origin.command === "nointerlineskip") {
       // \nointerlineskip sets \prevdepth=-1000pt. Glue and penalties do not
@@ -1082,9 +1068,7 @@ function shouldInsertParagraphBoundaryInterlineGlue(
 ): boolean {
   for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
     const item = items[nextIndex];
-    if (!item) {
-      continue;
-    }
+    if (!item) continue;
     if (item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
       continue;
     }
@@ -1142,9 +1126,7 @@ function shouldInsertExplicitVerticalInterlineGlue(
 ): boolean {
   for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
     const item = items[nextIndex];
-    if (!item) {
-      continue;
-    }
+    if (!item) continue;
     if (item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
       continue;
     }
@@ -1329,9 +1311,7 @@ function lastRoleOfKind<K extends TexVBoxRole["kind"]>(
   }
   for (let index = scopePath.length - 1; index >= 0; index -= 1) {
     const role = scopePath[index];
-    if (role?.kind === kind) {
-      return role as Extract<TexVBoxRole, { kind: K }>;
-    }
+    if (role && roleHasKind(role, kind)) return role;
   }
   return undefined;
 }
@@ -1542,9 +1522,7 @@ function nextPostDisplayEmptyLineHBox(
 ): TexHBoxItem | undefined {
   for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
     const item = items[nextIndex];
-    if (!item) {
-      continue;
-    }
+    if (!item) continue;
     if (item.kind === "glue" || item.kind === "penalty") {
       continue;
     }
@@ -1562,9 +1540,7 @@ function nextDisplayAlignmentRowHBox(
 ): TexHBoxItem | undefined {
   for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
     const item = items[nextIndex];
-    if (!item) {
-      continue;
-    }
+    if (!item) continue;
     if (item.kind === "glue" || item.kind === "penalty") {
       continue;
     }
@@ -1590,7 +1566,7 @@ function displayMathSkipVariant(
   if (!previousParagraphMeasurement) {
     return "normal";
   }
-  const preDisplaySize = previousParagraphMeasurement?.lastLinePreDisplaySize ??
+  const preDisplaySize = previousParagraphMeasurement.lastLinePreDisplaySize ??
     texLength(Number.NEGATIVE_INFINITY);
   // TeX.web chooses the normal skips when the centered display overlaps the
   // preceding line's pre-display size; otherwise it uses the short skips.
@@ -1714,9 +1690,7 @@ function nextParagraphMeasurement(
 ): TexVListParagraphBoxMeasurement | undefined {
   for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
     const item = items[nextIndex];
-    if (!item) {
-      continue;
-    }
+    if (!item) continue;
     if (item.kind === "glue" || item.kind === "penalty" || isBoundaryTransparentHBox(item)) {
       continue;
     }
@@ -1848,13 +1822,15 @@ function listProfileForContext(profile: TexListLayoutProfile | undefined, contex
   if (!profile || !context) return profile;
   const size = context.depth === 1 ? profile.sizeOverrides?.find(item => Math.abs(item.fontSizePt - Number(context.fontSizePt)) < .001) : undefined;
   const index = context.depth - 1;
-  const replace = (values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined => {
+  function replace(values: readonly number[], value: number | undefined): readonly number[];
+  function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined;
+  function replace(values: readonly number[] | undefined, value: number | undefined): readonly number[] | undefined {
     if (value === undefined) return values;
     const copy = [...values ?? []];
     while (copy.length <= index) copy.push(0);
     copy[index] = value;
     return copy;
-  };
+  }
   const authored = context.spacing;
   const topsepStretchPtByDepth = replace(profile.topsepStretchPtByDepth, authored?.topsep?.stretchPt ?? size?.topsepStretchPt);
   const topsepShrinkPtByDepth = replace(profile.topsepShrinkPtByDepth, authored?.topsep?.shrinkPt ?? size?.topsepShrinkPt);
@@ -1863,16 +1839,16 @@ function listProfileForContext(profile: TexListLayoutProfile | undefined, contex
   const parsepStretchPtByDepth = replace(profile.parsepStretchPtByDepth, authored?.parskip?.stretchPt ?? size?.parsepStretchPt);
   const parsepShrinkPtByDepth = replace(profile.parsepShrinkPtByDepth, authored?.parskip?.shrinkPt ?? size?.parsepShrinkPt);
   return { ...profile,
-    topsepPtByDepth: replace(profile.topsepPtByDepth, authored?.topsep?.sizePt ?? size?.topsepPt)!,
+    topsepPtByDepth: replace(profile.topsepPtByDepth, authored?.topsep?.sizePt ?? size?.topsepPt),
     ...(topsepStretchPtByDepth !== undefined ? { topsepStretchPtByDepth } : {}),
     ...(topsepShrinkPtByDepth !== undefined ? { topsepShrinkPtByDepth } : {}),
-    partopsepPtByDepth: replace(profile.partopsepPtByDepth, authored?.partopsep?.sizePt)!,
-    itemsepPtByDepth: replace(profile.itemsepPtByDepth, authored?.itemsep?.sizePt ?? size?.itemsepPt)!,
+    partopsepPtByDepth: replace(profile.partopsepPtByDepth, authored?.partopsep?.sizePt),
+    itemsepPtByDepth: replace(profile.itemsepPtByDepth, authored?.itemsep?.sizePt ?? size?.itemsepPt),
     ...(itemsepStretchPtByDepth !== undefined ? { itemsepStretchPtByDepth } : {}),
     ...(itemsepShrinkPtByDepth !== undefined ? { itemsepShrinkPtByDepth } : {}),
     // \list copies \parsep into \parskip on entry. A later assignment to
     // \parsep alone does not change the active paragraph glue.
-    parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parskip?.sizePt ?? size?.parsepPt)!,
+    parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parskip?.sizePt ?? size?.parsepPt),
     ...(parsepStretchPtByDepth !== undefined ? { parsepStretchPtByDepth } : {}),
     ...(parsepShrinkPtByDepth !== undefined ? { parsepShrinkPtByDepth } : {}),
   };
@@ -2253,4 +2229,8 @@ function texDepthIndexedEm(values: readonly number[], depth: number): number {
 
 function texEmSkip(value: number, font: ResolvedTexFont): TexLength {
   return texLength(roundTexPt(value * font.atPt));
+}
+
+function roleHasKind<K extends TexVBoxRole["kind"]>(role: TexVBoxRole, kind: K): role is Extract<TexVBoxRole, { kind: K }> {
+  return role.kind === kind;
 }

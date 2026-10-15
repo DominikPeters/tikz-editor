@@ -480,7 +480,7 @@ export function generateTexFuzzCase(
   const weights = options.coverageFeedback === undefined
     ? profile.weights
     : adaptTexFuzzWeights(
-      profile.weights as Readonly<Record<TexFuzzFeatureId, number>>,
+      profile.weights,
       options.coverageFeedback,
       options.adaptiveNoveltyBudget === undefined ? {} : { noveltyBudget: options.adaptiveNoveltyBudget }
     );

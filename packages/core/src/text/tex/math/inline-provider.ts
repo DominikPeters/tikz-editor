@@ -921,7 +921,7 @@ function addFractionCaretMapEntries(
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
   for (const [index, item] of items.entries()) {
-    if (item?.kind !== "rule" || item.role !== "fraction-rule") {
+    if (item.kind !== "rule" || item.role !== "fraction-rule") {
       continue;
     }
     const numerator = adjacentFractionCaretChild(items, index, -1, item.sourceSpan);
@@ -1514,7 +1514,7 @@ function getDisplayMathAlignment(
           row,
           rowItems,
           tag,
-          tagPlacement?.shiftTag ?? null,
+          tagPlacement.shiftTag,
           params.targetWidth
         )
         : {

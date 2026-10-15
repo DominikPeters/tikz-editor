@@ -80,7 +80,7 @@ function getFallbackOverlayMeasureContext(): CanvasRenderingContext2D | null {
 }
 
 function applyFallbackOverlayFont(ctx: CanvasRenderingContext2D | null, target: EditableTextTarget): void {
-  applyTextMeasureFont(ctx, target?.style);
+  applyTextMeasureFont(ctx, target.style);
 }
 
 function resolvePlainFallbackLineBoxes(
@@ -139,7 +139,7 @@ function resolveRegionSelectionOverlay(
   applyFallbackOverlayFont(ctx, target);
   const layout = createVisualTextLayout(
     target.text,
-    target.renderSourceText ?? target.text,
+    target.renderSourceText,
     (text) => {
       if (!ctx) {
         return Number.NaN;
@@ -360,6 +360,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
     }
 
     const requestRef = { cancelled: false };
+    const isRequestCancelled = () => requestRef.cancelled;
     const viewportRect = viewport.getBoundingClientRect();
     const documentAnchor = textareaOffsetToDocument(textareaOffset(boundedStart), target.sourceSpan);
     const documentFocus = textareaOffsetToDocument(textareaOffset(boundedEnd), target.sourceSpan);
@@ -464,7 +465,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               offset: caretDocumentOffset,
               ...(caretEdge ? { edge: caretEdge } : {})
             });
-            if (requestRef.cancelled) {
+            if (isRequestCancelled()) {
               return;
             }
             if (!point.ok || point.clientPoint == null) {
@@ -491,7 +492,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
                 paragraphContainer,
                 point.offset ?? caretDocumentOffset
               )) ?? Math.max(1, target.region.height);
-            if (requestRef.cancelled) {
+            if (isRequestCancelled()) {
               return;
             }
             pushOverlay({
@@ -536,7 +537,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               startOffset: documentSourceOffset(startOffset),
               endOffset: documentSourceOffset(endOffset)
             });
-            if (requestRef.cancelled) {
+            if (isRequestCancelled()) {
               return;
             }
             if (paragraphRects.ok) {
@@ -577,7 +578,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
             containerElement,
             offset: documentStart
           });
-          if (requestRef.cancelled) {
+          if (isRequestCancelled()) {
             return;
           }
           if (!point.ok || point.clientPoint == null) {
@@ -595,7 +596,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
               containerElement,
               point.offset ?? documentStart
             )) ?? Math.max(1, target.region.height);
-          if (requestRef.cancelled) {
+          if (isRequestCancelled()) {
             return;
           }
           pushOverlay({
@@ -628,7 +629,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           startOffset: documentStart,
           endOffset: documentEnd
         });
-        if (requestRef.cancelled) {
+        if (isRequestCancelled()) {
           return;
         }
         if (!rects.ok || rects.rects.length === 0) {
@@ -647,7 +648,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
           }))
         });
       } catch {
-        if (requestRef.cancelled) {
+        if (isRequestCancelled()) {
           return;
         }
         setRegionFallbackOverlay();

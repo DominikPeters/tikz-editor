@@ -104,7 +104,6 @@ export function buildMatrixInspectorDescriptor(
   }
 
   const writable = true;
-  const readOnlyReason = undefined;
   const transformContext = resolveTransformInspectorMutationContext(source, matrixId, parseOptions, resolveTarget);
   const transformValues = transformContext.values;
   const rowSepPt = resolveMatrixSpacingPt(resolved.target.options, "row sep");
@@ -116,7 +115,6 @@ export function buildMatrixInspectorDescriptor(
     elementKind: "path",
     elementId: matrixId,
     writeTargetId: matrixId,
-    ...(readOnlyReason === undefined ? {} : { readOnlyReason }),
     sections: [
       {
         id: "transform",
@@ -141,8 +139,7 @@ export function buildMatrixInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -163,8 +160,7 @@ export function buildMatrixInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -184,8 +180,7 @@ export function buildMatrixInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -205,8 +200,7 @@ export function buildMatrixInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -227,8 +221,7 @@ export function buildMatrixInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           }
         ]
@@ -245,7 +238,7 @@ export function buildMatrixInspectorDescriptor(
             value: rowSepPt,
             step: 0.1,
             unit: "pt",
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "row sep", writable, ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason }) }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "row sep", writable }
           },
           {
             kind: "length",
@@ -254,7 +247,7 @@ export function buildMatrixInspectorDescriptor(
             value: columnSepPt,
             step: 0.1,
             unit: "pt",
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "column sep", writable, ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason }) }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "column sep", writable }
           },
           {
             kind: "color",
@@ -263,7 +256,7 @@ export function buildMatrixInspectorDescriptor(
             value: drawColor,
             syntaxValue: drawColor,
             options: colorOptionsForValue(drawColor),
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "draw", writable, ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason }) }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "draw", writable }
           },
           {
             kind: "color",
@@ -272,7 +265,7 @@ export function buildMatrixInspectorDescriptor(
             value: fillColor,
             syntaxValue: fillColor,
             options: colorOptionsForValue(fillColor),
-            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "fill", writable, ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason }) }
+            write: { mode: "setProperty", elementId: matrixId, level: "command", key: "fill", writable }
           }
         ]
       }
@@ -338,7 +331,6 @@ export function buildTreeInspectorDescriptor(
     : [];
 
   const writable = true;
-  const readOnlyReason = undefined;
   const transformContext = resolveTransformInspectorMutationContext(source, sourceId, parseOptions, resolveTarget);
   const transformValues = transformContext.values;
 
@@ -371,7 +363,6 @@ export function buildTreeInspectorDescriptor(
     elementKind: "path",
     elementId: sourceId,
     writeTargetId: sourceId,
-    ...(readOnlyReason === undefined ? {} : { readOnlyReason }),
     sections: [
       {
         id: "transform",
@@ -396,8 +387,7 @@ export function buildTreeInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -418,8 +408,7 @@ export function buildTreeInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -439,8 +428,7 @@ export function buildTreeInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -460,8 +448,7 @@ export function buildTreeInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -482,8 +469,7 @@ export function buildTreeInspectorDescriptor(
                 values: cloneTransformInspectorValues(transformContext.values),
                 ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
               },
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           }
         ]
@@ -504,8 +490,7 @@ export function buildTreeInspectorDescriptor(
               elementId: resolveRootLayoutWriteTargetId("grow"),
               level: "command",
               key: "grow",
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -520,8 +505,7 @@ export function buildTreeInspectorDescriptor(
               elementId: resolveRootLayoutWriteTargetId("level distance"),
               level: "command",
               key: "level distance",
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           },
           {
@@ -536,8 +520,7 @@ export function buildTreeInspectorDescriptor(
               elementId: resolveRootLayoutWriteTargetId("sibling distance"),
               level: "command",
               key: "sibling distance",
-              writable,
-              ...(readOnlyReason === undefined ? {} : { reason: readOnlyReason })
+              writable
             }
           }
         ]

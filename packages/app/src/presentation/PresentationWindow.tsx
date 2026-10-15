@@ -1,3 +1,4 @@
+import { isRecord } from "../validation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { getActiveEditorPlatform } from "../platform/current";
 import { useSettingsStore } from "../settings/useSettingsStore";
@@ -55,7 +56,8 @@ const ARRANGEMENT_KEY = "tikz-editor:presenter-arrangement";
 function loadArrangement(): Arrangement {
   try {
     const raw = getActiveEditorPlatform().persistence.load(ARRANGEMENT_KEY);
-    const saved = raw ? JSON.parse(raw) as Partial<Arrangement> : {};
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    const saved = isRecord(parsed) ? parsed : {};
     return { preset: saved.preset === "notes" || saved.preset === "compact" ? saved.preset : "balanced",
       notesRatio: typeof saved.notesRatio === "number" ? Math.max(20, Math.min(70, saved.notesRatio)) : 34,
       previewRatio: typeof saved.previewRatio === "number" ? Math.max(25, Math.min(75, saved.previewRatio)) : 60 };
@@ -70,7 +72,8 @@ function Splitter({ value, onChange, label, orientation = "vertical" }: { value:
       }
     }} onPointerDown={event => {
       const element = event.currentTarget;
-      const box = element.parentElement!.getBoundingClientRect();
+      const parent = element.parentElement; if (!parent) return;
+      const box = parent.getBoundingClientRect();
       event.preventDefault(); element.setPointerCapture(event.pointerId);
       const horizontal = orientation === "horizontal";
       const move = (pointer: PointerEvent) => {
@@ -92,7 +95,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   const audienceRoot = useRef<HTMLElement | null>(null);
   const scheme = useSettingsStore(s => s.settings.general.colorScheme);
   const uiFontSizePx = useSettingsStore(s => s.settings.general.uiFontSizePx);
-  const uiStyle = { "--app-ui-font-size": uiFontSizePx + "px", "--app-ui-scale": uiFontSizePx / 11 } as CSSProperties;
+  const uiStyle: CSSProperties & { [key: `--${string}`]: string | number } = { "--app-ui-font-size": uiFontSizePx + "px", "--app-ui-scale": uiFontSizePx / 11 };
   const transport = useRef<PresentationTransport | null>(null);
   const snapshotRef = useRef(snapshot);
   const lastSeen = useRef(Date.now());
@@ -162,7 +165,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !snapshotRef.current || snapshotRef.current.ended) return;
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest("input, textarea, select, [contenteditable=true], [role=separator]")) return;
       if (target?.closest("button") && (event.key === " " || event.key === "Enter")) return;
       if (role === "audience" && !event.ctrlKey && !event.metaKey && !event.altKey && (event.key === "f" || event.key === "F")) { event.preventDefault(); enterFullscreen(); return; }
@@ -179,7 +182,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
 
   if (role === "audience") return <main ref={audienceRoot} tabIndex={0} className={css.audience} style={uiStyle} data-testid="audience-window" data-blank={snapshot?.blank ?? "none"}
     onPointerMove={() => { setControlsVisible(true); if (hideControls.current) clearTimeout(hideControls.current); hideControls.current = setTimeout(() => { setControlsVisible(false); }, 1800); }}
-    onClick={event => { if (!(event.target as Element).closest("button,a") && !snapshot?.ended) send({ type: "next" }); }}>
+    onClick={event => { if (!(event.target instanceof Element ? event.target : null)?.closest("button,a") && !snapshot?.ended) send({ type: "next" }); }}>
     {snapshot?.blank === "none" && !snapshot.ended ? <AudienceSlide page={snapshot.current} /> : null}
     {snapshot?.ended ? <div className={css.ended}>Presentation ended</div> : null}
     {controlsVisible && !snapshot?.ended ? <div className={css.audienceControls} data-color-scheme="dark">
@@ -192,7 +195,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
 
   const elapsed = snapshot ? presentationElapsed(snapshot.timer, now) : 0;
   const current = snapshot?.current;
-  const frame = current ? snapshot?.frames[current.cursor.frame] : null;
+  const frame = current ? snapshot.frames[current.cursor.frame] : null;
   const vertical = arrangement.preset !== "balanced";
   const mainStyle = { gridTemplateColumns: `minmax(0, ${100 - arrangement.notesRatio}fr) 6px minmax(0, ${arrangement.notesRatio}fr)` };
   const previewsStyle: CSSProperties = vertical ? { gridTemplateRows: `minmax(0, ${arrangement.previewRatio}fr) 6px minmax(0, ${100 - arrangement.previewRatio}fr)` } : { gridTemplateColumns: `minmax(0, ${arrangement.previewRatio}fr) 6px minmax(0, ${100 - arrangement.previewRatio}fr)` };
@@ -212,7 +215,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
     {snapshot && !snapshot.outputAvailable && !snapshot.ended ? <div className={css.notice}><span>Audience output is closed.</span><Modal.SecondaryButton onClick={() => { send({ type: "recover-output" }); }}>Show Audience Window</Modal.SecondaryButton></div> : null}
     <div className={css.main} style={mainStyle}>
       <div className={css.previews} data-vertical={vertical || undefined} style={previewsStyle}>
-        <section className={css.preview}><h2>Current <span>{current ? `Slide ${current.cursor.frame + 1} / ${snapshot?.frames.length ?? 0} · Build ${current.cursor.step} / ${frame?.steps ?? 1}${current.cursor.continuation > 1 ? ` · Page ${current.cursor.continuation}` : ""}` : ""}</span></h2>
+        <section className={css.preview}><h2>Current <span>{current ? `Slide ${current.cursor.frame + 1} / ${snapshot.frames.length} · Build ${current.cursor.step} / ${frame?.steps ?? 1}${current.cursor.continuation > 1 ? ` · Page ${current.cursor.continuation}` : ""}` : ""}</span></h2>
           <Slide svg={current?.svg ?? null} {...(current?.cursor === undefined ? {} : { cursor: current.cursor })} label="Current slide" />
         </section>
         <Splitter label="Resize current and next previews" orientation={vertical ? "horizontal" : "vertical"} value={arrangement.previewRatio} onChange={previewRatio => { setArrangement(value => ({ ...value, previewRatio })); }} />
@@ -232,14 +235,14 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       <Modal.SecondaryButton className={css.blankButton ?? ""} aria-pressed={snapshot?.blank === "black"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "black" ? "none" : "black" }); }} title="Black screen (B)">Black</Modal.SecondaryButton>
       <Modal.SecondaryButton className={css.blankButton ?? ""} aria-pressed={snapshot?.blank === "white"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "white" ? "none" : "white" }); }} title="White screen (W)">White</Modal.SecondaryButton>
       {getActiveEditorPlatform().id.startsWith("desktop") ? <Modal.SecondaryButton onClick={() => { send({ type: "swap-displays" }); }}>Swap Displays</Modal.SecondaryButton> : null}
-      <select className={settingsCss.select} aria-label="Presenter layout" value={arrangement.preset} onChange={event => { const preset = event.target.value as Arrangement["preset"]; setArrangement({ preset, notesRatio: preset === "notes" ? 52 : 34, previewRatio: preset === "compact" ? 75 : 60 }); }}>
+      <select className={settingsCss.select} aria-label="Presenter layout" value={arrangement.preset} onChange={event => { const preset = event.target.value; if (preset !== "compact" && preset !== "balanced" && preset !== "notes") return; setArrangement({ preset, notesRatio: preset === "notes" ? 52 : 34, previewRatio: preset === "compact" ? 75 : 60 }); }}>
         <option value="balanced">Balanced</option><option value="notes">Notes</option><option value="compact">Compact</option>
       </select>
     </div>
     <nav className={css.filmstrip} aria-label="Presentation slides" onKeyDown={event => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
-      const index = buttons.indexOf(event.target as HTMLButtonElement), next = buttons[index + (event.key === "ArrowRight" ? 1 : -1)];
+      const index = buttons.findIndex(button => button === event.target), next = buttons[index + (event.key === "ArrowRight" ? 1 : -1)];
       event.preventDefault(); event.stopPropagation(); next?.focus();
     }}>
       {snapshot?.frames.map(item => <FilmstripItem key={`${snapshot.revision}:${item.index}`} frame={item.index} title={item.title} svg={snapshot.thumbnails[item.index]} active={current?.cursor.frame === item.index} revision={snapshot.revision} send={send} />)}

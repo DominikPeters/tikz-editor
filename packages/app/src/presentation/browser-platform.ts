@@ -13,12 +13,13 @@ export function createBrowserPresentationApi(): PlatformPresentationApi {
   let awake = false;
   let wakeLock: WakeLockSentinel | null = null;
   let requestingWake = false;
+  const isAwake = () => awake;
   const acquireWake = async () => {
     if (!awake || requestingWake || wakeLock || document.visibilityState !== "visible" || !("wakeLock" in navigator)) return;
     requestingWake = true;
     try {
       const lock = await navigator.wakeLock.request("screen");
-      if (!awake) { await lock.release(); return; }
+      if (!isAwake()) { await lock.release(); return; }
       wakeLock = lock;
       lock.addEventListener("release", () => { if (wakeLock === lock) wakeLock = null; });
     } catch { /* Browser/OS policy may deny a wake lock. */ }
@@ -36,6 +37,7 @@ export function createBrowserPresentationApi(): PlatformPresentationApi {
       return new Promise<PresentationWindows>(resolve => {
       let audience: Window | null = null, presenter: Window | null = null;
       let closing = false;
+      let audienceWasOpen = false;
       const openAudience = () => {
         audience = window.open(presentationWindowUrl(sessionId, "audience", options.mode === "display"), `tikz-audience-${sessionId}`, "popup,width=1100,height=700");
         if (!audience) throw new Error("Allow this site to open a presentation window, then try again.");
@@ -46,7 +48,7 @@ export function createBrowserPresentationApi(): PlatformPresentationApi {
         presenter.focus();
       };
       // Reserve windows while the launch click still has browser user activation.
-      if (options.mode !== "rehearse") openAudience();
+      if (options.mode !== "rehearse") { openAudience(); audienceWasOpen = true; }
       if (options.showPresenter !== false || options.mode === "rehearse") {
         try { openPresenter(); }
         catch (error) {
@@ -55,7 +57,6 @@ export function createBrowserPresentationApi(): PlatformPresentationApi {
           console.info("[tikz-editor] Presenter popup was blocked", error);
         }
       }
-      let audienceWasOpen = audience !== null;
       const timer = window.setInterval(() => {
         if (closing) return;
         if (audienceWasOpen && audience?.closed) { audienceWasOpen = false; onOutputLost(); }

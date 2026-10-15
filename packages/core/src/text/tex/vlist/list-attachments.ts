@@ -428,9 +428,6 @@ function texLayoutLabelHBoxContent(
           cursor += shapedItem.width;
           continue;
         }
-        if (shapedItem.kind !== "glyph") {
-          continue;
-        }
         pendingItems.push({
           kind: "tex-glyph",
           text: item.text.slice(shapedItem.sourceStart - item.sourceStart, shapedItem.sourceEnd - item.sourceStart),

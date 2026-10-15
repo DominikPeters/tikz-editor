@@ -5,7 +5,7 @@ import { worldTransform } from "../../coords/transforms.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
-import type { CoordinateItem, EdgeFromParentOperationItem, EdgeOperationItem, GraphOperationItem, NodeItem, PathItem, PathStatement, PicOperationItem, PlotOperationItem, Span, ToOperationItem } from "../../ast/types.js";
+import type { CoordinateItem, EdgeOperationItem, NodeItem, PathItem, PathStatement, PicOperationItem, Span, ToOperationItem } from "../../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { parseTikz } from "../../parser/index.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -337,7 +337,7 @@ export function evaluatePathStatement(
           ? mergeOptionLists(parseOptionListRaw(`[auto=${scopedAutoSide}]`, node.span.from), node.options)
           : node.options;
       const resolvedNode = evaluateNodeItem(
-        nodeOptionsWithScopedAuto === node.options ? node : { ...node, ...(nodeOptionsWithScopedAuto === undefined ? {} : { options: nodeOptionsWithScopedAuto }), ...(nodeOptionsWithScopedAuto?.span === undefined ? {} : { optionsSpan: nodeOptionsWithScopedAuto?.span }) },
+        nodeOptionsWithScopedAuto === node.options ? node : { ...node, ...(nodeOptionsWithScopedAuto === undefined ? {} : { options: nodeOptionsWithScopedAuto }), ...(nodeOptionsWithScopedAuto?.span === undefined ? {} : { optionsSpan: nodeOptionsWithScopedAuto.span }) },
         statement,
         context,
         builder.style,
@@ -443,7 +443,8 @@ export function evaluatePathStatement(
     [
       "PlotOperation",
       (pathItem) => {
-        const item = pathItem as PlotOperationItem;
+        if (pathItem.kind !== "PlotOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const connectFrom = builder.currentOperator === "--" ? context.currentPoint ?? builder.currentPointLogical : null;
         const localPlotSettings = applyPlotOptionLists(
           { ...builder.plotSettings },
@@ -579,7 +580,8 @@ export function evaluatePathStatement(
     [
       "GraphOperation",
       (pathItem) => {
-        const item = pathItem as GraphOperationItem;
+        if (pathItem.kind !== "GraphOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const plan = buildGraphPlan(item, context.namedNodeSets);
         if (plan.diagnostics.length > 0) {
           for (const diagnostic of plan.diagnostics) {
@@ -623,7 +625,7 @@ export function evaluatePathStatement(
             raw: node.name,
             templateRaw: node.name,
             name: node.name,
-            ...(node.options?.span === undefined ? {} : { optionsSpan: node.options?.span }),
+            ...(node.options?.span === undefined ? {} : { optionsSpan: node.options.span }),
             ...(node.options === undefined ? {} : { options: node.options }),
             textSource: "group",
             textSpan: node.span,
@@ -671,7 +673,7 @@ export function evaluatePathStatement(
                   span: node.span,
                   raw: node.text,
                   templateRaw: node.text,
-                  ...(node.options?.span === undefined ? {} : { optionsSpan: node.options?.span }),
+                  ...(node.options?.span === undefined ? {} : { optionsSpan: node.options.span }),
                   ...(node.options === undefined ? {} : { options: node.options }),
                   textSource: "group",
                   textSpan: node.span,
@@ -698,7 +700,7 @@ export function evaluatePathStatement(
             kind: "EdgeOperation",
             id: `${item.id}:graph-edge:${edgeIndex}`,
             span: edge.span,
-            ...(edge.options?.span === undefined ? {} : { optionsSpan: edge.options?.span }),
+            ...(edge.options?.span === undefined ? {} : { optionsSpan: edge.options.span }),
             ...(edge.options === undefined ? {} : { options: edge.options }),
             ...(graphEdgeNodes === undefined ? {} : { nodes: graphEdgeNodes }),
             target: {
@@ -804,7 +806,8 @@ export function evaluatePathStatement(
     [
       "PathOption",
       (pathItem) => {
-        const item = pathItem as Extract<PathItem, { kind: "PathOption" }>;
+        if (pathItem.kind !== "PathOption") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const expandedOptions = expandOptionListMacros([item.options], builder.treeFrameState.macroBindings, context.macroTraceCollector ?? undefined)[0] ?? item.options;
         const expandedItem = expandedOptions === item.options ? item : { ...item, options: expandedOptions };
         if (builder.pendingCircleCenter) {
@@ -865,10 +868,10 @@ export function evaluatePathStatement(
           );
           if (parsed) {
             builder.pendingGrid.rawSteps = parsed.rawSteps;
-            if (parsed.stepX != null && parsed.stepX >= 0) {
+            if (parsed.stepX >= 0) {
               builder.pendingGrid.stepX = parsed.stepX;
             }
-            if (parsed.stepY != null && parsed.stepY >= 0) {
+            if (parsed.stepY >= 0) {
               builder.pendingGrid.stepY = parsed.stepY;
             }
           }
@@ -885,7 +888,7 @@ export function evaluatePathStatement(
           && item.span.from === statement.options?.span.from
           && item.span.to === statement.options.span.to;
 
-        if (expandedOptions) {
+        {
           if (!mirrorsStatementOptions) {
             const optionSourceRef = {
               sourceId: item.id,
@@ -950,7 +953,8 @@ export function evaluatePathStatement(
     [
       "Node",
       (pathItem) => {
-        const item = pathItem as Extract<PathItem, { kind: "Node" }>;
+        if (pathItem.kind !== "Node") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         if (builder.currentOperator) {
           builder.pendingSegmentNodes.push(item);
           return;
@@ -1003,7 +1007,7 @@ export function evaluatePathStatement(
         const explicitNodeAtSyntax = hasExplicitNodeAtSyntax(statement.items, builder.currentItemIndex);
         const explicitNodeAtTarget = explicitNodeAtSyntax ? (builder.currentPointLogical ?? context.currentPoint ?? undefined) : undefined;
         const resolvedNode = evaluateNodeItem(
-          nodeOptionsWithScopedAuto === nodeItem.options ? nodeItem : { ...nodeItem, ...(nodeOptionsWithScopedAuto === undefined ? {} : { options: nodeOptionsWithScopedAuto }), ...(nodeOptionsWithScopedAuto?.span === undefined ? {} : { optionsSpan: nodeOptionsWithScopedAuto?.span }) },
+          nodeOptionsWithScopedAuto === nodeItem.options ? nodeItem : { ...nodeItem, ...(nodeOptionsWithScopedAuto === undefined ? {} : { options: nodeOptionsWithScopedAuto }), ...(nodeOptionsWithScopedAuto?.span === undefined ? {} : { optionsSpan: nodeOptionsWithScopedAuto.span }) },
           statement,
           context,
           builder.style,
@@ -1163,14 +1167,12 @@ export function evaluatePathStatement(
                     distancePt: spec.distancePt,
                     defaultDistancePt: spec.defaultDistancePt,
                     distanceExplicit: spec.distanceExplicit,
-                    ownerPoint: materialized.mainPoint ?? undefined,
+                    ownerPoint: materialized.mainPoint,
                     ...(optionalOwnerGeometry1 === undefined ? {} : { ownerGeometry: optionalOwnerGeometry1 })
                   }
                 };
                 frontNodeElements.push(...pinEdge.behindNodeElements);
-                if (pinEdge.activePath) {
-                  frontNodeElements.push(pinEdge.activePath);
-                }
+                frontNodeElements.push(pinEdge.activePath);
                 frontNodeElements.push(...pinEdge.frontNodeElements);
               } else {
                 frontNodeElements.push(...pinEdge.behindNodeElements, ...pinEdge.frontNodeElements);
@@ -1200,7 +1202,8 @@ export function evaluatePathStatement(
     [
       "DecorateOperation",
       (pathItem) => {
-        const item = pathItem as Extract<PathItem, { kind: "DecorateOperation" }>;
+        if (pathItem.kind !== "DecorateOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         markFeature("decorate_operation", "supported");
         builder.activePath = flushDrawableActivePath(geometryElements, builder.activePath);
         builder.previousSegmentRoundedCorners = null;
@@ -1308,7 +1311,8 @@ export function evaluatePathStatement(
     [
       "CoordinateOperation",
       (pathItem) => {
-        const item = pathItem as Extract<PathItem, { kind: "CoordinateOperation" }>;
+        if (pathItem.kind !== "CoordinateOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const operationName = item.name?.trim();
         const parsedName = operationName === undefined || operationName.length === 0 ? parseCoordinateOperation(item.raw)?.name : operationName;
         if (!parsedName) {
@@ -1394,7 +1398,8 @@ export function evaluatePathStatement(
     [
       "PicOperation",
       (pathItem) => {
-        const item = pathItem as PicOperationItem;
+        if (pathItem.kind !== "PicOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const placementFraction = resolveNodePositionFraction(item.options);
         if (placementFraction != null && builder.currentOperator) {
           builder.pendingSegmentPics.push({ item, fraction: placementFraction });
@@ -1438,7 +1443,8 @@ export function evaluatePathStatement(
     [
       "ToOperation",
       (pathItem) => {
-        const item = pathItem as ToOperationItem;
+        if (pathItem.kind !== "ToOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const toPlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, builder.leadingToLikeOptions));
         const toItem: ToOperationItem =
           toPlan.generatedNodes.length > 0
@@ -1487,7 +1493,8 @@ export function evaluatePathStatement(
     [
       "EdgeOperation",
       (pathItem) => {
-        const item = pathItem as EdgeOperationItem;
+        if (pathItem.kind !== "EdgeOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         const edgePlan = extractToLikeOptionPlan(mergeToLikePathOptions(item, builder.leadingToLikeOptions));
         const edgeItem: EdgeOperationItem =
           edgePlan.generatedNodes.length > 0
@@ -1608,7 +1615,8 @@ export function evaluatePathStatement(
     [
       "EdgeFromParentOperation",
       (pathItem) => {
-        const item = pathItem as EdgeFromParentOperationItem;
+        if (pathItem.kind !== "EdgeFromParentOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         markFeature("edge_from_parent_operation", "unsupported");
         pushDiagnostic(
           "edge-from-parent-outside-child",
@@ -1621,7 +1629,8 @@ export function evaluatePathStatement(
     [
       "SvgOperation",
       (pathItem) => {
-        const item = pathItem as Extract<PathItem, { kind: "SvgOperation" }>;
+        if (pathItem.kind !== "SvgOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         if (item.options) {
           markFeature("options_structured", "supported");
         }
@@ -1712,7 +1721,8 @@ export function evaluatePathStatement(
     [
       "LetOperation",
       (pathItem) => {
-        const item = pathItem as Extract<PathItem, { kind: "LetOperation" }>;
+        if (pathItem.kind !== "LetOperation") throw new Error("Unexpected path operation handler");
+        const item = pathItem;
         markFeature("let_operation", "unsupported");
         pushDiagnostic("unsupported-let-operation", "`let` operations are not semantically implemented yet.", item.span.from, item.span.to);
       }
@@ -2417,7 +2427,7 @@ export function evaluatePathStatement(
         if (lastCommand?.kind === "C") {
           const previousCommand = parsed.commands.length > 1 ? parsed.commands[parsed.commands.length - 2] : null;
           const from = previousCommand?.kind === "C" ? previousCommand.to : context.currentPoint;
-          if (from) {
+          {
             builder.lastPlacementSegment = {
               kind: "cubic",
               from,
@@ -2473,11 +2483,6 @@ export function evaluatePathStatement(
         markFeature("svg_path", "supported");
 
         if (evaluatedTarget.advancesCurrentPoint) {
-          setCurrentPoint(to, evaluatedTarget.world, {
-            form: targetItem.form,
-            x: targetItem.x
-          });
-        } else if (!context.currentPoint) {
           setCurrentPoint(to, evaluatedTarget.world, {
             form: targetItem.form,
             x: targetItem.x

@@ -8,5 +8,6 @@ export function tfmToPt(font: ResolvedTexFont, value: number | undefined): TexLe
 export function roundTexPt<T extends number>(value: T): T {
   // Arithmetic form of Number(value.toFixed(6)); this helper is on the
   // shaping hot path and the string round-trip dominated its cost.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Rounding preserves the caller's coordinate frame while arithmetic erases its numeric brand.
   return (Math.round(value * 1e6) / 1e6) as T;
 }

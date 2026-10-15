@@ -1,6 +1,6 @@
 import { requireArrayValue } from "../../utils/collections.js";
 import { currentFrame } from "../context.js";
-import { worldTransform } from "../../coords/transforms.js";
+import type { WorldTransform } from "../../coords/transforms.js";
 import { pt } from "../../coords/scalars.js";
 import { PT_PER_CM } from "../../coords/source.js";
 import { worldPoint as makeWorldPoint, worldVector as makeWorldVector, type WorldPoint, type WorldVector } from "../../coords/points.js";
@@ -71,8 +71,6 @@ const DIRECTION_META: Record<PositioningDirection, DirectionMeta> = {
   "mid right": { xSign: 1, ySign: 0, currentAnchor: "mid west", targetAnchor: "mid east", singleFactor: 1 }
 };
 
-const IDENTITY_MATRIX = worldTransform(1, 0, 0, 1, 0, 0);
-
 function worldPoint(x: number, y: number): WorldPoint {
   return makeWorldPoint(pt(x), pt(y));
 }
@@ -105,7 +103,8 @@ export type NodePositioningResolution = {
 
 export function parseDirectionalKey(key: string): ParsedDirectionalKey | null {
   const normalized = key.trim().toLowerCase();
-  const direct = DIRECTION_KEYS[normalized as PositioningDirection];
+  const directionLookup: Readonly<Partial<Record<string, PositioningDirection>>> = DIRECTION_KEYS;
+  const direct = directionLookup[normalized];
   if (direct) {
     return { direction: direct, legacyOf: false };
   }
@@ -115,7 +114,7 @@ export function parseDirectionalKey(key: string): ParsedDirectionalKey | null {
   }
 
   const base = normalized.slice(0, -3).trim();
-  const legacy = DIRECTION_KEYS[base as PositioningDirection];
+  const legacy = directionLookup[base];
   if (!legacy) {
     return null;
   }
@@ -176,13 +175,9 @@ export function resolveNodePositioningTarget(
 
   const diagnostics: string[] = [];
   const frame = currentFrame(context);
-  const activeTransform = frame?.transform ?? IDENTITY_MATRIX;
-  let onGrid = frame?.onGrid ?? false;
-  let nodeDistance = frame?.nodeDistance ?? {
-    kind: "pair",
-    vertical: { kind: "dimension", value: PT_PER_CM },
-    horizontal: { kind: "dimension", value: PT_PER_CM }
-  };
+  const activeTransform = frame.transform;
+  let onGrid = frame.onGrid;
+  let nodeDistance = frame.nodeDistance;
   let relativePlacement: RelativePlacementSpec | null = null;
   let additiveOffset: WorldVector = makeWorldVector(pt(0), pt(0));
 
@@ -311,7 +306,7 @@ export function resolveNodePositioningTarget(
   return { anchorPoint, ...(anchorOverride === undefined ? {} : { anchorOverride: anchorOverride }), diagnostics, ...(relativePlacementResult === undefined ? {} : { relativePlacement: relativePlacementResult }) };
 }
 
-function parseDirectionalOffset(direction: PositioningDirection, raw: string, transform: typeof IDENTITY_MATRIX): WorldVector | null {
+function parseDirectionalOffset(direction: PositioningDirection, raw: string, transform: WorldTransform): WorldVector | null {
   const normalized = normalizeOptionValue(raw);
   const shift =
     normalized.length === 0
@@ -346,7 +341,7 @@ function resolveRelativePlacement(
   context: SemanticContext,
   onGrid: boolean,
   defaultNodeDistance: NodeDistanceSpec,
-  transform: typeof IDENTITY_MATRIX
+  transform: WorldTransform
 ): { anchorPoint: WorldPoint | null; targetWorld?: WorldPoint; targetCenter?: WorldPoint; anchorOverride?: string; diagnostics: string[] } {
   const diagnostics: string[] = [];
   const meta = DIRECTION_META[spec.direction];
@@ -428,7 +423,7 @@ function resolveReferencePoint(
   return { point: evaluated.world, usesBareNodeName, diagnostics };
 }
 
-function shiftVectorForDirection(direction: PositioningDirection, shift: NodeDistanceSpec, transform: typeof IDENTITY_MATRIX): WorldVector {
+function shiftVectorForDirection(direction: PositioningDirection, shift: NodeDistanceSpec, transform: WorldTransform): WorldVector {
   const meta = DIRECTION_META[direction];
 
   const horizontalComponent = shift.kind === "single" ? shift.value : shift.horizontal;
@@ -445,7 +440,7 @@ function shiftVectorForDirection(direction: PositioningDirection, shift: NodeDis
   return worldVector(meta.xSign * base.x, meta.ySign * base.y);
 }
 
-function horizontalPositioningVector(component: NodeDistanceValue, transform: typeof IDENTITY_MATRIX): WorldVector {
+function horizontalPositioningVector(component: NodeDistanceValue, transform: WorldTransform): WorldVector {
   if (component.kind === "dimension") {
     return worldVector(component.value, 0);
   }
@@ -453,7 +448,7 @@ function horizontalPositioningVector(component: NodeDistanceValue, transform: ty
   return applyMatrixToVector(transform, worldVector(component.value * PT_PER_CM, 0));
 }
 
-function verticalPositioningVector(component: NodeDistanceValue, transform: typeof IDENTITY_MATRIX): WorldVector {
+function verticalPositioningVector(component: NodeDistanceValue, transform: WorldTransform): WorldVector {
   if (component.kind === "dimension") {
     return worldVector(0, component.value);
   }

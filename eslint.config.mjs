@@ -133,6 +133,9 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+      "@typescript-eslint/no-unsafe-type-assertion": "error",
+      "@typescript-eslint/no-unnecessary-condition": "error",
       "@typescript-eslint/consistent-type-exports": "error",
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-import-type-side-effects": "error",
@@ -166,6 +169,8 @@ export default tseslint.config(
         }
       ],
       "@typescript-eslint/unbound-method": "error",
+      "no-useless-assignment": "error",
+      "react-hooks/exhaustive-deps": "error",
       "@eslint-react/dom-no-dangerously-set-innerhtml-with-children": "error",
       "@eslint-react/dom-no-find-dom-node": "error",
       "@eslint-react/dom-no-missing-button-type": "error",
@@ -193,61 +198,6 @@ export default tseslint.config(
     }
   },
   {
-    files: [
-      "apps/*/src/{main.tsx,vite-env.d.ts}",
-      "apps/landing/src/App.tsx",
-      "packages/app/src/app-menu/**/*.{ts,tsx}",
-      "packages/app/src/colors/{color-palette,source-color-detection}.ts",
-      "packages/app/src/context-menu/**/*.{ts,tsx}",
-      "packages/app/src/{edit-analysis-manager,index,landing-assets,linked-file-sync,profiling,scrub-utils,source-identity}.ts",
-      "packages/app/src/platform/**/*.{ts,tsx}",
-      "packages/app/src/settings/**/*.{ts,tsx}",
-      "packages/app/src/store/**/*.{ts,tsx}",
-      "packages/app/src/types/**/*.{ts,tsx}",
-      "packages/app/src/ui/TreeView.tsx",
-      "packages/app/src/ui/coords/**/*.{ts,tsx}",
-      "packages/app/src/ui/source-panel/{number-scrubber,tikz-autocomplete}.ts",
-      "packages/core/src/{ast,capabilities,coords,corpus,domains,export,foreach,geometry,macros,options,svg,syntax,types,utils}/**/*.{ts,tsx}",
-      "packages/core/src/index.ts",
-      "packages/core/src/parser/incremental.ts",
-      "packages/core/src/profiling.ts",
-      "packages/core/src/text/knuth-plass/**/*.{ts,tsx}"
-    ],
-    rules: {
-      "@typescript-eslint/no-unnecessary-condition": "error"
-    }
-  },
-  {
-    files: [
-      "packages/app/src/store/{document-sessions,store,workspace-state,workspace-storage}.ts",
-      "packages/app/src/ui/editor-clipboard.ts",
-      "packages/app/src/validation.ts",
-      "packages/{lezer-tex,lezer-tikz,lang-tikz}/src/**/*.ts"
-    ],
-    rules: {
-      "@typescript-eslint/no-unsafe-type-assertion": "error",
-      "@typescript-eslint/no-non-null-assertion": "error"
-    }
-  },
-  {
-    files: ["packages/tex-fuzz/src/**/*.ts"],
-    rules: {
-      "@typescript-eslint/no-non-null-assertion": "error"
-    }
-  },
-  {
-    files: [
-      "packages/core/src/{ast,diagnostics,domains,foreach,macros,options,parser,syntax,transform}/**/*.ts",
-      "packages/core/src/conditionals/**/*.ts",
-      "packages/core/src/semantic/coords/parse-length.ts",
-      "packages/core/src/semantic/pgfmath/**/*.ts",
-      "packages/core/src/text/{line-map,source-map}.ts"
-    ],
-    rules: {
-      "@typescript-eslint/no-non-null-assertion": "error"
-    }
-  },
-  {
     files: ["test/**/*.{ts,tsx}"],
     plugins: {
       vitest
@@ -258,16 +208,6 @@ export default tseslint.config(
       "vitest/no-identical-title": "warn",
       "vitest/no-commented-out-tests": "warn",
       "vitest/no-conditional-tests": "warn"
-    }
-  },
-  {
-    files: [
-      "packages/app/src/ui/canvas-panel/**/*.{ts,tsx}",
-      "packages/app/src/ui/inspector-panel/**/*.{ts,tsx}"
-    ],
-    rules: {
-      "no-useless-assignment": "error",
-      "react-hooks/exhaustive-deps": "error"
     }
   }
 );

@@ -755,8 +755,9 @@ function parsePerpendicularCoordinate(raw: string): { operator: "|-" | "-|"; lef
       continue;
     }
 
+    if (split.operator !== "|-" && split.operator !== "-|") continue;
     return {
-      operator: split.operator as "|-" | "-|",
+      operator: split.operator,
       leftRaw,
       rightRaw
     };

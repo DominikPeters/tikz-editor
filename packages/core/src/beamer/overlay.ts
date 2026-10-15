@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import {
@@ -221,7 +222,7 @@ export function scanBeamerFrameOverlays(
           ? beamerOptionalArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to)
           : null;
         const content = beamerRequiredArgumentAfter(context, optional?.span.to ?? rawSpec.span.to, frame.bodySpan.to);
-        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content?.contentSpan } : {}) });
+        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content.contentSpan } : {}) });
       }
       continue;
     }
@@ -237,7 +238,7 @@ export function scanBeamerFrameOverlays(
         const target = beamerRequiredArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to);
         const content = command.name !== "label" && target
           ? beamerRequiredArgumentAfter(context, target.span.to, frame.bodySpan.to) : null;
-        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content?.contentSpan } : {}) });
+        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content.contentSpan } : {}) });
       }
       continue;
     }
@@ -383,7 +384,7 @@ export function scanBeamerFrameOverlays(
     }
     pending.push({ kind: "list-default", sourceOrder: list.from,
       span: { from: list.from, to: list.to }, rawSpec: defaultSpec });
-    listDefaultsByOwner.set(list, { argument: defaultArgument!, spec: defaultSpec });
+    listDefaultsByOwner.set(list, { argument: requireDefined(defaultArgument, "Expected an internal overlay value"), spec: defaultSpec });
   }
   for (const list of listRanges) {
     // A nested list without an authored default retains the nearest enclosing
@@ -789,18 +790,17 @@ function resolveOverlaySpec(
   spec: BeamerOverlaySpec;
   nextPauseCounter: number;
 } {
-  let sawPlus = false;
   // Beamer's mode alternatives are separated by `|`, not comma. A handout
   // selector must never contaminate the presentation overlay numbers.
   const presentation = source.value.split("|").flatMap(part => {
     const mode = /^\s*([A-Za-z]+)\s*:\s*([\s\S]*)$/u.exec(part);
     return mode ? ["presentation", "beamer", "all"].includes(requireArrayValue(mode, 1)) ? [mode[2]] : [] : [part];
   }).join(",");
+  const sawPlus = [...presentation.matchAll(/([+.])(?:\(([-+]?\d+)\))?/gu)].some(match => match[1] === "+");
   const resolved = presentation
     .replace(/([+.])(?:\(([-+]?\d+)\))?/gu, (_whole, symbol, offsetRaw) => {
       const offset = Number(offsetRaw ?? 0);
       if (symbol === "+") {
-        sawPlus = true;
         return String(Math.max(1, pauseCounter + offset));
       }
       return String(Math.max(1, pauseCounter - 1 + offset));

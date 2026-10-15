@@ -126,7 +126,8 @@ export function renderArrowTipDropdown(
         </span>
       )}
       renderOption={(option, state) => {
-        const optionPreset = option.value as Exclude<ArrowTipPresetId, "custom">;
+        if (!isSelectableArrowTipValue(option.value)) return <span>{option.label}</span>;
+        const optionPreset = option.value;
         return (
           <span className={css.arrowTipOption}>
             <span className={css.arrowTipOptionPreview}>
@@ -192,7 +193,8 @@ export function renderDashStyleDropdown(
         </span>
       )}
       renderOption={(option, state) => {
-        const optionPreset = option.value as Exclude<DashStylePresetId, "custom">;
+        if (!isSelectableDashStyleValue(option.value)) return <span>{option.label}</span>;
+        const optionPreset = option.value;
         return (
           <span className={css.dashStyleOption}>
             <span className={css.dashStyleOptionPreview}>
@@ -258,7 +260,8 @@ export function renderLineCapDropdown(
         </span>
       )}
       renderOption={(option, state) => {
-        const optionPreset = option.value as Exclude<LineCapPresetId, "custom">;
+        if (!isSelectableLineCapValue(option.value)) return <span>{option.label}</span>;
+        const optionPreset = option.value;
         return (
           <span className={css.lineCapOption}>
             <span className={css.lineCapOptionPreview}>
@@ -324,7 +327,8 @@ export function renderLineJoinDropdown(
         </span>
       )}
       renderOption={(option, state) => {
-        const optionPreset = option.value as Exclude<LineJoinPresetId, "custom">;
+        if (!isSelectableLineJoinValue(option.value)) return <span>{option.label}</span>;
+        const optionPreset = option.value;
         return (
           <span className={css.lineJoinOption}>
             <span className={css.lineJoinOptionPreview}>
@@ -390,7 +394,8 @@ export function renderPathMorphingDecorationDropdown(
         </span>
       )}
       renderOption={(option, state) => {
-        const optionPreset = option.value as Exclude<PathMorphingDecorationPresetId, "custom">;
+        if (!isSelectablePathMorphingDecorationValue(option.value)) return <span>{option.label}</span>;
+        const optionPreset = option.value;
         return (
           <span className={css.pathMorphingDecorationOption}>
             <span className={css.pathMorphingDecorationOptionPreview}>
@@ -505,7 +510,8 @@ export function renderFillPatternDropdown(
         </span>
       )}
       renderOption={(option, state) => {
-        const optionPreset = option.value as Exclude<FillPatternPresetId, "custom">;
+        if (!isSelectableFillPatternValue(option.value)) return <span>{option.label}</span>;
+        const optionPreset = option.value;
         return (
           <span className={css.fillPatternOption}>
             <span className={css.fillPatternOptionPreview}>
@@ -606,7 +612,8 @@ export function renderNodeFontSizeDropdown(
       {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => <span className={valueClassName}>{displayLabel}</span>}
       renderOption={(option) => {
-        const ptLabel = nodeFontSizePresetPtLabel(option.value as Exclude<NodeFontSizePresetId, "custom">);
+        if (!isSelectableNodeFontSizeValue(option.value)) return <span>{option.label}</span>;
+        const ptLabel = nodeFontSizePresetPtLabel(option.value);
         return (
           <span className={css.nodeFontSizeOption}>
             <span className={css.nodeFontSizeOptionLabel}>{option.label}</span>

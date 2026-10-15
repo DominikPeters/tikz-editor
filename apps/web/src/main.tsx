@@ -7,7 +7,9 @@ async function bootstrap() {
   setActiveEditorPlatform(createBrowserPlatformAdapter());
   const { App } = await import("@tikz-editor/app");
 
-  createRoot(document.getElementById("root")!).render(
+  const root = document.getElementById("root");
+if (!root) throw new Error("Missing app root element");
+createRoot(root).render(
     <StrictMode>
       <App />
     </StrictMode>

@@ -20,7 +20,7 @@ function inferSegmentEndHeadingDegrees(segment: PlacementSegment | null, frame: 
     return 0;
   }
 
-  let direction: WorldVector | null = null;
+  let direction: WorldVector;
   if (segment.kind === "line") {
     direction = wv(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
   } else if (segment.kind === "hv") {
@@ -37,7 +37,7 @@ function inferSegmentEndHeadingDegrees(segment: PlacementSegment | null, frame: 
     if (Math.hypot(direction.x, direction.y) <= 1e-9) {
       direction = wv(segment.to.x - segment.from.x, segment.to.y - segment.from.y);
     }
-  } else if (segment.kind === "arc") {
+  } else {
     if (segment.turnLookupControl) {
       const endpointLocal = worldToFrameLocal(segment.to, frame);
       if (!endpointLocal) return 0;
@@ -58,7 +58,7 @@ function inferSegmentEndHeadingDegrees(segment: PlacementSegment | null, frame: 
     return Math.hypot(dx, dy) <= 1e-9 ? 0 : Math.atan2(dy, dx) * 180 / Math.PI;
   }
 
-  if (!direction || Math.hypot(direction.x, direction.y) <= 1e-9) {
+  if (Math.hypot(direction.x, direction.y) <= 1e-9) {
     return 0;
   }
   // Placement endpoints/control points are already in world coordinates.

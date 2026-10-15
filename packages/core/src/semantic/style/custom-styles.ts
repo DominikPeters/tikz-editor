@@ -224,9 +224,7 @@ export function resolveCustomStyleInvocation(entry: OptionEntry, customStyles: C
       ? entry.key
       : entry.kind === "kv"
         ? entry.key
-        : entry.kind === "unknown"
-          ? entry.raw.trim()
-          : null;
+        : entry.raw.trim();
   if (!key) {
     return null;
   }

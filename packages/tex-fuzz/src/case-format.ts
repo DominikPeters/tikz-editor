@@ -1,7 +1,7 @@
-import {
-  TEX_FUZZ_SCHEMA_VERSION,
-  type TexFuzzCase,
-  type TexFuzzReplayBundle,
+import { isTexFuzzCase, isTexFuzzReplayBundle } from "./validation.js";
+import type {
+  TexFuzzCase,
+  TexFuzzReplayBundle,
 } from "./model.js";
 
 export function serializeTexFuzzBundle(bundle: TexFuzzReplayBundle): string {
@@ -9,18 +9,15 @@ export function serializeTexFuzzBundle(bundle: TexFuzzReplayBundle): string {
 }
 
 export function parseTexFuzzBundle(value: string): TexFuzzReplayBundle {
-  const parsed = JSON.parse(value) as Partial<TexFuzzReplayBundle>;
-  if (parsed.case?.schemaVersion !== TEX_FUZZ_SCHEMA_VERSION) {
-    throw new Error(`Unsupported or missing TeX fuzz schema version.`);
+  const parsed: unknown = JSON.parse(value);
+  if (!isTexFuzzReplayBundle(parsed)) {
+    throw new Error("Unsupported or malformed TeX fuzz replay bundle.");
   }
-  if (!parsed.observation?.fingerprint) {
-    throw new Error("TeX fuzz bundle is missing a failure observation.");
-  }
-  return parsed as TexFuzzReplayBundle;
+  return parsed;
 }
 
-export function replayTexFuzzCase(caseData: TexFuzzCase): TexFuzzCase {
-  if (caseData.schemaVersion !== TEX_FUZZ_SCHEMA_VERSION) {
+export function replayTexFuzzCase(caseData: unknown): TexFuzzCase {
+  if (!isTexFuzzCase(caseData)) {
     throw new Error("Cannot replay an unsupported TeX fuzz schema.");
   }
   return caseData;

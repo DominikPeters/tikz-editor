@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { Intent } from "./intent.js";
 
@@ -42,7 +43,7 @@ export function createIntentScheduler(options: IntentSchedulerOptions): IntentSc
 
   const drain = () => {
     while (queue.length > 0 && canRun(requireArrayValue(queue, 0))) {
-      options.run(queue.shift()!);
+      options.run(requireDefined(queue.shift(), "Missing required queue.shift()"));
     }
   };
 
@@ -66,7 +67,7 @@ export function createIntentScheduler(options: IntentSchedulerOptions): IntentSc
     flush() {
       degraded = !options.isLayoutFresh();
       while (queue.length > 0) {
-        options.run(queue.shift()!);
+        options.run(requireDefined(queue.shift(), "Missing required queue.shift()"));
       }
     },
     reset() {

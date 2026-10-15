@@ -55,7 +55,7 @@ export function resolveBucketFillEdit(args: {
   });
   const fillProperty = findFillColorProperty(descriptor.sections.flatMap((section) => section.properties));
   if (!fillProperty || !fillProperty.write.writable || fillProperty.write.elementId.length === 0) {
-    return { kind: "noop", ...(fillProperty?.write.reason !== undefined ? { reason: fillProperty?.write.reason } : {}) };
+    return { kind: "noop", ...(fillProperty?.write.reason !== undefined ? { reason: fillProperty.write.reason } : {}) };
   }
 
   const clearKeys = colorClearKeys(fillProperty.syntaxValue);

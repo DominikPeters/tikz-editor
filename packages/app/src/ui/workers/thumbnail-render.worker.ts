@@ -11,19 +11,12 @@ import type {
   ThumbnailWorkerResponseMessage
 } from "./thumbnail-worker-types";
 
-type ThumbnailWorkerGlobalScope = {
-  onmessage: ((event: MessageEvent<ThumbnailWorkerRequestMessage>) => void) | null;
-  postMessage: (message: ThumbnailWorkerResponseMessage) => void;
-};
-
-const workerContext = self as unknown as ThumbnailWorkerGlobalScope;
-
 const queue: ThumbnailRenderRequest[] = [];
 const cancelledGroupIds = new Set<string>();
 const graphicsResolvers = new Map<string, DocumentGraphicsResolver>();
 let busy = false;
 
-workerContext.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage>) => {
+self.onmessage = (event: MessageEvent<ThumbnailWorkerRequestMessage | null>) => {
   const message = event.data;
   if (!message) {
     return;
@@ -73,7 +66,7 @@ async function pumpQueue(): Promise<void> {
           },
           evaluate: { ...(graphicsResolver === undefined ? {} : { graphicsResolver }) },
           svg: {
-            ...((next.svgOptions?.padding) === undefined ? {} : { padding: next.svgOptions?.padding })
+            ...((next.svgOptions?.padding) === undefined ? {} : { padding: next.svgOptions.padding })
           }
         })).svg.svg);
 
@@ -90,7 +83,7 @@ async function pumpQueue(): Promise<void> {
       figureSignature: next.figureSignature,
       svg
     };
-    workerContext.postMessage(response);
+    self.postMessage(response);
   } catch (error) {
     if (isCancelled(next)) {
       return;
@@ -104,7 +97,7 @@ async function pumpQueue(): Promise<void> {
       figureSignature: next.figureSignature,
       error: error instanceof Error ? error.message : String(error)
     };
-    workerContext.postMessage(response);
+    self.postMessage(response);
   } finally {
     busy = false;
     cleanupCancellationMarks();

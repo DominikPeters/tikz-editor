@@ -26,7 +26,6 @@ import type {
 import type { TexParagraphAlignment } from "./ir.js";
 import type {
   TexLayoutLabelItem,
-  TexGraphicsBox,
   TexMathBox,
 } from "./layout-inline-items.js";
 import {
@@ -273,7 +272,7 @@ function buildTexLineReport(
       ? naturalWidth
       : adjustedTexGlueWidth(
         naturalWidth,
-        run.kind === "space" && (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
+        (line.spaceCount ?? 0) > 0 ? run.texGlue : undefined,
         line.glueSetRatio ?? 0
       );
     const isHiddenGlue = isTexHiddenGlueSpace(run.wrapper);
@@ -429,7 +428,7 @@ function buildTexLineReport(
         height: texLength(report.ascent),
         depth: texLength(report.descent),
       },
-      ...(report.break?.lineLeading !== undefined ? { lineLeading: report.break?.lineLeading } : {}),
+      ...(report.break?.lineLeading !== undefined ? { lineLeading: report.break.lineLeading } : {}),
       preDisplaySize: texLinePreDisplaySize(report, params.font),
     },
   };
@@ -616,44 +615,16 @@ function texMathBoxFromWrapper(
   wrapper: Extract<ParagraphRun, { kind: "math" }>["wrapper"],
   cache: WeakMap<object, TexMathBox>
 ): TexMathBox | null {
-  if (!wrapper || typeof wrapper !== "object") {
-    return null;
-  }
   const box = wrapper.texMathBox;
-  if (!box || typeof box !== "object") {
-    return null;
-  }
+  if (!box) return null;
   const cached = cache.get(box);
-  if (cached) {
-    return cached;
-  }
-  const typedBox = box as {
-    readonly source?: unknown;
-    readonly content?: unknown;
-    readonly sourceStart?: unknown;
-    readonly sourceEnd?: unknown;
-    readonly contentStart?: unknown;
-    readonly contentEnd?: unknown;
-    readonly sourceKind?: unknown;
-    readonly width?: unknown;
-    readonly height?: unknown;
-    readonly depth?: unknown;
-    readonly caretMap?: unknown;
-    readonly caretStops?: unknown;
-    readonly constructRanges?: unknown;
-    readonly breakpoints?: unknown;
-    readonly svgBody?: unknown;
-    readonly hlist?: unknown;
-    readonly fontProfile?: unknown;
-    readonly color?: unknown;
-    readonly rootBox?: unknown;
-    readonly graphics?: unknown;
-  };
+  if (cached) return cached;
+  const typedBox = box;
   const constructRanges = parseTexMathConstructRanges(typedBox.constructRanges);
   const breakpoints = parseTexMathBreakpoints(typedBox.breakpoints);
   const normalized: TexMathBox = {
-    source: typeof typedBox.source === "string" ? typedBox.source : "",
-    content: typeof typedBox.content === "string" ? typedBox.content : "",
+    source: typedBox.source,
+    content: typedBox.content,
     sourceStart: Number(typedBox.sourceStart) || 0,
     sourceEnd: Number(typedBox.sourceEnd) || 0,
     contentStart: Number(typedBox.contentStart) || 0,
@@ -662,18 +633,18 @@ function texMathBoxFromWrapper(
     width: texLength(Number(typedBox.width) || 0),
     height: texLength(Number(typedBox.height) || 0),
     depth: texLength(Number(typedBox.depth) || 0),
-    ...(typeof typedBox.caretMap === "object" && typedBox.caretMap !== null ? { caretMap: typedBox.caretMap as NonNullable<TexMathBox["caretMap"]> } : {}),
+    ...(typedBox.caretMap !== undefined ? { caretMap: typedBox.caretMap } : {}),
     ...(Array.isArray(typedBox.caretStops) ? { caretStops: typedBox.caretStops
           .filter((stop): stop is number => Number.isFinite(stop))
           .map(texHBoxX) } : {}),
     ...(constructRanges !== undefined ? { constructRanges } : {}),
     ...(breakpoints !== undefined ? { breakpoints } : {}),
     ...(typeof typedBox.svgBody === "string" ? { svgBody: typedBox.svgBody } : {}),
-    ...(typeof typedBox.hlist === "object" && typedBox.hlist !== null ? { hlist: typedBox.hlist as TexMathHList } : {}),
-    ...(typeof typedBox.fontProfile === "object" && typedBox.fontProfile !== null ? { fontProfile: typedBox.fontProfile as TexMathFontProfile } : {}),
+    ...(typedBox.hlist !== undefined ? { hlist: typedBox.hlist } : {}),
+    ...(typedBox.fontProfile !== undefined ? { fontProfile: typedBox.fontProfile } : {}),
     ...(typeof typedBox.color === "string" ? { color: typedBox.color } : {}),
-    ...(typeof typedBox.rootBox === "object" && typedBox.rootBox !== null ? { rootBox: typedBox.rootBox as TexMathBox } : {}),
-    ...(Array.isArray(typedBox.graphics) ? { graphics: typedBox.graphics as readonly TexGraphicsBox[] } : {}),
+    ...(typedBox.rootBox !== undefined ? { rootBox: typedBox.rootBox } : {}),
+    ...(typedBox.graphics !== undefined ? { graphics: typedBox.graphics } : {}),
   };
   cache.set(box, normalized);
   return normalized;
@@ -813,7 +784,7 @@ function buildTexLineLabelSegments(
       kind: "space",
       role: "list-label",
       text: " ",
-      ...(item.kind === "space" && item.sourceEnd > item.sourceStart ? {
+      ...(item.sourceEnd > item.sourceStart ? {
         sourceStartRaw: layoutSourceOffset(item.sourceStart),
         sourceEndRaw: layoutSourceOffset(item.sourceEnd),
         sourceKind: "text" as const,
@@ -1193,16 +1164,12 @@ function parseTexMathConstructRanges(value: unknown): {
   if (!Array.isArray(value)) {
     return undefined;
   }
-  const ranges = value.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") {
+  const entries: readonly unknown[] = value;
+  const ranges = entries.flatMap((entry) => {
+    if (!isRecord(entry)) {
       return [];
     }
-    const candidate = entry as {
-      readonly sourceStart?: unknown;
-      readonly sourceEnd?: unknown;
-      readonly xStart?: unknown;
-      readonly xEnd?: unknown;
-    };
+    const candidate = entry;
     const sourceStart = Number(candidate.sourceStart);
     const sourceEnd = Number(candidate.sourceEnd);
     const xStart = Number(candidate.xStart);
@@ -1233,16 +1200,12 @@ function parseTexMathBreakpoints(value: unknown): {
   if (!Array.isArray(value)) {
     return undefined;
   }
-  const breakpoints = value.flatMap((entry) => {
-    if (!entry || typeof entry !== "object") {
+  const entries: readonly unknown[] = value;
+  const breakpoints = entries.flatMap((entry) => {
+    if (!isRecord(entry)) {
       return [];
     }
-    const candidate = entry as {
-      readonly kind?: unknown;
-      readonly sourceOffset?: unknown;
-      readonly x?: unknown;
-      readonly penalty?: unknown;
-    };
+    const candidate = entry;
     const kind: "binary" | "relation" | "penalty" | null =
       candidate.kind === "binary" || candidate.kind === "relation" || candidate.kind === "penalty"
       ? candidate.kind
@@ -1335,4 +1298,8 @@ function texLayoutItemsNaturalWidth(
     ).width);
   }
   return texLength(roundTexPt(width));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

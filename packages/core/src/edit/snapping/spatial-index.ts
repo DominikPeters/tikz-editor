@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { worldBounds } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -18,7 +19,7 @@ export function createPointIndex<T extends WorldPoint>(points: readonly T[]) {
       for (let i = lo; i < sorted.length && requireArrayValue(sorted, i)[axis] <= point[axis] + radius; i++) found.add(requireArrayValue(sorted, i));
     }
     // Keep deterministic tie-breaking identical to the exhaustive search.
-    return [...found].sort((a, b) => order.get(a)! - order.get(b)!);
+    return [...found].sort((a, b) => requireDefined(order.get(a), "Missing required order.get(a)") - requireDefined(order.get(b), "Missing required order.get(b)"));
   };
 }
 
@@ -73,7 +74,7 @@ export function createMutableBoundsIndex<T extends WorldBounds>(cellSize: number
       for (const key of entryKeys) { const cell = cells.get(key) ?? new Set<T>(); cell.add(entry); cells.set(key, cell); }
     },
     delete(entry: T) {
-      for (const key of memberships.get(entry) ?? []) { const cell = cells.get(key)!; cell.delete(entry); if (!cell.size) cells.delete(key); }
+      for (const key of memberships.get(entry) ?? []) { const cell = requireDefined(cells.get(key), "Missing required cells.get(key)"); cell.delete(entry); if (!cell.size) cells.delete(key); }
       memberships.delete(entry); large.delete(entry);
     },
     query(bounds: WorldBounds): T[] {

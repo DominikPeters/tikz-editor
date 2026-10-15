@@ -1,3 +1,4 @@
+import type { ShadowPaintStyle } from "../semantic/types.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type {
   ResolvedPattern,
@@ -503,7 +504,7 @@ export function emitSvgModel(
 
     for (const layer of element.style.shadowLayers) {
       const layerStyle = resolveShadowLayerStyle(
-        layer.style as ShadowRenderableStyle,
+        layer.style,
         element.style
       );
       if (layer.fade === "circle-fuzzy-edge-15") {
@@ -1147,7 +1148,7 @@ function emitShadowShapeParts(args: {
 }): void {
   for (const [index, layer] of args.shadowLayers.entries()) {
     const layerStyle = resolveShadowLayerStyle(
-      layer.style as ShadowRenderableStyle,
+      layer.style,
       args.baseStyle
     );
     const groupTransform = shadowTransformMatrix(layer, args.bounds);
@@ -1256,7 +1257,7 @@ function renderCircularShadowMaskDefinition(
 }
 
 function resolveShadowLayerStyle(
-  layerStyle: ShadowRenderableStyle,
+  layerStyle: ShadowPaintStyle,
   baseStyle: ResolvedStyle
 ): ShadowRenderableStyle {
   const inheritsFill = layerStyle.fill === SHADOW_INHERIT_FILL;
@@ -1267,10 +1268,8 @@ function resolveShadowLayerStyle(
         ? baseStyle.stroke
         : layerStyle.stroke,
     fill: inheritsFill ? baseStyle.fill : layerStyle.fill,
-    fillPattern: inheritsFill ? baseStyle.fillPattern : layerStyle.fillPattern,
-    patternColor: inheritsFill
-      ? baseStyle.patternColor
-      : layerStyle.patternColor,
+    fillPattern: inheritsFill ? baseStyle.fillPattern : null,
+    patternColor: baseStyle.patternColor,
   };
 }
 
@@ -2025,7 +2024,8 @@ function styleAttributes(
 ): string[] {
   const attrs: string[] = [];
   if (isText) {
-    const textStyle = style as ResolvedStyle;
+    if (!("textColor" in style)) throw new Error("Text rendering requires a complete text style");
+    const textStyle = style;
     const textColor = textStyle.textColor ?? "#000000";
     attrs.push(`fill="${escapeAttr(textColor)}"`);
     attrs.push(`fill-opacity="${fmt(textStyle.textOpacity)}"`);

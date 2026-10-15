@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { parseStyleValueAsOptionList } from "../../semantic/style/option-utils.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
@@ -183,7 +184,7 @@ export function applyAdornmentValueRewrite(
       }
     ],
     selectedSourceIds: [selectedTargetId],
-    changedSourceIds: [target.ownerSourceId!]
+    changedSourceIds: [requireDefined(target.ownerSourceId, "Missing required target.ownerSourceId")]
   };
 }
 

@@ -213,12 +213,6 @@ export function getToolCapabilityStatus(
   matrix: CapabilityMatrix = capabilityMatrix
 ): CapabilitySummary {
   const checks = TOOL_CHECKS[toolMode];
-  if (!checks) {
-    return {
-      status: "unsupported",
-      reason: `No capability checks registered for tool mode ${toolMode}.`
-    };
-  }
   return evaluateChecks(checks, matrix);
 }
 
@@ -252,8 +246,8 @@ function evaluateChecks(
     let status: CapabilityStatus = "supported";
 
     for (const layer of check.layers) {
-      const layerStatus = row?.[layer];
-      if (layerStatus === "none" || layerStatus == null) {
+      const layerStatus = row[layer];
+      if (layerStatus === "none") {
         status = "unsupported";
         break;
       }

@@ -182,7 +182,7 @@ function applyToLikeOperation(
     return { activePath, segment: null, behindNodeElements, frontNodeElements };
   }
 
-  const targetSpan = target.kind === "coordinate" ? (target.span ?? item.span) : item.span;
+  const targetSpan = target.span ?? item.span;
   const handle = createEditHandle(evaluated, targetSpan, statement.id, "path-point", context);
   if (handle) {
     context.editHandles.push(handle);
@@ -248,7 +248,7 @@ function applyToLikeOperation(
   }
 
   const start = effectiveStartPoint;
-  if (start && path && alignPathToStart(path.commands, start)) {
+  if (start && alignPathToStart(path.commands, start)) {
     context.pathStartPoint = start;
   }
   let segment: PlacementSegment | null;

@@ -89,12 +89,12 @@ export type PlatformMenu = {
   dispatchCommand?: (commandId: AppMenuCommandId, origin?: MenuCommandOrigin) => void;
   syncNativeMenu?: (payload: {
     definition: AppMenuDefinition;
-    commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    commandStates: Partial<Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>>;
     workspaceSignature?: string;
   }) => Promise<void> | void;
   showNativeContextMenu?: (payload: {
     items: readonly AppMenuItem[];
-    commandStates: Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>;
+    commandStates: Partial<Record<AppMenuCommandId, { enabled: boolean; checked?: boolean }>>;
     onCommandRun?: MenuCommandHandler;
   }) => Promise<void> | void;
 };

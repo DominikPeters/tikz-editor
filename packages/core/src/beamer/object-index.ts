@@ -67,20 +67,11 @@ export type BeamerObjectIndex = {
   readonly objectIdByMarkerId: ReadonlyMap<string, string>;
 };
 
-const LAYOUT_OBJECT_KINDS: ReadonlySet<string> = new Set([
-  "unsupported",
-  "block",
-  "columns",
-  "column",
-  "graphics",
-  "tikzpicture",
-]);
-
 type MutableNode = {
   id: string;
   kind: BeamerObjectKind;
   sourceSpan: Span;
-  bounds: BeamerRect | null;
+  bounds: BeamerRect;
   parentId: string | null;
   childIds: string[];
   list?: BeamerListTopology;
@@ -117,12 +108,12 @@ export function buildBeamerObjectIndex(args: {
   const nodes: MutableNode[] = [];
 
   for (const item of args.items) {
-    if (!LAYOUT_OBJECT_KINDS.has(item.kind) || item.visibility === "hidden") {
+    if (!(item.kind === "unsupported" || item.kind === "block" || item.kind === "columns" || item.kind === "column" || item.kind === "graphics" || item.kind === "tikzpicture") || item.visibility === "hidden") {
       continue;
     }
     nodes.push({
       id: item.id,
-      kind: item.kind as BeamerObjectKind,
+      kind: item.kind,
       sourceSpan: item.sourceSpan,
       bounds: item.bounds,
       parentId: null,
@@ -248,9 +239,9 @@ export function buildBeamerObjectIndex(args: {
       }
     }
     for (const record of listRecords) {
-      let listBounds: BeamerRect | null = null;
-      for (const node of record.itemNodes) {
-        listBounds = unionRect(listBounds, node.bounds as BeamerRect);
+      let listBounds = requireArrayValue(record.itemNodes, 0).bounds;
+      for (const node of record.itemNodes.slice(1)) {
+        listBounds = unionRect(listBounds, node.bounds);
       }
       nodes.push({
         id: record.listId,
@@ -301,7 +292,7 @@ export function buildBeamerObjectIndex(args: {
     node.childIds.sort();
   }
 
-  const finalNodes = nodes as unknown as BeamerObjectNode[];
+  const finalNodes = nodes;
   return {
     nodes: finalNodes,
     byId: new Map(finalNodes.map((node) => [node.id, node])),

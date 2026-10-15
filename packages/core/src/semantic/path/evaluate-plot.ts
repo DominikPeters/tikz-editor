@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -119,7 +120,7 @@ export function evaluatePlotCoordinatePoints(params: {
 }
 
 function appendPlotXMarks(commands: ScenePath["commands"], points: WorldPoint[]): void {
-  const halfSize = parseLength("1.5pt", "pt")!;
+  const halfSize = requireDefined(parseLength("1.5pt", "pt"), "Expected an internal evaluate-plot value");
   for (const point of points) {
     commands.push({
       kind: "M",
@@ -141,7 +142,7 @@ function appendPlotXMarks(commands: ScenePath["commands"], points: WorldPoint[])
 }
 
 function appendPlotPlusMarks(commands: ScenePath["commands"], points: WorldPoint[]): void {
-  const halfSize = parseLength("2pt", "pt")!;
+  const halfSize = requireDefined(parseLength("2pt", "pt"), "Expected an internal evaluate-plot value");
   for (const point of points) {
     commands.push({
       kind: "M",
@@ -163,7 +164,7 @@ function appendPlotPlusMarks(commands: ScenePath["commands"], points: WorldPoint
 }
 
 function appendPlotAsteriskMarks(commands: ScenePath["commands"], points: WorldPoint[]): void {
-  const radius = parseLength("2pt", "pt")!;
+  const radius = requireDefined(parseLength("2pt", "pt"), "Expected an internal evaluate-plot value");
   for (const point of points) {
     appendCircleSubpath(commands, point, radius);
   }
@@ -382,7 +383,7 @@ export function emitPlotPath(params: {
       } else {
         markPoints.push(...points);
       }
-    } else if (settings.handler === "const-mid" || settings.handler === "jump-mid") {
+    } else {
       if (points.length > 1) {
         for (let pointIndex = 1; pointIndex < points.length; pointIndex += 1) {
           const previous = requireArrayValue(points, pointIndex - 1);

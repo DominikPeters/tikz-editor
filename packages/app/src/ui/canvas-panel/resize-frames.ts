@@ -81,10 +81,7 @@ export function resolveResizeFrameForSource(
     if (element.kind === "Circle") {
       return resolveCircleResizeFrame(element, editHandles, sourceId, viewBox);
     }
-    if (element.kind === "Ellipse") {
-      return resolveEllipseResizeFrame(element, editHandles, sourceId, viewBox);
-    }
-    return null;
+    return resolveEllipseResizeFrame(element, editHandles, sourceId, viewBox);
   }
 
   if (nonTextElements.length === 0 && textElements.length === 1) {
@@ -156,7 +153,7 @@ function resolvePathResizeFrame(
   if (pathShapeHint === "rectangle") {
     return resolvePathRectangleResizeFrame(editHandles, sourceId, viewBox);
   }
-  if (pathShapeHint === "circle" || pathShapeHint === "ellipse") {
+  {
     const centerHandle = pickCenterPathPointHandle(editHandles, sourceId);
     if (!centerHandle) {
       return null;
@@ -181,7 +178,6 @@ function resolvePathResizeFrame(
       )
     );
   }
-  return null;
 }
 
 function resolveNodePathResizeFrame(
@@ -202,8 +198,9 @@ function resolveNodePathResizeFrame(
   if (!corners) {
     return resolveGenericNodePathResizeFrame(path, sourceId, viewBox);
   }
-  const transformedCorners = path.transform
-    ? corners.map((corner) => applyMatrix(path.transform!, corner))
+  const transform = path.transform;
+  const transformedCorners = transform
+    ? corners.map((corner) => applyMatrix(transform, corner))
     : corners;
   const centerWorld = worldPoint(
     pt(transformedCorners.reduce((sum, point) => sum + point.x, 0) / transformedCorners.length),
@@ -300,9 +297,7 @@ function approximatePathBoundsInWorld(path: ScenePath): WorldBounds | null {
       current = command.to;
       continue;
     }
-    if (command.kind === "Z") {
-      continue;
-    }
+    continue;
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
@@ -566,9 +561,10 @@ function buildResizeFrame(
 function resolveRectanglePathCorners(path: ScenePath): WorldPoint[] | null {
   const corners: WorldPoint[] = [];
   let closed = false;
+  const isClosed = () => closed;
   for (const command of path.commands) {
     if (command.kind === "M" || command.kind === "L") {
-      if (closed) {
+      if (isClosed()) {
         return null;
       }
       corners.push(command.to);

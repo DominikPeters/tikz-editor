@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type {
@@ -536,17 +537,14 @@ export function finalizeSemanticEvaluationRun(
     elements[index] = {
       ...element,
       layer: element.layer || MAIN_SCENE_LAYER,
-      runtimeId: element.runtimeId ?? element.id
+      runtimeId: element.runtimeId
     };
   }
 
   for (const [index, handle] of run.context.editHandles.entries()) {
-    if (!handle) {
-      continue;
-    }
     run.context.editHandles[index] = {
       ...handle,
-      runtimeId: handle.runtimeId ?? handle.id
+      runtimeId: handle.runtimeId
     };
   }
 
@@ -684,6 +682,8 @@ function remapPrePictureContextStatement(
   if (!sourceMap) {
     return statement;
   }
+  // This AST-only walker preserves statement discriminants and fields, replacing only numeric span coordinates.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   return remapSpansDeepWithExpansionSourceMap(statement, sourceMap) as Statement;
 }
 
@@ -695,7 +695,7 @@ function remapSpansDeepWithExpansionSourceMap(value: unknown, sourceMap: Expansi
     return value;
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   let nextRecord: Record<string, unknown> | null = null;
   if (isSpanLikeRecord(record)) {
     const mapped = sourceMap.mapSpan({ from: record.from, to: record.to }) ?? sourceMap.sourceSpan;
@@ -718,8 +718,8 @@ function remapSpansDeepWithExpansionSourceMap(value: unknown, sourceMap: Expansi
   return nextRecord ?? value;
 }
 
-function isSpanLikeRecord(record: Record<string, unknown>): record is Record<string, unknown> & Span {
-  return typeof record.from === "number" && typeof record.to === "number";
+function isSpanLikeRecord(record: object): record is object & Span {
+  return "from" in record && typeof record.from === "number" && "to" in record && typeof record.to === "number";
 }
 
 function buildSourceStatementSpanById(
@@ -744,7 +744,7 @@ function finalizeStatementElements(elements: SceneElement[]): SceneElement[] {
   return elements.map((element) => ({
     ...element,
     layer: element.layer || MAIN_SCENE_LAYER,
-    runtimeId: element.runtimeId ?? element.id
+    runtimeId: element.runtimeId
   }));
 }
 
@@ -780,7 +780,7 @@ function finalizeStatementEditHandles(
 ): EditHandle[] {
   return handles.map((handle) => ({
     ...handle,
-    runtimeId: handle.runtimeId ?? handle.id,
+    runtimeId: handle.runtimeId,
     sourceText: source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to),
     sourceRef: {
       ...handle.sourceRef,
@@ -1352,8 +1352,7 @@ function evaluateStatement(
   }
 
   if (
-    statement.kind === "UnknownStatement"
-    && applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
+    applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
   ) {
     markFeature(featureUsage, "unknown_statement", "supported");
     return [];
@@ -1454,7 +1453,7 @@ function evaluatePicCodeBody(
       rawOptions: expandOptionListMacros([layer.options], parent.macroBindings, context.macroTraceCollector ?? undefined)
     }))
     : parent.customStyles.has(picScopeStyleName)
-      ? [{ kind: "scope", sourceRef: picSourceRef, rawOptions: [parseStyleValueAsOptionList(picScopeStyleName)!] }]
+      ? [{ kind: "scope", sourceRef: picSourceRef, rawOptions: [requireDefined(parseStyleValueAsOptionList(picScopeStyleName), "Expected an internal evaluate value")] }]
       : [];
   const picStyleLayers: StyleTraceLayerInput[] = [
     ...(expandedItemOptions.length > 0
@@ -1672,7 +1671,7 @@ function stampPicElement(
   };
   const origin = {
     foreachStack: element.origin?.foreachStack ?? [],
-    ...(element.origin?.foreachTemplateLocalTargetId === undefined ? {} : { foreachTemplateLocalTargetId: element.origin?.foreachTemplateLocalTargetId }),
+    ...(element.origin?.foreachTemplateLocalTargetId === undefined ? {} : { foreachTemplateLocalTargetId: element.origin.foreachTemplateLocalTargetId }),
     picStack: [...(element.origin?.picStack ?? []), picOrigin],
     picTemplateLocalTargetId: localTargetId,
     ...(element.origin?.macroStack === undefined ? {} : { macroStack: element.origin.macroStack })
@@ -1680,7 +1679,7 @@ function stampPicElement(
   const base = {
     ...element,
     id: `scene-pic:${item.id}:${index}:${element.id}`,
-    runtimeId: `scene-pic:${item.id}:${index}:${element.runtimeId ?? element.id}`,
+    runtimeId: `scene-pic:${item.id}:${index}:${element.runtimeId}`,
     sourceRef,
     identityRef: {
       sourceId: localTargetId,
@@ -2675,7 +2674,7 @@ function pathBoundsPoints(commands: ScenePathCommand[]): WorldPoint[] {
       continue;
     }
 
-    if (command.kind === "Z" && subpathStart) {
+    if (subpathStart) {
       points.push(subpathStart);
       current = subpathStart;
     }
@@ -3055,9 +3054,10 @@ const TREE_STYLE_BUCKET_BY_APPEND_KEY: Record<string, keyof Omit<TreeMetaBuckets
 };
 
 function cloneFrameStyleBuckets(base: FrameStyleBuckets): FrameStyleBuckets {
-  const buckets = {
+  const buckets: FrameStyleBuckets = {
+    everyPathStyles: [], everyNodeStyles: [], everyTextNodePartStyles: [], everyFitStyles: [], everyPicStyles: [],
     everyShapeNodeStyles: new Map(base.everyShapeNodeStyles)
-  } as FrameStyleBuckets;
+  };
   for (const key of FRAME_STYLE_LIST_BUCKET_KEYS) {
     buckets[key] = [...base[key]];
   }

@@ -290,7 +290,7 @@ function visibleContentObligations(caseData: TexFuzzCase): readonly ContentOblig
     if (span && span.end > span.start) {
       obligations.push({
         path,
-        kind: span.kind ?? fallbackKind,
+        kind: span.kind,
         start: span.start,
         end: span.end,
         requiresPaintedText: fallbackKind === "text",

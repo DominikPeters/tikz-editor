@@ -494,7 +494,7 @@ function samplePathElementSegments(path: ScenePath): Array<{ from: WorldPoint; t
       current = command.to;
       continue;
     }
-    if (command.kind === "Z") {
+    {
       if (current && subpathStart) {
         segments.push({ from: current, to: subpathStart });
         current = subpathStart;

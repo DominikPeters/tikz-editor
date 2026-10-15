@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { ADORNMENT_EDIT_NOOP_REASON } from "./actions/adornment-set-property.js";
 import { PATH_ATTACHED_NODE_EDIT_NOOP_REASON } from "./actions/path-attached-node-actions.js";
 import type { EditGeometrySession } from "./geometry-session.js";
@@ -237,7 +238,7 @@ type AnchorNameResolution = {
 
 export function applyEditAction(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: EditAction,
   options: EditActionApplyOptions = {}
 ): EditActionResult {
@@ -515,7 +516,7 @@ function spansOverlap(left: Span, right: Span): boolean {
 
 function applyMoveHandle(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   handleId: string,
   newWorld: WorldPoint,
   parseOptions: EditParseOptions
@@ -537,7 +538,7 @@ function applyMoveHandle(
 
 function applyConnectHandle(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   handleId: string,
   nodeName: string,
   nodeSourceId: string | undefined,
@@ -832,7 +833,7 @@ function shiftSpan(span: Span, insertedSpan: Span | undefined, insertedLength: n
 
 function applySplitPath(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "splitPath" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
@@ -865,7 +866,7 @@ function applyReversePath(
 
 function applyDeletePathPoint(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "deletePathPoint" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
@@ -874,7 +875,7 @@ function applyDeletePathPoint(
 
 function applySetPathPointKind(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   action: Extract<EditAction, { kind: "setPathPointKind" }>,
   parseOptions: EditParseOptions
 ): EditActionResult {
@@ -883,7 +884,7 @@ function applySetPathPointKind(
 
 function applyMoveElements(
   source: string,
-  editHandles: EditHandle[],
+  editHandles: readonly EditHandle[],
   elementIds: readonly string[],
   delta: WorldPoint,
   parseOptions: EditParseOptions = {},
@@ -967,7 +968,7 @@ function resolveNodeTextTargetForElementId(
   });
   const stack: Statement[] = [...parsed.figure.body];
   while (stack.length > 0) {
-    const statement = stack.shift()!;
+    const statement = requireDefined(stack.shift(), "Missing required stack.shift()");
     if (statement.kind === "Scope") {
       stack.unshift(...statement.body);
       continue;

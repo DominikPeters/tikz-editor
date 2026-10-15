@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
@@ -235,7 +236,7 @@ function wrapRepeatedBlockInScope(
   const first = requireArrayValue(refs, 0);
   const last = requireArrayValue(refs, refs.length - 1);
   const block = source.slice(first.span.from, last.span.to);
-  const shiftTuple = buildShiftTuple(xLoop, yLoop)!;
+  const shiftTuple = requireDefined(buildShiftTuple(xLoop, yLoop), "Missing required buildShiftTuple(xLoop, yLoop)");
   return `\\begin{scope}[shift={${shiftTuple}}]\n${reindentSnippet(block, "  ")}\n\\end{scope}`;
 }
 
@@ -285,12 +286,12 @@ function rewritePathStatementCoordinates(
   yLoop: RepeatLoop | null
 ): string | null {
   const replacements: Array<{ span: Span; text: string }> = [];
-  let failed = false;
+  const status = { failed: false };
   const nodeNameCoordinateIds = collectNodeNameCoordinateIds(statement.items);
 
   walkPathItems(statement.items, {
     onPathItem: (item) => {
-      if (failed) {
+      if (status.failed) {
         return;
       }
 
@@ -300,7 +301,7 @@ function rewritePathStatementCoordinates(
         }
         const translated = buildTranslatedCoordinateItemRaw(item, source, xLoop, yLoop);
         if (!translated) {
-          failed = true;
+          status.failed = true;
           return;
         }
         replacements.push({ span: item.span, text: translated });
@@ -315,26 +316,26 @@ function rewritePathStatementCoordinates(
           yLoop
         );
         if (!translated) {
-          failed = true;
+          status.failed = true;
           return;
         }
         replacements.push({ span: item.target.span, text: translated });
       }
     },
     onNode: (node) => {
-      if (failed || !node.atSpan || !node.atRaw) {
+      if (status.failed || !node.atSpan || !node.atRaw) {
         return;
       }
       const translated = buildTranslatedNodePlacementRaw(node, source, xLoop, yLoop);
       if (!translated) {
-        failed = true;
+        status.failed = true;
         return;
       }
       replacements.push({ span: node.atSpan, text: translated });
     }
   });
 
-  if (failed || replacements.length === 0) {
+  if (status.failed || replacements.length === 0) {
     return null;
   }
 
@@ -345,7 +346,7 @@ function collectNodeNameCoordinateIds(items: readonly PathItem[]): Set<string> {
   const ids = new Set<string>();
   for (const [index, current] of items.entries()) {
 
-    if (current?.kind !== "Coordinate" || current.form !== "named") {
+    if (current.kind !== "Coordinate" || current.form !== "named") {
       continue;
     }
     const next = items[index + 1];
@@ -492,7 +493,7 @@ function applyInlineScopeShift(
   yLoop: RepeatLoop | null,
   parseOptions: EditParseOptions
 ): string | null {
-  const shiftTuple = buildShiftTuple(xLoop, yLoop)!;
+  const shiftTuple = requireDefined(buildShiftTuple(xLoop, yLoop), "Missing required buildShiftTuple(xLoop, yLoop)");
 
   const result = applySetPropertyAction(
     source,

@@ -200,7 +200,8 @@ export function useFigureThumbnails(
       return;
     }
 
-    let cancelled = false;
+    const lifecycle = { cancelled: false };
+    const isCancelled = () => lifecycle.cancelled;
     const timers: Array<{ kind: "idle" | "timeout"; id: number }> = [];
     const startRequest = (key: string, figure: FigureEntry, figureSignature: string): Promise<string | null> => {
       const groupId = `figure-thumb-group-${(thumbnailGroupCounter += 1).toString(36)}`;
@@ -244,14 +245,14 @@ export function useFigureThumbnails(
 
     const queue = async (): Promise<void> => {
       for (const [key, { figure, signature }] of wanted) {
-        if (cancelled) {
+        if (isCancelled()) {
           return;
         }
         if (thumbnailCache.has(key)) {
           continue;
         }
         const url = await (thumbnailInFlight.get(key) ?? startRequest(key, figure, signature));
-        if (cancelled) {
+        if (isCancelled()) {
           return;
         }
         if (!url) {
@@ -273,7 +274,7 @@ export function useFigureThumbnails(
     void queue();
 
     return () => {
-      cancelled = true;
+      lifecycle.cancelled = true;
       for (const timer of timers) {
         if (timer.kind === "idle" && typeof window.cancelIdleCallback === "function") {
           window.cancelIdleCallback(timer.id);

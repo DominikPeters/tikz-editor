@@ -589,8 +589,8 @@ export function buildNodeFontSetPropertyMutation(
 ): NodeFontSetPropertyMutation {
   const preset = values.sizePreset === "custom" ? null : NODE_FONT_PRESET_BY_ID.get(values.sizePreset);
   const safeCustomSize =
-    Number.isFinite(values.customSizePt) && (values.customSizePt ?? 0) > 0
-      ? (values.customSizePt as number)
+    values.customSizePt !== null && Number.isFinite(values.customSizePt) && values.customSizePt > 0
+      ? values.customSizePt
       : context.fallbackCustomSizePt;
   const commandParts: string[] = [];
 
@@ -1042,10 +1042,7 @@ function arrowPresetSideRaw(preset: Exclude<ArrowTipPresetId, "custom">, side: A
   if (preset === "bar") {
     return "|";
   }
-  if (preset === "hooks") {
-    return side === "start" ? "Hooks[left]" : "Hooks[right]";
-  }
-  return "";
+  return side === "start" ? "Hooks[left]" : "Hooks[right]";
 }
 
 function parseRotateAroundTransformValue(

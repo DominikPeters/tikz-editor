@@ -83,7 +83,7 @@ export type CommandBinding = {
   run: (origin: CommandOrigin) => void | Promise<void>;
 };
 
-export type CommandBindings = Record<AppMenuCommandId, CommandBinding>;
+export type CommandBindings = Partial<Record<AppMenuCommandId, CommandBinding>>;
 
 type Dispatch = (action: EditorAction) => void;
 
@@ -151,7 +151,7 @@ type RuntimeInput = {
 };
 
 export type EditorCommandRuntime = {
-  bindings: CommandBindings;
+  bindings: Record<AppMenuCommandId, CommandBinding>;
   runCommand: (commandId: AppMenuCommandId, origin: CommandOrigin) => boolean;
 };
 
@@ -236,7 +236,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     ...(input.sourceRevision === undefined ? {} : { sourceRevision: input.sourceRevision }),
     activeRootId,
     parseOptions,
-    figureCount: snapshot.figures?.length ?? 0,
+    figureCount: snapshot.figures.length,
     snapshotSource: snapshot.source,
     scene: snapshot.scene,
     editHandles: snapshot.editHandles,
@@ -286,17 +286,15 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   const runSvgCopy = () => {
-    if (!snapshot.svg) {
-      return;
-    }
-    void import("./export-commands").then((mod) => mod.copySvgMarkup(snapshot.svg!));
+    const svg = snapshot.svg;
+    if (!svg) return;
+    void import("./export-commands").then((mod) => mod.copySvgMarkup(svg));
   };
 
   const runPdfDownload = () => {
-    if (!snapshot.svg) {
-      return;
-    }
-    void import("./export-commands").then((mod) => mod.exportPdfDownload(snapshot.svg!, { fileName: "tikz-export.pdf" }));
+    const svg = snapshot.svg;
+    if (!svg) return;
+    void import("./export-commands").then((mod) => mod.exportPdfDownload(svg, { fileName: "tikz-export.pdf" }));
   };
 
   const runPngExport = () => {
@@ -416,7 +414,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     });
   };
 
-  const bindings: CommandBindings = {
+  const bindings: Record<AppMenuCommandId, CommandBinding> = {
     [APP_MENU_COMMAND_IDS.PRESENT_CURRENT]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current"); } },
     [APP_MENU_COMMAND_IDS.PRESENT_BEGINNING]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("beginning"); } },
     [APP_MENU_COMMAND_IDS.PRESENT_WINDOW]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "window"); } },
@@ -1120,7 +1118,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     bindings,
     runCommand: (commandId, origin) => {
       const binding = bindings[commandId];
-      if (!binding?.enabled) {
+      if (!binding.enabled) {
         return false;
       }
       void binding.run(origin);

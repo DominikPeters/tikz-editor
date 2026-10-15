@@ -1,3 +1,13 @@
+import type { TexMathBox } from "../../tex/layout-inline-items.js";
+
+/** Math wrappers carry native box metadata; measurement values may be unbranded. */
+export type TexMathBoxInput = Omit<TexMathBox, "width" | "height" | "depth" | "caretStops"> & {
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly caretStops?: readonly number[];
+};
+
 export interface ParagraphAttributes {
   get(name: string): unknown;
   set(name: string, value: unknown): void;
@@ -33,6 +43,7 @@ export interface ParagraphWrapperFactory {
 }
 
 export interface AnyWrapper {
+  readonly texMathBox?: TexMathBoxInput;
   node?: ParagraphNode;
   childNodes?: AnyWrapper[];
   parent?: AnyWrapper;

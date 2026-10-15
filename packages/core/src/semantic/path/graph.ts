@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { GraphOperationItem, GraphSpecChain, GraphSpecSegment, Span } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
@@ -20,10 +21,11 @@ import {
 } from "./graph-parse-utils.js";
 
 const CONNECTOR_OPERATORS = ["<->", "-!-", "->", "<-", "--"] as const;
-const DEFAULT_GRAPH_STEP_PT = parseLength("1cm", "cm")!;
-const DEFAULT_GRAPH_SEP_PT = parseLength("1em", "cm")!;
-const DEFAULT_GRAPH_RADIUS_PT = parseLength("1cm", "cm")!;
+const DEFAULT_GRAPH_STEP_PT = requireDefined(parseLength("1cm", "cm"), "Expected an internal graph value");
+const DEFAULT_GRAPH_SEP_PT = requireDefined(parseLength("1em", "cm"), "Expected an internal graph value");
+const DEFAULT_GRAPH_RADIUS_PT = requireDefined(parseLength("1cm", "cm"), "Expected an internal graph value");
 const BUILTIN_COLOR_CLASSES = ["all", "source", "target", "source'", "target'"] as const;
+const BUILTIN_COLOR_CLASS_SET: ReadonlySet<string> = new Set(BUILTIN_COLOR_CLASSES);
 const GRAPH_NODE_BUDGET = 10_000;
 const GRAPH_EDGE_BUDGET = 10_000;
 const AUTO_OPTION_LIST = parseOptionListRaw("[auto]", 0);
@@ -663,7 +665,7 @@ class GraphPlanner {
     let chainColors = cloneColorMap(firstTerm.colors);
     const edges: GraphPlannedEdgeInternal[] = [...firstTerm.edges];
 
-    while (true) {
+    for (;;) {
       const step = reader.readNext(chainScope, {
         logicalWidth: layout.logicalWidth + chainWidth,
         logicalDepth: layout.logicalDepth,
@@ -1572,9 +1574,7 @@ class GraphPlanner {
         record.targetEdgeNodes.push(clonePlannedEdgeNode(operation.node));
         continue;
       }
-      if (operation.kind === "add-source-node") {
-        record.sourceEdgeNodes.push(clonePlannedEdgeNode(operation.node));
-      }
+      record.sourceEdgeNodes.push(clonePlannedEdgeNode(operation.node));
     }
   }
 
@@ -2050,7 +2050,7 @@ function applyGraphScopeControlFlag(
     return { consumed: true, scope: applyNumberNodes(scope) };
   }
   if (isEdgeKindFlag(key)) {
-    scope.defaultOperatorEdgeKind = key as ConnectorOperator;
+    scope.defaultOperatorEdgeKind = key;
     return { consumed: true, scope };
   }
   if (applyPlacementControlFromFlag(scope, key, updatePlacementBase)) {
@@ -2940,7 +2940,7 @@ function stripMatchingQuotes(raw: string): string {
 
 function stripWrappingBraces(raw: string): string {
   let normalized = raw.trim();
-  while (true) {
+  for (;;) {
     const stripped = stripOuterBraces(normalized);
     if (!stripped) {
       return normalized;
@@ -3398,7 +3398,7 @@ function isKnownColorClass(color: string, declaredColorClasses: Set<string>): bo
   if (declaredColorClasses.has(color)) {
     return true;
   }
-  return BUILTIN_COLOR_CLASSES.includes(color as (typeof BUILTIN_COLOR_CLASSES)[number]);
+  return BUILTIN_COLOR_CLASS_SET.has(color);
 }
 
 function parseOperatorInvocationsFromEntry(
@@ -3592,7 +3592,7 @@ function buildOperatorPairs(operator: GraphOperatorInvocation, colors: GraphColo
   return pairMatchingAndStar(fromNodes, toNodes);
 }
 
-function isEdgeKindFlag(key: string): boolean {
+function isEdgeKindFlag(key: string): key is ConnectorOperator {
   return key === "--" || key === "->" || key === "<-" || key === "<->" || key === "-!-";
 }
 
@@ -3603,7 +3603,7 @@ function isDefaultEdgeKindKey(key: string): boolean {
 function parseDefaultEdgeKind(raw: string): ConnectorOperator | null {
   const normalized = stripWrappingBraces(raw).trim();
   if (isEdgeKindFlag(normalized)) {
-    return normalized as ConnectorOperator;
+    return normalized;
   }
   return null;
 }
@@ -3737,8 +3737,8 @@ function expandRange(leftRaw: string, rightRaw: string, diagnostics: string[]): 
   }
 
   if (left.length === 1 && right.length === 1) {
-    const leftCode = left.codePointAt(0)!;
-    const rightCode = right.codePointAt(0)!;
+    const leftCode = requireDefined(left.codePointAt(0), "Expected an internal graph value");
+    const rightCode = requireDefined(right.codePointAt(0), "Expected an internal graph value");
     const count = Math.abs(rightCode - leftCode) + 1;
     if (count > GRAPH_NODE_BUDGET) {
       pushUniqueDiagnostic(diagnostics, "graph-node-budget-exceeded");

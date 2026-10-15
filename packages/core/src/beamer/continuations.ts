@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 import type { Span } from "../ast/types.js";
@@ -90,9 +91,9 @@ const key = (path: readonly number[]): string => path.join("/");
 
 function sliceParagraphLine(item: Extract<PreparedFrameFlowItem, { kind: "paragraph" }>, lineIndex: number): PreparedFrameFlowItem {
   const original = item.paragraph;
-  const line = original.layout.report.lines.find((candidate) => candidate.lineIndex === lineIndex)!;
-  const placement = original.layout.vlistLayout.linePlacements.find((candidate) => candidate.lineIndex === lineIndex)!;
-  const owner = original.layout.vlistLayout.paragraphPlacements.find((candidate) => candidate.lineIndices.includes(lineIndex))!;
+  const line = requireDefined(original.layout.report.lines.find((candidate) => candidate.lineIndex === lineIndex), "Expected an internal continuations value");
+  const placement = requireDefined(original.layout.vlistLayout.linePlacements.find((candidate) => candidate.lineIndex === lineIndex), "Expected an internal continuations value");
+  const owner = requireDefined(original.layout.vlistLayout.paragraphPlacements.find((candidate) => candidate.lineIndices.includes(lineIndex)), "Expected an internal continuations value");
   const top = Number(placement.y);
   const height = Number(line.ascent + line.descent);
   const paragraphId = `${original.layout.paragraphId}:continuation-line:${lineIndex}`;
@@ -210,8 +211,8 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
             const lines = vlist.paragraphPlacements.find((candidate) => key(candidate.vlistPath) === key(entry.path))?.lineIndices ?? [];
             const adjustments = [...(entry.item.paragraph.verticalAdjustments ?? [])];
             for (const [index, lineIndex] of lines.entries()) {
-              const line = item.paragraph.layout.report.lines.find((candidate) => candidate.lineIndex === lineIndex)!;
-              const lineTop = Number(vlist.linePlacements.find((candidate) => candidate.lineIndex === lineIndex)!.y);
+              const line = requireDefined(item.paragraph.layout.report.lines.find((candidate) => candidate.lineIndex === lineIndex), "Expected an internal continuations value");
+              const lineTop = Number(requireDefined(vlist.linePlacements.find((candidate) => candidate.lineIndex === lineIndex), "Expected an internal continuations value").y);
               if (index > 0) result.push({ kind: "penalty", penalty: (index === 1 ? 150 : 0) + (index === lines.length - 1 ? 150 : 0) });
               if (lineTop > cursor) result.push(glue(lineTop - cursor));
               const sliced = sliceParagraphLine(item, lineIndex);

@@ -1,3 +1,4 @@
+import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { Span, Statement, PathStatement, PathItem, NodeItem, PicOperationItem, ChildOperationItem } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
@@ -31,7 +32,7 @@ function parseLoopBody(bodyRaw: string, bodySpan: Span): ForeachStatementBodyPar
     loopBodyParses.delete(key);
   } else {
     parsed = parseStatementsFromBodyWithMapping(bodyRaw, bodySpan);
-    if (loopBodyParses.size >= LOOP_BODY_PARSE_LIMIT) loopBodyParses.delete(loopBodyParses.keys().next().value!);
+    if (loopBodyParses.size >= LOOP_BODY_PARSE_LIMIT) loopBodyParses.delete(requireDefined(loopBodyParses.keys().next().value, "Missing required loopBodyParses.keys().next().value"));
   }
   loopBodyParses.set(key, parsed);
   return parsed;
@@ -246,7 +247,7 @@ export function resolveFigurePropertyTargetFromParseResult(
         kind: "figure",
         span: figure.span,
         ...(figure.options === undefined ? {} : { options: figure.options }),
-        ...(figure.options?.span === undefined ? {} : { optionsSpan: figure.options?.span }),
+        ...(figure.options?.span === undefined ? {} : { optionsSpan: figure.options.span }),
         optionsFormat: "bracketed",
         insertOffset
       }
@@ -737,9 +738,6 @@ function findTargetInPathItems(
 ): PropertyTarget | null {
   for (const [index, item] of items.entries()) {
 
-    if (!item) {
-      continue;
-    }
 
     if (item.kind === "PathKeyword" && item.id === elementId) {
       return makePathKeywordTarget(item, items, index);
@@ -889,7 +887,7 @@ function makeMatrixStatementTarget(statement: PathStatement, source: string): Pr
     pathCommand: statement.command,
     span: statement.span,
     ...(options === undefined ? {} : { options }),
-    ...(matrixNode.options?.span === undefined ? {} : { optionsSpan: matrixNode.options?.span }),
+    ...(matrixNode.options?.span === undefined ? {} : { optionsSpan: matrixNode.options.span }),
     optionsFormat: "bracketed",
     insertOffset,
     matrixSourceId: statement.id,
@@ -1247,7 +1245,7 @@ function resolveTreeChildTargetInStatements(
     ...(treeChildOptionsSpan === undefined ? {} : { treeChildOptionsSpan }),
     ...(child.bodySpan === undefined ? {} : { treeChildBodySpan: child.bodySpan }),
     treeChildInsertOffset,
-    ...(node?.id === undefined ? {} : { treeNodeId: node?.id }),
+    ...(node?.id === undefined ? {} : { treeNodeId: node.id }),
     ...(nodeTextSpan === undefined ? {} : { treeNodeTextSpan: nodeTextSpan }),
     ...(nodeOptions === undefined ? {} : { treeNodeOptions: nodeOptions }),
     ...(nodeOptionsSpan === undefined ? {} : { treeNodeOptionsSpan: nodeOptionsSpan }),
@@ -1377,7 +1375,7 @@ function absolutizeChildOperationSpans(
     }
     return relativeSpan;
   };
-  const mapped = { ...child, span: absolutize(child.span, child.raw)! };
+  const mapped = { ...child, span: requireDefined(absolutize(child.span, child.raw), "Missing required absolutize(child.span, child.raw)") };
   const optionsSpan = absolutize(child.optionsSpan, child.options?.raw ?? "");
   const bodySpan = absolutize(child.bodySpan, child.bodyRaw);
   if (optionsSpan === undefined) delete mapped.optionsSpan;
@@ -1494,7 +1492,7 @@ function makeScopeTarget(statement: Extract<Statement, { kind: "Scope" }>, sourc
     kind: "style-source",
     span: statement.span,
     ...(statement.options === undefined ? {} : { options: statement.options }),
-    ...(statement.options?.span === undefined ? {} : { optionsSpan: statement.options?.span }),
+    ...(statement.options?.span === undefined ? {} : { optionsSpan: statement.options.span }),
     optionsFormat: "bracketed",
     insertOffset: resolveInsertOffset(source, statement.span, /\\begin\{scope\*?\}/)
   };
@@ -1551,9 +1549,6 @@ function makeNodeAdornmentTarget(
 
   for (const [index, adornment] of plan.adornments.entries()) {
 
-    if (!adornment) {
-      continue;
-    }
     const expectedId = makeNodeAdornmentTargetId(node.id, index, adornment.kind);
     if (expectedId !== elementId) {
       continue;
@@ -1589,12 +1584,12 @@ function makeNodeAdornmentTarget(
 function makePathKeywordTarget(item: Extract<PathItem, { kind: "PathKeyword" }>, items: PathItem[], index: number): PropertyTarget {
   const maybeOption = items[index + 1];
   const optionItem = maybeOption?.kind === "PathOption" ? maybeOption : null;
-  const optionsSpan = optionItem?.span ?? optionItem?.options?.span;
+  const optionsSpan = optionItem?.span;
   return {
     id: item.id,
     kind: "path-keyword",
     span: item.span,
-    ...(optionItem?.options === undefined ? {} : { options: optionItem?.options }),
+    ...(optionItem?.options === undefined ? {} : { options: optionItem.options }),
     ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset: item.span.to
   };

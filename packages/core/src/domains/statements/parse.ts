@@ -326,9 +326,9 @@ function mapPgfMathStatement(node: SyntaxNode, source: string, state: StatementM
     ?? parseNode
     ?? findFirstChildByName(node, "PgfMathSetSeedCmd");
   const groups = findChildrenByName(node, "Group");
-  const commandRaw = commandNode
-    ? source.slice(commandNode.from, commandNode.to) as PgfMathStatement["commandRaw"]
-    : "\\pgfmathparse";
+  const rawCommand = commandNode ? source.slice(commandNode.from, commandNode.to) : "\\pgfmathparse";
+  const commandRaw = rawCommand === "\\pgfmathsetmacro" || rawCommand === "\\pgfmathsetseed"
+    ? rawCommand : "\\pgfmathparse";
 
   return {
     kind: "PgfMath",

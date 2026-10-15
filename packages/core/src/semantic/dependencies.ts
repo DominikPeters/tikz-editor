@@ -260,7 +260,6 @@ function dependencyIndex(graph: SemanticDependencyGraph): DependencyIndex {
     const edges = edgesBySource.get(id);
     if (edges) edges.push(edge);
     else edgesBySource.set(id, [edge]);
-    if (edge.category !== GEOMETRY_CATEGORY) continue;
     const neighbors = adjacency.get(edge.from);
     if (neighbors) neighbors.push(edge.to);
     else adjacency.set(edge.from, [edge.to]);
@@ -308,7 +307,7 @@ export function replaceSourceDependencies(
 }
 
 function sameEdge(left: SemanticDependencyEdge, right: SemanticDependencyEdge): boolean {
-  return left.from === right.from && left.to === right.to && left.category === right.category && left.relation === right.relation;
+  return left.from === right.from && left.to === right.to && left.relation === right.relation;
 }
 
 function compareNodes(left: SemanticDependencyNode, right: SemanticDependencyNode): number {

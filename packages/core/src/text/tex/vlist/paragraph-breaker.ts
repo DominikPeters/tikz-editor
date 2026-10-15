@@ -42,11 +42,6 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
   const initialErrors = [...params.initialErrors ?? []];
 
   for (const [planIndex, plan] of params.layoutIr.paragraphPlans.entries()) {
-    if (!plan) {
-      throw new Error(
-        `TeX paragraph breaker expected paragraph plan at index ${planIndex}.`
-      );
-    }
     const breakContext = plan.breakContext;
     if (
       breakContext.blockIndex !== plan.blockIndex ||
@@ -162,7 +157,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         forcedBreakAfter: plan.segment.forcedBreakAfter,
       },
       broken,
-      ...(plan.lineLabel?.label !== undefined ? { label: plan.lineLabel?.label } : {}),
+      ...(plan.lineLabel?.label !== undefined ? { label: plan.lineLabel.label } : {}),
     });
   }
 

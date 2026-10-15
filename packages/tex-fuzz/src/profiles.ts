@@ -19,7 +19,6 @@ const COVERAGE_ALIAS_FEATURES = new Set<TexFuzzFeatureId>(["text.bold", "text.it
 function rawGeneratedWeights(scope: "inline" | "document"): Readonly<Record<string, number>> {
   const weights: Record<string, number> = {};
   for (const definition of Object.values(TEX_FUZZ_FEATURE_DEFINITIONS)) {
-    if (definition === undefined) continue;
     if (definition.support === "oracle-canary" || COVERAGE_ALIAS_FEATURES.has(definition.id)) continue;
     const documentFeature = definition.mode === "document" || definition.id.startsWith("math.display.");
     if (scope === "inline" && documentFeature) continue;
@@ -122,12 +121,12 @@ export interface TexFuzzWeightedChoice<T extends string> {
  * Converts finite non-negative configuration weights to an exact integer sum.
  * Largest-remainder allocation is deterministic; ties use lexical key order.
  */
-export function normalizeTexFuzzWeights<T extends string>(
-  weights: Readonly<Record<T, number>>,
+export function normalizeTexFuzzWeights(
+  weights: Readonly<Record<string, number>>,
   scale: number = TEX_FUZZ_WEIGHT_SCALE
-): Readonly<Record<T, number>> {
+): Readonly<Record<string, number>> {
   if (!Number.isSafeInteger(scale) || scale <= 0) throw new RangeError("Weight scale must be a positive safe integer.");
-  const entries = Object.entries(weights) as [T, number][];
+  const entries = Object.entries(weights);
   if (entries.length === 0) throw new RangeError("Cannot normalize an empty weight table.");
   let total = 0;
   for (const [key, weight] of entries) {
@@ -150,7 +149,7 @@ export function normalizeTexFuzzWeights<T extends string>(
   }
   return Object.fromEntries(
     allocated.sort((left, right) => left.key.localeCompare(right.key)).map(({ key, floor }) => [key, floor])
-  ) as Readonly<Record<T, number>>;
+  );
 }
 
 export function pickWeightedTexFuzzValue<T extends string>(
@@ -179,18 +178,18 @@ export function pickWeightedTexFuzzValue<T extends string>(
 }
 
 /** Integer-only novelty boost. Unseen features receive the largest multiplier. */
-export function adaptTexFuzzWeights<T extends string>(
-  baseWeights: Readonly<Record<T, number>>,
+export function adaptTexFuzzWeights(
+  baseWeights: Readonly<Record<string, number | undefined>>,
   featureCounts: Readonly<Record<string, number>>,
   options: { readonly noveltyBudget?: number; readonly scale?: number } = {}
-): Readonly<Record<T, number>> {
+): Readonly<Record<string, number>> {
   const noveltyBudget = options.noveltyBudget ?? 16;
   if (!Number.isSafeInteger(noveltyBudget) || noveltyBudget < 0) {
     throw new RangeError("Novelty budget must be a non-negative safe integer.");
   }
-  const adjusted = {} as Record<T, number>;
-  for (const [feature, base] of Object.entries(baseWeights) as [T, number][]) {
-    if (!Number.isSafeInteger(base) || base < 0) throw new RangeError(`Invalid base weight ${base} for ${feature}.`);
+  const adjusted: Record<string, number> = {};
+  for (const [feature, base] of Object.entries(baseWeights)) {
+    if (typeof base !== "number" || !Number.isSafeInteger(base) || base < 0) throw new RangeError(`Invalid base weight ${base} for ${feature}.`);
     const observed = featureCounts[feature] ?? 0;
     if (!Number.isSafeInteger(observed) || observed < 0) throw new RangeError(`Invalid feature count ${observed} for ${feature}.`);
     adjusted[feature] = base * (1 + Math.floor(noveltyBudget / (observed + 1)));

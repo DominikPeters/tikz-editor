@@ -1,3 +1,4 @@
+import { requireDefined } from "../../utils/invariants.js";
 import { createEditGeometrySession, type EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { PathItem, Statement, Span } from "../../ast/types.js";
@@ -460,7 +461,7 @@ function buildRectangleCoordinateRewrites(
   prefixFrame: FrameTransform
 ): { kind: "success"; replacements: Array<{ span: Span; text: string }> } | { kind: "unsupported"; reason: string } {
   const prefix = asWorldTransform(prefixFrame);
-  const inversePrefix = inverseMatrix(prefix)!;
+  const inversePrefix = requireDefined(inverseMatrix(prefix), "Missing required inverseMatrix(prefix)");
   const rotateLocalPoint = (point: WorldPoint) => applyMatrix(prefix,
     rotateWorldPointAroundCenter(applyMatrix(inversePrefix, point), pivot, deltaDeg));
   const targetStart = rotateLocalPoint(context.startHandle.world);

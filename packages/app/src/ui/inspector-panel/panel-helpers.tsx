@@ -783,6 +783,9 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       ? numberProperties[0]?.clearKeys
       : undefined;
 
+    const minimums = numberProperties.map(property => property.min);
+    const exclusiveMinimums = numberProperties.map(property => property.minExclusive);
+    const maximums = numberProperties.map(property => property.max);
     return {
       kind: "number",
       id: base.id,
@@ -790,9 +793,9 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: numberProperties[0]?.value ?? 0,
       mixed: !numbersAreEqual(numberProperties.map((property) => property.value)),
       step: base.step,
-      ...(numberProperties.every((property) => property.min != null) ? { min: Math.max(...numberProperties.map((property) => property.min as number)) } : {}),
-      ...(numberProperties.every((property) => property.minExclusive != null) ? { minExclusive: Math.max(...numberProperties.map((property) => property.minExclusive as number)) } : {}),
-      ...(numberProperties.every((property) => property.max != null) ? { max: Math.min(...numberProperties.map((property) => property.max as number)) } : {}),
+      ...(minimums.every(value => value !== undefined) ? { min: Math.max(...minimums) } : {}),
+      ...(exclusiveMinimums.every(value => value !== undefined) ? { minExclusive: Math.max(...exclusiveMinimums) } : {}),
+      ...(maximums.every(value => value !== undefined) ? { max: Math.min(...maximums) } : {}),
       ...(base.unit === undefined ? {} : { unit: base.unit }),
       ...defaultValueFields(numberProperties),
       ...(clearKeys === undefined ? {} : { clearKeys }),
@@ -812,6 +815,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       ? lengthProperties[0]?.clearKeys
       : undefined;
 
+    const dimensionsContexts = lengthProperties.map(property => property.minimumDimensionsContext);
     return {
       kind: "length",
       id: base.id,
@@ -824,7 +828,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
       ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
-      ...(lengthProperties.map((property) => property.minimumDimensionsContext).every((context) => context != null) ? { minimumDimensionsContexts: (lengthProperties.map((property) => property.minimumDimensionsContext as NodeMinimumDimensionsMutationContext)) } : {}),
+      ...(dimensionsContexts.every(context => context !== undefined) ? { minimumDimensionsContexts: dimensionsContexts } : {}),
       ...readOnlyReasonFields(writes)
     };
   }
@@ -1256,11 +1260,10 @@ function defaultValueFields(properties: ReadonlyArray<{ defaultValue?: number }>
 
 function consensusDefaultValue(properties: ReadonlyArray<{ defaultValue?: number }>): number | undefined {
   const values = properties.map((property) => property.defaultValue);
-  if (values.some((value) => value == null)) {
+  if (!values.every((value) => value !== undefined)) {
     return undefined;
   }
-  const numericValues = values as number[];
-  return numbersAreEqual(numericValues) ? numericValues[0] : undefined;
+  return numbersAreEqual(values) ? values[0] : undefined;
 }
 
 export function deriveReadOnlyReason(
@@ -1406,8 +1409,8 @@ export function nodeFontSizeValueLabel(
     return "Mixed";
   }
   if (value === "custom") {
-    return Number.isFinite(customSizePt) && (customSizePt ?? 0) > 0
-      ? `Custom (${formatNumber(customSizePt as number)}pt)`
+    return customSizePt !== null && Number.isFinite(customSizePt) && customSizePt > 0
+      ? `Custom (${formatNumber(customSizePt)}pt)`
       : "Custom";
   }
   return options.find((option) => option.value === value)?.label ?? "Custom";

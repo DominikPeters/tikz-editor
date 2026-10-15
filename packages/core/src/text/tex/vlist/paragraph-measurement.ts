@@ -149,7 +149,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
       );
       return offset;
     }),
-    ...(lastLine?.preDisplaySize !== undefined ? { lastLinePreDisplaySize: lastLine?.preDisplaySize } : {}),
+    ...(lastLine?.preDisplaySize !== undefined ? { lastLinePreDisplaySize: lastLine.preDisplaySize } : {}),
     ...(lastLine ? { lastLineMetrics: lastLine.metrics } : {}),
     standardMetrics: paragraphBoxMetrics(
       paragraph.horizontal.metrics.width,

@@ -1,4 +1,5 @@
 import type { AxisBasis } from "./coords/axis-basis.js";
+import { isObjectRecord } from "../utils/records.js";
 import type { AdornmentOwnerGeometry, CoordinateForm, Span } from "../ast/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
 import type { OptionListAst } from "../options/types.js";
@@ -709,5 +710,7 @@ export function isFrameLocalCoordinateEditHandle(
 }
 
 export function isRelativeCoordinateEditHandle(handle: EditHandle): handle is RelativeCoordinateEditHandle {
-  return handle.handleType === "coordinate" && handle.rewriteMode === "delta";
+  if (handle.handleType !== "coordinate" || handle.rewriteMode !== "delta") return false;
+  const base: unknown = handle.relativeBase;
+  return isObjectRecord(base) && typeof base.x === "number" && typeof base.y === "number";
 }

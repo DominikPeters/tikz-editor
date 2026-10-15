@@ -118,7 +118,7 @@ export function useDeckOverlayContextMenu({ index, selected, frame, viewportRef,
       anchor: { x: x - (rect?.left ?? 0), y: y - (rect?.top ?? 0) } };
     if (platform.menu?.usesNativeContextMenus && platform.menu.showNativeContextMenu) {
       void platform.menu.showNativeContextMenu({ items, commandStates: menuBindings,
-        onCommandRun: (id, origin) => { if (current() && menuBindings[id].enabled) void menuBindings[id].run(origin); } });
+        onCommandRun: (id, origin) => { const binding = menuBindings[id]; if (current() && binding?.enabled) void binding.run(origin); } });
     } else setMenu(next);
   };
 
@@ -137,7 +137,7 @@ export function useDeckOverlayContextMenu({ index, selected, frame, viewportRef,
   const valid = menu && !locked && menu.documentId === documentId && menu.frameId === rootId && menu.revision === revision && menu.step === frame?.step;
   return { onContextMenu, openForObject,
     menu: valid ? <CanvasContextMenu open anchor={menu.anchor} target="selection-single" bindings={menu.bindings}
-      containerRef={viewportRef} onClose={close} onCommandRun={(id, origin) => { if (menu.bindings[id].enabled) void menu.bindings[id].run(origin); }}
+      containerRef={viewportRef} onClose={close} onCommandRun={(id, origin) => { const binding = menu.bindings[id]; if (binding?.enabled) void binding.run(origin); }}
       definition={{ ...CANVAS_CONTEXT_MENU_DEFINITION, "selection-single": menu.items }} /> : null,
   };
 }

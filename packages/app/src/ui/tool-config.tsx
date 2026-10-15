@@ -210,7 +210,6 @@ const TOOL_POPUP_KIND_MAP = new Map<ToolMode, ToolPopupKind>(
   TOOL_BUTTONS.flatMap((tool) => (tool.popupKind ? [[tool.mode, tool.popupKind] as const] : []))
 );
 
-const TOOL_CREATE_MODE_SET = new Set<ToolCreateMode>(TOOL_CREATE_MODES);
 
 export function toolModeFromShortcut(key: string): ToolMode | null {
   return TOOL_SHORTCUT_MAP.get(key.toLowerCase()) ?? null;
@@ -237,8 +236,10 @@ export function toolModeAutoOpensPopup(mode: ToolMode): boolean {
   return false;
 }
 
+const createModeSet: ReadonlySet<string> = new Set(TOOL_CREATE_MODES);
+
 export function isToolCreateMode(mode: ToolMode): mode is ToolCreateMode {
-  return TOOL_CREATE_MODE_SET.has(mode as ToolCreateMode);
+  return createModeSet.has(mode);
 }
 
 export function shouldConstrainToolCreateToSquare(mode: ToolCreateMode): boolean {
@@ -262,7 +263,7 @@ export const TOOL_HINTS: Partial<Record<ToolMode, string>> = {
 };
 
 export function isCreationToolMode(mode: ToolMode): boolean {
-  return TOOL_CREATE_MODE_SET.has(mode as ToolCreateMode);
+  return createModeSet.has(mode);
 }
 
 export function toolSupportsStroke(mode: ToolMode): boolean {
