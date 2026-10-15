@@ -1905,4 +1905,19 @@ describe("applyEditAction – setProperty", () => {
     });
     expect(result.kind).toBe("unsupported");
   });
+
+  it.each([
+    [String.raw`\node[fill=blue, draw] at (1,1) {A};`, String.raw`\node[fill=red!20, draw] at (1,1) {A};`],
+    [String.raw`\node (a) [fill=blue] at (1,1) {A};`, String.raw`\node (a) [fill=red!20] at (1,1) {A};`],
+    [String.raw`\node at (1,1) {A};`, String.raw`\node[fill=red!20] at (1,1) {A};`],
+    [String.raw`\pic[red] at (1,1) {angle};`, String.raw`\pic[red, fill=red!20] at (1,1) {angle};`],
+    [String.raw`\pic at (1,1) {angle};`, String.raw`\pic[fill=red!20] at (1,1) {angle};`]
+  ])("writes a node or pic statement's keys into its own option list: %s", (line, expected) => {
+    const source = `\\begin{tikzpicture}\n  ${line}\n\\end{tikzpicture}`;
+    const result = applyEditAction(source, [], { kind: "setProperty", elementId: "path:0", level: "command", key: "fill", value: "red!20" });
+    expect(result.kind).toBe("success");
+    if (result.kind === "success") {
+      expect(result.newSource.split("\n")[1]).toBe(`  ${expected}`);
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import type { Span, Statement, PathStatement, PathItem, NodeItem, ChildOperationItem } from "../ast/types.js";
+import type { Span, Statement, PathStatement, PathItem, NodeItem, PicOperationItem, ChildOperationItem } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import { parseStatementsFromBodyWithMapping, type ForeachStatementBodyParseResult } from "../foreach/snippet-parse.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -828,21 +828,43 @@ function makePathStatementTarget(statement: PathStatement, source: string): Prop
   if (matrixTarget) {
     return matrixTarget;
   }
+  const head = statementHeadItem(statement);
   const commandRegex =
-    statement.command === "node"
-      ? /\\?(?:node|matrix)\b/
-      : new RegExp(String.raw`\\?${escapeRegex(statement.command)}\b`);
+    head?.kind === "PicOperation"
+      ? /\\pic\b/
+      : statement.command === "node"
+        ? /\\?(?:node|matrix)\b/
+        : new RegExp(String.raw`\\?${escapeRegex(statement.command)}\b`);
   const insertOffset = resolveInsertOffset(source, statement.span, commandRegex);
+  // `\node` and `\pic` are `\path node` and `\path pic`: their option lists
+  // belong to that node or pic. A fresh list in front of one would be read
+  // first, so the node's own keys would override what was just written.
+  const options = statement.options ?? head?.options;
+  const optionsSpan = statement.options?.span ?? head?.optionsSpan ?? head?.options?.span;
 
   return {
     id: statement.id,
     kind: "path-statement",
     pathCommand: statement.command,
     span: statement.span,
-    options: statement.options,
-    optionsSpan: statement.options?.span,
+    options,
+    optionsSpan,
     insertOffset
   };
+}
+
+function statementHeadItem(statement: PathStatement): NodeItem | PicOperationItem | null {
+  if (statement.options) {
+    return null;
+  }
+  const first = statement.items[0];
+  if (first?.kind === "PicOperation" && statement.items.length === 1) {
+    return first;
+  }
+  if (statement.command !== "node") {
+    return null;
+  }
+  return statement.items.find((item): item is NodeItem => item.kind === "Node") ?? null;
 }
 
 function makeMatrixStatementTarget(statement: PathStatement, source: string): PropertyTarget | null {
