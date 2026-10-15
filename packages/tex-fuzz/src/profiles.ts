@@ -143,8 +143,10 @@ export function normalizeTexFuzzWeights<T extends string>(
   });
   let remaining = scale - allocated.reduce((sum, entry) => sum + entry.floor, 0);
   allocated.sort((left, right) => right.remainder - left.remainder || left.key.localeCompare(right.key));
-  for (let index = 0; index < allocated.length && remaining > 0; index += 1, remaining -= 1) {
-    allocated[index].floor += 1;
+  for (const entry of allocated) {
+    if (remaining <= 0) break;
+    entry.floor += 1;
+    remaining -= 1;
   }
   return Object.fromEntries(
     allocated.sort((left, right) => left.key.localeCompare(right.key)).map(({ key, floor }) => [key, floor])

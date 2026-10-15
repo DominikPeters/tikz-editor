@@ -49,8 +49,8 @@ function paragraphBox(node: SimpleTexBoxNode, params: TransformLayoutParams, fon
   const layout = layoutSimpleTexParagraph(node.content, {
     width: node.width, font, baselineSkip: skip, parindent: 0, alignment: "justified",
     textFontProfile: { ...params.textFontProfile, defaultFontState: fontState }, metricProvider: params.metricProvider,
-    mathBoxProvider: params.mathBoxProvider, graphicsResolver: params.graphicsResolver, tabularProfile: params.tabularProfile,
-    dimensionContext: params.dimensionContext ? { ...params.dimensionContext, linewidth: node.width, ...(node.command === "minipage" ? { textwidth: node.width, columnwidth: node.width } : {}) } : undefined,
+    ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}),
+    ...(params.dimensionContext ? { dimensionContext: { ...params.dimensionContext, linewidth: node.width, ...(node.command === "minipage" ? { textwidth: node.width, columnwidth: node.width } : {}) } } : {}),
     sourceMap: mapped.sourceMap,
   });
   if (!layout.supported || !layout.report || !layout.vlistLayout) throw new Error(layout.fallbackReason ?? "Unsupported transformed paragraph box.");
@@ -97,7 +97,7 @@ function contents(params: TransformLayoutParams): { hlist: TexMathHList; carets:
         walk(child.items, x + child.x, y + child.y); continue;
       }
       if (child.kind !== "glyph") continue;
-      for (const [sourceOffset, stop] of [[child.sourceSpan.start, child.x], [child.sourceSpan.end, child.x + child.width]]) carets.push({ sourceOffset, x: texHBoxX(x + stop), y: texHBoxY(y + child.y), height: child.height, depth: child.depth, sourceSpan: child.sourceSpan, kind: "glyph-boundary", priority: 20, hitBounds: { xStart: texHBoxX(x + child.x), xEnd: texHBoxX(x + child.x + child.width), yStart: texHBoxY(y + child.y - child.height), yEnd: texHBoxY(y + child.y + child.depth) } });
+      for (const [sourceOffset, stop] of [[child.sourceSpan.start, child.x], [child.sourceSpan.end, child.x + child.width]] as const) carets.push({ sourceOffset, x: texHBoxX(x + stop), y: texHBoxY(y + child.y), height: child.height, depth: child.depth, sourceSpan: child.sourceSpan, kind: "glyph-boundary", priority: 20, hitBounds: { xStart: texHBoxX(x + child.x), xEnd: texHBoxX(x + child.x + child.width), yStart: texHBoxY(y + child.y - child.height), yEnd: texHBoxY(y + child.y + child.depth) } });
     }
   }
   walk(hlist.items);
@@ -109,7 +109,7 @@ function geometry(params: TransformLayoutParams, body: TexMathHList): Geometry {
   const context = texDimensionContextForFont(params.dimensionContext ?? { linewidth: texLength(100), textwidth: texLength(100), columnwidth: texLength(100), paperwidth: texLength(100), em: font.atPt, ex: texLength(0) }, font);
   const dimension = (raw: string): number => {
     const boxReference = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)?)\\(width|height|depth|totalheight)$/u.exec(raw.trim());
-    if (boxReference) { const factor = Number(boxReference[1] || 1); const extent = ({ width: body.width, height: body.height, depth: body.depth, totalheight: body.height + body.depth } as Record<string, number>)[boxReference[2]]; return factorProduct(extent, factor); }
+    if (boxReference) { const factor = boxReference[1] ? Number(boxReference[1]) : 1; const extent = ({ width: body.width, height: body.height, depth: body.depth, totalheight: body.height + body.depth } as Record<string, number>)[boxReference[2] ?? ""]; if (extent === undefined) throw new Error("Missing graphicx box dimension."); return factorProduct(extent, factor); }
     const parsed = parseTexDimensionExpression(raw); const value = parsed && resolveTexDimensionExpression(parsed, context);
     if (value === null || value === undefined || !Number.isFinite(value)) throw new Error(`Unsupported graphicx dimension ${raw}.`);
     return scaled(value);

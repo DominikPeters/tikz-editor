@@ -1,3 +1,4 @@
+import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import type { MacroBinding } from "../../macros/types.js";
 import { itemRole } from "../ownership/kinds.js";
 import { buildEditTree } from "../tree/build.js";
@@ -57,16 +58,16 @@ function wrapsArgumentOnly(tree: EditTree, container: "paragraph" | "formula"): 
   }
   let child: NodeId = marker.id;
   for (;;) {
-    const slot = tree.slots[tree.nodes[child].parent!];
+    const slot = editSlotAt(tree.slots, editNodeAt(tree.nodes, child).parent!);
     const visible = slot.children.filter((id) => itemRole(tree, id) !== "invisible");
     if (visible.length !== 1 || visible[0] !== child) {
       return false;
     }
-    const owner = tree.nodes[slot.node];
+    const owner = editNodeAt(tree.nodes, slot.node);
     if (owner.kind === container) {
       // The container must be the body's only block.
-      const outer = owner.parent == null ? null : tree.slots[owner.parent];
-      return outer?.children.length === 1 && tree.nodes[outer.node].kind === (container === "paragraph" ? "scope" : "paragraph");
+      const outer = owner.parent == null ? null : editSlotAt(tree.slots, owner.parent);
+      return outer?.children.length === 1 && editNodeAt(tree.nodes, outer.node).kind === (container === "paragraph" ? "scope" : "paragraph");
     }
     if (itemRole(tree, owner.id) !== "transparent") {
       return false;

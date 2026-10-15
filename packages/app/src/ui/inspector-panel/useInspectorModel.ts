@@ -72,10 +72,10 @@ function buildScopeTransformWriteTarget(
     transformContext: {
       key,
       values: { ...context.values },
-      presence: context.presence ? { ...context.presence } : undefined
+      ...(context.presence ? { presence: { ...context.presence } } : {})
     },
     writable,
-    reason
+    ...(reason === undefined ? {} : { reason })
   };
 }
 
@@ -153,7 +153,7 @@ function buildScopeInspectorDescriptor(
     elementKind: "scope",
     elementId: scopeId,
     writeTargetId: writable ? scopeId : null,
-    readOnlyReason,
+    ...(readOnlyReason === undefined ? {} : { readOnlyReason }),
     sections
   };
 }

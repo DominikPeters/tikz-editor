@@ -76,7 +76,7 @@ export function snapSelectionTranslation(input: SnapSelectionTranslationInput): 
     settings,
     selection: movedSelection,
     includeGaps: true,
-    previousTargets: input.previousTargets,
+    ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
     enabledAxis: input.enabledAxis
   });
 
@@ -107,9 +107,9 @@ export function snapHandlePosition(input: SnapHandlePositionInput): SnapResult {
   return snapPointerWithPointsAndGrid({
     context: input.context,
     settings,
-    previousTargets: input.previousTargets,
+    ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
     pointer: input.point,
-    direction: input.direction,
+    ...(input.direction === undefined ? {} : { direction: input.direction }),
     referencePoints,
   });
 }
@@ -156,7 +156,7 @@ export function snapToolPointer(input: SnapToolPointerInput): SnapResult {
     return snapPointerWithPointsAndGrid({
       context: input.context,
       settings,
-      previousTargets: input.previousTargets,
+      ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
       pointer: input.pointer,
       referencePoints: input.context.referencePoints
     });
@@ -165,7 +165,7 @@ export function snapToolPointer(input: SnapToolPointerInput): SnapResult {
   return snapPointerWithPointsAndGrid({
     context: input.context,
     settings,
-    previousTargets: input.previousTargets,
+    ...(input.previousTargets === undefined ? {} : { previousTargets: input.previousTargets }),
     pointer: input.pointer,
     referencePoints: input.context.referencePoints
   });
@@ -229,7 +229,7 @@ function snapPointerWithPointsAndGrid({
     offset,
     snappedPoint,
     targets,
-    lines: pointerSnapLines(context, { ...snappedPoint, role: pointer.role }, targets, settings, referencePoints)
+    lines: pointerSnapLines(context, { ...snappedPoint, ...(pointer.role === undefined ? {} : { role: pointer.role }) }, targets, settings, referencePoints)
   };
 }
 
@@ -282,7 +282,7 @@ function runSelectionSnapPasses({
     settings,
     selection,
     includeGaps,
-    enabledAxis,
+    ...(enabledAxis === undefined ? {} : { enabledAxis }),
     thresholdWorld,
     clusterBreakWorld: SNAP_CLUSTER_BREAK_PX / context.zoom
   });
@@ -374,8 +374,8 @@ function collectPointGridAndGapSnaps({
       minOffset,
       nearest,
       kind: "point",
-      enabledAxis,
-      clusterBreakWorld
+      ...(enabledAxis === undefined ? {} : { enabledAxis }),
+      ...(clusterBreakWorld === undefined ? {} : { clusterBreakWorld })
     });
   }
 
@@ -384,7 +384,7 @@ function collectPointGridAndGapSnaps({
     guides: context.guides,
     minOffset,
     nearest,
-    enabledAxis
+    ...(enabledAxis === undefined ? {} : { enabledAxis })
   });
 
   if (settings.grid.enabled) {
@@ -393,7 +393,7 @@ function collectPointGridAndGapSnaps({
       minOffset,
       nearest,
       gridStep: pickGridStepPt(context.zoom, settings.grid.minorTargetPx),
-      enabledAxis
+      ...(enabledAxis === undefined ? {} : { enabledAxis })
     });
   }
 
@@ -403,7 +403,7 @@ function collectPointGridAndGapSnaps({
       visibleGaps: context.visibleGaps,
       minOffset,
       nearest,
-      enabledAxis
+      ...(enabledAxis === undefined ? {} : { enabledAxis })
     });
   }
 
@@ -439,8 +439,8 @@ function collectPointAndGridSnaps({
       minOffset,
       nearest,
       kind: "point",
-      enabledAxis,
-      clusterBreakWorld
+      ...(enabledAxis === undefined ? {} : { enabledAxis }),
+      ...(clusterBreakWorld === undefined ? {} : { clusterBreakWorld })
     });
   }
 
@@ -449,7 +449,7 @@ function collectPointAndGridSnaps({
     guides: context.guides,
     minOffset,
     nearest,
-    enabledAxis
+    ...(enabledAxis === undefined ? {} : { enabledAxis })
   });
 
   if (settings.grid.enabled) {
@@ -458,7 +458,7 @@ function collectPointAndGridSnaps({
       minOffset,
       nearest,
       gridStep: pickGridStepPt(context.zoom, settings.grid.minorTargetPx),
-      enabledAxis
+      ...(enabledAxis === undefined ? {} : { enabledAxis })
     });
   }
 
@@ -482,7 +482,10 @@ function effectiveSettings(context: SnapContext, patch?: SnapSettingsPatch): Sna
 function withReferenceBounds(lines: SnapLine[], context: SnapContext): SnapLine[] {
   let byId = referenceBoundsIndexes.get(context.referenceBounds);
   if (!byId) { byId = new Map(context.referenceBounds.map(bounds => [bounds.sourceId, bounds])); referenceBoundsIndexes.set(context.referenceBounds, byId); }
-  return lines.map(line => ({ ...line, referenceBounds: line.referenceBounds ?? line.sourceIds?.flatMap(id => byId.get(id) ?? []) }));
+  return lines.map(line => {
+    const referenceBounds = line.referenceBounds ?? line.sourceIds?.flatMap(id => byId.get(id) ?? []);
+    return { ...line, ...(referenceBounds === undefined ? {} : { referenceBounds }) };
+  });
 }
 
 const referenceBoundsIndexes = new WeakMap<SnapContext["referenceBounds"], Map<string, SnapContext["referenceBounds"][number]>>();

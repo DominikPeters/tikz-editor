@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import { concatMappedText, createGeneratedMappedText, createIdentityMappedText, type MappedText } from "../../source-map.js";
 import { texHBoxLocalX, texHBoxLocalY, texHBoxX, texHBoxY, texLength, type TexLength } from "../coordinates.js";
 import { parseTexDimensionExpression, resolveTexDimensionExpression, texDimensionContextForFont, type TexDimensionContext } from "../dimensions.js";
@@ -86,7 +87,7 @@ function paragraphCell(cell: TexTabularCell, column: TexTabularColumn, params: T
     createIdentityMappedText(cell.text, cell.sourceStart),
     ...mappedPreamble(column.afterParts ?? []),
   ]);
-  const layout = layoutSimpleTexParagraph(mapped.text, { width, alignment, font, baselineSkip: cellBaselineSkip, parindent: 0, textFontProfile: { ...params.textFontProfile, defaultFontState: params.fontState }, mathBoxProvider: params.mathBoxProvider, metricProvider: params.metricProvider, graphicsResolver: params.graphicsResolver, dimensionContext: params.dimensionContext, tabularProfile: params.tabularProfile, sourceMap: mapped.sourceMap });
+  const layout = layoutSimpleTexParagraph(mapped.text, { width, alignment, font, baselineSkip: cellBaselineSkip, parindent: 0, textFontProfile: { ...params.textFontProfile, defaultFontState: params.fontState }, ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), metricProvider: params.metricProvider, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}), sourceMap: mapped.sourceMap });
   if (!layout.supported || !layout.report || !layout.vlistLayout) throw new Error(layout.fallbackReason ?? "Unsupported tabular paragraph cell.");
   const placements = new Map(layout.vlistLayout.linePlacements.map((line) => [line.lineIndex, line]));
   const firstLine = layout.report.lines[0];
@@ -144,15 +145,15 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
     if (!box) throw new Error("Unsupported vertical material in tabular boundary insert.");
     return box;
   });
-  const boundaryWidths = boundaries.map((boundary, i) => boundaryBoxes[i].width + (boundary.replace !== undefined ? 0 : sep * (i === 0 || i === boundaries.length - 1 ? 1 : 2)) + Math.max(0, boundary.rules - 1) * doubleSep + (arrayPackage ? boundary.rules * ruleWidth : 0));
+  const boundaryWidths = boundaries.map((boundary, i) => requireArrayValue(boundaryBoxes, i).width + (boundary.replace !== undefined ? 0 : sep * (i === 0 || i === boundaries.length - 1 ? 1 : 2)) + Math.max(0, boundary.rules - 1) * doubleSep + (arrayPackage ? boundary.rules * ruleWidth : 0));
   const widths = table.preamble.columns.map((column) => column.width ? dimension(column.width, 0) : 0);
   const rows = new Map<number, MeasuredCell[]>();
   for (let index = 0; index < table.items.length; index++) {
-    const row = table.items[index]; if (row.kind !== "row") continue;
+    const row = requireArrayValue(table.items, index); if (row.kind !== "row") continue;
     let col = 0; const measured: MeasuredCell[] = [];
     for (const cell of row.cells) {
       if (col + cell.span > widths.length) throw new Error("Too many tabular cells.");
-      const column = cell.preamble?.columns[0] ?? table.preamble.columns[col];
+      const column = cell.preamble?.columns[0] ?? requireArrayValue(table.preamble.columns, col);
       let box = column.width ? paragraphCell(cell, column, params, dimension(column.width, 0), normalSkip, strutDepth) : naturalCell(cell, column, params);
       if (column.width) {
         box = { ...box, height: texLength(Math.max(box.height, strutHeight)) };
@@ -167,7 +168,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
         }
       }
       measured.push({ cell, column, box, index: col });
-      if (cell.span === 1) widths[col] = Math.max(widths[col], box.width);
+      if (cell.span === 1) widths[col] = Math.max(requireArrayValue(widths, col), box.width);
       col += cell.span;
     }
     rows.set(index, measured);
@@ -176,15 +177,15 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
     if (cell.span <= 1) continue;
     const start = index; const end = index + cell.span;
     const replacement = cell.preamble!;
-    const left = replacement.boundaries[0].replace === undefined ? sep : dimension("0pt", 0); const right = replacement.boundaries[1].replace === undefined ? sep : 0;
-    const existing = widths.slice(start, end).reduce((sum, n) => sum + n, 0) + boundaryWidths.slice(start + 1, end).reduce((sum, n) => sum + n, 0) + boundaryWidths[start] / (start === 0 ? 1 : 2) + boundaryWidths[end] / (end === widths.length ? 1 : 2);
+    const left = requireArrayValue(replacement.boundaries, 0).replace === undefined ? sep : dimension("0pt", 0); const right = requireArrayValue(replacement.boundaries, 1).replace === undefined ? sep : 0;
+    const existing = widths.slice(start, end).reduce((sum, n) => sum + n, 0) + boundaryWidths.slice(start + 1, end).reduce((sum, n) => sum + n, 0) + requireArrayValue(boundaryWidths, start) / (start === 0 ? 1 : 2) + requireArrayValue(boundaryWidths, end) / (end === widths.length ? 1 : 2);
     const deficit = box.width + left + right - existing;
-    if (deficit > 0) widths[end - 1] += deficit;
+    if (deficit > 0) widths[end - 1] = requireArrayValue(widths, end - 1) + deficit;
   }
   const cellStarts: number[] = []; const boundaryStarts: number[] = []; let width = 0;
-  for (let i = 0; i < widths.length; i++) { boundaryStarts.push(width); width += boundaryWidths[i]; cellStarts.push(width); width += widths[i]; }
+  for (let i = 0; i < widths.length; i++) { boundaryStarts.push(width); width += requireArrayValue(boundaryWidths, i); cellStarts.push(width); width += requireArrayValue(widths, i); }
   boundaryStarts.push(width); width += boundaryWidths.at(-1)!;
-  const logicalColumnEdge = (index: number): number => index === 0 ? 0 : index === widths.length ? width : cellStarts[index] - (boundaries[index].replace !== undefined ? 0 : sep);
+  const logicalColumnEdge = (index: number): number => index === 0 ? 0 : index === widths.length ? width : requireArrayValue(cellStarts, index) - (requireArrayValue(boundaries, index).replace !== undefined ? 0 : sep);
   const items: TexMathHListItem[] = []; let y = 0; let firstBaseline = 0; let lastDepth = 0; let lastBookClass = 0;
   const rectangle = (x: number, top: number, w: number, h: number, source: { start: number; end: number }): TexMathRuleLayoutItem => ({ kind: "rule", role: "array-rule", x: texHBoxLocalX(x), y: texHBoxLocalY(top), width: texLength(Math.max(0, w)), height: texLength(h), sourceSpan: source });
   const paintRule = (rule: TexTabularRule, top: number, h: number) => {
@@ -197,7 +198,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
     items.push(rectangle(x + left, top, edge - x - left - right, h, { start: rule.sourceStart, end: rule.sourceEnd }));
   };
   for (let index = 0; index < table.items.length; index++) {
-    const item = table.items[index]; const next = table.items[index + 1];
+    const item = requireArrayValue(table.items, index); const next = table.items[index + 1];
     if (item.kind === "rule") {
       if (item.command === "morecmidrules") { y += doubleSep; continue; }
       if (item.command === "addlinespace") { y += dimension(item.below, dimension(registers.defaultaddspace, fractionPt(bookSize, .5))); lastBookClass = 2; continue; }
@@ -226,8 +227,8 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
     for (const { cell, box, column, index: col } of row) {
       const spanEnd = col + cell.span;
       let available = widths.slice(col, spanEnd).reduce((sum, n) => sum + n, 0) + boundaryWidths.slice(col + 1, spanEnd).reduce((sum, n) => sum + n, 0);
-      let x = cellStarts[col];
-      if (cell.preamble) { const boundaryStart = logicalColumnEdge(col); const boundaryEnd = logicalColumnEdge(spanEnd); const left = cell.preamble.boundaries[0].replace === undefined ? sep : 0; const right = cell.preamble.boundaries[1].replace === undefined ? sep : 0; x = boundaryStart + left; available = boundaryEnd - boundaryStart - left - right; }
+      let x = requireArrayValue(cellStarts, col);
+      if (cell.preamble) { const boundaryStart = logicalColumnEdge(col); const boundaryEnd = logicalColumnEdge(spanEnd); const left = requireArrayValue(cell.preamble.boundaries, 0).replace === undefined ? sep : 0; const right = requireArrayValue(cell.preamble.boundaries, 1).replace === undefined ? sep : 0; x = boundaryStart + left; available = boundaryEnd - boundaryStart - left - right; }
       if (column.alignment === "center") x += (available - box.width) / 2; else if (column.alignment === "right") x += available - box.width;
       items.push(boxChild(box, x, baseline, { start: cell.sourceStart, end: cell.sourceEnd }));
     }
@@ -236,15 +237,15 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
     for (const { cell, index: col } of row) {
       if (!cell.preamble) continue;
       for (let i = col + 1; i < col + cell.span; i++) omittedBoundaries.add(i);
-      rowBoundaries.set(col, cell.preamble.boundaries[0]);
-      rowBoundaries.set(col + cell.span, cell.preamble.boundaries[1]);
+      rowBoundaries.set(col, requireArrayValue(cell.preamble.boundaries, 0));
+      rowBoundaries.set(col + cell.span, requireArrayValue(cell.preamble.boundaries, 1));
     }
     for (let i = 0; i < boundaries.length; i++) {
       if (omittedBoundaries.has(i)) continue;
-      const boundary = rowBoundaries.get(i) ?? boundaries[i]; const insertX = boundaryStarts[i] + (boundary.replace !== undefined ? 0 : sep);
-      if (!rowBoundaries.has(i) && boundaryBoxes[i].width) items.push(boxChild(boundaryBoxes[i], insertX, baseline, boundaryBoxes[i].sourceSpan));
+      const boundary = rowBoundaries.get(i) ?? requireArrayValue(boundaries, i); const insertX = requireArrayValue(boundaryStarts, i) + (boundary.replace !== undefined ? 0 : sep);
+      if (!rowBoundaries.has(i) && requireArrayValue(boundaryBoxes, i).width) items.push(boxChild(requireArrayValue(boundaryBoxes, i), insertX, baseline, requireArrayValue(boundaryBoxes, i).sourceSpan));
       const ruleRunWidth = Math.max(0, boundary.rules - 1) * doubleSep + (arrayPackage ? boundary.rules * ruleWidth : 0);
-      const ruleStart = i === 0 ? 0 : i === widths.length ? width - ruleRunWidth : cellStarts[i] - sep - ruleRunWidth;
+      const ruleStart = i === 0 ? 0 : i === widths.length ? width - ruleRunWidth : requireArrayValue(cellStarts, i) - sep - ruleRunWidth;
       for (let r = 0; r < boundary.rules; r++) items.push(rectangle(ruleStart - (arrayPackage ? 0 : ruleWidth / 2) + r * (doubleSep + (arrayPackage ? ruleWidth : 0)), y, ruleWidth, height + depth, { start: table.contentStart, end: table.contentStart }));
     }
     y = baseline + depth + (extra < 0 ? extra : 0); lastBookClass = 0;
@@ -264,7 +265,7 @@ export function layoutTexTabularBox(params: TableLayoutParams): TexMathBox {
       if (item.kind === "hlist") { collectCarets(item.items, x + item.x, y + item.y); continue; }
       if (item.kind !== "glyph") continue;
       const bounds = { xStart: texHBoxX(x + item.x), xEnd: texHBoxX(x + item.x + item.width), yStart: texHBoxY(y + item.y - item.height), yEnd: texHBoxY(y + item.y + item.depth) };
-      for (const [sourceOffset, caretX] of [[item.sourceSpan.start, x + item.x], [item.sourceSpan.end, x + item.x + item.width]]) caretEntries.push({ sourceOffset, x: texHBoxX(caretX), y: texHBoxY(y + item.y), height: item.height, depth: item.depth, sourceSpan: item.sourceSpan, kind: "glyph-boundary", hitBounds: bounds, priority: 20 });
+      for (const [sourceOffset, caretX] of [[item.sourceSpan.start, x + item.x], [item.sourceSpan.end, x + item.x + item.width]] as const) caretEntries.push({ sourceOffset, x: texHBoxX(caretX), y: texHBoxY(y + item.y), height: item.height, depth: item.depth, sourceSpan: item.sourceSpan, kind: "glyph-boundary", hitBounds: bounds, priority: 20 });
     }
   };
   collectCarets(hlist.items);

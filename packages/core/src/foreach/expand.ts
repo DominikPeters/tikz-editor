@@ -467,7 +467,10 @@ function cachedFragmentParse<T>(cache: Map<string, T>, raw: string, span: Span, 
     cache.delete(key);
   } else {
     parsed = parse();
-    if (cache.size >= FRAGMENT_PARSE_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+    if (cache.size >= FRAGMENT_PARSE_CACHE_LIMIT) {
+      const oldest = cache.keys().next();
+      if (!oldest.done) cache.delete(oldest.value);
+    }
   }
   cache.set(key, parsed);
   return parsed;
@@ -1332,8 +1335,7 @@ function reindexPathItems(
   statementIndex: number,
   templateLocalIdByExpandedId: Map<string, string>
 ): void {
-  for (let itemIndex = 0; itemIndex < statement.items.length; itemIndex += 1) {
-    const item = statement.items[itemIndex];
+  for (const [itemIndex, item] of statement.items.entries()) {
     const previousId = item.id;
     if (item.kind === "Coordinate") {
       item.id = coordinateItemId(statementIndex, itemIndex);
@@ -1353,8 +1355,8 @@ function reindexPathItems(
       item.id = picOperationItemId(statementIndex, itemIndex);
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = picForeachClauseId(statementIndex, itemIndex, clauseIndex);
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = picForeachClauseId(statementIndex, itemIndex, clauseIndex);
         }
       }
       continue;
@@ -1400,8 +1402,8 @@ function reindexPathItems(
       item.id = childOperationItemId(statementIndex, itemIndex);
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = childForeachClauseId(statementIndex, itemIndex, clauseIndex);
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = childForeachClauseId(statementIndex, itemIndex, clauseIndex);
         }
       }
       reindexNestedPathItems(item.body, statementIndex, `${item.id}:body`, templateLocalIdByExpandedId);
@@ -1454,8 +1456,8 @@ function reindexTopLevelNodeItem(
   item.id = nodeItemId(statementIndex, itemIndex);
   templateLocalIdByExpandedId.set(item.id, previousId);
   if (item.foreachClauses) {
-    for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-      item.foreachClauses[clauseIndex].id = nodeForeachClauseId(statementIndex, itemIndex, clauseIndex);
+    for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+      clause.id = nodeForeachClauseId(statementIndex, itemIndex, clauseIndex);
     }
   }
 }
@@ -1466,8 +1468,7 @@ function reindexNestedPathItems(
   parentPrefix: string,
   templateLocalIdByExpandedId: Map<string, string>
 ): void {
-  for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
-    const item = items[itemIndex];
+  for (const [itemIndex, item] of items.entries()) {
     const nestedPrefix = `${parentPrefix}:${itemIndex}`;
     const previousId = item.id;
 
@@ -1480,8 +1481,8 @@ function reindexNestedPathItems(
       item.id = `node:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = `${item.id}:foreach:${clauseIndex}`;
         }
       }
       continue;
@@ -1495,8 +1496,8 @@ function reindexNestedPathItems(
       item.id = `pic-operation:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = `${item.id}:foreach:${clauseIndex}`;
         }
       }
       continue;
@@ -1547,8 +1548,8 @@ function reindexNestedPathItems(
       item.id = `child-operation:${statementIndex}:${nestedPrefix}`;
       templateLocalIdByExpandedId.set(item.id, previousId);
       if (item.foreachClauses) {
-        for (let clauseIndex = 0; clauseIndex < item.foreachClauses.length; clauseIndex += 1) {
-          item.foreachClauses[clauseIndex].id = `${item.id}:foreach:${clauseIndex}`;
+        for (const [clauseIndex, clause] of item.foreachClauses.entries()) {
+          clause.id = `${item.id}:foreach:${clauseIndex}`;
         }
       }
       reindexNestedPathItems(item.body, statementIndex, `${item.id}:body`, templateLocalIdByExpandedId);

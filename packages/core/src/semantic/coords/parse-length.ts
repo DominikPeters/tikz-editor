@@ -60,7 +60,7 @@ export function parseQuantityExpression(
   options: ParseLengthOptions = {}
 ): ParsedQuantity | null {
   const result = evaluatePgfMathExpression(input, {
-    unitFactors: options.unitFactors
+    ...(options.unitFactors !== undefined ? { unitFactors: options.unitFactors } : {})
   });
   if (result.ok === false) {
     return null;
@@ -79,7 +79,7 @@ export function parseCoordinateLike(raw: string): { x: string; y: string } | nul
   if (parts.length < 2) {
     return null;
   }
-  return { x: parts[0], y: parts[1] };
+  return { x: parts[0] ?? "", y: parts[1] ?? "" };
 }
 
 function normalizeLengthInput(input: string): string {
@@ -97,7 +97,7 @@ function normalizeLengthInput(input: string): string {
 function hasExplicitLengthUnit(input: string): boolean {
   let index = 0;
   while (index < input.length) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (/\s/.test(char) || char === "+" || char === "-") {
       index += 1;
       continue;
@@ -109,7 +109,7 @@ function hasExplicitLengthUnit(input: string): boolean {
 
       if (char === ".") {
         index += 1;
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           hasDigits = true;
           index += 1;
         }
@@ -117,27 +117,27 @@ function hasExplicitLengthUnit(input: string): boolean {
           continue;
         }
       } else {
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           hasDigits = true;
           index += 1;
         }
-        if (index < input.length && input[index] === ".") {
+        if (index < input.length && input.charAt(index) === ".") {
           index += 1;
-          while (index < input.length && isDigit(input[index])) {
+          while (index < input.length && isDigit(input.charAt(index))) {
             hasDigits = true;
             index += 1;
           }
         }
       }
 
-      if (index < input.length && (input[index] === "e" || input[index] === "E")) {
+      if (index < input.length && (input.charAt(index) === "e" || input.charAt(index) === "E")) {
         const exponentStart = index;
         index += 1;
-        if (index < input.length && (input[index] === "+" || input[index] === "-")) {
+        if (index < input.length && (input.charAt(index) === "+" || input.charAt(index) === "-")) {
           index += 1;
         }
         const exponentDigitsStart = index;
-        while (index < input.length && isDigit(input[index])) {
+        while (index < input.length && isDigit(input.charAt(index))) {
           index += 1;
         }
         if (exponentDigitsStart === index) {
@@ -145,12 +145,12 @@ function hasExplicitLengthUnit(input: string): boolean {
         }
       }
 
-      while (index < input.length && /\s/.test(input[index])) {
+      while (index < input.length && /\s/.test(input.charAt(index))) {
         index += 1;
       }
 
       const unitStart = index;
-      while (index < input.length && /[A-Za-z]/.test(input[index])) {
+      while (index < input.length && /[A-Za-z]/.test(input.charAt(index))) {
         index += 1;
       }
       if (index > unitStart) {
@@ -175,7 +175,7 @@ function unwrapSingleOuterBracePair(raw: string): string | null {
 
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;

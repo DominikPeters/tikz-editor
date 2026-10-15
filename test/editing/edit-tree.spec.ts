@@ -202,6 +202,14 @@ describe("edit tree over the Beamer fixture corpus", () => {
     expect(failures).toEqual([]);
   });
 
+  it("skips unavailable math content slots during engine comparison", () => {
+    const tree = buildEditTree("$x$");
+    expect(tree.nodes.some((node) => node.kind === "formula")).toBe(true);
+    const unavailable = { ...tree, nodes: tree.nodes.map((node) =>
+      node.kind === "formula" ? { ...node, slots: [] } : node) };
+    expect(() => compareEditTreeWithEngines(unavailable)).not.toThrow();
+  });
+
   it("agrees with the math parser and the text IR", () => {
     const disagreements = scopes.flatMap((scope) =>
       compareEditTreeWithEngines(buildEditTree(scope.text, { commands: scope.commands }))

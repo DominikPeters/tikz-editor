@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { CommandTable } from "../commands/table.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
@@ -65,10 +67,10 @@ export function copyRange(view: EditView, from: number, to: number, commands: Co
     return null;
   }
   const text = tree.text;
-  const carried = (node: NodeId) => CARRIED_KINDS.has(tree.nodes[node].kind) ||
-    (view.role(node) === "transparent" && !UNCARRIED_COMMANDS.has(tree.nodes[node].command ?? ""));
-  const slotAround = (node: NodeId, offset: number) => tree.nodes[node].slots
-    .map((slot) => tree.slots[slot])
+  const carried = (node: NodeId) => CARRIED_KINDS.has(editNodeAt(tree.nodes, node).kind) ||
+    (view.role(node) === "transparent" && !UNCARRIED_COMMANDS.has(editNodeAt(tree.nodes, node).command ?? ""));
+  const slotAround = (node: NodeId, offset: number) => editNodeAt(tree.nodes, node).slots
+    .map((slot) => editSlotAt(tree.slots, slot))
     .find((slot) => slot.presence === "present" && slot.contentSpan.from <= offset && offset <= slot.contentSpan.to);
   let open = "";
   let close = "";
@@ -165,7 +167,7 @@ function plainText(view: EditView, from: number, to: number): string {
   const { tree } = view;
   const parts: string[] = [];
   const visit = (node: NodeId): void => {
-    const record = tree.nodes[node];
+    const record = editNodeAt(tree.nodes, node);
     if (record.span.to <= from || record.span.from >= to) {
       return;
     }
@@ -173,7 +175,7 @@ function plainText(view: EditView, from: number, to: number): string {
     const source = tree.text.slice(Math.max(from, record.span.from), Math.min(to, record.span.to));
     if (record.mode === "math" || record.kind === "formula" || record.kind === "display") {
       // A whole formula reads as its content; a part of one as its source.
-      const content = record.kind === "formula" || record.kind === "display" ? tree.slots[record.slots[0]]?.contentSpan : null;
+      const content = record.kind === "formula" || record.kind === "display" ? tree.slots[requireArrayValue(record.slots, 0)]?.contentSpan : null;
       parts.push(inside && content ? tree.text.slice(content.from, content.to) : source);
       return;
     }
@@ -195,10 +197,10 @@ function plainText(view: EditView, from: number, to: number): string {
       return;
     }
     for (const slot of record.slots) {
-      if (tree.slots[slot].role === "label") {
+      if (editSlotAt(tree.slots, slot).role === "label") {
         continue;
       }
-      for (const child of tree.slots[slot].children) {
+      for (const child of editSlotAt(tree.slots, slot).children) {
         visit(child);
       }
     }
@@ -224,7 +226,7 @@ export function pasteAt(
   if (beforeMulticolumn(view, caret) || inValue(view, at)) {
     return { kind: "none" };
   }
-  const mode = view.tree.slots[caret.slot].mode === "math" ? "math" : "text";
+  const mode = editSlotAt(view.tree.slots, caret.slot).mode === "math" ? "math" : "text";
   const place = { view, caret, at, mode, title } as const;
   const clip = payload.clip && convertClip(place, payload.clip, commands);
   if (clip) {
@@ -251,7 +253,7 @@ function insertSource(place: Place, converted: string): EditOutcome {
   const source = startSeam(place, guarded) + guarded;
   const end = at + source.length;
   const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, [{ from: at, to: at, insert: source }], end, mode), end);
-  const inserted = patches[0].insert;
+  const inserted = requireArrayValue(patches, 0).insert;
   return placeInsertion(view, caret, at, { kind: "patch", patches, caret: at + inserted.length, run: null });
 }
 
@@ -330,17 +332,17 @@ function fits(place: Place, source: string, commands: CommandTable | null): bool
 /** Whether a slot takes paragraphs: a flow, or a paragraph directly in one (not inside a wrapper, cell or title). */
 function holdsParagraphs(view: EditView, slot: SlotId): boolean {
   const { tree } = view;
-  const record = tree.slots[slot];
+  const record = editSlotAt(tree.slots, slot);
   if (record.mode !== "text") {
     return false;
   }
-  const owner = tree.nodes[record.node];
-  return record.flow || (owner.kind === "paragraph" && owner.parent != null && tree.slots[owner.parent].flow);
+  const owner = editNodeAt(tree.nodes, record.node);
+  return record.flow || (owner.kind === "paragraph" && owner.parent != null && editSlotAt(tree.slots, owner.parent).flow);
 }
 
 function insideList(tree: EditTree, node: NodeId): boolean {
-  for (let slot = tree.nodes[node].parent; slot != null; slot = tree.nodes[tree.slots[slot].node].parent) {
-    if (tree.nodes[tree.slots[slot].node].kind === "list") {
+  for (let slot = editNodeAt(tree.nodes, node).parent; slot != null; slot = editNodeAt(tree.nodes, editSlotAt(tree.slots, slot).node).parent) {
+    if (editNodeAt(tree.nodes, editSlotAt(tree.slots, slot).node).kind === "list") {
       return true;
     }
   }
@@ -349,15 +351,15 @@ function insideList(tree: EditTree, node: NodeId): boolean {
 
 /** Lists around a node and itself. */
 function listDepth(tree: EditTree, node: NodeId): number {
-  let depth = tree.nodes[node].kind === "list" ? 1 : 0;
-  for (let slot = tree.nodes[node].parent; slot != null; slot = tree.nodes[tree.slots[slot].node].parent) {
-    depth += tree.nodes[tree.slots[slot].node].kind === "list" ? 1 : 0;
+  let depth = editNodeAt(tree.nodes, node).kind === "list" ? 1 : 0;
+  for (let slot = editNodeAt(tree.nodes, node).parent; slot != null; slot = editNodeAt(tree.nodes, editSlotAt(tree.slots, slot).node).parent) {
+    depth += editNodeAt(tree.nodes, editSlotAt(tree.slots, slot).node).kind === "list" ? 1 : 0;
   }
   return depth;
 }
 
 function listDepthAt(view: EditView, slot: SlotId): number {
-  return listDepth(view.tree, view.tree.slots[slot].node);
+  return listDepth(view.tree, editSlotAt(view.tree.slots, slot).node);
 }
 
 /**
@@ -399,7 +401,7 @@ function recognizedTex(place: Place, plain: string, commands: CommandTable | nul
   if (place.mode === "math") {
     const whole = /^(?:\$([^$]+)\$|\\\(([\s\S]+)\\\))$/u.exec(text);
     if (whole) {
-      text = (whole[1] ?? whole[2]).trim();
+      text = (whole[1] ?? whole[2] ?? "").trim();
       delimited = true;
     }
   }
@@ -462,7 +464,7 @@ const TEXT_ESCAPES: Readonly<Record<string, string>> = {
 };
 
 function escapeText(text: string): string {
-  return text.replace(/[\\{}$%#&_^~]/gu, (char) => TEXT_ESCAPES[char]);
+  return text.replace(/[\\{}$%#&_^~]/gu, (char) => TEXT_ESCAPES[char] ?? char);
 }
 
 const MATH_ESCAPES: Readonly<Record<string, string>> = {
@@ -480,7 +482,8 @@ function escapeMath(place: Place, text: string): string {
   let scripts = new Set<string>();
   let base = false;
   for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
+    const char = text.charAt(index);
+
     if (char === "^" || char === "_") {
       const argument = /^(?:\d+|[A-Za-z])/u.exec(text.slice(index + 1))?.[0];
       if (base && argument && !scripts.has(char)) {
@@ -514,7 +517,8 @@ function protectClosingBrackets(source: string): string {
   let depth = 0;
   let result = "";
   for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
+    const char = source.charAt(index);
+
     if (char === "\\") {
       result += source.slice(index, index + 2);
       index += 1;

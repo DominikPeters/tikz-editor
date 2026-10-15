@@ -52,8 +52,8 @@ export function updateNumberScrubState(
     currentX: input.currentX,
     startValue: state.startValue,
     step: state.step,
-    min: state.min,
-    max: state.max,
+    ...(state.min === undefined ? {} : { min: state.min }),
+    ...(state.max === undefined ? {} : { max: state.max }),
     modifiers: input.modifiers
   });
   const didActivate = !state.hasActivated;

@@ -7,7 +7,7 @@ import type { ResolvedBeamerTheme } from "./theme/types.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 
-const STANDARD_PAGE_SIZES_CM: Readonly<Record<string, readonly [number, number]>> = {
+const STANDARD_PAGE_SIZES_CM = {
   "2013": [14, 9.1],
   "1610": [16, 10],
   "169": [16, 9],
@@ -16,7 +16,8 @@ const STANDARD_PAGE_SIZES_CM: Readonly<Record<string, readonly [number, number]>
   "43": [12.8, 9.6],
   "32": [13.5, 9],
   "141": [14.85, 10.5],
-};
+} satisfies Readonly<Record<string, readonly [number, number]>>;
+const pageSizeLookup: Readonly<Partial<Record<string, readonly [number, number]>>> = STANDARD_PAGE_SIZES_CM;
 
 /**
  * Resolve the source-derived page geometry needed before frame layout.
@@ -31,7 +32,7 @@ export function resolveBeamerPageGeometry(
 ): BeamerPageGeometry {
   const aspectRatio = documentClassOption(document, "aspectratio") ?? "43";
   const [widthCm, heightCm] =
-    STANDARD_PAGE_SIZES_CM[aspectRatio] ?? customPageSizeCm(aspectRatio);
+    pageSizeLookup[aspectRatio] ?? customPageSizeCm(aspectRatio);
   const pageWidth = cmToTexPt(widthCm);
   const pageHeight = cmToTexPt(heightCm);
   const marginLeft = theme.dimensions.textMarginLeftPt;

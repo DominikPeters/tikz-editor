@@ -224,8 +224,15 @@ function resolveSvgPadding(parse: ParseTikzResult): number {
 }
 
 function computeSvgOptions(parse: ParseTikzResult, viewBox: SvgViewBox | null | undefined): EmitSvgOptions {
-  return { padding: resolveSvgPadding(parse), textSourceCoordinates: "layout", viewBox: viewBox ?? undefined };
+  return { padding: resolveSvgPadding(parse), textSourceCoordinates: "layout", ...(viewBox == null ? {} : { viewBox }) };
 }
+function withSourceFingerprint(options: EvaluateOptions, sourceFingerprint: string | undefined): EvaluateOptions {
+  const next = { ...options };
+  if (sourceFingerprint === undefined) delete next.sourceFingerprint;
+  else next.sourceFingerprint = sourceFingerprint;
+  return next;
+}
+
 type ComputeCache = {
   documentId?: string;
   semantic: IncrementalSemanticSession;
@@ -292,9 +299,9 @@ async function computeSnapshotOnce(request: ComputeRequest, work?: CooperativeWo
   const previous = committed && committed.documentId === request.documentId && committed.outlineGeneration === outlineGeneration ? committed : null;
   const cache: ComputeCache = {
     outlineGeneration,
-    renderContextKey: previous?.renderContextKey,
-    overlayPage: previous?.overlayPage,
-    documentId: request.documentId,
+    ...((previous?.renderContextKey) === undefined ? {} : { renderContextKey: previous?.renderContextKey }),
+    ...((previous?.overlayPage) === undefined ? {} : { overlayPage: previous?.overlayPage }),
+    ...((request.documentId) === undefined ? {} : { documentId: request.documentId }),
     semantic: previous?.semantic.fork() ?? createIncrementalSemanticSession(),
     parse: previous?.parse.fork() ?? createIncrementalParseSession(),
     svg: previous?.svg ?? null,
@@ -319,7 +326,8 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     const beamerDocument = !renderContext && detectDocumentKind(request.source) === "beamer";
     if (!beamerDocument && cache.renderContextKey !== renderContext?.key) {
       cache.semantic.reset(); cache.parse.reset(); cache.svg = null; cache.text = null; cache.warmSource = null;
-      cache.renderContextKey = renderContext?.key;
+      if (renderContext?.key === undefined) delete cache.renderContextKey;
+      else cache.renderContextKey = renderContext.key;
     }
     if (beamerDocument) {
       const rootRef = request.activeRootId
@@ -351,14 +359,14 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     const changedSourceIds = normalizeChangedSourceIds(request.changedSourceIds ?? []);
     const patches = normalizePatches(request.patches ?? []);
     const sourceFingerprint = buildSourceRevisionFingerprint({
-      documentId: request.documentId,
-      sourceRevision: request.sourceRevision,
+      ...((request.documentId) === undefined ? {} : { documentId: request.documentId }),
+      ...((request.sourceRevision) === undefined ? {} : { sourceRevision: request.sourceRevision }),
       sourceLength: request.source.length
     });
     if (requestKind === "prewarm" && cache.warmSource === request.source) {
       return {
         id: request.id,
-        documentId: request.documentId,
+        ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
         snapshot: makeEmptySnapshot(request.source),
         diagnostics: []
       };
@@ -410,8 +418,8 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
           recomputeFromStatementIndex: result.semanticStats.recomputeFromStatementIndex,
           recomputedStatementCount: result.semanticStats.recomputedStatementCount,
           reusedStatementCount: result.semanticStats.reusedStatementCount,
-          corridorEndStatementIndex: result.semanticStats.corridorEndStatementIndex,
-          affectedStatementCount: result.semanticStats.affectedStatementCount
+          ...((result.semanticStats.corridorEndStatementIndex) === undefined ? {} : { corridorEndStatementIndex: result.semanticStats.corridorEndStatementIndex }),
+          ...((result.semanticStats.affectedStatementCount) === undefined ? {} : { affectedStatementCount: result.semanticStats.affectedStatementCount })
         }
       };
       recordProfilingComputeTiming({
@@ -421,7 +429,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
         durationMs: performance.now() - computeStartedAt,
         changedSourceCount: result.changedSourceIds.length,
         incremental: true,
-        deckLayoutReused: renderContext?.deckLayoutReused,
+        ...((renderContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: renderContext?.deckLayoutReused }),
         parseStrategy: result.parseStats.strategy,
         parseFallbackReason: result.parseStats.fallbackReason ?? null,
         parsePatchApplication: result.parseStats.patchApplication ?? null,
@@ -435,7 +443,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       });
       return {
         id: request.id,
-        documentId: request.documentId,
+        ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
         snapshot,
         diagnostics: result.renderDiagnostics
       };
@@ -464,12 +472,12 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
     const result = await renderTikzToSvgAsync(request.source, {
       parse: {
         recover: true,
-        activeFigureId: request.activeRootId,
+        ...((request.activeRootId) === undefined ? {} : { activeFigureId: request.activeRootId }),
         includeContextDefinitions: true,
-        structuralMasks: textEditMaskSpan ? [textEditMaskSpan] : undefined
+        ...(textEditMaskSpan ? { structuralMasks: [textEditMaskSpan] } : {})
       },
-      evaluate: { ...renderContext?.evaluate, sourceFingerprint, graphicsResolver },
-      cooperative: work,
+      evaluate: withSourceFingerprint({ ...renderContext?.evaluate, graphicsResolver }, sourceFingerprint),
+      ...((work) === undefined ? {} : { cooperative: work }),
       semanticEvaluatorAsync: async (figure, source, options, scopedWork) =>
         (await semanticSession.evaluateAsync({ figure, source, options, hints: { trigger: "other" } }, scopedWork)).semantic,
       semanticEvaluator: (figure, source, options) =>
@@ -492,7 +500,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       parseSession.prime(result.parse, {
         activeFigureId: request.activeRootId ?? result.parse.activeFigureId,
         includeContextDefinitions: true,
-        structuralMasks: renderContext?.structuralMasks,
+        ...((renderContext?.structuralMasks) === undefined ? {} : { structuralMasks: renderContext?.structuralMasks }),
         sourceRevision: request.sourceRevision ?? null
       });
       cache.svg = result.svg.model;
@@ -524,13 +532,13 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
       durationMs: performance.now() - computeStartedAt,
       changedSourceCount: changedSourceIds.length,
       incremental: false,
-      deckLayoutReused: renderContext?.deckLayoutReused,
+      ...((renderContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: renderContext?.deckLayoutReused }),
       phaseDurationsMs: phases
     });
 
     return {
       id: request.id,
-      documentId: request.documentId,
+      ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
       snapshot,
       diagnostics: result.renderDiagnostics
     };
@@ -561,7 +569,7 @@ async function computeSnapshotWithCache(request: ComputeRequest, revision: numbe
 
     return {
       id: request.id,
-      documentId: request.documentId,
+      ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
       snapshot,
       diagnostics: [
         {
@@ -751,7 +759,7 @@ function makeBeamerLayoutCloneSafe(layout: BeamerFrameLayout): { layout: BeamerF
 
 async function renderDeckPage(session: DeckComputeSession, frameIndex: number, step: number, work?: CooperativeWorkOptions, drawingLayer?: string) {
   const result = await session.prepared.renderFrame({ frameIndex, step,
-    graphicsResolver: session.graphicsContext.resolver, cooperative: work, drawingLayer });
+    graphicsResolver: session.graphicsContext.resolver, ...((work) === undefined ? {} : { cooperative: work }), ...((drawingLayer) === undefined ? {} : { drawingLayer: drawingLayer }) });
   work?.signal?.throwIfAborted();
   const clone = makeBeamerLayoutCloneSafe(result.layout);
   const frame: DeckActiveFrame = { frameId: result.frame.id, frameIndex, step, stepCount: result.layout.stepCount,
@@ -772,16 +780,17 @@ async function drawingLayerPage(session: DeckComputeSession, cache: ComputeCache
   const mask = request.textEditMaskSpan;
   const reusable = !mask || (picture.span.from <= mask.from && mask.to <= picture.span.to);
   const previous = cache.overlayPage;
+  const frameDescription = session.frames[frameIndex];
+  if (!frameDescription) throw new RangeError(`Missing deck frame ${frameIndex}`);
   if (previous && reusable && previous.rootId === rootId && previous.contextKey === contextKey &&
-    previous.frame.frameIndex === frameIndex && previous.frame.step === step && previous.frame.stepCount === session.frames[frameIndex].stepCount &&
+    previous.frame.frameIndex === frameIndex && previous.frame.step === step && previous.frame.stepCount === frameDescription.stepCount &&
     previous.rememberPicture === picture.rememberPicture && undrawnLayerPageStands(previous, request.source, picture.span)) {
     return { frame: previous.frame, reused: true };
   }
   const { frame } = await renderDeckPage(session, frameIndex, step, work, rootId);
   if (!frame.layout.embeddedTikz.some((entry) => entry.overlay?.rootId === rootId)) return null;
-  cache.overlayPage = reusable
-    ? { source: request.source, contextKey, frame, rootId, span: picture.span, rememberPicture: picture.rememberPicture }
-    : undefined;
+  if (reusable) cache.overlayPage = { source: request.source, contextKey, frame, rootId, span: picture.span, rememberPicture: picture.rememberPicture };
+  else delete cache.overlayPage;
   return { frame, reused: false };
 }
 
@@ -823,7 +832,7 @@ async function computeDeckSnapshot(
     // incremental-session concern.
     return {
       id: request.id,
-      documentId: request.documentId,
+      ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
       snapshot: makeEmptySnapshot(request.source),
       diagnostics: []
     };
@@ -846,16 +855,16 @@ async function computeDeckSnapshot(
     deckComputeSession.structuralMaskKey === structuralMaskKey;
   // Parsed afresh, a deck whose structure is unchanged keeps its rendered pages.
   const exact = sameContext && request.exactParse && !deckComputeSession!.parseExact
-    ? prepareBeamerDocument(request.source, { structuralMasks: structuralMask ? [structuralMask] : undefined, exactSyntax: true })
+    ? prepareBeamerDocument(request.source, { ...(structuralMask ? { structuralMasks: [structuralMask] } : {}), exactSyntax: true })
     : null;
   if (exact && sameSyntaxTree(exact.syntax.tree, deckComputeSession!.prepared.syntax.tree)) {
     session = { ...deckComputeSession!, parseExact: true, renderedPages: deckComputeSession!.renderedPages.fork() };
   } else if (!sameContext || exact) {
     // Any earlier document reparses correctly: what changed is found by diffing.
     const prepared = exact ?? prepareBeamerDocument(request.source, {
-      structuralMasks: structuralMask ? [structuralMask] : undefined,
-      previousSyntax: deckComputeSession?.prepared.syntax,
-      exactSyntax: request.exactParse
+      ...(structuralMask ? { structuralMasks: [structuralMask] } : {}),
+      ...((deckComputeSession?.prepared.syntax) === undefined ? {} : { previousSyntax: deckComputeSession?.prepared.syntax }),
+      ...((request.exactParse) === undefined ? {} : { exactSyntax: request.exactParse })
     });
     session = {
       contextKey, epoch: ++deckCacheEpoch, graphicsContext,
@@ -886,7 +895,9 @@ async function computeDeckSnapshot(
   let virtualLayer: string | null = null;
   let plainPage: (() => Promise<DeckActiveFrame>) | null = null;
   if (frameIndex != null) {
-    const stepCount = session.frames[frameIndex].stepCount;
+    const frameDescription = session.frames[frameIndex];
+    if (!frameDescription) throw new RangeError(`Missing deck frame ${frameIndex}`);
+    const stepCount = frameDescription.stepCount;
     const step = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, stepCount));
     const pageKey = `${frameIndex}:${step}`;
     // Pages as TeX draws them, every picture included; thumbnails and claims share them.
@@ -900,7 +911,9 @@ async function computeDeckSnapshot(
     if (!request.includeDrawingLayer) {
       activeFrame = await plainPage();
     } else {
-      const pictures = beamerOverlayPicturesIn({ source: request.source, syntax: session.prepared.syntax }, session.prepared.document.frames[frameIndex].bodySpan);
+      const documentFrame = session.prepared.document.frames[frameIndex];
+      if (!documentFrame) throw new RangeError(`Missing deck source frame ${frameIndex}`);
+      const pictures = beamerOverlayPicturesIn({ source: request.source, syntax: session.prepared.syntax }, documentFrame.bodySpan);
       const requested = parseDocumentRootId(request.drawingLayerRootId ?? "");
       const asked = requested?.kind === "beamer-frame-tikz" && requested.layer && requested.frameIndex === frameIndex ? requested : null;
       if (asked?.index === pictures.length) virtualLayer = formatDocumentRootId(asked);
@@ -979,7 +992,7 @@ async function computeDeckSnapshot(
   });
   return {
     id: request.id,
-    documentId: request.documentId,
+    ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
     snapshot,
     diagnostics: snapshot.deck?.diagnostics.map((diagnostic) => ({
       code: diagnostic.code ?? "beamer",
@@ -1025,7 +1038,7 @@ async function computeNestedTikzSnapshot(
   if (requestKind === "prewarm") {
     return {
       id: request.id,
-      documentId: request.documentId,
+      ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
       snapshot: makeEmptySnapshot(request.source),
       diagnostics: []
     };
@@ -1056,7 +1069,7 @@ async function computeNestedTikzSnapshot(
     evaluate: { graphicsResolver: graphicsContext.resolver, initialFont: beamerTikzFontCommand(theme.fonts["normal-text"]) },
     svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
     textEngine,
-    cooperative: work
+    ...((work) === undefined ? {} : { cooperative: work })
   });
   const snapshot: SessionSnapshot = {
     source: request.source,
@@ -1084,7 +1097,7 @@ async function computeNestedTikzSnapshot(
   });
   return {
     id: request.id,
-    documentId: request.documentId,
+    ...(request.documentId === undefined ? {} : { documentId: request.documentId }),
     snapshot,
     diagnostics: result.renderDiagnostics
   };
@@ -1111,7 +1124,7 @@ async function renderLayerFrame(source: string, frameIndex: number, step: number
   const prepared = deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source);
   const stepCount = prepared.frameStepCount(frameIndex);
   return prepared.renderFrame({ frameIndex, step: Math.min(Math.max(1, step), Math.max(1, stepCount)),
-    graphicsResolver: graphicsContext.resolver, cooperative: work });
+    graphicsResolver: graphicsContext.resolver, ...((work) === undefined ? {} : { cooperative: work }) });
 }
 
 /** Where a frame's new layer goes, by source and frame. */
@@ -1194,7 +1207,7 @@ async function computeOverlayLayerSnapshot(
   pageContext?: { frame: DeckActiveFrame; graphicsContext: PreparedDocumentGraphicsContext; prepared: PreparedBeamerDocument; deckLayoutReused: boolean }
 ): Promise<ComputeResponse | null> {
   if (requestKind === "prewarm") {
-    return { id: request.id, documentId: request.documentId, snapshot: makeEmptySnapshot(request.source), diagnostics: [] };
+    return { id: request.id, ...(request.documentId === undefined ? {} : { documentId: request.documentId }), snapshot: makeEmptySnapshot(request.source), diagnostics: [] };
   }
   const source = request.source;
   const prepared = pageContext?.prepared ?? (deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source));
@@ -1276,11 +1289,11 @@ async function computeOverlayLayerSnapshot(
   const result = await computeSnapshotWithCache({ ...request, source: masked, activeRootId: "figure:0", renderViewBox: viewBox, textEditMaskSpan: pictureMask,
     // Preserve exact statement patches when they also reconstruct the masked
     // source. Coalesced/virtual edits infer their transition from the baseline.
-    patches, patchBaseRevision: patches ? request.patchBaseRevision : null, inferSourceChanges: true }, revision, cache, work, {
+    patches, patchBaseRevision: patches ? request.patchBaseRevision ?? null : null, inferSourceChanges: true }, revision, cache, work, {
     key: JSON.stringify([formatDocumentRootId(ref), step, pageCoordinates, evaluate, graphicsContext.resolver.cacheKey]),
     textEngine, graphicsContext, evaluate, padding: 0, startedAt: computeStartedAt,
-    structuralMasks: pictureMask ? [pictureMask] : undefined,
-    deckLayoutReused: pageContext?.deckLayoutReused
+    ...(pictureMask ? { structuralMasks: [pictureMask] } : {}),
+    ...((pageContext?.deckLayoutReused) === undefined ? {} : { deckLayoutReused: pageContext?.deckLayoutReused })
   });
   result.snapshot.source = source;
   result.snapshot.overlayLayer = { rootId: formatDocumentRootId(ref), frameIndex: ref.frameIndex, step,
@@ -1341,7 +1354,7 @@ async function computeSnapshotIncremental(
   const parseIncremental = parseSession.evaluate({
     source,
     sourceRevision,
-    activeFigureId: activeRootId,
+    ...((activeRootId) === undefined ? {} : { activeFigureId: activeRootId }),
     includeContextDefinitions: true,
     structuralMasks: renderContext?.structuralMasks,
     patches,
@@ -1374,7 +1387,7 @@ async function computeSnapshotIncremental(
   let incremental = await evaluate({
     figure: parseResult.figure,
     source: parseResult.source,
-    options: { ...renderContext?.evaluate, sourceFingerprint, textEngine, graphicsResolver },
+    options: withSourceFingerprint({ ...renderContext?.evaluate, textEngine, graphicsResolver }, sourceFingerprint),
     hints: {
       changedSourceIds,
       sourcePatches: patches,
@@ -1396,11 +1409,12 @@ async function computeSnapshotIncremental(
   phases.geometryInvalidation = performance.now() - phaseStartedAt;
 
   phaseStartedAt = performance.now();
+  const svgReuse = incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined;
   let svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
     ...computeSvgOptions(parseResult, renderViewBox),
     ...(renderContext && { padding: renderContext.padding }),
     textEngine,
-    reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
+    ...(svgReuse === undefined ? {} : { reuse: svgReuse })
   }));
   phases.emitSvg = performance.now() - phaseStartedAt;
   reusePreviousModel = svgResult.model;
@@ -1414,7 +1428,7 @@ async function computeSnapshotIncremental(
     incremental = await evaluate({
       figure: parseResult.figure,
       source: parseResult.source,
-      options: { ...renderContext?.evaluate, sourceFingerprint, textEngine, graphicsResolver },
+      options: withSourceFingerprint({ ...renderContext?.evaluate, textEngine, graphicsResolver }, sourceFingerprint),
       hints: {
         changedSourceIds,
         sourcePatches: patches,
@@ -1437,11 +1451,12 @@ async function computeSnapshotIncremental(
     affectedSourceIdsForReuse = mergeSourceIds(dependencyAffectedSourceIds, texAffectedSourceIds);
     phases.geometryInvalidationAfterTextFlush = performance.now() - phaseStartedAt;
     phaseStartedAt = performance.now();
+    const flushedSvgReuse = incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined;
     svgResult = runTextRenderOperation(textScope, () => emitSvg(semanticResult.scene, {
       ...computeSvgOptions(parseResult, renderViewBox),
     ...(renderContext && { padding: renderContext.padding }),
       textEngine,
-      reuse: incrementalStats.strategy === "incremental" ? buildSvgReuseHints(reusePreviousModel, affectedSourceIdsForReuse) : undefined
+      ...(flushedSvgReuse === undefined ? {} : { reuse: flushedSvgReuse })
     }));
     phases.emitSvgAfterTextFlush = performance.now() - phaseStartedAt;
     reusePreviousModel = svgResult.model;

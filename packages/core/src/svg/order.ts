@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 export function upsertPartOrder(
   currentOrder: readonly string[],
   partId: string,
@@ -31,5 +32,5 @@ export function nextPartIdInOrder(
   if (index < 0 || index + 1 >= order.length) {
     return null;
   }
-  return order[index + 1] ?? null;
+  return requireArrayValue(order, index + 1);
 }

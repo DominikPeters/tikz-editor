@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import { isLeaf } from "../tree/navigate.js";
 import type { EditNodeKind, EditTree, NodeId, SlotId } from "../tree/types.js";
 
@@ -59,7 +61,7 @@ const INVISIBLE_ATOMS = new Set(["label", "nocite", "index", "phantomsection", "
   "providecommand", "def"]);
 
 export function itemRole(tree: EditTree, node: NodeId): ItemRole {
-  const record = tree.nodes[node];
+  const record = editNodeAt(tree.nodes, node);
   if (record.kind === "atom") {
     if (record.command && INVISIBLE_ATOMS.has(record.command)) {
       return "invisible";
@@ -68,14 +70,14 @@ export function itemRole(tree: EditTree, node: NodeId): ItemRole {
     const bare = record.command != null && record.span.to - record.span.from === record.command.length + 1;
     return bare ? "unit" : "construct";
   }
-  if (record.kind === "group" && tree.slots[record.slots[0]].children.length === 0) {
+  if (record.kind === "group" && editSlotAt(tree.slots, requireArrayValue(record.slots, 0)).children.length === 0) {
     // An empty group (`\LaTeX{}`) is a terminator and typesets nothing.
     return "invisible";
   }
   if (record.kind === "operator" && !isLeaf(tree, node)) {
     return "construct";
   }
-  if (record.kind === "overlay" && record.slots.filter((slot) => tree.slots[slot].presence === "present").length > 1) {
+  if (record.kind === "overlay" && record.slots.filter((slot) => editSlotAt(tree.slots, slot).presence === "present").length > 1) {
     // `\alt<2>{a}{b}`: branches, not a wrapper; selected and deleted whole.
     return "construct";
   }
@@ -88,7 +90,7 @@ export function itemRole(tree: EditTree, node: NodeId): ItemRole {
  * declarations (`\small` shows in what follows), nor terminator groups.
  */
 export function isRevealedCode(tree: EditTree, node: NodeId): boolean {
-  const kind = tree.nodes[node].kind;
+  const kind = editNodeAt(tree.nodes, node).kind;
   return (kind === "invisible" || kind === "vertical" || kind === "atom") && itemRole(tree, node) === "invisible";
 }
 
@@ -98,14 +100,14 @@ export function isRevealedCode(tree: EditTree, node: NodeId): boolean {
  * the slot is empty (an empty item still takes the caret).
  */
 export function isCaretSlot(tree: EditTree, slot: SlotId): boolean {
-  const record = tree.slots[slot];
+  const record = editSlotAt(tree.slots, slot);
   if (record.presence === "absent") {
     return false;
   }
   if (record.children.length === 0) {
     return true;
   }
-  return !record.flow && tree.nodes[record.node].kind !== "alignment";
+  return !record.flow && editNodeAt(tree.nodes, record.node).kind !== "alignment";
 }
 
 /** Argument slots that may be unbraced (`\frac1n`, `x^2`): emptied or extended, they need braces. */
@@ -119,25 +121,25 @@ export const ARGUMENT_ROLES: ReadonlySet<string> = new Set([
  * optional argument (`\item {}[0,1]`, K9).
  */
 export function isTerminatorGroup(tree: EditTree, node: NodeId): boolean {
-  const record = tree.nodes[node];
+  const record = editNodeAt(tree.nodes, node);
   if (record.kind !== "group" || record.parent == null) {
     return false;
   }
   if (tree.text[record.span.to] === "[") {
     return true;
   }
-  const siblings = tree.slots[record.parent].children;
+  const siblings = editSlotAt(tree.slots, record.parent).children;
   const previous = siblings[siblings.indexOf(node) - 1];
   if (previous == null) {
     return false;
   }
-  const span = tree.nodes[previous].span;
+  const span = editNodeAt(tree.nodes, previous).span;
   return span.to === record.span.from && /\\[A-Za-z@]+$/u.test(tree.text.slice(span.from, span.to));
 }
 
 /** A group whose content opens with a declaration (`{\bf x}`, `{\small …}`): a style wrapper (P8). */
 export function isDeclarationGroup(tree: EditTree, node: NodeId): boolean {
-  const record = tree.nodes[node];
-  const first = record.kind === "group" ? tree.slots[record.slots[0]].children[0] : undefined;
-  return first != null && tree.nodes[first].kind === "declaration";
+  const record = editNodeAt(tree.nodes, node);
+  const first = record.kind === "group" ? editSlotAt(tree.slots, requireArrayValue(record.slots, 0)).children[0] : undefined;
+  return first != null && editNodeAt(tree.nodes, first).kind === "declaration";
 }

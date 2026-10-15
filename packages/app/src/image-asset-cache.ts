@@ -724,6 +724,7 @@ function naturalJpegSize(bytes: Uint8Array): { readonly widthPt: number; readonl
       index += 1;
     }
     const marker = bytes[index];
+    if (marker === undefined) break;
     index += 1;
     if (marker === 0xd9 || marker === 0xda) {
       break;
@@ -765,10 +766,12 @@ function naturalSvgSize(bytes: Uint8Array): { readonly widthPt: number; readonly
     .split(/[\s,]+/)
     .map((part) => Number(part))
     .filter((part) => Number.isFinite(part));
-  if (parts.length !== 4 || parts[2] <= 0 || parts[3] <= 0) {
+  const widthPart = parts[2];
+  const heightPart = parts[3];
+  if (parts.length !== 4 || widthPart === undefined || heightPart === undefined || widthPart <= 0 || heightPart <= 0) {
     return null;
   }
-  return positivePixelSizeToPt(parts[2], parts[3]);
+  return positivePixelSizeToPt(widthPart, heightPart);
 }
 
 function parseSvgLength(raw: string | null): number | null {
@@ -823,14 +826,11 @@ function positivePixelSizeToPt(
 }
 
 function readUint32BE(bytes: Uint8Array, offset: number): number {
-  return (
-    bytes[offset] * 0x1000000 +
-    ((bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3])
-  );
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, false);
 }
 
 function readUint16BE(bytes: Uint8Array, offset: number): number {
-  return (bytes[offset] << 8) | bytes[offset + 1];
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(offset, false);
 }
 
 function isJpegStartOfFrameMarker(marker: number): boolean {
@@ -859,8 +859,8 @@ function decodeUtf8(bytes: Uint8Array): string {
     return new TextDecoder("utf-8").decode(bytes);
   }
   let text = "";
-  for (let i = 0; i < bytes.length; i += 1) {
-    text += String.fromCharCode(bytes[i]);
+  for (const byte of bytes) {
+    text += String.fromCharCode(byte);
   }
   return decodeURIComponent(escape(text));
 }

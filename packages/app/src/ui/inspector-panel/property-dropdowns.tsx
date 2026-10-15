@@ -115,8 +115,8 @@ export function renderArrowTipDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => (
         <span className={css.arrowTipValue}>
           <span className={css.arrowTipValuePreview}>
@@ -181,8 +181,8 @@ export function renderDashStyleDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => (
         <span className={css.dashStyleValue}>
           <span className={css.dashStyleValuePreview}>
@@ -247,8 +247,8 @@ export function renderLineCapDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => (
         <span className={css.lineCapValue}>
           <span className={css.lineCapValuePreview}>
@@ -313,8 +313,8 @@ export function renderLineJoinDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => (
         <span className={css.lineJoinValue}>
           <span className={css.lineJoinValuePreview}>
@@ -379,8 +379,8 @@ export function renderPathMorphingDecorationDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => (
         <span className={css.pathMorphingDecorationValue}>
           <span className={css.pathMorphingDecorationValuePreview}>
@@ -558,8 +558,8 @@ export function renderNodeShapeDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => <span className={valueClassName}>{displayLabel}</span>}
     />
   );
@@ -602,8 +602,8 @@ export function renderNodeFontSizeDropdown(
         }
         onHoverPreview(nextValue);
       }}
-      onOptionHoverEnd={onHoverPreviewEnd}
-      onOptionHoverLeave={onHoverPreviewLeave}
+      {...(onHoverPreviewEnd === undefined ? {} : { onOptionHoverEnd: onHoverPreviewEnd })}
+      {...(onHoverPreviewLeave === undefined ? {} : { onOptionHoverLeave: onHoverPreviewLeave })}
       renderValue={() => <span className={valueClassName}>{displayLabel}</span>}
       renderOption={(option) => {
         const ptLabel = nodeFontSizePresetPtLabel(option.value as Exclude<NodeFontSizePresetId, "custom">);

@@ -120,11 +120,12 @@ export function resolveContextDelta(
       const nextActive = new Set(activeStyles);
       nextActive.add(invocation.name);
       for (const nestedLayer of invocation.layers) {
+        const optionalSourceRef1 = cloneStyleSourceRef(nestedLayer.sourceRef);
         applyLayer(
           {
             kind: "named-style",
             styleName: invocation.name,
-            sourceRef: cloneStyleSourceRef(nestedLayer.sourceRef),
+            ...(optionalSourceRef1 === undefined ? {} : { sourceRef: optionalSourceRef1 }),
             rawOptions: [nestedLayer.options]
           },
           nextActive
@@ -163,9 +164,10 @@ function makeStyleChainEntry(
   beforeStyle: ResolvedStyle,
   afterStyle: ResolvedStyle
 ): StyleChainEntry {
+  const sourceRef = cloneStyleSourceRef(layer.sourceRef);
   const baseEntry = {
     kind: layer.kind,
-    sourceRef: cloneStyleSourceRef(layer.sourceRef),
+    ...(sourceRef === undefined ? {} : { sourceRef }),
     rawOptions: layer.rawOptions,
     before: beforeStyle,
     after: afterStyle,

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { Span } from "../../ast/types.js";
 import type { Diagnostic } from "../../diagnostics/types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -88,19 +89,33 @@ export function applyBeamerColorDeclaration(state: BeamerColorDeclarationState, 
     if (!role || /[\\{}]/u.test(role)) { state.diagnostics.push(colorDiagnostic(event.role.span, "beamer-color-invalid-role", "A Beamer color use requires a literal role name.").diagnostic); return; }
     if (event.starred) {
       const normal = resolveRole("normal text");
-      state.colorAliases.fg = normal.fg ?? "#000000"; state.colorAliases.bg = normal.bg ?? "#ffffff";
-      state.colorAliasRgb.fg = resolveRoleRgb?.("normal text", "fg") ?? colorRgb(state.colorAliases.fg)!;
-      state.colorAliasRgb.bg = resolveRoleRgb?.("normal text", "bg") ?? colorRgb(state.colorAliases.bg)!;
+      const foreground = normal.fg ?? "#000000";
+      const background = normal.bg ?? "#ffffff";
+      state.colorAliases.fg = foreground; state.colorAliases.bg = background;
+      const foregroundRgb = resolveRoleRgb?.("normal text", "fg") ?? colorRgb(foreground);
+      const backgroundRgb = resolveRoleRgb?.("normal text", "bg") ?? colorRgb(background);
+      if (foregroundRgb) state.colorAliasRgb.fg = foregroundRgb;
+      else delete state.colorAliasRgb.fg;
+      if (backgroundRgb) state.colorAliasRgb.bg = backgroundRgb;
+      else delete state.colorAliasRgb.bg;
     }
     const resolved = resolveRole(role);
-    state.colorAliases[`${role}.fg`.toLowerCase()] = resolved.fg ?? state.colorAliases.fg ?? "#000000";
-    state.colorAliases[`${role}.bg`.toLowerCase()] = resolved.bg ?? state.colorAliases.bg ?? "#ffffff";
-    state.colorAliasRgb[`${role}.fg`.toLowerCase()] = resolveRoleRgb?.(role, "fg") ?? colorRgb(state.colorAliases[`${role}.fg`.toLowerCase()])!;
-    state.colorAliasRgb[`${role}.bg`.toLowerCase()] = resolveRoleRgb?.(role, "bg") ?? colorRgb(state.colorAliases[`${role}.bg`.toLowerCase()])!;
-    state.colorAliases.fg = state.colorAliases[`${role}.fg`.toLowerCase()];
-    state.colorAliases.bg = state.colorAliases[`${role}.bg`.toLowerCase()];
-    state.colorAliasRgb.fg = state.colorAliasRgb[`${role}.fg`.toLowerCase()];
-    state.colorAliasRgb.bg = state.colorAliasRgb[`${role}.bg`.toLowerCase()];
+    const foreground = resolved.fg ?? state.colorAliases.fg ?? "#000000";
+    const background = resolved.bg ?? state.colorAliases.bg ?? "#ffffff";
+    const foregroundRgb = resolveRoleRgb?.(role, "fg") ?? colorRgb(foreground);
+    const backgroundRgb = resolveRoleRgb?.(role, "bg") ?? colorRgb(background);
+    state.colorAliases[`${role}.fg`.toLowerCase()] = foreground;
+    state.colorAliases[`${role}.bg`.toLowerCase()] = background;
+    if (foregroundRgb) state.colorAliasRgb[`${role}.fg`.toLowerCase()] = foregroundRgb;
+    else delete state.colorAliasRgb[`${role}.fg`.toLowerCase()];
+    if (backgroundRgb) state.colorAliasRgb[`${role}.bg`.toLowerCase()] = backgroundRgb;
+    else delete state.colorAliasRgb[`${role}.bg`.toLowerCase()];
+    state.colorAliases.fg = foreground;
+    state.colorAliases.bg = background;
+    if (foregroundRgb) state.colorAliasRgb.fg = foregroundRgb;
+    else delete state.colorAliasRgb.fg;
+    if (backgroundRgb) state.colorAliasRgb.bg = backgroundRgb;
+    else delete state.colorAliasRgb.bg;
     return;
   }
   if (event.kind === "define-color" || event.kind === "color-alias") {
@@ -169,12 +184,13 @@ const DEFAULT_RGB: Readonly<Record<string, BeamerColorRgb>> = {
 export function resolveBeamerColorExpressionRgb(raw: string, resolveAlias: (name: string) => BeamerColorRgb | null): BeamerColorRgb | null {
   const parts = raw.trim().toLowerCase().split("!").map(part => part.trim());
   const channels = (token: string) => resolveAlias(token) ?? DEFAULT_RGB[token] ?? colorRgb(resolveColorToCss(token) ?? "");
-  let result = channels(parts[0]);
+  let result = channels(parts[0] ?? "");
   if (!result) return null;
   for (let index = 1; index < parts.length; index += 2) {
     if (parts[index] === "") return null;
     const percent = Number(parts[index]);
-    const second = channels(parts[index + 1] || "white");
+    const target = parts[index + 1] ?? "";
+    const second = channels(target || "white");
     if (!Number.isFinite(percent) || !second) return null;
     const boundedPercent = Math.max(0, Math.min(100, percent));
     result = boundedPercent === 100 ? result : boundedPercent === 0 ? second : [
@@ -217,9 +233,9 @@ function definedColorRgb(model: string, raw: string, resolveAlias: (name: string
   if (values.every(Number.isFinite)) {
     if ((model.trim() === "rgb" || model.trim() === "RGB") && values.length === 3) {
       const scale = model.trim() === "RGB" ? 255 : 1;
-      return [clamp(values[0] / scale), clamp(values[1] / scale), clamp(values[2] / scale)];
+      return [clamp(requireArrayValue(values, 0) / scale), clamp(requireArrayValue(values, 1) / scale), clamp(requireArrayValue(values, 2) / scale)];
     }
-    if (model.trim() === "gray" && values.length === 1) return [clamp(values[0]), clamp(values[0]), clamp(values[0])];
+    if (model.trim() === "gray" && values.length === 1) return [clamp(requireArrayValue(values, 0)), clamp(requireArrayValue(values, 0)), clamp(requireArrayValue(values, 0))];
   }
   return model.trim() === "named" ? resolveBeamerColorExpressionRgb(raw, resolveAlias) : colorRgb(resolveDefineColorModel(model, raw) ?? "");
 }
@@ -231,7 +247,7 @@ export function beamerColorRgbToCss(channels: BeamerColorRgb): string {
 function colorRgb(css: string): BeamerColorRgb | null {
   if (/^#[0-9a-f]{3}$/iu.test(css)) css = `#${css.slice(1).split("").map(digit => digit + digit).join("")}`;
   const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/iu.exec(css);
-  return match ? [Number.parseInt(match[1], 16) / 255, Number.parseInt(match[2], 16) / 255, Number.parseInt(match[3], 16) / 255] : null;
+  return match ? [Number.parseInt(requireArrayValue(match, 1), 16) / 255, Number.parseInt(requireArrayValue(match, 2), 16) / 255, Number.parseInt(requireArrayValue(match, 3), 16) / 255] : null;
 }
 
 /** Return unresolved expression/cycle diagnostics once, at bounded authored spans. */
@@ -246,7 +262,7 @@ export function diagnoseBeamerColorDeclarations(state: BeamerColorDeclarationSta
     const dependencies = [...(color?.parents ?? (color?.parent ? [color.parent] : [])), ...(color?.use ?? [])];
     for (const expression of [color?.fgExpression, color?.bgExpression]) for (const token of expression?.value.split("!") ?? []) {
       const match = /^(.*)\.(?:fg|bg)$/u.exec(token.trim());
-      if (match) dependencies.push(match[1]);
+      if (match) dependencies.push(requireArrayValue(match, 1));
     }
     dependencies.forEach(visit);
     visiting.delete(role); visited.add(role);
@@ -255,6 +271,7 @@ export function diagnoseBeamerColorDeclarations(state: BeamerColorDeclarationSta
   for (const role of cycles) state.diagnostics.push(colorDiagnostic(spans.get(role) ?? events[0]?.span ?? { from: 0, to: 0 }, "beamer-color-parent-cycle", `The Beamer color '${role}' participates in an inheritance or use cycle.`).diagnostic);
   for (const role of spans.keys()) {
     const color = state.colors[role], resolved = resolveRole(role);
+    if (!color) continue;
     for (const field of ["fg", "bg"] as const) {
       const expression = field === "fg" ? color.fgExpression : color.bgExpression;
       if (expression?.value && !resolved[field]) state.diagnostics.push(colorDiagnostic(expression.span, "beamer-color-unsupported-expression", `The ${field} expression for Beamer color '${role}' cannot be resolved in this preview.`).diagnostic);

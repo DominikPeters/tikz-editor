@@ -217,8 +217,8 @@ export function getInspectorDescriptor(
       elementKind: normalizeElementKind(element.kind),
       elementId: element.sourceRef.sourceId,
       writeTargetId: inlineTarget.targetId,
-      readOnlyReason: inlineTarget.reason,
-      infoNote: inlineTarget.infoNote,
+      ...(inlineTarget.reason === undefined ? {} : { readOnlyReason: inlineTarget.reason }),
+      ...(inlineTarget.infoNote === undefined ? {} : { infoNote: inlineTarget.infoNote }),
       sections: applyForeachVariableReadOnlyToSections(adornmentSections, inlineTarget, resolveTarget)
     };
   }
@@ -233,8 +233,8 @@ export function getInspectorDescriptor(
     elementKind: normalizeElementKind(element.kind),
     elementId: element.sourceRef.sourceId,
     writeTargetId: inlineTarget.targetId,
-    readOnlyReason: inlineTarget.reason,
-    infoNote: inlineTarget.infoNote,
+    ...(inlineTarget.reason === undefined ? {} : { readOnlyReason: inlineTarget.reason }),
+    ...(inlineTarget.infoNote === undefined ? {} : { infoNote: inlineTarget.infoNote }),
     sections: applyForeachVariableReadOnlyToSections(
       orderInspectorSections(sections, {
         nodeBacked: inlineTarget.targetKind != null && NODE_TARGET_KINDS.has(inlineTarget.targetKind),
@@ -267,14 +267,15 @@ function makeSetPropertyWriteTargetForElementId(
     !treeChildWritable
       ? "This tree-child property is read-only."
       : inlineTarget.reason;
+  const propertyId = propertyIdForWriteKey(key);
   return {
     mode: "setProperty",
     elementId: elementId ?? "",
     level: "command",
     key,
-    propertyId: propertyIdForWriteKey(key) ?? undefined,
+    ...(propertyId == null ? {} : { propertyId }),
     writable,
-    reason
+    ...(reason === undefined ? {} : { reason })
   };
 }
 

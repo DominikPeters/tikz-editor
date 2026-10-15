@@ -70,13 +70,19 @@ export function executeDocumentEdit(
   }
   const working = insertion ? insertDrawingLayer(source, insertion) : source;
   const editSource = span ? maskTikzPictureSource(working, span) : source;
-  const parseOptions = buildEditParseOptions({ ...context, source: editSource, activeRootId: span ? snapshot.parseResult?.activeFigureId : activeRootId, analysis: "none", overrides: options.parseOptions });
-  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, sourceFingerprint: parseOptions.sourceFingerprint };
+  const parseRootId = span ? snapshot.parseResult?.activeFigureId : activeRootId;
+  const parseContext: Omit<EditExecutionContext, "activeRootId"> & { activeRootId?: string | null } = { ...context };
+  if (parseRootId === undefined) delete parseContext.activeRootId;
+  else parseContext.activeRootId = parseRootId;
+  const parseOptions = buildEditParseOptions({ ...parseContext, source: editSource, analysis: "none", ...((options.parseOptions) === undefined ? {} : { overrides: options.parseOptions }) });
+  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate };
+  if (parseOptions.sourceFingerprint === undefined) delete evaluateOptions.sourceFingerprint;
+  else evaluateOptions.sourceFingerprint = parseOptions.sourceFingerprint;
   const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.parseResult?.activeFigureId === parseOptions.activeFigureId;
   const geometry = options.geometry ?? (snapshotMatchesRoot && snapshot.source === source && snapshot.parseResult && snapshot.semanticResult
     ? createEditGeometrySession({ source: editSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, evaluateOptions, parseOptions)
     : undefined);
-  const result = applyEditAction(editSource, snapshot.editHandles, action, { geometry, parseOptions, evaluateOptions });
+  const result = applyEditAction(editSource, snapshot.editHandles, action, { ...((geometry) === undefined ? {} : { geometry: geometry }), parseOptions, evaluateOptions });
   if (!span || (result.kind !== "success" && result.kind !== "partial")) return result;
   const replay = applySourcePatches(working, result.patches);
   if (replay.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
@@ -88,8 +94,12 @@ export function executeDocumentEdit(
         const removal = beamerDrawingLayerRemovalSpan(replay.source, editedSpan);
         const removalPatch = { oldSpan: removal, newSpan: { from: removal.from, to: removal.from }, replacement: "" };
         const removed = applySourcePatches(replay.source, [removalPatch]);
-        if (removed.kind === "success") return { ...result, newSource: removed.source,
-          patches: composeSourcePatches(source, [result.patches, [removalPatch]]), changedSourceIds: undefined };
+        if (removed.kind === "success") {
+          const removedResult = { ...result, newSource: removed.source,
+            patches: composeSourcePatches(source, [result.patches, [removalPatch]]) };
+          delete removedResult.changedSourceIds;
+          return removedResult;
+        }
       }
     }
     return { ...result, newSource: replay.source };
@@ -114,12 +124,9 @@ export function executeDocumentEdit(
   }
   const committed = applySourcePatches(source, patches);
   if (committed.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
-  return {
-    ...result,
-    newSource: committed.source,
-    patches,
-    changedSourceIds: undefined
-  };
+  const committedResult = { ...result, newSource: committed.source, patches };
+  delete committedResult.changedSourceIds;
+  return committedResult;
 }
 
 function onlyEmptyScopes(statements: readonly Statement[]): boolean {

@@ -26,7 +26,7 @@ export const buildTransformSection: SectionBuilder = (context) => {
     transformContext: {
       key,
       values: cloneTransformInspectorValues(transformContext.values),
-      presence: transformContext.presence ? { ...transformContext.presence } : undefined
+      ...(transformContext.presence ? { presence: { ...transformContext.presence } } : {})
     }
   });
 

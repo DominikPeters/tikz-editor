@@ -1,3 +1,4 @@
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { BufferPatch } from "../transaction/transaction.js";
 import type { EditMode, EditTree, SlotId, Span } from "../tree/types.js";
 
@@ -13,8 +14,8 @@ import type { EditMode, EditTree, SlotId, Span } from "../tree/types.js";
  * optional slot or a script entirely.
  */
 export function slotOuterSpan(tree: EditTree, slot: SlotId): Span {
-  const record = tree.slots[slot];
-  const delimiters = tree.nodes[record.node].delimiters;
+  const record = editSlotAt(tree.slots, slot);
+  const delimiters = editNodeAt(tree.nodes, record.node).delimiters;
   const text = tree.text;
   let from = record.contentSpan.from;
   let to = record.contentSpan.to;
@@ -194,8 +195,8 @@ export function rulesInsideRows(tree: EditTree): number[] {
       continue;
     }
     for (const slot of node.slots) {
-      for (const child of tree.slots[slot].children) {
-        const span = tree.nodes[child].span;
+      for (const child of editSlotAt(tree.slots, slot).children) {
+        const span = editNodeAt(tree.nodes, child).span;
         if (RULE_COMMAND.test(tree.text.slice(span.from, span.to + 16))) {
           offsets.push(span.from);
         }

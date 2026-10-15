@@ -195,7 +195,8 @@ function splitTopLevelByComma(input: string): string[] {
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (char === "\\") {
       index += 1;
       continue;
@@ -253,7 +254,8 @@ function findTopLevelEquals(input: string): number {
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (char === "\\") {
       index += 1;
       continue;

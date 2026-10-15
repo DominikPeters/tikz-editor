@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { WorldTransform } from "../../coords/transforms.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint as makeWorldPoint, type WorldPoint } from "../../coords/points.js";
@@ -101,7 +102,7 @@ export function parseSvgPathOperation(args: {
   };
 
   while (cursor < tokens.length) {
-    const token = tokens[cursor];
+    const token = requireArrayValue(tokens, cursor);
     if (token.kind === "command") {
       activeCommand = token.value;
       cursor += 1;
@@ -387,7 +388,7 @@ function tokenizeSvgPathData(input: string): { tokens: SvgToken[]; diagnostics: 
   let index = 0;
 
   while (index < input.length) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (char == null) {
       break;
     }

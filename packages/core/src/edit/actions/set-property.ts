@@ -232,7 +232,8 @@ function splitTopLevelOptionSegments(input: string): string[] {
   let inComment = false;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (inComment) {
       if (char === "\n" || char === "\r") {
         inComment = false;
@@ -440,8 +441,8 @@ function serializeCommentToggleItems(
     .map((entry) => entry.index);
   const lastEntryIndex = entryIndexes.length > 0 ? entryIndexes[entryIndexes.length - 1] : -1;
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
+
     if (item.kind === "comment") {
       lines.push(withIndent(normalizeCommentLine(item.text)));
       continue;
@@ -494,16 +495,16 @@ function applyTreeChildSetProperty(
   if (childOptionSite) {
     const result = applyOptionMutationsAtSite(source, mutations, removePrimaryKey, {
       options: target.treeChildOptions,
-      optionsSpan: target.treeChildOptionsSpan,
-      insertOffset: target.treeChildInsertOffset
+      ...(target.treeChildOptionsSpan === undefined ? {} : { optionsSpan: target.treeChildOptionsSpan }),
+      ...(target.treeChildInsertOffset === undefined ? {} : { insertOffset: target.treeChildInsertOffset })
     });
     return addTreeChildFallbackWarningIfNeeded(withChangedSourceIdsForTarget(result, target), target);
   }
 
   const result = applyOptionMutationsAtSite(source, mutations, removePrimaryKey, {
     options: target.treeNodeOptions,
-    optionsSpan: target.treeNodeOptionsSpan,
-    insertOffset: target.treeNodeInsertOffset
+    ...(target.treeNodeOptionsSpan === undefined ? {} : { optionsSpan: target.treeNodeOptionsSpan }),
+    ...(target.treeNodeInsertOffset === undefined ? {} : { insertOffset: target.treeNodeInsertOffset })
   });
   return addTreeChildFallbackWarningIfNeeded(withChangedSourceIdsForTarget(result, target), target);
 }
@@ -521,7 +522,7 @@ function addTreeChildFallbackWarningIfNeeded(
     patches: result.patches,
     skippedHandles: [],
     reason: "Tree child edit applied using a source-span fallback. Verify the updated source.",
-    changedSourceIds: result.changedSourceIds
+    ...(result.changedSourceIds === undefined ? {} : { changedSourceIds: result.changedSourceIds })
   };
 }
 

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { OptionEntry } from "../options/types.js";
 import type { StyleChainEntry, StyleSourceRef } from "../semantic/style-chain.js";
 import type { SceneElement, ResolvedStyle } from "../semantic/types.js";
@@ -119,8 +120,8 @@ export function buildStylesCascadeModel(
   const orderedEntries = [...element.styleChain].reverse();
   const writeTargetCache = new Map<string, PropertyTargetResolution>();
 
-  for (let index = 0; index < orderedEntries.length; index += 1) {
-    const entry = orderedEntries[index];
+  for (const [index, entry] of orderedEntries.entries()) {
+
     const targetId = entry.sourceRef ? sourceTargetIdForEntry(entry, entry.sourceRef) : null;
     const sectionTarget =
       targetId != null
@@ -140,7 +141,7 @@ export function buildStylesCascadeModel(
       sourceLabel: entry.sourceRef?.label ?? null,
       sourceLocation: formatSourceLocation(snapshot.source, entry.sourceRef),
       writable: !sectionTarget.readOnly,
-      readOnlyReason: sectionTarget.readOnlyReason,
+      ...(sectionTarget.readOnlyReason === undefined ? {} : { readOnlyReason: sectionTarget.readOnlyReason }),
       declarations: declarationDrafts.map((draft) => ({
         ...draft,
         status: draft.status ?? "unsupported",
@@ -179,12 +180,12 @@ export function buildSharedStylesCascadeModel(models: StylesCascadeModel[]): Sty
   if (models.length === 0) {
     return null;
   }
-  const signature = models[0].comparableSignature;
+  const signature = requireArrayValue(models, 0).comparableSignature;
   if (models.some((model) => model.comparableSignature !== signature)) {
     return null;
   }
 
-  const base = models[0];
+  const base = requireArrayValue(models, 0);
   return {
     elementKind: base.elementKind,
     elementIds: models.flatMap((model) => model.elementIds),
@@ -214,10 +215,10 @@ export function planStylesSetPropertyActions(
       continue;
     }
     const [plannedMutation] = buildPropertyMutations({
-      propertyId: mutation.propertyId ?? target.propertyId,
+      ...((mutation.propertyId ?? target.propertyId) === undefined ? {} : { propertyId: mutation.propertyId ?? target.propertyId }),
       key: mutation.key,
       value: mutation.value,
-      clearKeys: mutation.clearKeys
+      ...(mutation.clearKeys === undefined ? {} : { clearKeys: mutation.clearKeys })
     });
     if (!plannedMutation) {
       continue;
@@ -228,8 +229,8 @@ export function planStylesSetPropertyActions(
       level: target.level,
       key: plannedMutation.key,
       value: plannedMutation.value,
-      propertyId: plannedMutation.propertyId,
-      clearKeys: plannedMutation.clearKeys
+      ...(plannedMutation.propertyId === undefined ? {} : { propertyId: plannedMutation.propertyId }),
+      ...(plannedMutation.clearKeys === undefined ? {} : { clearKeys: plannedMutation.clearKeys })
     };
     unique.set(`${target.elementId}:${plannedMutation.key}:${plannedMutation.value}:${(plannedMutation.clearKeys ?? []).join(",")}`, action);
   }
@@ -245,13 +246,14 @@ export function planStylesTogglePropertyActions(
     if (!target.writable || target.elementId.trim().length === 0) {
       continue;
     }
+    const propertyId = target.propertyId ?? propertyIdForWriteKey(mutation.key);
     const action: EditAction = {
       kind: "setProperty",
       elementId: target.elementId,
       level: target.level,
       key: mutation.key,
       value: "",
-      propertyId: target.propertyId ?? propertyIdForWriteKey(mutation.key) ?? undefined,
+      ...(propertyId == null ? {} : { propertyId }),
       commentMode: mutation.mode,
       commentSourceText: mutation.sourceText
     };
@@ -352,8 +354,9 @@ function buildSectionDeclarations(
           const styleTarget = resolvePropertyTarget(source, styleTargetId);
           const styleWriteTarget: SetPropertyWriteTarget =
             styleTarget.kind === "found"
-              ? { ...writeTarget, elementId: styleTargetId, writable: true, reason: undefined }
+              ? { ...writeTarget, elementId: styleTargetId, writable: true }
               : { ...writeTarget, elementId: styleTargetId, writable: false, reason: styleTarget.reason };
+          if (styleTarget.kind === "found") delete styleWriteTarget.reason;
           const styleOptionsSpan =
             styleTarget.kind === "found" && styleTarget.target.optionsSpan && styleTarget.target.optionsSpan.to > styleTarget.target.optionsSpan.from
               ? styleTarget.target.optionsSpan
@@ -546,7 +549,7 @@ function mapEntryToDeclaration(
     writeTarget,
     priorityKey: propertyId,
     defaultLike: false,
-    readOnlyReason: writeTarget.reason
+    ...(writeTarget.reason === undefined ? {} : { readOnlyReason: writeTarget.reason })
   };
 }
 
@@ -597,10 +600,11 @@ function buildUnsupportedDeclaration(
   styleEntry: StyleChainEntry
 ): StylesDeclarationDraft {
   const raw = entry.raw.trim();
+  const rawLabel = raw.split("=")[0]?.trim() ?? "";
   return {
     id: `unsupported:${entry.span.from}`,
     propertyId: null,
-    label: raw.split("=")[0]?.trim() || raw,
+    label: rawLabel.length > 0 ? rawLabel : raw,
     cssValue: raw.includes("=") ? raw.slice(raw.indexOf("=") + 1).trim() : "",
     property: null,
     sourceText: raw,
@@ -989,7 +993,7 @@ function formatSourceLocation(source: string, sourceRef: StyleSourceRef | undefi
   let low = 0, high = lineStarts.length - 1;
   while (low < high) {
     const middle = (low + high + 1) >> 1;
-    if (lineStarts[middle] <= span.from) low = middle;
+    if (requireArrayValue(lineStarts, middle) <= span.from) low = middle;
     else high = middle - 1;
   }
   return `line ${low + 1}`;
@@ -1102,8 +1106,18 @@ function overrideInspectorPropertyValue(
   writeTarget: SetPropertyWriteTarget
 ): InspectorProperty {
   switch (property.kind) {
-    case "number":
-      return { ...property, value: typeof nextValue === "number" ? nextValue : property.value, write: property.write ? { ...writeTarget, key: property.write.key, transformContext: property.write.transformContext } : undefined };
+    case "number": {
+      const updated = { ...property, value: typeof nextValue === "number" ? nextValue : property.value };
+      if (property.write) {
+        const write = { ...writeTarget, key: property.write.key };
+        if (property.write.transformContext === undefined) delete write.transformContext;
+        else write.transformContext = property.write.transformContext;
+        updated.write = write;
+      } else {
+        delete updated.write;
+      }
+      return updated;
+    }
     case "length":
       return { ...property, value: typeof nextValue === "number" ? nextValue : property.value, write: { ...writeTarget, key: property.write.key } };
     case "color":

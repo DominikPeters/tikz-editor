@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint } from "../coords/points.js";
@@ -255,7 +256,7 @@ export function reverseComplexPathSegments(
   fromAnchor?: AnchorReference
 ): { startWorld: WorldPoint; startAnchor?: AnchorReference; segments: ComplexPathSegment[] } {
   if (segments.length === 0) {
-    return { startWorld: fromWorld, startAnchor: fromAnchor, segments: [] };
+    return { startWorld: fromWorld, ...(fromAnchor === undefined ? {} : { startAnchor: fromAnchor }), segments: [] };
   }
   const reversed: ComplexPathSegment[] = [];
   // Walk backwards. For each segment, the new "to" is the previous segment's start.
@@ -268,11 +269,11 @@ export function reverseComplexPathSegments(
   // segFromPoints: [from, seg0.to, seg1.to, ...]
   // reversed[i] corresponds to segments[n-1-i]
   for (let i = segments.length - 1; i >= 0; i--) {
-    const seg = segments[i];
-    const segStart = segFromPoints[i];
+    const seg = requireArrayValue(segments, i);
+    const segStart = requireArrayValue(segFromPoints, i);
     const segStartAnchor = segFromAnchors[i];
     if (seg.kind === "line") {
-      reversed.push({ kind: "line", to: segStart, toAnchor: segStartAnchor });
+      reversed.push({ kind: "line", to: segStart, ...(segStartAnchor === undefined ? {} : { toAnchor: segStartAnchor }) });
     } else {
       // swap control1 and control2
       reversed.push({
@@ -280,13 +281,13 @@ export function reverseComplexPathSegments(
         to: segStart,
         control1: seg.control2,
         control2: seg.control1,
-        toAnchor: segStartAnchor
+        ...(segStartAnchor === undefined ? {} : { toAnchor: segStartAnchor })
       });
     }
   }
-  const newStart = segFromPoints[segFromPoints.length - 1];
+  const newStart = requireArrayValue(segFromPoints, segFromPoints.length - 1);
   const newStartAnchor = segFromAnchors[segFromAnchors.length - 1];
-  return { startWorld: newStart, startAnchor: newStartAnchor, segments: reversed };
+  return { startWorld: newStart, ...(newStartAnchor === undefined ? {} : { startAnchor: newStartAnchor }), segments: reversed };
 }
 
 /**
@@ -308,7 +309,7 @@ export function generateComplexPathPrependSource(
 
   // All segments except the last: include full operator + target
   for (let i = 0; i < segments.length - 1; i++) {
-    const seg = segments[i];
+    const seg = requireArrayValue(segments, i);
     if (seg.kind === "line") {
       parts.push(`-- ${formatPathEndpoint(seg.toAnchor, seg.to)}`);
     } else {
@@ -317,7 +318,7 @@ export function generateComplexPathPrependSource(
   }
 
   // Last segment: operator only, no target (existing body provides it)
-  const last = segments[segments.length - 1];
+  const last = requireArrayValue(segments, segments.length - 1);
   if (last.kind === "line") {
     parts.push("--");
   } else {

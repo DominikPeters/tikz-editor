@@ -47,7 +47,7 @@ export function buildObjectsPanelModel(args: {
 
   const byId = new Map<string, ObjectsPanelNode>();
   const figureBoundsState = resolveFigureBoundsState(analysisView.source, {
-    activeFigureId: analysisView.activeFigureId,
+    ...(analysisView.activeFigureId === undefined ? {} : { activeFigureId: analysisView.activeFigureId }),
     analysisView
   });
   const boundingBoxSourceId = figureBoundsState.mode === "fixed" ? figureBoundsState.sourceId : null;

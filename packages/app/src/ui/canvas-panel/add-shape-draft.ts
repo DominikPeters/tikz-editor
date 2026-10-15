@@ -104,8 +104,8 @@ export function resolveAddShapeDraft(
   }
 
   return {
-    minimumWidthPt: best.minimumWidthPt,
-    minimumHeightPt: best.minimumHeightPt,
+    ...(best.minimumWidthPt !== undefined ? { minimumWidthPt: best.minimumWidthPt } : {}),
+    ...(best.minimumHeightPt !== undefined ? { minimumHeightPt: best.minimumHeightPt } : {}),
     preview: best.preview
   };
 }
@@ -142,8 +142,8 @@ function buildConstraintCandidate(
   minimumHeightPt?: number
 ): ShapeConstraintCandidate {
   return {
-    minimumWidthPt,
-    minimumHeightPt,
+    ...(minimumWidthPt !== undefined ? { minimumWidthPt: minimumWidthPt } : {}),
+    ...(minimumHeightPt !== undefined ? { minimumHeightPt: minimumHeightPt } : {}),
     preview: buildPreviewGeometry(shape, minimumWidthPt, minimumHeightPt),
     explicitConstraintCount: (minimumWidthPt != null ? 1 : 0) + (minimumHeightPt != null ? 1 : 0)
   };

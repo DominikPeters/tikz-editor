@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import { capabilityChain, decideOwner, inTitle, type ChainLink } from "../ownership/keys.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
@@ -60,7 +62,7 @@ export function enter(view: EditView, caret: Position, at: number, key: "enter" 
       offset = edge.offset;
       continue;
     }
-    const owner = tree.nodes[decision.node];
+    const owner = editNodeAt(tree.nodes, decision.node);
     if (key === "line-break") {
       if (owner.kind === "row") {
         return rowBreak(view, position.slot, decision.node, offset);
@@ -97,7 +99,7 @@ export function enter(view: EditView, caret: Position, at: number, key: "enter" 
  */
 function breakAt(view: EditView, at: number, slot: SlotId, text: string, transparent: readonly ChainLink[] = []): EditOutcome {
   const { tree } = view;
-  const bounds = tree.slots[slot].contentSpan;
+  const bounds = editSlotAt(tree.slots, slot).contentSpan;
   const { closes, reopens } = carried(view, transparent);
   const collapse = transparent.length === 0;
   const from = collapse ? skipHorizontalBack(tree.text, at, bounds.from) : at;
@@ -112,14 +114,14 @@ function carried(view: EditView, transparent: readonly ChainLink[]): { closes: s
   let closes = "";
   let reopens = "";
   for (const link of transparent) {
-    const node = tree.nodes[link.node];
-    const slot = tree.slots[link.slot];
+    const node = editNodeAt(tree.nodes, link.node);
+    const slot = editSlotAt(tree.slots, link.slot);
     closes += tree.text.slice(slot.contentSpan.to, node.span.to);
     let open = tree.text.slice(node.span.from, slot.contentSpan.from);
     if (node.kind === "group") {
       // `{\bf ` reopens with its declarations.
-      const first = slot.children.find((child) => tree.nodes[child].kind !== "declaration");
-      open += tree.text.slice(slot.contentSpan.from, first == null ? slot.contentSpan.to : tree.nodes[first].span.from);
+      const first = slot.children.find((child) => editNodeAt(tree.nodes, child).kind !== "declaration");
+      open += tree.text.slice(slot.contentSpan.from, first == null ? slot.contentSpan.to : editNodeAt(tree.nodes, first).span.from);
     }
     reopens = open + reopens;
   }
@@ -129,7 +131,7 @@ function carried(view: EditView, transparent: readonly ChainLink[]): { closes: s
 /** Where a break goes instead of splitting a wrapper with nothing on one side of the caret, or null. */
 function wrapperEdge(view: EditView, link: ChainLink, at: number): { position: Position; offset: number } | null {
   const { tree } = view;
-  const node = tree.nodes[link.node];
+  const node = editNodeAt(tree.nodes, link.node);
   const visible = visibleOffsets(view, link.slot);
   const before = visible.some((span) => span.from < at);
   const after = visible.some((span) => span.to > at);
@@ -143,7 +145,7 @@ function wrapperEdge(view: EditView, link: ChainLink, at: number): { position: P
 }
 
 function visibleOffsets(view: EditView, slot: SlotId): Span[] {
-  return view.tree.slots[slot].children.filter((child) => view.role(child) !== "invisible").map((child) => view.tree.nodes[child].span);
+  return editSlotAt(view.tree.slots, slot).children.filter((child) => view.role(child) !== "invisible").map((child) => editNodeAt(view.tree.nodes, child).span);
 }
 
 /** Whether something visible stands between the previous line break (or the start of the block) and `at`. */
@@ -151,8 +153,8 @@ export function inkOnLine(view: EditView, slot: SlotId, at: number): boolean {
   const { tree } = view;
   // From the block the caret's line is in, so that ink before a wrapper around the caret counts.
   let from = slot;
-  for (let node = tree.slots[from].node; !LINE_STARTS.has(tree.nodes[node].kind) && tree.nodes[node].parent != null; node = tree.slots[from].node) {
-    from = tree.nodes[node].parent!;
+  for (let node = editSlotAt(tree.slots, from).node; !LINE_STARTS.has(editNodeAt(tree.nodes, node).kind) && editNodeAt(tree.nodes, node).parent != null; node = editSlotAt(tree.slots, from).node) {
+    from = editNodeAt(tree.nodes, node).parent!;
   }
   return lineBefore(view, from, at) === "ink";
 }
@@ -165,7 +167,7 @@ export function deadBreaks(view: EditView): Span[] {
       if (node.kind !== "break" || node.parent == null) {
         return false;
       }
-      const slot = tree.slots[node.parent];
+      const slot = editSlotAt(tree.slots, node.parent);
       return slot.mode === "text" && slot.role !== "cell" && !inkOnLine(view, node.parent, node.span.from);
     })
     .map((node) => node.span);
@@ -185,10 +187,10 @@ const LINE_STARTS = new Set(["paragraph", "item", "list", "row", "display", "con
 /** What comes first going back from `at` in `slot`: ink, a line end, or the slot's start. */
 function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | "start" {
   const { tree } = view;
-  const before = tree.slots[slot].children.filter((child) => tree.nodes[child].span.from < at);
+  const before = editSlotAt(tree.slots, slot).children.filter((child) => editNodeAt(tree.nodes, child).span.from < at);
   let gapEnd = at;
   for (const child of before.reverse()) {
-    const node = tree.nodes[child];
+    const node = editNodeAt(tree.nodes, child);
     // A blank line between it and the caret starts a paragraph (the caret's position may still be in the one before).
     if (/\n[ \t]*\n/u.test(tree.text.slice(node.span.to, gapEnd))) {
       return "line";
@@ -203,7 +205,7 @@ function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | 
       return "line";
     }
     // The node around the caret: its own line so far, then (unless it starts a line) what is before it.
-    const inner = node.slots.find((id) => tree.slots[id].contentSpan.from <= at && at <= tree.slots[id].contentSpan.to);
+    const inner = node.slots.find((id) => editSlotAt(tree.slots, id).contentSpan.from <= at && at <= editSlotAt(tree.slots, id).contentSpan.to);
     if (inner != null) {
       const found = lineBefore(view, inner, at);
       if (found !== "start") {
@@ -225,7 +227,7 @@ function lineBefore(view: EditView, slot: SlotId, at: number): "ink" | "line" | 
 
 /** What a node ends with, looking from its end: ink, a line break, or nothing visible (null). */
 function trailing(view: EditView, id: NodeId): "ink" | "line" | null {
-  const node = view.tree.nodes[id];
+  const node = editNodeAt(view.tree.nodes, id);
   if (node.kind === "break" || node.kind === "vertical") {
     return "line";
   }
@@ -235,7 +237,7 @@ function trailing(view: EditView, id: NodeId): "ink" | "line" | null {
   if (node.slots.length === 0 || (node.kind === "overlay" && node.command != null && OVERLAY_ABSENT.has(node.command))) {
     return inked(view, id) ? "ink" : null;
   }
-  const slots = node.slots.map((slot) => view.tree.slots[slot]).filter((slot) => slot.presence === "present")
+  const slots = node.slots.map((slot) => editSlotAt(view.tree.slots, slot)).filter((slot) => slot.presence === "present")
     .sort((left, right) => right.contentSpan.from - left.contentSpan.from);
   for (const slot of slots) {
     for (const child of [...slot.children].reverse()) {
@@ -251,21 +253,21 @@ function trailing(view: EditView, id: NodeId): "ink" | "line" | null {
 /** Whether a node is inside an `overprint` environment. */
 function inOverprint(view: EditView, id: NodeId): boolean {
   const { tree } = view;
-  const { from, to } = tree.nodes[id].span;
+  const { from, to } = editNodeAt(tree.nodes, id).span;
   return tree.nodes.some((node) => node.span.from < from && node.span.to > to &&
     (node.command === "overprint" || tree.text.startsWith("\\begin{overprint}", node.span.from)));
 }
 
 /** Whether a node puts anything on the page: a visible leaf, or a node with one inside. */
 function inked(view: EditView, id: NodeId): boolean {
-  const node = view.tree.nodes[id];
+  const node = editNodeAt(view.tree.nodes, id);
   if (view.role(id) === "invisible" || ["space", "break", "vertical", "declaration"].includes(node.kind)) {
     return false;
   }
-  const inSlot = (slot: SlotId) => view.tree.slots[slot].children.some((child) => inked(view, child));
+  const inSlot = (slot: SlotId) => editSlotAt(view.tree.slots, slot).children.some((child) => inked(view, child));
   if (node.kind === "overlay" && node.command != null && OVERLAY_ABSENT.has(node.command)) {
     // Gone on the other slides (`\only`), or ink on every slide only if each branch has some (`\alt`).
-    return node.command !== "only" && node.slots.every((slot) => view.tree.slots[slot].presence !== "present" || inSlot(slot));
+    return node.command !== "only" && node.slots.every((slot) => editSlotAt(view.tree.slots, slot).presence !== "present" || inSlot(slot));
   }
   return node.slots.length === 0 || node.slots.some(inSlot);
 }
@@ -282,11 +284,11 @@ function protectBreak(insert: string, text: string, after: number): string {
 /** ⏎ in a display (D1): to the text after it, or a fresh line below. */
 function leaveDisplay(view: EditView, display: NodeId): EditOutcome {
   const { tree } = view;
-  const node = tree.nodes[display];
-  const siblings = tree.slots[node.parent!].children;
+  const node = editNodeAt(tree.nodes, display);
+  const siblings = editSlotAt(tree.slots, node.parent!).children;
   const next = siblings[siblings.indexOf(display) + 1];
-  if (next != null && tree.nodes[next].kind === "paragraph") {
-    return { kind: "move", to: { slot: tree.nodes[next].slots[0], index: 0 } };
+  if (next != null && editNodeAt(tree.nodes, next).kind === "paragraph") {
+    return { kind: "move", to: { slot: requireArrayValue(editNodeAt(tree.nodes, next).slots, 0), index: 0 } };
   }
   return patchOutcome({ edits: [{ span: { from: node.span.to, to: node.span.to }, insert: "\n" }], caret: node.span.to + 1 });
 }
@@ -308,7 +310,7 @@ function rowBreak(view: EditView, slot: SlotId, row: NodeId, at: number): EditOu
 /** ⏎ in an alignment row (D2): a row break, the rest of the row moving to a new line with the same indent. */
 function newRow(view: EditView, row: NodeId, at: number, transparent: readonly ChainLink[] = []): EditOutcome {
   const { tree } = view;
-  const span = tree.nodes[row].span;
+  const span = editNodeAt(tree.nodes, row).span;
   const { closes, reopens } = carried(view, transparent);
   const collapse = transparent.length === 0;
   const from = collapse ? skipHorizontalBack(tree.text, at, span.from) : at;
@@ -327,15 +329,15 @@ function newRow(view: EditView, row: NodeId, at: number, transparent: readonly C
 function leaveAlignment(view: EditView, at: number): EditOutcome | null {
   const { tree } = view;
   for (const node of tree.nodes) {
-    if (node.kind !== "alignment" || node.parent == null || tree.slots[node.parent].mode === "math") {
+    if (node.kind !== "alignment" || node.parent == null || editSlotAt(tree.slots, node.parent).mode === "math") {
       continue;
     }
-    const content = tree.slots[node.slots[0]];
-    const last = content.children.filter((child) => tree.nodes[child].kind === "row").at(-1);
-    if (last == null || at < tree.nodes[last].span.to || at > content.contentSpan.to) {
+    const content = editSlotAt(tree.slots, requireArrayValue(node.slots, 0));
+    const last = content.children.filter((child) => editNodeAt(tree.nodes, child).kind === "row").at(-1);
+    if (last == null || at < editNodeAt(tree.nodes, last).span.to || at > content.contentSpan.to) {
       continue;
     }
-    const row = tree.nodes[last];
+    const row = editNodeAt(tree.nodes, last);
     const breakToken = row.delimiters.find((span) => span.to === row.span.to && tree.text.startsWith("\\\\", span.from));
     if (!breakToken || !isBlank(tree.text, row.span.to, content.contentSpan.to)) {
       return null;
@@ -358,7 +360,7 @@ export function tab(view: EditView, caret: Position, back: boolean, selectionEnd
   if (decision.kind === "stop") {
     return { kind: "none" };
   }
-  const owner = tree.nodes[decision.node];
+  const owner = editNodeAt(tree.nodes, decision.node);
   if (owner.kind === "item") {
     return indentItems(view, caret, selectionEnd ?? caret, back ? "unnest" : "nest");
   }
@@ -373,7 +375,7 @@ function nextSlot(view: EditView, owner: NodeId, slot: SlotId, back: boolean): E
   if (target) {
     return { kind: "move", to: { slot: target.id, index: back ? target.children.length : 0 } };
   }
-  const node = tree.nodes[owner];
+  const node = editNodeAt(tree.nodes, owner);
   const index = childIndex(tree, owner);
   return { kind: "move", to: { slot: node.parent!, index: back ? index : index + 1 } };
 }
@@ -387,7 +389,7 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
   if (target) {
     return { kind: "move", to: { slot: target.id, index: back ? target.children.length : 0 } };
   }
-  const rows = tree.slots[tree.nodes[row].parent!].children.filter((child) => tree.nodes[child].kind === "row");
+  const rows = editSlotAt(tree.slots, editNodeAt(tree.nodes, row).parent!).children.filter((child) => editNodeAt(tree.nodes, child).kind === "row");
   const neighbour = rows[rows.indexOf(row) + (back ? -1 : 1)];
   if (back || rowIsFull(view, cell)) {
     if (neighbour == null) {
@@ -397,8 +399,8 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
     const goal = back ? neighbourCells.at(-1) : neighbourCells[0];
     return goal ? { kind: "move", to: { slot: goal.id, index: back ? goal.children.length : 0 } } : { kind: "none" };
   }
-  const end = trimmedEnd(tree.text, cells[at].contentSpan);
-  const insert = end > cells[at].contentSpan.from ? " & " : "& ";
+  const end = trimmedEnd(tree.text, requireArrayValue(cells, at).contentSpan);
+  const insert = end > requireArrayValue(cells, at).contentSpan.from ? " & " : "& ";
   return patchOutcome({ edits: [{ span: { from: end, to: end }, insert }], caret: end + insert.length });
 }
 
@@ -411,22 +413,22 @@ function nextCell(view: EditView, row: NodeId, cell: SlotId, back: boolean): Edi
  */
 export function joinRows(view: EditView, row: NodeId, direction: "backward" | "forward"): EditOutcome | null {
   const { tree } = view;
-  const parent = tree.nodes[row].parent;
+  const parent = editNodeAt(tree.nodes, row).parent;
   if (parent == null) {
     return null;
   }
-  const siblings = tree.slots[parent].children;
+  const siblings = editSlotAt(tree.slots, parent).children;
   const at = siblings.indexOf(row);
   const [first, second] = direction === "backward" ? [siblings[at - 1], row] : [row, siblings[at + 1]];
-  if (first == null || second == null || tree.nodes[first].kind !== "row" || tree.nodes[second].kind !== "row") {
+  if (first == null || second == null || editNodeAt(tree.nodes, first).kind !== "row" || editNodeAt(tree.nodes, second).kind !== "row") {
     return null;
   }
-  const upper = tree.nodes[first];
+  const upper = editNodeAt(tree.nodes, first);
   const breakToken = upper.delimiters.find((span) => span.to === upper.span.to && tree.text[span.from] === "\\");
-  if (!breakToken || !isBlank(tree.text, upper.span.to, tree.nodes[second].span.from)) {
+  if (!breakToken || !isBlank(tree.text, upper.span.to, editNodeAt(tree.nodes, second).span.from)) {
     return null;
   }
-  const limit = columnLimit(view, tree.slots[parent].node);
+  const limit = columnLimit(view, editSlotAt(tree.slots, parent).node);
   if (limit != null && columnsUsed(view, first) + columnsUsed(view, second) - 1 > limit) {
     return null;
   }
@@ -444,9 +446,9 @@ export function joinRows(view: EditView, row: NodeId, direction: "backward" | "f
 /** Whether the row of `cell` has all the columns its alignment fixes (`\multicolumn{n}` counting n), so `&` cannot add one. */
 export function rowIsFull(view: EditView, cell: SlotId): boolean {
   const { tree } = view;
-  const row = tree.slots[cell].node;
-  const parent = tree.nodes[row].parent;
-  const columns = parent == null ? null : columnLimit(view, tree.slots[parent].node);
+  const row = editSlotAt(tree.slots, cell).node;
+  const parent = editNodeAt(tree.nodes, row).parent;
+  const columns = parent == null ? null : columnLimit(view, editSlotAt(tree.slots, parent).node);
   if (columns == null) {
     return false;
   }
@@ -466,14 +468,14 @@ function columnsUsed(view: EditView, row: NodeId): number {
 export function widestRow(view: EditView, alignment: NodeId): number {
   const { tree } = view;
   return Math.max(0, ...tree.nodes
-    .filter((node) => node.kind === "row" && node.parent != null && tree.slots[node.parent].node === alignment)
+    .filter((node) => node.kind === "row" && node.parent != null && editSlotAt(tree.slots, node.parent).node === alignment)
     .map((row) => columnsUsed(view, row.id)));
 }
 
 /** The fixed column count of an alignment (`array`/`tabular` specification, `alignat{n}`), or null. */
 function columnLimit(view: EditView, alignment: NodeId): number | null {
   const { tree } = view;
-  const node = tree.nodes[alignment];
+  const node = editNodeAt(tree.nodes, alignment);
   const spec = node.values.find((value) => value.role === "spec");
   if (spec) {
     return specColumns(tree.text.slice(spec.contentSpan.from, spec.contentSpan.to));
@@ -518,12 +520,12 @@ const FIXED_COLUMNS: ReadonlyMap<string, number> = new Map([
 /** ⇥ / ⇧⇥ on the items from `start` to `end` (one list), or the toolbar indent buttons. */
 export function indentItems(view: EditView, start: Position, end: Position, direction: "nest" | "unnest"): EditOutcome {
   const { tree } = view;
-  const first = listItemOf(tree, tree.slots[start.slot].node);
-  const last = listItemOf(tree, tree.slots[end.slot].node);
+  const first = listItemOf(tree, editSlotAt(tree.slots, start.slot).node);
+  const last = listItemOf(tree, editSlotAt(tree.slots, end.slot).node);
   if (!first || first.list.node !== last?.list.node || last.index < first.index) {
     return { kind: "none" };
   }
-  const moved = { from: first.item.commandSpan.from, to: last.list.items[last.index].contentSpan.to };
+  const moved = { from: first.item.commandSpan.from, to: requireArrayValue(last.list.items, last.index).contentSpan.to };
   if (direction === "nest" && !nestable(view, first.list.node, moved.from, moved.to)) {
     return { kind: "none" };
   }
@@ -541,8 +543,8 @@ function nestable(view: EditView, list: NodeId, from: number, to: number): boole
   const { tree } = view;
   const depth = (id: NodeId) => {
     let lists = 0;
-    for (let node: NodeId | null = id; node != null; node = tree.nodes[node].parent == null ? null : tree.slots[tree.nodes[node].parent!].node) {
-      lists += tree.nodes[node].kind === "list" ? 1 : 0;
+    for (let node: NodeId | null = id; node != null; node = editNodeAt(tree.nodes, node).parent == null ? null : editSlotAt(tree.slots, editNodeAt(tree.nodes, node).parent!).node) {
+      lists += editNodeAt(tree.nodes, node).kind === "list" ? 1 : 0;
     }
     return lists;
   };
@@ -560,17 +562,17 @@ export function toggleList(view: EditView, caret: Position, environment: "itemiz
   }
   const chain = capabilityChain(tree, "enter", caret.slot);
   const at = view.offset(caret);
-  const context = listItemOf(tree, tree.slots[caret.slot].node);
+  const context = listItemOf(tree, editSlotAt(tree.slots, caret.slot).node);
   if (context) {
     return patchOutcome(toggleListPatch(tree.text, context, environment, at));
   }
-  const paragraph = chain.map((link) => tree.nodes[link.node]).find((node) => node.kind === "paragraph");
+  const paragraph = chain.map((link) => editNodeAt(tree.nodes, link.node)).find((node) => node.kind === "paragraph");
   if (paragraph) {
-    const content = tree.slots[paragraph.slots[0]].contentSpan;
+    const content = editSlotAt(tree.slots, requireArrayValue(paragraph.slots, 0)).contentSpan;
     const span = { from: content.from, to: trimmedEnd(tree.text, content) };
     return patchOutcome(wrapInListPatch(tree.text, span, environment, at));
   }
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   return slot.flow && slot.children.length === 0
     ? patchOutcome(wrapInListPatch(tree.text, slot.contentSpan, environment, at))
     : { kind: "none" };
@@ -598,11 +600,11 @@ export function joinBackward(view: EditView, caret: Position): EditOutcome {
     const patch = mergeWithPreviousItemPatch(tree.text, context, context.item.contentSpan.from);
     return patch ? patchOutcome(patch) : { kind: "none" };
   }
-  const node = tree.nodes[block];
-  const siblings = tree.slots[node.parent!].children;
+  const node = editNodeAt(tree.nodes, block);
+  const siblings = editSlotAt(tree.slots, node.parent!).children;
   const previous = siblings[siblings.indexOf(block) - 1];
-  if (previous != null && tree.nodes[previous].kind === "paragraph" && node.kind === "paragraph") {
-    const from = trimmedEnd(tree.text, tree.nodes[previous].span);
+  if (previous != null && editNodeAt(tree.nodes, previous).kind === "paragraph" && node.kind === "paragraph") {
+    const from = trimmedEnd(tree.text, editNodeAt(tree.nodes, previous).span);
     const insert = joinSeparator(tree.text, from, " ");
     return patchOutcome({ edits: [{ span: { from, to: node.span.from }, insert }], caret: from + insert.length });
   }
@@ -627,12 +629,12 @@ export function joinForward(view: EditView, caret: Position): EditOutcome {
     const patch = mergeNextItemPatch(tree.text, context, trimmedEnd(tree.text, context.item.contentSpan));
     return patch ? patchOutcome(patch) : { kind: "none" };
   }
-  const node = tree.nodes[block];
-  const siblings = tree.slots[node.parent!].children;
+  const node = editNodeAt(tree.nodes, block);
+  const siblings = editSlotAt(tree.slots, node.parent!).children;
   const next = siblings[siblings.indexOf(block) + 1];
-  if (next != null && tree.nodes[next].kind === "paragraph" && node.kind === "paragraph") {
+  if (next != null && editNodeAt(tree.nodes, next).kind === "paragraph" && node.kind === "paragraph") {
     const from = trimmedEnd(tree.text, node.span);
-    return patchOutcome({ edits: [{ span: { from, to: tree.nodes[next].span.from }, insert: joinSeparator(tree.text, from, " ") }], caret: from });
+    return patchOutcome({ edits: [{ span: { from, to: editNodeAt(tree.nodes, next).span.from }, insert: joinSeparator(tree.text, from, " ") }], caret: from });
   }
   const step = view.step(caret, 1);
   return step ? { kind: "move", to: step } : { kind: "none" };
@@ -641,8 +643,8 @@ export function joinForward(view: EditView, caret: Position): EditOutcome {
 /** The list item a block belongs to directly (the item itself, or a paragraph in its flow). */
 function itemOfBlock(view: EditView, block: NodeId) {
   const { tree } = view;
-  const node = tree.nodes[block];
-  const owner = node.kind === "item" ? node : node.parent == null ? null : tree.nodes[tree.slots[node.parent].node];
+  const node = editNodeAt(tree.nodes, block);
+  const owner = node.kind === "item" ? node : node.parent == null ? null : editNodeAt(tree.nodes, editSlotAt(tree.slots, node.parent).node);
   return owner?.kind === "item" ? listItemOf(tree, owner.id) : null;
 }
 
@@ -656,7 +658,7 @@ function itemLabel(view: EditView, item: NodeId) {
 function blockAt(view: EditView, slot: SlotId): NodeId | null {
   const { tree } = view;
   for (let current: SlotId | null = slot; current != null;) {
-    const node: EditNode = tree.nodes[tree.slots[current].node];
+    const node: EditNode = editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node);
     if (node.kind === "paragraph" || node.kind === "item") {
       return node.id;
     }
@@ -666,13 +668,13 @@ function blockAt(view: EditView, slot: SlotId): NodeId | null {
 }
 
 function firstBlockOf(view: EditView, block: NodeId): boolean {
-  const node = view.tree.nodes[block];
-  return node.kind === "item" || view.tree.slots[node.parent!].children[0] === block;
+  const node = editNodeAt(view.tree.nodes, block);
+  return node.kind === "item" || editSlotAt(view.tree.slots, node.parent!).children[0] === block;
 }
 
 function lastBlockOf(view: EditView, block: NodeId): boolean {
-  const node = view.tree.nodes[block];
-  return node.kind === "item" || view.tree.slots[node.parent!].children.at(-1) === block;
+  const node = editNodeAt(view.tree.nodes, block);
+  return node.kind === "item" || editSlotAt(view.tree.slots, node.parent!).children.at(-1) === block;
 }
 
 function patchOutcome(patch: StructuralPatch): EditOutcome {
@@ -686,18 +688,18 @@ function patchOutcome(patch: StructuralPatch): EditOutcome {
     caret: patch.caret,
     run: null,
     exact: true,
-    selectionEnd: patch.selectionEnd,
+    ...(patch.selectionEnd === undefined ? {} : { selectionEnd: patch.selectionEnd }),
   };
 }
 
 /** Whether a slot is in an alignment's rows (a cell, at any depth short of a formula). */
 export function inAlignment(view: EditView, slot: SlotId): boolean {
   const { tree } = view;
-  for (let current: SlotId | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
-    if (tree.slots[current].role === "cell" || tree.nodes[tree.slots[current].node].kind === "alignment") {
+  for (let current: SlotId | null = slot; current != null; current = editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).parent) {
+    if (editSlotAt(tree.slots, current).role === "cell" || editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).kind === "alignment") {
       return true;
     }
-    if (tree.nodes[tree.slots[current].node].kind === "formula") {
+    if (editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).kind === "formula") {
       return false;
     }
   }
@@ -707,8 +709,8 @@ export function inAlignment(view: EditView, slot: SlotId): boolean {
 /** Whether a slot is a list item's flow, or a paragraph in one. */
 export function inListFlow(view: EditView, slot: SlotId): boolean {
   const { tree } = view;
-  const paragraph = tree.nodes[tree.slots[slot].node];
+  const paragraph = editNodeAt(tree.nodes, editSlotAt(tree.slots, slot).node);
   const flow = paragraph.kind === "paragraph" && paragraph.parent != null ? paragraph.parent : slot;
-  const kind = tree.nodes[tree.slots[flow].node].kind;
-  return (kind === "item" && tree.slots[flow].role === "flow") || kind === "list";
+  const kind = editNodeAt(tree.nodes, editSlotAt(tree.slots, flow).node).kind;
+  return (kind === "item" && editSlotAt(tree.slots, flow).role === "flow") || kind === "list";
 }

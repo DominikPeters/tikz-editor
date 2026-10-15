@@ -544,7 +544,7 @@ const HitRegionShape = memo(function HitRegionShape({
 }) {
   const className = hovered ? `${css.hitRegion} ${css.hitRegionHovered}` : css.hitRegion;
   const common = {
-    className,
+    ...(className !== undefined ? { className: className } : {}),
     stroke: region.pointerMode === "stroke" ? "transparent" : "none",
     strokeWidth: region.pointerMode === "stroke" ? region.strokeWidth : undefined,
     style: cursor ? { cursor } : undefined,

@@ -7,12 +7,12 @@ export function splitTopLevelCommas(raw: string): string[] {
   let inQuote = false;
 
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
     }
-    if (char === '"' && raw[index - 1] !== "\\") {
+    if (char === '"' && raw.charAt(index - 1) !== "\\") {
       inQuote = !inQuote;
       continue;
     }

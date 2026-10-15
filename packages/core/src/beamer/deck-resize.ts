@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { parseTexDimensionExpression } from "../text/tex/dimensions.js";
@@ -35,11 +36,11 @@ function numericValue(source: string, span: Span, scalar = false): NumericValue 
   const match = /^(\s*\{?\s*)([+]?(?:\d+(?:\.\d*)?|\.\d+))(\s*(?:\\[a-zA-Z]+|[a-zA-Z]+)?)(\s*\}?\s*)$/u.exec(raw);
   if (!match || (raw.includes("{") !== raw.includes("}"))) return null;
   const value = Number(match[2]);
-  const suffix = match[3].trim();
+  const suffix = requireArrayValue(match, 3).trim();
   if (!(value > 0) || !Number.isFinite(value)) return null;
   if (scalar ? suffix !== "" || Number(raw) !== value : !parseTexDimensionExpression(raw)) return null;
-  const from = span.from + match[1].length;
-  return { span: { from, to: from + match[2].length }, value };
+  const from = span.from + requireArrayValue(match, 1).length;
+  return { span: { from, to: from + requireArrayValue(match, 2).length }, value };
 }
 
 export function beamerColumnDividers(source: string, layout: BeamerFrameLayout, index?: BeamerObjectIndex): BeamerColumnDivider[] {
@@ -58,8 +59,8 @@ export function beamerColumnDividers(source: string, layout: BeamerFrameLayout, 
     const columns = objects.nodes.filter((node) => node.kind === "column" && node.parentId === parent.id)
       .sort((a, b) => a.sourceSpan.from - b.sourceSpan.from);
     for (let i = 1; i < columns.length; i += 1) {
-      const a = columns[i - 1];
-      const b = columns[i];
+      const a = requireArrayValue(columns, i - 1);
+      const b = requireArrayValue(columns, i);
       const left = readWidth(a);
       const right = readWidth(b);
       if (!left || !right || a.bounds.width <= 0 || b.bounds.width <= 0) continue;

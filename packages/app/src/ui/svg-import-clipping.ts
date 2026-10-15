@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { parseTikz } from "@tikz-editor/core/parser";
 import { evaluateTikzFigure } from "@tikz-editor/core/semantic";
 import type { ScenePathCommand } from "@tikz-editor/core/semantic";
@@ -56,7 +57,7 @@ function prepareTransform(element: Element): void {
     operation.lastIndex = cursor;
     const match = operation.exec(transform);
     if (!match) unsupported("the clipping transform cannot be converted faithfully");
-    const values = match[2].trim().split(/[\s,]+/u);
+    const values = requireArrayValue(match, 2).trim().split(/[\s,]+/u);
     if (!values.every(value => new RegExp(`^${NUMBER}$`, "u").test(value) && Number.isFinite(Number(value)))) {
       unsupported("the clipping transform contains unsupported values");
     }
@@ -66,10 +67,10 @@ function prepareTransform(element: Element): void {
     const numbers = values.map(Number);
     let next: Matrix;
     if (match[1] === "matrix") next = numbers as Matrix;
-    else if (match[1] === "translate") next = [1, 0, 0, 1, numbers[0], numbers[1] ?? 0];
-    else if (match[1] === "scale") next = [numbers[0], 0, 0, numbers[1] ?? numbers[0], 0, 0];
+    else if (match[1] === "translate") next = [1, 0, 0, 1, requireArrayValue(numbers, 0), numbers[1] ?? 0];
+    else if (match[1] === "scale") next = [requireArrayValue(numbers, 0), 0, 0, numbers[1] ?? requireArrayValue(numbers, 0), 0, 0];
     else {
-      const angle = numbers[0] * Math.PI / 180;
+      const angle = requireArrayValue(numbers, 0) * Math.PI / 180;
       if (match[1] === "skewX") next = [1, 0, Math.tan(angle), 1, 0, 0];
       else if (match[1] === "skewY") next = [1, Math.tan(angle), 0, 1, 0, 0];
       else {
@@ -100,15 +101,15 @@ function assertClipPathData(data: string): void {
     tokens.push(match[0]); cursor = token.lastIndex;
   }
   if (tokens.length === 0) return;
-  if (tokens[0].toUpperCase() !== "M") unsupported("the clip path must start with a moveto command");
+  if (requireArrayValue(tokens, 0).toUpperCase() !== "M") unsupported("the clip path must start with a moveto command");
   const arity: Record<string, number> = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, Z: 0 };
   for (let i = 0; i < tokens.length;) {
-    const command = tokens[i++].toUpperCase();
+    const command = requireArrayValue(tokens, i++).toUpperCase();
     if (command === "A") unsupported("elliptical arc clip paths are not supported");
     const count = arity[command];
     if (count == null) unsupported("the clip path contains an unsupported command");
     const start = i;
-    while (i < tokens.length && !/^[a-zA-Z]$/u.test(tokens[i])) i++;
+    while (i < tokens.length && !/^[a-zA-Z]$/u.test(requireArrayValue(tokens, i))) i++;
     const length = i - start;
     if (count === 0 ? length !== 0 : length === 0 || length % count !== 0) unsupported("the clip path contains incomplete coordinates");
   }
@@ -215,7 +216,7 @@ export function convertSvgWithClipping(svg: Element, convert: Converter): string
   const viewBox = svg.getAttribute("viewBox");
   if (viewBox) {
     const values = viewBox.trim().split(/[\s,]+/u).map(Number);
-    if (values.length !== 4 || !values.every(Number.isFinite) || values[2] <= 0 || values[3] <= 0) unsupported("the clipped SVG has an invalid viewBox");
+    if (values.length !== 4 || !values.every(Number.isFinite) || requireArrayValue(values, 2) <= 0 || requireArrayValue(values, 3) <= 0) unsupported("the clipped SVG has an invalid viewBox");
   }
   for (const use of Array.from(svg.querySelectorAll("use"))) {
     const target = referencedUseTarget(use);
@@ -250,7 +251,7 @@ export function convertSvgWithClipping(svg: Element, convert: Converter): string
     const reference = activeClip(element)!;
     const match = /^url\(\s*['"]?#([^\s'"()]+)['"]?\s*\)$/u.exec(reference);
     if (!match) unsupported(`clip-path=${reference} is not a supported local clip reference`);
-    const definition = svg.ownerDocument.getElementById(match[1]);
+    const definition = svg.ownerDocument.getElementById(requireArrayValue(match, 1));
     if (!definition || tag(definition) !== "clipPath") unsupported(`clip reference #${match[1]} does not identify a clipPath`);
     const clip = clipSource(svg, definition, convert);
     let container = element;

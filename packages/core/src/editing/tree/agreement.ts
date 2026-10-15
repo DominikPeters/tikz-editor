@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "./lookup.js";
 import { parseSimpleTexInlineNodes, SIMPLE_TEX_FONT_COMMAND_NAMES, type SimpleTexInlineNode } from "../../text/tex/ir.js";
 import { parseTexMath } from "../../text/tex/math/parser.js";
 import type { EditTree, NodeId } from "./types.js";
@@ -38,7 +40,8 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
   const disagreements: EngineDisagreement[] = [];
   for (const node of tree.nodes) {
     if (node.kind === "formula" || node.kind === "display") {
-      const slot = tree.slots[node.slots[0]];
+      const slotId = node.slots[0];
+      const slot = slotId === undefined ? undefined : tree.slots[slotId];
       if (slot?.role !== "content") continue;
       const { from, to } = slot.contentSpan;
       const engine = mathFacts(tree.text.slice(from, to), from);
@@ -47,7 +50,7 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
           .map((fact) => fact.replace(/^overset/u, "scripted"))
       );
       for (const id of emptyBaseScripts(tree, node.id)) {
-        ours.delete(`scripted@${tree.nodes[id].span.from}-${tree.nodes[id].span.to}`);
+        ours.delete(`scripted@${editNodeAt(tree.nodes, id).span.from}-${editNodeAt(tree.nodes, id).span.to}`);
       }
       diff(disagreements, "math", ours, engine, slot.contentSpan);
     } else if (node.kind === "paragraph") {
@@ -57,12 +60,14 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
       const engine = new Set<string>();
       collectFontCommands(parsed.nodes, engine);
       for (const fact of engine) {
-        const [head, range] = fact.split("@");
+        const parts = fact.split("@");
+        const head = requireArrayValue(parts, 0);
+        const range = requireArrayValue(parts, 1);
         const command = head.slice("font:".length);
         if (!tree.text.startsWith(`\\${command}`, Number(range.split("-")[0]))) engine.delete(fact);
       }
       const ours = new Set(
-        [...treeFacts(tree, node.id, ["style"])].filter((fact) => FONT_COMMANDS.has(fact.split("@")[0].split(":")[1] ?? ""))
+        [...treeFacts(tree, node.id, ["style"])].filter((fact) => FONT_COMMANDS.has(requireArrayValue(fact.split("@"), 0).split(":")[1] ?? ""))
           .map((fact) => `font${fact.slice(fact.indexOf(":"))}`)
       );
       diff(disagreements, "text", ours, engine, node.span);
@@ -76,15 +81,15 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
  * the text IR, with every offset kept: replaced syntax becomes spaces.
  */
 function projectedParagraph(tree: EditTree, paragraph: NodeId): string {
-  const { from, to } = tree.nodes[paragraph].span;
+  const { from, to } = editNodeAt(tree.nodes, paragraph).span;
   const chars = tree.text.slice(from, to).split("");
   const blank = (start: number, end: number) => {
     for (let index = start; index < end; index++) chars[index - from] = " ";
   };
   const visit = (id: NodeId) => {
-    const node = tree.nodes[id];
+    const node = editNodeAt(tree.nodes, id);
     if (node.kind === "link") {
-      const text = node.slots.map((slot) => tree.slots[slot]).find((slot) => slot.role === "content");
+      const text = node.slots.map((slot) => editSlotAt(tree.slots, slot)).find((slot) => slot.role === "content");
       const { from: start, to: end } = text?.contentSpan ?? { from: -1, to: -1 };
       if (text && tree.text[start - 1] === "{" && tree.text[end] === "}") {
         blank(node.span.from, start - 1);
@@ -92,10 +97,10 @@ function projectedParagraph(tree: EditTree, paragraph: NodeId): string {
       }
     } else if (node.kind === "style" && node.command && FONT_COMMANDS.has(node.command)) {
       const spec = /^\\[A-Za-z]+(\s*<[^<>{}]*>)/u.exec(tree.text.slice(node.span.from, node.span.to));
-      if (spec) blank(node.span.from + spec[0].length - spec[1].length, node.span.from + spec[0].length);
+      if (spec) blank(node.span.from + spec[0].length - requireArrayValue(spec, 1).length, node.span.from + spec[0].length);
     }
     for (const slot of node.slots) {
-      for (const child of tree.slots[slot].children) visit(child);
+      for (const child of editSlotAt(tree.slots, slot).children) visit(child);
     }
   };
   visit(paragraph);
@@ -120,7 +125,7 @@ function diff(
 function treeFacts(tree: EditTree, root: NodeId, kinds: readonly string[]): Set<string> {
   const facts = new Set<string>();
   const visit = (id: NodeId) => {
-    const node = tree.nodes[id];
+    const node = editNodeAt(tree.nodes, id);
     if (id !== root && (node.kind === "formula" || node.kind === "display" || node.kind === "text-in-math")) {
       return;
     }
@@ -129,7 +134,7 @@ function treeFacts(tree: EditTree, root: NodeId, kinds: readonly string[]): Set<
       facts.add(`${node.kind}${command}@${node.span.from}-${node.span.to}`);
     }
     for (const slot of node.slots) {
-      for (const child of tree.slots[slot].children) visit(child);
+      for (const child of editSlotAt(tree.slots, slot).children) visit(child);
     }
   };
   visit(root);
@@ -138,9 +143,9 @@ function treeFacts(tree: EditTree, root: NodeId, kinds: readonly string[]): Set<
 
 function emptyBaseScripts(tree: EditTree, root: NodeId): NodeId[] {
   return tree.nodes
-    .filter((node) => node.kind === "scripted" && node.span.from >= tree.nodes[root].span.from &&
-      node.span.to <= tree.nodes[root].span.to)
-    .filter((node) => tree.slots[node.slots[0]].children.length === 0)
+    .filter((node) => node.kind === "scripted" && node.span.from >= editNodeAt(tree.nodes, root).span.from &&
+      node.span.to <= editNodeAt(tree.nodes, root).span.to)
+    .filter((node) => editSlotAt(tree.slots, requireArrayValue(node.slots, 0)).children.length === 0)
     .map((node) => node.id);
 }
 

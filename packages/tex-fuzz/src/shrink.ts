@@ -97,7 +97,10 @@ function nodeCandidates(node: TexFuzzNode): readonly TexFuzzNode[] {
     if (node.command === "rotatebox" && node.angle !== 0) candidates.push({ ...node, angle: 0 });
     if (node.command === "scalebox") {
       if (node.scale !== 1) candidates.push({ ...node, scale: 1 });
-      if (node.verticalScale !== undefined) candidates.push({ ...node, verticalScale: undefined });
+      if (node.verticalScale !== undefined) {
+        const { verticalScale: _verticalScale, ...withoutVerticalScale } = node;
+        candidates.push(withoutVerticalScale);
+      }
     }
     if (node.command === "resizebox") {
       if (node.width !== "!" && node.width.amount !== 1) candidates.push({ ...node, width: { ...node.width, amount: 1 } });
@@ -121,15 +124,16 @@ function nodeCandidates(node: TexFuzzNode): readonly TexFuzzNode[] {
     }
   }
   if ("children" in node) {
-    if (node.children.length === 1) {
-      candidates.push(node.children[0]);
+    const firstChild = node.children[0];
+    if (node.children.length === 1 && firstChild) {
+      candidates.push(firstChild);
     }
-    for (let index = 0; index < node.children.length; index += 1) {
+    for (const [index, child] of node.children.entries()) {
       if (node.children.length > 1) {
         const without = node.children.filter((_, childIndex) => childIndex !== index);
         candidates.push({ ...node, children: without });
       }
-      for (const childCandidate of nodeCandidates(node.children[index])) {
+      for (const childCandidate of nodeCandidates(child)) {
         candidates.push({ ...node, children: replaceAt(node.children, index, [childCandidate]) });
       }
     }
@@ -163,14 +167,14 @@ function rawStringCandidates(caseData: TexFuzzCase): readonly TexFuzzCase[] {
 
 export function texFuzzShrinkCandidates(caseData: TexFuzzCase): readonly TexFuzzCase[] {
   const candidates: TexFuzzCase[] = [];
-  for (let index = 0; index < caseData.ast.length; index += 1) {
+  for (const [index, node] of caseData.ast.entries()) {
     if (caseData.ast.length > 1) {
       candidates.push(caseFromTexFuzzAst(caseData.ast.filter((_, itemIndex) => itemIndex !== index), {
         seed: caseData.seed,
         profile: caseData.profile,
       }));
     }
-    for (const candidate of nodeCandidates(caseData.ast[index])) {
+    for (const candidate of nodeCandidates(node)) {
       candidates.push(caseFromTexFuzzAst(replaceAt(caseData.ast, index, [candidate]), {
         seed: caseData.seed,
         profile: caseData.profile,
@@ -275,6 +279,8 @@ export async function shrinkTexFuzzCase(
       }
       return { minimizedCase: current, candidatesEvaluated, oracleEvaluations, termination: "minimal" };
     }
-    current = batch[preservedIndex];
+    const preserved = batch[preservedIndex];
+    if (!preserved) throw new RangeError("Shrink predicate selected a missing candidate.");
+    current = preserved;
   }
 }

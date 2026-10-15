@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { PersistentMapSnapshot } from "./persistent-map.js";
 import { PersistentMap } from "./persistent-map.js";
 
@@ -233,7 +234,8 @@ export class SemanticDependencyGraphBuilder {
     }
     this.edges.set(edgeKey, edge);
     const sourceId = (edge.relation === "producer" ? edge.from : edge.to).slice("source:".length);
-    this.edgesBySource.set(sourceId, { edge, previous: this.edgesBySource.get(sourceId) });
+    const optionalPrevious1 = this.edgesBySource.get(sourceId);
+    this.edgesBySource.set(sourceId, { edge, ...(optionalPrevious1 === undefined ? {} : { previous: optionalPrevious1 }) });
   }
 }
 
@@ -284,7 +286,7 @@ export function replaceSourceDependencies(
     if (left.opaque !== right.opaque || left.opaqueReasons.join("\0") !== right.opaqueReasons.join("\0")) return false;
     const leftEdges = before.edgesBySource.get(id) ?? [];
     const rightEdges = after.edgesBySource.get(id) ?? [];
-    return leftEdges.length === rightEdges.length && leftEdges.every((edge, i) => sameEdge(edge, rightEdges[i]));
+    return leftEdges.length === rightEdges.length && leftEdges.every((edge, i) => sameEdge(edge, requireArrayValue(rightEdges, i)));
   });
   if (unchanged) return previous;
 
@@ -317,15 +319,15 @@ function mergeSorted<T>(left: readonly T[], right: readonly T[], compare: (a: T,
   const merged: T[] = [];
   let i = 0, j = 0;
   while (i < left.length && j < right.length) {
-    const order = compare(left[i], right[j]);
-    if (order < 0) merged.push(left[i++]);
+    const order = compare(requireArrayValue(left, i), requireArrayValue(right, j));
+    if (order < 0) merged.push(requireArrayValue(left, i++));
     else {
       if (order === 0) i++;
-      merged.push(right[j++]);
+      merged.push(requireArrayValue(right, j++));
     }
   }
-  while (i < left.length) merged.push(left[i++]);
-  while (j < right.length) merged.push(right[j++]);
+  while (i < left.length) merged.push(requireArrayValue(left, i++));
+  while (j < right.length) merged.push(requireArrayValue(right, j++));
   return merged;
 }
 

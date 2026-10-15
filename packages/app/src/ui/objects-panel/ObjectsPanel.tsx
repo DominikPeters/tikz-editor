@@ -260,9 +260,9 @@ export function ObjectsPanel() {
 
   if (rows.length === 0) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Header>Objects</SidePanel.Header>
-        <SidePanel.Content className={css.content}>
+        <SidePanel.Content className={css.content ?? ""}>
           <div className={css.empty}>No scene objects in the current figure.</div>
         </SidePanel.Content>
       </SidePanel>
@@ -270,9 +270,9 @@ export function ObjectsPanel() {
   }
 
   return (
-    <SidePanel className={css.panel} data-testid="objects-panel">
+    <SidePanel className={css.panel ?? ""} data-testid="objects-panel">
       <SidePanel.Header>Objects</SidePanel.Header>
-      <SidePanel.Content className={css.content}>
+      <SidePanel.Content className={css.content ?? ""}>
         <div className={css.toolbar}>
           <div className={css.multiArrangeGroup} role="group" aria-label="Group selection actions">
             {groupActions.map((action) => renderActionButton(action))}

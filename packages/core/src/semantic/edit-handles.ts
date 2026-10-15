@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../utils/collections.js";
+import { currentFrame } from "./context.js";
 import type { Span } from "../ast/types.js";
 import type { SemanticContext } from "./context.js";
 import type { EvaluatedCoordinate } from "./coords/evaluate.js";
@@ -32,11 +34,11 @@ export function createEditHandle(
     kind,
     world: evaluated.world,
     sourceText,
-    axisBasis: context.stack[context.stack.length - 1].axisBasis,
-    sourceUnits: evaluated.sourceUnits,
+    axisBasis: currentFrame(context).axisBasis,
+    ...(evaluated.sourceUnits === undefined ? {} : { sourceUnits: evaluated.sourceUnits }),
     coordinateForm: evaluated.coordinateForm,
-    relativePrefix: evaluated.relativePrefix,
-    rewriteTargetHandleId: opts.rewriteTargetHandleId
+    ...(evaluated.relativePrefix === undefined ? {} : { relativePrefix: evaluated.relativePrefix }),
+    ...(opts.rewriteTargetHandleId === undefined ? {} : { rewriteTargetHandleId: opts.rewriteTargetHandleId })
   } as const;
 
   if (evaluated.coordinateForm === "calc" && evaluated.frame && !evaluated.relativePrefix) {
@@ -114,7 +116,7 @@ export function nextEditHandleId(context: SemanticContext, sourceId: string, kin
     handleCounters.set(context, state);
   }
   for (; state.count < context.editHandles.length; state.count++) {
-    const handle = context.editHandles[state.count];
+    const handle = requireArrayValue(context.editHandles, state.count);
     const key = `${handle.sourceRef.sourceId}:${handle.kind}`;
     state.byOwner.set(key, (state.byOwner.get(key) ?? 0) + 1);
   }

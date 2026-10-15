@@ -64,7 +64,7 @@ export function applyPlannedSetPropertyAction(
   parseOptions: EditParseOptions = {},
   geometry?: EditGeometrySession
 ): EditActionResultLike {
-  return withChangedSourceId(planPropertyWrite({ source, action, parseOptions, geometry }).selected, action.elementId);
+  return withChangedSourceId(planPropertyWrite({ source, action, parseOptions, ...(geometry === undefined ? {} : { geometry }) }).selected, action.elementId);
 }
 
 function withChangedSourceId(result: EditActionResultLike, sourceId: string): EditActionResultLike {
@@ -101,7 +101,10 @@ export function planPropertyWrite(request: PropertyWriteRequest): PropertyWriteP
   if (snapshotParse && snapshotParse.activeFigureId === activeFigureId) {
     analysisSession.primeFromParse(snapshotParse, request.source, { activeFigureId });
   }
-  const cleanupParseOptions: EditParseOptions = { ...parseOptions, activeFigureId, analysisSession, analysisView: null, preparedParse: undefined };
+  const cleanupParseOptions: EditParseOptions = { ...parseOptions, analysisSession, analysisView: null };
+  delete cleanupParseOptions.preparedParse;
+  if (activeFigureId === undefined) delete cleanupParseOptions.activeFigureId;
+  else cleanupParseOptions.activeFigureId = activeFigureId;
   if (hasParseErrors(conservative.newSource, cleanupParseOptions)) {
     return { conservative, selected: conservative, certificates: [] };
   }
@@ -179,15 +182,9 @@ function buildDefaultOmissionCandidate(
   if (action.value.trim().length === 0 || !shouldOmitDefaultWhenEquivalent(action.propertyId ?? propertyIdForWriteKey(action.key))) {
     return null;
   }
-  const result = applySetPropertyActionRaw(
-    source,
-    {
-      ...action,
-      value: "",
-      clearKeys: undefined
-    },
-    parseOptions
-  );
+  const clearAction = { ...action, value: "" };
+  delete clearAction.clearKeys;
+  const result = applySetPropertyActionRaw(source, clearAction, parseOptions);
   return result.kind === "success" || result.kind === "partial" ? result.newSource : null;
 }
 

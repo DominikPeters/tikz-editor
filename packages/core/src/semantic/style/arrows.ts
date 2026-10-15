@@ -73,14 +73,14 @@ export function parseArrowSideSpecification(raw: string, side: "start" | "end", 
   let afterLineEnd = false;
   let cursor = 0;
   while (cursor < input.length) {
-    while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+    while (cursor < input.length && /\s/.test(input.charAt(cursor))) {
       cursor += 1;
     }
     if (cursor >= input.length) {
       break;
     }
 
-    const char = input[cursor];
+    const char = input.charAt(cursor);
     if (char === ".") {
       afterLineEnd = true;
       cursor += 1;
@@ -917,7 +917,7 @@ function parseDefaultArrowSep(lineWidth: number): number {
 function readArrowNamedTip(input: string, startIndex: number): { name: string; nextIndex: number } | null {
   let cursor = startIndex;
   while (cursor < input.length) {
-    const char = input[cursor] ?? "";
+    const char = input.charAt(cursor);
     if (char === "[" || char === "." || char === "{" || char === "}" || char === "_" || char === ">" || char === "<" || char === "|") {
       break;
     }

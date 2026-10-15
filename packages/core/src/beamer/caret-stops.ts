@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { getKnuthPlassParagraphCaretStops } from "../text/knuth-plass/index.js";
 import type { BeamerFrameLayout, BeamerListTopology, BeamerParagraphLayout } from "./types.js";
@@ -48,7 +49,7 @@ export type BeamerCaretDomain = {
   readonly mathSpans: readonly Span[];
   /** Per-paragraph role and span, for structural-key context checks. */
   readonly paragraphs: readonly BeamerCaretDomainParagraph[];
-  readonly overlayBranches?: BeamerFrameLayout["overlayBranches"];
+  readonly overlayBranches?: NonNullable<BeamerFrameLayout["overlayBranches"]>;
 };
 
 type MutableRow = {
@@ -187,7 +188,7 @@ export function buildBeamerCaretStopDomain(args: {
 
   return {
     source: args.source,
-    overlayBranches: args.overlayBranches,
+    ...(args.overlayBranches !== undefined ? { overlayBranches: args.overlayBranches } : {}),
     rows,
     offsets: [...offsetSet].sort((left, right) => left - right),
     atomSpans: [...atomByRange.values()].sort((left, right) => left.from - right.from),
@@ -204,7 +205,7 @@ function nearestDomainIndex(offsets: readonly number[], offset: number): number 
   let high = offsets.length - 1;
   while (low < high) {
     const mid = (low + high) >> 1;
-    if (offsets[mid] < offset) {
+    if (requireArrayValue(offsets, mid) < offset) {
       low = mid + 1;
     } else {
       high = mid;
@@ -233,9 +234,10 @@ export function nextBeamerCaretOffset(
     return candidate != null && candidate > offset ? candidate : null;
   }
   const index = nearestDomainIndex(offsets, offset);
-  if (offsets[index] < offset) {
+  const nearest = offsets[index];
+  if (nearest !== undefined && nearest < offset) {
     // Every domain offset is below `offset`; the last one is the previous stop.
-    return offsets[index];
+    return nearest;
   }
   const candidate = offsets[index - 1];
   return candidate != null && candidate < offset ? candidate : null;
@@ -254,10 +256,10 @@ export function beamerCaretRowForOffset(
 ): RowPosition | null {
   let best: RowPosition | null = null;
   let bestScore = -1;
-  for (let rowIndex = 0; rowIndex < domain.rows.length; rowIndex += 1) {
-    const stops = domain.rows[rowIndex].stops;
-    for (let stopIndex = 0; stopIndex < stops.length; stopIndex += 1) {
-      if (stops[stopIndex].offset !== offset) {
+  for (const [rowIndex, row] of domain.rows.entries()) {
+    const stops = row.stops;
+    for (const [stopIndex, stop] of stops.entries()) {
+      if (stop.offset !== offset) {
         continue;
       }
       const score = stopIndex === 0 ? 2 : stopIndex === stops.length - 1 ? 1 : 0;
@@ -270,8 +272,9 @@ export function beamerCaretRowForOffset(
   return best;
 }
 
-function nearestStopInRow(row: BeamerCaretRow, x: number): BeamerCaretStop {
+function nearestStopInRow(row: BeamerCaretRow, x: number): BeamerCaretStop | null {
   let best = row.stops[0];
+  if (!best) return null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const stop of row.stops) {
     const distance = Math.abs(stop.x - x);
@@ -309,14 +312,18 @@ export function verticalBeamerCaretOffset(
     return null;
   }
   const row = domain.rows[position.rowIndex];
-  const effectiveGoalX = goalX ?? row.stops[position.stopIndex].x;
+  const current = row?.stops[position.stopIndex];
+  if (!row || !current) return null;
+  const effectiveGoalX = goalX ?? current.x;
   const targetRow = domain.rows[position.rowIndex + direction];
   if (!targetRow) {
     const edge = direction < 0 ? row.stops[0] : row.stops[row.stops.length - 1];
-    return edge.offset === offset ? null : { offset: edge.offset, goalX: edge.x };
+    return !edge || edge.offset === offset ? null : { offset: edge.offset, goalX: edge.x };
   }
+  const target = nearestStopInRow(targetRow, effectiveGoalX);
+  if (!target) return null;
   return {
-    offset: nearestStopInRow(targetRow, effectiveGoalX).offset,
+    offset: target.offset,
     goalX: effectiveGoalX,
   };
 }
@@ -331,8 +338,9 @@ export function beamerCaretRowEdgeOffset(
   if (!position) {
     return null;
   }
-  const stops = domain.rows[position.rowIndex].stops;
-  return (edge === "start" ? stops[0] : stops[stops.length - 1]).offset;
+  const stops = domain.rows[position.rowIndex]?.stops;
+  if (!stops) return null;
+  return (edge === "start" ? stops[0] : stops[stops.length - 1])?.offset ?? null;
 }
 
 /**
@@ -364,5 +372,6 @@ export function nearestBeamerCaretOffset(
   const index = nearestDomainIndex(offsets, offset);
   const upper = offsets[Math.min(index, offsets.length - 1)];
   const lower = offsets[Math.max(0, index - 1)];
+  if (upper === undefined || lower === undefined) return null;
   return Math.abs(upper - offset) <= Math.abs(offset - lower) ? upper : lower;
 }

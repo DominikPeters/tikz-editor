@@ -69,12 +69,12 @@ export type CommandTable = {
   readonly quotes: "tex" | "unicode";
 };
 
-const content = (mode?: EditMode): ArgSchema => ({ kind: "mandatory", rendered: true, role: "content", mode });
+const content = (mode?: EditMode): ArgSchema => ({ kind: "mandatory", rendered: true, role: "content", ...(mode === undefined ? {} : { mode }) });
 const slot = (role: SlotRole, kind: ArgSchema["kind"] = "mandatory", mode?: EditMode): ArgSchema => ({
   kind,
   rendered: true,
   role,
-  mode,
+  ...(mode === undefined ? {} : { mode }),
 });
 const value = (role: EditValue["role"], kind: ArgSchema["kind"] = "mandatory"): ArgSchema => ({
   kind,

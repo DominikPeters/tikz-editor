@@ -173,7 +173,7 @@ export function measureNodeAnchorExtents(
   style: ResolvedStyle,
   defaultPositionFraction?: number
 ): NodeAnchorExtents {
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const everyNodeStyles = item.adornment ? [] : frame.everyNodeStyles;
   const nodeOptions = withDefaultNodePosition(item.options, defaultPositionFraction);
   const effectiveNodeOptions = resolveEffectiveNodeOptions({
@@ -204,9 +204,10 @@ export function measureNodeAnchorExtents(
   };
   const nodeLocalStyle = resolveNodeStyle(expandedNodeLocalOptions, nodeDecorationBaseStyle, context, 1);
   const nodeShape = resolveNodeShape(expandedNodeOptions);
+  const optionalTrace1 = context.macroTraceCollector ?? undefined;
   const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined,
+    ...(optionalTrace1 === undefined ? {} : { trace: optionalTrace1 }),
     sourceOffset: item.textSpan.from
   });
   const resolvedNodeText = expandedNodeText;
@@ -279,7 +280,7 @@ export function evaluateNodeItem(
   behindElements: SceneElement[];
   frontElements: SceneElement[];
 } {
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const effectiveBaseStyleChain = baseStyleChain ?? frame.styleChain;
   const everyNodeStyles = item.adornment ? [] : frame.everyNodeStyles;
   const everyFitStyles = item.adornment ? [] : frame.everyFitStyles;
@@ -404,9 +405,10 @@ export function evaluateNodeItem(
     pushDiagnostic(code, `Node positioning issue: ${code}`, item.span.from, item.span.to);
   }
 
+  const optionalTrace2 = context.macroTraceCollector ?? undefined;
   const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined,
+    ...(optionalTrace2 === undefined ? {} : { trace: optionalTrace2 }),
     sourceOffset: item.textSpan.from
   });
   const resolvedNodeText = expandedNodeText;
@@ -466,7 +468,7 @@ export function evaluateNodeItem(
       style,
       markFeature,
       pushDiagnostic,
-      forcedName,
+      ...(forcedName === undefined ? {} : { forcedName: forcedName }),
       matrixMode,
       nodeShape,
       nodeStyle,
@@ -555,7 +557,7 @@ export function evaluateNodeItem(
             twoPartVisual.width / 2 + adjustedNodeLayout.outerXSep,
             twoPartVisual.height / 2 + adjustedNodeLayout.outerYSep
           ),
-          twoPartShapeSizing: twoPartShapeSizing ?? undefined
+          ...(twoPartShapeSizing == null ? {} : { twoPartShapeSizing })
         }
     : adjustedNodeLayout;
   const slopedRotation = resolveSlopedNodeRotation(expandedNodeOptions, segment, effectiveBaseStyleChain);
@@ -701,7 +703,8 @@ export function evaluateNodeItem(
   const pushNodeElement = (element: SceneElement): void => {
     const rotatedElement = rotateNodeElementGeometry(element, center, 0);
     rotatedElement.styleChain = cloneStyleChain(nodeStyleChain);
-    rotatedElement.transform = nodeElementTransform;
+    if (nodeElementTransform === undefined) delete rotatedElement.transform;
+    else rotatedElement.transform = nodeElementTransform;
     nodeElements.push(rotatedElement);
   };
   emitNodeShape({
@@ -933,8 +936,7 @@ export function evaluateNodeItem(
         });
         const effectiveSplitWidth = splitLayout.width;
         const effectiveSplitHeight = splitLayout.height;
-        for (let index = 0; index < splitLayout.parts.length; index += 1) {
-          const part = splitLayout.parts[index];
+        for (const [index, part] of splitLayout.parts.entries()) {
           const partText = part.text;
           if (partText.length === 0) {
             continue;
@@ -1007,12 +1009,12 @@ function attachAdornmentMetadata(
     valueSpan: adornment.valueSpan,
     textSpan: adornment.textSpan,
     angleRaw: adornment.angleRaw,
-    angleSpan: adornment.angleSpan,
+    ...(adornment.angleSpan === undefined ? {} : { angleSpan: adornment.angleSpan }),
     distancePt: adornment.distancePt,
     defaultDistancePt: adornment.defaultDistancePt,
     distanceExplicit: adornment.distanceExplicit,
     ownerPoint,
-    ownerGeometry: adornment.ownerGeometry
+    ...(adornment.ownerGeometry === undefined ? {} : { ownerGeometry: adornment.ownerGeometry })
   };
 
   return {
@@ -1042,7 +1044,7 @@ function resolveNodeStyleTrace(params: {
   applyEveryFitStyles?: boolean;
   transformScale: number;
 }): { style: ResolvedStyle; chain: StyleChainEntry[] } {
-  const frame = params.context.stack[params.context.stack.length - 1];
+  const frame = currentFrame(params.context);
   const macroTrace = params.context.macroTraceCollector ?? undefined;
   const everyNodeLayers = expandProvenanceOptionLayers(frame.everyNodeStyles, frame, macroTrace);
   const everyFitLayers =
@@ -1431,7 +1433,7 @@ function expandNodePlacementOptions(options: OptionListAst | undefined, context:
     return undefined;
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expandedLists = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   const expandedEntries: OptionEntry[] = [];
   const diagnostics: string[] = [];
@@ -1473,7 +1475,7 @@ function segmentTangent(
     // Glyph rotation uses PGF's local timer axes, while auto placement uses
     // world directions. The node transform supplies any retained CTM.
     const arcSegment: PlacementSegment = arcFrame === "local"
-      ? { kind: "arc", from: segment.from, to: segment.to, params: segment.params, basis: segment.localBasis }
+      ? { kind: "arc", from: segment.from, to: segment.to, params: segment.params, ...(segment.localBasis === undefined ? {} : { basis: segment.localBasis }) }
       : segment;
     const arcTangent = tangentAtPlacementSegment(
       arcSegment,
@@ -1564,10 +1566,12 @@ function rotateNodeElementGeometry(element: SceneElement, center: WorldPoint, ro
   }
 
   const rotated = normalizeRotationDegrees((element.rotation ?? 0) + rotation);
+  const rotatedElement = { ...element };
+  delete rotatedElement.rotation;
   return {
-    ...element,
+    ...rotatedElement,
     center: rotateWorldPointAround(element.center, center, rotation),
-    rotation: Math.abs(rotated) > 1e-6 ? rotated : undefined
+    ...(Math.abs(rotated) > 1e-6 ? { rotation: rotated } : {})
   };
 }
 

@@ -73,8 +73,7 @@ function layoutItemsToRuns(
   const runs: ParagraphRun[] = [];
   const shapedRuns = new Map<number, ShapedTexTextRun>();
   let pendingItalicCorrection = texLength(0);
-  for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
-    const item = items[itemIndex];
+  for (const [itemIndex, item] of items.entries()) {
     const runIndex = runs.length;
     if (item.kind === "text") {
       const nextItem = items[itemIndex + 1];
@@ -100,7 +99,7 @@ function layoutItemsToRuns(
       runs.push({
         kind: "text",
         runIndex,
-        role: item.role,
+        ...(item.role !== undefined ? { role: item.role } : {}),
         sourceStart: item.sourceStart,
         sourceEnd: item.sourceEnd,
         text: item.text,
@@ -119,7 +118,7 @@ function layoutItemsToRuns(
       runs.push({
         kind: "space",
         runIndex,
-        role: item.role,
+        ...(item.role !== undefined ? { role: item.role } : {}),
         sourceStart: item.sourceStart,
         sourceEnd: item.sourceEnd,
         text: " ",
@@ -192,7 +191,7 @@ function layoutItemsToRuns(
       runs.push({
         kind: "math",
         runIndex,
-        role: item.role,
+        ...(item.role !== undefined ? { role: item.role } : {}),
         sourceStart: item.sourceStart,
         sourceEnd: item.sourceEnd,
         wrapper,
@@ -221,7 +220,7 @@ function layoutItemsToRuns(
       runs.push({
         kind: "penalty",
         runIndex,
-        role: item.role,
+        ...(item.role !== undefined ? { role: item.role } : {}),
         sourceStart: item.sourceStart,
         sourceEnd: item.sourceEnd,
         penalty: item.penalty,
@@ -251,7 +250,7 @@ function layoutItemsToRuns(
     runs.push({
       kind: "space",
       runIndex,
-      role: item.role,
+      ...(item.role !== undefined ? { role: item.role } : {}),
       sourceStart: item.sourceStart,
       sourceEnd: item.sourceEnd,
       text: " ",
@@ -303,7 +302,7 @@ function mathRunForBox(
   return {
     kind: "math",
     runIndex,
-    role,
+    ...(role !== undefined ? { role: role } : {}),
     sourceStart,
     sourceEnd,
     wrapper,
@@ -323,7 +322,7 @@ function mathBreakpointRun(
   return {
     kind: "penalty",
     runIndex,
-    role,
+    ...(role !== undefined ? { role: role } : {}),
     sourceStart: sourceOffset,
     sourceEnd: sourceOffset,
     penalty: breakPenalty,
@@ -344,7 +343,7 @@ function mathGlueRun(
   return {
     kind: "space",
     runIndex,
-    role,
+    ...(role !== undefined ? { role: role } : {}),
     sourceStart: sourceOffset,
     sourceEnd: sourceOffset,
     text: " ",
@@ -406,7 +405,7 @@ function mathBoxFragments(box: TexMathBox): readonly TexMathBoxFragment[] {
         breakAfter: {
           sourceOffset: breakpoint.sourceOffset,
           penalty: breakpoint.penalty,
-          postBreakGlue: breakpoint.postBreakGlue,
+          ...(breakpoint.postBreakGlue !== undefined ? { postBreakGlue: breakpoint.postBreakGlue } : {}),
         },
       });
     }
@@ -447,8 +446,17 @@ function mathBoxFragment(
   if (width <= 0) {
     return null;
   }
+  const {
+    stretch: _stretch, shrink: _shrink, constructRanges: _constructRanges,
+    breakpoints: _breakpoints, svgBody: _svgBody, ...fragmentBase
+  } = box;
+  const stretch = fragmentMathFlex(box, xStart, xEnd, "stretch");
+  const shrink = fragmentMathFlex(box, xStart, xEnd, "shrink");
+  const constructRanges = fragmentMathConstructRanges(box, xStart, xEnd);
+  const breakpoints = fragmentMathBreakpoints(box, xStart, xEnd);
+  const svgBody = box.svgBody && !box.hlist ? fragmentMathSvgBody(box, xStart, xEnd) : undefined;
   return {
-    ...box,
+    ...fragmentBase,
     rootBox: box.rootBox ?? box,
     content: box.source.slice(
       Math.max(0, sourceStart - box.sourceStart),
@@ -459,13 +467,13 @@ function mathBoxFragment(
     contentStart: sourceStart,
     contentEnd: sourceEnd,
     width,
-    stretch: fragmentMathFlex(box, xStart, xEnd, "stretch"),
-    shrink: fragmentMathFlex(box, xStart, xEnd, "shrink"),
+    ...(stretch !== undefined ? { stretch } : {}),
+    ...(shrink !== undefined ? { shrink } : {}),
     caretStops: fragmentMathCaretStops(box, xStart, xEnd, sourceStart, sourceEnd),
-    constructRanges: fragmentMathConstructRanges(box, xStart, xEnd),
-    breakpoints: fragmentMathBreakpoints(box, xStart, xEnd),
-    svgBody: box.svgBody && !box.hlist ? fragmentMathSvgBody(box, xStart, xEnd) : undefined,
-    hlist: box.hlist ? fragmentMathHList(box.hlist, xStart, xEnd, width, sourceStart, sourceEnd) : undefined,
+    ...(constructRanges !== undefined ? { constructRanges } : {}),
+    ...(breakpoints !== undefined ? { breakpoints } : {}),
+    ...(svgBody !== undefined ? { svgBody } : {}),
+    ...(box.hlist ? { hlist: fragmentMathHList(box.hlist, xStart, xEnd, width, sourceStart, sourceEnd) } : {}),
   };
 }
 
@@ -744,7 +752,7 @@ function createSimpleBreakRef(
     wrapper,
     linebreak: forced ? "newline" : "auto",
     isForcedLineBreak: forced,
-    lineLeading,
+    ...(lineLeading !== undefined ? { lineLeading: lineLeading } : {}),
   };
 }
 

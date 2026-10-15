@@ -48,7 +48,7 @@ export async function scopeCaretPoint(args: {
   }
   // (Or the character before it, before invisible source: `\pause`, a comment.)
   let rect;
-  for (const [from, to] of [[offset, offset + 1], [offset - 1, offset]]) {
+  for (const [from, to] of [[offset, offset + 1], [offset - 1, offset]] as const) {
     const rects = await getKnuthPlassSelectionRects(textLayoutContext, {
       ...layout,
       startOffset: documentSourceOffset(from),

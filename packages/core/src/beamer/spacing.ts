@@ -24,7 +24,7 @@ export function collectBeamerParagraphSpacing(paragraphs: readonly BeamerParagra
     };
     for (const box of paragraph.vlistLayout.boxReport.items) {
       if (box.itemKind !== "glue" || !box.glue) continue;
-      push({ ...box.glue, sourceSpan: box.sourceSpan }, Number(box.x), Number(box.y),
+      push({ ...box.glue, ...(box.sourceSpan !== undefined ? { sourceSpan: box.sourceSpan } : {}) }, Number(box.x), Number(box.y),
         box.glue.size < 0 ? Number(box.glue.size) : Number(box.totalHeight));
     }
     // Horizontal-mode \vspace is attached to a line by \vadjust rather than

@@ -41,8 +41,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
   const brokenEntries: TexBrokenLayoutParagraph[] = [];
   const initialErrors = [...params.initialErrors ?? []];
 
-  for (let planIndex = 0; planIndex < params.layoutIr.paragraphPlans.length; planIndex += 1) {
-    const plan = params.layoutIr.paragraphPlans[planIndex];
+  for (const [planIndex, plan] of params.layoutIr.paragraphPlans.entries()) {
     if (!plan) {
       throw new Error(
         `TeX paragraph breaker expected paragraph plan at index ${planIndex}.`
@@ -85,11 +84,11 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       texLayoutItemsForParagraphPlan(plan, {
         atPt: params.font.atPt,
         metricProvider: params.metricProvider,
-        mathBoxProvider: params.options.mathBoxProvider,
-        graphicsResolver: params.options.graphicsResolver,
-        textFontProfile: params.options.textFontProfile,
-        dimensionContext,
-        tabularProfile: params.options.tabularProfile,
+        ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
+        ...(params.options.graphicsResolver !== undefined ? { graphicsResolver: params.options.graphicsResolver } : {}),
+        ...(params.options.textFontProfile !== undefined ? { textFontProfile: params.options.textFontProfile } : {}),
+        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
+        ...(params.options.tabularProfile !== undefined ? { tabularProfile: params.options.tabularProfile } : {}),
       })
     );
     if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {
@@ -122,12 +121,12 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
       measurement: runAdapter.measurement,
       options: breakOptions,
       alignment: plan.alignment,
-      alignmentProfile: plan.alignmentProfile,
+      ...(plan.alignmentProfile !== undefined ? { alignmentProfile: plan.alignmentProfile } : {}),
       inheritedAlignment: plan.inheritedAlignment,
-      inheritedAlignmentProfile: plan.inheritedAlignmentProfile,
+      ...(plan.inheritedAlignmentProfile !== undefined ? { inheritedAlignmentProfile: plan.inheritedAlignmentProfile } : {}),
       noIndent: plan.segment.noIndent,
-      firstLineIndentWidth: breakContext.firstLineIndentWidth,
-      forcedBreakIndentWidth: breakContext.forcedBreakIndentWidth,
+      ...(breakContext.firstLineIndentWidth !== undefined ? { firstLineIndentWidth: breakContext.firstLineIndentWidth } : {}),
+      ...(breakContext.forcedBreakIndentWidth !== undefined ? { forcedBreakIndentWidth: breakContext.forcedBreakIndentWidth } : {}),
       scopePolicy: breakContext.scopePolicy,
     });
     const broadOverfullTolerance = breakContext.width === undefined
@@ -163,7 +162,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         forcedBreakAfter: plan.segment.forcedBreakAfter,
       },
       broken,
-      label: plan.lineLabel?.label,
+      ...(plan.lineLabel?.label !== undefined ? { label: plan.lineLabel?.label } : {}),
     });
   }
 

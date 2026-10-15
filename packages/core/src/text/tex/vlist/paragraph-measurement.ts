@@ -39,8 +39,10 @@ export function createTexVListParagraphHorizontalLayoutsFromLineBoxes(params: {
   const lineBoxByIndex = new Map(params.lineBoxes.map((line) => [line.lineIndex, line]));
   return {
     report: params.report,
-    paragraphLayouts: params.paragraphLineAssignments.map((assignment) => ({
-      baselineSkip: params.baselineSkips?.get(assignment.blockIndex),
+    paragraphLayouts: params.paragraphLineAssignments.map((assignment) => {
+      const baselineSkip = params.baselineSkips?.get(assignment.blockIndex);
+      return {
+      ...(baselineSkip !== undefined ? { baselineSkip } : {}),
       blockIndex: assignment.blockIndex,
       vlistPath: assignment.vlistPath,
       lineIndices: assignment.lineIndices,
@@ -49,7 +51,7 @@ export function createTexVListParagraphHorizontalLayoutsFromLineBoxes(params: {
         lineBoxByIndex,
         params.baselineSkips?.get(assignment.blockIndex) ?? params.lineHeight
       ),
-    })),
+    }; }),
   };
 }
 
@@ -131,7 +133,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
     : texLength(0);
   let precedingAdjustmentSize = texLength(0);
   return {
-    baselineSkip: paragraph.baselineSkip,
+    ...(paragraph.baselineSkip !== undefined ? { baselineSkip: paragraph.baselineSkip } : {}),
     blockIndex: paragraph.blockIndex,
     vlistPath: paragraph.vlistPath,
     lineIndices,
@@ -147,7 +149,7 @@ export function texVListParagraphMeasurementFromHorizontalLayout(
       );
       return offset;
     }),
-    lastLinePreDisplaySize: lastLine?.preDisplaySize,
+    ...(lastLine?.preDisplaySize !== undefined ? { lastLinePreDisplaySize: lastLine?.preDisplaySize } : {}),
     ...(lastLine ? { lastLineMetrics: lastLine.metrics } : {}),
     standardMetrics: paragraphBoxMetrics(
       paragraph.horizontal.metrics.width,
@@ -275,7 +277,7 @@ export function createMeasuredParagraphVListMeasurer(
         firstLine.y + (firstLine.metrics?.height ?? measurement.standardMetrics.height)
       );
       return {
-        x: item.x,
+        ...(item.x !== undefined ? { x: item.x } : {}),
         y: texVListY(roundTexPt(cursor + paragraphBaseline - item.box.metrics.height)),
         metrics: item.box.metrics,
         advance: item.advance ?? texLength(0),
@@ -303,11 +305,12 @@ export function createMeasuredParagraphVListMeasurer(
     if (measurement.lineIndices.length === 0) {
       return null;
     }
+    const lastDepth = measurement.lastLineMetrics?.depth ?? measurement.lineOffsets.at(-1)?.metrics?.depth;
     return {
       y: cursor,
       advance: measurement.ruleLeadingAdvance,
       metrics: measurement.ruleLeadingMetrics,
-      lastDepth: measurement.lastLineMetrics?.depth ?? measurement.lineOffsets.at(-1)?.metrics?.depth,
+      ...(lastDepth !== undefined ? { lastDepth } : {}),
     };
   };
 }

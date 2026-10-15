@@ -90,7 +90,9 @@ export class BeamerPresentationRenderer implements PresentationRenderer {
       const result = await this.prepared.renderFrame({ frameIndex: cursor.frame, step: cursor.step, continuation: cursor.continuation,
         graphicsResolver: this.graphics.resolver, cooperative: { signal, budgetMs: 4, yieldControl: yieldToBrowser } });
       signal.throwIfAborted();
-      this.counts.set(cursor.frame, (result.layout.continuation?.count ?? 1) + this.frames[cursor.frame].steps - 1);
+      const frame = this.frames[cursor.frame];
+      if (!frame) throw new RangeError(`Missing presentation frame ${cursor.frame}`);
+      this.counts.set(cursor.frame, (result.layout.continuation?.count ?? 1) + frame.steps - 1);
       const page: PresentationPage = { cursor, svg: result.svg.svg, notesSvg: renderNotes(this.prepared, cursor, this.graphics) };
       await decodeSvg(page.svg, signal);
       signal.throwIfAborted();

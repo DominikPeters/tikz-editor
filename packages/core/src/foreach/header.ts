@@ -39,8 +39,8 @@ export function parseForeachHeaderRaw(raw: string): ParsedForeachHeaderRaw {
       headerRaw,
       variablesRaw: left.variablesRaw,
       listRaw: "",
-      optionsRaw: left.firstOptionRaw,
-      optionsSpan: left.firstOptionSpan,
+      ...(left.firstOptionRaw !== undefined ? { optionsRaw: left.firstOptionRaw } : {}),
+      ...(left.firstOptionSpan !== undefined ? { optionsSpan: left.firstOptionSpan } : {}),
       isValid: false
     };
   }
@@ -53,8 +53,8 @@ export function parseForeachHeaderRaw(raw: string): ParsedForeachHeaderRaw {
     headerRaw,
     variablesRaw: left.variablesRaw,
     listRaw,
-    optionsRaw: left.firstOptionRaw,
-    optionsSpan: left.firstOptionSpan,
+    ...(left.firstOptionRaw !== undefined ? { optionsRaw: left.firstOptionRaw } : {}),
+    ...(left.firstOptionSpan !== undefined ? { optionsSpan: left.firstOptionSpan } : {}),
     isValid: left.variablesRaw.length > 0 || listRaw.length > 0
   };
 }
@@ -65,7 +65,7 @@ function findTopLevelInKeyword(raw: string): number {
   let bracketDepth = 0;
 
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
 
     if (char === "\\") {
       index += 1;
@@ -105,8 +105,8 @@ function findTopLevelInKeyword(raw: string): number {
       continue;
     }
 
-    const left = index > 0 ? raw[index - 1] : "";
-    const right = index + 2 < raw.length ? raw[index + 2] : "";
+    const left = raw.charAt(index - 1);
+    const right = raw.charAt(index + 2);
     if (!isWordBoundary(left) || !isWordBoundary(right)) {
       continue;
     }
@@ -194,8 +194,8 @@ function removeTopLevelOptionLists(raw: string): {
 
   return {
     variablesRaw: variablesBuilder.trim(),
-    firstOptionRaw,
-    firstOptionSpan
+    ...(firstOptionRaw !== undefined ? { firstOptionRaw } : {}),
+    ...(firstOptionSpan !== undefined ? { firstOptionSpan } : {})
   };
 }
 
@@ -203,7 +203,7 @@ function findMatchingBracket(raw: string, from: number): number {
   let depth = 0;
 
   for (let index = from; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;
@@ -228,7 +228,7 @@ function maskLineCommentsPreservingLength(input: string): string {
   let inComment = false;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (inComment) {
       if (char === "\n" || char === "\r") {
         inComment = false;

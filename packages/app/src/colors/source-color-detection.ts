@@ -187,7 +187,7 @@ export function collectDetectedColors(
         return;
       }
       const valueGroup = groups[1];
-      if (valueGroup.innerRaw.length === 0) {
+      if (!valueGroup || valueGroup.innerRaw.length === 0) {
         return;
       }
 
@@ -219,8 +219,10 @@ export function collectDetectedColors(
         return;
       }
 
-      const modelRaw = groups[1].innerRaw.trim();
+      const modelGroup = groups[1];
       const specificationGroup = groups[2];
+      if (!modelGroup || !specificationGroup) return;
+      const modelRaw = modelGroup.innerRaw.trim();
       const specificationRaw = specificationGroup.innerRaw.trim();
       if (modelRaw.length === 0 || specificationRaw.length === 0) {
         return;
@@ -417,7 +419,7 @@ function resolveColorExpression(raw: string, context: ColorResolveContext): Colo
   }
 
   const normalizedBySemantic = normalizeColor(normalized, {
-    currentColor: context.currentColor
+    ...((context.currentColor) === undefined ? {} : { currentColor: context.currentColor })
   });
   if (isHexColor(normalizedBySemantic)) {
     return {
@@ -449,8 +451,9 @@ function resolveMixedColor(raw: string, context: ColorResolveContext): string | 
     }
     cursor += 1;
 
-    const mixToken = parts[cursor] && parts[cursor].length > 0 ? parts[cursor] : "white";
-    if (parts[cursor] && parts[cursor].length > 0) {
+    const candidateToken = parts[cursor];
+    const mixToken = candidateToken && candidateToken.length > 0 ? candidateToken : "white";
+    if (candidateToken && candidateToken.length > 0) {
       cursor += 1;
     }
 
@@ -509,7 +512,7 @@ function resolveColorTokenToHex(
   }
 
   const normalized = normalizeColor(token, {
-    currentColor: context.currentColor
+    ...((context.currentColor) === undefined ? {} : { currentColor: context.currentColor })
   });
   if (!isHexColor(normalized)) {
     return null;
@@ -695,10 +698,10 @@ function intersectsRanges(from: number, to: number, ranges: readonly SourceRange
 function trimWithOffsets(raw: string, absoluteFrom: number): { value: string; from: number; to: number } {
   let start = 0;
   let end = raw.length;
-  while (start < end && isWhitespace(raw[start])) {
+  while (start < end && isWhitespace(raw.charAt(start))) {
     start += 1;
   }
-  while (end > start && isWhitespace(raw[end - 1])) {
+  while (end > start && isWhitespace(raw.charAt(end - 1))) {
     end -= 1;
   }
 

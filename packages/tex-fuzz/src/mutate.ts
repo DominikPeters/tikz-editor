@@ -76,14 +76,14 @@ export function texFuzzPrefixDamage(caseData: TexFuzzCase): readonly TexFuzzPref
     add(offset, "byte");
   }
   for (let index = 0; index < caseData.source.length; index += 1) {
-    const character = caseData.source[index];
+    const character = caseData.source.charAt(index);
     if ("{}[]$".includes(character)) {
       add(index, "delimiter-before");
       add(index + 1, "delimiter-after");
     }
     if (character === "\\") {
       let end = index + 1;
-      while (end < caseData.source.length && /[A-Za-z@]/u.test(caseData.source[end])) {
+      while (end < caseData.source.length && /[A-Za-z@]/u.test(caseData.source.charAt(end))) {
         end += 1;
       }
       for (let offset = index + 1; offset <= end; offset += 1) {
@@ -151,7 +151,7 @@ export function texFuzzMalformedMutations(caseData: TexFuzzCase): readonly TexFu
   const source = caseData.source;
 
   for (let index = 0; index < source.length; index += 1) {
-    const character = source[index];
+    const character = source.charAt(index);
     const swaps = delimiterSwaps(character);
     if (swaps.length > 0) {
       add("delimiter-duplicate", { kind: "insert", offset: index, text: character });
@@ -197,7 +197,7 @@ export function texFuzzMalformedMutations(caseData: TexFuzzCase): readonly TexFu
     const previous = source.charCodeAt(offset - 1);
     const current = source.charCodeAt(offset);
     const splitsSurrogate = previous >= 0xd800 && previous <= 0xdbff && current >= 0xdc00 && current <= 0xdfff;
-    const splitsCombiningSequence = /\p{Mark}/u.test(source[offset]);
+    const splitsCombiningSequence = /\p{Mark}/u.test(source.charAt(offset));
     if (splitsSurrogate || splitsCombiningSequence) {
       add("grapheme-split", { kind: "insert", offset, text: "{}" });
     }

@@ -230,8 +230,8 @@ export function useInspectorPreviewScrub(args: {
         startX: event.clientX,
         startValue: binding.value,
         step: binding.step,
-        min: binding.min,
-        max: binding.max
+        ...(binding.min === undefined ? {} : { min: binding.min }),
+        ...(binding.max === undefined ? {} : { max: binding.max })
       }),
       onPreview: binding.onPreview,
       onCommit: binding.onCommit

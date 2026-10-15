@@ -119,9 +119,9 @@ unfinished`;
     expect(frame).toMatchObject({
       overlay: { value: "2-" },
       options: { alignment: "top" },
-      title: undefined,
       endSpan: null,
     });
+    expect(frame).not.toHaveProperty("title");
     expect(document.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "beamer-unterminated-document",
       "beamer-unterminated-frame",

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { formatNumber } from "@tikz-editor/core/edit/format";
 import {
   LINE_WIDTH_PRESETS,
@@ -563,7 +564,7 @@ export function buildMultiInspectorModel(descriptors: InspectorDescriptor[], sel
     };
   }
 
-  const first = descriptors[0];
+  const first = requireArrayValue(descriptors, 0);
   const sections: MultiInspectorSection[] = [];
 
   for (const baseSection of first.sections) {
@@ -739,7 +740,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(enumProperties.map((property) => property.value)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -763,11 +764,11 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       label: base.label,
       value: booleanProperties[0]?.value ?? false,
       mixed: !allValuesEqual(booleanProperties.map((property) => property.value)),
-      trueValue,
-      falseValue,
-      clearKeys,
+      ...(trueValue === undefined ? {} : { trueValue }),
+      ...(falseValue === undefined ? {} : { falseValue }),
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -789,20 +790,14 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: numberProperties[0]?.value ?? 0,
       mixed: !numbersAreEqual(numberProperties.map((property) => property.value)),
       step: base.step,
-      min: numberProperties.every((property) => property.min != null)
-        ? Math.max(...numberProperties.map((property) => property.min as number))
-        : undefined,
-      minExclusive: numberProperties.every((property) => property.minExclusive != null)
-        ? Math.max(...numberProperties.map((property) => property.minExclusive as number))
-        : undefined,
-      max: numberProperties.every((property) => property.max != null)
-        ? Math.min(...numberProperties.map((property) => property.max as number))
-        : undefined,
-      unit: base.unit,
-      defaultValue: consensusDefaultValue(numberProperties),
-      clearKeys,
+      ...(numberProperties.every((property) => property.min != null) ? { min: Math.max(...numberProperties.map((property) => property.min as number)) } : {}),
+      ...(numberProperties.every((property) => property.minExclusive != null) ? { minExclusive: Math.max(...numberProperties.map((property) => property.minExclusive as number)) } : {}),
+      ...(numberProperties.every((property) => property.max != null) ? { max: Math.min(...numberProperties.map((property) => property.max as number)) } : {}),
+      ...(base.unit === undefined ? {} : { unit: base.unit }),
+      ...defaultValueFields(numberProperties),
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -825,14 +820,12 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !numbersAreEqual(values),
       step: base.step,
       unit: base.unit,
-      defaultValue: consensusDefaultValue(lengthProperties),
-      clearKeys,
+      ...defaultValueFields(lengthProperties),
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      minimumDimensionsContexts: lengthProperties.map((property) => property.minimumDimensionsContext).every((context) => context != null)
-        ? (lengthProperties.map((property) => property.minimumDimensionsContext as NodeMinimumDimensionsMutationContext))
-        : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...(lengthProperties.map((property) => property.minimumDimensionsContext).every((context) => context != null) ? { minimumDimensionsContexts: (lengthProperties.map((property) => property.minimumDimensionsContext as NodeMinimumDimensionsMutationContext)) } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -855,10 +848,10 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       step: base.step,
       unit: base.unit,
-      clearKeys,
+      ...(clearKeys === undefined ? {} : { clearKeys }),
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -878,8 +871,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       options: base.options,
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -900,8 +893,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: values[0] ?? "unset",
       mixed: !allValuesEqual(values),
       writes,
-      clearKeys,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(clearKeys === undefined ? {} : { clearKeys }),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -950,7 +943,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       })),
       writes,
       notes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -972,7 +965,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed,
       options: dedupeStrings(colorProperties.flatMap((property) => property.options)),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -992,7 +985,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       options: base.options,
       contexts: fillModeProperties.map((property) => property.context),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1012,8 +1005,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       options: base.options,
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1033,8 +1026,8 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       mixed: !allValuesEqual(values),
       options: base.options,
       writes,
-      note: allValuesEqual(notes) ? (notes[0] ?? undefined) : undefined,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...(allValuesEqual(notes) && notes[0] != null ? { note: notes[0] } : {}),
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1053,10 +1046,10 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       value: values[0] ?? 0,
       mixed: !numbersAreEqual(values),
       step: base.step,
-      unit: base.unit,
+      ...(base.unit === undefined ? {} : { unit: base.unit }),
       contexts: fillPatternOptionProperties.map((property) => property.context),
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1078,7 +1071,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       max: base.max,
       step: base.step,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1098,7 +1091,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(dashProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1118,7 +1111,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(lineCapProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1138,7 +1131,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(lineJoinProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1158,7 +1151,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(pathMorphingProperties.map((property) => property.previewLineWidth)),
       options: base.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1200,7 +1193,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       step: base.step,
       mixed,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1222,7 +1215,7 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       previewLineWidth: averageNumbers(arrowProperties.map((property) => property.previewLineWidth)),
       options: arrowBase.options,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
@@ -1244,11 +1237,21 @@ export function buildMultiInspectorProperty(properties: InspectorProperty[]): Mu
       options: shadowBase.options,
       contexts,
       writes,
-      readOnlyReason: deriveReadOnlyReason(writes)
+      ...readOnlyReasonFields(writes)
     };
   }
 
   return null;
+}
+
+function readOnlyReasonFields(writes: Parameters<typeof deriveReadOnlyReason>[0]): { readOnlyReason?: string } {
+  const readOnlyReason = deriveReadOnlyReason(writes);
+  return readOnlyReason === undefined ? {} : { readOnlyReason };
+}
+
+function defaultValueFields(properties: ReadonlyArray<{ defaultValue?: number }>): { defaultValue?: number } {
+  const defaultValue = consensusDefaultValue(properties);
+  return defaultValue === undefined ? {} : { defaultValue };
 }
 
 function consensusDefaultValue(properties: ReadonlyArray<{ defaultValue?: number }>): number | undefined {

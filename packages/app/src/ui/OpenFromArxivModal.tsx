@@ -206,7 +206,7 @@ export function OpenFromArxivModal({
       size="xl"
       labelledBy="open-from-arxiv-title"
       dataTestId="open-from-arxiv-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Open from arXiv"
@@ -235,7 +235,7 @@ export function OpenFromArxivModal({
               aria-label="arXiv URL or ID"
             />
             <Modal.PrimaryButton
-              className={css.loadButton}
+              className={css.loadButton ?? ""}
               disabled={!canLoad}
               onClick={() => { void loadPaper(); }}
             >

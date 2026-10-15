@@ -18,7 +18,7 @@ export function snapToolCreatePointer(input: {
   const pointer = resolveToolCreateCurrentWorld(start, input.pointer, mode, shiftKey);
   const direction = shiftKey && shouldConstrainToolCreateToSquare(mode)
     ? worldVector(pt(Math.sign(pointer.x - start.x) || 1), pt(Math.sign(pointer.y - start.y) || 1)) : null;
-  const snap = context ? snapHandlePosition({ context, previousTargets: input.previousTargets, point: pointer, direction, modifiers: { ctrlOrMeta: bypass } }) : null;
+  const snap = context ? snapHandlePosition({ context, ...(input.previousTargets !== undefined ? { previousTargets: input.previousTargets } : {}), point: pointer, direction, modifiers: { ctrlOrMeta: bypass } }) : null;
   let snappedPoint = snap?.snappedPoint ?? pointer;
   if (mode === "addGrid" && !bypass) {
     snappedPoint = snapPointDeltaToAxisStepMultiples(start, snappedPoint, DEFAULT_GRID_TOOL_STEP_PT, DEFAULT_GRID_TOOL_STEP_PT);

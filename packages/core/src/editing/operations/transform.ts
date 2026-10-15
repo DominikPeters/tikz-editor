@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import type { EditOutcome } from "./delete.js";
@@ -22,15 +24,15 @@ const OPENS_QUOTE = /[\s([{~`‘“]/u;
  */
 export function smartQuote(view: EditView, caret: Position, at: number, literal: EditOutcome, style: QuoteStyle): EditOutcome | null {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   if (slot.mode !== "text" || literal.kind !== "patch" || literal.patches.length !== 1) {
     return null;
   }
-  const [patch] = literal.patches;
+  const patch = requireArrayValue(literal.patches, 0);
   if (patch.from !== at || patch.to !== at || !patch.insert.endsWith("\"")) {
     return null;
   }
-  const opening = at <= slot.contentSpan.from || OPENS_QUOTE.test(tree.text[at - 1]);
+  const opening = at <= slot.contentSpan.from || OPENS_QUOTE.test(tree.text.charAt(at - 1));
   const quote = style === "unicode" ? (opening ? "“" : "”") : opening ? "``" : "''";
   const insert = patch.insert.slice(0, -1) + quote;
   return {
@@ -52,13 +54,13 @@ const LIST_FLOWS = new Set(["scope", "container"]);
  */
 export function listAutoformat(view: EditView, caret: Position, at: number, literal: EditOutcome): EditOutcome | null {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
-  const paragraph = tree.nodes[slot.node];
+  const slot = editSlotAt(tree.slots, caret.slot);
+  const paragraph = editNodeAt(tree.nodes, slot.node);
   if (literal.kind !== "patch" || paragraph.kind !== "paragraph" || paragraph.parent == null) {
     return null;
   }
-  const flow = tree.slots[paragraph.parent];
-  if (!flow.flow || !LIST_FLOWS.has(tree.nodes[flow.node].kind)) {
+  const flow = editSlotAt(tree.slots, paragraph.parent);
+  if (!flow.flow || !LIST_FLOWS.has(editNodeAt(tree.nodes, flow.node).kind)) {
     return null;
   }
   const end = paragraph.span.to;

@@ -5,6 +5,18 @@ import {
 } from "@tikz-editor/tex-fuzz";
 
 describe("adversarial TeX generator breadth", () => {
+  it("omits absent optional fields from generated replay ASTs", () => {
+    for (const profile of ["aggressive", "document", "vertical-slice", "canary"] as const) {
+      for (let seed = 0; seed < 25; seed += 1) {
+        const generated = generateTexFuzzCase(seed, { profile, depth: 3, size: 5 });
+        JSON.stringify(generated.ast, (key, value: unknown) => {
+          expect(value, `profile ${profile}, seed ${seed}, field ${key}`).not.toBeUndefined();
+          return value;
+        });
+      }
+    }
+  });
+
   it("covers every expanded inline family without violating range invariants", () => {
     const features = new Set<string>();
     for (let seed = 0; seed < 25; seed += 1) {

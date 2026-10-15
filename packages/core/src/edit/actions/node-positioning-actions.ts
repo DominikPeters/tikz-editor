@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
@@ -739,7 +740,7 @@ function resolveStandaloneNodeAtRemovalSpan(source: string, nodeRef: NodeRef): S
   if (nodeIndex < 2) {
     return null;
   }
-  const atKeyword = nodeRef.statement.items[nodeIndex - 2];
+  const atKeyword = requireArrayValue(nodeRef.statement.items, nodeIndex - 2);
   const coordinate = nodeRef.statement.items[nodeIndex - 1];
   if (!isAtKeyword(atKeyword) || coordinate?.kind !== "Coordinate") {
     return null;

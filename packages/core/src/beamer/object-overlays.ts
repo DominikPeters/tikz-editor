@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { beamerBuildSpecPatch, canEditBeamerBuildTiming, isExplicitBeamerBuildSpec, type BeamerBuildModel, type BeamerBuildRow } from "./builds.js";
@@ -44,7 +45,7 @@ export function beamerObjectOverlayTarget(model: BeamerBuildModel, node: BeamerO
       removePatches = [patch(own.spec.source.span, "")];
     } else if (own.command) {
       const command = own.command;
-      const branch = command.branches[0];
+      const branch = requireArrayValue(command.branches, 0);
       const spans = [command.commandSpan, own.spec.source.span];
       if (source.slice(command.commandSpan.from, command.commandSpan.to).startsWith("\\begin")) {
         spans.push({ from: branch.contentSpan.to, to: command.span.to });

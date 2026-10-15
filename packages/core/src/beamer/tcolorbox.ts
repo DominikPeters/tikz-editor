@@ -98,7 +98,7 @@ export function resolveTcolorboxPlan(args: { source: string; options: TcolorboxO
     leftPt: mm(4), rightPt: mm(4), leftTitlePt: mm(4), rightTitlePt: mm(4),
     topPt: mm(2), bottomPt: mm(2), topTitlePt: 0, bottomTitlePt: 0,
     arcPt: mm(1), outerArcPt: 0, sharpCorners: false,
-    title: options.title, fontTitle: options.fontTitle, fontUpper: options.fontUpper,
+    title: options.title, ...(options.fontTitle !== undefined ? { fontTitle: options.fontTitle } : {}), ...(options.fontUpper !== undefined ? { fontUpper: options.fontUpper } : {}),
     frameColor: "#404040", backgroundColor: "#f2f2f2", textColor: "#000000", titleColor: "#ffffff", titleBackgroundColor: null,
     titleXPt: 0, titleWidthPt: 0, bodyXPt: 0, bodyWidthPt: 0,
     beforeSkipPt: args.baselineSkipPt / 2, afterSkipPt: args.baselineSkipPt / 2,
@@ -117,7 +117,7 @@ export function resolveTcolorboxPlan(args: { source: string; options: TcolorboxO
     }
     const value = sourceValue(source, entry).value;
     if (COLOR_KEYS.has(entry.key)) {
-      const color = normalizeColor(value, { resolveAlias: args.resolveColorAlias });
+      const color = normalizeColor(value, { ...(args.resolveColorAlias !== undefined ? { resolveAlias: args.resolveColorAlias } : {}) });
       const colorField = { colback: "backgroundColor", colframe: "frameColor", coltext: "textColor", colupper: "textColor", coltitle: "titleColor", colbacktitle: "titleBackgroundColor" } as const;
       plan[colorField[entry.key as keyof typeof colorField]] = color;
       continue;

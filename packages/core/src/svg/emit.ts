@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type {
   ResolvedPattern,
   ResolvedStyle,
@@ -204,12 +205,13 @@ export function emitSvgModel(
       clipChain && clipChain.length > 0
         ? wrapMarkupWithClipChain(markup, clipChain)
         : markup;
+    const optionalTextRenderKey1 = elementId ? textRenderKeys.get(elementId) : undefined;
     modelBuilder.addPart({
       basePartId,
       sourceId,
       elementId,
       markup: wrappedMarkup,
-      textRenderKey: elementId ? textRenderKeys.get(elementId) : undefined,
+      ...(optionalTextRenderKey1 === undefined ? {} : { textRenderKey: optionalTextRenderKey1 }),
     });
   };
 
@@ -960,13 +962,13 @@ function appendStyledShapeParts(args: {
       `${args.basePartId}:outer`,
       args.sourceId,
       args.elementId,
-      markups[0]
+      requireArrayValue(markups, 0)
     );
     args.appendPart(
       `${args.basePartId}:inner`,
       args.sourceId,
       args.elementId,
-      markups[1]
+      requireArrayValue(markups, 1)
     );
     return;
   }
@@ -992,9 +994,10 @@ function renderStyledShapeMarkups(args: {
       args.bounds,
       args.geometryTransform
     );
+    const optionalFill2 = outerFill ?? undefined;
     const outerAttrs = styleAttributes(args.style, false, {
       lineWidth: doubleOuterLineWidth(args.style),
-      fill: outerFill ?? undefined,
+      ...(optionalFill2 === undefined ? {} : { fill: optionalFill2 }),
     });
     appendTransformAttribute(outerAttrs, transforms);
     const innerAttrs = styleAttributes(args.style, false, {
@@ -1015,8 +1018,9 @@ function renderStyledShapeMarkups(args: {
     args.bounds,
     args.geometryTransform
   );
+  const optionalFill3 = resolvedFill ?? undefined;
   const attrs = styleAttributes(args.style, false, {
-    fill: resolvedFill ?? undefined,
+    ...(optionalFill3 === undefined ? {} : { fill: optionalFill3 }),
   });
   appendTransformAttribute(attrs, transforms);
   return [renderStyledShapeElement(args.sourceId, args.shape, attrs)];
@@ -1117,8 +1121,8 @@ function computeEllipsePaintBounds(
   const matrix = transform ?? worldToSvgTransform(1, 0, 0, 1, 0, 0);
   const cx = matrix.a * center.x + matrix.c * center.y + matrix.e;
   const cy = matrix.b * center.x + matrix.d * center.y + matrix.f;
-  const axisX = [Math.abs(matrix.a * rx), Math.abs(matrix.b * rx)];
-  const axisY = [Math.abs(matrix.c * ry), Math.abs(matrix.d * ry)];
+  const axisX: [number, number] = [Math.abs(matrix.a * rx), Math.abs(matrix.b * rx)];
+  const axisY: [number, number] = [Math.abs(matrix.c * ry), Math.abs(matrix.d * ry)];
   // pgfpathellipse constructs four cubic arcs; pgf@lt@curveto records their
   // control points as path bounds, which pgfshadepath uses for its fitting.
   const kappa = 0.55228475;
@@ -1141,8 +1145,7 @@ function emitShadowShapeParts(args: {
   geometryTransform: SvgTransform | null;
   transforms?: readonly string[];
 }): void {
-  for (let index = 0; index < args.shadowLayers.length; index += 1) {
-    const layer = args.shadowLayers[index];
+  for (const [index, layer] of args.shadowLayers.entries()) {
     const layerStyle = resolveShadowLayerStyle(
       layer.style as ShadowRenderableStyle,
       args.baseStyle
@@ -1159,7 +1162,7 @@ function emitShadowShapeParts(args: {
       bounds: args.bounds,
       resolveFillPaint: args.resolveFillPaint,
       geometryTransform: args.geometryTransform,
-      transforms: args.transforms,
+      ...(args.transforms === undefined ? {} : { transforms: args.transforms }),
     });
 
     const groupAttrs = shadowGroupAttributes(
@@ -1963,6 +1966,7 @@ function polygonPathFromPolarAngles(
     };
   });
   const [first, ...rest] = points;
+  if (!first) return "";
   return `M ${fmt(first.x)} ${fmt(first.y)} ${rest
     .map((point) => `L ${fmt(point.x)} ${fmt(point.y)}`)
     .join(" ")} Z`;
@@ -1997,8 +2001,9 @@ function mixColors(
 
 function toRgb(color: string): { r: number; g: number; b: number } | null {
   const normalized = color.trim().toLowerCase();
-  if (normalized in COLOR_HEX) {
-    return hexToRgb(COLOR_HEX[normalized]);
+  const namedColor = COLOR_HEX[normalized];
+  if (namedColor !== undefined) {
+    return hexToRgb(namedColor);
   }
   if (
     /^#[0-9a-f]{3}$/i.test(normalized) ||

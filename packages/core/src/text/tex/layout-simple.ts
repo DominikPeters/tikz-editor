@@ -124,14 +124,14 @@ export function layoutSimpleTexParagraph(
     options.width,
     options.colorResolver?.resolve.bind(options.colorResolver),
     {
-      listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth,
-      bibliographyMargins: options.listProfile?.bibliographyMargins,
-      descriptionLabelWidthPt: options.listProfile?.descriptionLabelWidthPt,
-      descriptionLabelWidths: options.listProfile?.descriptionLabelWidths,
-      colorResolverCacheKey: options.colorResolver?.cacheKey,
+      ...(options.listProfile?.leftMarginEmByDepth !== undefined ? { listLeftMarginEmByDepth: options.listProfile?.leftMarginEmByDepth } : {}),
+      ...(options.listProfile?.bibliographyMargins !== undefined ? { bibliographyMargins: options.listProfile?.bibliographyMargins } : {}),
+      ...(options.listProfile?.descriptionLabelWidthPt !== undefined ? { descriptionLabelWidthPt: options.listProfile?.descriptionLabelWidthPt } : {}),
+      ...(options.listProfile?.descriptionLabelWidths !== undefined ? { descriptionLabelWidths: options.listProfile?.descriptionLabelWidths } : {}),
+      ...(options.colorResolver?.cacheKey !== undefined ? { colorResolverCacheKey: options.colorResolver?.cacheKey } : {}),
       fontSizePt: font.atPt,
-      baselineSkipPt: options.baselineSkip,
-      namedFontSizes: options.namedFontSizes,
+      ...(options.baselineSkip !== undefined ? { baselineSkipPt: options.baselineSkip } : {}),
+      ...(options.namedFontSizes !== undefined ? { namedFontSizes: options.namedFontSizes } : {}),
     }
   );
   const fallbackReason = analysis.fallbackReason;
@@ -226,7 +226,7 @@ export function layoutSimpleTexParagraph(
   try {
     const layoutPreparation = prepareSimpleTexLayoutScope({
       blocks,
-      items: analysis.ir?.items,
+      ...(analysis.ir?.items !== undefined ? { items: analysis.ir?.items } : {}),
       defaultAlignment,
       font,
       metricProvider,
@@ -283,16 +283,16 @@ export function layoutSimpleTexParagraph(
   const reportAssembly = layoutTexVListFromBrokenParagraphs(layoutIr.vlist, {
     paragraphId,
     width: texLength(options.width),
-    height: layoutOptions.height,
+    ...(layoutOptions.height !== undefined ? { height: layoutOptions.height } : {}),
     alignment: layoutIr.reportAlignment,
     layoutMode: layoutIr.layoutMode,
     font,
     metricProvider,
     entries: paragraphBreaks.entries,
     initialErrors: errors,
-    baselineSkip: layoutOptions.baselineSkip,
-    initialPreviousDepth: layoutOptions.initialPreviousDepth,
-    displayMathProfile: layoutOptions.displayMathProfile,
+    ...(layoutOptions.baselineSkip !== undefined ? { baselineSkip: layoutOptions.baselineSkip } : {}),
+    ...(layoutOptions.initialPreviousDepth !== undefined ? { initialPreviousDepth: layoutOptions.initialPreviousDepth } : {}),
+    ...(layoutOptions.displayMathProfile !== undefined ? { displayMathProfile: layoutOptions.displayMathProfile } : {}),
   });
   if (reportAssembly.status === "empty") {
     const reason = "Paragraph contains no text runs.";
@@ -318,7 +318,7 @@ export function layoutSimpleTexParagraph(
     fallbackReason: null,
     shapedRuns: reportAssembly.combined.shapedRuns,
     errors: reportAssembly.combined.errors,
-    ...(listStructure ? { listStructure } : {}),
+    ...(listStructure ? { listStructure: listStructure } : {}),
   };
 }
 

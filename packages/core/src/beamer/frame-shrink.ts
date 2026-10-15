@@ -46,7 +46,7 @@ export function crampedBeamerListProfile(profile: TexListLayoutProfile): TexList
     itemsepPtByDepth: zeros,
     itemsepStretchPtByDepth: zeros,
     itemsepShrinkPtByDepth: zeros,
-    sizeOverrides: profile.sizeOverrides?.map(size => ({ ...size, itemsepPt: 0, itemsepStretchPt: 0, itemsepShrinkPt: 0 })),
+    ...(profile.sizeOverrides ? { sizeOverrides: profile.sizeOverrides.map(size => ({ ...size, itemsepPt: 0, itemsepStretchPt: 0, itemsepShrinkPt: 0 })) } : {}),
   };
 }
 

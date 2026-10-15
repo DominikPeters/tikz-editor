@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { listDocumentSessions } from "../store/document-sessions";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -831,7 +832,7 @@ function EditorApp() {
         if ((request.kind ?? "render") === "prewarm") {
           return;
         }
-        dispatch({ type: "COMPUTE_REQUESTED", requestId: request.id, documentId: request.documentId });
+        dispatch({ type: "COMPUTE_REQUESTED", requestId: request.id, ...(request.documentId === undefined ? {} : { documentId: request.documentId }) });
       },
       onSuccess: (_request, response) => {
         if ((_request.kind ?? "render") === "prewarm") {
@@ -841,7 +842,7 @@ function EditorApp() {
           type: "SNAPSHOT_READY",
           requestId: response.id,
           snapshot: response.snapshot,
-          documentId: response.documentId
+          ...(response.documentId === undefined ? {} : { documentId: response.documentId })
         });
       },
       onError: (request) => {
@@ -852,7 +853,7 @@ function EditorApp() {
           type: "SNAPSHOT_READY",
           requestId: request.id,
           snapshot: makeEmptySnapshot(request.source),
-          documentId: request.documentId
+          ...(request.documentId === undefined ? {} : { documentId: request.documentId })
         });
       }
     });
@@ -1023,7 +1024,7 @@ function EditorApp() {
           await respond(false, `Invalid figure_index ${figureIndexArg}. Document has ${snapshotForDoc.figures.length} figure(s).`);
           return;
         }
-        const requestedFigId = snapshotForDoc.figures[idx].id;
+        const requestedFigId = requireArrayValue(snapshotForDoc.figures, idx).id;
         if (requestedFigId !== snapshotForDoc.activeRootId) {
           try {
             const result = await computeSnapshot({
@@ -1121,8 +1122,8 @@ function EditorApp() {
         let enhancedSvg = svgToRender;
         if (hasGrid || hasZoom) {
           enhancedSvg = applyPreviewEnhancements(svgToRender, {
-            showGrid: hasGrid ? (args.show_grid as { spacing?: number; color?: string }) : undefined,
-            zoomRegion: hasZoom ? (args.zoom_region as { min_x: number; min_y: number; max_x: number; max_y: number }) : undefined
+            ...(hasGrid ? { showGrid: (args.show_grid as { spacing?: number; color?: string }) } : {}),
+            ...(hasZoom ? { zoomRegion: (args.zoom_region as { min_x: number; min_y: number; max_x: number; max_y: number }) } : {})
           });
         }
 
@@ -1210,9 +1211,11 @@ function EditorApp() {
         case "dynamic-tool-call":
           void respondToDynamicTool(event);
           break;
-        case "error":
-          dispatch({ type: "ASSISTANT_SET_ERROR", documentId: event.documentId, sessionGeneration: event.documentId ? event.sessionGeneration ?? 0 : useEditorStore.getState().documents[activeDocumentIdRef.current]?.assistantSessionGeneration, message: event.message });
+        case "error": {
+          const sessionGeneration = event.documentId ? event.sessionGeneration ?? 0 : useEditorStore.getState().documents[activeDocumentIdRef.current]?.assistantSessionGeneration;
+          dispatch({ type: "ASSISTANT_SET_ERROR", ...(event.documentId === undefined ? {} : { documentId: event.documentId }), ...(sessionGeneration === undefined ? {} : { sessionGeneration }), message: event.message });
           break;
+        }
       }
     });
 
@@ -1283,7 +1286,7 @@ function EditorApp() {
           documentId,
           sessionGeneration,
           prompt,
-          pastedImages: pastedImages.length > 0 ? pastedImages : undefined
+          ...(pastedImages.length > 0 ? { pastedImages } : {})
         });
         return;
       }
@@ -1316,7 +1319,7 @@ function EditorApp() {
         prompt,
         source: currentSource,
         pngBase64,
-        pastedImages: pastedImages.length > 0 ? pastedImages : undefined,
+        ...(pastedImages.length > 0 ? { pastedImages } : {}),
         threadId: thread?.threadId ?? currentDocument?.assistantThreadId ?? null,
         workspacePath: thread?.workspacePath ?? currentDocument?.assistantWorkspacePath ?? null,
         figurePath: thread?.figurePath ?? currentDocument?.assistantFigurePath ?? null,
@@ -1930,7 +1933,7 @@ function EditorApp() {
           setUpdateModalPhase({
             status: "installing",
             downloadedBytes,
-            contentLength: progress.contentLength
+            ...(progress.contentLength === undefined ? {} : { contentLength: progress.contentLength })
           });
           return;
         }
@@ -1939,14 +1942,14 @@ function EditorApp() {
           setUpdateModalPhase((current) => ({
             status: "installing",
             downloadedBytes,
-            contentLength: current.status === "installing" ? current.contentLength : undefined
+            ...(current.status === "installing" && current.contentLength !== undefined ? { contentLength: current.contentLength } : {})
           }));
           return;
         }
         setUpdateModalPhase((current) => ({
           status: "installing",
           downloadedBytes,
-          contentLength: current.status === "installing" ? current.contentLength : undefined
+          ...(current.status === "installing" && current.contentLength !== undefined ? { contentLength: current.contentLength } : {})
         }));
       });
       await updates.relaunch();
@@ -2074,7 +2077,7 @@ function EditorApp() {
             activeRootId={compiledPictureSource.activeRootId}
             documentFileRef={compiledPictureSource.fileRef}
             onClose={() => { setCompiledPictureSource(null); }}
-            latex={platform.latex}
+            {...(platform.latex === undefined ? {} : { latex: platform.latex })}
             showOpenInNewTab={!platform.id.startsWith("desktop")}
             showLogToggle={platform.id.startsWith("desktop")}
           />
@@ -2339,8 +2342,8 @@ async function blobToBase64(blob: Blob): Promise<string> {
   const arrayBuffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
   let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) {
-    binary += String.fromCharCode(bytes[index]);
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
   return btoa(binary);
 }

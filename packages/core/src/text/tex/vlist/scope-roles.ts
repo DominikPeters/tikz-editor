@@ -93,7 +93,7 @@ function texVBoxFallbackRolePathForParagraph(
 ): readonly TexVBoxRole[] {
   return texVBoxRolePathForScope({
     quoteDepth: paragraph.quoteDepth,
-    listScope: paragraph.listContext,
+    ...(paragraph.listContext !== undefined ? { listScope: paragraph.listContext } : {}),
   });
 }
 

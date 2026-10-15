@@ -98,14 +98,16 @@ export function parseBezierFromItems(
       if (!control2Eval.world) return null;
       control2 = control2Eval.world;
     }
+    const optionalControl2Coordinate1 = control2Item ?? undefined;
+    const optionalControl2Evaluation2 = control2Eval ?? undefined;
     return {
       consumedIndex: cursor,
       control1: control1Eval.world,
       control2,
       control1Coordinate: control1Item,
       control1Evaluation: control1Eval,
-      control2Coordinate: control2Item ?? undefined,
-      control2Evaluation: control2Eval ?? undefined,
+      ...(optionalControl2Coordinate1 === undefined ? {} : { control2Coordinate: optionalControl2Coordinate1 }),
+      ...(optionalControl2Evaluation2 === undefined ? {} : { control2Evaluation: optionalControl2Evaluation2 }),
       nodes,
       endPoint: context.pathStartPoint,
       endAdvancesCurrentPoint: true,
@@ -126,14 +128,16 @@ export function parseBezierFromItems(
     control2 = control2Eval.world;
   }
 
+  const optionalControl2Coordinate3 = control2Item ?? undefined;
+  const optionalControl2Evaluation4 = control2Eval ?? undefined;
   return {
     consumedIndex: cursor,
     control1: control1Eval.world,
     control2,
     control1Coordinate: control1Item,
     control1Evaluation: control1Eval,
-    control2Coordinate: control2Item ?? undefined,
-    control2Evaluation: control2Eval ?? undefined,
+    ...(optionalControl2Coordinate3 === undefined ? {} : { control2Coordinate: optionalControl2Coordinate3 }),
+    ...(optionalControl2Evaluation4 === undefined ? {} : { control2Evaluation: optionalControl2Evaluation4 }),
     nodes,
     endPoint: targetEval.world,
     endCoordinate: targetItem,

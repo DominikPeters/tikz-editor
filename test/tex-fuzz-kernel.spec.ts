@@ -110,6 +110,7 @@ describe("adversarial TeX fuzz kernel vertical slice", () => {
       expect(candidate.source.length).toBeLessThan(caseData.source.length);
       expect(classifyTexFuzzNativeSupport(candidate).supported).toBe(true);
       expect(checkTexFuzzHardInvariants(candidate)).toEqual([]);
+      expect(JSON.parse(JSON.stringify(candidate.ast))).toStrictEqual(candidate.ast);
     }
   });
 

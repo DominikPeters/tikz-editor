@@ -381,7 +381,7 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
               options={property.options}
               namedColorSwatches={projectNamedColorSwatches}
               disabled={!writable}
-              triggerLabelClassName={valueClassName}
+              triggerLabelClassName={valueClassName ?? ""}
               onChange={(nextValue) => {
                 if (property.write.shadowContext) {
                   applyShadowPropertyValue(property.write, property.id, nextValue);

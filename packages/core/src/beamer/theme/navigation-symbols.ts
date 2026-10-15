@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type {
   BeamerFrameTemplateContext,
   BeamerTemplatePathCommand,
@@ -66,12 +67,12 @@ export function planBeamerNavigationSymbols(
     y: originY,
   }));
   const shapes: BeamerTemplateVectorShape[] = [
-    ...slideShapes(origins[0]),
-    ...frameShapes(origins[1]),
-    ...subsectionShapes(origins[2]),
-    ...sectionShapes(origins[3]),
-    ...documentShapes(origins[4]),
-    ...historyShapes(origins[5]),
+    ...slideShapes(requireArrayValue(origins, 0)),
+    ...frameShapes(requireArrayValue(origins, 1)),
+    ...subsectionShapes(requireArrayValue(origins, 2)),
+    ...sectionShapes(requireArrayValue(origins, 3)),
+    ...documentShapes(requireArrayValue(origins, 4)),
+    ...historyShapes(requireArrayValue(origins, 5)),
   ];
 
   return [{

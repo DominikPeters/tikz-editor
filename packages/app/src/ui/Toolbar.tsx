@@ -198,7 +198,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
         onClose={closeBucketPopup}
         popup={renderPopup("bucket-color")}
         popupTestId="toolbar-tool-popup-addBucket"
-        popupClassName={popupCss.bucketColorPopup}
+        popupClassName={popupCss.bucketColorPopup ?? ""}
       >
         <div className={css.splitButton}>
           <RenderedTooltip content={buttonTitle}>

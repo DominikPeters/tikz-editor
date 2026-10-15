@@ -46,7 +46,7 @@ function hasModifierAccelerator(accelerator: string | undefined): accelerator is
 
 function basename(path: string): string {
   const segments = path.split(/[\\/]/g);
-  const last = segments[segments.length - 1];
+  const last = segments.at(-1) ?? path;
   return last.trim() ? last : path;
 }
 
@@ -81,8 +81,8 @@ export function serializeDesktopContextMenuItems(
       commandId: item.commandId,
       label: item.label,
       enabled: state.enabled,
-      checked: state.checked,
-      accelerator: hasModifierAccelerator(item.accelerator) ? item.accelerator : undefined
+      ...(state.checked === undefined ? {} : { checked: state.checked }),
+      ...(hasModifierAccelerator(item.accelerator) ? { accelerator: item.accelerator } : {})
     });
   }
 
@@ -205,8 +205,7 @@ export function createNativeDesktopMenuManager(options: {
     if (item.kind === "recent-files") {
       const recentItems: NativeMenuNode[] = [];
       if (recentFiles.length > 0) {
-        for (let i = 0; i < recentFiles.length; i += 1) {
-          const path = recentFiles[i];
+        for (const [i, path] of recentFiles.entries()) {
           recentItems.push(await menuApi.MenuItem.new({
             id: `file.open-recent.${i}`,
             text: basename(path),
@@ -267,7 +266,7 @@ export function createNativeDesktopMenuManager(options: {
         text: item.label,
         checked: state.checked,
         enabled: state.enabled,
-        accelerator,
+        ...(accelerator === undefined ? {} : { accelerator }),
         action: (id) => {
           dispatchCommand(id as AppMenuCommandId, origin);
         }
@@ -280,7 +279,7 @@ export function createNativeDesktopMenuManager(options: {
       id: item.commandId,
       text: item.label,
       enabled: state.enabled,
-      accelerator,
+      ...(accelerator === undefined ? {} : { accelerator }),
       action: (id) => {
         dispatchCommand(id as AppMenuCommandId, origin);
       }

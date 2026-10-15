@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import { evaluateTransformCoordinate } from "../coords/evaluate.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { worldPoint } from "../../coords/points.js";
@@ -163,8 +164,7 @@ export function handleChildOperationCluster(params: {
   }
   const clusterChildCount = cluster.children.length;
 
-  for (let childIndex = 0; childIndex < cluster.children.length; childIndex += 1) {
-    const child = cluster.children[childIndex];
+  for (const [childIndex, child] of cluster.children.entries()) {
     const childIndexOneBased = childIndex + 1;
     const defaultChildLevel = parentFrame.treeLevel + 1;
     const childSourceRef = {
@@ -390,7 +390,7 @@ export function handleChildOperationCluster(params: {
         id: `${statement.id}:tree-child:${childIndexOneBased}:${child.id}`,
         span: child.span,
         command: "node",
-        options: undefined,
+
         items: splitBody.body.slice(0, rootIndex + 1)
       };
       const makePathFrame = (command: "node" | "path") => {
@@ -460,8 +460,8 @@ export function handleChildOperationCluster(params: {
         childIndex,
         level: childFrameMeta.treeLevel,
         childOperationSpan,
-        bodySpan: childBodySpan,
-        optionsSpan: childOptionsSpan
+        ...(childBodySpan === undefined ? {} : { bodySpan: childBodySpan }),
+        ...(childOptionsSpan === undefined ? {} : { optionsSpan: childOptionsSpan })
       };
       for (const el of childElements) {
         // Preserve nested child metadata from recursive evaluations.
@@ -496,14 +496,14 @@ export function handleChildOperationCluster(params: {
       if (edgeSpec) {
         markFeature("edge_from_parent_operation", "supported");
       }
-      const edgeTargetInverse = inverseMatrix(context.stack[context.stack.length - 1].transform);
+      const edgeTargetInverse = inverseMatrix(currentFrame(context).transform);
       const materializedEdge: EdgeOperationItem = {
         kind: "EdgeOperation",
         id: `${child.id}:edge-from-parent:${childIndexOneBased}`,
         span: edgeSpec?.span ?? child.span,
-        optionsSpan: edgeSpec?.optionsSpan,
-        options: edgeSpec?.options,
-        nodes: edgeSpec?.nodes,
+        ...(edgeSpec?.optionsSpan === undefined ? {} : { optionsSpan: edgeSpec?.optionsSpan }),
+        ...(edgeSpec?.options === undefined ? {} : { options: edgeSpec?.options }),
+        ...(edgeSpec?.nodes === undefined ? {} : { nodes: edgeSpec?.nodes }),
         target: {
           kind: "coordinate",
           // The endpoint is already world-space; encode it in the active
@@ -553,7 +553,7 @@ export function handleChildOperationCluster(params: {
         });
       }
 
-      const activeTreeFrame = context.stack[context.stack.length - 1];
+      const activeTreeFrame = currentFrame(context);
       const resolvedTreeEdgeStyle = resolveContextDelta(
         activeTreeFrame.style,
         activeTreeFrame.transform,

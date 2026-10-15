@@ -185,13 +185,17 @@ export function planTexFuzzArtifacts(
   }
 
   const findings = [...witnessesByFinding].sort(([left], [right]) => left.localeCompare(right))
-    .map(([findingId, witnesses]): TexFuzzArtifactFinding => ({
-      findingId,
-      fingerprint: fingerprintByFinding.get(findingId)!,
-      witnesses: [...witnesses.values()].sort((left, right) =>
-        left.witnessId.localeCompare(right.witnessId)
-      ),
-    }));
+    .map(([findingId, witnesses]): TexFuzzArtifactFinding => {
+      const fingerprint = fingerprintByFinding.get(findingId);
+      if (!fingerprint) throw new Error(`Missing fingerprint for finding ${findingId}.`);
+      return {
+        findingId,
+        fingerprint,
+        witnesses: [...witnesses.values()].sort((left, right) =>
+          left.witnessId.localeCompare(right.witnessId)
+        ),
+      };
+    });
   return {
     manifest: {
       schemaVersion: TEX_FUZZ_ARTIFACT_SCHEMA_VERSION,
@@ -310,8 +314,11 @@ export function planTexFuzzRebaseline(
   const adjacency = new Map<string, Set<string>>();
   const witnessEdges = new Map<string, readonly string[]>();
   for (const witnessId of sharedWitnesses) {
-    const oldNodes = [...oldOwners.get(witnessId)!].map((id) => `old:${id}`);
-    const newNodes = [...newOwners.get(witnessId)!].map((id) => `new:${id}`);
+    const oldWitnessOwners = oldOwners.get(witnessId);
+    const newWitnessOwners = newOwners.get(witnessId);
+    if (!oldWitnessOwners || !newWitnessOwners) throw new Error(`Missing owners for shared witness ${witnessId}.`);
+    const oldNodes = [...oldWitnessOwners].map((id) => `old:${id}`);
+    const newNodes = [...newWitnessOwners].map((id) => `new:${id}`);
     witnessEdges.set(witnessId, [...oldNodes, ...newNodes]);
     for (const oldNode of oldNodes) {
       const neighbors = adjacency.get(oldNode) ?? new Set();
@@ -331,8 +338,7 @@ export function planTexFuzzRebaseline(
     if (visited.has(start)) continue;
     const nodes = new Set<string>();
     const queue = [start];
-    while (queue.length > 0) {
-      const node = queue.pop()!;
+    for (let node = queue.pop(); node !== undefined; node = queue.pop()) {
       if (visited.has(node)) continue;
       visited.add(node);
       nodes.add(node);
@@ -341,7 +347,11 @@ export function planTexFuzzRebaseline(
     links.push({
       old: new Set([...nodes].filter((node) => node.startsWith("old:")).map((node) => node.slice(4))),
       next: new Set([...nodes].filter((node) => node.startsWith("new:")).map((node) => node.slice(4))),
-      witnesses: sharedWitnesses.filter((id) => witnessEdges.get(id)!.some((node) => nodes.has(node))),
+      witnesses: sharedWitnesses.filter((id) => {
+        const edges = witnessEdges.get(id);
+        if (!edges) throw new Error(`Missing edges for shared witness ${id}.`);
+        return edges.some((node) => nodes.has(node));
+      }),
     });
   }
 

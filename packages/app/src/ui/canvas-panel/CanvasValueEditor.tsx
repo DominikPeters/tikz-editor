@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ValueKind } from "@tikz-editor/core/editing/operations/index";
 import { BASIC_PICKER_COLORS } from "../../colors/color-palette";
@@ -79,8 +80,10 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
   const namedColorSwatches = useProjectNamedColorSwatches();
 
   // (In a colour model, `[rgb]`, the colour is numbers, which the picker does not write.)
-  const inModel = model.fields.some((field, index) => field.open === "[" && values[index].trim() !== "");
+  const inModel = model.fields.some((field, index) => field.open === "[" && requireArrayValue(values, index).trim() !== "");
   const showsPicker = model.fields[focused]?.kind === "color" && !inModel;
+  const focusedValue = values[focused];
+  const pickerValue = focusedValue === undefined || focusedValue.length === 0 ? null : focusedValue;
 
   const placement = useClearOfBand(root, model.band, model.prefer, model.left, showsPicker);
 
@@ -121,7 +124,7 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
     } else if (event.key === "Tab" && model.fields.length > 1) {
       event.preventDefault();
       focus((index + (event.shiftKey ? model.fields.length - 1 : 1)) % model.fields.length);
-    } else if (event.key === "}" && closed(values[index])) {
+    } else if (event.key === "}" && closed(requireArrayValue(values, index))) {
       event.preventDefault();
       if (index + 1 < model.fields.length) {
         focus(index + 1);
@@ -149,7 +152,7 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
             return <span key={partIndex} className={css.valueEditorFixed}>{part.text}</span>;
           }
           const index = part.field;
-          const field = model.fields[index];
+          const field = requireArrayValue(model.fields, index);
           return (
             <span key={partIndex}>
               {field.open}
@@ -162,7 +165,7 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
                 autoComplete="off"
                 aria-label={`${HINTS[field.kind] || "value"} of \\${model.command}`}
                 data-testid={`canvas-value-editor-field-${index}`}
-                style={{ width: `${Math.max(4, Math.max(values[index].length, (HINTS[field.kind] || "").length) + 1)}ch` }}
+                style={{ width: `${Math.max(4, Math.max(requireArrayValue(values, index).length, (HINTS[field.kind] || "").length) + 1)}ch` }}
                 onFocus={() => { setFocused(index); }}
                 onChange={(event) => {
                   const next = [...values];
@@ -184,8 +187,8 @@ export function CanvasValueEditor({ model }: { model: CanvasValueEditorModel }) 
             ariaLabel={`Colour of \\${model.command}`}
             options={BASIC_PICKER_COLORS}
             namedColorSwatches={namedColorSwatches}
-            value={values[focused] || null}
-            syntaxValue={values[focused] || null}
+            value={pickerValue}
+            syntaxValue={pickerValue}
             onChange={(next) => {
               const updated = [...values];
               updated[focused] = next;

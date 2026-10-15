@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { createPointIndex } from "./spatial-index.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -71,14 +72,14 @@ export function collectPointSnaps({
       if (enabledAxis !== "y") {
         const absX = Math.abs(offsetX);
         if (absX <= minOffset.x + SNAP_EPSILON) {
-          rawX.push({ selectionIndex, from, to, offset: offsetX, absOffset: absX, visualDistance, role, sourceId });
+          rawX.push({ selectionIndex, from, to, offset: offsetX, absOffset: absX, visualDistance, ...(role === undefined ? {} : { role }), ...(sourceId === undefined ? {} : { sourceId }) });
         }
       }
 
       if (enabledAxis !== "x") {
         const absY = Math.abs(offsetY);
         if (absY <= minOffset.y + SNAP_EPSILON) {
-          rawY.push({ selectionIndex, from, to, offset: offsetY, absOffset: absY, visualDistance, role, sourceId });
+          rawY.push({ selectionIndex, from, to, offset: offsetY, absOffset: absY, visualDistance, ...(role === undefined ? {} : { role }), ...(sourceId === undefined ? {} : { sourceId }) });
         }
       }
     }
@@ -97,12 +98,12 @@ function filterToNearestCluster(
   }
 
   const sorted = [...candidates].sort((a, b) => a.visualDistance - b.visualDistance);
-  const kept = [sorted[0]];
+  const kept = [requireArrayValue(sorted, 0)];
   for (let i = 1; i < sorted.length; i += 1) {
-    if (sorted[i].visualDistance - sorted[i - 1].visualDistance > clusterBreakWorld) {
+    if (requireArrayValue(sorted, i).visualDistance - requireArrayValue(sorted, i - 1).visualDistance > clusterBreakWorld) {
       break;
     }
-    kept.push(sorted[i]);
+    kept.push(requireArrayValue(sorted, i));
   }
   return kept;
 }
@@ -133,8 +134,8 @@ function pushAxisCandidates(
       to: worldPoint(pt(candidate.to.x), pt(candidate.to.y)),
       offset: candidate.offset,
       key: roundSnapValue(axis === "x" ? candidate.to.x : candidate.to.y),
-      role: candidate.role,
-      sourceId: candidate.sourceId
+      ...(candidate.role === undefined ? {} : { role: candidate.role }),
+      ...(candidate.sourceId === undefined ? {} : { sourceId: candidate.sourceId })
     });
 
     if (axis === "x") {
@@ -237,7 +238,7 @@ export function createPointSnapLines(nearest: AxisSnapBuckets): SnapLine[] {
 
       const oldDistance = group.primary ? Math.hypot(group.primary.from.x - group.primary.to.x, group.primary.from.y - group.primary.to.y) : Infinity;
       if (Math.hypot(snap.from.x - snap.to.x, snap.from.y - snap.to.y) < oldDistance) {
-        group.primary = { from: snap.from, to: snap.to, sourceId: snap.sourceId };
+        group.primary = { from: snap.from, to: snap.to, ...(snap.sourceId === undefined ? {} : { sourceId: snap.sourceId }) };
       }
       // Project the selection point onto the guide coordinate; at render time
       // (post-snap, threshold 0) it already lies there up to float noise.
@@ -256,10 +257,10 @@ export function createPointSnapLines(nearest: AxisSnapBuckets): SnapLine[] {
       lines.push({
         type: "points",
         axis,
-        role: group.role,
-        primary: group.primary,
+        ...(group.role === undefined ? {} : { role: group.role }),
+        ...(group.primary === undefined ? {} : { primary: group.primary }),
         points: dedupeAndSortLinePoints(axis, group.points),
-        sourceIds: group.sourceIds.size > 0 ? [...group.sourceIds] : undefined
+        ...(group.sourceIds.size > 0 ? { sourceIds: [...group.sourceIds] } : {})
       });
     }
   }
@@ -293,7 +294,7 @@ function suppressBracketedCenterLines(lines: SnapLine[]): SnapLine[] {
       return true;
     }
 
-    const coordinate = line.axis === "x" ? line.points[0].x : line.points[0].y;
+    const coordinate = line.axis === "x" ? requireArrayValue(line.points, 0).x : requireArrayValue(line.points, 0).y;
     let hasBelow = false;
     let hasAbove = false;
     for (const other of lines) {
@@ -303,7 +304,7 @@ function suppressBracketedCenterLines(lines: SnapLine[]): SnapLine[] {
       if (other.points.length === 0) {
         continue;
       }
-      const otherCoordinate = line.axis === "x" ? other.points[0].x : other.points[0].y;
+      const otherCoordinate = line.axis === "x" ? requireArrayValue(other.points, 0).x : requireArrayValue(other.points, 0).y;
       if (otherCoordinate < coordinate - SNAP_EPSILON) {
         hasBelow = true;
       } else if (otherCoordinate > coordinate + SNAP_EPSILON) {
@@ -325,7 +326,7 @@ export function createPointerLinesForPointSnap(nearest: AxisSnapBuckets, snapped
       axis: "x",
       from: worldPoint(pt(xSnap.to.x), pt(xSnap.to.y)),
       to: worldPoint(pt(xSnap.to.x), pt(snappedPoint.y)),
-      sourceIds: xSnap.sourceId ? [xSnap.sourceId] : undefined
+      ...(xSnap.sourceId ? { sourceIds: [xSnap.sourceId] } : {})
     });
   }
 
@@ -336,7 +337,7 @@ export function createPointerLinesForPointSnap(nearest: AxisSnapBuckets, snapped
       axis: "y",
       from: worldPoint(pt(ySnap.to.x), pt(ySnap.to.y)),
       to: worldPoint(pt(snappedPoint.x), pt(ySnap.to.y)),
-      sourceIds: ySnap.sourceId ? [ySnap.sourceId] : undefined
+      ...(ySnap.sourceId ? { sourceIds: [ySnap.sourceId] } : {})
     });
   }
 

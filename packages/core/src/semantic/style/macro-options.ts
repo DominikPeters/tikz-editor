@@ -41,7 +41,7 @@ function expandOptionEntryMacro(
   if (entry.kind === "kv") {
     const valueRaw = expandMacroBindings(entry.valueRaw, macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace
+      ...(trace === undefined ? {} : { trace: trace })
     });
     if (valueRaw === entry.valueRaw) {
       return entry;
@@ -56,7 +56,7 @@ function expandOptionEntryMacro(
   if (entry.kind === "unknown") {
     const raw = expandMacroBindings(entry.raw, macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace
+      ...(trace === undefined ? {} : { trace: trace })
     });
     if (raw === entry.raw) {
       return entry;

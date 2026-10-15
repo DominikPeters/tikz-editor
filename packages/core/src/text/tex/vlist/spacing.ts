@@ -142,8 +142,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
   ancestors: readonly TexVBoxRole[],
   pathPrefix: readonly number[]
 ): void {
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
     if (!item) {
       continue;
     }
@@ -156,7 +155,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
         const blockIndex = -2_000_000 - (item.sourceSpan?.start ?? 0);
         const boundaryParagraph: TexParagraphItem = {
           kind: "paragraph", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, blockIndex,
-          paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true, startsAfterExplicitPar: true, scopePath: item.scopePath, quoteDepth: ancestors.filter(role => role.kind === "quote").length },
+          paragraph: { blockIndex, text: "", sourceSpan: item.sourceSpan ?? { start: 0, end: 0 }, nodes: [], noIndent: true, startsAfterExplicitPar: true, ...(item.scopePath !== undefined ? { scopePath: item.scopePath } : {}), quoteDepth: ancestors.filter(role => role.kind === "quote").length },
         };
         planSimpleTexParagraphVerticalSkipsInto([boundaryParagraph], font, listProfile, state, skips, ancestors, pathPrefix);
         const boundarySkip = skips.at(-1);
@@ -363,10 +362,10 @@ function paragraphScopeFromVListAncestors(
         totalLeftMarginEm: listRole.totalLeftMarginEm,
         showLabel: item.paragraph.listContext?.showLabel ??
           !state.emittedListItemKeys.has(listItemKey),
-        label: item.paragraph.listContext?.label,
-        fontSizePt: item.paragraph.listContext?.fontSizePt,
-        spacing: item.paragraph.listContext?.spacing,
-        listStart: item.paragraph.listContext?.listStart,
+        ...(item.paragraph.listContext?.label !== undefined ? { label: item.paragraph.listContext?.label } : {}),
+        ...(item.paragraph.listContext?.fontSizePt !== undefined ? { fontSizePt: item.paragraph.listContext?.fontSizePt } : {}),
+        ...(item.paragraph.listContext?.spacing !== undefined ? { spacing: item.paragraph.listContext?.spacing } : {}),
+        ...(item.paragraph.listContext?.listStart !== undefined ? { listStart: item.paragraph.listContext?.listStart } : {}),
       },
     };
   }
@@ -425,8 +424,7 @@ function addParagraphVerticalGlueToItems(
   pathPrefix: readonly number[]
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
-  for (let index = 0; index < sourceItems.length; index += 1) {
-    const item = sourceItems[index];
+  for (const [index, item] of sourceItems.entries()) {
     if (!item) {
       continue;
     }
@@ -457,7 +455,7 @@ function paragraphBoundaryGlueItems(
 ): TexGlueItem[] {
   const scopePath = item.kind === "paragraph" ? texVBoxRolePathForParagraph(item.paragraph) : item.scopePath ?? [];
   const shared = {
-    sourceSpan: item.sourceSpan,
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
     ...(scopePath.length > 0 ? { scopePath } : {}),
     stretchOrder: "normal" as const,
     shrinkOrder: "normal" as const,
@@ -527,8 +525,7 @@ function materializeDisplayMathVerticalGlueInItems(
   profile: TexDisplayMathLayoutProfile
 ): readonly TexVListItem[] {
   const items: TexVListItem[] = [];
-  for (let index = 0; index < sourceItems.length; index += 1) {
-    const item = sourceItems[index];
+  for (const [index, item] of sourceItems.entries()) {
     if (!item) {
       continue;
     }
@@ -583,11 +580,11 @@ function displayMathProfileForItem(
   // footnotesize. Other size declarations and explicit fontsize inherit them.
   const classIndex = item.normalFontSizePt === 12 ? 2 :
     item.normalFontSizePt !== undefined && Math.abs(item.normalFontSizePt - 10.95) < .01 ? 1 : 0;
-  const registers = {
+  const registers = ({
     normalsize: [[10, 2, 5, 3, 6, 3, 3], [11, 3, 6, 3, 6.5, 3.5, 3], [12, 3, 7, 3, 6.5, 3.5, 3]],
     small: [[8.5, 3, 4, 2, 4, 2, 2], [10, 2, 5, 3, 6, 3, 3], [11, 3, 6, 3, 6.5, 3.5, 3]],
     footnotesize: [[6, 2, 4, 1, 3, 1, 2], [8, 2, 4, 1, 4, 2, 2], [10, 2, 5, 3, 6, 3, 3]],
-  }[item.displaySkipCommand][classIndex];
+  } as const)[item.displaySkipCommand][classIndex];
   const [sizePt, stretchPt, shrinkPt, aboveShortStretch, belowShort, belowShortStretch, belowShortShrink] = registers;
   const normal = { sizePt, stretchPt, shrinkPt };
   return { ...profile,
@@ -697,7 +694,7 @@ export function resolveDisplayMathVerticalGlueInVList(
     options,
     [],
     {
-      previousDisplayMaterialMetrics: initialMaterialMetrics,
+      ...(initialMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: initialMaterialMetrics } : {}),
     }
   );
   return {
@@ -738,8 +735,7 @@ function resolveDisplayMathVerticalGlueInItems(
     !previousDepthSuppressed && (previousParagraphMeasurement !== undefined ||
     previousDisplayMaterialMetrics !== undefined);
   let paragraphBoundaryInterlineAlreadyInserted = false;
-  for (let index = 0; index < sourceItems.length; index += 1) {
-    const item = sourceItems[index];
+  for (const [index, item] of sourceItems.entries()) {
     if (!item) {
       continue;
     }
@@ -805,9 +801,9 @@ function resolveDisplayMathVerticalGlueInItems(
         options,
         path,
         {
-          previousParagraphMeasurement,
+          ...(previousParagraphMeasurement !== undefined ? { previousParagraphMeasurement: previousParagraphMeasurement } : {}),
           previousDisplaySkipVariant,
-          previousDisplayMaterialMetrics,
+          ...(previousDisplayMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: previousDisplayMaterialMetrics } : {}),
           previousDepthSuppressed,
         }
       );
@@ -1073,9 +1069,9 @@ function resolveDisplayMathVerticalGlueInItems(
   }
   return {
     items,
-    previousParagraphMeasurement,
+    ...(previousParagraphMeasurement !== undefined ? { previousParagraphMeasurement: previousParagraphMeasurement } : {}),
     previousDisplaySkipVariant,
-    previousDisplayMaterialMetrics,
+    ...(previousDisplayMaterialMetrics !== undefined ? { previousDisplayMaterialMetrics: previousDisplayMaterialMetrics } : {}),
     previousDepthSuppressed,
   };
 }
@@ -1280,8 +1276,8 @@ function displayAlignmentIntertextParagraph(
     paragraph: {
       text: rawText,
       sourceSpan,
-      fontSizePt: item.fontSizePt,
-      baselineSkip: item.baselineSkip,
+      ...(item.fontSizePt !== undefined ? { fontSizePt: item.fontSizePt } : {}),
+      ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
       nodes,
       noIndent: true,
       alignment: "justified",
@@ -1629,7 +1625,7 @@ function displayMathInterlineGlueItem(
 ): TexGlueItem {
   return {
     kind: "glue",
-    sourceSpan: item.sourceSpan,
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
     ...(item.scopePath ? { scopePath: item.scopePath } : {}),
     origin: {
       kind: "display-math-interline",
@@ -1647,7 +1643,7 @@ function paragraphBoundaryInterlineGlueItem(
 ): TexGlueItem {
   return {
     kind: "glue",
-    sourceSpan: item.sourceSpan,
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
     ...(item.scopePath ? { scopePath: item.scopePath } : {}),
     origin: {
       kind: "paragraph-boundary-interline",
@@ -1680,7 +1676,7 @@ function plainParagraphBoundaryInterlineGlueItem(
     : item.scopePath ?? [];
   return {
     kind: "glue",
-    sourceSpan: item.sourceSpan,
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
     ...(scopePath.length > 0 ? { scopePath } : {}),
     origin: {
       kind: "paragraph-boundary-interline",
@@ -1698,7 +1694,7 @@ function plainVerticalInterlineGlueItem(
 ): TexGlueItem {
   return {
     kind: "glue",
-    sourceSpan: item.sourceSpan,
+    ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
     ...(item.scopePath ? { scopePath: item.scopePath } : {}),
     origin: {
       kind: "paragraph-boundary-interline",
@@ -1860,19 +1856,25 @@ function listProfileForContext(profile: TexListLayoutProfile | undefined, contex
     return copy;
   };
   const authored = context.spacing;
+  const topsepStretchPtByDepth = replace(profile.topsepStretchPtByDepth, authored?.topsep?.stretchPt ?? size?.topsepStretchPt);
+  const topsepShrinkPtByDepth = replace(profile.topsepShrinkPtByDepth, authored?.topsep?.shrinkPt ?? size?.topsepShrinkPt);
+  const itemsepStretchPtByDepth = replace(profile.itemsepStretchPtByDepth, authored?.itemsep?.stretchPt ?? size?.itemsepStretchPt);
+  const itemsepShrinkPtByDepth = replace(profile.itemsepShrinkPtByDepth, authored?.itemsep?.shrinkPt ?? size?.itemsepShrinkPt);
+  const parsepStretchPtByDepth = replace(profile.parsepStretchPtByDepth, authored?.parskip?.stretchPt ?? size?.parsepStretchPt);
+  const parsepShrinkPtByDepth = replace(profile.parsepShrinkPtByDepth, authored?.parskip?.shrinkPt ?? size?.parsepShrinkPt);
   return { ...profile,
     topsepPtByDepth: replace(profile.topsepPtByDepth, authored?.topsep?.sizePt ?? size?.topsepPt)!,
-    topsepStretchPtByDepth: replace(profile.topsepStretchPtByDepth, authored?.topsep?.stretchPt ?? size?.topsepStretchPt),
-    topsepShrinkPtByDepth: replace(profile.topsepShrinkPtByDepth, authored?.topsep?.shrinkPt ?? size?.topsepShrinkPt),
+    ...(topsepStretchPtByDepth !== undefined ? { topsepStretchPtByDepth } : {}),
+    ...(topsepShrinkPtByDepth !== undefined ? { topsepShrinkPtByDepth } : {}),
     partopsepPtByDepth: replace(profile.partopsepPtByDepth, authored?.partopsep?.sizePt)!,
     itemsepPtByDepth: replace(profile.itemsepPtByDepth, authored?.itemsep?.sizePt ?? size?.itemsepPt)!,
-    itemsepStretchPtByDepth: replace(profile.itemsepStretchPtByDepth, authored?.itemsep?.stretchPt ?? size?.itemsepStretchPt),
-    itemsepShrinkPtByDepth: replace(profile.itemsepShrinkPtByDepth, authored?.itemsep?.shrinkPt ?? size?.itemsepShrinkPt),
+    ...(itemsepStretchPtByDepth !== undefined ? { itemsepStretchPtByDepth } : {}),
+    ...(itemsepShrinkPtByDepth !== undefined ? { itemsepShrinkPtByDepth } : {}),
     // \list copies \parsep into \parskip on entry. A later assignment to
     // \parsep alone does not change the active paragraph glue.
     parsepPtByDepth: replace(profile.parsepPtByDepth, authored?.parskip?.sizePt ?? size?.parsepPt)!,
-    parsepStretchPtByDepth: replace(profile.parsepStretchPtByDepth, authored?.parskip?.stretchPt ?? size?.parsepStretchPt),
-    parsepShrinkPtByDepth: replace(profile.parsepShrinkPtByDepth, authored?.parskip?.shrinkPt ?? size?.parsepShrinkPt),
+    ...(parsepStretchPtByDepth !== undefined ? { parsepStretchPtByDepth } : {}),
+    ...(parsepShrinkPtByDepth !== undefined ? { parsepShrinkPtByDepth } : {}),
   };
 }
 

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import {
   offsetTexHBoxLocalX,
@@ -557,8 +558,7 @@ function layoutTexMathListContents(list: TexMathList, options: TexMathLayoutOpti
   let depth = 0;
   let atomIndex = 0;
 
-  for (let itemIndex = 0; itemIndex < spaced.items.length; itemIndex += 1) {
-    const item = spaced.items[itemIndex];
+  for (const item of spaced.items) {
     if (!item) {
       continue;
     }
@@ -1135,7 +1135,7 @@ function prepareOrdNoads(
   const normalized = normalizeTexMathAtomClasses({ ...list, items: authoredItems });
   const items: TexMathItem[] = normalized.items.map((item, index) => {
     // Normalize this list's classes without replacing original nested IR.
-    const authored = authoredItems[index];
+    const authored = requireArrayValue(authoredItems, index);
     return item.kind === "atom" && authored.kind === "atom"
       ? { ...authored, atomClass: item.atomClass } : item;
   });
@@ -1148,10 +1148,11 @@ function prepareOrdNoads(
     const override = glyphs.get(nucleus);
     if (override) return override;
     const parts = resolveMathSymbolParts(nucleus, fontProfile, activeStyle, baseAtPt, activeAlphabet);
-    return parts.length === 1 && parts[0].kind === "glyph" ? parts[0] : undefined;
+    const first = parts[0];
+    return parts.length === 1 && first?.kind === "glyph" ? first : undefined;
   };
   for (let index = 0; index < items.length; index += 1) {
-    const atom = items[index];
+    const atom = requireArrayValue(items, index);
     if (atom.kind === "style-change") { activeStyle = atom.style; continue; }
     if (atom.kind === "alphabet-change") { activeAlphabet = atom.alphabet; continue; }
     const next = items[index + 1];
@@ -1170,7 +1171,9 @@ function prepareOrdNoads(
       glyphs.set(nucleus, { ...left, code: rule[3], text: nucleus.text, sourceSpan,
         sourceCharacterSpans: [...left.sourceCharacterSpans ?? [left.sourceSpan], ...right.sourceCharacterSpans ?? [right.sourceSpan]],
         advance: tfmToPt(left.font, metric.width) });
-      items[index] = { ...atom, nucleus, subscript: next.subscript, superscript: next.superscript,
+      items[index] = { ...atom, nucleus,
+        ...(next.subscript !== undefined ? { subscript: next.subscript } : {}),
+        ...(next.superscript !== undefined ? { superscript: next.superscript } : {}),
         sourceSpan: { start: atom.sourceSpan.start, end: next.sourceSpan.end } };
       items.splice(index + 1, 1);
       index -= 1; // TeX restarts on the replacement, permitting ff+i -> ffi.
@@ -1198,8 +1201,8 @@ function shouldUseOperatorLimits(
     if (inner?.kind === "atom" && !inner.subscript && !inner.superscript) {
       return shouldUseOperatorLimits({
         ...inner,
-        subscript: atom.subscript,
-        superscript: atom.superscript,
+        ...(atom.subscript !== undefined ? { subscript: atom.subscript } : {}),
+        ...(atom.superscript !== undefined ? { superscript: atom.superscript } : {}),
         ...(atom.limits !== undefined ? { limits: atom.limits } : {}),
       }, style);
     }
@@ -1336,7 +1339,7 @@ function layoutNucleus(
         });
       }
     }
-    const result = layoutTexMathList(nucleus.list, { fontProfile, style, cramped, baseAtPt, alphabet });
+    const result = layoutTexMathList(nucleus.list, { fontProfile, style, cramped, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
     if (!result.supported) {
       return null;
     }
@@ -1603,14 +1606,12 @@ function layoutTextNucleus(
       ? texFrameMBoxHList(hlist, {
           sourceSpan: nucleus.sourceSpan,
           contentSourceSpan: nucleus.textSourceSpan,
-          boxWidth: nucleus.command === "framebox" && nucleus.boxWidth !== undefined
-            ? texLength(nucleus.boxWidth)
-            : undefined,
-          boxAlign: nucleus.boxAlign,
+          ...(nucleus.command === "framebox" && nucleus.boxWidth !== undefined ? { boxWidth: texLength(nucleus.boxWidth) } : {}),
+          ...(nucleus.boxAlign !== undefined ? { boxAlign: nucleus.boxAlign } : {}),
         })
       : texReboxMBoxHList(hlist, {
-          boxWidth: nucleus.boxWidth !== undefined ? texLength(nucleus.boxWidth) : undefined,
-          boxAlign: nucleus.boxAlign,
+          ...(nucleus.boxWidth !== undefined ? { boxWidth: texLength(nucleus.boxWidth) } : {}),
+          ...(nucleus.boxAlign !== undefined ? { boxAlign: nucleus.boxAlign } : {}),
         });
     return mathAtomLayout({
       items: boxedHList.items,
@@ -1983,16 +1984,16 @@ function layoutAlignedNucleus(
     concreteRows,
     fontProfile
   );
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const naturalHeight = roundTexPt(
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
   const rowItems: TexMathChildHListLayoutItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
@@ -2042,7 +2043,7 @@ function layoutAlignedNucleus(
       ...(row.intertextsBefore ? { intertextsBefore: row.intertextsBefore } : {}),
       ...(row.multlineShove ? { multlineShove: row.multlineShove } : {}),
     }));
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+    baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   return mathAtomLayout({
@@ -2066,7 +2067,7 @@ function layoutAlignedRow(
 ): TexMathAlignedRowLayout | null {
   const cellStyle = alignedCellStyle();
   const cells = row.cells.map((cell, columnIndex) => {
-    const result = layoutTexMathList(cell.list, { fontProfile, style: cellStyle, baseAtPt, alphabet });
+    const result = layoutTexMathList(cell.list, { fontProfile, style: cellStyle, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
     return result.supported
       ? {
           hlist: alignCellHList(
@@ -2156,10 +2157,10 @@ function alignedRowBaselineOffsets(
 ): readonly number[] {
   const offsets = [0];
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const previous = rows[rowIndex - 1];
-    const current = rows[rowIndex];
+    const previous = requireArrayValue(rows, rowIndex - 1);
+    const current = requireArrayValue(rows, rowIndex);
     offsets.push(roundTexPt(
-      offsets[rowIndex - 1] +
+      requireArrayValue(offsets, rowIndex - 1) +
       alignedRowBaselineDistance(previous, current, fontProfile)
     ));
   }
@@ -2284,16 +2285,16 @@ function layoutSubstackNucleus(
 
   const width = roundTexPt(Math.max(...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
   const baselineOffsets = substackRowBaselineOffsets(concreteRows, fontProfile, baseAtPt);
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const naturalHeight = roundTexPt(
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
   const rowItems: TexMathChildHListLayoutItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
@@ -2318,7 +2319,7 @@ function layoutSubstackNucleus(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     }));
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+    baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   return mathAtomLayout({
@@ -2338,9 +2339,9 @@ function layoutSubstackRow(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
-  const cell = row.cells[0];
+  const cell = requireArrayValue(row.cells, 0);
   const result = cell
-    ? layoutTexMathList(cell.list, { fontProfile, style: TEX_SUBSTACK_STYLE, baseAtPt, alphabet })
+    ? layoutTexMathList(cell.list, { fontProfile, style: TEX_SUBSTACK_STYLE, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) })
     : null;
   if (!result?.supported) {
     return null;
@@ -2384,16 +2385,16 @@ function layoutSubarrayNucleus(
 
   const width = roundTexPt(Math.max(...concreteRows.map((row) => row.cells[0]?.hlist.width ?? 0)));
   const baselineOffsets = substackRowBaselineOffsets(concreteRows, fontProfile, baseAtPt);
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const naturalHeight = roundTexPt(
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
   const rowItems: TexMathChildHListLayoutItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
@@ -2421,7 +2422,7 @@ function layoutSubarrayNucleus(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     }));
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+    baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   return mathAtomLayout({
@@ -2453,14 +2454,14 @@ function layoutSidesetNucleus(
     fontProfile,
     style: "display",
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   const postBaseList = sidesetBaseWithPostscript(nucleus.base, nucleus.postscript);
   const postBase = layoutTexMathList(postBaseList, {
     fontProfile,
     style: "display",
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!base.supported || !postBase.supported) {
     return null;
@@ -2522,7 +2523,7 @@ function layoutSidesetPrescript(
       fontProfile,
       style: "display",
       baseAtPt,
-      alphabet,
+      ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
     });
     return result.supported ? result.hlist : null;
   }
@@ -2680,8 +2681,8 @@ function substackRowBaselineOffsets(
   const lineSkip = mathStyleParameterToPt(fontProfile, "stackVGap", TEX_SUBSTACK_STYLE, baseAtPt);
   const offsets = [0];
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const previous = rows[rowIndex - 1];
-    const current = rows[rowIndex];
+    const previous = requireArrayValue(rows, rowIndex - 1);
+    const current = requireArrayValue(rows, rowIndex);
     const naturalDistance = roundTexPt(previous.depth + current.height);
     const baselineDistance = baselineSkip - naturalDistance >= lineSkip
       ? baselineSkip
@@ -2777,16 +2778,16 @@ function layoutCasesBody(
   const columnGap = tfmToPt(textFont, textFont.data.fontdimen.quad);
   const width = roundTexPt(firstColumnWidth + (hasSecondColumn ? columnGap + secondColumnWidth : 0));
   const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const naturalHeight = roundTexPt(
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
   const rowItems: TexMathChildHListLayoutItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
@@ -2822,7 +2823,7 @@ function layoutCasesBody(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     }));
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+    baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   return mathAtomLayout({
@@ -2884,12 +2885,12 @@ function layoutArrayNucleus(
     ).reduce((sum, boundaryWidth) => sum + boundaryWidth, 0));
   const rowRules = nucleus.rowRules ?? [];
   const baselineOffsets = arrayRowBaselineOffsets(concreteRows, rowRules);
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const topRuleHeight = arrayRowRuleBoundaryHeight(rowRules, 0);
   const bottomRuleHeight = arrayRowRuleBoundaryHeight(rowRules, concreteRows.length);
   const naturalHeight = roundTexPt(
     topRuleHeight +
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth +
     bottomRuleHeight
@@ -2897,7 +2898,7 @@ function layoutArrayNucleus(
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  const firstBaselineY = roundTexPt(-height + topRuleHeight + concreteRows[0].height);
+  const firstBaselineY = roundTexPt(-height + topRuleHeight + requireArrayValue(concreteRows, 0).height);
   const rowItems: TexMathHListItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
@@ -2968,8 +2969,8 @@ function arrayRowBaselineOffsets(
 ): readonly number[] {
   const offsets = [0];
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const previous = rows[rowIndex - 1];
-    const current = rows[rowIndex];
+    const previous = requireArrayValue(rows, rowIndex - 1);
+    const current = requireArrayValue(rows, rowIndex);
     offsets.push(roundTexPt(
       (offsets[rowIndex - 1] ?? 0) +
       previous.depth +
@@ -3076,7 +3077,7 @@ function layoutArrayCellInserts(
 ): ReadonlyMap<TexMathArrayCellInsert, TexMathHList> | null {
   const layouts = new Map<TexMathArrayCellInsert, TexMathHList>();
   for (const insert of inserts) {
-    const result = layoutTexMathList(insert.list, { fontProfile, style: "text", baseAtPt, alphabet });
+    const result = layoutTexMathList(insert.list, { fontProfile, style: "text", baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
     if (!result.supported) {
       return null;
     }
@@ -3145,7 +3146,7 @@ function layoutArrayPreambleInserts(
     if (item.kind !== "insert") {
       continue;
     }
-    const result = layoutTexMathList(item.list, { fontProfile, style: "text", baseAtPt, alphabet });
+    const result = layoutTexMathList(item.list, { fontProfile, style: "text", baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
     if (!result.supported) {
       return null;
     }
@@ -3310,16 +3311,16 @@ function layoutSmallMatrixBody(
   );
   const width = roundTexPt(outerGap + bodyWidth + outerGap);
   const baselineOffsets = smallMatrixRowBaselineOffsets(concreteRows);
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const naturalHeight = roundTexPt(
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
   const items: TexMathHListItem[] = [mathGlueLayoutItem({
     kind: "glue",
     x: 0,
@@ -3362,7 +3363,7 @@ function layoutSmallMatrixBody(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     }));
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+    baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   items.push(mathGlueLayoutItem({
@@ -3422,16 +3423,16 @@ function layoutMatrixBody(
     Math.max(0, columnCount - 1) * 2 * TEX_MATRIX_ARRAY_COL_SEP_PT
   );
   const baselineOffsets = matrixRowBaselineOffsets(concreteRows);
-  const lastRow = concreteRows[concreteRows.length - 1];
+  const lastRow = requireArrayValue(concreteRows, concreteRows.length - 1);
   const naturalHeight = roundTexPt(
-    concreteRows[0].height +
+    requireArrayValue(concreteRows, 0).height +
     (baselineOffsets[baselineOffsets.length - 1] ?? 0) +
     lastRow.depth
   );
   const axis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const height = roundTexPt(naturalHeight / 2 + axis);
   const depth = roundTexPt(naturalHeight - height);
-  let baselineY = roundTexPt(-height + concreteRows[0].height);
+  let baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height);
   const rowItems: TexMathChildHListLayoutItem[] = [];
 
   for (const [rowIndex, row] of concreteRows.entries()) {
@@ -3465,7 +3466,7 @@ function layoutMatrixBody(
       sourceSpan: row.sourceSpan,
       items: rowChildren,
     }));
-    baselineY = roundTexPt(-height + concreteRows[0].height + (baselineOffsets[rowIndex + 1] ?? 0));
+    baselineY = roundTexPt(-height + requireArrayValue(concreteRows, 0).height + (baselineOffsets[rowIndex + 1] ?? 0));
   }
 
   return mathAtomLayout({
@@ -3501,7 +3502,7 @@ function layoutSmallMatrixRow(
   alphabet?: TexMathAlphabetCommand
 ): TexMathAlignedRowLayout | null {
   const cells = row.cells.map((cell) => {
-    const result = layoutTexMathList(cell.list, { fontProfile, style: "script", baseAtPt, alphabet });
+    const result = layoutTexMathList(cell.list, { fontProfile, style: "script", baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
     return result.supported
       ? {
           hlist: result.hlist,
@@ -3524,8 +3525,8 @@ function layoutSmallMatrixRow(
 function smallMatrixRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
   const offsets = [0];
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const previous = rows[rowIndex - 1];
-    const current = rows[rowIndex];
+    const previous = requireArrayValue(rows, rowIndex - 1);
+    const current = requireArrayValue(rows, rowIndex);
     const naturalDistance = roundTexPt(previous.depth + current.height);
     const baselineDistance = TEX_SMALLMATRIX_BASELINE_SKIP_PT - naturalDistance >= TEX_SMALLMATRIX_LINE_SKIP_PT
       ? TEX_SMALLMATRIX_BASELINE_SKIP_PT
@@ -3560,7 +3561,7 @@ function layoutMatrixRow(
   cellStyle: TexMathStyle = "text"
 ): TexMathAlignedRowLayout | null {
   const cells = row.cells.map((cell) => {
-    const result = layoutTexMathList(cell.list, { fontProfile, style: cellStyle, baseAtPt, alphabet });
+    const result = layoutTexMathList(cell.list, { fontProfile, style: cellStyle, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
     return result.supported
       ? {
           hlist: result.hlist,
@@ -3589,10 +3590,10 @@ function layoutMatrixRow(
 function matrixRowBaselineOffsets(rows: readonly TexMathAlignedRowLayout[]): readonly number[] {
   const offsets = [0];
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const previous = rows[rowIndex - 1];
-    const current = rows[rowIndex];
+    const previous = requireArrayValue(rows, rowIndex - 1);
+    const current = requireArrayValue(rows, rowIndex);
     offsets.push(roundTexPt(
-      offsets[rowIndex - 1] +
+      requireArrayValue(offsets, rowIndex - 1) +
       previous.depth +
       current.height
     ));
@@ -4092,7 +4093,7 @@ function layoutFractionList(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 
@@ -4199,7 +4200,7 @@ function layoutRadicalNucleus(
     style: "scriptscript",
     cramped: false,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!degree.supported) {
     return null;
@@ -4250,7 +4251,7 @@ function layoutRadicandList(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 
@@ -4265,7 +4266,7 @@ function layoutBoxedNucleus(
     style: "display",
     cramped: false,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!body.supported) {
     return null;
@@ -4322,7 +4323,7 @@ function layoutBoxedNucleus(
     }),
   ];
   return mathAtomLayout({
-    items: [frameRules[0], frameRules[1], bodyChild, frameRules[2], frameRules[3]],
+    items: [requireArrayValue(frameRules, 0), requireArrayValue(frameRules, 1), bodyChild, requireArrayValue(frameRules, 2), requireArrayValue(frameRules, 3)],
     width,
     height,
     depth,
@@ -4345,7 +4346,7 @@ function layoutSmashNucleus(
     style,
     cramped,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!body.supported) {
     return null;
@@ -4375,7 +4376,7 @@ function layoutPhantomNucleus(
     style,
     cramped,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!body.supported) {
     return null;
@@ -4404,7 +4405,7 @@ function layoutShiftBoxNucleus(
     style,
     cramped,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!body.supported) {
     return null;
@@ -4438,7 +4439,7 @@ function layoutVCenterNucleus(
     style,
     cramped,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!body.supported) {
     return null;
@@ -4594,7 +4595,7 @@ function layoutLineBody(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 
@@ -4662,7 +4663,7 @@ function layoutBraceNucleus(
     fontProfile,
     style: "display",
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
   });
   if (!bodyResult.supported) {
     return null;
@@ -4681,13 +4682,13 @@ function layoutBraceNucleus(
     ? roundTexPt(-(body.height + 3 + braceDepth))
     : roundTexPt(body.depth + 3 + braceHeight);
   const halfWidth = roundTexPt(width / 2);
-  const leftRuleWidth = roundTexPt(Math.max(0, halfWidth - widths[0] - widths[1]));
-  const rightRuleWidth = roundTexPt(Math.max(0, width - halfWidth - widths[2] - widths[3]));
+  const leftRuleWidth = roundTexPt(Math.max(0, halfWidth - requireArrayValue(widths, 0) - requireArrayValue(widths, 1)));
+  const rightRuleWidth = roundTexPt(Math.max(0, width - halfWidth - requireArrayValue(widths, 2) - requireArrayValue(widths, 3)));
   const positions = [
     0,
-    roundTexPt(widths[0] + leftRuleWidth),
+    roundTexPt(requireArrayValue(widths, 0) + leftRuleWidth),
     halfWidth,
-    roundTexPt(width - widths[3]),
+    roundTexPt(width - requireArrayValue(widths, 3)),
   ];
   const glyphs = codes.map((code, index): TexMathGlyphLayoutItem => mathGlyphLayoutItem({
     kind: "glyph",
@@ -4989,7 +4990,7 @@ function layoutAccentBase(
     style,
     cramped,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
     suppressAmsNestedAccentAdjustment,
   });
   return result.supported ? result.hlist : null;
@@ -5846,7 +5847,7 @@ function layoutLeftRightBody(
     style,
     cramped,
     baseAtPt,
-    alphabet,
+    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
     allowMiddleDelimiters: true,
   });
   return result.supported ? result.hlist : null;
@@ -7539,7 +7540,7 @@ function layoutScriptList(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
   if (!result.supported) {
     return null;
   }
@@ -7588,7 +7589,7 @@ function layoutLimitList(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathHList | null {
-  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, alphabet });
+  const result = layoutTexMathList(list, { fontProfile, style, cramped, baseAtPt, ...(alphabet !== undefined ? { alphabet: alphabet } : {}) });
   return result.supported ? omitSingleCharacterCleanBoxItalicCorrection(result.hlist, list) : null;
 }
 

@@ -39,10 +39,10 @@ export function lensSpan(view: EditView, anchor: number, focus: number): Span {
 /** A span without the line ends and spaces at its edges, which belong to the flow around it. */
 function trimmedSpan(text: string, span: Span): Span {
   let { from, to } = span;
-  while (from < to && /\s/u.test(text[from])) {
+  while (from < to && /\s/u.test(text.charAt(from))) {
     from += 1;
   }
-  while (to > from && /\s/u.test(text[to - 1])) {
+  while (to > from && /\s/u.test(text.charAt(to - 1))) {
     to -= 1;
   }
   return { from, to };

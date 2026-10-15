@@ -54,7 +54,7 @@ export function collectMacroCommandDefinition(
       : {
         kind: "callable",
         parameterCount,
-        optionalFirstArgDefault: statement.optionalDefaultRaw,
+        ...(statement.optionalDefaultRaw !== undefined ? { optionalFirstArgDefault: statement.optionalDefaultRaw } : {}),
         body: statement.bodyRaw,
         provenance,
       }
@@ -146,7 +146,7 @@ function cloneBindingWithOrigin(
     : {
       kind: "callable",
       parameterCount: binding.parameterCount,
-      optionalFirstArgDefault: binding.optionalFirstArgDefault,
+      ...(binding.optionalFirstArgDefault !== undefined ? { optionalFirstArgDefault: binding.optionalFirstArgDefault } : {}),
       body: binding.body,
       provenance: [...binding.provenance, origin],
     };

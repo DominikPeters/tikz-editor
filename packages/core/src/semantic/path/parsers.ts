@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { coordinateInner } from "./shared.js";
 import { parseLengthWithInfo } from "../coords/parse-length.js";
 
@@ -9,14 +10,14 @@ export type ParsedLengthWithTransform = {
 export function parseCoordinateOperation(raw: string): { name: string } | null {
   const inlineWithAt = raw.match(/coordinate\s*\(([^)]+)\)\s*at\s*(\([^)]+\))/i);
   if (inlineWithAt) {
-    return { name: inlineWithAt[1].trim() };
+    return { name: requireArrayValue(inlineWithAt, 1).trim() };
   }
 
   const simple = raw.match(/coordinate\s*\(([^)]+)\)/i);
   if (!simple) {
     return null;
   }
-  return { name: simple[1].trim() };
+  return { name: requireArrayValue(simple, 1).trim() };
 }
 
 export function parseCircleRadiusFromCoordinateRaw(raw: string): ParsedLengthWithTransform | null {
@@ -51,8 +52,8 @@ export function parseEllipseRadiiFromCoordinateRaw(raw: string): { rx: ParsedLen
     return null;
   }
 
-  const parsedRx = parseLengthWithInfo(match[1].trim(), "cm");
-  const parsedRy = parseLengthWithInfo(match[2].trim(), "cm");
+  const parsedRx = parseLengthWithInfo(requireArrayValue(match, 1).trim(), "cm");
+  const parsedRy = parseLengthWithInfo(requireArrayValue(match, 2).trim(), "cm");
   const rx = parsedRx?.value ?? null;
   const ry = parsedRy?.value ?? null;
   if (rx == null || ry == null) {

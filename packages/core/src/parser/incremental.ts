@@ -181,15 +181,18 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
 
     const fallbackToFull = (reason: IncrementalParseFallbackReason): IncrementalParseEvaluateResult => {
       const parse = parseTikz(input.source, {
-        recover: true, activeFigureId, includeContextDefinitions,
-        nodeTextValidator: input.nodeTextValidator, structuralMasks
+        recover: true,
+        ...(activeFigureId !== undefined ? { activeFigureId } : {}),
+        includeContextDefinitions,
+        ...(input.nodeTextValidator !== undefined ? { nodeTextValidator: input.nodeTextValidator } : {}),
+        structuralMasks
       });
       cached = buildCache(parse, {
         activeFigureId: activeFigureId ?? parse.activeFigureId,
         includeContextDefinitions, structuralMasks, sourceRevision: input.sourceRevision ?? null
       });
       return { parse, stats: {
-        strategy: "full", fallbackReason: reason, patchApplication,
+        strategy: "full", fallbackReason: reason, ...(patchApplication !== undefined ? { patchApplication } : {}),
         reparsedStatementCount: countStatements(parse.figure.body), reusedStatementCount: 0
       } };
     };
@@ -199,13 +202,14 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
     }
     // Text changed only outside the picture and the statements it reads (its
     // context definitions): every statement stands, only where they stand moved.
-    const figureSpan = cached?.activeFigureSpan;
-    const shiftOnly = cached != null && figureSpan != null && changedSourceIds.length === 0 && patches.length > 0 &&
-      cached.activeFigureId === (activeFigureId === undefined ? cached.activeFigureId : activeFigureId) &&
-      cached.includeContextDefinitions === includeContextDefinitions &&
-      cached.diagnosticPartition.global.length === 0 &&
+    const currentCache = cached;
+    const figureSpan = currentCache?.activeFigureSpan;
+    const shiftOnly = currentCache != null && figureSpan != null && changedSourceIds.length === 0 && patches.length > 0 &&
+      currentCache.activeFigureId === (activeFigureId === undefined ? currentCache.activeFigureId : activeFigureId) &&
+      currentCache.includeContextDefinitions === includeContextDefinitions &&
+      currentCache.diagnosticPartition.global.length === 0 &&
       patches.every((patch) => (patch.oldSpan.to <= figureSpan.from || patch.oldSpan.from >= figureSpan.to) &&
-        ![...cached!.statementRefsBySourceId.values()].some((ref) => ref.span.from <= patch.oldSpan.to && patch.oldSpan.from <= ref.span.to));
+        ![...currentCache.statementRefsBySourceId.values()].some((ref) => ref.span.from <= patch.oldSpan.to && patch.oldSpan.from <= ref.span.to));
     const fallback = shiftOnly ? null : decideFallbackReason({
       cached,
       inputSource: input.source,
@@ -219,6 +223,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
     }
 
     try {
+      const previousSource = cached.source;
       const changedRefs = new Map<string, StatementRef>();
       for (const sourceId of changedSourceIds) {
         const ref = cached.statementRefsBySourceId.get(sourceId);
@@ -248,7 +253,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       const nextFigures = shiftFigureInventory(cached.figures, patches, structuralSource);
       // Typing a delimiter, comment or verbatim text can move where figures
       // begin and end, which shifting the old inventory cannot show.
-      if (patches.some((patch) => figureScanMayChange(cached!.source, input.source, patch)) &&
+      if (patches.some((patch) => figureScanMayChange(previousSource, input.source, patch)) &&
         !sameSpans(scanFigureSpans(structuralSource), nextFigures.map((figure) => figure.span))) {
         return fallbackToFull("patch-touches-figure-delimiter");
       }
@@ -265,9 +270,11 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
       if (shiftOnly && includeContextDefinitions) {
         // Definitions are statements of the picture; none may appear, go or change.
         const before = cached.contextDefinitions;
-        if (before.length !== contextDefinitions.length || before.some((definition, index) =>
-          cached!.source.slice(definition.span.from, definition.span.to) !==
-            input.source.slice(contextDefinitions[index].span.from, contextDefinitions[index].span.to))) {
+        if (before.length !== contextDefinitions.length || before.some((definition, index) => {
+          const nextDefinition = contextDefinitions[index];
+          return !nextDefinition || previousSource.slice(definition.span.from, definition.span.to) !==
+            input.source.slice(nextDefinition.span.from, nextDefinition.span.to);
+        })) {
           return fallbackToFull("context-definitions-changed");
         }
       }
@@ -351,7 +358,7 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         changes: { patches, changedSourceIds },
         stats: {
           strategy: "incremental",
-          patchApplication,
+          ...(patchApplication !== undefined ? { patchApplication } : {}),
           reparsedStatementCount: changedSourceIds.length,
           reusedStatementCount: Math.max(0, nextIndex.size - changedSourceIds.length)
         }
@@ -383,12 +390,17 @@ function figureScanMayChange(before: string, after: string, patch: SourcePatch):
 }
 
 function sameSpans(left: readonly Span[], right: readonly Span[]): boolean {
-  return left.length === right.length && left.every((span, index) => span.from === right[index].from && span.to === right[index].to);
+  return left.length === right.length && left.every((span, index) => {
+    const other = right[index];
+    return span.from === other?.from && span.to === other.to;
+  });
 }
 
 function identityStructure(statement: Statement): string {
   const items = (entries: readonly PathItem[]): string => entries.map((item) => {
-    const clauses = "foreachClauses" in item ? item.foreachClauses?.map((clause) => clause.kind).join(",") ?? "" : "";
+    const foreachClauses = item.kind === "Node" || item.kind === "PicOperation" || item.kind === "ChildOperation"
+      ? item.foreachClauses : undefined;
+    const clauses = foreachClauses?.map((clause) => clause.kind).join(",") ?? "";
     if (item.kind === "ChildOperation") return `${item.kind}[${clauses}](${items(item.body)})`;
     if (item.kind === "ToOperation" || item.kind === "EdgeOperation" || item.kind === "EdgeFromParentOperation") {
       return `${item.kind}(${items(item.nodes ?? [])};${"pics" in item ? items(item.pics ?? []) : ""})`;
@@ -572,7 +584,11 @@ function parseStatementSnippet(snippet: string, nodeTextValidator?: ParseTikzOpt
   hasParseError: boolean;
 } {
   const source = `${SNIPPET_PREFIX}${snippet}\n${SNIPPET_SUFFIX.slice(1)}`;
-  const parse = parseTikz(source, { recover: true, nodeTextValidator, structuralMasks });
+  const parse = parseTikz(source, {
+    recover: true,
+    ...(nodeTextValidator !== undefined ? { nodeTextValidator } : {}),
+    ...(structuralMasks !== undefined ? { structuralMasks } : {})
+  });
   return {
     parse,
     hasParseError: parse.diagnostics.some((diagnostic) => diagnostic.severity === "error")
@@ -867,6 +883,9 @@ function shiftSpanThroughPatches(span: Span, patches: readonly SourcePatch[]): S
   // replacement cannot shift a span into the range of a later patch.
   for (let index = patches.length - 1; index >= 0; index--) {
     const patch = patches[index];
+    if (!patch) {
+      throw new Error(`Missing source patch at index ${index}`);
+    }
     next = shiftSpanThroughSinglePatch(next, patch);
   }
   return next;

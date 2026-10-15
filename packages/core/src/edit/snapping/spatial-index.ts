@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldBounds } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldBounds, WorldPoint } from "../../coords/points.js";
@@ -13,8 +14,8 @@ export function createPointIndex<T extends WorldPoint>(points: readonly T[]) {
       if (radius < 0) continue;
       const sorted = axes[axis];
       let lo = 0, hi = sorted.length;
-      while (lo < hi) { const mid = (lo + hi) >>> 1; if (sorted[mid][axis] < point[axis] - radius) lo = mid + 1; else hi = mid; }
-      for (let i = lo; i < sorted.length && sorted[i][axis] <= point[axis] + radius; i++) found.add(sorted[i]);
+      while (lo < hi) { const mid = (lo + hi) >>> 1; if (requireArrayValue(sorted, mid)[axis] < point[axis] - radius) lo = mid + 1; else hi = mid; }
+      for (let i = lo; i < sorted.length && requireArrayValue(sorted, i)[axis] <= point[axis] + radius; i++) found.add(requireArrayValue(sorted, i));
     }
     // Keep deterministic tie-breaking identical to the exhaustive search.
     return [...found].sort((a, b) => order.get(a)! - order.get(b)!);
@@ -33,7 +34,10 @@ export function createBoundsIndex<T extends WorldBounds>(entries: readonly T[]):
     const axis = depth % 2 === 0 ? "minX" : "minY";
     items.sort((a, b) => a[axis] - b[axis]);
     const mid = items.length >>> 1;
-    return { bounds, left: build(items.slice(0, mid), depth + 1), right: build(items.slice(mid), depth + 1) };
+    const left = build(items.slice(0, mid), depth + 1);
+    const right = build(items.slice(mid), depth + 1);
+    if (!left || !right) throw new Error("Spatial index split produced an empty branch");
+    return { bounds, left, right };
   };
   const root = build([...entries], 0);
   return bounds => {

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { formatSvgNumber as fmt } from "../../svg/format.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { TexListMarkerProfile } from "../../text/tex/layout-options.js";
@@ -58,7 +59,7 @@ export function resolveBeamerItemizeMarkers(
 
   return theme.templates.bullets.map((template, index) => {
     const family = template.id.split("/").at(-1);
-    const projectedRole = ["item projected", "subitem projected", "subsubitem projected"][index];
+    const projectedRole = requireArrayValue(["item projected", "subitem projected", "subsubitem projected"], index);
     const structure = (family === "ball" ? resolveBeamerThemeColor(theme, projectedRole).bg : undefined) ??
       resolveBeamerListLabelColor(theme, "itemize", index + 1, index + 1) ??
       resolveBeamerThemeColor(theme, "normal text").fg ?? BLACK;
@@ -112,7 +113,7 @@ export function resolveBeamerEnumerateMarker(
     return undefined;
   }
   const bodyFont = theme.fonts["normal-text"];
-  const projectedRole = ["item projected", "subitem projected", "subsubitem projected"][Math.max(0, Math.min(labelDepth - 1, 2))];
+  const projectedRole = requireArrayValue(["item projected", "subitem projected", "subsubitem projected"], Math.max(0, Math.min(labelDepth - 1, 2)));
   const fontProfile = createBeamerTexTextFontProfile(bodyFont);
   const resolvedBodyFont = fontProfile.resolveTextFont(
     fontProfile.defaultFontState,
@@ -545,8 +546,8 @@ function mixHex(left: string, right: string, leftWeight: number): string {
   }
   const channel = (index: number) =>
     Math.round(
-      leftRgb[index] * leftWeight +
-      rightRgb[index] * (1 - leftWeight)
+      requireArrayValue(leftRgb, index) * leftWeight +
+      requireArrayValue(rightRgb, index) * (1 - leftWeight)
     );
   return `#${[0, 1, 2]
     .map((index) => channel(index).toString(16).padStart(2, "0"))
@@ -557,9 +558,9 @@ function parseHex(value: string): readonly [number, number, number] | null {
   const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/iu.exec(value);
   return match
     ? [
-        Number.parseInt(match[1], 16),
-        Number.parseInt(match[2], 16),
-        Number.parseInt(match[3], 16),
+        Number.parseInt(requireArrayValue(match, 1), 16),
+        Number.parseInt(requireArrayValue(match, 2), 16),
+        Number.parseInt(requireArrayValue(match, 3), 16),
       ]
     : null;
 }

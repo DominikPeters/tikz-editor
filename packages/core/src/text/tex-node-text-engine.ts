@@ -320,10 +320,10 @@ async function initializeEngine(
           fontSizePt,
           alignment,
           requestedAlignment: request.alignment ?? null,
-          sourceMap: layoutInput.sourceMap,
-          graphicsResolver: request.graphicsResolver,
-          colorResolver: request.colorResolver,
-          mathFontProfile: options.mathFontProfile,
+          ...(layoutInput.sourceMap !== undefined ? { sourceMap: layoutInput.sourceMap } : {}),
+          ...(request.graphicsResolver !== undefined ? { graphicsResolver: request.graphicsResolver } : {}),
+          ...(request.colorResolver !== undefined ? { colorResolver: request.colorResolver } : {}),
+          ...(options.mathFontProfile !== undefined ? { mathFontProfile: options.mathFontProfile } : {}),
           nextParagraphId,
         });
         if (!entry) {
@@ -423,7 +423,7 @@ function buildTexSharedLayout(params: {
     tikzTextWidthNode: true,
     // The natural-width sentinel is an implementation detail, not a TeX
     // document register. Keep named width registers unresolved in that mode.
-    dimensionContext: isNaturalWidthLayout ? null : undefined,
+    ...(isNaturalWidthLayout ? { dimensionContext: null } : {}),
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: params.fontSizePt,
@@ -635,7 +635,7 @@ function buildTexTextCacheEntry(params: {
     requestedAlignment: params.requestedAlignment,
     retainedBytes: shared.retainedBytes + body.length * 2 + params.sourceText.length * 2 + 256,
   };
-  return { cacheKey: params.cacheKey, outlineGeneration: texGlyphOutlineGeneration(), layoutCacheKey: params.layoutCacheKey, sourceMap: params.sourceMap ? structuredClone(params.sourceMap) : undefined,
+  return { cacheKey: params.cacheKey, outlineGeneration: texGlyphOutlineGeneration(), layoutCacheKey: params.layoutCacheKey, ...(params.sourceMap ? { sourceMap: structuredClone(params.sourceMap) } : {}),
     layout, paragraphId, canRenderLocalSource: isDirectTextSourceMap(params.sourceMap),
     // Conservative per-binding accounting includes retained shared layout and
     // a possible resolved report; eviction never leaves an unbounded side cache.
@@ -840,7 +840,7 @@ function normalizeTexTextInput(
   return {
     text,
     font: { ...font },
-    ...(sourceMap ? { sourceMap } : {}),
+    ...(sourceMap ? { sourceMap: sourceMap } : {}),
   };
 }
 

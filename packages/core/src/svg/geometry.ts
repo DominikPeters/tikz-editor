@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { worldToSvgPoint } from "../coords/svg.js";
 import { pt } from "../coords/scalars.js";
 import { svgPoint, svgBounds, worldPoint } from "../coords/points.js";
@@ -134,10 +135,10 @@ export function computeSvgStrokedPathBounds(
   };
   let segments: StrokeSegment[] = [];
   const flush = (closed: boolean): void => {
-    for (let index = 1; index < segments.length; index += 1) includeJoin(segments[index - 1], segments[index]);
+    for (let index = 1; index < segments.length; index += 1) includeJoin(requireArrayValue(segments, index - 1), requireArrayValue(segments, index));
     if (segments.length > 0) {
-      const first = segments[0];
-      const last = segments[segments.length - 1];
+      const first = requireArrayValue(segments, 0);
+      const last = requireArrayValue(segments, segments.length - 1);
       if (closed) includeJoin(last, first);
       else {
         includeCap(first.from, first.start, -1);

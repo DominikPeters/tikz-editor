@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { InteractionState } from "../input/interaction.js";
 import { ARGUMENT_ROLES, isCaretSlot } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
@@ -27,7 +29,7 @@ export function typeCharacter(
   title = false
 ): EditOutcome {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   if (slot.mode === "verbatim") {
     return insert(at, char);
   }
@@ -53,7 +55,7 @@ export function typeCharacter(
     // would end it (LaTeX takes the first one, even inside `$…$`).
     const open = state.placeholder != null ? placeholderAt(view, state.placeholder, at) : null;
     // Placeholder braces are replaced, so they protect nothing: look from what holds them.
-    const from = open ? tree.nodes[open.formula ?? tree.slots[open.slot!].node].parent : caret.slot;
+    const from = open ? editNodeAt(tree.nodes, open.formula ?? editSlotAt(tree.slots, open.slot!).node).parent : caret.slot;
     // A frame title is read as an optional argument too, on the continuation frames of `allowframebreaks`.
     if (from != null && (title || insideOptional(view, from))) {
       return open
@@ -85,8 +87,8 @@ export function typeCharacter(
  * into gets braces (R6, K2).
  */
 export function placeInsertion(view: EditView, caret: Position, at: number, typed: EditOutcome): EditOutcome {
-  const slot = view.tree.slots[caret.slot];
-  if (view.tree.nodes[slot.node].kind === "alignment") {
+  const slot = editSlotAt(view.tree.slots, caret.slot);
+  if (editNodeAt(view.tree.nodes, slot.node).kind === "alignment") {
     return newRowFor(view, typed, at, slot.contentSpan.to);
   }
   // R6: whatever is typed into an unbraced argument (`\frac‸12`, then `^`) brings its braces.
@@ -102,7 +104,7 @@ function braceWaitingArgument(view: EditView, at: number, typed: EditOutcome): E
   if (typed.kind !== "patch" || typed.patches.length !== 1) {
     return typed;
   }
-  const [patch] = typed.patches;
+  const patch = requireArrayValue(typed.patches, 0);
   // One token, or a terminator that ends the command's name (R5). (`~` and `'` are macros, not one token.)
   if (patch.from !== at || patch.to !== at || /^(?:\\[A-Za-z]+|\\.|[^\\{}~'])$/u.test(patch.insert) || /^[{ ]/u.test(patch.insert)) {
     return typed;
@@ -110,8 +112,7 @@ function braceWaitingArgument(view: EditView, at: number, typed: EditOutcome): E
   if (!view.tree.diagnostics.some((diagnostic) => diagnostic.code === "missing-argument" && diagnostic.span.from === at && diagnostic.span.to === at)) {
     return typed;
   }
-  const shift = (offset: number | undefined) => (offset == null ? undefined : offset + 1);
-  return { ...typed, patches: [{ from: at, to: at, insert: `{${patch.insert}}` }], caret: typed.caret + 1, placeholder: shift(typed.placeholder) };
+  return { ...typed, patches: [{ from: at, to: at, insert: `{${patch.insert}}` }], caret: typed.caret + 1, ...(typed.placeholder === undefined ? {} : { placeholder: typed.placeholder + 1 }) };
 }
 
 /**
@@ -121,34 +122,34 @@ function braceWaitingArgument(view: EditView, at: number, typed: EditOutcome): E
  */
 function newRowFor(view: EditView, typed: EditOutcome, at: number, end: number): EditOutcome {
   const rest = view.tree.text.slice(at, end);
-  if (typed.kind !== "patch" || typed.patches.length !== 1 || typed.patches[0].from !== at || typed.patches[0].to !== at ||
+  if (typed.kind !== "patch" || typed.patches.length !== 1 || requireArrayValue(typed.patches, 0).from !== at || requireArrayValue(typed.patches, 0).to !== at ||
     !/\S/u.test(rest) || /^\s*\\\\/u.test(rest)) {
     return typed;
   }
-  return { ...typed, patches: [{ ...typed.patches[0], insert: `${typed.patches[0].insert} \\\\ ` }] };
+  return { ...typed, patches: [{ ...requireArrayValue(typed.patches, 0), insert: `${requireArrayValue(typed.patches, 0).insert} \\\\ ` }] };
 }
 
 /** Whether the caret is in a cell before its `\multicolumn`, with only spaces before. */
 export function beforeMulticolumn(view: EditView, caret: Position): boolean {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   if (slot.role !== "cell") {
     return false;
   }
-  const spaces = (child: NodeId) => tree.nodes[child].kind === "space" || view.role(child) === "invisible";
+  const spaces = (child: NodeId) => editNodeAt(tree.nodes, child).kind === "space" || view.role(child) === "invisible";
   const next = slot.children.slice(caret.index).find((child) => !spaces(child));
-  return next != null && tree.nodes[next].command === "multicolumn" && slot.children.slice(0, caret.index).every(spaces);
+  return next != null && editNodeAt(tree.nodes, next).command === "multicolumn" && slot.children.slice(0, caret.index).every(spaces);
 }
 
 /** Whether the caret is right after an atom with a superscript (`x^2‸`). */
 export function afterSuperscript(view: EditView, caret: Position): boolean {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   let at = caret.index;
-  while (at > 0 && view.role(slot.children[at - 1]) === "invisible") {
+  while (at > 0 && view.role(requireArrayValue(slot.children, at - 1)) === "invisible") {
     at -= 1;
   }
-  const previous = at > 0 ? tree.nodes[slot.children[at - 1]] : null;
+  const previous = at > 0 ? editNodeAt(tree.nodes, requireArrayValue(slot.children, at - 1)) : null;
   return previous?.kind === "scripted" && presentSlots(tree, previous.id).some((candidate) => candidate.role === "sup");
 }
 
@@ -240,7 +241,7 @@ function terminated(view: EditView, at: number, char: string, mode: EditMode): s
 
 export function skipSpacesBack(text: string, at: number): number {
   let end = at;
-  while (end > 0 && /\s/u.test(text[end - 1])) {
+  while (end > 0 && /\s/u.test(text.charAt(end - 1))) {
     end -= 1;
   }
   return end;
@@ -249,7 +250,7 @@ export function skipSpacesBack(text: string, at: number): number {
 /** Whether the source before an offset ends with a control word (`\alpha`, not the text after `\\`). */
 export function endsWithControlWord(text: string, at: number): boolean {
   let start = at;
-  while (start > 0 && /[A-Za-z@]/u.test(text[start - 1])) {
+  while (start > 0 && /[A-Za-z@]/u.test(text.charAt(start - 1))) {
     start -= 1;
   }
   if (start === at) {
@@ -264,7 +265,7 @@ export function endsWithControlWord(text: string, at: number): boolean {
 
 /** Whether a slot is an alignment cell, where `&` separates cells. */
 function inAlignmentCell(view: EditView, slot: SlotId): boolean {
-  return view.tree.slots[slot].role === "cell";
+  return editSlotAt(view.tree.slots, slot).role === "cell";
 }
 
 /**
@@ -275,7 +276,7 @@ function inAlignmentCell(view: EditView, slot: SlotId): boolean {
 export function optionalArgumentAhead(view: EditView, at: number): boolean {
   const { tree } = view;
   let end = at;
-  while (end > 0 && /\s/u.test(tree.text[end - 1])) {
+  while (end > 0 && /\s/u.test(tree.text.charAt(end - 1))) {
     end -= 1;
   }
   // `\begin{figure}[`: environments read a following `[` as their options;
@@ -286,7 +287,7 @@ export function optionalArgumentAhead(view: EditView, at: number): boolean {
   }
   return tree.nodes.some((node) => {
     if (node.kind === "item") {
-      const label = node.slots.map((slot) => tree.slots[slot]).find((slot) => slot.role === "label");
+      const label = node.slots.map((slot) => editSlotAt(tree.slots, slot)).find((slot) => slot.role === "label");
       return label?.presence === "absent" && node.delimiters.some((span) => span.to === end);
     }
     return node.kind === "break" && node.span.to === end && /^\\\\\*?$/u.test(tree.text.slice(node.span.from, node.span.to));
@@ -301,13 +302,13 @@ export function optionalArgumentAhead(view: EditView, at: number): boolean {
  */
 function closeSlot(view: EditView, caret: Position): EditOutcome {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   const rest = slot.children.slice(caret.index);
   if (rest.some((child) => view.role(child) !== "invisible")) {
     return { kind: "none" };
   }
   const outer = slotOuterSpan(tree, slot.id);
-  const owner = tree.nodes[slot.node];
+  const owner = editNodeAt(tree.nodes, slot.node);
   const braced = slot.braced || (owner.kind === "group" && tree.text[outer.to - 1] === "}") || tree.text[slot.contentSpan.to] === "}";
   if (!braced || owner.parent == null || !isCaretSlot(tree, owner.parent)) {
     return { kind: "none" };
@@ -351,9 +352,9 @@ function closeOverlay(view: EditView, at: number): EditOutcome | null {
 export function insideOptional(view: EditView, slot: SlotId): boolean {
   const { tree } = view;
   for (let current: SlotId | null = slot; current != null;) {
-    const record: EditSlot = tree.slots[current];
+    const record: EditSlot = editSlotAt(tree.slots, current);
     const closer = tree.text[record.contentSpan.to];
-    const owner: EditNode = tree.nodes[record.node];
+    const owner: EditNode = editNodeAt(tree.nodes, record.node);
     if (closer === "]" && owner.delimiters.some((span) => span.from === record.contentSpan.to)) {
       return true;
     }
@@ -387,7 +388,7 @@ function closeOptional(view: EditView, at: number): EditOutcome | null {
       continue;
     }
     const value = node.values.find((candidate) => candidate.span.to === at + 1);
-    const slot = node.slots.map((id) => tree.slots[id]).find((candidate) => candidate.contentSpan.to === at && candidate.presence === "present");
+    const slot = node.slots.map((id) => editSlotAt(tree.slots, id)).find((candidate) => candidate.contentSpan.to === at && candidate.presence === "present");
     if (!value && !slot) {
       continue;
     }
@@ -408,11 +409,11 @@ function stepOverDollar(view: EditView, caret: Position): EditOutcome {
   let slot = caret.slot;
   let index = caret.index;
   for (;;) {
-    const record = tree.slots[slot];
+    const record = editSlotAt(tree.slots, slot);
     if (record.children.slice(index).some((child) => view.role(child) !== "invisible")) {
       return { kind: "none" };
     }
-    const owner = tree.nodes[record.node];
+    const owner = editNodeAt(tree.nodes, record.node);
     if (owner.parent == null) {
       return { kind: "none" };
     }
@@ -451,7 +452,7 @@ export function placeholderAt(view: EditView, open: number, at: number): Placeho
     }
   }
   const group = tree.nodes.find((node) => node.kind === "group" && node.span.from === open && node.span.to === open + 2);
-  const parent = group?.parent == null ? null : tree.slots[group.parent];
+  const parent = group?.parent == null ? null : editSlotAt(tree.slots, group.parent);
   if (group && parent && isDollarFormula(view, parent.node)) {
     return { open, kind: "formula", slot: null, formula: parent.node };
   }
@@ -490,9 +491,9 @@ export function abandonPlaceholder(view: EditView, placeholder: Placeholder): Ed
   const { tree } = view;
   let span;
   if (placeholder.formula != null) {
-    span = tree.nodes[placeholder.formula].span;
+    span = editNodeAt(tree.nodes, placeholder.formula).span;
   } else {
-    const role = tree.slots[placeholder.slot!].role;
+    const role = editSlotAt(tree.slots, placeholder.slot!).role;
     if (role !== "sup" && role !== "sub") {
       return null;
     }

@@ -55,13 +55,13 @@ export function renderTikzToSvg(source: string, opts: RenderTikzOptions = {}): R
   const svgOptions = { ...opts.svg, ...opts.svgOptionsFromParse?.(parseResult) };
   const textScope = opts.evaluate?.textEngine?.createRenderScope?.();
   const svgScope = svgOptions.textEngine === opts.evaluate?.textEngine ? textScope : svgOptions.textEngine?.createRenderScope?.();
+  const graphicsResolver = opts.graphicsResolver ?? opts.evaluate?.graphicsResolver;
   const semanticResult = runTextRenderOperation(textScope, () => (opts.semanticEvaluator ?? evaluateTikzFigure)(
     parseResult.figure,
     parseResult.source,
     {
       ...opts.evaluate,
-      graphicsResolver:
-        opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
+      ...(graphicsResolver === undefined ? {} : { graphicsResolver }),
     }
   ));
   const svgResult = runTextRenderOperation(svgScope, () => emitSvg(semanticResult.scene, svgOptions));
@@ -89,26 +89,28 @@ export async function renderTikzToSvgAsync(source: string, opts: RenderTikzOptio
     textEngine = await createTexNodeTextEngine();
   }
 
+  const optionalNodeTextValidator2 = opts.parse?.nodeTextValidator ??
+      (hasExplicitTextEngine ? createRenderNodeTextValidator(source, textEngine) : undefined);
   const parseOpts: ParseTikzOptions = {
     ...opts.parse,
     includeContextDefinitions: opts.parse?.includeContextDefinitions ?? true,
-    nodeTextValidator:
-      opts.parse?.nodeTextValidator ??
-      (hasExplicitTextEngine ? createRenderNodeTextValidator(source, textEngine) : undefined)
+    ...(optionalNodeTextValidator2 === undefined ? {} : { nodeTextValidator: optionalNodeTextValidator2 })
   };
 
+  const optionalTextEngine3 = opts.evaluate?.textEngine ?? textEngine;
+  const optionalGraphicsResolver4 = opts.graphicsResolver ?? opts.evaluate?.graphicsResolver;
   const evaluateOpts: EvaluateOptions = {
     ...opts.evaluate,
-    textEngine: opts.evaluate?.textEngine ?? textEngine,
-    graphicsResolver:
-      opts.graphicsResolver ?? opts.evaluate?.graphicsResolver,
+    ...(optionalTextEngine3 === undefined ? {} : { textEngine: optionalTextEngine3 }),
+    ...(optionalGraphicsResolver4 === undefined ? {} : { graphicsResolver: optionalGraphicsResolver4 }),
   };
 
   const parseResult = parseTikz(source, parseOpts);
   const outputOptions = { ...opts.svg, ...opts.svgOptionsFromParse?.(parseResult) };
+  const optionalTextEngine5 = outputOptions.textEngine ?? textEngine;
   const svgOpts: EmitSvgOptions = {
     ...outputOptions,
-    textEngine: outputOptions.textEngine ?? textEngine
+    ...(optionalTextEngine5 === undefined ? {} : { textEngine: optionalTextEngine5 })
   };
   const textScope = evaluateOpts.textEngine?.createRenderScope?.();
   const svgScope = svgOpts.textEngine === evaluateOpts.textEngine ? textScope : svgOpts.textEngine?.createRenderScope?.();

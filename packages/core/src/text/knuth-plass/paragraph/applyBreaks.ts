@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import type {
   BreakDecision,
   GreedyLine,
@@ -198,7 +199,7 @@ function applyWrappedTextGapWidths(
       width: widthEm,
       stretch: gap?.stretchEm ?? 0,
       shrink: gap?.shrinkEm ?? 0,
-      spaceFactor: gap?.spaceFactor,
+      ...(gap?.spaceFactor !== undefined ? { spaceFactor: gap.spaceFactor } : {}),
     };
     const wrapper = (run.breakRef as { wrapper?: AnyWrapper | null }).wrapper;
     if (!wrapper) {
@@ -360,7 +361,7 @@ function tokenizeForMutation(text: string): TextMutationToken[] {
 function wordTokenIndices(tokens: TextMutationToken[]): number[] {
   const indices: number[] = [];
   for (let i = 0; i < tokens.length; i++) {
-    if (tokens[i].kind === 'word') {
+    if (requireArrayValue(tokens, i).kind === 'word') {
       indices.push(i);
     }
   }
@@ -415,15 +416,15 @@ function mutateWrapperText(
         return false;
       }
 
-      const tokenIndex = wordIndices[wordIndex];
-      const word = tokens[tokenIndex].text;
+      const tokenIndex = requireArrayValue(wordIndices, wordIndex);
+      const word = requireArrayValue(tokens, tokenIndex).text;
       if (consumed > word.length) {
         errors.push(
           `Mutation failed: line-leading trim length ${consumed} exceeds word '${word}'.`
         );
         return false;
       }
-      tokens[tokenIndex].text = word.slice(consumed);
+      requireArrayValue(tokens, tokenIndex).text = word.slice(consumed);
     }
 
     for (const [wordIndex, splitsAscending] of wordSplits.entries()) {
@@ -434,8 +435,8 @@ function mutateWrapperText(
         return false;
       }
 
-      const tokenIndex = wordIndices[wordIndex];
-      let word = tokens[tokenIndex].text;
+      const tokenIndex = requireArrayValue(wordIndices, wordIndex);
+      let word = requireArrayValue(tokens, tokenIndex).text;
       const splitsDescending = [...splitsAscending].sort(
         (a, b) => b.splitOffset - a.splitOffset
       );
@@ -451,7 +452,7 @@ function mutateWrapperText(
         word = `${word.slice(0, split)}${insertion}${word.slice(split)}`;
       }
 
-      tokens[tokenIndex].text = word;
+      requireArrayValue(tokens, tokenIndex).text = word;
     }
 
     child.node.setText(
@@ -679,7 +680,7 @@ export function applyBreaks(
         runIndex: breakDecision.runIndex,
         sourceOffset: breakDecision.sourceOffset,
         visibleHyphen: false,
-        lineLeading: breakDecision.lineLeading,
+        ...(breakDecision.lineLeading !== undefined ? { lineLeading: breakDecision.lineLeading } : {}),
       });
       continue;
     }
@@ -733,7 +734,7 @@ export function applyBreaks(
       runIndex: run.runIndex,
       sourceOffset: run.sourceEnd,
       visibleHyphen: false,
-      lineLeading: run.breakRef.lineLeading,
+      ...(run.breakRef.lineLeading !== undefined ? { lineLeading: run.breakRef.lineLeading } : {}),
     });
   }
 
@@ -791,7 +792,7 @@ export function applyBreaks(
         runIndex: action.runIndex,
         sourceOffset: action.sourceOffset,
         visibleHyphen: action.visibleHyphen,
-        splitOffset: action.splitOffset,
+        ...(action.splitOffset !== undefined ? { splitOffset: action.splitOffset } : {}),
       });
     }
   }

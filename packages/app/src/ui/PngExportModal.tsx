@@ -182,7 +182,7 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
       size="lg"
       labelledBy="png-export-title"
       dataTestId="png-export-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Export PNG"

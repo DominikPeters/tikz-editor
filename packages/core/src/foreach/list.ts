@@ -29,6 +29,9 @@ export function expandForeachList(listRaw: string, opts: ForeachListExpansionOpt
   const expanded: string[] = [];
   for (let index = 0; index < rawEntries.length; index += 1) {
     const entry = rawEntries[index];
+    if (entry === undefined) {
+      throw new Error(`Missing foreach list entry at index ${index}`);
+    }
     if (!entry.includes("...")) {
       expanded.push(entry);
       continue;
@@ -60,12 +63,12 @@ function expandDotsEntry(
   nextRaw: string,
   opts: ForeachListExpansionOptions
 ): { inserted: boolean; consumeNext: boolean } {
-  if (expandedSoFar.length === 0) {
+  const previousRaw = expandedSoFar.at(-1);
+  if (previousRaw === undefined) {
     return { inserted: false, consumeNext: false };
   }
 
   const { prefix, suffix } = splitContext(dotsEntry);
-  const previousRaw = expandedSoFar[expandedSoFar.length - 1];
   const previous = extractDotValue(previousRaw, prefix, suffix, opts.parseExpressions);
   if (!previous) {
     return { inserted: false, consumeNext: false };
@@ -79,7 +82,7 @@ function expandDotsEntry(
   let step: number;
   if (expandedSoFar.length >= 2) {
     const prevPrevRaw = expandedSoFar[expandedSoFar.length - 2];
-    const prevPrev = extractDotValue(prevPrevRaw, prefix, suffix, opts.parseExpressions);
+    const prevPrev = prevPrevRaw !== undefined ? extractDotValue(prevPrevRaw, prefix, suffix, opts.parseExpressions) : null;
     if (prevPrev?.kind === previous.kind) {
       step = previous.value - prevPrev.value;
     } else {

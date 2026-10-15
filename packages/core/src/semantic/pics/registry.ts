@@ -118,10 +118,11 @@ export function resolvePicCode(item: PicOperationItem, registry: PicDefinitionRe
       const substitutedCode = code.parameterized && entry.kind === "kv"
         ? substitutePicParameter(code.codeRaw, stripWrappingBraces(entry.valueRaw.trim()))
         : code.codeRaw;
+      const optionalCodeSpan1 = substitutedCode === code.codeRaw ? code.codeSpan : undefined;
       codes.set(code.codeLayer, {
         kind: "found", ...code,
         codeRaw: substitutedCode,
-        codeSpan: substitutedCode === code.codeRaw ? code.codeSpan : undefined,
+        ...(optionalCodeSpan1 === undefined ? {} : { codeSpan: optionalCodeSpan1 }),
         source: "definition",
         unresolvedParameters: containsParameterPlaceholder(substitutedCode)
       });
@@ -176,10 +177,11 @@ function makePicCodeBody(
   codeLayer: PicCodeLayer
 ): PicCodeBody {
   const code = normalizePicCodeRawAndSpan(rawCode, codeSpan);
+  const optionalSourceSpan2 = code.span ?? sourceRef.sourceSpan;
   return {
     codeRaw: code.raw,
-    codeSpan: code.span,
-    sourceRef: { ...cloneStyleSourceRef(sourceRef)!, sourceSpan: code.span ?? sourceRef.sourceSpan },
+    ...(code.span === undefined ? {} : { codeSpan: code.span }),
+    sourceRef: { ...cloneStyleSourceRef(sourceRef)!, ...(optionalSourceSpan2 === undefined ? {} : { sourceSpan: optionalSourceSpan2 }) },
     parameterized: containsParameterPlaceholder(code.raw),
     codeLayer
   };
@@ -247,10 +249,10 @@ function normalizePicCodeRawAndSpan(rawCode: string, span?: Span | null): { raw:
     };
   }
   let trimmedEnd = rawCode.length;
-  while (trimmedEnd > trimmedStart && /\s/u.test(rawCode[trimmedEnd - 1] ?? "")) {
+  while (trimmedEnd > trimmedStart && /\s/u.test(rawCode.charAt(trimmedEnd - 1))) {
     trimmedEnd -= 1;
   }
-  if (rawCode[trimmedStart] === "{" && rawCode[trimmedEnd - 1] === "}") {
+  if (rawCode.charAt(trimmedStart) === "{" && rawCode.charAt(trimmedEnd - 1) === "}") {
     return {
       raw,
       span: {

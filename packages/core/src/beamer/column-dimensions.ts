@@ -21,7 +21,7 @@ export function resolveBeamerColumnPositions(params: {
   rightMargin: number;
 }): number[] {
   const keys = new Map((params.options ?? "").split(",").map(option => {
-    const [key, ...value] = option.split("=");
+    const [key = "", ...value] = option.split("=");
     return [key.trim(), value.join("=").trim()] as const;
   }));
   const totalwidth = keys.get("totalwidth");

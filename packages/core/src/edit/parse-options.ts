@@ -30,12 +30,12 @@ export function parseTikzForEdit(source: string, options: EditParseOptions = {})
   }
   if (options.analysisSession) {
     return options.analysisSession.ensure(source, {
-      activeFigureId: options.activeFigureId
+      ...(options.activeFigureId === undefined ? {} : { activeFigureId: options.activeFigureId })
     }).parseResult;
   }
   return parseTikz(source, {
     recover: true,
-    activeFigureId: options.activeFigureId,
+    ...(options.activeFigureId === undefined ? {} : { activeFigureId: options.activeFigureId }),
     // Edit queries resolve scene/source ids produced by the main compute path,
     // so they must preserve the same statement numbering.
     includeContextDefinitions: true

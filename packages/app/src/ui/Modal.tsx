@@ -41,11 +41,11 @@ type PanelProps = CommonModalProps & {
 type ModalProps = SheetProps | PanelProps;
 
 const SHEET_SIZE_CLASS: Record<SheetSize, string> = {
-  sm: css.sizeSm,
-  md: css.sizeMd,
-  lg: css.sizeLg,
-  xl: css.sizeXl,
-  auto: css.sizeAuto
+  sm: css.sizeSm ?? "",
+  md: css.sizeMd ?? "",
+  lg: css.sizeLg ?? "",
+  xl: css.sizeXl ?? "",
+  auto: css.sizeAuto ?? ""
 };
 
 export function Modal(props: ModalProps) {

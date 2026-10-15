@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -67,7 +68,7 @@ export function makeCircleElement(
     runtimeId: `scene-circle:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span },
-    adornment,
+    ...(adornment === undefined ? {} : { adornment: adornment }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -101,21 +102,21 @@ export function makeTextElement(
     runtimeId: `scene-text:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span },
-    adornment,
-    textSourceSpan,
-    textHasFixedWidth,
+    ...(adornment === undefined ? {} : { adornment: adornment }),
+    ...(textSourceSpan === undefined ? {} : { textSourceSpan: textSourceSpan }),
+    ...(textHasFixedWidth === undefined ? {} : { textHasFixedWidth: textHasFixedWidth }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
     position,
     text,
-    textBlockWidth,
-    textBlockHeight,
-    nodeVisualWidth,
-    nodeVisualHeight,
+    ...(textBlockWidth === undefined ? {} : { textBlockWidth: textBlockWidth }),
+    ...(textBlockHeight === undefined ? {} : { textBlockHeight: textBlockHeight }),
+    ...(nodeVisualWidth === undefined ? {} : { nodeVisualWidth: nodeVisualWidth }),
+    ...(nodeVisualHeight === undefined ? {} : { nodeVisualHeight: nodeVisualHeight }),
     ...(nodeVisualCenter ? { nodeVisualCenter } : {}),
-    textRenderInfo,
-    rotation
+    ...(textRenderInfo === undefined ? {} : { textRenderInfo: textRenderInfo }),
+    ...(rotation === undefined ? {} : { rotation: rotation })
   };
 }
 
@@ -246,7 +247,7 @@ export function makeNodeBoxElement(
     runtimeId: `scene-node-box:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span },
-    adornment,
+    ...(adornment === undefined ? {} : { adornment: adornment }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -271,7 +272,7 @@ export function makeNodeEllipseElement(
     runtimeId: `scene-node-ellipse:${sourceId}:${itemId}`,
     layer: MAIN_SCENE_LAYER,
     sourceRef: { sourceId, sourceSpan: span },
-    adornment,
+    ...(adornment === undefined ? {} : { adornment: adornment }),
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
     clipChain: [],
@@ -1053,7 +1054,7 @@ function makeNodePolygonElement(
   }
   const commands: ScenePathCommand[] = [{ kind: "M", to: first }];
   for (let index = 1; index < corners.length; index += 1) {
-    commands.push({ kind: "L", to: corners[index] });
+    commands.push({ kind: "L", to: requireArrayValue(corners, index) });
   }
   commands.push({ kind: "Z" });
   return {
@@ -1109,7 +1110,7 @@ function appendPolygonSubpaths(commands: ScenePathCommand[], polygons: WorldPoin
     }
     commands.push({ kind: "M", to: first });
     for (let index = 1; index < polygon.length; index += 1) {
-      commands.push({ kind: "L", to: polygon[index] });
+      commands.push({ kind: "L", to: requireArrayValue(polygon, index) });
     }
     commands.push({ kind: "Z" });
   }

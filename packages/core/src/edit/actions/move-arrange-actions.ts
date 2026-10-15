@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { CoordinateItem, NodeItem, PathStatement, Span, Statement } from "../../ast/types.js";
@@ -61,7 +62,9 @@ export function applyMoveElementsAction(
   if (baseline) {
     source = baseline.source;
     editHandles = baseline.editHandles;
-    parseOptions = { ...parseOptions, sourceFingerprint: baseline.sourceFingerprint };
+    parseOptions = { ...parseOptions };
+    if (baseline.sourceFingerprint === undefined) delete parseOptions.sourceFingerprint;
+    else parseOptions.sourceFingerprint = baseline.sourceFingerprint;
   }
   const requestedIds = normalizeElementIds(elementIds);
   if (requestedIds.length === 0) {
@@ -431,7 +434,7 @@ function applyMoveMatrixElementsWithPlacementRewrite(
   if (patches.length === 0) {
     return {
       kind: "unsupported",
-      reason: failureReasons[0]
+      reason: requireArrayValue(failureReasons, 0)
     };
   }
 
@@ -480,7 +483,7 @@ function applyMoveScopeElementsWithTransformRewrite(
   if (patches.length === 0) {
     return {
       kind: "unsupported",
-      reason: failureReasons[0]
+      reason: requireArrayValue(failureReasons, 0)
     };
   }
 
@@ -544,7 +547,7 @@ export function planOrderedScopeTranslation(
     ? [{ entry, index, key: normalizeOptionKey(entry.key).replace(/^\/tikz\//, "") }] : []);
   const shifts = keyed.filter(({ key }) => key === "shift");
   if (shifts.length === 1) {
-    const shift = shifts[0];
+    const shift = requireArrayValue(shifts, 0);
     const old = parseRotateAroundPivotRaw(shift.entry.valueRaw);
     const prefix = resolveFrame(entries.slice(0, shift.index));
     const localDelta = prefix ? applyInverseLinear(prefix, delta) : null;
@@ -644,7 +647,7 @@ function applyMoveTreeRootElementsWithPlacementRewrite(
   if (patches.length === 0) {
     return {
       kind: "unsupported",
-      reason: failureReasons[0]
+      reason: requireArrayValue(failureReasons, 0)
     };
   }
 
@@ -1036,7 +1039,7 @@ function spansEqual(left: Span, right: Span): boolean {
 }
 
 function buildMatrixInlineAtInsertion(source: string, bodyOpenOffset: number, nextCoordinate: string): string {
-  const needsLeadingSpace = !/\s/u.test(source[bodyOpenOffset - 1]);
+  const needsLeadingSpace = !/\s/u.test(source.charAt(bodyOpenOffset - 1));
   return `${needsLeadingSpace ? " " : ""}at ${nextCoordinate} `;
 }
 
@@ -1063,8 +1066,8 @@ function findPrimaryMatrixNodeItem(statement: PathStatement): NodeItem | null {
 
 function findInlineAtCoordinateItem(statement: PathStatement): CoordinateItem | null {
   for (let index = 0; index < statement.items.length - 1; index += 1) {
-    const item = statement.items[index];
-    const next = statement.items[index + 1];
+    const item = requireArrayValue(statement.items, index);
+    const next = requireArrayValue(statement.items, index + 1);
     if (item.kind === "PathKeyword" && item.keyword === "at" && next.kind === "Coordinate") {
       return next;
     }

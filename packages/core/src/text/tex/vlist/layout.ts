@@ -75,8 +75,7 @@ export function layoutTexVListItems(
 ): { readonly positioned: readonly PositionedTexVListItem[]; readonly cursor: TexVListY } {
   const positioned: PositionedTexVListItem[] = [];
   let cursor = startCursor;
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
     if (!item) {
       continue;
     }
@@ -289,9 +288,9 @@ export function measuredBoxMetricsForVListItem(item: TexVListItem): MeasuredTexV
   }
   if (item.kind === "hbox") {
     return {
-      x: item.x,
+      ...(item.x !== undefined ? { x: item.x } : {}),
       metrics: item.box.metrics,
-      advance: item.advance,
+      ...(item.advance !== undefined ? { advance: item.advance } : {}),
     };
   }
   if (item.kind === "penalty") {
@@ -340,9 +339,7 @@ export function offsetPositionedTexVListItems(
   return items.map((item) => ({
     ...item,
     y: texVListY(roundTexPt(item.y + dy)),
-    children: item.children
-      ? offsetPositionedTexVListItems(item.children, dy)
-      : undefined,
+    ...(item.children ? { children: offsetPositionedTexVListItems(item.children, dy) } : {}),
   }));
 }
 

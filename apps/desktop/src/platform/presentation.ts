@@ -118,7 +118,7 @@ export function createDesktopPresentationApi(): PlatformPresentationApi {
         const child = new WebviewWindow(label, { url: url.pathname + url.search, title: role === "audience" ? "Presentation" : "Presenter View",
           width: role === "audience" ? 1100 : 1180, height: role === "audience" ? 720 : 820, visible: false, focus: false,
           backgroundThrottling: "disabled" as BackgroundThrottlingPolicy,
-          resizable: true, dragDropEnabled: false, backgroundColor: role === "audience" ? "#000000" : undefined });
+          resizable: true, dragDropEnabled: false, ...(role === "audience" ? { backgroundColor: "#000000" } : {}) });
         await waitForCreated(child);
         await invoke("desktop_prepare_presentation_window", { label });
         await child.once("tauri://destroyed", () => {

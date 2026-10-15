@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span, Statement, PathStatement, PathItem, NodeItem, PicOperationItem, ChildOperationItem } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import { parseStatementsFromBodyWithMapping, type ForeachStatementBodyParseResult } from "../foreach/snippet-parse.js";
@@ -244,8 +245,8 @@ export function resolveFigurePropertyTargetFromParseResult(
         id: TIKZPICTURE_GLOBAL_TARGET_ID,
         kind: "figure",
         span: figure.span,
-        options: figure.options,
-        optionsSpan: figure.options?.span,
+        ...(figure.options === undefined ? {} : { options: figure.options }),
+        ...(figure.options?.span === undefined ? {} : { optionsSpan: figure.options?.span }),
         optionsFormat: "bracketed",
         insertOffset
       }
@@ -565,11 +566,12 @@ function resolvePicTemplateTargetFromParseResult(
   const templateNodeTextSpan = resolvePathStatementNodeTextSpan(reparsedBody.parseResult.figure.body, parsed.localTargetId);
   const remappedTemplateNodeTextSpan = templateNodeTextSpan ? reparsedBody.sourceMapper.mapSpan(templateNodeTextSpan) : null;
 
+  const textSpan = remapped.textSpan ?? remappedTemplateNodeTextSpan;
   return {
     ...remapped,
     id: targetId,
     kind: "pic-template",
-    textSpan: remapped.textSpan ?? remappedTemplateNodeTextSpan ?? undefined,
+    ...(textSpan == null ? {} : { textSpan }),
     picCodeSpan: parsed.codeSpan,
     picLocalTargetId: parsed.localTargetId
   };
@@ -598,7 +600,8 @@ function parseForeachTemplateTargetId(
   if (loopPath.length === 0) {
     return null;
   }
-  const [loopId, ...nestedLoopLocalIds] = loopPath;
+  const loopId = requireArrayValue(loopPath, 0);
+  const nestedLoopLocalIds = loopPath.slice(1);
   return { loopId, nestedLoopLocalIds, localTargetId };
 }
 
@@ -637,11 +640,12 @@ function resolveForeachTemplateTargetFromParseResult(
   const templateNodeTextSpan = resolvePathStatementNodeTextSpan(reparsedBody.parseResult.figure.body, parsed.localTargetId);
   const remappedTemplateNodeTextSpan = templateNodeTextSpan ? reparsedBody.sourceMapper.mapSpan(templateNodeTextSpan) : null;
 
+  const textSpan = remapped.textSpan ?? remappedTemplateNodeTextSpan;
   return {
     ...remapped,
     id: targetId,
     kind: "foreach-template",
-    textSpan: remapped.textSpan ?? remappedTemplateNodeTextSpan ?? undefined,
+    ...(textSpan == null ? {} : { textSpan }),
     foreachLoopId: parsed.loopId,
     foreachLocalTargetId: parsed.localTargetId
   };
@@ -731,8 +735,8 @@ function findTargetInPathItems(
   ownerSourceId: string,
   context: { statementCommand?: string; statementSpan?: Span } = {}
 ): PropertyTarget | null {
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
+
     if (!item) {
       continue;
     }
@@ -847,8 +851,8 @@ function makePathStatementTarget(statement: PathStatement, source: string): Prop
     kind: "path-statement",
     pathCommand: statement.command,
     span: statement.span,
-    options,
-    optionsSpan,
+    ...(options === undefined ? {} : { options }),
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset
   };
 }
@@ -878,13 +882,14 @@ function makeMatrixStatementTarget(statement: PathStatement, source: string): Pr
   }
   const insertOffset = resolveInsertOffset(source, statement.span, /\\?(?:node|matrix)\b/);
   const bodyOpenOffset = resolveMatrixBodyOpenOffset(source, matrixNode.textSpan);
+  const options = normalizeMatrixStatementOptions(matrixNode.options);
   return {
     id: statement.id,
     kind: "matrix-statement",
     pathCommand: statement.command,
     span: statement.span,
-    options: normalizeMatrixStatementOptions(matrixNode.options),
-    optionsSpan: matrixNode.options?.span,
+    ...(options === undefined ? {} : { options }),
+    ...(matrixNode.options?.span === undefined ? {} : { optionsSpan: matrixNode.options?.span }),
     optionsFormat: "bracketed",
     insertOffset,
     matrixSourceId: statement.id,
@@ -892,7 +897,7 @@ function makeMatrixStatementTarget(statement: PathStatement, source: string): Pr
     matrixTextMode: matrixMode.textMode,
     matrixOfNodes: matrixMode.matrixOfNodes,
     matrixTextSpan: matrixNode.textSpan,
-    matrixBodyOpenOffset: bodyOpenOffset
+    ...(bodyOpenOffset === undefined ? {} : { matrixBodyOpenOffset: bodyOpenOffset })
   };
 }
 
@@ -960,11 +965,11 @@ function resolveMatrixCellTargetInStatements(
     id: elementId,
     kind: "matrix-cell",
     span: resolvedCell.cellSpan,
-    options: matrixCellOptions,
-    optionsSpan: resolvedCell.optionSpan,
+    ...(matrixCellOptions === undefined ? {} : { options: matrixCellOptions }),
+    ...(resolvedCell.optionSpan === undefined ? {} : { optionsSpan: resolvedCell.optionSpan }),
     optionsFormat: "bracketed",
     textSpan: resolvedCell.textSpan,
-    optionSpan: resolvedCell.optionSpan,
+    ...(resolvedCell.optionSpan === undefined ? {} : { optionSpan: resolvedCell.optionSpan }),
     insertOffset,
     matrixSourceId: ref.statement.id,
     matrixKind: matrixMode.matrixKind,
@@ -1039,19 +1044,22 @@ function remapPropertyTargetToOriginalSource(
   if (target.options && !options) {
     return null;
   }
-  remapped.options = options ?? undefined;
+  if (options == null) delete remapped.options;
+  else remapped.options = options;
 
   const treeChildOptions = remapOptionList(target.treeChildOptions, mapper);
   if (target.treeChildOptions && !treeChildOptions) {
     return null;
   }
-  remapped.treeChildOptions = treeChildOptions ?? undefined;
+  if (treeChildOptions == null) delete remapped.treeChildOptions;
+  else remapped.treeChildOptions = treeChildOptions;
 
   const treeNodeOptions = remapOptionList(target.treeNodeOptions, mapper);
   if (target.treeNodeOptions && !treeNodeOptions) {
     return null;
   }
-  remapped.treeNodeOptions = treeNodeOptions ?? undefined;
+  if (treeNodeOptions == null) delete remapped.treeNodeOptions;
+  else remapped.treeNodeOptions = treeNodeOptions;
 
   const spanKeys: Array<keyof PropertyTarget> = [
     "optionsSpan",
@@ -1151,7 +1159,7 @@ function remapOptionEntry(
     return {
       ...entry,
       span,
-      keySpan
+      ...(keySpan === undefined ? {} : { keySpan })
     };
   }
 
@@ -1166,8 +1174,8 @@ function remapOptionEntry(
   return {
     ...entry,
     span,
-    keySpan,
-    valueSpan
+    ...(keySpan === undefined ? {} : { keySpan }),
+    ...(valueSpan === undefined ? {} : { valueSpan })
   };
 }
 
@@ -1220,29 +1228,30 @@ function resolveTreeChildTargetInStatements(
   const nodeTextSpan = nodeSpanInfo?.textSpan;
   const treeChildInsertOffset = resolveInsertOffset(source, child.span, /\bchild\b/);
   const treeNodeInsertOffset = nodeSpanInfo?.insertOffset;
+  const treeChildOptionsSpan = child.optionsSpan ?? child.options?.span;
 
   return {
     id: elementId,
     kind: "tree-child",
     span: child.span,
-    options: nodeOptions,
-    optionsSpan: nodeOptionsSpan,
-    optionSpan: nodeOptionsSpan,
+    ...(nodeOptions === undefined ? {} : { options: nodeOptions }),
+    ...(nodeOptionsSpan === undefined ? {} : { optionsSpan: nodeOptionsSpan }),
+    ...(nodeOptionsSpan === undefined ? {} : { optionSpan: nodeOptionsSpan }),
     optionsFormat: "bracketed",
-    textSpan: nodeTextSpan,
+    ...(nodeTextSpan === undefined ? {} : { textSpan: nodeTextSpan }),
     insertOffset: treeNodeInsertOffset ?? treeChildInsertOffset,
     treeRootSourceId: parsedId.treeRootSourceId,
     treeChildSourceId: parsedId.treeChildSourceId,
     childOperationId: child.id,
-    treeChildOptions: child.options,
-    treeChildOptionsSpan: child.optionsSpan ?? child.options?.span,
-    treeChildBodySpan: child.bodySpan,
+    ...(child.options === undefined ? {} : { treeChildOptions: child.options }),
+    ...(treeChildOptionsSpan === undefined ? {} : { treeChildOptionsSpan }),
+    ...(child.bodySpan === undefined ? {} : { treeChildBodySpan: child.bodySpan }),
     treeChildInsertOffset,
-    treeNodeId: node?.id,
-    treeNodeTextSpan: nodeTextSpan,
-    treeNodeOptions: nodeOptions,
-    treeNodeOptionsSpan: nodeOptionsSpan,
-    treeNodeInsertOffset,
+    ...(node?.id === undefined ? {} : { treeNodeId: node?.id }),
+    ...(nodeTextSpan === undefined ? {} : { treeNodeTextSpan: nodeTextSpan }),
+    ...(nodeOptions === undefined ? {} : { treeNodeOptions: nodeOptions }),
+    ...(nodeOptionsSpan === undefined ? {} : { treeNodeOptionsSpan: nodeOptionsSpan }),
+    ...(treeNodeInsertOffset === undefined ? {} : { treeNodeInsertOffset }),
     treeChildForeach: (child.foreachClauses?.length ?? 0) > 0,
     treeChildNodeSpanFallbackUsed: nodeSpanInfo?.fallbackUsed ?? false
   };
@@ -1368,12 +1377,14 @@ function absolutizeChildOperationSpans(
     }
     return relativeSpan;
   };
-  return {
-    ...child,
-    span: absolutize(child.span, child.raw)!,
-    optionsSpan: absolutize(child.optionsSpan, child.options?.raw ?? ""),
-    bodySpan: absolutize(child.bodySpan, child.bodyRaw)
-  };
+  const mapped = { ...child, span: absolutize(child.span, child.raw)! };
+  const optionsSpan = absolutize(child.optionsSpan, child.options?.raw ?? "");
+  const bodySpan = absolutize(child.bodySpan, child.bodyRaw);
+  if (optionsSpan === undefined) delete mapped.optionsSpan;
+  else mapped.optionsSpan = optionsSpan;
+  if (bodySpan === undefined) delete mapped.bodySpan;
+  else mapped.bodySpan = bodySpan;
+  return mapped;
 }
 
 function resolveFirstEditableTreeNode(items: PathItem[]): NodeItem | null {
@@ -1470,8 +1481,8 @@ function resolveTreeChildNodeSpanInfo(
   }
 
   return {
-    optionsSpan,
-    textSpan,
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
+    ...(textSpan === undefined ? {} : { textSpan }),
     insertOffset,
     fallbackUsed
   };
@@ -1482,8 +1493,8 @@ function makeScopeTarget(statement: Extract<Statement, { kind: "Scope" }>, sourc
     id: statement.id,
     kind: "style-source",
     span: statement.span,
-    options: statement.options,
-    optionsSpan: statement.options?.span,
+    ...(statement.options === undefined ? {} : { options: statement.options }),
+    ...(statement.options?.span === undefined ? {} : { optionsSpan: statement.options?.span }),
     optionsFormat: "bracketed",
     insertOffset: resolveInsertOffset(source, statement.span, /\\begin\{scope\*?\}/)
   };
@@ -1495,12 +1506,13 @@ function makeNodeTarget(
   ownerSourceId: string,
   context: { statementCommand?: string; statementSpan?: Span } = {}
 ): PropertyTarget {
+  const optionsSpan = node.optionsSpan ?? node.options?.span;
   return {
     id: node.id,
     kind: "node-item",
     span: node.span,
-    options: node.options,
-    optionsSpan: node.optionsSpan ?? node.options?.span,
+    ...(node.options === undefined ? {} : { options: node.options }),
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset: resolveNodeInsertOffset(source, node, context),
     ownerSourceId
   };
@@ -1537,8 +1549,8 @@ function makeNodeAdornmentTarget(
     return null;
   }
 
-  for (let index = 0; index < plan.adornments.length; index += 1) {
-    const adornment = plan.adornments[index];
+  for (const [index, adornment] of plan.adornments.entries()) {
+
     if (!adornment) {
       continue;
     }
@@ -1547,17 +1559,18 @@ function makeNodeAdornmentTarget(
       continue;
     }
 
+    const options = stripAdornmentInternalStyleOptions(adornment.options);
     return {
       id: elementId,
       kind: "node-adornment",
       span: adornment.span,
-      options: stripAdornmentInternalStyleOptions(adornment.options),
+      ...(options === undefined ? {} : { options }),
       optionsSpan: adornment.valueSpan,
       optionSpan: adornment.span,
       valueSpan: adornment.valueSpan,
       textSpan: adornment.textSpan,
       angleRaw: adornment.angleRaw,
-      angleSpan: adornment.angleSpan,
+      ...(adornment.angleSpan === undefined ? {} : { angleSpan: adornment.angleSpan }),
       distancePt: adornment.distancePt,
       defaultDistancePt: adornment.defaultDistancePt,
       distanceExplicit: adornment.distanceExplicit,
@@ -1576,12 +1589,13 @@ function makeNodeAdornmentTarget(
 function makePathKeywordTarget(item: Extract<PathItem, { kind: "PathKeyword" }>, items: PathItem[], index: number): PropertyTarget {
   const maybeOption = items[index + 1];
   const optionItem = maybeOption?.kind === "PathOption" ? maybeOption : null;
+  const optionsSpan = optionItem?.span ?? optionItem?.options?.span;
   return {
     id: item.id,
     kind: "path-keyword",
     span: item.span,
-    options: optionItem?.options,
-    optionsSpan: optionItem?.span ?? optionItem?.options?.span,
+    ...(optionItem?.options === undefined ? {} : { options: optionItem?.options }),
+    ...(optionsSpan === undefined ? {} : { optionsSpan }),
     insertOffset: item.span.to
   };
 }
@@ -1595,12 +1609,13 @@ function makeToLikeOperationTarget(
   keywordRegex: RegExp,
   source: string
 ): PropertyTarget {
+  const resolvedOptionsSpan = optionsSpan ?? options?.span;
   return {
     id,
     kind,
     span,
-    options,
-    optionsSpan: optionsSpan ?? options?.span,
+    ...(options === undefined ? {} : { options }),
+    ...(resolvedOptionsSpan === undefined ? {} : { optionsSpan: resolvedOptionsSpan }),
     insertOffset: resolveInsertOffset(source, span, keywordRegex)
   };
 }

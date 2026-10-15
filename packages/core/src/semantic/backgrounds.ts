@@ -163,7 +163,7 @@ export function makeEveryOnBackgroundLayerOptionLayer(sourceRef: StyleSourceRef)
     rawOptions: options ? [options] : [],
     sourceRef: {
       sourceId: sourceRef.sourceId,
-      sourceSpan: sourceRef.sourceSpan,
+      ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: sourceRef.sourceSpan }),
       sourceKind: sourceRef.sourceKind,
       label: "every on background layer"
     }
@@ -306,7 +306,7 @@ function resolveBackgroundHookStyle(
     kind: "command",
     sourceRef: {
       sourceId: sourceRef.sourceId,
-      sourceSpan: sourceRef.sourceSpan,
+      ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: sourceRef.sourceSpan }),
       sourceKind: "background-command-default",
       label: "path"
     },
@@ -325,7 +325,7 @@ function resolveBackgroundHookStyle(
         kind: "scope",
         sourceRef: {
           sourceId: sourceRef.sourceId,
-          sourceSpan: sourceRef.sourceSpan,
+          ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: sourceRef.sourceSpan }),
           sourceKind: "background-hook",
           label: styleName
         },

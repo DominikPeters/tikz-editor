@@ -178,8 +178,8 @@ function applyInsertionSyntax(source: string, handle: EditHandle, coordinate: st
 
   if (handle.insertion.kind === "node-inline-at") {
     const offset = handle.sourceRef.sourceSpan.from;
-    const previousChar = offset > 0 ? source[offset - 1] : "";
-    const nextChar = offset < source.length ? source[offset] : "";
+    const previousChar = source.charAt(offset - 1);
+    const nextChar = source.charAt(offset);
     const leading = previousChar.length > 0 && !/\s/.test(previousChar) ? " " : "";
     const trailing = nextChar.length > 0 && !/\s/.test(nextChar) && nextChar !== ";" ? " " : "";
     return `${leading}at ${coordinate}${trailing}`;
@@ -386,6 +386,7 @@ export function rewritePositioningFromContext(
       const absShiftXcm = Math.abs(shiftXcm);
       const absShiftYcm = Math.abs(shiftYcm);
       const expected = POSITIONING_DIRECTION_SIGNS[candidateDirection];
+      if (expected === undefined) throw new RangeError(`Unknown positioning direction ${candidateDirection}`);
 
       if (expected.x === 0 || expected.y === 0) {
         const axial = Math.max(absShiftXcm, absShiftYcm);

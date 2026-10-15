@@ -1859,8 +1859,8 @@ describe("simple TeX paragraph layout", () => {
     expect(lineTexts(result.report)).toEqual(["Alpha", "Beta"]);
     expect(result.report?.lines[0]?.break).toMatchObject({
       kind: "forced",
-      lineLeading: undefined,
     });
+    expect(result.report?.lines[0]?.break).not.toHaveProperty("lineLeading");
   });
 
   it("preserves optional leading on TeX double backslash line breaks", () => {

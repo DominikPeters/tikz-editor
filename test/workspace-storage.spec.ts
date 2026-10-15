@@ -219,10 +219,11 @@ describe("workspace storage migration", () => {
         path: "/tmp/legacy.tex",
         provider: "desktop-fs"
       },
-      diskRevision: { hash: "abc", mtimeMs: undefined, size: undefined },
+      diskRevision: { hash: "abc" },
       lastKnownDiskSource: "\\draw (0,0)--(1,1);",
       externalChangeStatus: "changed"
     });
+    expect(seed?.documents[0]?.diskRevision).toStrictEqual({ hash: "abc" });
   });
 
   it("migrates v3 activeFigureId payloads to activeRootId", () => {

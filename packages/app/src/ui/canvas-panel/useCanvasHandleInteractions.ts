@@ -190,7 +190,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: [handle.sourceRef.sourceId],
-            dependencies: snapshot.semanticResult?.dependencies,
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult?.dependencies } : {}),
             guides: snapGuideInput,
             settings: { ...snapSettingsPatch, gaps: { enabled: false } },
             zoom: canvasTransform.scale,
@@ -205,9 +205,10 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         snapshot.parseResult?.figure.body
       );
 
+      const geometry = prepareEditGeometry();
       setDragState({
         kind: "handle",
-        geometry: prepareEditGeometry(),
+        ...(geometry !== undefined ? { geometry } : {}),
         nodeAnchorTargets,
         matrixCellAnchorHints,
         latestSource: source,
@@ -215,7 +216,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         handleId: handle.id,
         sourceId: handle.sourceRef.sourceId,
         handleKind: handle.kind,
-        handleEditingId: handle.editingId,
+        ...(handle.editingId !== undefined ? { handleEditingId: handle.editingId } : {}),
         cursor: handleCursor,
         lastKnownWorld: { ...handle.world },
         snapContext,
@@ -355,7 +356,7 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: collectSnapExcludedSourceIds([sourceId], scopeOverlay, snapshot.scene.elements),
-            dependencies: snapshot.semanticResult?.dependencies,
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult?.dependencies } : {}),
             guides: snapGuideInput,
             // Resize snaps the moving point; equal-gap candidates are unused.
             settings: { ...snapSettingsPatch, gaps: { enabled: false } },
@@ -372,14 +373,14 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       }
       setDragState({
         kind: "resize",
-        geometry,
+        ...(geometry !== undefined ? { geometry: geometry } : {}),
         rectangleBaseline,
         snapContext,
         latestSource: source,
         pointerId: event.pointerId,
         elementId: sourceId,
         role: normalizedRole,
-        movingCornerRole: normalizedRole !== role && isCornerResizeRole(role) ? role : undefined,
+        ...(normalizedRole !== role && isCornerResizeRole(role) ? { movingCornerRole: role } : {}),
         cursor: cursor || resizeCursorForRole(normalizedRole),
         preserveAspectRatio: isCircleResizeSource
           ? 1
@@ -528,9 +529,11 @@ export function useCanvasHandleInteractions(args: UseCanvasHandleInteractionsArg
       const startCenterPivotPointerAngleDeg = angleDeg(centerPivotWorld, world);
 
       setSnapLines([]);
+      const geometry = prepareEditGeometry();
+
       setDragState({
         kind: "rotate",
-        geometry: prepareEditGeometry(),
+        ...(geometry !== undefined ? { geometry } : {}),
         pointerId: event.pointerId,
         elementId: rotateTargetId,
         sourceId,

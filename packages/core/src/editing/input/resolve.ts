@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import {
   resolveCanvasRenderedMotion,
   type CanvasBufferSelection,
@@ -173,8 +175,8 @@ const UNCOVERING = new Set(["uncover", "visible", "invisible"]);
 /** Whether a slot is inside an argument of a command of that name. */
 function insideCommand(view: EditView, slot: SlotId, command: string): boolean {
   const { tree } = view;
-  for (let current: SlotId | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
-    if (tree.nodes[tree.slots[current].node].command === command) {
+  for (let current: SlotId | null = slot; current != null; current = editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).parent) {
+    if (editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).command === command) {
       return true;
     }
   }
@@ -295,7 +297,7 @@ export function resolveIntent(context: IntentContext, intent: Intent): IntentRes
  */
 function matchingPlainBracket(view: EditView, slot: SlotId, at: number, forward: boolean): number | null {
   const { tree } = view;
-  const children = tree.slots[slot].children.map((id) => tree.nodes[id]);
+  const children = editSlotAt(tree.slots, slot).children.map((id) => editNodeAt(tree.nodes, id));
   const glyph = (node: EditNode) => tree.text.slice(node.span.from, node.span.to);
   const start = forward
     ? children.findIndex((node) => node.span.from >= at)
@@ -308,10 +310,10 @@ function matchingPlainBracket(view: EditView, slot: SlotId, at: number, forward:
   }
   let depth = 0;
   for (let index = start; index >= 0 && index < children.length; index += forward ? 1 : -1) {
-    const text = glyph(children[index]);
+    const text = glyph(requireArrayValue(children, index));
     depth += text === glyph(first) ? 1 : text === close ? -1 : 0;
     if (depth === 0) {
-      return forward ? children[index].span.to : children[index].span.from;
+      return forward ? requireArrayValue(children, index).span.to : requireArrayValue(children, index).span.from;
     }
   }
   return null;
@@ -338,7 +340,7 @@ function alphanumericWordEdge(text: string, offset: number, forward: boolean): n
 
 /** The `\right` token (with its delimiter) of the pair whose `\right` starts at an offset: a pending one (M14). */
 export function pendingCloserSpan(view: EditView, at: number): { readonly from: number; readonly to: number } | null {
-  return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.delimiters[1].from === at)?.delimiters[1] ?? null;
+  return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && requireArrayValue(node.delimiters, 1).from === at)?.delimiters[1] ?? null;
 }
 
 /**
@@ -361,11 +363,11 @@ function pendingCloserAfter(context: IntentContext, transaction: Transaction): n
  * `\right|` unless one inside is unmatched.
  */
 function closesPending(text: string, pair: EditNode, char: string): boolean {
-  const token = pair.delimiters[1];
+  const token = requireArrayValue(pair.delimiters, 1);
   if (text.slice(token.from, token.to) !== `\\right${char}`) {
     return false;
   }
-  const inside = text.slice(pair.delimiters[0].to, token.from);
+  const inside = text.slice(requireArrayValue(pair.delimiters, 0).to, token.from);
   const count = (needle: string) => inside.split(needle).length - 1;
   switch (char) {
     case ")":
@@ -382,7 +384,7 @@ function closesPending(text: string, pair: EditNode, char: string): boolean {
 /** Whether a node is inside an environment of that name (kept as a node, or an atom holding it). */
 function insideEnvironment(view: EditView, node: NodeId, name: string): boolean {
   const { tree } = view;
-  const { from, to } = tree.nodes[node].span;
+  const { from, to } = editNodeAt(tree.nodes, node).span;
   return tree.nodes.some((candidate) => candidate.span.from < from && candidate.span.to > to &&
     (candidate.command === name || tree.text.startsWith(`\\begin{${name}}`, candidate.span.from)));
 }
@@ -406,11 +408,11 @@ function caretAt(view: EditView, offset: number): Position {
  */
 function outsideUnbracedScript(view: EditView, position: Position, offset: number): Position | null {
   const { tree } = view;
-  const slot = tree.slots[position.slot];
+  const slot = editSlotAt(tree.slots, position.slot);
   if ((slot.role !== "sup" && slot.role !== "sub") || slot.braced || position.index < slot.children.length) {
     return null;
   }
-  const scripted = tree.nodes[slot.node];
+  const scripted = editNodeAt(tree.nodes, slot.node);
   if (scripted.parent == null || scripted.span.to !== offset) {
     return null;
   }
@@ -524,7 +526,7 @@ class Resolver {
         const literal = outcome.literal;
         return this.transaction(
           outcome.patches,
-          { kind: "absolute", anchor: caret, focus, positions: stop && focus === caret ? { anchor: stop, focus: stop } : undefined },
+          { kind: "absolute", anchor: caret, focus, ...(stop && focus === caret ? { positions: { anchor: stop, focus: stop } } : {}) },
           literal
             ? {
                 group: "transformation",
@@ -780,7 +782,7 @@ class Resolver {
         (node.kind === "atom" && view.tree.text.startsWith("\\begin", node.span.from))));
       // (A `\\left` just before the closing `$` would take it as its delimiter.)
       const delimiterBefore = /\\(?:left|right|middle)\s*$/u.test(view.tree.text.slice(Math.max(0, to - 12), to));
-      if (text === "$" && from < to && start.slot === end.slot && view.tree.slots[start.slot].mode === "text" && !hasMath && !delimiterBefore && !this.crossesStructure()) {
+      if (text === "$" && from < to && start.slot === end.slot && editSlotAt(view.tree.slots, start.slot).mode === "text" && !hasMath && !delimiterBefore && !this.crossesStructure()) {
         const patches = [{ from, to: from, insert: "$" }, { from: to, to, insert: "$" }];
         return this.outcome(view, { kind: "patch", patches, caret: to + 1, run: null });
       }
@@ -885,12 +887,13 @@ class Resolver {
    */
   private unwrapDelimiters(view: EditView, id: NodeId, direction: "backward" | "forward"): IntentResolution {
     const { text, nodes, slots } = view.tree;
-    const node = nodes[id];
-    const [left, right] = node.delimiters;
-    const content = slots[node.slots[0]];
-    const middles = content.children.map((child) => nodes[child]).filter((child) => child.command === "middle");
+    const node = editNodeAt(nodes, id);
+    const left = requireArrayValue(node.delimiters, 0);
+    const right = requireArrayValue(node.delimiters, 1);
+    const content = editSlotAt(slots, requireArrayValue(node.slots, 0));
+    const middles = content.children.map((child) => editNodeAt(nodes, child)).filter((child) => child.command === "middle");
     const scripted = /^\s*[_^']/u.test(text.slice(right.to));
-    const parent = node.parent == null ? null : slots[node.parent];
+    const parent = node.parent == null ? null : editSlotAt(slots, node.parent);
     const emptied = text.slice(content.contentSpan.from, content.contentSpan.to).trim() === "" && parent != null &&
       isDollarFormula(view, parent.node) &&
       (text.slice(parent.contentSpan.from, node.span.from) + text.slice(node.span.to, parent.contentSpan.to)).trim() === "";
@@ -960,10 +963,10 @@ class Resolver {
         // runs on to the formula's end until its `\right` is typed): it goes alone (M14).
         const offset = this.caretOffset(view);
         const open = view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 1 &&
-          (direction === "backward" ? node.delimiters[0].to === offset : node.delimiters[0].from === offset));
+          (direction === "backward" ? requireArrayValue(node.delimiters, 0).to === offset : requireArrayValue(node.delimiters, 0).from === offset));
         if (open) {
-          const { from, to } = open.delimiters[0];
-          const slot = open.parent == null ? null : view.tree.slots[open.parent];
+          const { from, to } = requireArrayValue(open.delimiters, 0);
+          const slot = open.parent == null ? null : editSlotAt(view.tree.slots, open.parent);
           // The formula's only content: it holds `{}`, never `$$`, as any emptied `$…$` does.
           if (slot && isDollarFormula(view, slot.node) &&
             (text.slice(slot.contentSpan.from, from) + text.slice(to, slot.contentSpan.to)).trim() === "") {
@@ -975,7 +978,7 @@ class Resolver {
         // ⌫ just inside a pair's `\left(` (or ⌦ just inside its `\right)`) unwraps it, keeping
         // what it enclosed: there is no way to delete one delimiter of a pair alone (M14).
         const pair = view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 &&
-          (direction === "backward" ? node.delimiters[0].to === offset : node.delimiters[1].from === offset));
+          (direction === "backward" ? requireArrayValue(node.delimiters, 0).to === offset : requireArrayValue(node.delimiters, 1).from === offset));
         if (pair) {
           return this.unwrapDelimiters(view, pair.id, direction);
         }
@@ -1096,7 +1099,7 @@ class Resolver {
       return NONE;
     }
     if (kind === "sup" || kind === "sub") {
-      const after = { slot: view.tree.nodes[ghost.node].parent!, index: childIndex(view.tree, ghost.node) + 1 };
+      const after = { slot: editNodeAt(view.tree.nodes, ghost.node).parent!, index: childIndex(view.tree, ghost.node) + 1 };
       return this.outcome(view, typeCharacter(view, after, kind === "sup" ? "^" : "_", NO_INTERACTION, at));
     }
     return this.outcome(view, { kind: "patch", patches: [{ from: at, to: at, insert: "[]" }], caret: at + 1, run: null, exact: true });
@@ -1298,7 +1301,7 @@ class Resolver {
    * command replaces it, and it is what the first field starts with.
    */
   private openPicker(view: EditView, commands: CommandTable, chip: ChipState, name: string, key: CommitKey, then?: string): IntentResolution {
-    const mode = view.tree.slots[caretAt(view, chip.at).slot].mode === "math" ? "math" : "text";
+    const mode = editSlotAt(view.tree.slots, caretAt(view, chip.at).slot).mode === "math" ? "math" : "text";
     const own = commands.command(name, mode);
     const schema = own ?? commands.command(name, mode === "math" ? "text" : "math")!;
     const target = schema.args.find((arg) => arg.kind === "mandatory" && arg.rendered);
@@ -1316,7 +1319,7 @@ class Resolver {
     const { anchor, focus, positions } = this.context;
     return this.transaction(
       [],
-      { kind: "absolute", anchor, focus, positions: positions ?? undefined },
+      { kind: "absolute", anchor, focus, ...(positions == null ? {} : { positions }) },
       { group: "own-step" },
       interaction === NO_INTERACTION ? {} : { interaction }
     );
@@ -1344,7 +1347,7 @@ class Resolver {
       return this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: chip.name + char, selected: 0 } });
     }
     const caret = caretAt(view, chip.at);
-    if (chip.name === "" && !isControlSymbol(char, view.tree.slots[caret.slot].mode)) {
+    if (chip.name === "" && !isControlSymbol(char, editSlotAt(view.tree.slots, caret.slot).mode)) {
       // `\<` is no command: the chip closes, and the character is typed as itself.
       return new Resolver({ ...this.context, interaction: NO_INTERACTION }).insertText(char, true);
     }
@@ -1357,7 +1360,8 @@ class Resolver {
     }
     const delimiterChip = /^(left|right)(?:\\([A-Za-z]*))?$/u.exec(chip.name);
     if (delimiterChip) {
-      const [, side, named] = delimiterChip;
+      const side = requireArrayValue(delimiterChip, 1);
+      const named = delimiterChip[2];
       if (named == null && char === "\\") {
         // The delimiter is a command (`\left\{`, `\left\langle`): the chip goes on to its name.
         return this.keepSelection({ ...this.context.interaction, chip: { ...chip, name: `${chip.name}\\`, selected: 0 } });
@@ -1381,8 +1385,8 @@ class Resolver {
       // that takes arguments gets its braces, with the new chip in the first, so the
       // source stays whole if that chip is never committed (`\\sqrt{\\te‸}`).
       // (A command that needs values asks for them first, the `\\` starting the first.)
-      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
-      const schema = commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text");
+      const name = chipCommitName(commands, editSlotAt(view.tree.slots, caret.slot).mode, chip.name, chip.selected, view.tree.text, false);
+      const schema = commands.command(name, editSlotAt(view.tree.slots, caret.slot).mode === "math" ? "math" : "text");
       if (schema && needsValues(schema)) {
         return this.commitChip(view, commands, chip, "typed", false, char);
       }
@@ -1395,14 +1399,14 @@ class Resolver {
       return { kind: "transaction", transaction: { ...committed.transaction, interaction: { chip: { name: "", at, selected: 0, held: null } } } };
     }
     if (char === "<") {
-      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
-      if (commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text")?.args.some((arg) => arg.kind === "overlay")) {
+      const name = chipCommitName(commands, editSlotAt(view.tree.slots, caret.slot).mode, chip.name, chip.selected, view.tree.text, false);
+      if (commands.command(name, editSlotAt(view.tree.slots, caret.slot).mode === "math" ? "math" : "text")?.args.some((arg) => arg.kind === "overlay")) {
         return this.commitChip(view, commands, chip, "overlay", false);
       }
     }
     if (char === "{" || char === "[") {
-      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
-      const schema = commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text");
+      const name = chipCommitName(commands, editSlotAt(view.tree.slots, caret.slot).mode, chip.name, chip.selected, view.tree.text, false);
+      const schema = commands.command(name, editSlotAt(view.tree.slots, caret.slot).mode === "math" ? "math" : "text");
       const opens = char === "{"
         ? schema?.args.some((arg) => arg.kind === "mandatory")
         : schema?.args.find((arg) => arg.kind !== "overlay")?.kind === "optional";
@@ -1413,14 +1417,14 @@ class Resolver {
     if (char === "}" || char === "$") {
       // A closer right after a command that takes arguments would leave it without them (`{\underbrace}`):
       // it gets its braces, and the closer acts from inside them.
-      const name = chipCommitName(commands, view.tree.slots[caret.slot].mode, chip.name, chip.selected, view.tree.text, false);
-      if (commands.command(name, view.tree.slots[caret.slot].mode === "math" ? "math" : "text")?.args.some((arg) => arg.kind === "mandatory")) {
+      const name = chipCommitName(commands, editSlotAt(view.tree.slots, caret.slot).mode, chip.name, chip.selected, view.tree.text, false);
+      if (commands.command(name, editSlotAt(view.tree.slots, caret.slot).mode === "math" ? "math" : "text")?.args.some((arg) => arg.kind === "mandatory")) {
         return this.commitChip(view, commands, chip, "structure", false, char);
       }
     }
     // TeX would take the character as the argument (K2), but it belongs to the argument's mode
     // (`_` after `$\textit` is text): it goes inside the braces, typed there.
-    const mode = view.tree.slots[caret.slot].mode === "math" ? "math" : "text";
+    const mode = editSlotAt(view.tree.slots, caret.slot).mode === "math" ? "math" : "text";
     const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, false);
     const argument = commands.command(name, mode)?.args.find((arg) => arg.kind === "mandatory");
     const crosses = argument?.rendered === true && argument.mode != null && argument.mode !== mode;
@@ -1441,7 +1445,7 @@ class Resolver {
     side: string,
     delimiter: string
   ): IntentResolution | null {
-    const mode = view.tree.slots[caret.slot].mode;
+    const mode = editSlotAt(view.tree.slots, caret.slot).mode;
     // A bare `]` would end the optional argument it is in (`\bibitem[A$\right]$`): the bracket by name.
     const bracketed = this.context.title === true || insideOptional(view, caret.slot);
     const named = bracketed && delimiter === "]" ? "\\rbrack" : bracketed && delimiter === "[" ? "\\lbrack" : delimiter;
@@ -1526,13 +1530,13 @@ class Resolver {
     if (at == null || this.hasRange() || this.from !== at) {
       return null;
     }
-    return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.delimiters[1].from === at) ?? null;
+    return view.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters.length === 2 && requireArrayValue(node.delimiters, 1).from === at) ?? null;
   }
 
   /** Accepts the pending `\right` (M14): the caret steps past it, or stays put (Esc). */
   private acceptCloser(pair: EditNode, stepPast: boolean): IntentResolution {
     this.acceptsCloser = true;
-    const caret = stepPast ? pair.delimiters[1].to : this.from;
+    const caret = stepPast ? requireArrayValue(pair.delimiters, 1).to : this.from;
     return this.transaction([], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
   }
 
@@ -1546,16 +1550,16 @@ class Resolver {
    */
   private movePendingCloser(view: EditView, pair: EditNode, motion: Extract<Intent, { type: "move" }>): IntentResolution {
     const { text } = this.context;
-    const token = pair.delimiters[1];
+    const token = requireArrayValue(pair.delimiters, 1);
     const closer = text.slice(token.from, token.to);
     const unwrapped = text.slice(0, token.from) + text.slice(token.to);
     const loose = this.context.structure!(unwrapped);
     // Without the `\right`, the `\left` runs on to its slot's end (or to a `\right` further on): its content's stops are where the `\right` may go.
-    const open = loose.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters[0]?.from === pair.delimiters[0].from);
+    const open = loose.tree.nodes.find((node) => node.kind === "delimited" && node.delimiters[0]?.from === requireArrayValue(pair.delimiters, 0).from);
     if (!open) {
       return this.acceptCloser(pair, motion.dir === "right");
     }
-    const content = open.slots[0];
+    const content = requireArrayValue(open.slots, 0);
     const stops = [...new Set(loose.stops.filter((stop) => stop.slot === content).map((stop) => loose.offset(stop)))].sort((a, b) => a - b);
     const at = token.from;
     const forward = motion.dir === "right";
@@ -1617,13 +1621,13 @@ class Resolver {
       return this.transaction([{ from: here.from, to: here.to, insert: apart(insert, text, here.to) }], { kind: "absolute", anchor: caret, focus: caret }, { group: "own-step" });
     }
     const { tree } = view;
-    const slot = tree.slots[caretAt(view, chip.at).slot];
+    const slot = editSlotAt(tree.slots, caretAt(view, chip.at).slot);
     // The innermost `\left` still open whose contents the caret is in (or at the end of, with nothing
     // in it yet), in its own slot: not inside a script or argument within it.
     const open = tree.nodes
       .filter((node) => node.kind === "delimited" && node.delimiters.length === 1)
       .filter((node) => {
-        const content = tree.slots[node.slots[0]];
+        const content = editSlotAt(tree.slots, requireArrayValue(node.slots, 0));
         return content.contentSpan.from <= chip.at && chip.at <= content.contentSpan.to &&
           (content.id === slot.id || (node.span.to === chip.at && slot.children.includes(node.id)));
       })
@@ -1637,13 +1641,13 @@ class Resolver {
       );
     }
     const pair = chip.held || !isDelimiter(char) ? undefined : slot.children
-      .map((id) => tree.nodes[id])
+      .map((id) => editNodeAt(tree.nodes, id))
       .filter((node) => node.kind === "delimited" && node.delimiters.length === 2 && node.span.to <= chip.at)
       .at(-1);
     if (!pair) {
       return this.keepSelection(NO_INTERACTION);
     }
-    const closer = pair.delimiters[1];
+    const closer = requireArrayValue(pair.delimiters, 1);
     const insert = `\\right${char}`;
     const caret = chip.at - (closer.to - closer.from) + insert.length;
     return this.transaction(
@@ -1667,7 +1671,7 @@ class Resolver {
       return this.keepSelection(NO_INTERACTION);
     }
     const caret = caretAt(view, chip.at);
-    const mode = view.tree.slots[caret.slot].mode;
+    const mode = editSlotAt(view.tree.slots, caret.slot).mode;
     const name = chipCommitName(commands, mode, chip.name, chip.selected, view.tree.text, accept, this.pendingCloserText(view));
     if (mode === "math" && BLOCK_COMMANDS.has(name)) {
       // List and environment commands make no sense in a formula.
@@ -1680,7 +1684,7 @@ class Resolver {
       // A line break with no line to end (at an item's start, after a blank line).
       return this.keepSelection(NO_INTERACTION);
     }
-    const rowLevel = view.tree.slots[caret.slot].role === "cell" || view.tree.nodes[view.tree.slots[caret.slot].node].kind === "alignment";
+    const rowLevel = editSlotAt(view.tree.slots, caret.slot).role === "cell" || editNodeAt(view.tree.nodes, editSlotAt(view.tree.slots, caret.slot).node).kind === "alignment";
     if (TABLE_RULES.has(name) && !(rowLevel && inAlignment(view, caret.slot))) {
       // Outside a table, or inside something in a cell (a script, a group), TeX has no row for a rule ("Misplaced \noalign").
       return this.keepSelection(NO_INTERACTION);
@@ -1693,8 +1697,8 @@ class Resolver {
       // beamer's `\uncover` family is set with `\limits`, which an operator's name has no operator for.
       return this.keepSelection(NO_INTERACTION);
     }
-    const holder = view.tree.slots[caret.slot].node;
-    if (name === "pause" && (view.tree.nodes[holder].command === "overprint" || insideEnvironment(view, holder, "overprint"))) {
+    const holder = editSlotAt(view.tree.slots, caret.slot).node;
+    if (name === "pause" && (editNodeAt(view.tree.nodes, holder).command === "overprint" || insideEnvironment(view, holder, "overprint"))) {
       // In `overprint`, a `\pause` makes its areas overlap (beamer: "Overprints may not overlap").
       return this.keepSelection(NO_INTERACTION);
     }
@@ -1707,7 +1711,8 @@ class Resolver {
       // `\left` and `\right` only exist in pairs (K16, O5): `\left` brings its
       // `\right` (a completion names the delimiter, `\left(`; bare, it is `(`);
       // a `\right` closes or steps over one (a bare one, or `\middle`, writes nothing).
-      const [, side, given] = delimited;
+      const side = requireArrayValue(delimited, 1);
+      const given = delimited[2];
       const delimiter = given ?? (side === "left" ? "(" : "");
       return this.commitDelimiter(view, commands, caret, chip, side, delimiter) ?? this.keepSelection(NO_INTERACTION);
     }
@@ -1733,7 +1738,7 @@ class Resolver {
     const middle = applyPatches(this.context.text, commit.outcome.patches);
     const middleView = this.context.structure!(middle);
     const at = commit.outcome.caret;
-    const typed = typeCharacter(middleView, caretAt(middleView, at), then, { pending: commit.pending }, at, this.context.title);
+    const typed = typeCharacter(middleView, caretAt(middleView, at), then, { ...(commit.pending === undefined ? {} : { pending: commit.pending }) }, at, this.context.title);
     if (typed.kind === "move") {
       // `}` after `\pi` in `e^{i\pi`: the commit, then the caret steps out.
       const caret = middleView.offset(typed.to);
@@ -1926,15 +1931,15 @@ class Resolver {
     const ends = promoteSelection(view, selectionEndsAt(view, from, to));
     const chain = (slot: number) => {
       const slots = [slot];
-      for (let node = tree.slots[slot].node; tree.nodes[node].parent != null; node = tree.slots[tree.nodes[node].parent!].node) {
-        slots.push(tree.nodes[node].parent!);
+      for (let node = editSlotAt(tree.slots, slot).node; editNodeAt(tree.nodes, node).parent != null; node = editSlotAt(tree.slots, editNodeAt(tree.nodes, node).parent!).node) {
+        slots.push(editNodeAt(tree.nodes, node).parent!);
       }
       return slots;
     };
     const startChain = chain(ends.anchor.slot);
     const endChain = chain(ends.focus.slot);
     const meet = startChain.find((slot) => endChain.includes(slot));
-    const throughWrappers = (slots: number[]) => slots.slice(0, slots.indexOf(meet!)).every((slot) => view.role(tree.slots[slot].node) === "transparent");
+    const throughWrappers = (slots: number[]) => slots.slice(0, slots.indexOf(meet!)).every((slot) => view.role(editSlotAt(tree.slots, slot).node) === "transparent");
     if (meet == null || !throughWrappers(startChain) || !throughWrappers(endChain)) {
       return true;
     }
@@ -1986,8 +1991,8 @@ class Resolver {
       if (!node) {
         return true;
       }
-      for (let parent = node.parent; parent != null; parent = tree.nodes[tree.slots[parent].node].parent) {
-        const owner = tree.nodes[tree.slots[parent].node];
+      for (let parent = node.parent; parent != null; parent = editNodeAt(tree.nodes, editSlotAt(tree.slots, parent).node).parent) {
+        const owner = editNodeAt(tree.nodes, editSlotAt(tree.slots, parent).node);
         if (owner.span.from <= this.from && owner.span.to >= this.to) {
           break;
         }
@@ -2002,7 +2007,7 @@ class Resolver {
   /** M17: ⌘B and ⌘I do nothing in math (`\\mathbf` is an alphabet, not bold). */
   private inMath(): boolean {
     const view = this.context.structure && this.context.isScopeSession ? this.currentView(this.context.structure) : null;
-    return view?.tree.slots[view.positionAt(this.from).slot].mode === "math";
+    return view != null && editSlotAt(view.tree.slots, view.positionAt(this.from).slot).mode === "math";
   }
 
   /** Whether the selection is the content of an unbraced argument (`\\textbf x`, `x^2`), which a wrapper cannot go into without braces. */
@@ -2012,8 +2017,8 @@ class Resolver {
       return false;
     }
     return [this.from, this.to].some((offset) => {
-      const slot = view.tree.slots[view.positionAt(offset).slot];
-      const owner = view.tree.nodes[slot.node];
+      const slot = editSlotAt(view.tree.slots, view.positionAt(offset).slot);
+      const owner = editNodeAt(view.tree.nodes, slot.node);
       return !slot.braced && slot.role !== "flow" && owner.kind !== "formula" && owner.kind !== "paragraph" &&
         owner.kind !== "group" && owner.kind !== "row" && owner.kind !== "display" && owner.kind !== "scope";
     });

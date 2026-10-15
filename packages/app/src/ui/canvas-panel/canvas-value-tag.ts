@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { TaggedValue } from "@tikz-editor/core/editing/operations/index";
 
 /** Average advance of the tag's font (9px UI and mono), in px per character. */
@@ -18,14 +19,14 @@ export function valueTagText(command: string, values: readonly Pick<TaggedValue,
   while (render().length > budget) {
     let longest = -1;
     texts.forEach((text, index) => {
-      if (text.length > 2 && (longest < 0 || text.length > texts[longest].length)) {
+      if (text.length > 2 && (longest < 0 || text.length > requireArrayValue(texts, longest).length)) {
         longest = index;
       }
     });
     if (longest < 0) {
       break;
     }
-    const text = texts[longest].replace(/…$/u, "");
+    const text = requireArrayValue(texts, longest).replace(/…$/u, "");
     texts[longest] = `${text.slice(0, Math.max(1, text.length - Math.max(1, render().length - budget) - 1))}…`;
   }
   return render();

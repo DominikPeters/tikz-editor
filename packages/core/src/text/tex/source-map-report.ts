@@ -187,21 +187,19 @@ function remapLineSegmentReport<Space extends SourceCoordinateSpace>(
       sourceEndRaw: documentSourceOffset(sourceProjection.end),
       sourceRangePolicy: sourceProjection.policy,
     } : {}),
-    mathConstructRanges: segment.mathConstructRanges?.map((range) =>
+    ...(segment.mathConstructRanges !== undefined ? { mathConstructRanges: segment.mathConstructRanges.map((range) =>
       remapLineMathConstructRangeReport(range, sourceMap)
-    ),
-    mathCaretEntries: segment.mathCaretEntries?.map((entry) =>
+    ) } : {}),
+    ...(segment.mathCaretEntries !== undefined ? { mathCaretEntries: segment.mathCaretEntries.map((entry) =>
       remapLineMathCaretEntryReport(entry, sourceMap)
-    ),
-    mathBreakpoints: segment.mathBreakpoints?.map((breakpoint) =>
+    ) } : {}),
+    ...(segment.mathBreakpoints !== undefined ? { mathBreakpoints: segment.mathBreakpoints.map((breakpoint) =>
       remapLineMathBreakpointReport(breakpoint, sourceMap)
-    ),
-    graphics: segment.graphics?.map((graphic) =>
+    ) } : {}),
+    ...(segment.graphics !== undefined ? { graphics: segment.graphics.map((graphic) =>
       remapLineGraphicsReport(graphic, sourceMap)
-    ),
-    mathSvgBody: segment.mathSvgBody
-      ? remapSvgSourceDataAttributes(segment.mathSvgBody, sourceMap)
-      : undefined
+    ) } : {}),
+    ...(segment.mathSvgBody ? { mathSvgBody: remapSvgSourceDataAttributes(segment.mathSvgBody, sourceMap) } : {})
   }];
 }
 
@@ -265,6 +263,8 @@ function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
     const {
       sourceStartRaw: _sourceStartRaw,
       sourceEndRaw: _sourceEndRaw,
+      startOffset: _startOffset,
+      endOffset: _endOffset,
       mathConstructRanges: _mathConstructRanges,
       mathCaretEntries: _mathCaretEntries,
       mathBreakpoints: _mathBreakpoints,
@@ -274,26 +274,25 @@ function splitRemappedTextSegmentReport<Space extends SourceCoordinateSpace>(
     return {
       ...rest,
       text: text.slice(start, end),
-      startOffset: segment.startOffset == null ? undefined : segment.startOffset + start,
-      endOffset: segment.startOffset == null ? undefined : segment.startOffset + end,
+      ...(segment.startOffset != null ? { startOffset: segment.startOffset + start, endOffset: segment.startOffset + end } : {}),
       sourceStartRaw: documentSourceOffset(sourceProjection.start),
       sourceEndRaw: documentSourceOffset(sourceProjection.end),
       sourceRangePolicy: sourceProjection.policy,
       x: xStart,
       width: texLength(xEnd - xStart),
-      caretStops: segment.caretStops?.slice(start, end + 1),
-      mathConstructRanges: segment.mathConstructRanges?.map((range) =>
+      ...(segment.caretStops !== undefined ? { caretStops: segment.caretStops.slice(start, end + 1) } : {}),
+      ...(segment.mathConstructRanges !== undefined ? { mathConstructRanges: segment.mathConstructRanges.map((range) =>
         remapLineMathConstructRangeReport(range, sourceMap)
-      ),
-      mathCaretEntries: segment.mathCaretEntries?.map((entry) =>
+      ) } : {}),
+      ...(segment.mathCaretEntries !== undefined ? { mathCaretEntries: segment.mathCaretEntries.map((entry) =>
         remapLineMathCaretEntryReport(entry, sourceMap)
-      ),
-      mathBreakpoints: segment.mathBreakpoints?.map((breakpoint) =>
+      ) } : {}),
+      ...(segment.mathBreakpoints !== undefined ? { mathBreakpoints: segment.mathBreakpoints.map((breakpoint) =>
         remapLineMathBreakpointReport(breakpoint, sourceMap)
-      ),
-      graphics: segment.graphics?.map((graphic) =>
+      ) } : {}),
+      ...(segment.graphics !== undefined ? { graphics: segment.graphics.map((graphic) =>
         remapLineGraphicsReport(graphic, sourceMap)
-      ),
+      ) } : {}),
     };
   });
 }
@@ -370,7 +369,7 @@ function remapPositionedTexVListItem(
   return {
     ...item,
     item: remapTexVListItem(item.item, sourceMap),
-    children: item.children?.map((child) => remapPositionedTexVListItem(child, sourceMap))
+    ...(item.children !== undefined ? { children: item.children.map((child) => remapPositionedTexVListItem(child, sourceMap)) } : {})
   };
 }
 
@@ -388,10 +387,10 @@ function remapTexVListItem(item: TexVListItem, sourceMap: TextSourceMap): TexVLi
         paragraph: {
           ...item.paragraph,
           sourceSpan: mapTexSourceSpan(item.paragraph.sourceSpan, sourceMap),
-          verticalAdjustments: item.paragraph.verticalAdjustments?.map((adjustment) => ({
+          ...(item.paragraph.verticalAdjustments !== undefined ? { verticalAdjustments: item.paragraph.verticalAdjustments.map((adjustment) => ({
             ...adjustment,
             ...(adjustment.sourceSpan ? { sourceSpan: mapTexSourceSpan(adjustment.sourceSpan, sourceMap) } : {}),
-          }))
+          })) } : {})
         }
       };
     case "hbox":
@@ -448,15 +447,15 @@ function remapTexHorizontalLayout(
       : item.kind === "tex-glyph" && item.sourceSpan
         ? { ...item, sourceSpan: mapTexSourceSpan(item.sourceSpan, sourceMap) }
         : item),
-    lines: layout.lines?.map((line) => remapTexLineBox(line, sourceMap)),
-    hitMap: layout.hitMap ? remapTexHitMap(layout.hitMap, sourceMap) : undefined
+    ...(layout.lines !== undefined ? { lines: layout.lines.map((line) => remapTexLineBox(line, sourceMap)) } : {}),
+    ...(layout.hitMap ? { hitMap: remapTexHitMap(layout.hitMap, sourceMap) } : {})
   };
 }
 
 function remapTexLineBox(line: TexLineBox, sourceMap: TextSourceMap): TexLineBox {
   return {
     ...line,
-    sourceSpan: line.sourceSpan ? mapTexSourceSpan(line.sourceSpan, sourceMap) : undefined
+    ...(line.sourceSpan ? { sourceSpan: mapTexSourceSpan(line.sourceSpan, sourceMap) } : {})
   };
 }
 
@@ -471,8 +470,7 @@ function remapTexHitMap(hitMap: TexHitMap, sourceMap: TextSourceMap): TexHitMap 
     ...hitMap,
     ...(sourceSpan ? { sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end } : {}),
     ...(contentSpan ? { contentStart: contentSpan.start, contentEnd: contentSpan.end } : {}),
-    caretMap: hitMap.caretMap
-      ? {
+    ...(hitMap.caretMap ? { caretMap: {
           ...hitMap.caretMap,
           ...(sourceSpan ? { sourceStart: sourceSpan.start, sourceEnd: sourceSpan.end } : {}),
           ...(contentSpan ? { contentStart: contentSpan.start, contentEnd: contentSpan.end } : {}),
@@ -486,24 +484,23 @@ function remapTexHitMap(hitMap: TexHitMap, sourceMap: TextSourceMap): TexHitMap 
               ...(entrySpan ? { sourceSpan: entrySpan } : {}),
             };
           }),
-          diagnostics: hitMap.caretMap.diagnostics?.map((diagnostic) => ({
+          ...(hitMap.caretMap.diagnostics !== undefined ? { diagnostics: hitMap.caretMap.diagnostics.map((diagnostic) => ({
             ...diagnostic,
             sourceSpan: mapInputSpan(
               sourceMap,
               diagnostic.sourceSpan.start,
               diagnostic.sourceSpan.end
             ),
-          })),
-        }
-      : undefined,
-    constructRanges: hitMap.constructRanges?.map((range) => {
+          })) } : {}),
+        } } : {}),
+    ...(hitMap.constructRanges !== undefined ? { constructRanges: hitMap.constructRanges.map((range) => {
       const mapped = mapInputSpan(sourceMap, range.sourceStart, range.sourceEnd);
       return { ...range, sourceStart: mapped.start, sourceEnd: mapped.end };
-    }),
-    breakpoints: hitMap.breakpoints?.map((breakpoint) => ({
+    }) } : {}),
+    ...(hitMap.breakpoints !== undefined ? { breakpoints: hitMap.breakpoints.map((breakpoint) => ({
       ...breakpoint,
       sourceOffset: mapInputOffset(sourceMap, breakpoint.sourceOffset)
-    }))
+    })) } : {})
   };
 }
 
@@ -533,8 +530,7 @@ function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox 
     sourceEnd: sourceSpan.end,
     contentStart: contentSpan.start,
     contentEnd: contentSpan.end,
-    caretMap: box.caretMap
-      ? {
+    ...(box.caretMap ? { caretMap: {
           ...box.caretMap,
           sourceStart: sourceSpan.start,
           sourceEnd: sourceSpan.end,
@@ -550,24 +546,23 @@ function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox 
               ...(entrySpan ? { sourceSpan: { start: entrySpan.start, end: entrySpan.end } } : {})
             };
           }),
-          diagnostics: box.caretMap.diagnostics?.map((diagnostic) => {
+          ...(box.caretMap.diagnostics !== undefined ? { diagnostics: box.caretMap.diagnostics.map((diagnostic) => {
             const diagnosticSpan = mapInputSpan(sourceMap, diagnostic.sourceSpan.start, diagnostic.sourceSpan.end);
             return {
               ...diagnostic,
               sourceSpan: { start: diagnosticSpan.start, end: diagnosticSpan.end }
             };
-          })
-        }
-      : undefined,
-    constructRanges: box.constructRanges?.map((range) => {
+          }) } : {})
+        } } : {}),
+    ...(box.constructRanges !== undefined ? { constructRanges: box.constructRanges.map((range) => {
       const mapped = mapInputSpan(sourceMap, range.sourceStart, range.sourceEnd);
       return { ...range, sourceStart: mapped.start, sourceEnd: mapped.end };
-    }),
-    breakpoints: box.breakpoints?.map((breakpoint) => ({
+    }) } : {}),
+    ...(box.breakpoints !== undefined ? { breakpoints: box.breakpoints.map((breakpoint) => ({
       ...breakpoint,
       sourceOffset: mapInputOffset(sourceMap, breakpoint.sourceOffset)
-    })),
-    graphics: box.graphics?.map((graphic) => {
+    })) } : {}),
+    ...(box.graphics !== undefined ? { graphics: box.graphics.map((graphic) => {
       const graphicSpan = mapInputSpan(
         sourceMap,
         graphic.sourceSpan.start,
@@ -584,9 +579,9 @@ function remapTexMathBox(box: TexMathBox, sourceMap: TextSourceMap): TexMathBox 
         filenameSpan,
         options: remapSimpleTexGraphicsOptions(graphic.options, sourceMap),
       };
-    }),
-    svgBody: box.svgBody ? remapSvgSourceDataAttributes(box.svgBody, sourceMap) : undefined,
-    rootBox: box.rootBox ? remapTexMathBox(box.rootBox, sourceMap) : undefined
+    }) } : {}),
+    ...(box.svgBody ? { svgBody: remapSvgSourceDataAttributes(box.svgBody, sourceMap) } : {}),
+    ...(box.rootBox ? { rootBox: remapTexMathBox(box.rootBox, sourceMap) } : {})
   };
 }
 
@@ -662,16 +657,14 @@ function remapTexVListBoxReportItem(
     : undefined;
   return {
     ...item,
-    ...(sourceSpan ? { sourceSpan } : {}),
+    ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
     ...(item.hboxRole ? { hboxRole: remapTexHBoxRole(item.hboxRole, sourceMap) } : {}),
-    children: item.children?.map((child) => remapTexVListBoxReportItem(child, sourceMap)),
-    displayMath: item.displayMath
-      ? {
+    ...(item.children !== undefined ? { children: item.children.map((child) => remapTexVListBoxReportItem(child, sourceMap)) } : {}),
+    ...(item.displayMath ? { displayMath: {
           ...item.displayMath,
           contentStart: mapInputOffset(sourceMap, item.displayMath.contentStart),
           contentEnd: mapInputOffset(sourceMap, item.displayMath.contentEnd)
-        }
-      : undefined
+        } } : {})
   };
 }
 
@@ -755,7 +748,7 @@ export function remapSimpleTexListStructureSourceMap(
       }
       items.push({
         commandSpan,
-        ...(labelSpan ? { labelSpan } : {}),
+        ...(labelSpan ? { labelSpan: labelSpan } : {}),
         contentSpan,
         itemIndex: item.itemIndex,
       });

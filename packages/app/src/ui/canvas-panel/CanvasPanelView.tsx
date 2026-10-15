@@ -520,7 +520,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
               ) : null}
               <CanvasSVGLayer
                 model={svgModel}
-                diffHints={svgDiffHints}
+                {...(svgDiffHints !== undefined ? { diffHints: svgDiffHints } : {})}
                 forceReplaceAll={forceSvgReplaceAll}
                 overBackdrop={layerBackdropSvg != null}
                 showTransparencyGrid={showTransparencyGrid}
@@ -704,7 +704,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   toolMode={toolMode}
                   editableTextRegionKeys={editableTextRegionKeys}
                   draggableSourceIds={draggableSourceIds}
-                  cursorByTargetId={hitRegionCursorByTargetId}
+                  {...(hitRegionCursorByTargetId !== undefined ? { cursorByTargetId: hitRegionCursorByTargetId } : {})}
                   onElementPointerDown={onElementPointerDown}
                   onElementContextMenu={onElementContextMenu}
                   onElementDoubleClick={onElementDoubleClick}
@@ -799,29 +799,17 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   viewBox={svgResult.viewBox}
                   strokeWidth={handleStrokeWidth}
                   radius={handleHalfSize}
-                  onAnchorPointerDown={
-                    onNodeAnchorPointerDown
-                      ? (event, anchor) => {
+                  {...(onNodeAnchorPointerDown ? { onAnchorPointerDown: (event, anchor) => {
                           if (anchor.nodeSourceId) {
                             onNodeAnchorPointerDown(event, anchor.nodeSourceId);
                           }
-                        }
-                      : undefined
-                  }
-                  onAnchorClick={
-                    onNodeAnchorClick
-                      ? (event, anchor) => {
+                        } } : {})}
+                  {...(onNodeAnchorClick ? { onAnchorClick: (event, anchor) => {
                           if (anchor.nodeSourceId) {
                             onNodeAnchorClick(event, anchor.nodeSourceId);
                           }
-                        }
-                      : undefined
-                  }
-                  onAnchorHoverChange={
-                    onNodeAnchorHoverChange
-                      ? (anchor) => { onNodeAnchorHoverChange(anchor?.nodeSourceId ?? null); }
-                      : undefined
-                  }
+                        } } : {})}
+                  {...(onNodeAnchorHoverChange ? { onAnchorHoverChange: (anchor) => { onNodeAnchorHoverChange(anchor?.nodeSourceId ?? null); } } : {})}
                 />
 
                 {toolMode === "select" && (
@@ -1039,7 +1027,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                       top: hasRotatedPlacement ? rect.center!.y : rect.bounds.minY,
                       width,
                       height,
-                      transform: hasRotatedPlacement ? `translate(-50%, -50%) rotate(${rect.rotationDeg}deg)` : undefined,
+                      ...(hasRotatedPlacement ? { transform: `translate(-50%, -50%) rotate(${rect.rotationDeg}deg)` } : {}),
                       transformOrigin: "center"
                     }}
                   />
@@ -1068,9 +1056,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                         // The unfocused surface holds a static, lower-contrast
                         // caret; only the focused surface blinks.
                         opacity: canvasSurfaceInactive ? 1 : textCaretBlinkVisible ? 1 : 0,
-                        transform: hasRotatedPlacement
-                          ? `translate(-50%, -50%) rotate(${caret.rotationDeg}deg)`
-                          : undefined,
+                        ...(hasRotatedPlacement ? { transform: `translate(-50%, -50%) rotate(${caret.rotationDeg}deg)` } : {}),
                         transformOrigin: "center"
                       }}
                     />
@@ -1145,7 +1131,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                 >
                   <CanvasSVGLayer
                     model={svgModel}
-                    diffHints={svgDiffHints}
+                    {...(svgDiffHints !== undefined ? { diffHints: svgDiffHints } : {})}
                     forceReplaceAll={forceSvgReplaceAll}
                     showTransparencyGrid={showTransparencyGrid}
                     showDocumentBounds={showDocumentBounds}
@@ -1199,7 +1185,7 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
                   ))}
                 </div>
               }
-              className={css.dragTooltip}
+              className={css.dragTooltip ?? ""}
               data-testid="canvas-drag-tooltip-shell"
             />
           ) : null}

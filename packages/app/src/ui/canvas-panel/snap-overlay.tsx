@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { SnapLine, SnapBounds } from "@tikz-editor/core/edit/snapping";
 import type { WorldPoint } from "../coords/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/types";
@@ -30,13 +31,13 @@ export function SnapOverlay({ snapLines, sourceNames, viewBox, scale, snapStroke
     let text: string;
     if (line.type === "gap") {
       segments = line.segments;
-      const [a, b] = segments[0];
+      const [a, b] = requireArrayValue(segments, 0);
       anchor = worldPoint(pt((a.x + b.x) / 2), pt((a.y + b.y) / 2));
       const distance = Math.hypot(a.x - b.x, a.y - b.y) / PT_PER_CM;
       text = `${line.gapKind === "equal" ? "Equal spacing" : "Centered"} · ${Number(distance.toFixed(2))} cm`;
     } else {
-      const a = line.type === "pointer" ? line.to : line.primary?.from ?? line.points[0];
-      const b = line.type === "pointer" ? line.from : line.primary?.to ?? line.points.at(-1)!;
+      const a = line.type === "pointer" ? line.to : line.primary?.from ?? requireArrayValue(line.points, 0);
+      const b = line.type === "pointer" ? line.from : line.primary?.to ?? requireArrayValue(line.points, line.points.length - 1);
       segments = [[a, b]]; anchor = b;
       const sourceId = line.type === "points" ? line.primary?.sourceId ?? line.sourceIds?.[0] : line.sourceIds?.[0];
       const bounds = sourceId ? references.get(sourceId) : undefined;

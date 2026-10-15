@@ -292,7 +292,8 @@ function findInsertionAnchorEntry(
 
 function containsLiveComment(source: string): boolean {
   for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
+    const char = source.charAt(index);
+
     if (char === "\\") {
       index += 1;
       continue;

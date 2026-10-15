@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { AdornmentOwnerGeometry, NodeItem, PathItem, Span, Statement } from "@tikz-editor/core/ast/types";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import { PT_PER_CM } from "@tikz-editor/core/edit/format";
@@ -1170,7 +1171,7 @@ export function selectNudgeAnchorHandle(handles: EditHandle[]): EditHandle | nul
   if (handles.length === 0) {
     return null;
   }
-  return handles.find((handle) => handle.kind === "node-position") ?? handles[0];
+  return handles.find((handle) => handle.kind === "node-position") ?? requireArrayValue(handles, 0);
 }
 
 export function canvasDragKindFromDragState(drag: DragState | null): CanvasDragKind | null {

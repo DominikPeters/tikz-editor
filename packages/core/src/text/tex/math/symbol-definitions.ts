@@ -40,7 +40,7 @@ export function texMathCharacterDeclaration(text: string): TexMathCharacterDecla
   if (/^[A-Za-z]$/.test(text)) return { atomClass: "ord", family: "letters", code: text.charCodeAt(0) };
   if (/^[0-9]$/.test(text)) return { atomClass: "ord", family: "operators", code: text.charCodeAt(0) };
   return Object.hasOwn(mathCharacterDeclarations, text)
-    ? (mathCharacterDeclarations as Record<string, TexMathCharacterDeclaration>)[text] : null;
+    ? (mathCharacterDeclarations as Record<string, TexMathCharacterDeclaration>)[text] ?? null : null;
 }
 
 // TeX Live 2025 amssymb.sty / amsfonts.sty DeclareMathSymbol declarations.
@@ -288,7 +288,7 @@ const amsSymbolDeclarations = {
 export function texMathSymbolDeclaration(command: string): TexMathSymbolDeclaration | null {
   const name = command.startsWith("\\") ? command.slice(1) : command;
   return Object.hasOwn(amsSymbolDeclarations, name)
-    ? (amsSymbolDeclarations as Record<string, TexMathSymbolDeclaration>)[name] : null;
+    ? (amsSymbolDeclarations as Record<string, TexMathSymbolDeclaration>)[name] ?? null : null;
 }
 
 export function texMathSymbolCommandNames(options: {

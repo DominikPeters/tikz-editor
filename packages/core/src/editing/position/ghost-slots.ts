@@ -1,3 +1,4 @@
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { presentSlots, slotChain } from "../tree/navigate.js";
 import type { NodeId, SlotId } from "../tree/types.js";
 import type { Position } from "./position.js";
@@ -33,15 +34,15 @@ const PASSED = new Set(["paragraph", "group", "scope"]);
  */
 export function ghostSlots(view: EditView, caret: Position): GhostSlot[] {
   const { tree } = view;
-  const focus = slotChain(tree, caret.slot).map((slot) => tree.slots[slot].node).find((node) => !PASSED.has(tree.nodes[node].kind));
+  const focus = slotChain(tree, caret.slot).map((slot) => editSlotAt(tree.slots, slot).node).find((node) => !PASSED.has(editNodeAt(tree.nodes, node).kind));
   if (focus == null || view.hidden.has(focus)) {
     return [];
   }
-  const node = tree.nodes[focus];
-  const absent = (role: string): SlotId | null => node.slots.find((slot) => tree.slots[slot].role === role && tree.slots[slot].presence === "absent") ?? null;
+  const node = editNodeAt(tree.nodes, focus);
+  const absent = (role: string): SlotId | null => node.slots.find((slot) => editSlotAt(tree.slots, slot).role === role && editSlotAt(tree.slots, slot).presence === "absent") ?? null;
   if (node.kind === "radical") {
     const index = absent("index");
-    return index == null ? [] : [{ kind: "index", node: focus, at: tree.slots[index].contentSpan.from, anchor: node.span.from }];
+    return index == null ? [] : [{ kind: "index", node: focus, at: editSlotAt(tree.slots, index).contentSpan.from, anchor: node.span.from }];
   }
   if (node.kind === "scripted") {
     const slots = presentSlots(tree, focus);
@@ -56,12 +57,12 @@ export function ghostSlots(view: EditView, caret: Position): GhostSlot[] {
   }
   if (node.kind === "item") {
     const label = absent("label");
-    const list = node.parent == null ? null : tree.nodes[tree.slots[node.parent].node];
+    const list = node.parent == null ? null : editNodeAt(tree.nodes, editSlotAt(tree.slots, node.parent).node);
     if (label == null || list?.command !== "description") {
       return [];
     }
     const flow = presentSlots(tree, focus).find((slot) => slot.role === "flow");
-    return [{ kind: "label", node: focus, at: tree.slots[label].contentSpan.from, anchor: flow?.contentSpan.from ?? node.span.from }];
+    return [{ kind: "label", node: focus, at: editSlotAt(tree.slots, label).contentSpan.from, anchor: flow?.contentSpan.from ?? node.span.from }];
   }
   return [];
 }

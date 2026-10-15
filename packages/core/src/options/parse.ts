@@ -297,3 +297,28 @@ function trimLocalBounds(value: string): { from: number; to: number } | null {
   }
   return { from, to };
 }
+
+export function parseStyleValueAsOptionList(valueRaw: string, absoluteFrom = 0): OptionListAst | null {
+  const trimmed = valueRaw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  let inner = trimmed;
+  let innerStartOffset = 0;
+  if (inner.startsWith("{") && inner.endsWith("}")) {
+    const withoutOuter = inner.slice(1, -1);
+    const leadingInner = withoutOuter.search(/\S/);
+    innerStartOffset = 1 + (leadingInner >= 0 ? leadingInner : 0);
+    inner = withoutOuter.trim();
+  }
+
+  if (inner.length === 0) {
+    return null;
+  }
+
+  const hasExplicitBrackets = inner.startsWith("[");
+  const optionRaw = hasExplicitBrackets ? inner : `[${inner}]`;
+  const offsetAdjustment = hasExplicitBrackets ? innerStartOffset : innerStartOffset - 1;
+  return parseOptionListRaw(optionRaw, absoluteFrom + offsetAdjustment);
+}

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { CM_PER_PT, formatNumber } from "@tikz-editor/core/edit/format";
 import { pt, worldPoint } from "@tikz-editor/core/coords/index";
 import { buildDrawOptions } from "@tikz-editor/core/edit/element-templates";
@@ -47,19 +48,19 @@ export function simplifyFreehandPoints(points: readonly WorldPoint[], toleranceW
   }
 
   const toleranceSq = toleranceWorld * toleranceWorld;
-  const simplified: WorldPoint[] = [points[0]];
-  let lastKept = points[0];
+  const simplified: WorldPoint[] = [requireArrayValue(points, 0)];
+  let lastKept = requireArrayValue(points, 0);
 
   for (let i = 1; i < points.length - 1; i += 1) {
-    const point = points[i];
+    const point = requireArrayValue(points, i);
     if (distanceSquared(lastKept, point) >= toleranceSq) {
       simplified.push(point);
       lastKept = point;
     }
   }
 
-  const lastPoint = points[points.length - 1];
-  const currentLast = simplified[simplified.length - 1];
+  const lastPoint = requireArrayValue(points, points.length - 1);
+  const currentLast = requireArrayValue(simplified, simplified.length - 1);
   if (distanceSquared(currentLast, lastPoint) > 0) {
     simplified.push(lastPoint);
   }
@@ -74,10 +75,10 @@ export function catmullRomToBezierSegments(points: readonly WorldPoint[]): Freeh
 
   const segments: FreehandBezierSegment[] = [];
   for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = i === 0 ? points[i] : points[i - 1];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = i + 2 < points.length ? points[i + 2] : p2;
+    const p0 = i === 0 ? requireArrayValue(points, i) : requireArrayValue(points, i - 1);
+    const p1 = requireArrayValue(points, i);
+    const p2 = requireArrayValue(points, i + 1);
+    const p3 = i + 2 < points.length ? requireArrayValue(points, i + 2) : p2;
 
     segments.push({
       control1: worldPoint(
@@ -111,8 +112,8 @@ export function resolveFreehandPreviewSegments(
     for (let i = 1; i < previewPoints.length; i += 1) {
       previewSegments.push({
         kind: "line",
-        from: previewPoints[i - 1],
-        to: previewPoints[i]
+        from: requireArrayValue(previewPoints, i - 1),
+        to: requireArrayValue(previewPoints, i)
       });
     }
     return previewSegments;
@@ -120,7 +121,7 @@ export function resolveFreehandPreviewSegments(
 
   const curves = catmullRomToBezierSegments(previewPoints);
   const previewSegments: Array<{ kind: "bezier"; from: WorldPoint; control1: WorldPoint; control2: WorldPoint; to: WorldPoint }> = [];
-  let current = previewPoints[0];
+  let current = requireArrayValue(previewPoints, 0);
   for (const segment of curves) {
     previewSegments.push({
       kind: "bezier",
@@ -155,7 +156,7 @@ export function generateFreehandToolSource(
     return null;
   }
 
-  const parts: string[] = [formatPointCm(simplified[0])];
+  const parts: string[] = [formatPointCm(requireArrayValue(simplified, 0))];
   for (const segment of segments) {
     parts.push(
       `.. controls ${formatPointCm(segment.control1)} and ${formatPointCm(segment.control2)} .. ${formatPointCm(segment.to)}`
@@ -168,7 +169,7 @@ export function generateFreehandToolSource(
 function polylineLength(points: readonly WorldPoint[]): number {
   let length = 0;
   for (let i = 1; i < points.length; i += 1) {
-    length += Math.sqrt(distanceSquared(points[i - 1], points[i]));
+    length += Math.sqrt(distanceSquared(requireArrayValue(points, i - 1), requireArrayValue(points, i)));
   }
   return length;
 }

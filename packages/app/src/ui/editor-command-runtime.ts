@@ -220,7 +220,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   } = input;
   const parseOptions = buildEditParseOptions({
     documentId: activeDocumentId,
-    sourceRevision,
+    ...(sourceRevision === undefined ? {} : { sourceRevision }),
     source,
     activeRootId,
     snapshot,
@@ -230,10 +230,10 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     }
   });
 
-  const commandContext = {
+  const commandContext: Parameters<typeof deleteSelection>[0] = {
     source,
     documentId: activeDocumentId,
-    sourceRevision: input.sourceRevision,
+    ...(input.sourceRevision === undefined ? {} : { sourceRevision: input.sourceRevision }),
     activeRootId,
     parseOptions,
     figureCount: snapshot.figures?.length ?? 0,
@@ -325,8 +325,8 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
         return;
       }
       const resolved = await resolveOpenedFileForDocument(opened, {
-        requireSvg: options.requireSvg,
-        requireIpe: options.requireIpe
+        ...(options.requireSvg === undefined ? {} : { requireSvg: options.requireSvg }),
+        ...(options.requireIpe === undefined ? {} : { requireIpe: options.requireIpe })
       });
       if (resolved.kind === "failure") {
         const alertFn = (globalThis as { alert?: (message?: string) => void }).alert;
@@ -1223,7 +1223,7 @@ export function useEditorCommandRuntime(
       createEditorCommandRuntime({
         documentKind,
         presentation: { active: !!presentation.snapshot, presenterVisible: presentation.snapshot?.presenterVisible ?? false, blank: presentation.snapshot?.blank ?? "none", focus: presentation.focus },
-        onPresentationOptions: options.onPresentationOptions,
+        ...(options.onPresentationOptions === undefined ? {} : { onPresentationOptions: options.onPresentationOptions }),
         source: effectiveCommandInputs.source,
         activeRootId: effectiveCommandInputs.activeRootId,
         sourceRevision: effectiveCommandInputs.sourceRevision,
@@ -1258,28 +1258,28 @@ export function useEditorCommandRuntime(
         indentSize,
         updateCanvasSettings,
         dispatch,
-        onOpenExample: options.onOpenExample,
-        onOpenFromArxiv: options.onOpenFromArxiv,
-        onOpenSvgExport: options.onOpenSvgExport,
-        onOpenPngExport: options.onOpenPngExport,
-        onRequestCloseDocument: options.onRequestCloseDocument,
-        onRequestCloseAllDocuments: options.onRequestCloseAllDocuments,
-        onRequestQuitApp: options.onRequestQuitApp,
-        onRequestSaveDocument: options.onRequestSaveDocument,
-        onAddNodeAdornment: options.onAddNodeAdornment,
-        onPositionNodeRelativeTo: options.onPositionNodeRelativeTo,
-        onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute,
-        onShowCompiledPicture: options.onShowCompiledPicture,
-        onOpenSettings: options.onOpenSettings,
-        onCheckForUpdates: options.onCheckForUpdates,
-        onShowAbout: options.onShowAbout,
-        updateCheckBusy: options.updateCheckBusy,
-        onFocusAssistant: options.onFocusAssistant,
-        onOpenInsertEquation: options.onOpenInsertEquation,
-        onOpenEditEquation: options.onOpenEditEquation,
-        onOpenRepeat: options.onOpenRepeat,
-        onOpenSaveWorkspace: options.onOpenSaveWorkspace,
-        onOpenManageWorkspaces: options.onOpenManageWorkspaces
+        ...(options.onOpenExample === undefined ? {} : { onOpenExample: options.onOpenExample }),
+        ...(options.onOpenFromArxiv === undefined ? {} : { onOpenFromArxiv: options.onOpenFromArxiv }),
+        ...(options.onOpenSvgExport === undefined ? {} : { onOpenSvgExport: options.onOpenSvgExport }),
+        ...(options.onOpenPngExport === undefined ? {} : { onOpenPngExport: options.onOpenPngExport }),
+        ...(options.onRequestCloseDocument === undefined ? {} : { onRequestCloseDocument: options.onRequestCloseDocument }),
+        ...(options.onRequestCloseAllDocuments === undefined ? {} : { onRequestCloseAllDocuments: options.onRequestCloseAllDocuments }),
+        ...(options.onRequestQuitApp === undefined ? {} : { onRequestQuitApp: options.onRequestQuitApp }),
+        ...(options.onRequestSaveDocument === undefined ? {} : { onRequestSaveDocument: options.onRequestSaveDocument }),
+        ...(options.onAddNodeAdornment === undefined ? {} : { onAddNodeAdornment: options.onAddNodeAdornment }),
+        ...(options.onPositionNodeRelativeTo === undefined ? {} : { onPositionNodeRelativeTo: options.onPositionNodeRelativeTo }),
+        ...(options.onConvertNodePositionToAbsolute === undefined ? {} : { onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute }),
+        ...(options.onShowCompiledPicture === undefined ? {} : { onShowCompiledPicture: options.onShowCompiledPicture }),
+        ...(options.onOpenSettings === undefined ? {} : { onOpenSettings: options.onOpenSettings }),
+        ...(options.onCheckForUpdates === undefined ? {} : { onCheckForUpdates: options.onCheckForUpdates }),
+        ...(options.onShowAbout === undefined ? {} : { onShowAbout: options.onShowAbout }),
+        ...(options.updateCheckBusy === undefined ? {} : { updateCheckBusy: options.updateCheckBusy }),
+        ...(options.onFocusAssistant === undefined ? {} : { onFocusAssistant: options.onFocusAssistant }),
+        ...(options.onOpenInsertEquation === undefined ? {} : { onOpenInsertEquation: options.onOpenInsertEquation }),
+        ...(options.onOpenEditEquation === undefined ? {} : { onOpenEditEquation: options.onOpenEditEquation }),
+        ...(options.onOpenRepeat === undefined ? {} : { onOpenRepeat: options.onOpenRepeat }),
+        ...(options.onOpenSaveWorkspace === undefined ? {} : { onOpenSaveWorkspace: options.onOpenSaveWorkspace }),
+        ...(options.onOpenManageWorkspaces === undefined ? {} : { onOpenManageWorkspaces: options.onOpenManageWorkspaces })
       }),
     [
       documentKind,

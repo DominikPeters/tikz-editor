@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { PathItem, PathStatement, Span } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
 import type { WorldPoint } from "../coords/points.js";
@@ -58,7 +59,7 @@ export function planCenteredPivotMoves(
     const entries = statement.options?.entries ?? [];
     const pivots = entries.filter(isRotateAroundEntry);
     if (pivots.length !== 1) continue;
-    const rotation = pivots[0];
+    const rotation = requireArrayValue(pivots, 0);
     const parsedRotation = parseRotateAroundValue(rotation.valueRaw);
     if (!parsedRotation) continue;
     const prefix = resolveStatementOptionFrame(source, sourceId, entries.slice(0, entries.indexOf(rotation)), parseOptions, geometry);
@@ -80,7 +81,7 @@ export function planCenteredPivotMoves(
     if (!localDelta) return { kind: "unsupported", reason: "Centered-pivot move requires an invertible coordinate frame." };
     const nextPivot = worldPoint(pt(parsedRotation.pivot.x + localDelta.x), pt(parsedRotation.pivot.y + localDelta.y));
     // Preserve the angle expression and the actual key/option position.
-    const angleRaw = splitAllAtTopLevel(stripEnclosingBraces(rotation.valueRaw), ":")[0].trim();
+    const angleRaw = requireArrayValue(splitAllAtTopLevel(stripEnclosingBraces(rotation.valueRaw), ":"), 0).trim();
     const nextValue = `{${angleRaw}:(${formatNumber(nextPivot.x * CM_PER_PT, { fractionDigits: 6 })},${formatNumber(nextPivot.y * CM_PER_PT, { fractionDigits: 6 })})}`;
     const nextEntry = { ...rotation, valueRaw: nextValue, raw: `${rotation.key}=${nextValue}` };
     const nextEntries = entries.map(entry => entry === rotation ? nextEntry : entry);
@@ -113,8 +114,8 @@ function shapeCenter(statement: PathStatement, handles: readonly EditHandle[]): 
   const shapes = statement.items.filter((item): item is Extract<PathItem, { kind: "PathKeyword" }> =>
     item.kind === "PathKeyword" && (item.keyword === "rectangle" || item.keyword === "circle" || item.keyword === "ellipse"));
   if (shapes.length !== 1) return;
-  if (shapes[0].keyword === "rectangle" && handles.length === 2) {
-    return worldPoint(pt((handles[0].world.x + handles[1].world.x) / 2), pt((handles[0].world.y + handles[1].world.y) / 2));
+  if (requireArrayValue(shapes, 0).keyword === "rectangle" && handles.length === 2) {
+    return worldPoint(pt((requireArrayValue(handles, 0).world.x + requireArrayValue(handles, 1).world.x) / 2), pt((requireArrayValue(handles, 0).world.y + requireArrayValue(handles, 1).world.y) / 2));
   }
-  if ((shapes[0].keyword === "circle" || shapes[0].keyword === "ellipse") && handles.length === 1) return handles[0].world;
+  if ((requireArrayValue(shapes, 0).keyword === "circle" || requireArrayValue(shapes, 0).keyword === "ellipse") && handles.length === 1) return requireArrayValue(handles, 0).world;
 }

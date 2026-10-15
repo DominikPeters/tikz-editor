@@ -84,7 +84,7 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
         figure: {
           kind: "Figure",
           span: { from: inlineNode.from, to: inlineNode.to },
-          options,
+          ...(options !== undefined ? { options } : {}),
           body: inlineBody
         },
         figures: [],
@@ -147,9 +147,7 @@ export function fromCst(tree: Tree, source: string, opts: CstToAstOptions = {}):
     figure: {
       kind: "Figure",
       span: activeFigureEntry.inventory.span,
-      options: optionsNode
-        ? parseOptionListRaw(activeSyntax.parseSource.slice(optionsNode.from, optionsNode.to), optionsNode.from)
-        : undefined,
+      ...(optionsNode ? { options: parseOptionListRaw(activeSyntax.parseSource.slice(optionsNode.from, optionsNode.to), optionsNode.from) } : {}),
       body
     },
     figures: figureEntries.map((entry) => entry.inventory),
@@ -180,8 +178,7 @@ function collectFigureNodes(
     return nodes;
   }
   const parsedNodesBySpan = collectParsedFigureNodesBySpan(tree);
-  for (let index = 0; index < scanned.length; index += 1) {
-    const inventory = scanned[index];
+  for (const [index, inventory] of scanned.entries()) {
     const id = formatDocumentRootId({ kind: "tikz-figure", index });
     const parsedNode = parsedNodesBySpan.get(spanKey(inventory.span)) ?? null;
     nodes.push({
@@ -192,7 +189,7 @@ function collectFigureNodes(
         span: inventory.span,
         beginSpan: inventory.beginSpan,
         endSpan: inventory.endSpan,
-        optionsSpan: inventory.optionsSpan,
+        ...(inventory.optionsSpan !== undefined ? { optionsSpan: inventory.optionsSpan } : {}),
         startLine: inventory.startLine,
         endLine: inventory.endLine
       }
@@ -210,7 +207,7 @@ function resolveActiveFigureEntry(entries: FigureNodeEntry[], requestedId: strin
     return null;
   }
   if (requestedId === undefined || requestedId.length === 0) {
-    return entries[0];
+    return entries[0] ?? null;
   }
   const directMatch = entries.find((entry) => entry.id === requestedId);
   if (directMatch) {
@@ -218,9 +215,9 @@ function resolveActiveFigureEntry(entries: FigureNodeEntry[], requestedId: strin
   }
   const requestedIndex = tikzFigureIndexFromRootId(requestedId);
   if (requestedIndex == null || requestedIndex < 0 || requestedIndex >= entries.length) {
-    return entries[0];
+    return entries[0] ?? null;
   }
-  return entries[requestedIndex];
+  return entries[requestedIndex] ?? null;
 }
 
 function collectPriorDefinitions(
@@ -352,7 +349,7 @@ function scanFigureInventories(
       span: { from: beginFrom, to: endTo },
       beginSpan: { from: beginFrom, to: beginTo },
       endSpan: { from: endFrom, to: endTo },
-      optionsSpan,
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
       startLine: lineForOffset(beginFrom, lineStarts),
       endLine: lineForOffset(Math.max(beginFrom, endTo - 1), lineStarts)
     });
@@ -777,9 +774,9 @@ function tryParseNewCommandStatement(
       nameRaw,
       nameSpan,
       arity,
-      aritySpan,
-      optionalDefaultRaw,
-      optionalDefaultSpan,
+      ...(aritySpan !== undefined ? { aritySpan } : {}),
+      ...(optionalDefaultRaw !== undefined ? { optionalDefaultRaw } : {}),
+      ...(optionalDefaultSpan !== undefined ? { optionalDefaultSpan } : {}),
       bodyRaw: commandRaw === "\\DeclareMathOperator"
         ? `${starred ? "\\operatorname*" : "\\operatorname"}{${bodyGroup.content}}`
         : bodyGroup.content,

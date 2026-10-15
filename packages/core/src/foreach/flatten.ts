@@ -165,8 +165,8 @@ function flattenTarget(target: FlattenTargetNode, context: FlattenContext): Flat
 
 function flattenForeachStatement(statement: ForeachStatement, context: FlattenContext): FlattenReplacementResult {
   const iterations = resolveIterations({
-    variablesRaw: statement.variablesRaw,
-    listRaw: statement.listRaw,
+    ...(statement.variablesRaw !== undefined ? { variablesRaw: statement.variablesRaw } : {}),
+    ...(statement.listRaw !== undefined ? { listRaw: statement.listRaw } : {}),
     options: statement.options,
     loopSpan: statement.span,
     bodyRaw: statement.bodyRaw,
@@ -200,8 +200,8 @@ function flattenForeachStatement(statement: ForeachStatement, context: FlattenCo
 
 function flattenPathForeach(item: PathForeachItem, context: FlattenContext): FlattenReplacementResult {
   const iterations = resolveIterations({
-    variablesRaw: item.variablesRaw,
-    listRaw: item.listRaw,
+    ...(item.variablesRaw !== undefined ? { variablesRaw: item.variablesRaw } : {}),
+    ...(item.listRaw !== undefined ? { listRaw: item.listRaw } : {}),
     options: item.options,
     loopSpan: item.span,
     bodyRaw: item.bodyRaw,

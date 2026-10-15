@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type { Span, TikzFigure } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -238,11 +239,11 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
     // in invalidation too, including paths outside the scope that use its nodes.
     for (const sourceId of changedSourceIds.slice()) {
       const index = previous.sourceStatementFirstIndexBySourceId.get(sourceId);
-      if (index == null || run.scopeSteps.get(run.expandedFigureBody[index]) !== "enter") continue;
-      const scopeId = run.expandedFigureBody[index].id;
+      if (index == null || run.scopeSteps.get(requireArrayValue(run.expandedFigureBody, index)) !== "enter") continue;
+      const scopeId = requireArrayValue(run.expandedFigureBody, index).id;
       for (let i = index + 1; i < statementCount; i++) {
-        if (run.expandedFigureBody[i].id === `${scopeId}:leave`) break;
-        changedSourceIds.push(previous.statementFragments[i].sourceId);
+        if (requireArrayValue(run.expandedFigureBody, i).id === `${scopeId}:leave`) break;
+        changedSourceIds.push(requireArrayValue(previous.statementFragments, i).sourceId);
       }
     }
     const invalidation = collectGeometryInvalidation(previous.dependencies, {
@@ -264,7 +265,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
     // Changing scope options or their dependencies affects every statement in
     // the scope, even when those statements consume no named resources directly.
     for (const index of affectedStatementIndices.slice()) {
-      const statement = run.expandedFigureBody[index];
+      const statement = requireArrayValue(run.expandedFigureBody, index);
       if (run.scopeSteps.get(statement) !== "enter") continue;
       const end = run.expandedFigureBody.findIndex((candidate, i) => i > index && candidate.id === `${statement.id}:leave`);
       for (let i = index + 1; i <= end; i++) affectedStatementIndices.push(i);
@@ -530,7 +531,7 @@ function* evaluateIncrementalSuffix(args: {
         reusedStatementCount: restoreIndex,
         corridorEndStatementIndex: statementCount - 1,
         affectedStatementCount,
-        fallbackReason,
+        ...(fallbackReason === undefined ? {} : { fallbackReason: fallbackReason }),
         checkpointPreparation,
         checkpointCount: checkpointsBeforeStatement.size
       }
@@ -639,7 +640,7 @@ function* evaluateSelectively(args: {
     // checkpoints past the corridor, but for the bounds drawn so far.
     const editHandles = run.context.editHandles;
     for (let statementIndex = corridorEndIndex + 1; statementIndex < statementCount; statementIndex += 1) {
-      const fragment = previous.statementFragments[statementIndex];
+      const fragment = requireArrayValue(previous.statementFragments, statementIndex);
       const checkpoint = previousCheckpoints.checkpointsBeforeStatement.get(statementIndex);
       if (checkpoint) checkpointsBeforeStatement.set(statementIndex, withPictureBounds(bindCheckpoint(checkpoint), run.context.pictureBounds));
       extendPictureBounds(run.context, fragment.effectSummary.extendsPictureBounds);
@@ -655,7 +656,7 @@ function* evaluateSelectively(args: {
   } else {
     const reusedSourceIds = new Set<string>();
     for (let statementIndex = corridorEndIndex + 1; statementIndex < statementCount; statementIndex += 1) {
-      const fragment = previous.statementFragments[statementIndex];
+      const fragment = requireArrayValue(previous.statementFragments, statementIndex);
       if (shouldCaptureCheckpoint(statementIndex, checkpointInterval)) {
         checkpointsBeforeStatement.set(
           statementIndex,
@@ -764,6 +765,7 @@ function assembleSelectiveSemanticResult(args: {
 
   const finalFeatureUsage = cloneFeatureUsage(featureUsage);
   const colorAliases = new Map(currentFrame(run.context).colorAliases);
+  const optionalBounds1 = run.context.pictureBounds ?? computeBounds(elements);
   const scene: SceneFigure = {
     kind: "SceneFigure",
     span: run.figure.span,
@@ -774,7 +776,7 @@ function assembleSelectiveSemanticResult(args: {
     layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements,
     // As a full evaluation: clipping and `use as bounding box` paths bound the picture, not all of its elements.
-    bounds: run.context.pictureBounds ?? computeBounds(elements),
+    ...(optionalBounds1 === undefined ? {} : { bounds: optionalBounds1 }),
     hasStatefulGraphicsState:
       finalFeatureUsage.path_clipping === "used-supported" || finalFeatureUsage.use_as_bounding_box === "used-supported",
     ...(run.rootTransform ? { rootTransform: run.rootTransform } : {})
@@ -871,8 +873,8 @@ function corridorEffectsStand(
   toIndex: number
 ): boolean {
   for (let index = fromIndex; index <= toIndex; index += 1) {
-    const before = previous[index];
-    const after = next[index];
+    const before = requireArrayValue(previous, index);
+    const after = requireArrayValue(next, index);
     if (before?.statementId !== after?.statementId) return false;
     const left = before.effectSummary;
     const right = after.effectSummary;
@@ -915,7 +917,7 @@ function corridorSymbolUsesStand(
   toIndex: number
 ): boolean {
   const consumers = new Set<string>();
-  for (let index = fromIndex; index <= toIndex; index += 1) consumers.add(fragments[index].statementId);
+  for (let index = fromIndex; index <= toIndex; index += 1) consumers.add(requireArrayValue(fragments, index).statementId);
   const uses = (
     edges: Iterable<{ consumerStatementId: string; providerStatementId: string; kind: string; name: string }>,
     unresolved: Iterable<{ consumerStatementId: string; kind: string; name: string }>
@@ -1113,15 +1115,16 @@ function createCheckpointBinder(
   const authored = (sourceRef: Pick<StyleSourceRef, "sourceId"> & { sourceKind?: string } | undefined) =>
     sourceRef != null && (sourceRef.sourceKind === "figure-options" || run.sourceStatementSpanById.has(sourceRef.sourceId));
   const chain = (entries: StyleChainEntry[]) => {
-    const bound = entries.map(entry => authored(entry.sourceRef)
-      ? { ...entry, sourceRef: binder.metadata(entry.sourceRef), rawOptions: binder.metadata(entry.rawOptions) }
-      : entry);
-    return bound.every((entry, index) => entry.sourceRef === entries[index].sourceRef && entry.rawOptions === entries[index].rawOptions)
+    const bound = entries.map(entry => {
+      if (!entry.sourceRef || !authored(entry.sourceRef)) return entry;
+      return { ...entry, sourceRef: binder.metadata(entry.sourceRef), rawOptions: binder.metadata(entry.rawOptions) };
+    });
+    return bound.every((entry, index) => entry.sourceRef === requireArrayValue(entries, index).sourceRef && entry.rawOptions === requireArrayValue(entries, index).rawOptions)
       ? entries : bound;
   };
   const provenance = (lists: ProvenanceOptionList[]) => {
     const bound = lists.map(list => authored(list.sourceRef) ? { ...list, sourceRef: binder.metadata(list.sourceRef) } : list);
-    return bound.every((list, index) => list.sourceRef === lists[index].sourceRef) ? lists : bound;
+    return bound.every((list, index) => list.sourceRef === requireArrayValue(lists, index).sourceRef) ? lists : bound;
   };
   const frame = (current: SemanticContextFrame): SemanticContextFrame => {
     const next: SemanticContextFrame = {
@@ -1163,7 +1166,7 @@ function* restorePrefixFeatureUsage(
 ): Generator<void, void, void> {
   // The new run supplies current figure/preamble usage, including foreach scans.
   for (let index = 0; index < statementIndexExclusive; index += 1) {
-    mergeFeatureUsage(usage, fragments[index].featureUsage);
+    mergeFeatureUsage(usage, requireArrayValue(fragments, index).featureUsage);
     yield;
   }
 }

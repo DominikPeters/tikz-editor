@@ -310,7 +310,7 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
     const values = viewBox.split(/[\s,]+/).map((value) => Number(value));
     const width = values[2];
     const height = values[3];
-    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    if (width !== undefined && height !== undefined && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
       return { width, height };
     }
   }

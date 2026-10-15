@@ -92,12 +92,12 @@ export function breakTexParagraphRuns(params: {
     options: params.options,
     alignment: params.alignment,
     noIndent: params.noIndent,
-    alignmentProfile: params.alignmentProfile,
+    ...(params.alignmentProfile !== undefined ? { alignmentProfile: params.alignmentProfile } : {}),
     inheritedAlignment: params.inheritedAlignment,
-    inheritedAlignmentProfile: params.inheritedAlignmentProfile,
+    ...(params.inheritedAlignmentProfile !== undefined ? { inheritedAlignmentProfile: params.inheritedAlignmentProfile } : {}),
     scopePolicy: params.scopePolicy,
-    firstLineIndentWidth: params.firstLineIndentWidth,
-    forcedBreakIndentWidth: params.forcedBreakIndentWidth,
+    ...(params.firstLineIndentWidth !== undefined ? { firstLineIndentWidth: params.firstLineIndentWidth } : {}),
+    ...(params.forcedBreakIndentWidth !== undefined ? { forcedBreakIndentWidth: params.forcedBreakIndentWidth } : {}),
   });
   const pass1 = breakWithDp(pass1Model, params.options.width, {
     ...dpOptions,
@@ -275,7 +275,7 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
       ),
     rightskipShrink: texLength(0),
     firstLineIndentWidth:
-      Number.isFinite(firstLineIndentWidth)
+      firstLineIndentWidth !== undefined && Number.isFinite(firstLineIndentWidth)
         ? firstLineIndentWidth
         : !noIndent &&
             scopePolicy.allowParagraphIndent &&
@@ -285,9 +285,9 @@ function texParagraphDpOptions(params: TexParagraphDpOptionParams): DpOptions {
           ? options.parindent
           : texLength(0),
     forcedBreakIndentWidth:
-      Number.isFinite(forcedBreakIndentWidth) && scopePolicy.allowForcedBreakIndent
+      forcedBreakIndentWidth !== undefined && Number.isFinite(forcedBreakIndentWidth) && scopePolicy.allowForcedBreakIndent
         ? forcedBreakIndentWidth
-        : Number.isFinite(firstLineIndentWidth) && scopePolicy.allowForcedBreakIndent
+        : firstLineIndentWidth !== undefined && Number.isFinite(firstLineIndentWidth) && scopePolicy.allowForcedBreakIndent
         ? firstLineIndentWidth
         : options.tikzTextWidthNode === true &&
               alignment !== "justified" &&

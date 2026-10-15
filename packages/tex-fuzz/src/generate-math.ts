@@ -55,7 +55,7 @@ export function generateTexFuzzMathNode(random: TexFuzzRandom, path: string, dep
     case 4:
       return {
         kind: "radical",
-        degree: random.boolean(`${path}/has-degree`) ? generateTexFuzzMathNode(random, `${path}/degree`, depth - 1) : undefined,
+        ...(random.boolean(`${path}/has-degree`) ? { degree: generateTexFuzzMathNode(random, `${path}/degree`, depth - 1) } : {}),
         body: generateTexFuzzMathNode(random, `${path}/radicand`, depth - 1),
       };
     case 5: {
@@ -63,8 +63,8 @@ export function generateTexFuzzMathNode(random: TexFuzzRandom, path: string, dep
       return {
         kind: "script",
         base: generateTexFuzzMathNode(random, `${path}/base`, depth - 1),
-        subscript: scriptMode !== 1 ? generateTexFuzzMathNode(random, `${path}/subscript`, depth - 1) : undefined,
-        superscript: scriptMode !== 0 ? generateTexFuzzMathNode(random, `${path}/superscript`, depth - 1) : undefined,
+        ...(scriptMode !== 1 ? { subscript: generateTexFuzzMathNode(random, `${path}/subscript`, depth - 1) } : {}),
+        ...(scriptMode !== 0 ? { superscript: generateTexFuzzMathNode(random, `${path}/superscript`, depth - 1) } : {}),
       };
     }
     case 6:
@@ -85,7 +85,7 @@ export function generateTexFuzzMathNode(random: TexFuzzRandom, path: string, dep
       return {
         kind: "operator",
         command: random.pick(`${path}/operator-command`, OPERATORS),
-        script: random.boolean(`${path}/operator-script`) ? generateTexFuzzMathNode(random, `${path}/operator-limit`, depth - 1) : undefined,
+        ...(random.boolean(`${path}/operator-script`) ? { script: generateTexFuzzMathNode(random, `${path}/operator-limit`, depth - 1) } : {}),
       };
     case 11:
       return { kind: "stackrel", above: generateTexFuzzMathNode(random, `${path}/stack-above`, depth - 1), body: generateTexFuzzMathNode(random, `${path}/stack-body`, depth - 1) };
@@ -93,7 +93,7 @@ export function generateTexFuzzMathNode(random: TexFuzzRandom, path: string, dep
       return {
         kind: "xarrow",
         command: random.pick(`${path}/arrow-command`, ["xleftarrow", "xrightarrow"] as const),
-        below: random.boolean(`${path}/arrow-below`) ? generateTexFuzzMathNode(random, `${path}/arrow-below-body`, depth - 1) : undefined,
+        ...(random.boolean(`${path}/arrow-below`) ? { below: generateTexFuzzMathNode(random, `${path}/arrow-below-body`, depth - 1) } : {}),
         above: generateTexFuzzMathNode(random, `${path}/arrow-above`, depth - 1),
       };
     case 13: {

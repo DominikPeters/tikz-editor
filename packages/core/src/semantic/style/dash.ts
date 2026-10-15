@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { parseLength } from "../coords/parse-length.js";
 import { normalizeOptionValue } from "./option-utils.js";
 
@@ -40,7 +41,7 @@ export function parseDashValue(raw: string): { pattern: number[] | null; phase: 
   let phase: number | null = null;
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     if (token.toLowerCase() === "phase") {
       const next = tokens[index + 1];
       if (!next) {

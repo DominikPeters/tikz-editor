@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { EditNode, EditTree, NodeId, Span } from "../tree/types.js";
 
 /**
@@ -54,28 +56,28 @@ export function listShapes(tree: EditTree): readonly ListShape[] {
       }
       const begin = node.delimiters[0];
       const end = node.delimiters.at(-1);
-      const flow = tree.slots[node.slots[0]];
+      const flow = editSlotAt(tree.slots, requireArrayValue(node.slots, 0));
       if (!begin || !end || !tree.text.startsWith("\\end", end.from)) {
         return [];
       }
       const items = flow.children.flatMap((child) => {
-        const item = tree.nodes[child];
+        const item = editNodeAt(tree.nodes, child);
         if (item.kind !== "item") {
           return [];
         }
-        const slots = item.slots.map((slot) => tree.slots[slot]);
+        const slots = item.slots.map((slot) => editSlotAt(tree.slots, slot));
         const label = slots.find((slot) => slot.role === "label");
         const content = slots.find((slot) => slot.role === "flow")!;
         return [{
           node: item.id,
           commandSpan: { from: item.span.from, to: content.contentSpan.from },
-          labelSpan: label?.presence === "present" ? label.contentSpan : undefined,
+          ...(label?.presence === "present" ? { labelSpan: label.contentSpan } : {}),
           contentSpan: content.contentSpan,
         }];
       });
       let depth = 1;
-      for (let parent = node.parent; parent != null; parent = tree.nodes[tree.slots[parent].node].parent) {
-        if (tree.nodes[tree.slots[parent].node].kind === "list") {
+      for (let parent = node.parent; parent != null; parent = editNodeAt(tree.nodes, editSlotAt(tree.slots, parent).node).parent) {
+        if (editNodeAt(tree.nodes, editSlotAt(tree.slots, parent).node).kind === "list") {
           depth += 1;
         }
       }
@@ -100,17 +102,17 @@ const LIST_ENVIRONMENTS = new Set(["itemize", "enumerate", "description"]);
 /** The innermost list item holding a node, with its list. */
 export function listItemOf(tree: EditTree, node: NodeId): ListContext | null {
   for (let current: NodeId | null = node; current != null;) {
-    const record: EditNode = tree.nodes[current];
+    const record: EditNode = editNodeAt(tree.nodes, current);
     if (record.kind === "item") {
       for (const list of listShapes(tree)) {
         const index = list.items.findIndex((item) => item.node === current);
         if (index >= 0) {
-          return { list, item: list.items[index], index };
+          return { list, item: requireArrayValue(list.items, index), index };
         }
       }
       return null;
     }
-    current = record.parent == null ? null : tree.slots[record.parent].node;
+    current = record.parent == null ? null : editSlotAt(tree.slots, record.parent).node;
   }
   return null;
 }
@@ -135,7 +137,7 @@ export function lineIndentAt(source: string, offset: number): string {
 
 export function isBlank(source: string, from: number, to: number): boolean {
   for (let index = from; index < to; index += 1) {
-    if (!/\s/u.test(source[index])) {
+    if (!/\s/u.test(source.charAt(index))) {
       return false;
     }
   }
@@ -176,7 +178,7 @@ export function joinSeparator(source: string, end: number, fallback: string): st
 
 export function trimmedEnd(source: string, span: Span): number {
   let end = span.to;
-  while (end > span.from && /\s/u.test(source[end - 1])) {
+  while (end > span.from && /\s/u.test(source.charAt(end - 1))) {
     end -= 1;
   }
   return end;
@@ -276,7 +278,7 @@ export function mergeWithPreviousItemPatch(source: string, context: ListContext,
   if (index === 0) {
     return null;
   }
-  const previous = list.items[index - 1];
+  const previous = requireArrayValue(list.items, index - 1);
   const from = trimmedEnd(source, previous.contentSpan);
   const empty = from === previous.contentSpan.from || isBlank(source, caret, context.item.contentSpan.to);
   // An empty previous item ends in its `\item`: the joined text must not run into it (R5).
@@ -290,7 +292,7 @@ export function mergeNextItemPatch(source: string, context: ListContext, caret: 
   if (index === list.items.length - 1) {
     return null;
   }
-  const next = list.items[index + 1];
+  const next = requireArrayValue(list.items, index + 1);
   const empty = trimmedEnd(source, item.contentSpan) === item.contentSpan.from;
   const insert = joinSeparator(source, caret, empty && !/\\[A-Za-z@]+$/u.test(source.slice(0, caret)) ? "" : " ");
   return { edits: [{ span: { from: caret, to: next.contentSpan.from }, insert }], caret };
@@ -315,7 +317,7 @@ export function nestItemsPatch(
   const { list, index } = context;
   const group: ItemShape = {
     ...context.item,
-    contentSpan: { from: context.item.contentSpan.from, to: list.items[lastIndex].contentSpan.to },
+    contentSpan: { from: context.item.contentSpan.from, to: requireArrayValue(list.items, lastIndex).contentSpan.to },
   };
   const items = [...list.items.slice(0, index), group, ...list.items.slice(lastIndex + 1)];
   const grouped: ListContext = { list: { ...list, items }, item: group, index };
@@ -326,7 +328,7 @@ export function nestItemsPatch(
   return {
     edits,
     caret: mapAfterEdits(edits, caret),
-    selectionEnd: selectionEnd === caret ? undefined : mapAfterEdits(edits, selectionEnd),
+    ...(selectionEnd === caret ? {} : { selectionEnd: mapAfterEdits(edits, selectionEnd) }),
   };
 }
 
@@ -335,7 +337,7 @@ function nestEdits(source: string, lists: readonly ListShape[], context: ListCon
   if (index === 0) {
     return null;
   }
-  const previous = list.items[index - 1];
+  const previous = requireArrayValue(list.items, index - 1);
   const adjacent = lists.find((candidate) =>
     candidate.node !== list.node &&
     candidate.environment === list.environment &&
@@ -374,13 +376,13 @@ function unnestEdits(source: string, lists: readonly ListShape[], context: ListC
     edits.push({ span: tokenRemovalSpan(source, list.endSpan), insert: "" });
   } else if (index === 0) {
     edits.push({ span: tokenRemovalSpan(source, list.openSpan), insert: "" });
-    edits.push(insertBeforeToken(source, list.items[1].commandSpan.from, beginLine));
+    edits.push(insertBeforeToken(source, requireArrayValue(list.items, 1).commandSpan.from, beginLine));
   } else if (index === list.items.length - 1) {
     edits.push(insertBeforeToken(source, item.commandSpan.from, endLine));
     edits.push({ span: tokenRemovalSpan(source, list.endSpan), insert: "" });
   } else {
     edits.push(insertBeforeToken(source, item.commandSpan.from, endLine));
-    edits.push(insertBeforeToken(source, list.items[index + 1].commandSpan.from, beginLine));
+    edits.push(insertBeforeToken(source, requireArrayValue(list.items, index + 1).commandSpan.from, beginLine));
   }
   return sorted(edits);
 }
@@ -427,13 +429,13 @@ function dissolveItemEdits(source: string, context: ListContext): SourceEdit[] {
     edits.push(boundaryRemovalEdit(source, list.endSpan, "below"));
   } else if (index === 0) {
     edits.push(boundaryRemovalEdit(source, list.openSpan, "above"));
-    edits.push(insertBeforeToken(source, list.items[1].commandSpan.from, beginLine));
+    edits.push(insertBeforeToken(source, requireArrayValue(list.items, 1).commandSpan.from, beginLine));
   } else if (index === list.items.length - 1) {
     edits.push(insertBeforeToken(source, item.commandSpan.from, endLine));
     edits.push(boundaryRemovalEdit(source, list.endSpan, "below"));
   } else {
     edits.push(insertBeforeToken(source, item.commandSpan.from, endLine));
-    edits.push(insertBeforeToken(source, list.items[index + 1].commandSpan.from, beginLine));
+    edits.push(insertBeforeToken(source, requireArrayValue(list.items, index + 1).commandSpan.from, beginLine));
   }
   return sorted(edits);
 }

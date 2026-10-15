@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { stripEnclosingBraces } from "../../semantic/style/option-utils.js";
 import type { ResolvedPattern } from "../../semantic/types.js";
 import {
@@ -70,7 +71,8 @@ function findTopLevelOpenBracket(input: string): number {
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
+
     if (char === "\\") {
       index += 1;
       continue;
@@ -122,8 +124,8 @@ export function dashStylePresetFromStyle(dashArray: number[] | null, lineWidth: 
   if (dashArray.length !== 2) {
     return "custom";
   }
-  const first = dashArray[0];
-  const second = dashArray[1];
+  const first = requireArrayValue(dashArray, 0);
+  const second = requireArrayValue(dashArray, 1);
   if (closeEnough(first, 3) && closeEnough(second, 3)) {
     return "dashed";
   }

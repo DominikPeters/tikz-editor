@@ -97,7 +97,8 @@ export async function checkTexFuzzEngineHistory(
   if (scope && visible) {
     const retained = scope.run(() => capture(visible, scope.layoutContext));
     if (canonicalSnapshot(retained) !== expectedVisible) add("engine-history-visible-snapshot-mismatch", "retained");
-    const next = engine.createRenderScope!(scope.layoutContext);
+    if (!engine.createRenderScope) throw new Error("A retained render scope requires render-scope support.");
+    const next = engine.createRenderScope(scope.layoutContext);
     const inherited = next.run(() => engine.measure(initial));
     if (inherited?.paragraphId !== visible.paragraphId) add("engine-history-visible-identity-mismatch", "incremental-retain");
     next.retain(inherited ? [inherited.cacheKey] : []);

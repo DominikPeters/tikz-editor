@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { NodeItem } from "../../ast/types.js";
 import { worldPoint, type WorldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -340,8 +341,7 @@ export function emitNodeShape(state: NodeShapeEmissionContext): void {
         maxY: center.y + segment.maxY
       }));
       if (useCustomFill && partFills.length > 0) {
-        for (let index = 0; index < segments.length; index += 1) {
-          const segment = segments[index];
+        for (const [index, segment] of segments.entries()) {
           const fill = partFills[Math.min(index, partFills.length - 1)] ?? null;
           if (!fill || fill === "none") {
             continue;
@@ -383,8 +383,8 @@ export function emitNodeShape(state: NodeShapeEmissionContext): void {
       if (parts > 1) {
         for (let index = 1; index < segments.length; index += 1) {
           if (drawSplits) {
-            const previous = segments[index - 1];
-            const current = segments[index];
+            const previous = requireArrayValue(segments, index - 1);
+            const current = requireArrayValue(segments, index);
             if (horizontal) {
               const x = (previous.maxX + current.minX) / 2;
               pushNodeElement(

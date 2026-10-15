@@ -1,3 +1,4 @@
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
 import { slotChain } from "../tree/navigate.js";
@@ -46,18 +47,18 @@ export function editingHint(view: EditView, caret: Position, interaction: Intera
   }
   const { tree } = view;
   if (interaction.placeholder != null) {
-    const role = tree.slots[caret.slot].role;
+    const role = editSlotAt(tree.slots, caret.slot).role;
     return role === "sup" || role === "sub"
       ? { id: "placeholder-script", text: "empty script · type its content · → leaves it out" }
       : { id: "placeholder", text: "empty · type to fill · → leaves it out" };
   }
   for (const slot of slotChain(tree, caret.slot)) {
-    const { role } = tree.slots[slot];
+    const { role } = editSlotAt(tree.slots, slot);
     const text = SLOT_HINTS[role];
     if (text) {
       return { id: `slot-${role}`, text };
     }
-    if (tree.nodes[tree.slots[slot].node].kind === "text-in-math") {
+    if (editNodeAt(tree.nodes, editSlotAt(tree.slots, slot).node).kind === "text-in-math") {
       return { id: "text-in-math", text: "text in math · prose rules apply" };
     }
   }

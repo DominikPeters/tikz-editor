@@ -15,7 +15,7 @@ export function applyFlagEntry(
   resolveColorAlias?: ColorAliasResolver
 ): ApplyOutcome {
   const currentColor = style.textColor ?? style.stroke ?? style.fill ?? "black";
-  const normalizedColorCandidate = normalizeColor(key, { currentColor, resolveAlias: resolveColorAlias });
+  const normalizedColorCandidate = normalizeColor(key, { currentColor, ...(resolveColorAlias === undefined ? {} : { resolveAlias: resolveColorAlias }) });
   if (key === "draw") {
     return {
       style: {

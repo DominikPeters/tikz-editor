@@ -21,7 +21,7 @@ interface ScopeFrame {
   readonly role: TexVBoxRole;
   readonly items: TexVListItem[];
   layout: TexVBoxLayout;
-  sourceSpan?: TexSourceSpan;
+  sourceSpan: TexSourceSpan | undefined;
 }
 
 export function groupSimpleTexVListScopes(
@@ -32,8 +32,7 @@ export function groupSimpleTexVListScopes(
   const rootItems: TexVListItem[] = [];
   const stack: ScopeFrame[] = [];
 
-  for (let index = 0; index < vlist.items.length; index += 1) {
-    const rawItem = vlist.items[index];
+  for (const [index, rawItem] of vlist.items.entries()) {
     if (!rawItem) {
       continue;
     }
@@ -51,6 +50,7 @@ export function groupSimpleTexVListScopes(
         key: scope.key,
         role: scope.role,
         items: [],
+        sourceSpan: undefined,
         layout: texVBoxLayoutForScopeRole(scope.role, font),
       };
       appendItem(stack, rootItems, mutableFrameToVBox(frame));
@@ -78,7 +78,7 @@ function normalizeExistingVBoxScopes(
     ...item,
     items: groupSimpleTexVListScopes({
       kind: "vlist",
-      sourceSpan: item.sourceSpan,
+      ...(item.sourceSpan !== undefined ? { sourceSpan: item.sourceSpan } : {}),
       items: item.items,
     }, font, listProfile).items,
   };

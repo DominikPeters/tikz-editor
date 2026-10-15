@@ -70,7 +70,7 @@ function toDecoratableNodePath(element: SceneElement): ScenePath | null {
         sourceId: element.sourceRef.sourceId,
         sourceSpan: element.sourceRef.sourceSpan
       },
-      origin: element.origin,
+      ...(element.origin === undefined ? {} : { origin: element.origin }),
       style: cloneStyleForDecoration(element.style),
       styleChain: element.styleChain.map((entry) => ({ ...entry })),
       commands
@@ -89,7 +89,7 @@ function toDecoratableNodePath(element: SceneElement): ScenePath | null {
         sourceId: element.sourceRef.sourceId,
         sourceSpan: element.sourceRef.sourceSpan
       },
-      origin: element.origin,
+      ...(element.origin === undefined ? {} : { origin: element.origin }),
       style: cloneStyleForDecoration(element.style),
       styleChain: element.styleChain.map((entry) => ({ ...entry })),
       commands

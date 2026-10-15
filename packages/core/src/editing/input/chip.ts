@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { CommandCategory, CommandTable } from "../commands/table.js";
 import type { EditMode } from "../tree/types.js";
 
@@ -95,7 +96,7 @@ function usageCounts(text: string): Map<string, number> {
   if (counted?.text !== text) {
     const counts = new Map<string, number>();
     for (const match of text.matchAll(/\\([A-Za-z@]+)/gu)) {
-      counts.set(match[1], (counts.get(match[1]) ?? 0) + 1);
+      counts.set(requireArrayValue(match, 1), (counts.get(requireArrayValue(match, 1)) ?? 0) + 1);
     }
     counted = { text, counts };
   }

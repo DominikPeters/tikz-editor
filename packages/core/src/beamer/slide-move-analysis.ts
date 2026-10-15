@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { isTexMathTypesettingCommand } from "../text/tex/math/parser.js";
 import { applyMacroArguments, parseMacroInvocationArgs } from "../macros/expand.js";
@@ -130,7 +131,7 @@ function definitions(syntax: TexSyntaxIndex): { definitions: Definition[]; store
     result.push({ name: parsed.nameRaw.replace(/^\\/u, ""), span, command: control.name, body,
       alias: parsed.kind === "MacroAlias",
       arity: parsed.kind === "MacroCommandDefinition" ? parsed.arity : 0,
-      optionalDefault: parsed.kind === "MacroCommandDefinition" ? parsed.optionalDefaultRaw : undefined,
+      ...(parsed.kind === "MacroCommandDefinition" ? { optionalDefault: parsed.optionalDefaultRaw } : {}),
       references: [...bodySyntax.controls, ...(defaultSyntax?.controls ?? [])].map(item => item.name),
       wellFormed: bodySyntax.errors.length === 0 && (!defaultSyntax || defaultSyntax.errors.length === 0),
       literal: !/[#$&^_~]/u.test(body) && bodySyntax.errors.length === 0 &&
@@ -219,8 +220,8 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
   const frameSpans = frames.map(frame => beamerSlideSourceSpan(source, frame));
   at = frameSpans.find(span => contains(span, at!))?.from ?? at;
   const destination = at;
-  if (frameSpans.every((span, i) => i === 0 || frameSpans[i - 1].to === span.from) &&
-    frameSpans[0].from <= at && at <= frameSpans.at(-1)!.to) return finish();
+  if (frameSpans.every((span, i) => i === 0 || requireArrayValue(frameSpans, i - 1).to === span.from) &&
+    requireArrayValue(frameSpans, 0).from <= at && at <= frameSpans.at(-1)!.to) return finish();
   const { definitions: defs, stored } = definitions(syntax);
   const structure = scopes(syntax, stored);
   const path = (position: number, kind?: Scope["kind"]) => structure.scopes.filter(scope => (!kind || scope.kind === kind) && contains(scope.span, position));
@@ -277,7 +278,7 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
     const walk = (name: string, position: number, span: Span, seen: Set<string>, beforeAt = position, afterAt = position) => {
       if (seen.has(name) || (loopVariable(name, beforeAt) && loopVariable(name, afterAt, true))) return;
       const before = binding(name, beforeAt, false), after = binding(name, afterAt, true);
-      result.push({ name, at: position, span, before, after });
+      result.push({ name, at: position, span, ...(before !== undefined ? { before } : {}), ...(after !== undefined ? { after } : {}) });
       const next = new Set([...seen, name]);
       for (const dependency of new Set([...(before?.references ?? []), ...(after?.references ?? [])])) {
         if (knownNames.has(dependency)) walk(dependency, position, span, next,
@@ -294,7 +295,7 @@ export function analyzeBeamerSlideMove(source: string, edit: Extract<BeamerSlide
     const next = new Set([...seen, def]);
     return def.references.every(name => {
       const candidates = defs.filter(item => item.name === name);
-      return candidates.length === 1 && canRelocate(candidates[0], next);
+      return candidates.length === 1 && canRelocate(requireArrayValue(candidates, 0), next);
     });
   };
   // This proof is used only for automatic relocation. An opaque expansion can

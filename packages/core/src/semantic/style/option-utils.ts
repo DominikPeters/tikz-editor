@@ -1,5 +1,4 @@
-import { parseOptionListRaw } from "../../options/parse.js";
-import type { OptionListAst } from "../../options/types.js";
+import { requireArrayValue } from "../../utils/collections.js";
 import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import { parseCoordinateLike, parseLength, parseQuantityExpression } from "../coords/parse-length.js";
 import { worldPoint } from "../../coords/points.js";
@@ -16,30 +15,7 @@ function transformAxisVector(x: number, y: number): TransformAxisVector {
   return { x, y };
 }
 
-export function parseStyleValueAsOptionList(valueRaw: string, absoluteFrom = 0): OptionListAst | null {
-  const trimmed = valueRaw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  let inner = trimmed;
-  let innerStartOffset = 0;
-  if (inner.startsWith("{") && inner.endsWith("}")) {
-    const withoutOuter = inner.slice(1, -1);
-    const leadingInner = withoutOuter.search(/\S/);
-    innerStartOffset = 1 + (leadingInner >= 0 ? leadingInner : 0);
-    inner = withoutOuter.trim();
-  }
-
-  if (inner.length === 0) {
-    return null;
-  }
-
-  const hasExplicitBrackets = inner.startsWith("[");
-  const optionRaw = hasExplicitBrackets ? inner : `[${inner}]`;
-  const offsetAdjustment = hasExplicitBrackets ? innerStartOffset : innerStartOffset - 1;
-  return parseOptionListRaw(optionRaw, absoluteFrom + offsetAdjustment);
-}
+export { parseStyleValueAsOptionList } from "../../options/parse.js";
 
 const FONT_STYLE_BY_COMMAND: Record<string, ResolvedStyle["fontStyle"]> = {
   "\\it": "italic",
@@ -182,6 +158,7 @@ export function parseCmTransformValue(
   }
 
   const [aRaw, bRaw, cRaw, dRaw, translationRaw] = parts;
+  if (aRaw === undefined || bRaw === undefined || cRaw === undefined || dRaw === undefined || translationRaw === undefined) return null;
   const a = parseScalarQuantity(aRaw);
   const b = parseScalarQuantity(bRaw);
   const c = parseScalarQuantity(cRaw);
@@ -224,7 +201,7 @@ export function parseRotateAroundValue(
     return null;
   }
 
-  const angleRaw = parts[0];
+  const angleRaw = requireArrayValue(parts, 0);
   const coordinateRaw = parts.slice(1).join(":").trim();
   if (angleRaw.length === 0 || coordinateRaw.length === 0) {
     return null;
@@ -282,10 +259,10 @@ export function stripEnclosingBraces(raw: string): string {
 
 export function readOptionalBracketOptions(input: string, startIndex: number): { optionsRaw: string | null; nextIndex: number } {
   let cursor = startIndex;
-  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+  while (cursor < input.length && /\s/.test(input.charAt(cursor))) {
     cursor += 1;
   }
-  if (input[cursor] !== "[") {
+  if (input.charAt(cursor) !== "[") {
     return { optionsRaw: null, nextIndex: cursor };
   }
   const block = readBalancedBlock(input, cursor, "[", "]");
@@ -301,13 +278,13 @@ export function readBalancedBlock(
   open: string,
   close: string
 ): { content: string; nextIndex: number } | null {
-  if (input[startIndex] !== open) {
+  if (input.charAt(startIndex) !== open) {
     return null;
   }
 
   let depth = 0;
   for (let index = startIndex; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;
@@ -336,7 +313,7 @@ export function findTopLevelCharacter(input: string, character: string): number 
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;
@@ -389,7 +366,7 @@ function extractControlSequences(input: string): Array<{ name: string; endIndex:
 
 function parseExplicitFontSize(input: string, startIndex: number): number | null {
   let cursor = startIndex;
-  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+  while (cursor < input.length && /\s/.test(input.charAt(cursor))) {
     cursor += 1;
   }
 
@@ -398,7 +375,7 @@ function parseExplicitFontSize(input: string, startIndex: number): number | null
     return null;
   }
   cursor = sizeBlock.nextIndex;
-  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+  while (cursor < input.length && /\s/.test(input.charAt(cursor))) {
     cursor += 1;
   }
 

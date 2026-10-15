@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import { texFragmentParser } from "@tikz-editor/lezer-tex";
 import { getTexSyntaxIndex, matchTexSyntaxEnvironments } from "../syntax-index.js";
 import type { TexTabular, TexTabularBoundary, TexTabularCell, TexTabularColumn, TexTabularPreamble, TexTabularRow, TexTabularRule, TexTabularSourcePart } from "./types.js";
@@ -5,7 +6,7 @@ import type { TexTabular, TexTabularBoundary, TexTabularCell, TexTabularColumn, 
 function skipSpace(source: string, from: number): number {
   let cursor = from;
   while (cursor < source.length) {
-    if (/\s/u.test(source[cursor])) cursor++;
+    if (/\s/u.test(source.charAt(cursor))) cursor++;
     else if (source[cursor] === "%") { const newline = source.indexOf("\n", cursor); cursor = newline < 0 ? source.length : newline + 1; }
     else break;
   }
@@ -37,20 +38,20 @@ export function parseTexTabularPreamble(source: string, sourceOffset = 0): TexTa
   for (let i = 0; i < source.length;) {
     i = skipSpace(source, i);
     if (i >= source.length) break;
-    const char = source[i++];
-    if (char === "|") { const last = boundaries.length - 1; boundaries[last] = { ...boundaries[last], rules: boundaries[last].rules + 1 }; continue; }
+    const char = source.charAt(i++);
+    if (char === "|") { const last = boundaries.length - 1; boundaries[last] = { ...boundaries[last], rules: requireArrayValue(boundaries, last).rules + 1 }; continue; }
     if (char === "@" || char === "!") {
       const group = tabularGroup(source, i); if (!group) throw new Error("Malformed tabular boundary insert.");
       const last = boundaries.length - 1;
       const part = { text: group.content, sourceStart: sourceOffset + group.start, sourceEnd: sourceOffset + group.end - 1 };
-      boundaries[last] = mergeBoundary(boundaries[last], char === "@" ? { rules: 0, replace: group.content, replaceParts: [part] } : { rules: 0, insert: group.content, insertParts: [part] });
+      boundaries[last] = mergeBoundary(requireArrayValue(boundaries, last), char === "@" ? { rules: 0, replace: group.content, replaceParts: [part] } : { rules: 0, insert: group.content, insertParts: [part] });
       i = group.end; continue;
     }
     if (char === ">" || char === "<") {
       const group = tabularGroup(source, i); if (!group) throw new Error("Malformed tabular column declaration.");
       const part = { text: group.content, sourceStart: sourceOffset + group.start, sourceEnd: sourceOffset + group.end - 1 };
       if (char === ">") { before += group.content; beforeParts.push(part); }
-      else { const last = columns.length - 1; if (last < 0) throw new Error("Tabular suffix has no column."); columns[last] = { ...columns[last], after: (columns[last].after ?? "") + group.content, afterParts: [...columns[last].afterParts ?? [], part] }; }
+      else { const last = columns.length - 1; if (last < 0) throw new Error("Tabular suffix has no column."); columns[last] = { ...requireArrayValue(columns, last), after: (requireArrayValue(columns, last).after ?? "") + group.content, afterParts: [...requireArrayValue(columns, last).afterParts ?? [], part] }; }
       i = group.end; continue;
     }
     if (char === "*") {
@@ -60,7 +61,7 @@ export function parseTexTabularPreamble(source: string, sourceOffset = 0): TexTa
       for (let repeat = 0; repeat < n; repeat++) {
         const expanded = parseTexTabularPreamble(group.content, sourceOffset + group.start);
         const last = boundaries.length - 1;
-        boundaries[last] = mergeBoundary(boundaries[last], expanded.boundaries[0]);
+        boundaries[last] = mergeBoundary(requireArrayValue(boundaries, last), requireArrayValue(expanded.boundaries, 0));
         columns.push(...expanded.columns.map((column, index) => index === 0 && before ? { ...column, before: before + (column.before ?? ""), beforeParts: [...beforeParts, ...column.beforeParts ?? []] } : column));
         before = ""; beforeParts = [];
         boundaries.push(...expanded.boundaries.slice(1));
@@ -80,7 +81,7 @@ export function parseTexTabularPreamble(source: string, sourceOffset = 0): TexTa
 
 function cell(source: string, from: number, to: number, sourceOffset: number): TexTabularCell {
   let start = skipSpace(source, from); let end = to;
-  while (end > start && /\s/u.test(source[end - 1])) end--;
+  while (end > start && /\s/u.test(source.charAt(end - 1))) end--;
   let span = 1; let preamble: TexTabularPreamble | undefined;
   if (source.startsWith("\\multicolumn", start)) {
     const count = tabularGroup(source, start + 12); const spec = count && tabularGroup(source, count.end); const body = spec && tabularGroup(source, spec.end);
@@ -88,7 +89,7 @@ function cell(source: string, from: number, to: number, sourceOffset: number): T
     span = Number(count.content); preamble = parseTexTabularPreamble(spec.content, sourceOffset + spec.start); if (span < 1 || preamble.columns.length !== 1) throw new Error("Invalid multicolumn span.");
     start = body.start; end = body.end - 1;
   }
-  return { text: source.slice(start, end), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + end, span, ...(preamble ? { preamble } : {}) };
+  return { text: source.slice(start, end), sourceStart: sourceOffset + start, sourceEnd: sourceOffset + end, span, ...(preamble ? { preamble: preamble } : {}) };
 }
 
 function rule(source: string, start: number, offset: number): { rule: TexTabularRule; end: number } | null {
@@ -100,7 +101,7 @@ function rule(source: string, start: number, offset: number): { rule: TexTabular
   if (name === "cmidrule") {
     const trim = tabularGroup(source, end, "(", ")"); if (trim) {
       for (let i = 0; i < trim.content.length;) {
-        const side = trim.content[i++]; if (side !== "l" && side !== "r") { if (/\s/u.test(side)) continue; throw new Error("Unsupported cmidrule trimming."); }
+        const side = trim.content.charAt(i++); if (side !== "l" && side !== "r") { if (/\s/u.test(side)) continue; throw new Error("Unsupported cmidrule trimming."); }
         const amount = tabularGroup(trim.content, i); if (amount) i = amount.end;
         if (side === "l") trimLeft = amount?.content ?? "default"; else trimRight = amount?.content ?? "default";
       }
@@ -115,7 +116,7 @@ function rule(source: string, start: number, offset: number): { rule: TexTabular
     const a = tabularGroup(source, end); const b = a && tabularGroup(source, a.end); const c = b && tabularGroup(source, b.end);
     if (!a || !b || !c) throw new Error("Malformed specialrule."); width = a.content; above = b.content; below = c.content; end = c.end;
   }
-  return { rule: { kind: "rule", command: name, ...(width ? { width } : {}), ...(above ? { above } : {}), ...(below ? { below } : {}), ...(from ? { from, to } : {}), ...(trimLeft ? { trimLeft } : {}), ...(trimRight ? { trimRight } : {}), sourceStart: offset + start, sourceEnd: offset + end }, end };
+  return { rule: { kind: "rule", command: name, ...(width ? { width: width } : {}), ...(above ? { above: above } : {}), ...(below ? { below: below } : {}), ...(from ? { ...(from !== undefined ? { from: from } : {}), ...(to !== undefined ? { to: to } : {}) } : {}), ...(trimLeft ? { trimLeft: trimLeft } : {}), ...(trimRight ? { trimRight: trimRight } : {}), sourceStart: offset + start, sourceEnd: offset + end }, end };
 }
 
 export function parseTexTabular(source: string, from: number, bodyEnd: number, offset = 0): TexTabular {

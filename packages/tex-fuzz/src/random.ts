@@ -43,7 +43,9 @@ export class TexFuzzRandom {
     if (values.length === 0) {
       throw new RangeError(`Cannot choose from an empty list at ${path}.`);
     }
-    return values[this.int(path, values.length)];
+    const value = values[this.int(path, values.length)];
+    if (value === undefined) throw new RangeError(`Missing choice value at ${path}.`);
+    return value;
   }
 
   weightedIndex(path: string, integerWeights: readonly number[]): number {
@@ -65,8 +67,8 @@ export class TexFuzzRandom {
     }
     const sample = this.int(path, total);
     let cumulative = 0;
-    for (let index = 0; index < integerWeights.length; index += 1) {
-      cumulative += integerWeights[index];
+    for (const [index, weight] of integerWeights.entries()) {
+      cumulative += weight;
       if (sample < cumulative) return index;
     }
     throw new Error(`Unreachable weighted choice state at ${path}.`);
@@ -76,7 +78,9 @@ export class TexFuzzRandom {
     if (values.length !== integerWeights.length) {
       throw new RangeError(`Weighted value and weight counts differ at ${path}.`);
     }
-    return values[this.weightedIndex(path, integerWeights)];
+    const value = values[this.weightedIndex(path, integerWeights)];
+    if (value === undefined) throw new RangeError(`Missing weighted choice value at ${path}.`);
+    return value;
   }
 
   choices(): readonly TexFuzzChoice[] {

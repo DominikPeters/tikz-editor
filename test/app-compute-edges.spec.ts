@@ -387,7 +387,7 @@ describe("computeSnapshot edge orchestration", () => {
       recomputedStatementCount: 1,
       reusedStatementCount: 0
     };
-    const emitSvg = vi.fn(() => ({
+    const emitSvg = vi.fn((_scene: unknown, _options: unknown) => ({
       svg: "<svg></svg>",
       model: makeModel("opaque"),
       diagnostics: []
@@ -432,7 +432,8 @@ describe("computeSnapshot edge orchestration", () => {
     expect(response.snapshot.incremental?.fallbackReason).toBe("opaque-dependency");
     expect(emitSvg).toHaveBeenCalledWith(
       semanticResult.scene,
-      expect.objectContaining({ reuse: undefined })
+      expect.any(Object)
     );
+    expect(emitSvg.mock.calls[0]?.[1]).not.toHaveProperty("reuse");
   });
 });

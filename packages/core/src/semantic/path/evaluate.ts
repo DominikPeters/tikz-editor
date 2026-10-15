@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { currentFrame } from "../context.js";
 import { coordinateTransform, type AxisBasis } from "../coords/axis-basis.js";
 import { worldTransform } from "../../coords/transforms.js";
 import { worldPoint } from "../../coords/points.js";
@@ -251,7 +253,7 @@ export function evaluatePathStatement(
     context.currentPoint = null;
     context.pathStartPoint = null;
   }
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const frameTransform = frame.transform;
   const initialPlotSettings = applyPlotSettingsFromStyleChain(
     createDefaultPlotSettings(),
@@ -335,7 +337,7 @@ export function evaluatePathStatement(
           ? mergeOptionLists(parseOptionListRaw(`[auto=${scopedAutoSide}]`, node.span.from), node.options)
           : node.options;
       const resolvedNode = evaluateNodeItem(
-        nodeOptionsWithScopedAuto === node.options ? node : { ...node, options: nodeOptionsWithScopedAuto, optionsSpan: nodeOptionsWithScopedAuto?.span },
+        nodeOptionsWithScopedAuto === node.options ? node : { ...node, ...(nodeOptionsWithScopedAuto === undefined ? {} : { options: nodeOptionsWithScopedAuto }), ...(nodeOptionsWithScopedAuto?.span === undefined ? {} : { optionsSpan: nodeOptionsWithScopedAuto?.span }) },
         statement,
         context,
         builder.style,
@@ -595,7 +597,7 @@ export function evaluatePathStatement(
           id: `${statement.id}:${item.id}:graph`,
           span: item.span,
           command: "path",
-          options: undefined,
+
           items: []
         };
 
@@ -604,8 +606,7 @@ export function evaluatePathStatement(
 
         const runtimeGraphNodes: RuntimeGraphNode[] = [];
 
-        for (let nodeIndex = 0; nodeIndex < plan.nodes.length; nodeIndex += 1) {
-          const node = plan.nodes[nodeIndex];
+        for (const [nodeIndex, node] of plan.nodes.entries()) {
           const existingNodeCoordinate = withDependencySource(context, graphStatement.id, () => {
             const scoped = applyNameScope(node.name, context);
             const scopedMatch = readNamedCoordinate(context, scoped);
@@ -622,8 +623,8 @@ export function evaluatePathStatement(
             raw: node.name,
             templateRaw: node.name,
             name: node.name,
-            optionsSpan: node.options?.span,
-            options: node.options,
+            ...(node.options?.span === undefined ? {} : { optionsSpan: node.options?.span }),
+            ...(node.options === undefined ? {} : { options: node.options }),
             textSource: "group",
             textSpan: node.span,
             text: node.text
@@ -631,7 +632,7 @@ export function evaluatePathStatement(
           runtimeGraphNodes.push({
             syntheticNode,
             defaultPoint: node.defaultPoint,
-            placementHint: node.placementHint,
+            ...(node.placementHint === undefined ? {} : { placementHint: node.placementHint }),
             nodeIndex
           });
         }
@@ -659,8 +660,7 @@ export function evaluatePathStatement(
         }
 
         const edgeElements: SceneElement[] = [];
-        for (let edgeIndex = 0; edgeIndex < plan.edges.length; edgeIndex += 1) {
-          const edge = plan.edges[edgeIndex];
+        for (const [edgeIndex, edge] of plan.edges.entries()) {
           const startCoordinateRaw = `(${edge.from}${edge.fromAnchor ? `.${edge.fromAnchor}` : ""})`;
           const targetCoordinateRaw = `(${edge.to}${edge.toAnchor ? `.${edge.toAnchor}` : ""})`;
           const graphEdgeNodes: NodeItem[] | undefined =
@@ -671,8 +671,8 @@ export function evaluatePathStatement(
                   span: node.span,
                   raw: node.text,
                   templateRaw: node.text,
-                  optionsSpan: node.options?.span,
-                  options: node.options,
+                  ...(node.options?.span === undefined ? {} : { optionsSpan: node.options?.span }),
+                  ...(node.options === undefined ? {} : { options: node.options }),
                   textSource: "group",
                   textSpan: node.span,
                   text: node.text
@@ -698,9 +698,9 @@ export function evaluatePathStatement(
             kind: "EdgeOperation",
             id: `${item.id}:graph-edge:${edgeIndex}`,
             span: edge.span,
-            optionsSpan: edge.options?.span,
-            options: edge.options,
-            nodes: graphEdgeNodes,
+            ...(edge.options?.span === undefined ? {} : { optionsSpan: edge.options?.span }),
+            ...(edge.options === undefined ? {} : { options: edge.options }),
+            ...(graphEdgeNodes === undefined ? {} : { nodes: graphEdgeNodes }),
             target: {
               kind: "coordinate",
               raw: targetCoordinateRaw,
@@ -981,12 +981,15 @@ export function evaluatePathStatement(
             : null;
         const forcedMainNodeName: string | undefined =
           builder.pendingNodeNameForNodeCommand ?? synthesizedMainNodeName ?? synthesizedTreeNodeName ?? undefined;
-        const nodeBase = trailingCoordinateRaw ? { ...item, name: undefined } : item;
-        const nodeItem = {
-          ...nodeBase,
-          options: adornmentPlan.mainOptions,
-          optionsSpan: adornmentPlan.mainOptions?.span
-        };
+        const nodeItem: NodeItem = { ...item };
+        if (trailingCoordinateRaw) delete nodeItem.name;
+        if (adornmentPlan.mainOptions === undefined) {
+          delete nodeItem.options;
+          delete nodeItem.optionsSpan;
+        } else {
+          nodeItem.options = adornmentPlan.mainOptions;
+          nodeItem.optionsSpan = adornmentPlan.mainOptions.span;
+        }
         const standaloneNodeDefaultTarget = !builder.hasPathCurrentPoint ? defaultPathOrigin : undefined;
         const allowImplicitOriginHandle =
           statement.command === "node"
@@ -1000,7 +1003,7 @@ export function evaluatePathStatement(
         const explicitNodeAtSyntax = hasExplicitNodeAtSyntax(statement.items, builder.currentItemIndex);
         const explicitNodeAtTarget = explicitNodeAtSyntax ? (builder.currentPointLogical ?? context.currentPoint ?? undefined) : undefined;
         const resolvedNode = evaluateNodeItem(
-          nodeOptionsWithScopedAuto === nodeItem.options ? nodeItem : { ...nodeItem, options: nodeOptionsWithScopedAuto, optionsSpan: nodeOptionsWithScopedAuto?.span },
+          nodeOptionsWithScopedAuto === nodeItem.options ? nodeItem : { ...nodeItem, ...(nodeOptionsWithScopedAuto === undefined ? {} : { options: nodeOptionsWithScopedAuto }), ...(nodeOptionsWithScopedAuto?.span === undefined ? {} : { optionsSpan: nodeOptionsWithScopedAuto?.span }) },
           statement,
           context,
           builder.style,
@@ -1037,8 +1040,7 @@ export function evaluatePathStatement(
 
         const mainNodeNameRaw = forcedMainNodeName ?? declaredNodeName;
         if (mainNodeNameRaw) {
-          for (let adornmentIndex = 0; adornmentIndex < adornmentPlan.adornments.length; adornmentIndex += 1) {
-            const spec = adornmentPlan.adornments[adornmentIndex];
+          for (const [adornmentIndex, spec] of adornmentPlan.adornments.entries()) {
             const materialized = materializeNodeAdornment({
               spec,
               context,
@@ -1068,9 +1070,9 @@ export function evaluatePathStatement(
                 kind: "EdgeOperation",
                 id: `${item.id}:pin-edge:${adornmentIndex}`,
                 span: spec.span,
-                optionsSpan: undefined,
-                options: undefined,
-                nodes: undefined,
+
+
+
                 target: {
                   kind: "coordinate",
                   raw: `(${materialized.node.name})`
@@ -1144,6 +1146,7 @@ export function evaluatePathStatement(
                 };
               }
               if (pinEdge.activePath && hasDrawablePathSegments(pinEdge.activePath)) {
+                const optionalOwnerGeometry1 = cloneAdornmentOwnerGeometry(materialized.mainGeometry);
                 pinEdge.activePath = {
                   ...pinEdge.activePath,
                   adornment: {
@@ -1156,12 +1159,12 @@ export function evaluatePathStatement(
                     valueSpan: spec.valueSpan,
                     textSpan: spec.textSpan,
                     angleRaw: spec.angleRaw,
-                    angleSpan: spec.angleSpan,
+                    ...(spec.angleSpan === undefined ? {} : { angleSpan: spec.angleSpan }),
                     distancePt: spec.distancePt,
                     defaultDistancePt: spec.defaultDistancePt,
                     distanceExplicit: spec.distanceExplicit,
                     ownerPoint: materialized.mainPoint ?? undefined,
-                    ownerGeometry: cloneAdornmentOwnerGeometry(materialized.mainGeometry)
+                    ...(optionalOwnerGeometry1 === undefined ? {} : { ownerGeometry: optionalOwnerGeometry1 })
                   }
                 };
                 frontNodeElements.push(...pinEdge.behindNodeElements);
@@ -1331,8 +1334,7 @@ export function evaluatePathStatement(
             return;
           }
 
-          for (let adornmentIndex = 0; adornmentIndex < adornmentPlan.adornments.length; adornmentIndex += 1) {
-            const spec = adornmentPlan.adornments[adornmentIndex];
+          for (const [adornmentIndex, spec] of adornmentPlan.adornments.entries()) {
             const materialized = materializeNodeAdornment({
               spec,
               context,
@@ -1718,7 +1720,7 @@ export function evaluatePathStatement(
   ]);
 
   for (let index = 0; index < statement.items.length; index += 1) {
-    const item = statement.items[index];
+    const item = requireArrayValue(statement.items, index);
     builder.currentItemIndex = index;
     if (item.kind !== "PathComment" && item.kind !== "PathOption") {
       builder.sawNonLeadingPathItem = true;
@@ -1879,7 +1881,7 @@ export function evaluatePathStatement(
           ? resolveNamedCoordinateRewriteHandleId(item.x, context)
           : undefined;
       const handle = createEditHandle(evaluated, item.span, statement.id, handleKind, context, {
-        rewriteTargetHandleId
+        ...(rewriteTargetHandleId === undefined ? {} : { rewriteTargetHandleId: rewriteTargetHandleId })
       });
       if (handle) context.editHandles.push(handle);
       for (const code of evaluated.diagnostics) {
@@ -2172,7 +2174,7 @@ export function evaluatePathStatement(
               : undefined;
           const handleContext = relativeBase === context.currentPoint ? context : { ...context, currentPoint: relativeBase };
           const handle = createEditHandle(evaluated, coordinate.span, statement.id, kind, handleContext, {
-            rewriteTargetHandleId
+            ...(rewriteTargetHandleId === undefined ? {} : { rewriteTargetHandleId: rewriteTargetHandleId })
           });
           if (handle) {
             context.editHandles.push(handle);
@@ -2821,9 +2823,12 @@ function mergeToLikePathOptions<T extends ToOperationItem | EdgeOperationItem>(
     };
   }
 
+  const mergedOptions = mergeOptionLists(leadingOptions, item.options);
+  const mergedItem = { ...item };
+  if (mergedOptions === undefined) delete mergedItem.options;
+  else mergedItem.options = mergedOptions;
   return {
-    ...item,
-    options: mergeOptionLists(leadingOptions, item.options),
+    ...mergedItem,
     optionsSpan: {
       from: Math.min(leadingOptions.span.from, item.options.span.from),
       to: Math.max(leadingOptions.span.to, item.options.span.to)
@@ -2945,6 +2950,7 @@ function isMatrixNodeOptions(options: NodeItem["options"] | undefined): boolean 
 }
 
 function expandPathItemRaw(raw: string, context: SemanticContext): string {
-  const frame = context.stack[context.stack.length - 1];
-  return expandMacroBindings(raw, frame.macroBindings, { trace: context.macroTraceCollector ?? undefined });
+  const frame = currentFrame(context);
+  const optionalTrace3 = context.macroTraceCollector ?? undefined;
+  return expandMacroBindings(raw, frame.macroBindings, { ...(optionalTrace3 === undefined ? {} : { trace: optionalTrace3 }) });
 }

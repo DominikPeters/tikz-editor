@@ -371,7 +371,8 @@ function extractTopLevelCoordinateTokens(raw: string): string[] {
   let start = -1;
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
+
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
@@ -447,7 +448,8 @@ function unwrapSingleBraceLayer(raw: string): { content: string; hadOuterBraces:
   }
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
+
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;

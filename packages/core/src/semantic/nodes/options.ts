@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import type { PathOptionItem } from "../../ast/types.js";
 import type { OptionListAst } from "../../options/types.js";
 import { resolveContextColorAliasValue, type ProvenanceOptionList, type SemanticContext } from "../context.js";
@@ -68,7 +69,7 @@ export function resolveNodeStyle(
 ): ResolvedStyle {
   let resolvedStyle = { ...baseStyle };
   if (options) {
-    const frame = context.stack[context.stack.length - 1];
+    const frame = currentFrame(context);
     const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
     const layers: StyleTraceLayerInput[] =
       expanded.length > 0
@@ -121,7 +122,7 @@ export function resolveNodeOptionScale(
     return 1;
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   const layers: StyleTraceLayerInput[] =
     expanded.length > 0
@@ -174,7 +175,7 @@ export function resolveNodeOptionTransform(
     return identityMatrix();
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   const layers: StyleTraceLayerInput[] =
     expanded.length > 0
@@ -292,7 +293,7 @@ export function expandNodeOptionsForShape(
     return undefined;
   }
 
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const expanded = expandOptionListMacros([options], frame.macroBindings, context.macroTraceCollector ?? undefined);
   if (expanded.length === 0) {
     return options;

@@ -85,6 +85,6 @@ export function useActiveDocumentAssetWatches(params: {
     };
   }, [params.files]);
   useEffect(() => {
-    ownerRef.current?.update({ source: params.source, documentFileRef: params.documentFileRef, additionalDocuments: params.additionalDocuments });
+    ownerRef.current?.update({ source: params.source, documentFileRef: params.documentFileRef, ...(params.additionalDocuments === undefined ? {} : { additionalDocuments: params.additionalDocuments }) });
   }, [params.files, params.source, params.documentFileRef, params.additionalDocuments]);
 }

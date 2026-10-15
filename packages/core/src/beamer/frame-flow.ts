@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type {
   LaidParagraph,
   PositionedFrameFlowItem,
@@ -33,8 +34,7 @@ export function positionPreparedFrameFlow(
   const items: PositionedFrameFlowItem[] = [];
   let cursor = 0;
   let previousDepth = initialPreviousDepth;
-  for (let index = 0; index < flow.length; index += 1) {
-    const item = flow[index];
+  for (const [index, item] of flow.entries()) {
     if (item.kind === "title-page") {
       const contentTop =
         cursor + item.titlePage.leadingFillWeight * fillUnit;
@@ -166,7 +166,7 @@ export function positionPreparedFrameFlow(
     const visualBottom = Math.max(
       ...item.columns.map(
         (column, columnIndex) =>
-          columnTops[columnIndex] + column.naturalHeight
+          requireArrayValue(columnTops, columnIndex) + column.naturalHeight
       )
     );
     items.push({
@@ -187,7 +187,7 @@ export function paragraphEndingMaterialDepth(
 ): number {
   const items = paragraph.layout.vlistLayout.boxReport.items;
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
+    const item = requireArrayValue(items, index);
     // TeX glue and penalties do not reset \prevdepth. This matters when a
     // list's trailing glue is followed by the default block template: the
     // block title line still computes its inter-line glue from the final
@@ -239,7 +239,7 @@ export function previousDepthBeforeTrailingVerticalSpace(
     return null;
   }
   for (let index = items.length - 2; index >= 0; index -= 1) {
-    const item = items[index];
+    const item = requireArrayValue(items, index);
     if (item.itemKind === "glue" || item.itemKind === "penalty") {
       continue;
     }

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import type {
   AnyWrapper,
   BreakRef,
@@ -146,7 +147,7 @@ function normalizeForcedLineLeadingRuns(runs: ParagraphRun[]): ParagraphRun[] {
   };
 
   for (let i = 0; i < runs.length - 1; i++) {
-    const run = runs[i];
+    const run = requireArrayValue(runs, i);
     if (run.kind !== 'space') continue;
     if (run.breakRef.kind !== 'mspace') continue;
     if (!run.breakRef.isForcedLineBreak && !run.breakRef.lineLeading) continue;
@@ -193,7 +194,7 @@ function normalizeForcedLineLeadingRuns(runs: ParagraphRun[]): ParagraphRun[] {
   let cursor = 0;
 
   for (let i = 0; i < runs.length; i++) {
-    const run = runs[i];
+    const run = requireArrayValue(runs, i);
 
     if (run.kind === 'text') {
       const consumed = trimmedByTextRun.get(i) ?? 0;
@@ -405,7 +406,7 @@ function flattenWrapper(wrapper: AnyWrapper | null | undefined, context: Flatten
         wrapper,
         linebreak,
         isForcedLineBreak: isForcedMspaceBreak(wrapper, linebreak),
-        lineLeading,
+        ...(lineLeading !== undefined ? { lineLeading: lineLeading } : {}),
       },
       sourceStart,
       sourceEnd,

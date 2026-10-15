@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint } from "../../coords/points.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -112,7 +113,7 @@ export function applyPasteStatementsAction(
       text: insertion.text
     }
   ]);
-  const appliedInsertion = applied.applied[0];
+  const appliedInsertion = requireArrayValue(applied.applied, 0);
 
   const insertedSpans = insertion.snippetSpans.map((span) => ({
     from: appliedInsertion.newSpan.from + span.from,
@@ -131,8 +132,8 @@ export function applyPasteStatementsAction(
       patches: applied.patches,
       skippedHandles: shifted.skippedHandles,
       reason: shifted.partialReason,
-      selectedSourceIds: changedSourceIds,
-      changedSourceIds
+      ...(changedSourceIds === undefined ? {} : { selectedSourceIds: changedSourceIds }),
+      ...(changedSourceIds === undefined ? {} : { changedSourceIds })
     };
   }
 
@@ -140,8 +141,8 @@ export function applyPasteStatementsAction(
     kind: "success",
     newSource: applied.source,
     patches: applied.patches,
-    selectedSourceIds: changedSourceIds,
-    changedSourceIds
+    ...(changedSourceIds === undefined ? {} : { selectedSourceIds: changedSourceIds }),
+    ...(changedSourceIds === undefined ? {} : { changedSourceIds })
   };
 }
 
@@ -189,7 +190,7 @@ export function applyDuplicateElementsAction(
         partialSkippedHandles.push(...shifted.skippedHandles);
       }
 
-      const anchor = orderedRefs[orderedRefs.length - 1];
+      const anchor = requireArrayValue(orderedRefs, orderedRefs.length - 1);
 
       const insertion = formatSnippetsForInsertion(
         renamedSnippets,
@@ -202,7 +203,7 @@ export function applyDuplicateElementsAction(
           text: insertion.text
         }
       ]);
-      const appliedInsertion = applied.applied[0];
+      const appliedInsertion = requireArrayValue(applied.applied, 0);
 
       patches.push(...applied.patches);
       currentSource = applied.source;
@@ -228,8 +229,8 @@ export function applyDuplicateElementsAction(
       patches,
       skippedHandles: deps.uniqueStrings(partialSkippedHandles),
       reason: deps.uniqueStrings(partialReasons).join(" "),
-      selectedSourceIds: changedSourceIds,
-      changedSourceIds
+      ...(changedSourceIds === undefined ? {} : { selectedSourceIds: changedSourceIds }),
+      ...(changedSourceIds === undefined ? {} : { changedSourceIds })
     };
   }
 
@@ -237,8 +238,8 @@ export function applyDuplicateElementsAction(
     kind: "success",
     newSource: currentSource,
     patches,
-    selectedSourceIds: changedSourceIds,
-    changedSourceIds
+    ...(changedSourceIds === undefined ? {} : { selectedSourceIds: changedSourceIds }),
+    ...(changedSourceIds === undefined ? {} : { changedSourceIds })
   };
 }
 

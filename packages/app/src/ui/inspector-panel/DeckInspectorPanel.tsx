@@ -150,8 +150,8 @@ export function DeckInspectorPanel(): JSX.Element {
         writable: true,
         value: field.value,
         step: field.step,
-        min: field.min,
-        max: field.max,
+        ...(field.min === undefined ? {} : { min: field.min }),
+        ...(field.max === undefined ? {} : { max: field.max }),
         onPreview: (next) => {
           const built = buildResult(next);
           if (built) {
@@ -183,7 +183,7 @@ export function DeckInspectorPanel(): JSX.Element {
 
   if (!rendered) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Select a slide object to inspect it.</p>
         </SidePanel.Content>
@@ -192,9 +192,9 @@ export function DeckInspectorPanel(): JSX.Element {
   }
 
   return (
-    <SidePanel className={css.panel}>
+    <SidePanel className={css.panel ?? ""}>
       <SidePanel.Header>{rendered.title}</SidePanel.Header>
-      <SidePanel.Content className={css.content}>
+      <SidePanel.Content className={css.content ?? ""}>
         <SidePanel.SectionBody>
           <fieldset disabled={activeFrame?.frameId !== activeRootId || activeFrame?.step !== Math.min(activeStep, Math.max(1, activeFrame?.stepCount ?? 1))}
             style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>

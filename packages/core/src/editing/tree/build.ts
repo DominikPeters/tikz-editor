@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editNodeAt, editSlotAt } from "./lookup.js";
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 
 import {
@@ -157,7 +159,7 @@ class Binder {
 
   private node(kind: EditNodeKind, mode: EditMode, span: Span, command?: string): NodeId {
     const id = this.nodes.length;
-    this.nodes.push({ id, kind, span: { ...span }, slots: [], delimiters: [], values: [], mode, command, parent: null });
+    this.nodes.push({ id, kind, span: { ...span }, slots: [], delimiters: [], values: [], mode, ...(command === undefined ? {} : { command }), parent: null });
     return id;
   }
 
@@ -179,18 +181,18 @@ class Binder {
       flow: options.flow ?? false,
       children: [],
     });
-    this.nodes[node].slots.push(id);
+    editNodeAt(this.nodes, node).slots.push(id);
     return id;
   }
 
   private attach(slot: SlotId, node: NodeId): void {
-    this.slots[slot].children.push(node);
-    this.nodes[node].parent = slot;
+    editSlotAt(this.slots, slot).children.push(node);
+    editNodeAt(this.nodes, node).parent = slot;
   }
 
   private delimiter(node: NodeId, from: number, to: number): void {
     if (to > from) {
-      this.nodes[node].delimiters.push({ from, to });
+      editNodeAt(this.nodes, node).delimiters.push({ from, to });
     }
   }
 
@@ -221,7 +223,7 @@ class Binder {
 
   /** Attaches an inline item, opening a paragraph in flow slots. */
   private inline(run: Run, node: NodeId): void {
-    const span = this.nodes[node].span;
+    const span = editNodeAt(this.nodes, node).span;
     let target = run.slot;
     if (run.flow) {
       if (run.paragraph == null) {
@@ -234,13 +236,13 @@ class Binder {
     }
     const pending = run.pendingSpace;
     run.pendingSpace = null;
-    if (pending && (!run.trim || this.slots[target].children.length > 0)) {
+    if (pending && (!run.trim || editSlotAt(this.slots, target).children.length > 0)) {
       this.attach(target, this.node("space", run.mode, pending));
     }
     this.attach(target, node);
     if (run.flow) {
-      const paragraphSlot = this.slots[target];
-      const paragraphNode = this.nodes[paragraphSlot.node];
+      const paragraphSlot = editSlotAt(this.slots, target);
+      const paragraphNode = editNodeAt(this.nodes, paragraphSlot.node);
       paragraphNode.span.to = span.to;
       paragraphSlot.contentSpan.to = span.to;
     }
@@ -279,9 +281,9 @@ class Binder {
     if (at + 1 >= text.length) {
       return { name: "", end: at + 1 };
     }
-    if (WORD_CHAR.test(text[at + 1])) {
+    if (WORD_CHAR.test(text.charAt(at + 1))) {
       let end = at + 2;
-      while (end < text.length && WORD_CHAR.test(text[end])) {
+      while (end < text.length && WORD_CHAR.test(text.charAt(end))) {
         end += 1;
       }
       return { name: text.slice(at + 1, end), end };
@@ -372,7 +374,7 @@ class Binder {
         }
         continue;
       }
-      if (!/[ \t\r\n]/u.test(this.text[cursor])) {
+      if (!/[ \t\r\n]/u.test(this.text.charAt(cursor))) {
         break;
       }
       if (this.text[cursor] === "\n") {
@@ -441,7 +443,7 @@ class Binder {
       if (this.atStop(run, cursor)) {
         break;
       }
-      const char = text[cursor];
+      const char = text.charAt(cursor);
       if (/[ \t\r\n]/u.test(char)) {
         cursor = this.whitespace(run, cursor);
         continue;
@@ -497,7 +499,7 @@ class Binder {
   private whitespace(run: Run, at: number): number {
     let end = at;
     let newlines = 0;
-    while (end < run.end && /[ \t\r\n]/u.test(this.text[end])) {
+    while (end < run.end && /[ \t\r\n]/u.test(this.text.charAt(end))) {
       if (this.text[end] === "\n") {
         newlines += 1;
       }
@@ -547,9 +549,9 @@ class Binder {
     if (complete) {
       this.delimiter(node, end - 1, end);
     }
-    this.nodes[node].span.to = complete ? end : stopped;
+    editNodeAt(this.nodes, node).span.to = complete ? end : stopped;
     this.inline(run, node);
-    return this.nodes[node].span.to;
+    return editNodeAt(this.nodes, node).span.to;
   }
 
   /** Scans a slot's interior and returns where scanning stopped. */
@@ -561,11 +563,11 @@ class Binder {
     stops: ReadonlySet<Stop> = NO_STOPS,
     options: { flow?: boolean; trim?: boolean } = {}
   ): number {
-    const run = this.run(slot, mode, to, { stops, flow: options.flow, trim: options.trim });
+    const run = this.run(slot, mode, to, { stops, ...(options.flow === undefined ? {} : { flow: options.flow }), ...(options.trim === undefined ? {} : { trim: options.trim }) });
     const stopped = this.scan(run, from);
     this.finish(run);
     if (stopped < to) {
-      this.slots[slot].contentSpan.to = stopped;
+      editSlotAt(this.slots, slot).contentSpan.to = stopped;
     }
     return stopped;
   }
@@ -595,7 +597,7 @@ class Binder {
     } else {
       this.diagnose("unclosed-math", at, stopped, "Unclosed formula");
     }
-    this.nodes[node].span.to = end;
+    editNodeAt(this.nodes, node).span.to = end;
     if (kind === "display") {
       this.block(run, node);
     } else {
@@ -608,7 +610,7 @@ class Binder {
 
   private command(run: Run, at: number): number {
     const { name, end } = this.controlAt(at);
-    const isWord = name.length > 0 && WORD_CHAR.test(name[0]);
+    const isWord = name.length > 0 && WORD_CHAR.test(name.charAt(0));
     if (name === "") {
       this.diagnose("missing-argument", at, end, "Lone backslash");
       this.leaf(run, "atom", at, Math.min(end, this.text.length));
@@ -676,7 +678,7 @@ class Binder {
       return end;
     }
     const node = this.bindCommand(run, at, end, schema);
-    const nodeEnd = this.nodes[node].span.to;
+    const nodeEnd = editNodeAt(this.nodes, node).span.to;
     run.skipSpace = isWord && nodeEnd === end;
     return nodeEnd;
   }
@@ -688,7 +690,7 @@ class Binder {
   private primitiveEnd(name: string, end: number, limit: number): number {
     if (name.endsWith("leaders")) {
       const box = /^\s*\\(vrule|hrule|hbox|vbox|vtop)(?![A-Za-z@])/u.exec(this.text.slice(end, limit));
-      const boxEnd = box ? this.primitiveEnd(box[1], end + box[0].length, limit) : end;
+      const boxEnd = box ? this.primitiveEnd(requireArrayValue(box, 1), end + box[0].length, limit) : end;
       const glue = /^\s*\\(?:[hv]fill|[hv]fil|[hv]ss|[hv]filneg)(?![A-Za-z@])|^\s*\\([hv]skip)(?![A-Za-z@])/u.exec(this.text.slice(boxEnd, limit));
       if (!glue) {
         return boxEnd;
@@ -696,7 +698,7 @@ class Binder {
       const glueEnd = boxEnd + glue[0].length;
       return glue[1] ? this.primitiveEnd(glue[1], glueEnd, limit) : glueEnd;
     }
-    const specEnd = end + (PRIMITIVE_SPECS[name].exec(this.text.slice(end, limit))?.[0].length ?? 0);
+    const specEnd = end + (PRIMITIVE_SPECS[name]?.exec(this.text.slice(end, limit))?.[0].length ?? 0);
     if (name === "hbox" || name === "vbox" || name === "vtop") {
       const open = /^\s*\{/u.exec(this.text.slice(specEnd, limit));
       if (open) {
@@ -787,7 +789,7 @@ class Binder {
     } else {
       this.diagnose("missing-argument", at, stopped, "\\left without \\right");
     }
-    this.nodes[node].span.to = end;
+    editNodeAt(this.nodes, node).span.to = end;
     this.inline(run, node);
     return end;
   }
@@ -806,7 +808,7 @@ class Binder {
     for (const arg of schema.args) {
       cursor = this.bindArgument(run, node, arg, cursor);
     }
-    const record = this.nodes[node];
+    const record = editNodeAt(this.nodes, node);
     record.span.to = cursor;
     if (record.slots.length === 0) {
       record.delimiters = [];
@@ -856,14 +858,14 @@ class Binder {
       if (!match.complete) {
         this.diagnose("unclosed-group", start, match.end, "Unclosed argument");
       }
-    } else if (start < run.end && !this.atStop(run, start) && !"}$&%".includes(text[start]) &&
+    } else if (start < run.end && !this.atStop(run, start) && !"}$&%".includes(text.charAt(start)) &&
       !(text[start] === "\\" && this.isControl(start, "\\"))) {
       // TeX's undelimited argument: exactly one token (\frac1n, x^2).
       const end = this.tokenEnd(start);
       span = { from: start, to: end };
       content = span;
     } else {
-      this.diagnose("missing-argument", cursor, cursor, `\\${this.nodes[node].command ?? ""} is missing an argument`);
+      this.diagnose("missing-argument", cursor, cursor, `\\${editNodeAt(this.nodes, node).command ?? ""} is missing an argument`);
       if (arg.rendered) {
         this.slot(node, arg.role as SlotRole, { from: cursor, to: cursor }, { mode });
       }
@@ -879,7 +881,7 @@ class Binder {
       this.scanSlot(slot, mode, content.from, content.to);
       this.delimiter(node, content.to, span.to);
     } else {
-      this.nodes[node].values.push({ role: arg.role as EditValue["role"], span, contentSpan: content });
+      editNodeAt(this.nodes, node).values.push({ role: arg.role as EditValue["role"], span, contentSpan: content });
       this.delimiter(node, span.from, span.to);
     }
     return span.to;
@@ -889,14 +891,14 @@ class Binder {
 
   private script(run: Run, at: number): number {
     const role: SlotRole = this.text[at] === "^" ? "sup" : "sub";
-    const siblings = this.slots[run.slot].children;
+    const siblings = editSlotAt(this.slots, run.slot).children;
     const last = siblings.at(-1);
-    const lastNode = last != null ? this.nodes[last] : null;
+    const lastNode = last != null ? editNodeAt(this.nodes, last) : null;
     const baseable = lastNode != null && !["space", "invisible", "declaration", "break", "vertical"].includes(lastNode.kind);
     let scripted: NodeId;
     let gapFrom: number;
     if (baseable && lastNode.kind === "scripted" &&
-      !lastNode.slots.some((slot) => this.slots[slot].role === role)) {
+      !lastNode.slots.some((slot) => editSlotAt(this.slots, slot).role === role)) {
       scripted = lastNode.id;
       gapFrom = lastNode.span.to;
     } else {
@@ -918,7 +920,7 @@ class Binder {
     this.delimiter(scripted, gapFrom, at);
     this.delimiter(scripted, at, at + 1);
     const end = this.bindArgument(run, scripted, { kind: "mandatory", rendered: true, role }, at + 1);
-    this.nodes[scripted].span.to = end;
+    editNodeAt(this.nodes, scripted).span.to = end;
     return end;
   }
 
@@ -940,7 +942,7 @@ class Binder {
     if (!head) {
       return null;
     }
-    const name = head[1];
+    const name = requireArrayValue(head, 1);
     const pattern = /\\(begin|end)\s*\{([^{}%]*)\}|%[^\n]*|\\[\\%{}]/gu;
     pattern.lastIndex = at + head[0].length;
     let depth = 1;
@@ -1075,14 +1077,14 @@ class Binder {
    * reported.
    */
   private preamble(slot: SlotId, from: number, to: number): void {
-    const before = this.slots[slot].children.length;
+    const before = editSlotAt(this.slots, slot).children.length;
     const run = this.run(slot, "text", to, { trim: true });
     this.scan(run, from);
     this.finish(run);
-    const stray = this.slots[slot].children.slice(before).map((id) => this.nodes[id])
+    const stray = editSlotAt(this.slots, slot).children.slice(before).map((id) => editNodeAt(this.nodes, id))
       .filter((node) => !["invisible", "declaration", "atom", "space", "vertical"].includes(node.kind));
     if (stray.length > 0) {
-      this.diagnose("text-before-first-item", stray[0].span.from, stray.at(-1)!.span.to, "Content before the first \\item");
+      this.diagnose("text-before-first-item", requireArrayValue(stray, 0).span.from, stray.at(-1)!.span.to, "Content before the first \\item");
     }
   }
 
@@ -1094,7 +1096,7 @@ class Binder {
     let cursor = from;
     while (cursor < to) {
       // Whitespace, comments and rules between rows.
-      if (/[ \t\r\n]/u.test(text[cursor])) {
+      if (/[ \t\r\n]/u.test(text.charAt(cursor))) {
         cursor += 1;
         continue;
       }
@@ -1142,7 +1144,7 @@ class Binder {
    * (text/tex/ir.ts); text otherwise, and for a specification it cannot read.
    */
   private columnModes(node: NodeId): EditMode[] {
-    const spec = this.nodes[node].values.find((value) => value.role === "spec");
+    const spec = editNodeAt(this.nodes, node).values.find((value) => value.role === "spec");
     if (!spec) {
       return [];
     }
@@ -1169,7 +1171,7 @@ class Binder {
       const slot = this.slot(row, "cell", { from: cellFrom, to }, { mode: cellMode });
       const stopped = this.scanSlot(slot, cellMode, cellFrom, to, stops, { trim: true });
       if (stopped >= to) {
-        this.nodes[row].span.to = to;
+        editNodeAt(this.nodes, row).span.to = to;
         return to;
       }
       if (this.text[stopped] === "&") {
@@ -1186,7 +1188,7 @@ class Binder {
         if (match.complete) end = match.end;
       }
       this.delimiter(row, stopped, end);
-      this.nodes[row].span.to = end;
+      editNodeAt(this.nodes, row).span.to = end;
       return end;
     }
   }

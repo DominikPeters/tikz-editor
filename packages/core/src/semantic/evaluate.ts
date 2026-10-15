@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type {
   ColorletStatement,
@@ -465,7 +466,7 @@ export function evaluateSemanticStatementByIndex(
     run.context.source
   );
   for (let index = 0; index < editHandles.length; index += 1) {
-    run.context.editHandles[handleStart + index] = editHandles[index];
+    run.context.editHandles[handleStart + index] = requireArrayValue(editHandles, index);
   }
   remapDiagnostics(run.diagnostics, diagnosticsStart, statementSourceMap, {
     statement,
@@ -531,8 +532,7 @@ export function finalizeSemanticEvaluationRun(
     popFrame(run.context);
   }
 
-  for (let index = 0; index < elements.length; index += 1) {
-    const element = elements[index];
+  for (const [index, element] of elements.entries()) {
     elements[index] = {
       ...element,
       layer: element.layer || MAIN_SCENE_LAYER,
@@ -540,8 +540,7 @@ export function finalizeSemanticEvaluationRun(
     };
   }
 
-  for (let index = 0; index < run.context.editHandles.length; index += 1) {
-    const handle = run.context.editHandles[index];
+  for (const [index, handle] of run.context.editHandles.entries()) {
     if (!handle) {
       continue;
     }
@@ -563,6 +562,9 @@ export function finalizeSemanticEvaluationRun(
   }
   const requiredTikzLibraries = listContextRequiredLibraries(run.context);
 
+  const optionalBounds1 = generatedBackground.elements.length > 0
+          ? computeBounds(orderedElements) ?? run.context.pictureBounds ?? undefined
+          : run.context.pictureBounds ?? computeBounds(orderedElements);
   const result: EvaluateTikzResult = {
     scene: {
       kind: "SceneFigure",
@@ -570,10 +572,7 @@ export function finalizeSemanticEvaluationRun(
       requiredTikzLibraries,
       layers,
       elements: orderedElements,
-      bounds:
-        generatedBackground.elements.length > 0
-          ? computeBounds(orderedElements) ?? run.context.pictureBounds ?? undefined
-          : run.context.pictureBounds ?? computeBounds(orderedElements),
+      ...(optionalBounds1 === undefined ? {} : { bounds: optionalBounds1 }),
       hasStatefulGraphicsState:
         run.featureUsage.path_clipping === "used-supported" ||
         run.featureUsage.use_as_bounding_box === "used-supported" ||
@@ -597,8 +596,7 @@ export function finalizeSemanticEvaluationRun(
 
 function buildSourceStatementFirstIndexBySourceId(run: SemanticEvaluationRun): Record<string, number> {
   const bySourceId = new Map<string, number>();
-  for (let index = 0; index < run.expandedFigureBody.length; index += 1) {
-    const statement = run.expandedFigureBody[index];
+  for (const [index, statement] of run.expandedFigureBody.entries()) {
     const attributed = run.statementAttribution.get(statement);
     const sourceId = attributed?.sourceId ?? statement.id;
     const previous = bySourceId.get(sourceId);
@@ -896,7 +894,7 @@ export function collectNodeAnchorTargets(context: SemanticContext): NodeAnchorTa
       seen.add(key);
       targets.push({
         nodeName,
-        nodeSourceId: geometry.sourceId,
+        ...(geometry.sourceId === undefined ? {} : { nodeSourceId: geometry.sourceId }),
         anchor: normalizedAnchor,
         world: worldPoint(pt(world.x), pt(world.y)),
         tier: BASIC_ANCHORS.has(normalizedAnchor) ? "basic" : "special"
@@ -1645,11 +1643,12 @@ function makePicRecursionKey(item: PicOperationItem, resolvedCode: ResolvedPicCo
 }
 
 function makePicOriginFrame(item: PicOperationItem, resolvedCode: ResolvedPicCode & { kind: "found" }): PicOriginFrame {
+  const optionalCodeSpan2 = resolvedCode.codeSpan ? { ...resolvedCode.codeSpan } : undefined;
   return {
     invocationId: item.id,
     invocationSpan: { ...item.span },
     picType: item.typeRaw.trim(),
-    codeSpan: resolvedCode.codeSpan ? { ...resolvedCode.codeSpan } : undefined,
+    ...(optionalCodeSpan2 === undefined ? {} : { codeSpan: optionalCodeSpan2 }),
     codeSource: resolvedCode.source,
     parameterized: resolvedCode.parameterized
   };
@@ -1673,10 +1672,10 @@ function stampPicElement(
   };
   const origin = {
     foreachStack: element.origin?.foreachStack ?? [],
-    foreachTemplateLocalTargetId: element.origin?.foreachTemplateLocalTargetId,
+    ...(element.origin?.foreachTemplateLocalTargetId === undefined ? {} : { foreachTemplateLocalTargetId: element.origin?.foreachTemplateLocalTargetId }),
     picStack: [...(element.origin?.picStack ?? []), picOrigin],
     picTemplateLocalTargetId: localTargetId,
-    macroStack: element.origin?.macroStack
+    ...(element.origin?.macroStack === undefined ? {} : { macroStack: element.origin.macroStack })
   };
   const base = {
     ...element,
@@ -1713,9 +1712,10 @@ function applyPgfMathStatement(
     markFeature(featureUsage, "pgfmath_seed_commands", "supported");
     const expressionRaw = statement.argsRaw[0] ?? "";
     const expressionSpan = statement.argsSpan[0] ?? statement.span;
+    const optionalTrace3 = context.macroTraceCollector ?? undefined;
     const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace: context.macroTraceCollector ?? undefined
+      ...(optionalTrace3 === undefined ? {} : { trace: optionalTrace3 })
     });
     if (containsPgfMathRandomToken(expanded)) {
       markFeature(featureUsage, "pgfmath_random_functions", "supported");
@@ -1737,9 +1737,10 @@ function applyPgfMathStatement(
   if (statement.commandRaw === "\\pgfmathparse") {
     const expressionRaw = statement.argsRaw[0] ?? "";
     const expressionSpan = statement.argsSpan[0] ?? statement.span;
+    const optionalTrace4 = context.macroTraceCollector ?? undefined;
     const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-      trace: context.macroTraceCollector ?? undefined
+      ...(optionalTrace4 === undefined ? {} : { trace: optionalTrace4 })
     });
     if (containsPgfMathRandomToken(expanded)) {
       markFeature(featureUsage, "pgfmath_random_functions", "supported");
@@ -1777,9 +1778,10 @@ function applyPgfMathStatement(
 
   const expressionRaw = statement.argsRaw[1] ?? "";
   const expressionSpan = statement.argsSpan[1] ?? statement.span;
+  const optionalTrace5 = context.macroTraceCollector ?? undefined;
   const expanded = expandMacroBindings(expressionRaw, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace5 === undefined ? {} : { trace: optionalTrace5 })
   });
   if (containsPgfMathRandomToken(expanded)) {
     markFeature(featureUsage, "pgfmath_random_functions", "supported");
@@ -1975,9 +1977,10 @@ function applyColorletStatement(
   }
 
   const frame = currentFrame(context);
+  const optionalTrace6 = context.macroTraceCollector ?? undefined;
   const expandedValue = expandMacroBindings(rawValue, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace6 === undefined ? {} : { trace: optionalTrace6 })
   });
   writeContextColorAlias(context, name, expandedValue, {
     statementId: statement.id,
@@ -2023,13 +2026,15 @@ function applyDefineColorStatement(
   }
 
   const frame = currentFrame(context);
+  const optionalTrace7 = context.macroTraceCollector ?? undefined;
   const expandedModel = expandMacroBindings(modelRaw, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace7 === undefined ? {} : { trace: optionalTrace7 })
   });
+  const optionalTrace8 = context.macroTraceCollector ?? undefined;
   const expandedSpecification = expandMacroBindings(specificationRaw, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: context.macroTraceCollector ?? undefined
+    ...(optionalTrace8 === undefined ? {} : { trace: optionalTrace8 })
   });
   const resolvedValue = resolveDefineColorModel(expandedModel, expandedSpecification);
   if (!resolvedValue) {
@@ -2221,7 +2226,7 @@ function applyMacroCommandDefinitionStatement(
       : {
           kind: "callable",
           parameterCount,
-          optionalFirstArgDefault,
+          ...(optionalFirstArgDefault === undefined ? {} : { optionalFirstArgDefault }),
           body: statement.bodyRaw,
           provenance: [origin]
         };
@@ -2257,7 +2262,7 @@ function cloneMacroBinding(binding: MacroBinding): MacroBinding {
   return {
     kind: "callable",
     parameterCount: binding.parameterCount,
-    optionalFirstArgDefault: binding.optionalFirstArgDefault,
+    ...(binding.optionalFirstArgDefault === undefined ? {} : { optionalFirstArgDefault: binding.optionalFirstArgDefault }),
     body: binding.body,
     provenance: cloneMacroOriginStack(binding.provenance)
   };
@@ -3647,7 +3652,7 @@ function updateTreeLevelStyleLayers(
   if (append) {
     next[index] = {
       level,
-      layers: [...next[index].layers, layer]
+      layers: [...requireArrayValue(next, index).layers, layer]
     };
   } else {
     next[index] = {
@@ -3733,7 +3738,8 @@ function splitScopeSteps(
     const origin = attribution.get(statement);
     if (statement.kind !== "Scope" || (origin && (origin.foreachStack.length > 0 || origin.sourceId !== statement.id)) || sourceMaps.has(statement)) return [statement];
     const enter = { ...statement };
-    const leave = { ...statement, id: `${statement.id}:leave`, body: [], options: undefined };
+    const leave = { ...statement, id: `${statement.id}:leave`, body: [] };
+    delete leave.options;
     steps.set(enter, "enter");
     steps.set(leave, "leave");
     return [enter, ...splitScopeSteps(statement.body, steps, attribution, sourceMaps), leave];

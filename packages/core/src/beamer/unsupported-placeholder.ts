@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { formatSvgNumber as fmt } from "../svg/format.js";
 import { escapeAttribute } from "./theme/svg-markup.js";
@@ -46,7 +47,7 @@ export function prepareUnsupportedPlaceholder(
     lines.push(visibleText.slice(offset, offset + charactersPerLine));
   }
   if (isTruncated && lines.length > 0) {
-    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, -1)}…`;
+    lines[lines.length - 1] = `${requireArrayValue(lines, lines.length - 1).slice(0, -1)}…`;
   }
   return {
     id: node.id,

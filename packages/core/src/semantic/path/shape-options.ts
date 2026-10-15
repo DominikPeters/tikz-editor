@@ -99,7 +99,7 @@ export function extractCircleShapeOptions(
     }
   }
 
-  return { radius, rx, ry, rotation };
+  return { ...(radius === undefined ? {} : { radius: radius }), ...(rx === undefined ? {} : { rx: rx }), ...(ry === undefined ? {} : { ry: ry }), ...(rotation === undefined ? {} : { rotation: rotation }) };
 }
 
 export function extractRoundedCorners(options: PathOptionItem["options"], current: number | null): number | null | undefined {

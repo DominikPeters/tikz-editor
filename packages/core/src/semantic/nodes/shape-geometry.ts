@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { parseLength } from "../coords/parse-length.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint as makeWorldPoint, worldVector as makeWorldVector, type WorldPoint, type WorldVector } from "../../coords/points.js";
@@ -2219,9 +2220,8 @@ export function intersectRayWithPolygon(reference: WorldPoint, direction: WorldV
   );
 
   let best: { point: WorldPoint; t: number } | null = null;
-  for (let index = 0; index < polygon.length; index += 1) {
-    const edgeStart = polygon[index];
-    const edgeEnd = polygon[(index + 1) % polygon.length];
+  for (const [index, edgeStart] of polygon.entries()) {
+    const edgeEnd = requireArrayValue(polygon, (index + 1) % polygon.length);
     const hit = intersectSegments(reference, rayTarget, edgeStart, edgeEnd);
     if (!hit) {
       continue;

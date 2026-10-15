@@ -55,8 +55,8 @@ function base64FromBytes(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString("base64");
   }
   let binary = "";
-  for (let i = 0; i < bytes.byteLength; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
   return btoa(binary);
 }

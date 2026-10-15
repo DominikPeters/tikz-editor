@@ -109,7 +109,7 @@ export function EquationModal({ mode, initialLatex = "", onClose, onConfirm, onV
 
     host.innerHTML = "";
     const field = document.createElement("math-field") as MathFieldElementLike;
-    field.className = css.mathField;
+    field.className = css.mathField ?? "";
     field.value = value;
 
     const onInput = () => {
@@ -153,7 +153,7 @@ export function EquationModal({ mode, initialLatex = "", onClose, onConfirm, onV
       resizable
       closeOnBackdrop
       initialWidth={720}
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title={title}

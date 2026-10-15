@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { EditTree, NodeId, SlotId } from "../tree/types.js";
 
 /**
@@ -18,13 +20,13 @@ export type Affinity = "before" | "after";
  * whitespace (`$a\cup ‸B$`, `$x^2 ‸$`).
  */
 export function positionOffset(tree: EditTree, position: Position): number {
-  const slot = tree.slots[position.slot];
+  const slot = editSlotAt(tree.slots, position.slot);
   if (slot.presence === "absent") {
     throw new Error(`Slot ${slot.id} is absent and has no positions`);
   }
   const { children } = slot;
   if (position.index < children.length) {
-    return tree.nodes[children[position.index]].span.from;
+    return editNodeAt(tree.nodes, requireArrayValue(children, position.index)).span.from;
   }
   // A slot's end is after its trailing whitespace; an empty slot's only
   // position is at its start (`\item ‸`, not before the next line's indent).
@@ -39,12 +41,12 @@ export function positionOffset(tree: EditTree, position: Position): number {
  */
 export function insertionOffset(tree: EditTree, position: Position): number {
   const offset = positionOffset(tree, position);
-  const slot = tree.slots[position.slot];
+  const slot = editSlotAt(tree.slots, position.slot);
   const last = slot.children.at(-1);
   if (slot.mode !== "text" || slot.flow || last == null || position.index < slot.children.length) {
     return offset;
   }
-  const end = tree.nodes[last].span.to;
+  const end = editNodeAt(tree.nodes, last).span.to;
   return /^\s*$/u.test(tree.text.slice(end, offset)) ? end : offset;
 }
 
@@ -72,12 +74,12 @@ export function createPositionIndex(tree: EditTree): PositionIndex {
   const positions: Position[] = [];
   const offsets: number[] = [];
   const visitNode = (node: NodeId) => {
-    for (const slot of tree.nodes[node].slots) {
+    for (const slot of editNodeAt(tree.nodes, node).slots) {
       visitSlot(slot);
     }
   };
   const visitSlot = (slotId: SlotId) => {
-    const slot = tree.slots[slotId];
+    const slot = editSlotAt(tree.slots, slotId);
     if (slot.presence === "absent") {
       return;
     }
@@ -103,14 +105,14 @@ export function createPositionIndex(tree: EditTree): PositionIndex {
       }
     };
     slot.children.forEach((child, index) => {
-      markGap(tree.nodes[child].span.from, index);
-      cursor = Math.max(cursor, tree.nodes[child].span.to);
+      markGap(editNodeAt(tree.nodes, child).span.from, index);
+      cursor = Math.max(cursor, editNodeAt(tree.nodes, child).span.to);
     });
     markGap(slot.contentSpan.to, slot.children.length);
   }
   const byOffset = new Map<number, Position[]>();
   positions.forEach((position, index) => {
-    const offset = offsets[index];
+    const offset = requireArrayValue(offsets, index);
     const list = byOffset.get(offset);
     if (list) {
       list.push(position);
@@ -123,7 +125,7 @@ export function createPositionIndex(tree: EditTree): PositionIndex {
     if (!candidates) {
       return null;
     }
-    return affinity === "before" ? candidates[0] : candidates[candidates.length - 1];
+    return affinity === "before" ? requireArrayValue(candidates, 0) : requireArrayValue(candidates, candidates.length - 1);
   };
   return {
     positions,

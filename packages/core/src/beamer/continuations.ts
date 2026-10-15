@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { beamerDocumentParser } from "@tikz-editor/lezer-tex";
 import type { Span } from "../ast/types.js";
 import { concatMappedText, createGeneratedMappedText, projectInputRange, sliceMappedText, type MappedText } from "../text/source-map.js";
@@ -31,7 +32,7 @@ export function collectBeamerContinuationBreaks(syntax: TexSyntaxIndex, frame: B
     if (!Number.isInteger(priority) || priority < 0 || priority > 4) continue;
     breaks.set(control.span.from, {
       span: { from: control.span.from, to: optional?.span.to ?? overlay?.span.to ?? control.span.to },
-      penalty: (control.name === "noframebreak" || control.name === "nopagebreak" ? -1 : 1) * penalties[priority],
+      penalty: (control.name === "noframebreak" || control.name === "nopagebreak" ? -1 : 1) * requireArrayValue(penalties, priority),
       newpage: control.name === "newpage",
     });
   }
@@ -73,7 +74,7 @@ export function beamerContinuationTitleSuffix(document: BeamerDocumentModel, ind
   const source = document.source.slice(document.preamble.span.from, document.preamble.span.to);
   const setting = /\\setbeamertemplate\s*\{\s*frametitle continuation\s*\}\s*\[\s*(from second|singleframecheck|default|roman)\s*\]/gu;
   let variant = "default";
-  for (const match of source.matchAll(setting)) variant = match[1];
+  for (const match of source.matchAll(setting)) variant = requireArrayValue(match, 1);
   if (variant === "from second") return index > 1 ? " (cont.)" : " ";
   if (variant === "singleframecheck" && count === 1) return " ";
   return ` ${roman(index)}`;
@@ -123,7 +124,7 @@ function sliceParagraphLine(item: Extract<PreparedFrameFlowItem, { kind: "paragr
   const paragraph: LaidParagraph = {
     height,
     layout: { ...original.layout, paragraphId, report, vlistLayout, bounds: { ...original.layout.bounds, x: 0, y: 0, height }, editableTextSpans: [], atomicRenderSpans: [],
-      links: original.layout.links?.filter((link) => link.bounds.y < top + height && link.bounds.y + link.bounds.height > top).map((link) => ({ ...link, bounds: { ...link.bounds, y: link.bounds.y - top } })),
+      ...(original.layout.links ? { links: original.layout.links.filter((link) => link.bounds.y < top + height && link.bounds.y + link.bounds.height > top).map((link) => ({ ...link, bounds: { ...link.bounds, y: link.bounds.y - top } })) } : {}),
     },
     svgBody: `<defs><clipPath id="${clipId}"><rect x="-1000" y="0" width="10000" height="${height}"/></clipPath></defs><g clip-path="url(#${clipId})"><g transform="translate(0 ${-top})">${original.svgBody}</g></g>`,
     listMarkers: original.listMarkers.filter((marker) => marker.bounds.y < top + height && marker.bounds.y + marker.bounds.height > top).map((marker) => ({ ...marker, bounds: { ...marker.bounds, y: marker.bounds.y - top } })),
@@ -218,7 +219,7 @@ function frameMaterial(flow: readonly PreparedFrameFlowItem[], baselineSkip: num
               cursor = lineTop + Number(line.ascent + line.descent);
               const sourceEnd = Math.max(Number(line.break?.sourceOffset ?? -1), ...line.segments.map(segment => Number(segment.sourceEndRaw ?? -1)));
               for (let adjustmentIndex = 0; adjustmentIndex < adjustments.length;) {
-                const adjustment = adjustments[adjustmentIndex];
+                const adjustment = requireArrayValue(adjustments, adjustmentIndex);
                 if (!adjustment.sourceSpan || adjustment.sourceSpan.start > sourceEnd) { adjustmentIndex++; continue; }
                 const command = breaks.get(Number(adjustment.sourceSpan.start));
                 if (command) result.push({ kind: "penalty", penalty: command.penalty });
@@ -291,7 +292,7 @@ export function splitBeamerFrameContinuations(params: {
     const limit = splitMaterial(remaining, params.factor * params.textHeight, params.titleHeight + topNatural, topStretch);
     parts.push(remaining.slice(0, limit));
     remaining = remaining.slice(limit);
-    while (remaining.length && remaining[0].kind !== "box") remaining = remaining.slice(1);
+    while (remaining.length && requireArrayValue(remaining, 0).kind !== "box") remaining = remaining.slice(1);
     const first = remaining[0];
     if (first?.kind === "box") remaining = [glue(Math.max(0, params.baselineSkip - (first.splitTopHeight ?? first.height))), ...remaining];
     if (parts.length > 1000) throw new Error("Beamer continuation splitting did not make progress.");

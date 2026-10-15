@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { BeamerOverlayPicture } from "./overlay-pictures.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
 import type { Span } from "../ast/types.js";
@@ -73,7 +74,7 @@ export function buildBeamerReferenceIndex(
     const alias = /^(.*)<([1-9]\d*)>$/u.exec(name);
     const step = alias ? Number(alias[2]) : 0;
     const frame = alias && Number.isSafeInteger(step)
-      ? frameTargets.get(alias[1])?.find((entry) => step <= entry.stepCount) : undefined;
+      ? frameTargets.get(requireArrayValue(alias, 1))?.find((entry) => step <= entry.stepCount) : undefined;
     if (!frame || (explicit && explicit.sourceStart < frame.sourceStart)) return explicit?.destination;
     return { kind: "frame", frameId: frame.frameId, step };
   };

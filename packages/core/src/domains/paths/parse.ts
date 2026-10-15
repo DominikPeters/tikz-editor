@@ -43,7 +43,6 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
       id: pathStatementId(statementIndex),
       span: { from: node.from, to: node.to },
       command: "path",
-      options: undefined,
       items: [picItem]
     };
   }
@@ -69,6 +68,10 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
   const pathItemNodes = collectPathItemNodes(node);
   let nodeIndex = 0;
   while (nodeIndex < pathItemNodes.length) {
+    const pathItemNode = pathItemNodes[nodeIndex];
+    if (!pathItemNode) {
+      throw new Error(`Missing parsed path item at index ${nodeIndex}`);
+    }
     const mappedGraph = tryMapGraphOperation(pathItemNodes, nodeIndex, source, statementIndex, itemIndex, context);
     if (mappedGraph) {
       if (context.pendingNodeOptions.length > 0) {
@@ -114,7 +117,7 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
       continue;
     }
 
-    const mapped = mapPathItem(pathItemNodes[nodeIndex], source, statementIndex, itemIndex, context);
+    const mapped = mapPathItem(pathItemNode, source, statementIndex, itemIndex, context);
     if (mapped) {
       items.push(mapped);
       itemIndex += 1;
@@ -145,12 +148,13 @@ export function mapPathStatement(node: SyntaxNode, source: string, statementInde
   const normalizedItems = normalizeChildOperationItems(items);
   const finalizedItems = command === "node" ? withInferredStandaloneNodeName(normalizedItems) : normalizedItems;
 
+  const options = findStatementOptions(finalizedItems);
   return {
     kind: "Path",
     id: pathStatementId(statementIndex),
     span: { from: node.from, to: node.to },
     command,
-    options: findStatementOptions(finalizedItems),
+    ...(options !== undefined ? { options } : {}),
     items: finalizedItems
   };
 }
@@ -162,7 +166,7 @@ function withInferredStandaloneNodeName(items: PathItem[]): PathItem[] {
   }
 
   const node = items[nodeIndex];
-  if (node.kind !== "Node" || node.name) {
+  if (node?.kind !== "Node" || node.name) {
     return items;
   }
 
@@ -179,8 +183,10 @@ function withInferredStandaloneNodeName(items: PathItem[]): PathItem[] {
 function inferStandaloneNodeName(items: PathItem[], limit: number): string | undefined {
   let awaitingAtCoordinate = false;
 
-  for (let index = 0; index < limit; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
+    if (index >= limit) {
+      break;
+    }
 
     if (item.kind === "PathKeyword" && item.keyword === "at") {
       awaitingAtCoordinate = true;
@@ -207,6 +213,9 @@ function normalizeChildOperationItems(items: PathItem[]): PathItem[] {
   const normalized: PathItem[] = [];
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
+    if (!item) {
+      throw new Error(`Missing parsed path item at index ${index}`);
+    }
     if (item.kind !== "ChildOperation") {
       normalized.push(item);
       continue;
@@ -241,10 +250,10 @@ function normalizeChildOperationItems(items: PathItem[]): PathItem[] {
         span: foreachCandidate.span,
         raw: foreachCandidate.raw,
         headerRaw: foreachCandidate.headerRaw,
-        variablesRaw: foreachCandidate.variablesRaw,
-        listRaw: foreachCandidate.listRaw,
-        optionsSpan: foreachCandidate.optionsSpan,
-        options: foreachCandidate.options
+        ...(foreachCandidate.variablesRaw !== undefined ? { variablesRaw: foreachCandidate.variablesRaw } : {}),
+        ...(foreachCandidate.listRaw !== undefined ? { listRaw: foreachCandidate.listRaw } : {}),
+        ...(foreachCandidate.optionsSpan !== undefined ? { optionsSpan: foreachCandidate.optionsSpan } : {}),
+        ...(foreachCandidate.options !== undefined ? { options: foreachCandidate.options } : {})
       };
       const parsedBody = parsePathItemsFromFragment(foreachCandidate.bodyRaw);
       normalizedChild = {
@@ -485,7 +494,11 @@ function tryMapGraphOperation(
   itemIndex: number,
   context: PathItemContext
 ): { item: PathItem; consumed: number } | null {
-  const firstNode = unwrapPathItemNode(nodes[startIndex]);
+  const candidate = nodes[startIndex];
+  if (!candidate) {
+    return null;
+  }
+  const firstNode = unwrapPathItemNode(candidate);
   const firstRaw = source.slice(firstNode.from, firstNode.to).trim().toLowerCase();
 
   // `\graph [..] { ... };` command form where the keyword is encoded in PathCommand.
@@ -497,7 +510,8 @@ function tryMapGraphOperation(
     if (firstNode.type.name === "OptionList") {
       optionsNode = firstNode;
       consumeCount += 1;
-      const maybeSpecNode = nodes[startIndex + consumeCount] ? unwrapPathItemNode(nodes[startIndex + consumeCount]) : null;
+      const maybeSpecCandidate = nodes[startIndex + consumeCount];
+      const maybeSpecNode = maybeSpecCandidate ? unwrapPathItemNode(maybeSpecCandidate) : null;
       if (maybeSpecNode && isGraphSpecNode(maybeSpecNode, source)) {
         specNode = maybeSpecNode;
         consumeCount += 1;
@@ -520,8 +534,10 @@ function tryMapGraphOperation(
         id: graphOperationItemId(statementIndex, itemIndex),
         span: { from, to },
         raw: source.slice(from, to),
-        optionsSpan: toSpan(optionsNode),
-        options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
+        ...(optionsNode ? {
+          optionsSpan: toSpan(optionsNode),
+          options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+        } : {}),
         specSpan: { from: specNode.from, to: specNode.to },
         specRaw: source.slice(specNode.from, specNode.to),
         spec: parseGraphSpec(source.slice(specNode.from, specNode.to), specNode.from)
@@ -561,8 +577,10 @@ function tryMapGraphOperation(
       id: graphOperationItemId(statementIndex, itemIndex),
       span: { from, to },
       raw: source.slice(from, to),
-      optionsSpan: toSpan(optionsNode),
-      options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
+      ...(optionsNode ? {
+        optionsSpan: toSpan(optionsNode),
+        options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+      } : {}),
       specSpan: { from: specNode.from, to: specNode.to },
       specRaw: source.slice(specNode.from, specNode.to),
       spec: parseGraphSpec(source.slice(specNode.from, specNode.to), specNode.from)
@@ -578,7 +596,11 @@ function tryMapDecorateOperation(
   statementIndex: number,
   itemIndex: number
 ): { item: PathItem; consumed: number } | null {
-  const keywordNode = unwrapPathItemNode(nodes[startIndex]);
+  const candidate = nodes[startIndex];
+  if (!candidate) {
+    return null;
+  }
+  const keywordNode = unwrapPathItemNode(candidate);
   if (!isDecorateKeywordNode(keywordNode, source)) {
     return null;
   }
@@ -616,7 +638,11 @@ function tryMapPlotOperation(
   statementIndex: number,
   itemIndex: number
 ): { item: PathItem; consumed: number } | null {
-  const keywordNode = unwrapPathItemNode(nodes[startIndex]);
+  const candidate = nodes[startIndex];
+  if (!candidate) {
+    return null;
+  }
+  const keywordNode = unwrapPathItemNode(candidate);
   if (!isPlotKeywordNode(keywordNode, source)) {
     return null;
   }
@@ -676,11 +702,15 @@ function tryMapPlotOperation(
       id: plotOperationItemId(statementIndex, itemIndex),
       span: { from, to },
       raw: source.slice(from, to),
-      optionsSpan: toSpan(optionsNode),
-      options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
+      ...(optionsNode ? {
+        optionsSpan: toSpan(optionsNode),
+        options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+      } : {}),
       mode,
-      dataSpan: toSpan(dataNode),
-      dataRaw: dataNode ? source.slice(dataNode.from, dataNode.to) : undefined
+      ...(dataNode ? {
+        dataSpan: toSpan(dataNode),
+        dataRaw: source.slice(dataNode.from, dataNode.to)
+      } : {})
     },
     consumed: consumeCount
   };
@@ -724,10 +754,7 @@ function unwrapPathItemNode(node: SyntaxNode): SyntaxNode {
   return node;
 }
 
-function toSpan(node: SyntaxNode | null): { from: number; to: number } | undefined {
-  if (!node) {
-    return undefined;
-  }
+function toSpan(node: SyntaxNode): { from: number; to: number } {
   return {
     from: node.from,
     to: node.to
@@ -758,12 +785,14 @@ function findStatementOptions(items: PathItem[]) {
 }
 
 function mergeOptionLists(optionLists: OptionListAst[]): OptionListAst {
-  if (optionLists.length === 1) {
-    return optionLists[0];
-  }
-
   const first = optionLists[0];
-  const last = optionLists[optionLists.length - 1];
+  const last = optionLists.at(-1);
+  if (!first || !last) {
+    throw new Error("Cannot merge an empty option list collection");
+  }
+  if (optionLists.length === 1) {
+    return first;
+  }
   return {
     span: {
       from: first.span.from,

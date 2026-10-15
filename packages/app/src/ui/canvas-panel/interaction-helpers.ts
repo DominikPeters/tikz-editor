@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { ElementTemplate } from "@tikz-editor/core/edit/actions";
 import type { EditHandle, SceneElement, ScenePathCommand } from "@tikz-editor/core/semantic/types";
 import { CM_PER_PT, PT_PER_CM, formatNumber } from "@tikz-editor/core/edit/format";
@@ -48,20 +49,20 @@ export function createTemplateForToolDrag(
 
   if (mode === "addPath") {
     return hasDrag
-      ? { kind: "line", hasArrow: false, to: endWorld, strokeColor }
-      : { kind: "line", hasArrow: false, strokeColor };
+      ? { kind: "line", hasArrow: false, to: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "line", hasArrow: false, ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addLine") {
     return hasDrag
-      ? { kind: "line", hasArrow: false, to: endWorld, strokeColor }
-      : { kind: "line", hasArrow: false, strokeColor };
+      ? { kind: "line", hasArrow: false, to: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "line", hasArrow: false, ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addArrow") {
     return hasDrag
-      ? { kind: "line", hasArrow: true, to: endWorld, strokeColor }
-      : { kind: "line", hasArrow: true, strokeColor };
+      ? { kind: "line", hasArrow: true, to: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "line", hasArrow: true, ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addBezier") {
@@ -70,27 +71,27 @@ export function createTemplateForToolDrag(
       pt((startWorld.y + endWorld.y) / 2)
     );
     if (hasDrag) {
-      return createBezierTemplateFromBend(startWorld, endWorld, bend, { strokeColor });
+      return createBezierTemplateFromBend(startWorld, endWorld, bend, { ...(strokeColor !== undefined ? { strokeColor } : {}) });
     }
-    return { kind: "bezier", strokeColor };
+    return { kind: "bezier", ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addGrid") {
     return hasDrag
-      ? { kind: "grid", corner: endWorld, strokeColor }
-      : { kind: "grid", strokeColor };
+      ? { kind: "grid", corner: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}) }
+      : { kind: "grid", ...(strokeColor !== undefined ? { strokeColor } : {}) };
   }
 
   if (mode === "addRect") {
     return hasDrag
-      ? { kind: "rectangle", corner: endWorld, strokeColor, fillColor }
-      : { kind: "rectangle", strokeColor, fillColor };
+      ? { kind: "rectangle", corner: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) }
+      : { kind: "rectangle", ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) };
   }
 
   if (mode === "addEllipse") {
     return hasDrag
-      ? { kind: "ellipse", corner: endWorld, strokeColor, fillColor }
-      : { kind: "ellipse", strokeColor, fillColor };
+      ? { kind: "ellipse", corner: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) }
+      : { kind: "ellipse", ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) };
   }
 
   if (mode === "addShape") {
@@ -104,23 +105,23 @@ export function createTemplateForToolDrag(
           kind: "node",
           shape: options?.selectedAddShape ?? "rectangle",
           text: "",
-          minimumWidthPt: draft.minimumWidthPt,
-          minimumHeightPt: draft.minimumHeightPt,
-          strokeColor,
-          fillColor
+          ...(draft.minimumWidthPt !== undefined ? { minimumWidthPt: draft.minimumWidthPt } : {}),
+          ...(draft.minimumHeightPt !== undefined ? { minimumHeightPt: draft.minimumHeightPt } : {}),
+          ...(strokeColor !== undefined ? { strokeColor } : {}),
+          ...(fillColor !== undefined ? { fillColor } : {})
         }
       : {
           kind: "node",
           shape: options?.selectedAddShape ?? "rectangle",
           text: "",
-          strokeColor,
-          fillColor
+          ...(strokeColor !== undefined ? { strokeColor } : {}),
+          ...(fillColor !== undefined ? { fillColor } : {})
         };
   }
 
   return hasDrag
-    ? { kind: "circle", edge: endWorld, strokeColor, fillColor }
-    : { kind: "circle", strokeColor, fillColor };
+    ? { kind: "circle", edge: endWorld, ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) }
+    : { kind: "circle", ...(strokeColor !== undefined ? { strokeColor } : {}), ...(fillColor !== undefined ? { fillColor } : {}) };
 }
 
 export function resolveBezierControlsFromBend(
@@ -178,7 +179,7 @@ export function createBezierTemplateFromBend(
     to: controls.endWorld,
     control1: controls.control1,
     control2: controls.control2,
-    strokeColor: options?.strokeColor
+    ...(options?.strokeColor !== undefined ? { strokeColor: options?.strokeColor } : {})
   };
 }
 
@@ -214,7 +215,7 @@ export function resolveHandleIdForDrag(
       : handle.id === drag.handleId && handle.sourceRef.sourceId === drag.sourceId
   ));
   if (matches.length !== 1) return null;
-  const match = matches[0];
+  const match = requireArrayValue(matches, 0);
   drag.handleId = match.id;
   drag.sourceId = match.sourceRef.sourceId;
   return match.id;
@@ -480,7 +481,7 @@ export function pickClosestSourceId(
   sourceIds: readonly string[],
   preferredWorld: WorldPoint
 ): string {
-  let bestId = sourceIds[0];
+  let bestId = requireArrayValue(sourceIds, 0);
   let bestDistSq = Number.POSITIVE_INFINITY;
 
   for (const sourceId of sourceIds) {

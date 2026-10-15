@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { useEffect, type RefObject } from "react";
 import { clientPoint, svgPoint, svgBounds, viewportBounds, pt, px } from "@tikz-editor/core/coords/index";
 import { getKnuthPlassPointFromOffset, getKnuthPlassSelectionRects } from "@tikz-editor/core/text/knuth-plass";
@@ -166,8 +167,7 @@ function resolveRegionSelectionOverlay(
   const rects: RegionSelectionOverlayBox[] = [];
   const start = Math.min(selectionStart, selectionEnd);
   const end = Math.max(selectionStart, selectionEnd);
-  for (let index = 0; index < ranges.length; index += 1) {
-    const range = ranges[index];
+  for (const [index, range] of ranges.entries()) {
     const localStart = Math.max(start, range.start);
     const localEnd = Math.min(end, range.end);
     if (localEnd <= localStart) {
@@ -182,7 +182,7 @@ function resolveRegionSelectionOverlay(
     rects.push({
       bounds: svgBounds(pt(left), pt(lineBox.top), pt(left + width), pt(lineBox.top + lineBox.height)),
       center: svgPoint(pt(left + width / 2), pt(lineBox.top + lineBox.height / 2)),
-      rotationDeg: Number.isFinite(target.region.rotation) ? Number(target.region.rotation) : undefined
+      ...(Number.isFinite(target.region.rotation) ? { rotationDeg: Number(target.region.rotation) } : {})
     });
   }
   return { caret: null, rects };
@@ -196,8 +196,8 @@ function projectRegionSelectionOverlayToViewport(
   const projectPoint = (point: SvgPoint): ViewportPoint => svgToViewport(point, canvasTransform, viewBox);
   const projectBox = (box: RegionSelectionOverlayBox): TextSelectionOverlayBox => ({
     bounds: svgBoundsToViewportBounds(box.bounds, projectPoint),
-    center: box.center ? projectPoint(box.center) : undefined,
-    rotationDeg: box.rotationDeg
+    ...(box.center ? { center: projectPoint(box.center) } : {}),
+    ...(box.rotationDeg !== undefined ? { rotationDeg: box.rotationDeg } : {})
   });
   return {
     caret: overlay.caret ? projectBox(overlay.caret) : null,
@@ -234,7 +234,7 @@ async function estimateCaretHeight(
       endOffset
     });
     if (rects.ok && rects.rects.length > 0) {
-      const rect = rects.rects[0];
+      const rect = requireArrayValue(rects.rects, 0);
       return Math.max(1, rect.bounds.maxY - rect.bounds.minY);
     }
   }
@@ -506,10 +506,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
                   px(caretCenter.y - viewportRect.top + height / 2)
                 ),
                 center: clientToViewport(caretCenter, viewportRect),
-                rotationDeg:
-                  typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg)
-                    ? point.rotationDeg
-                    : undefined
+                ...(typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg) ? { rotationDeg: point.rotationDeg } : {})
               },
               rects: []
             });
@@ -613,10 +610,7 @@ export function useCanvasTextEditingEffects(args: UseCanvasTextEditingEffectsArg
                 px(point.clientPoint.y - viewportRect.top + height / 2)
               ),
               center: clientToViewport(point.clientPoint, viewportRect),
-              rotationDeg:
-                typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg)
-                  ? point.rotationDeg
-                  : undefined
+              ...(typeof point.rotationDeg === "number" && Number.isFinite(point.rotationDeg) ? { rotationDeg: point.rotationDeg } : {})
             },
             rects: []
           });

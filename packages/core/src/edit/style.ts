@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { CoordinateSourceUnits } from "../semantic/types.js";
 import { coordinateSourceUnit, parseLength } from "../semantic/coords/parse-length.js";
 import { PT_PER_CM } from "../coords/source.js";
@@ -16,7 +17,7 @@ function componentWithUnit(value: string, oldComponent: string, unit?: string): 
 export function formatCoordinate(oldRaw: string, x: string, y: string, units?: CoordinateSourceUnits): string {
   const exact = oldRaw.match(/^\((\s*)(\[[^\]]*\]\s*)?([^,)]*)(\s*),(\s*)([^)]*)(\s*)\)$/s);
   if (exact) {
-    return `(${exact[1]}${exact[2] ?? ""}${componentWithUnit(x, exact[3], units?.x)}${exact[4]},${exact[5]}${componentWithUnit(y, exact[6], units?.y)}${exact[7]})`;
+    return `(${exact[1]}${exact[2] ?? ""}${componentWithUnit(x, requireArrayValue(exact, 3), units?.x)}${exact[4]},${exact[5]}${componentWithUnit(y, requireArrayValue(exact, 6), units?.y)}${exact[7]})`;
   }
 
   const afterComma = /,\s+/.test(oldRaw) ? " " : "";
@@ -26,7 +27,7 @@ export function formatCoordinate(oldRaw: string, x: string, y: string, units?: C
 export function formatPolarCoordinate(oldRaw: string, angle: string, radius: string, units?: CoordinateSourceUnits): string {
   const exact = oldRaw.match(/^\((\s*)(\[[^\]]*\]\s*)?([^:)]*)(\s*):(\s*)([^)]*)(\s*)\)$/s);
   if (exact) {
-    return `(${exact[1]}${exact[2] ?? ""}${angle}${exact[4]}:${exact[5]}${componentWithUnit(radius, exact[6], units?.radius)}${exact[7]})`;
+    return `(${exact[1]}${exact[2] ?? ""}${angle}${exact[4]}:${exact[5]}${componentWithUnit(radius, requireArrayValue(exact, 6), units?.radius)}${exact[7]})`;
   }
 
   const afterColon = /:\s+/.test(oldRaw) ? " " : "";

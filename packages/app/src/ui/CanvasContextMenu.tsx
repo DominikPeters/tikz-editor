@@ -26,7 +26,7 @@ function navigateMenu(event: ReactKeyboardEvent<HTMLDivElement>) {
     event.preventDefault(); event.stopPropagation();
     const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next]?.focus();
-  } else if (event.key === "ArrowLeft" && menu?.parentElement?.classList.contains(css.submenuPopup)) {
+  } else if (event.key === "ArrowLeft" && menu?.parentElement?.classList.contains(css.submenuPopup ?? "")) {
     event.preventDefault(); event.stopPropagation();
     const trigger = menu.parentElement.previousElementSibling;
     if (trigger instanceof HTMLButtonElement) trigger.focus();
@@ -201,9 +201,11 @@ export function CanvasContextMenu({
     );
 
     const computedStyle = getComputedStyle(container);
+    const fontSize = computedStyle.getPropertyValue("--app-ui-font-size").trim();
+    const scale = computedStyle.getPropertyValue("--app-ui-scale").trim();
     const nextInheritedStyle: ContextMenuInheritedStyle = {
-      "--app-ui-font-size": computedStyle.getPropertyValue("--app-ui-font-size").trim() || undefined,
-      "--app-ui-scale": computedStyle.getPropertyValue("--app-ui-scale").trim() || undefined
+      ...(fontSize ? { "--app-ui-font-size": fontSize } : {}),
+      ...(scale ? { "--app-ui-scale": scale } : {})
     };
     setInheritedStyle((current) =>
       current["--app-ui-font-size"] === nextInheritedStyle["--app-ui-font-size"] &&

@@ -20,7 +20,7 @@ export type DocumentEditSession = {
 
 export function beginDocumentEdit(state: SessionState, changedSourceIds: string[] | null = null): DocumentEditSession {
   const doc = getActiveDocument(state);
-  return { documentId: doc.id, activeRootId: doc.activeRootId, drawingLayerRootId: doc.drawingLayerRootId, rootChosen: doc.hasInitializedRootSelection, baseSource: doc.source,
+  return { documentId: doc.id, activeRootId: doc.activeRootId, ...((doc.drawingLayerRootId) === undefined ? {} : { drawingLayerRootId: doc.drawingLayerRootId }), rootChosen: doc.hasInitializedRootSelection, baseSource: doc.source,
     latestSource: doc.source, latestRevision: doc.sourceRevision, changedSourceIds, patches: [] };
 }
 
@@ -64,12 +64,14 @@ export function restoreDocumentEdit(
   const trackedPatches = session.patches && patchesMatchSourceTransition(session.baseSource, session.latestSource, session.patches)
     ? session.patches : undefined;
   const patches = preview?.patches ?? trackedPatches;
+  const inversePatches = patches?.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
+    replacement: session.baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) }));
+  const inverseIdentityMoves = preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan }));
   dispatch({ type: "SET_SOURCE_TRANSIENT", documentId: session.documentId,
     source: session.baseSource, expectedSource: session.latestSource, expectedSourceRevision: session.latestRevision,
     changedSourceIds: session.changedSourceIds,
-    patches: patches?.map(patch => ({ oldSpan: patch.newSpan, newSpan: patch.oldSpan,
-      replacement: session.baseSource.slice(patch.oldSpan.from, patch.oldSpan.to) })),
-    identityMoves: preview?.identityMoves?.map(move => ({ oldSpan: move.newSpan, newSpan: move.oldSpan })) });
+    ...(inversePatches === undefined ? {} : { patches: inversePatches }),
+    ...(inverseIdentityMoves === undefined ? {} : { identityMoves: inverseIdentityMoves }) });
   trackDocumentEdit(session, getState());
   return session.latestSource === session.baseSource;
 }

@@ -254,9 +254,12 @@ export function applyEditAction(
       ...parseOptions,
       analysisView: null,
       analysisSession: null,
-      sourceFingerprint: geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint,
-      preparedParse: { source, activeFigureId: parseOptions.activeFigureId, result: geometry.parsed }
+
+      preparedParse: { source, ...(parseOptions.activeFigureId === undefined ? {} : { activeFigureId: parseOptions.activeFigureId }), result: geometry.parsed }
     };
+    const sourceFingerprint = geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint;
+    if (sourceFingerprint === undefined) delete parseOptions.sourceFingerprint;
+    else parseOptions.sourceFingerprint = sourceFingerprint;
   }
   if ("bypassSnapping" in action) parseOptions = { ...parseOptions, bypassSnapping: action.bypassSnapping };
   const rawResult = (() : EditActionResult => {
@@ -397,8 +400,11 @@ export function applyEditAction(
   )) {
     const baselineResult = normalizeResultPatches(source, result);
     if (baselineResult.kind === "success" || baselineResult.kind === "partial") {
-      result = { ...result, identityMoves: geometryIdentityMoves(geometry, currentSource, result.newSource,
-        baselineResult.patches, result.identityMoves), geometryBaseSource: geometry.source };
+      const identityMoves = geometryIdentityMoves(geometry, currentSource, result.newSource,
+        baselineResult.patches, result.identityMoves);
+      result = { ...result, geometryBaseSource: geometry.source };
+      if (identityMoves === undefined) delete result.identityMoves;
+      else result.identityMoves = identityMoves;
     }
   }
   return normalizeResultPatches(currentSource, result);
@@ -425,8 +431,8 @@ function applyFlattenForeachAction(
   parseOptions: EditParseOptions
 ): EditActionResult {
   const flattened = flattenForeachInSource(source, action.target, {
-    recursive: action.recursive,
-    maxExpansions: action.maxExpansions
+    ...(action.recursive === undefined ? {} : { recursive: action.recursive }),
+    ...(action.maxExpansions === undefined ? {} : { maxExpansions: action.maxExpansions })
   });
 
   if (flattened.kind === "unsupported") {
@@ -520,7 +526,7 @@ function applyMoveHandle(
       kind: "success",
       newSource: result.newSource,
       patches: result.patches,
-      changedSourceIds: result.changedSourceIds
+      ...(result.changedSourceIds === undefined ? {} : { changedSourceIds: result.changedSourceIds })
     };
   }
   if (result.kind === "unsupported") {
@@ -584,7 +590,7 @@ function applyConnectHandle(
     return { kind: "error", message: "Handle span content mismatch (stale handle)." };
   }
 
-  const nameResolution = resolveAnchorNodeName(source, { nodeName, nodeSourceId, anchor }, parseOptions);
+  const nameResolution = resolveAnchorNodeName(source, { nodeName, ...(nodeSourceId === undefined ? {} : { nodeSourceId }), anchor }, parseOptions);
   if (!nameResolution) {
     return { kind: "error", message: "Node name is required for endpoint connection." };
   }
@@ -677,8 +683,8 @@ function resolveElementTemplateAnchorNames(
     source: currentSource,
     template: {
       ...template,
-      fromAnchor,
-      toAnchor
+      ...(fromAnchor === undefined ? {} : { fromAnchor }),
+      ...(toAnchor === undefined ? {} : { toAnchor })
     }
   };
 }
@@ -708,7 +714,7 @@ function resolveAnchorNodeName(
   return {
     source: named.source,
     anchor: { ...anchor, nodeName: named.name },
-    insertedSpan: named.insertedSpan,
+    ...(named.insertedSpan === undefined ? {} : { insertedSpan: named.insertedSpan }),
     insertedLength: named.insertedLength
   };
 }

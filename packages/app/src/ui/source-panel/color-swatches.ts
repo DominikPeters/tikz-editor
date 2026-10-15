@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { Extension } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import type { EditorView} from "@codemirror/view";
@@ -156,8 +157,8 @@ function sameRanges(left: readonly SourceRange[], right: readonly SourceRange[])
     return false;
   }
   for (let index = 0; index < left.length; index += 1) {
-    const leftRange = left[index];
-    const rightRange = right[index];
+    const leftRange = requireArrayValue(left, index);
+    const rightRange = requireArrayValue(right, index);
     if (leftRange?.from !== rightRange?.from || leftRange.to !== rightRange.to) {
       return false;
     }

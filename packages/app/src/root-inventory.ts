@@ -67,8 +67,9 @@ export function reconcileActiveRootSelection(params: {
     (!activeRootId &&
       rootCount >= 2 &&
       rootCount > params.previousRootCount);
-  if (shouldAutoSelectFirst) {
-    activeRootId = params.roots[0].id;
+  const firstRoot = params.roots[0];
+  if (shouldAutoSelectFirst && firstRoot) {
+    activeRootId = firstRoot.id;
     hasInitializedRootSelection = true;
   }
   return { activeRootId, hasInitializedRootSelection };

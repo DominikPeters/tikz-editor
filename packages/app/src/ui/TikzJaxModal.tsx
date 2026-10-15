@@ -234,7 +234,7 @@ export function TikzJaxModal({
     if (!output) return;
     if (phase === "done" || phase === "rendering" || phase === "loading-lib") return;
     const pre = document.createElement("pre");
-    pre.className = css.outputLog;
+    pre.className = css.outputLog ?? "";
     pre.textContent = nativeLog.length > 0 ? nativeLog : nativeError !== null && nativeError.length > 0 ? nativeError : "No diagnostic output.";
     output.innerHTML = "";
     output.appendChild(pre);
@@ -247,7 +247,7 @@ export function TikzJaxModal({
     if (!output) return;
     if (showLogView) {
       const pre = document.createElement("pre");
-      pre.className = css.outputLog;
+      pre.className = css.outputLog ?? "";
       pre.textContent = nativeLog || "No diagnostic output.";
       output.innerHTML = "";
       output.appendChild(pre);
@@ -304,7 +304,7 @@ export function TikzJaxModal({
       closeOnBackdrop
       initialWidth={760}
       initialHeight={560}
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Compiled Picture"

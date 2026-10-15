@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { FillPatternOptionMutationContext } from "../property-write-builders.js";
 import { normalizeOptionKey } from "../option-key.js";
 import {
@@ -90,7 +91,7 @@ export const buildFillSection: SectionBuilder = (context) => {
       label: "Shading",
       value: fillPaintState.shading,
       options: FILL_SHADING_OPTIONS,
-      note: fillPaintState.shading === "custom" ? FILL_STYLE_CUSTOM_NOTE : undefined,
+      ...(fillPaintState.shading === "custom" ? { note: FILL_STYLE_CUSTOM_NOTE } : {}),
       write: context.writeProperty("shading")
     });
 
@@ -204,7 +205,7 @@ export const buildFillSection: SectionBuilder = (context) => {
         label: "Pattern",
         value: fillPaintState.pattern,
         options: FILL_PATTERN_OPTIONS,
-        note: fillPaintState.pattern === "custom" ? FILL_STYLE_CUSTOM_NOTE : undefined,
+        ...(fillPaintState.pattern === "custom" ? { note: FILL_STYLE_CUSTOM_NOTE } : {}),
         write: context.writeProperty("pattern")
       },
       {
@@ -311,7 +312,7 @@ function makeFillPatternNumberProperty(
     option,
     value: mutationContext.values[valueKey],
     step,
-    unit,
+    ...(unit === undefined ? {} : { unit }),
     context: mutationContext,
     write: context.writeProperty("pattern")
   };
@@ -524,9 +525,9 @@ function pathSupportsFillEditing(commands: ScenePathCommand[]): boolean {
 function polygonSignedArea(points: ReadonlyArray<{ x: number; y: number }>): number {
   if (points.length < 3) return 0;
   let area = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
+  for (const [index, current] of points.entries()) {
+
+    const next = requireArrayValue(points, (index + 1) % points.length);
     area += current.x * next.y - next.x * current.y;
   }
   return area / 2;

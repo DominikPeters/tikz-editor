@@ -89,8 +89,8 @@ function transformBoxNode(random: TexFuzzRandom, path: string, context: Generati
       angle: random.pick(`${path}/angle`, [-45, -15, 0, 30, 90, 180] as const), children };
     case "scalebox": return { kind: "transform-box", command,
       scale: random.pick(`${path}/scale`, [0.5, 0.75, 1.25, 1.5, 2] as const),
-      verticalScale: random.boolean(`${path}/vertical-scale-present`)
-        ? random.pick(`${path}/vertical-scale`, [0.75, 1, 1.5] as const) : undefined,
+      ...(random.boolean(`${path}/vertical-scale-present`)
+        ? { verticalScale: random.pick(`${path}/vertical-scale`, [0.75, 1, 1.5] as const) } : {}),
       children };
     case "resizebox": {
       const mode = random.pick(`${path}/resize-mode`, ["width", "height", "both"] as const);
@@ -237,8 +237,7 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
       return {
         kind: "box",
         command,
-        width,
-        alignment: width ? random.pick(`${path}/box-alignment`, ["l", "c", "r", "s"] as const) : undefined,
+        ...(width ? { width, alignment: random.pick(`${path}/box-alignment`, ["l", "c", "r", "s"] as const) } : {}),
         children: inlineChildren(random, `${path}/sized-box`, depth, context),
       };
     }
@@ -266,17 +265,17 @@ function inlineNode(random: TexFuzzRandom, path: string, depth: number, context:
       return {
         kind: "raisebox",
         lift: dimension(random, `${path}/lift`),
-        height: random.boolean(`${path}/height-present`) ? dimension(random, `${path}/height`) : undefined,
-        depth: random.boolean(`${path}/depth-present`) ? dimension(random, `${path}/depth`) : undefined,
+        ...(random.boolean(`${path}/height-present`) ? { height: dimension(random, `${path}/height`) } : {}),
+        ...(random.boolean(`${path}/depth-present`) ? { depth: dimension(random, `${path}/depth`) } : {}),
         children: inlineChildren(random, `${path}/raise-body`, depth, context),
       };
-    case "rule": return { kind: "rule", raise: random.boolean(`${path}/raise-present`) ? dimension(random, `${path}/raise`) : undefined, width: dimension(random, `${path}/rule-width`, { nonNegative: true }), height: dimension(random, `${path}/rule-height`, { nonNegative: true }) };
+    case "rule": return { kind: "rule", ...(random.boolean(`${path}/raise-present`) ? { raise: dimension(random, `${path}/raise`) } : {}), width: dimension(random, `${path}/rule-width`, { nonNegative: true }), height: dimension(random, `${path}/rule-height`, { nonNegative: true }) };
     case "tabular": return tabularNode(random, `${path}/tabular`);
     case "math": return { kind: "math", body: generateTexFuzzMathNode(random, `${path}/math`, Math.min(4, Math.max(1, depth - 1))), delimiter: random.boolean(`${path}/math-delimiter`) ? "dollar" : "paren" };
     case "accent": return { kind: "accent", command: random.pick(`${path}/accent`, ["'", "`", "^"] as const), base: "e" };
     case "line-break":
       return random.boolean(`${path}/linebreak-kind`)
-        ? { kind: "line-break", command: "\\", starred: random.boolean(`${path}/linebreak-star`), leading: random.boolean(`${path}/line-leading`) ? dimension(random, `${path}/leading`) : undefined }
+        ? { kind: "line-break", command: "\\", starred: random.boolean(`${path}/linebreak-star`), ...(random.boolean(`${path}/line-leading`) ? { leading: dimension(random, `${path}/leading`) } : {}) }
         : { kind: "line-break", command: random.boolean(`${path}/linebreak-control`) ? "newline" : "linebreak", priority: random.pick(`${path}/linebreak-priority`, [0, 1, 2, 3, 4] as const) };
   }
   throw new Error(`Unhandled inline TeX fuzz node kind ${kind}.`);
@@ -287,7 +286,7 @@ function listEnvironmentChildren(random: TexFuzzRandom, path: string, depth: num
   return Array.from({ length: count }, (_, index) => [
     // OT1 list-label attachment metrics currently accept only the encoded
     // label repertoire; Unicode prose remains exercised in the item body.
-    { kind: "item", label: random.boolean(`${path}/label-${index}`) ? [{ kind: "text", value: "Label" }] : undefined } satisfies TexFuzzNode,
+    { kind: "item", ...(random.boolean(`${path}/label-${index}`) ? { label: [{ kind: "text", value: "Label" }] } : {}) } satisfies TexFuzzNode,
     ...inlineChildren(random, `${path}/item-body-${index}`, depth, context),
   ]).flat();
 }
@@ -341,9 +340,9 @@ function documentNode(random: TexFuzzRandom, path: string, depth: number, contex
     case "vertical-rule":
       return {
         kind: "vertical-rule",
-        width: random.boolean(`${path}/vrule-width`) ? dimension(random, `${path}/vrule-width-value`, { nonNegative: true }) : undefined,
-        height: random.boolean(`${path}/vrule-height`) ? dimension(random, `${path}/vrule-height-value`, { nonNegative: true }) : undefined,
-        depth: random.boolean(`${path}/vrule-depth`) ? dimension(random, `${path}/vrule-depth-value`) : undefined,
+        ...(random.boolean(`${path}/vrule-width`) ? { width: dimension(random, `${path}/vrule-width-value`, { nonNegative: true }) } : {}),
+        ...(random.boolean(`${path}/vrule-height`) ? { height: dimension(random, `${path}/vrule-height-value`, { nonNegative: true }) } : {}),
+        ...(random.boolean(`${path}/vrule-depth`) ? { depth: dimension(random, `${path}/vrule-depth-value`) } : {}),
       };
     case "parbox":
       return {
@@ -483,7 +482,7 @@ export function generateTexFuzzCase(
     : adaptTexFuzzWeights(
       profile.weights as Readonly<Record<TexFuzzFeatureId, number>>,
       options.coverageFeedback,
-      { noveltyBudget: options.adaptiveNoveltyBudget }
+      options.adaptiveNoveltyBudget === undefined ? {} : { noveltyBudget: options.adaptiveNoveltyBudget }
     );
   const ast = Array.from({ length: size }, (_, index) => {
     const context: GenerationContext = { weights, remainingDescendants: MAX_DESCENDANTS_PER_ROOT };

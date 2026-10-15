@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type {
   SvgPatchOp,
   SvgRenderModel,
@@ -147,7 +148,7 @@ export class SvgDomPatcher {
     const children = Array.from(parsed.documentElement.children);
     if (!parsed.querySelector("parsererror") && children.length === parts.length && children.every(isSvgElementNode)) {
       parts.forEach((part, index) => {
-        const element = children[index];
+        const element = requireArrayValue(children, index);
         element.setAttribute("data-part-id", part.partId);
         elements.set(part, element);
       });

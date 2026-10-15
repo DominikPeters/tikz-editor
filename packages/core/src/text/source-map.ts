@@ -87,9 +87,9 @@ export function translateTextSourceMap(map: TextSourceMap, delta: number): TextS
   const projection = (origin: TextSourceProjection): TextSourceProjection => {
     switch (origin.kind) {
       case "direct": return { ...origin, ...range(origin) };
-      case "macro-argument": return { ...origin, ...range(origin), invocation: range(origin.invocation), definition: origin.definition && range(origin.definition) };
-      case "macro-generated": return { ...origin, invocation: range(origin.invocation), definition: origin.definition && range(origin.definition) };
-      case "generated": return { ...origin, owner: origin.owner && range(origin.owner) };
+      case "macro-argument": return { ...origin, ...range(origin), invocation: range(origin.invocation), ...(origin.definition ? { definition: range(origin.definition) } : {}) };
+      case "macro-generated": return { ...origin, invocation: range(origin.invocation), ...(origin.definition ? { definition: range(origin.definition) } : {}) };
+      case "generated": return { ...origin, ...(origin.owner ? { owner: range(origin.owner) } : {}) };
       case "unmapped": return origin;
     }
   };
@@ -98,7 +98,7 @@ export function translateTextSourceMap(map: TextSourceMap, delta: number): TextS
     charOrigins: map.charOrigins.map(projection),
     boundaryOrigins: map.boundaryOrigins.map((anchor) => {
       if (anchor.kind === "offset") return { ...anchor, offset: anchor.offset + delta };
-      if (anchor.kind === "range") return { ...anchor, ...range(anchor), projection: anchor.projection && projection(anchor.projection) };
+      if (anchor.kind === "range") return { ...anchor, ...range(anchor), ...(anchor.projection ? { projection: projection(anchor.projection) } : {}) };
       return anchor;
     })
   };
@@ -123,7 +123,7 @@ export function createGeneratedMappedText(
   owner?: TextSourceRange
 ): MappedText {
   const projection: TextSourceProjection = owner
-    ? { kind: "generated", reason, owner }
+    ? { kind: "generated", reason, ...(owner !== undefined ? { owner: owner } : {}) }
     : { kind: "generated", reason };
   const anchor: TextSourceAnchor = owner
     ? { kind: "range", from: owner.from, to: owner.to, policy: "generated", projection }
@@ -375,7 +375,7 @@ function projectionToAnchor(
       from: projection.invocation.from,
       to: projection.invocation.to,
       policy: "macro",
-      projection
+      ...(projection !== undefined ? { projection: projection } : {})
     };
   }
   if (projection.kind === "generated") {
@@ -385,7 +385,7 @@ function projectionToAnchor(
           from: projection.owner.from,
           to: projection.owner.to,
           policy: "generated",
-          projection
+          ...(projection !== undefined ? { projection: projection } : {})
         }
       : { kind: "unmapped", reason: projection.reason };
   }

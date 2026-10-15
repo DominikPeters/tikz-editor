@@ -182,7 +182,7 @@ async function caretEnds(
     const extent = result.caretTop && result.caretBottom
       ? { top: Math.min(result.caretTop.y, result.caretBottom.y), bottom: Math.max(result.caretTop.y, result.caretBottom.y) }
       : undefined;
-    return { x: result.clientPoint.x, y: result.clientPoint.y, extent };
+    return { x: result.clientPoint.x, y: result.clientPoint.y, ...(extent !== undefined ? { extent: extent } : {}) };
   };
   const start = await point(from, "before");
   const end = await point(to, "after");

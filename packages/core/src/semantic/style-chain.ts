@@ -69,28 +69,17 @@ export function cloneStyleSourceRef(sourceRef: StyleSourceRef | undefined): Styl
   if (!sourceRef) {
     return undefined;
   }
+  const identityRef = sourceRef.identityRef;
   return {
     sourceId: sourceRef.sourceId,
-    sourceSpan: sourceRef.sourceSpan
-      ? {
-          from: sourceRef.sourceSpan.from,
-          to: sourceRef.sourceSpan.to
-        }
-      : undefined,
+    ...(sourceRef.sourceSpan === undefined ? {} : { sourceSpan: { ...sourceRef.sourceSpan } }),
     sourceKind: sourceRef.sourceKind,
-    label: sourceRef.label,
-    identityRef: sourceRef.identityRef
-      ? {
-          sourceId: sourceRef.identityRef.sourceId,
-          sourceSpan: sourceRef.identityRef.sourceSpan
-            ? {
-                from: sourceRef.identityRef.sourceSpan.from,
-                to: sourceRef.identityRef.sourceSpan.to
-              }
-            : undefined,
-          sourceKind: sourceRef.identityRef.sourceKind
-        }
-      : undefined
+    ...(sourceRef.label === undefined ? {} : { label: sourceRef.label }),
+    ...(identityRef === undefined ? {} : { identityRef: {
+      sourceId: identityRef.sourceId,
+      ...(identityRef.sourceSpan === undefined ? {} : { sourceSpan: { ...identityRef.sourceSpan } }),
+      ...(identityRef.sourceKind === undefined ? {} : { sourceKind: identityRef.sourceKind })
+    } })
   };
 }
 
@@ -121,9 +110,10 @@ export function cloneStyleChainEntry(entry: StyleChainEntry): StyleChainEntry {
 }
 
 function cloneStyleChainEntryBase(entry: StyleChainEntryBase): StyleChainEntryBase {
+  const optionalSourceRef3 = cloneStyleSourceRef(entry.sourceRef);
   return {
     kind: entry.kind,
-    sourceRef: cloneStyleSourceRef(entry.sourceRef),
+    ...(optionalSourceRef3 === undefined ? {} : { sourceRef: optionalSourceRef3 }),
     // Copy only the outer list; option AST nodes are treated as immutable.
     rawOptions: entry.rawOptions.slice(),
     before: cloneResolvedStyle(entry.before),

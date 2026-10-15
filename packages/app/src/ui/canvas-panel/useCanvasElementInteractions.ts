@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clientPoint, px, pt, worldVector } from "@tikz-editor/core/coords/index";
@@ -170,7 +171,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         ? buildSnapContext({
             sceneElements: snapshot.scene.elements,
             selectedSourceIds: snapExcludedSourceIds,
-            dependencies: snapshot.semanticResult?.dependencies,
+            ...(snapshot.semanticResult?.dependencies !== undefined ? { dependencies: snapshot.semanticResult?.dependencies } : {}),
             guides: snapGuideInput,
             settings: snapSettingsPatch,
             zoom: canvasTransform.scale,
@@ -183,21 +184,19 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         : null;
       setSnapLines([]);
 
+      const geometry = prepareEditGeometry();
       setDragState({
         kind: "element",
-        geometry: prepareEditGeometry(),
+        ...(geometry !== undefined ? { geometry } : {}),
         pointerId,
         elementIds: draggedIds,
         startWorld: world,
-        adornmentDragFromText:
-          draggedIds.length === 1 && draggedIds[0]?.startsWith("node-adornment:")
-            ? options.adornmentDragFromText === true
-            : undefined,
+        ...(draggedIds.length === 1 && draggedIds[0]?.startsWith("node-adornment:") ? { adornmentDragFromText: options.adornmentDragFromText === true } : {}),
         lastAppliedTotalDelta: worldVector(pt(0), pt(0)),
         baseline: {
           source: nestedFigureSpan ? maskTikzPictureSource(source, nestedFigureSpan) : source,
           editHandles: snapshot.editHandles,
-          sourceFingerprint: parseOptions.sourceFingerprint
+          ...(parseOptions.sourceFingerprint !== undefined ? { sourceFingerprint: parseOptions.sourceFingerprint } : {})
         },
         latestSource: source,
         snapContext,
@@ -654,9 +653,9 @@ function findClosestSegmentWorldPoint(
   let best: { segmentIndex: number; point: WorldPoint; distance: number } | null = null;
 
   for (let i = 0; i < analysis.segments.length; i++) {
-    const seg = analysis.segments[i];
-    const startW = resolveAnchorWorld(editHandles, sourceId, analysis.anchors[seg.startAnchorIndex]);
-    const endW = resolveAnchorWorld(editHandles, sourceId, analysis.anchors[seg.endAnchorIndex]);
+    const seg = requireArrayValue(analysis.segments, i);
+    const startW = resolveAnchorWorld(editHandles, sourceId, requireArrayValue(analysis.anchors, seg.startAnchorIndex));
+    const endW = resolveAnchorWorld(editHandles, sourceId, requireArrayValue(analysis.anchors, seg.endAnchorIndex));
     if (!startW || !endW) continue;
 
     let closest: { point: WorldPoint };

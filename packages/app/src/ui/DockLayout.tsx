@@ -204,7 +204,7 @@ function buildSourceOnTopLayout(): IJsonModel {
   }
 
   return {
-    global: buildDefaultLayout().global,
+    ...((buildDefaultLayout().global) === undefined ? {} : { global: buildDefaultLayout().global }),
     layout: {
       type: "row",
       children: [
@@ -247,7 +247,7 @@ function buildSourceOnTopLayout(): IJsonModel {
 
 function buildCanvasOnlyLayout(): IJsonModel {
   return {
-    global: buildDefaultLayout().global,
+    ...((buildDefaultLayout().global) === undefined ? {} : { global: buildDefaultLayout().global }),
     layout: {
       type: "row",
       children: [
@@ -276,7 +276,7 @@ function buildWideInspectorLayout(): IJsonModel {
   }
 
   return {
-    global: buildDefaultLayout().global,
+    ...((buildDefaultLayout().global) === undefined ? {} : { global: buildDefaultLayout().global }),
     layout: {
       type: "row",
       children: [

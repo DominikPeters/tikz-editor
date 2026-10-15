@@ -45,7 +45,7 @@ export function RepeatModal({
       draggable
       closeOnBackdrop
       initialWidth={344}
-      className={css.modal}
+      className={css.modal ?? ""}
     >
       <Modal.Header
         title="Repeat"

@@ -81,7 +81,7 @@ export const buildNodeSection: SectionBuilder = (context) => {
         label: "Shape",
         value: state.shape,
         options: NODE_SHAPE_OPTIONS,
-        note: state.shapeNote,
+        ...(state.shapeNote === undefined ? {} : { note: state.shapeNote }),
         write: context.writeProperty(NODE_SHAPE_KEY)
       },
       ...shapeAdaptiveProperties,
@@ -93,7 +93,7 @@ export const buildNodeSection: SectionBuilder = (context) => {
         step: 0.1,
         unit: "pt",
         defaultValue: NODE_INNER_SEP_DEFAULT,
-        note: state.innerSepNote,
+        ...(state.innerSepNote === undefined ? {} : { note: state.innerSepNote }),
         write: context.writeProperty("inner sep")
       },
       {
@@ -104,7 +104,7 @@ export const buildNodeSection: SectionBuilder = (context) => {
         step: 0.1,
         unit: "pt",
         defaultValue: NODE_MINIMUM_DIMENSION_DEFAULT,
-        note: state.minimumWidthNote,
+        ...(state.minimumWidthNote === undefined ? {} : { note: state.minimumWidthNote }),
         minimumDimensionsContext: {
           minimumWidth: state.minimumWidth,
           minimumHeight: state.minimumHeight
@@ -119,7 +119,7 @@ export const buildNodeSection: SectionBuilder = (context) => {
         step: 0.1,
         unit: "pt",
         defaultValue: NODE_MINIMUM_DIMENSION_DEFAULT,
-        note: state.minimumHeightNote,
+        ...(state.minimumHeightNote === undefined ? {} : { note: state.minimumHeightNote }),
         minimumDimensionsContext: {
           minimumWidth: state.minimumWidth,
           minimumHeight: state.minimumHeight
@@ -159,7 +159,7 @@ export const buildNodeSection: SectionBuilder = (context) => {
         customSizePt: state.font.customSizePt,
         sizeOptions: NODE_FONT_SIZE_PRESETS.map((preset) => ({ value: preset.value, label: preset.label })),
         context: state.font.context,
-        note: state.font.note,
+        ...(state.font.note === undefined ? {} : { note: state.font.note }),
         write: context.writeProperty(state.font.context.key)
       },
       {
@@ -269,10 +269,10 @@ function shapeAdaptiveInspectorProperty(
       label: control.label,
       value: control.value,
       step: control.step,
-      min: control.min,
-      max: control.max,
-      unit: control.unit,
-      clearKeys: control.clearKeys,
+      ...(control.min === undefined ? {} : { min: control.min }),
+      ...(control.max === undefined ? {} : { max: control.max }),
+      ...(control.unit === undefined ? {} : { unit: control.unit }),
+      ...(control.clearKeys === undefined ? {} : { clearKeys: control.clearKeys }),
       write
     };
   }
@@ -284,7 +284,7 @@ function shapeAdaptiveInspectorProperty(
       value: control.value,
       step: control.step,
       unit: "pt",
-      clearKeys: control.clearKeys,
+      ...(control.clearKeys === undefined ? {} : { clearKeys: control.clearKeys }),
       write
     };
   }
@@ -303,9 +303,9 @@ function shapeAdaptiveInspectorProperty(
     id: control.id,
     label: control.label,
     value: control.value,
-    trueValue: control.trueValue,
-    falseValue: control.falseValue,
-    clearKeys: control.clearKeys,
+    ...(control.trueValue === undefined ? {} : { trueValue: control.trueValue }),
+    ...(control.falseValue === undefined ? {} : { falseValue: control.falseValue }),
+    ...(control.clearKeys === undefined ? {} : { clearKeys: control.clearKeys }),
     write
   };
 }

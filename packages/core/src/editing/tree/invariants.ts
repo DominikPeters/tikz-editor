@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "./lookup.js";
 import { createPositionIndex } from "../position/position.js";
 import type { EditTree } from "./types.js";
 
@@ -14,7 +16,7 @@ export function checkEditTree(tree: EditTree): string[] {
   const coverage = new Uint16Array(text.length);
   const cover = (from: number, to: number) => {
     for (let offset = from; offset < to; offset += 1) {
-      coverage[offset] += 1;
+      coverage[offset] = (coverage[offset] ?? 0) + 1;
     }
   };
   const within = (inner: { from: number; to: number }, outer: { from: number; to: number }) =>
@@ -24,7 +26,7 @@ export function checkEditTree(tree: EditTree): string[] {
     if (!within(node.span, { from: 0, to: text.length })) {
       violations.push(`node ${node.id} (${node.kind}) span ${node.span.from}-${node.span.to} is outside the scope`);
     }
-    const present = node.slots.map((id) => slots[id]).filter((slot) => slot.presence === "present");
+    const present = node.slots.map((id) => editSlotAt(slots, id)).filter((slot) => slot.presence === "present");
     if (present.length === 0) {
       if (node.delimiters.length > 0) {
         violations.push(`leaf ${node.id} (${node.kind}) has delimiters`);
@@ -53,7 +55,7 @@ export function checkEditTree(tree: EditTree): string[] {
     }
     let cursor = slot.contentSpan.from;
     for (const childId of slot.children) {
-      const child = nodes[childId];
+      const child = editNodeAt(nodes, childId);
       if (child.parent !== slot.id) {
         violations.push(`node ${child.id} (${child.kind}) does not point back to slot ${slot.id}`);
       }
@@ -84,8 +86,8 @@ export function checkEditTree(tree: EditTree): string[] {
 
   const index = createPositionIndex(tree);
   for (let position = 1; position < index.offsets.length; position += 1) {
-    if (index.offsets[position] < index.offsets[position - 1]) {
-      const { slot, index: at } = index.positions[position];
+    if (requireArrayValue(index.offsets, position) < requireArrayValue(index.offsets, position - 1)) {
+      const { slot, index: at } = requireArrayValue(index.positions, position);
       violations.push(
         `position ${slot}:${at} at offset ${index.offsets[position]} comes after offset ${index.offsets[position - 1]}`
       );

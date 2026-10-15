@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { parseTexTabular, tabularGroup } from "./tabular/parser.js";
 import type { TexTabular, TexTabularAssignmentFont, TexTabularRegisters } from "./tabular/types.js";
 import { TreeFragment, type SyntaxNode, type SyntaxNodeRef, type Tree } from "@lezer/common";
@@ -1053,8 +1054,7 @@ function collectSimpleTexPolicyRanges(
   target: SimpleTexPolicyTarget,
   ranges: SimpleTexPolicySourceRange[] = []
 ): SimpleTexPolicySourceRange[] {
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index];
+  for (const [index, node] of nodes.entries()) {
     const matches =
       (target === "line-break" && node?.kind === "line-break") ||
       (target === "control-paragraph-break" &&
@@ -1452,8 +1452,8 @@ function scanSimpleTexIrNodes(
           text: text.slice(index, lineBreak.end),
           sourceStart,
           sourceEnd: sourceOffset + lineBreak.end,
-          lineLeading: lineBreak.lineLeading,
-          priority: lineBreak.priority,
+          ...(lineBreak.lineLeading !== undefined ? { lineLeading: lineBreak.lineLeading } : {}),
+          ...(lineBreak.priority !== undefined ? { priority: lineBreak.priority } : {}),
         });
         index = lineBreak.end;
         continue;
@@ -1488,7 +1488,7 @@ function scanSimpleTexIrNodes(
             if (item.kind !== "row") continue;
             let columnIndex = 0;
             for (const cell of item.cells) {
-              const column = cell.preamble?.columns[0] ?? table.preamble.columns[columnIndex];
+              const column = cell.preamble?.columns[0] ?? requireArrayValue(table.preamble.columns, columnIndex);
               if (cell.preamble?.boundaries.some((boundary) => (boundary.replace ?? "").length || (boundary.insert ?? "").length)) throw new Error("Multicolumn boundary inserts are not yet supported.");
               if (!(column.before?.trim() === "$" && column.after?.trim() === "$")) {
                 const scan = scanSimpleTexIrNodes(cell.text, cell.sourceStart, resolveColorAlias);
@@ -1507,10 +1507,11 @@ function scanSimpleTexIrNodes(
       const tableRegister = scanSimpleTexTabularRegister(text, index, sourceOffset);
       if (tableRegister) { nodes.push(tableRegister.node); index = tableRegister.end; continue; }
       const sizeBoundary = syntax.environmentBoundaryByStart.get(index);
-      if (sizeBoundary && matchedEnvironmentBoundaryStarts.has(index) && Object.hasOwn(FONT_SIZE_COMMAND_FACTORS, `\\${sizeBoundary.name}`)) {
+      const sizeFactor = sizeBoundary && FONT_SIZE_COMMAND_FACTORS[`\\${sizeBoundary.name}`];
+      if (sizeBoundary && matchedEnvironmentBoundaryStarts.has(index) && sizeFactor !== undefined) {
         nodes.push({ kind: "style-declaration", text: text.slice(index, sizeBoundary.span.to),
           sizeScope: { boundary: sizeBoundary.kind, name: sizeBoundary.name },
-          ...(sizeBoundary.kind === "begin" ? { sizePt: texLength(DEFAULT_TEXT_FONT_SIZE * FONT_SIZE_COMMAND_FACTORS[`\\${sizeBoundary.name}`]) } : {}),
+          ...(sizeBoundary.kind === "begin" ? { sizePt: texLength(DEFAULT_TEXT_FONT_SIZE * sizeFactor) } : {}),
           sourceStart, sourceEnd: sourceOffset + sizeBoundary.span.to });
         index = sizeBoundary.span.to;
         continue;
@@ -2145,6 +2146,7 @@ function scanSimpleTexColorBoxCommand(
   );
   const childrenAreInline = childScan.nodes.every(isSimpleTexInlineNode);
   const hasForcedBreak = childScan.nodes.some((node) => node.kind === "line-break");
+  const backgroundColor = command.name === "colorbox" ? firstColor.color : secondColor?.color;
   return {
     node: {
       kind: "mbox",
@@ -2156,8 +2158,8 @@ function scanSimpleTexColorBoxCommand(
       contentStart: sourceOffset + contentArgument.contentStart,
       contentEnd: sourceOffset + contentArgument.contentEnd,
       children: childrenAreInline ? childScan.nodes.filter(isSimpleTexInlineNode) : [],
-      backgroundColor: command.name === "colorbox" ? firstColor.color : secondColor?.color,
-      frameColor: command.name === "fcolorbox" ? firstColor.color : undefined,
+      ...(backgroundColor !== undefined ? { backgroundColor } : {}),
+      ...(command.name === "fcolorbox" ? { frameColor: firstColor.color } : {}),
     },
     end: contentArgument.end,
     unsupportedCommand: childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
@@ -2469,10 +2471,10 @@ function scanSimpleTexVerticalGlueCommand(
         sourceStart: sourceOffset + start,
         sourceEnd: sourceOffset + start + full.length,
         size: size ?? texLength(0),
-        stretch: stretch ?? undefined,
-        shrink: shrink ?? undefined,
-        stretchOrder: stretch !== undefined ? "normal" : undefined,
-        shrinkOrder: shrink !== undefined ? "normal" : undefined,
+        ...(stretch != null ? { stretch } : {}),
+        ...(shrink != null ? { shrink } : {}),
+        ...(stretch !== undefined ? { stretchOrder: "normal" } : {}),
+        ...(shrink !== undefined ? { shrinkOrder: "normal" } : {}),
       },
       end: start + full.length,
       unsupportedCommand:
@@ -2715,7 +2717,7 @@ function scanSimpleTexBoxCommand(
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + contentGroupEnd,
       width: parsedWidth ?? texLength(0),
-      ...(height !== undefined ? { height } : {}),
+      ...(height !== undefined ? { height: height } : {}),
       alignment,
       content: text.slice(contentStart, contentEnd),
       contentStart: sourceOffset + contentStart,
@@ -2804,7 +2806,7 @@ function scanSimpleTexBoxEnvironment(
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + environment.span.to,
       width: parsedWidth ?? texLength(0),
-      ...(height !== undefined ? { height } : {}),
+      ...(height !== undefined ? { height: height } : {}),
       alignment,
       content: text.slice(contentStart, environment.contentSpan.to),
       contentStart: sourceOffset + contentStart,
@@ -3023,9 +3025,9 @@ function scanSimpleTexItemCommand(
       text: text.slice(start, end),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + end,
-      labelNodes,
-      labelSourceStart,
-      labelSourceEnd,
+      ...(labelNodes !== undefined ? { labelNodes: labelNodes } : {}),
+      ...(labelSourceStart !== undefined ? { labelSourceStart: labelSourceStart } : {}),
+      ...(labelSourceEnd !== undefined ? { labelSourceEnd: labelSourceEnd } : {}),
     },
     end,
     unsupportedCommand,
@@ -3163,8 +3165,8 @@ function scanSimpleTexMBoxCommand(
       children: childrenAreInline
         ? childScan.nodes.filter(isSimpleTexInlineNode)
         : [],
-      boxWidth,
-      boxAlign,
+      ...(boxWidth !== undefined ? { boxWidth: boxWidth } : {}),
+      ...(boxAlign !== undefined ? { boxAlign: boxAlign } : {}),
     },
     end: groupEnd,
     unsupportedCommand: unsupportedDimension || childScan.unsupportedCommand || !childrenAreInline || hasForcedBreak,
@@ -3372,15 +3374,15 @@ function parseSimpleTexGraphicsOptions(
     }
   }
   return {
-    ...(width !== undefined ? { width } : {}),
-    ...(height !== undefined ? { height } : {}),
-    ...(scale !== undefined ? { scale } : {}),
+    ...(width !== undefined ? { width: width } : {}),
+    ...(height !== undefined ? { height: height } : {}),
+    ...(scale !== undefined ? { scale: scale } : {}),
     ...(keepAspectRatio ? { keepAspectRatio } : {}),
-    ...(page ? { page } : {}),
-    ...(trim ? { trim } : {}),
-    ...(viewport ? { viewport } : {}),
-    ...(clip !== undefined ? { clip } : {}),
-    ...(optionList ? { optionList } : {}),
+    ...(page ? { page: page } : {}),
+    ...(trim ? { trim: trim } : {}),
+    ...(viewport ? { viewport: viewport } : {}),
+    ...(clip !== undefined ? { clip: clip } : {}),
+    ...(optionList ? { optionList: optionList } : {}),
     raw: optionList?.raw.slice(1, -1) ?? "",
   };
 }
@@ -3433,7 +3435,7 @@ function splitSimpleTexGraphicsDimensionList(raw: string): string[] {
   let start = 0;
   let braceDepth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "{") {
       braceDepth += 1;
       continue;
@@ -3552,8 +3554,8 @@ function scanSimpleTexRaiseBoxCommand(
       kind: "raisebox",
       text: text.slice(start, groupEnd),
       lift,
-      boxHeight,
-      boxDepth,
+      ...(boxHeight !== undefined ? { boxHeight: boxHeight } : {}),
+      ...(boxDepth !== undefined ? { boxDepth: boxDepth } : {}),
       sourceStart: sourceOffset + start,
       sourceEnd: sourceOffset + groupEnd,
       content: text.slice(contentStart, contentEnd),
@@ -3772,7 +3774,7 @@ export function parseSimpleTexTabularRegisters(text: string): TexTabularRegister
   let registers: TexTabularRegisters = {};
   let font: TexTabularAssignmentFont = {};
   for (const node of scanSimpleTexIrNodes(text).nodes) {
-    if (node.kind === "font-declaration") font = simpleTexFontStateForDeclaration({ family: font.family ?? defaultSimpleTexFontState.family, series: font.series ?? defaultSimpleTexFontState.series, shape: font.shape ?? defaultSimpleTexFontState.shape, sizePt: font.sizePt === undefined ? undefined : texLength(font.sizePt) }, node.command);
+    if (node.kind === "font-declaration") font = simpleTexFontStateForDeclaration({ family: font.family ?? defaultSimpleTexFontState.family, series: font.series ?? defaultSimpleTexFontState.series, shape: font.shape ?? defaultSimpleTexFontState.shape, ...(!(font.sizePt === undefined) ? { sizePt: texLength(font.sizePt) } : {}) }, node.command);
     if (node.kind === "style-declaration") {
       if (node.tabularRegisters) registers = { ...registers, ...snapshotTabularRegisters(node.tabularRegisters, font) };
       if (node.sizePt !== undefined) font = { ...font, sizePt: node.sizePt };
@@ -3782,7 +3784,7 @@ export function parseSimpleTexTabularRegisters(text: string): TexTabularRegister
 }
 
 function snapshotTabularRegisters(registers: TexTabularRegisters, font: TexTabularAssignmentFont): TexTabularRegisters {
-  return Object.fromEntries(Object.entries(registers).map(([name, value]) => [name, typeof value === "string" ? { value, font: { family: font.family, series: font.series, shape: font.shape, sizePt: font.sizePt } } : value]));
+  return Object.fromEntries(Object.entries(registers).map(([name, value]) => [name, typeof value === "string" ? { value, font: { ...(font.family !== undefined ? { family: font.family } : {}), ...(font.series !== undefined ? { series: font.series } : {}), ...(font.shape !== undefined ? { shape: font.shape } : {}), ...(font.sizePt !== undefined ? { sizePt: font.sizePt } : {}) } } : value]));
 }
 
 /** Stock url.sty: typewriter glyphs with binary/relation break penalties. */
@@ -3803,20 +3805,20 @@ function scanSimpleTexUrl(text: string, start: number, sourceOffset: number): { 
   const opening = new Set("([{<");
   const atoms = Array.from({ length: end - open - 1 }, (_, index) => {
     const from = open + 1 + index;
-    const char = text[from];
+    const char = text.charAt(from);
     return { from, char, mathClass: char === ":" ? 3 : opening.has(char) ? 4 : breaks.has(char) ? 2 : 0 };
   }).filter(atom => !/[ \t\r\n]/u.test(atom.char));
   // url.sty uses math atoms. TeX demotes binary atoms after open/bin/rel
   // atoms, before relations, and at either end of the formula.
   for (let index = 0; index < atoms.length; index++) {
-    const atom = atoms[index];
+    const atom = requireArrayValue(atoms, index);
     const previous = atoms[index - 1];
     if (atom.mathClass === 2 && (!previous || [2, 3, 4].includes(previous.mathClass))) atom.mathClass = 0;
     if (atom.mathClass === 3 && previous?.mathClass === 2) previous.mathClass = 0;
   }
   if (atoms.at(-1)?.mathClass === 2) atoms.at(-1)!.mathClass = 0;
   for (let index = 0; index < atoms.length; index++) {
-    const atom = atoms[index];
+    const atom = requireArrayValue(atoms, index);
     const next = atoms[index + 1];
     const penalty = next && next.mathClass !== 4 && (atom.mathClass === 2 || atom.mathClass === 3) ? atom.mathClass === 3 ? 500 : 700 : undefined;
     children.push({ kind: "text", text: atom.char, sourceStart: sourceOffset + atom.from, sourceEnd: sourceOffset + atom.from + 1, ...(penalty !== undefined ? { breakAfterPenalty: penalty } : {}) });
@@ -4060,7 +4062,7 @@ function normalizeSimpleTexColor(
   if (model) {
     return resolveDefineColorModel(model, specification);
   }
-  const normalized = normalizeColor(specification, { resolveAlias: resolveColorAlias });
+  const normalized = normalizeColor(specification, { ...(resolveColorAlias !== undefined ? { resolveAlias: resolveColorAlias } : {}) });
   return normalized.length > 0 && normalized !== "none" ? normalized : null;
 }
 
@@ -4418,7 +4420,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
   const initialBaseline = options?.baselineSkipPt === undefined ? undefined : texLength(options.baselineSkipPt);
   type SizeState = SimpleTexDisplayMathState & { sizePt: TexLength };
   const normalFontSizePt = texLength(options?.namedFontSizes?.normalsize?.sizePt ?? 10);
-  const initialState: SizeState = { sizePt: initialSize, baselineSkip: initialBaseline, normalFontSizePt };
+  const initialState: SizeState = { sizePt: initialSize, ...(initialBaseline !== undefined ? { baselineSkip: initialBaseline } : {}), normalFontSizePt };
   let sizeState: SizeState = initialState;
   const sizeScopes: SizeState[] = [];
   const sizeHistory: Array<{ from: number; state: SizeState }> = [{ from: sourceOffset, state: sizeState }];
@@ -4440,7 +4442,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
       sizeHistory.push({ from: node.sourceEnd, state: outer });
       return { ...node, children };
     }
-    if (node.kind === "rule" && node.strut) return { ...node, strutBaselineSkipPt: sizeState.baselineSkip };
+    if (node.kind === "rule" && node.strut) {
+      const { strutBaselineSkipPt: _strutBaselineSkipPt, ...rule } = node;
+      return { ...rule, ...(sizeState.baselineSkip !== undefined ? { strutBaselineSkipPt: sizeState.baselineSkip } : {}) };
+    }
     if (node.kind !== "style-declaration") return node;
     const name = node.sizeScope?.boundary === "begin" ? node.sizeScope.name : node.sizeCommand;
     if (node.sizeScope?.boundary === "begin") sizeScopes.push(sizeState);
@@ -4453,15 +4458,17 @@ function buildSimpleTexParagraphBlocksFromNodes(
         ...(["normalsize", "small", "footnotesize"].includes(name)
           ? { displaySkipCommand: name as "normalsize" | "small" | "footnotesize" } : {}) };
     } else if (node.sizePt != null) {
-      sizeState = { ...sizeState, sizePt: node.sizePt, baselineSkip: node.baselineSkipPt ?? sizeState.baselineSkip };
+      const baselineSkip = node.baselineSkipPt ?? sizeState.baselineSkip;
+      sizeState = { ...sizeState, sizePt: node.sizePt, ...(baselineSkip !== undefined ? { baselineSkip } : {}) };
     } else if (!node.sizeScope) return node;
     sizeHistory.push({ from: node.sourceEnd, state: sizeState });
-    return { ...node, sizePt: sizeState.sizePt, baselineSkipPt: sizeState.baselineSkip };
+    const { baselineSkipPt: _baselineSkipPt, ...declaration } = node;
+    return { ...declaration, sizePt: sizeState.sizePt, ...(sizeState.baselineSkip !== undefined ? { baselineSkipPt: sizeState.baselineSkip } : {}) };
   });
   sourceNodes = resolveSizeNodes(sourceNodes);
   const sizeAt = (offset: number): SizeState => {
-    for (let i = sizeHistory.length - 1; i >= 0; i -= 1) if (sizeHistory[i].from <= offset) return sizeHistory[i].state;
-    return sizeHistory[0].state;
+    for (let i = sizeHistory.length - 1; i >= 0; i -= 1) if (requireArrayValue(sizeHistory, i).from <= offset) return requireArrayValue(sizeHistory, i).state;
+    return requireArrayValue(sizeHistory, 0).state;
   };
   const resolveListGlue = (raw: string, sizePt: number): { sizePt: number; stretchPt: number; shrinkPt: number } | null => {
     const parts = /^([\s\S]*?)(?:\s+plus\s+([\s\S]*?))?(?:\s+minus\s+([\s\S]*?))?$/u.exec(raw.trim());
@@ -4571,8 +4578,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     return {
       start: index,
       noIndent,
-      alignment,
-      alignmentProfile,
+      ...(alignment !== undefined ? { alignment: alignment } : {}),
+      ...(alignmentProfile !== undefined ? { alignmentProfile: alignmentProfile } : {}),
     };
   };
 
@@ -4719,16 +4726,16 @@ function buildSimpleTexParagraphBlocksFromNodes(
           : {}),
         noIndent,
         ...(startsAfterExplicitPar ? { startsAfterExplicitPar: true } : {}),
-        ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
+        ...(firstLineIndentEm !== undefined ? { firstLineIndentEm: firstLineIndentEm } : {}),
         ...(quotationItemLabelPendingStack.at(-1) === true
           ? { quotationItemFirstParagraph: true }
           : {}),
-        alignment,
-        alignmentProfile,
+        ...(alignment !== undefined ? { alignment: alignment } : {}),
+        ...(alignmentProfile !== undefined ? { alignmentProfile: alignmentProfile } : {}),
         quoteDepth,
         quotationDepth,
-        listContext,
-        ...(scopePath ? { scopePath } : {}),
+        ...(listContext !== undefined ? { listContext: listContext } : {}),
+        ...(scopePath ? { scopePath: scopePath } : {}),
       };
       blocks.push(block);
       items.push({
@@ -4783,12 +4790,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
       depth: activeList.depth,
       labelDepth: activeList.labelDepth,
       itemIndex: activeList.itemIndex,
-      itemCommandSpan: activeList.itemCommandSpan,
+      ...(activeList.itemCommandSpan !== undefined ? { itemCommandSpan: activeList.itemCommandSpan } : {}),
       ...(activeList.kind === "enumerate" && activeList.labelCounter !== activeList.itemIndex ? { labelCounter: activeList.labelCounter } : {}),
       ownLeftMarginEm: activeList.ownLeftMarginEm,
       totalLeftMarginEm: activeList.totalLeftMarginEm,
       showLabel: pendingListShowLabel,
-      label: pendingListLabel,
+      ...(pendingListLabel !== undefined ? { label: pendingListLabel } : {}),
       listStart: activeList.sourceStart,
       fontSizePt: activeList.fontSizePt,
       ...(activeList.spacing ? { spacing: activeList.spacing } : {}),
@@ -4820,6 +4827,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       ownLeftMarginEm: ownMargin,
       totalLeftMarginEm: (listStack.at(-1)?.totalLeftMarginEm ?? 0) + ownMargin,
     } as const;
+    const fontState = listStack.at(-1)?.fontState;
     listStack.push({
       sourceStart,
       kind,
@@ -4831,7 +4839,7 @@ function buildSimpleTexParagraphBlocksFromNodes(
       totalLeftMarginEm: scopeRole.totalLeftMarginEm,
       scopeRole,
       fontSizePt: sizeAt(sourceStart).sizePt,
-      fontState: listStack.at(-1)?.fontState,
+      ...(fontState !== undefined ? { fontState } : {}),
     });
     return scopeRole;
   };
@@ -4907,8 +4915,8 @@ function buildSimpleTexParagraphBlocksFromNodes(
     const scopePath = currentSimpleTexScopePath();
     return {
       quoteDepth: currentQuoteDepth,
-      ...(listScope ? { listScope } : {}),
-      ...(scopePath ? { scopePath } : {}),
+      ...(listScope ? { listScope: listScope } : {}),
+      ...(scopePath ? { scopePath: scopePath } : {}),
     };
   };
 
@@ -4922,10 +4930,10 @@ function buildSimpleTexParagraphBlocksFromNodes(
     sourceEnd: node.sourceEnd,
     size: node.size,
     ...(node.relativeSize ? { relativeSize: node.relativeSize } : {}),
-    stretch: node.stretch,
-    shrink: node.shrink,
-    stretchOrder: node.stretchOrder,
-    shrinkOrder: node.shrinkOrder,
+    ...(node.stretch !== undefined ? { stretch: node.stretch } : {}),
+    ...(node.shrink !== undefined ? { shrink: node.shrink } : {}),
+    ...(node.stretchOrder !== undefined ? { stretchOrder: node.stretchOrder } : {}),
+    ...(node.shrinkOrder !== undefined ? { shrinkOrder: node.shrinkOrder } : {}),
     ...currentSimpleTexBlockItemScope(),
   });
 
@@ -5002,11 +5010,12 @@ function buildSimpleTexParagraphBlocksFromNodes(
       if (abortScan) {
         break;
       }
+      const displayState = sizeAt(node.sourceStart);
       items.push({
         kind: "display-math",
-        fontSizePt: sizeAt(node.sourceStart).sizePt,
-        baselineSkip: sizeAt(node.sourceStart).baselineSkip,
-        displaySkipCommand: sizeAt(node.sourceStart).displaySkipCommand,
+        fontSizePt: displayState.sizePt,
+        ...(displayState.baselineSkip !== undefined ? { baselineSkip: displayState.baselineSkip } : {}),
+        ...(displayState.displaySkipCommand !== undefined ? { displaySkipCommand: displayState.displaySkipCommand } : {}),
         normalFontSizePt,
         text: node.text,
         delimiter: node.delimiter,
@@ -5494,20 +5503,20 @@ export function splitSimpleTexParagraphSegments(
           node.sourceEnd <= end
         ),
         noIndent: segmentNoIndent,
-        ...(firstLineIndentEm !== undefined ? { firstLineIndentEm } : {}),
+        ...(firstLineIndentEm !== undefined ? { firstLineIndentEm: firstLineIndentEm } : {}),
         ...(block.leadingInterwordSpace === true && segments.length === 0
           ? { leadingInterwordSpace: true }
           : {}),
         ...(block.quotationItemFirstParagraph === true && segments.length === 0
           ? { quotationItemFirstParagraph: true }
           : {}),
-        forcedBreakAfter,
+        ...(forcedBreakAfter !== undefined ? { forcedBreakAfter: forcedBreakAfter } : {}),
       });
     }
   };
 
   for (let index = 0; index < block.nodes.length; index += 1) {
-    const node = block.nodes[index];
+    const node = requireArrayValue(block.nodes, index);
     if (node.kind !== "line-break" || (node.priority !== undefined && node.priority < 4)) {
       continue;
     }
@@ -5520,7 +5529,7 @@ export function splitSimpleTexParagraphSegments(
       block.firstLineIndentEm,
       {
         sourceOffset: node.sourceStart,
-        lineLeading: node.lineLeading,
+        ...(node.lineLeading !== undefined ? { lineLeading: node.lineLeading } : {}),
       }
     );
     index += 1;
@@ -5568,8 +5577,7 @@ export function simpleTexInlineNodesToTokens(
   let skipPostLineBreakSpace = false;
   let activeFontState = fontState;
 
-  for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
-    const node = nodes[nodeIndex];
+  for (const node of nodes) {
     if (node.kind === "comment") {
       continue;
     }
@@ -5593,7 +5601,7 @@ export function simpleTexInlineNodesToTokens(
           text: node.text,
           sourceStart: node.sourceStart,
           sourceEnd: node.sourceEnd,
-          lineLeading: node.lineLeading,
+          ...(node.lineLeading !== undefined ? { lineLeading: node.lineLeading } : {}),
           fontState: activeFontState,
         });
         skipPostLineBreakSpace = true;
@@ -5664,10 +5672,10 @@ export function simpleTexInlineNodesToTokens(
         contentEnd: node.contentEnd,
         children: node.children,
         command: node.command,
-        boxWidth: node.boxWidth,
-        boxAlign: node.boxAlign,
-        backgroundColor: node.backgroundColor,
-        frameColor: node.frameColor,
+        ...(node.boxWidth !== undefined ? { boxWidth: node.boxWidth } : {}),
+        ...(node.boxAlign !== undefined ? { boxAlign: node.boxAlign } : {}),
+        ...(node.backgroundColor !== undefined ? { backgroundColor: node.backgroundColor } : {}),
+        ...(node.frameColor !== undefined ? { frameColor: node.frameColor } : {}),
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
@@ -5727,10 +5735,10 @@ export function simpleTexInlineNodesToTokens(
         contentEnd: node.contentEnd,
         children: node.children,
         lift: node.lift,
-        relativeLiftEm: node.relativeLiftEm,
-        childFontScale: node.childFontScale,
-        boxHeight: node.boxHeight,
-        boxDepth: node.boxDepth,
+        ...(node.relativeLiftEm !== undefined ? { relativeLiftEm: node.relativeLiftEm } : {}),
+        ...(node.childFontScale !== undefined ? { childFontScale: node.childFontScale } : {}),
+        ...(node.boxHeight !== undefined ? { boxHeight: node.boxHeight } : {}),
+        ...(node.boxDepth !== undefined ? { boxDepth: node.boxDepth } : {}),
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
@@ -5800,8 +5808,8 @@ export function simpleTexInlineNodesToTokens(
         sourceStart: node.sourceStart,
         sourceEnd: node.sourceEnd,
         fontState: activeFontState,
-        nonBreaking: node.nonBreaking,
-        controlSpace: node.controlSpace,
+        ...(node.nonBreaking !== undefined ? { nonBreaking: node.nonBreaking } : {}),
+        ...(node.controlSpace !== undefined ? { controlSpace: node.controlSpace } : {}),
       });
       continue;
     }
@@ -5912,7 +5920,7 @@ export function simpleTexFontStateForCommand(
     };
   }
   if (command === "textnormal") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, color: current.color, tabularRegisters: current.tabularRegisters };
+    return { ...luaLatexNormalFontState, ...(current.sizePt !== undefined ? { sizePt: current.sizePt } : {}), ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.color !== undefined ? { color: current.color } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "textsf") {
     return { ...current, family: "sans" };
@@ -5928,25 +5936,25 @@ function simpleTexFontStateForDeclaration(
   command: SimpleTexFontDeclarationName
 ): SimpleTexFontState {
   if (command === "it") {
-    return { ...defaultSimpleTexFontState, shape: "italic", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "italic", ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "bf") {
-    return { ...defaultSimpleTexFontState, series: "bold", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, series: "bold", ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "rm") {
-    return { ...defaultSimpleTexFontState, baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "sf") {
-    return { ...defaultSimpleTexFontState, family: "sans", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, family: "sans", ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "sl") {
-    return { ...defaultSimpleTexFontState, shape: "slanted", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "slanted", ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "sc") {
-    return { ...defaultSimpleTexFontState, shape: "small-caps", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, shape: "small-caps", ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "tt") {
-    return { ...defaultSimpleTexFontState, family: "typewriter", baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, tabularRegisters: current.tabularRegisters };
+    return { ...defaultSimpleTexFontState, family: "typewriter", ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "em") {
     return {
@@ -5955,7 +5963,7 @@ function simpleTexFontStateForDeclaration(
     };
   }
   if (command === "normalfont") {
-    return { ...luaLatexNormalFontState, sizePt: current.sizePt, baselineSkipPt: current.baselineSkipPt, emphasisStyle: current.emphasisStyle, color: current.color, tabularRegisters: current.tabularRegisters };
+    return { ...luaLatexNormalFontState, ...(current.sizePt !== undefined ? { sizePt: current.sizePt } : {}), ...(current.baselineSkipPt !== undefined ? { baselineSkipPt: current.baselineSkipPt } : {}), ...(current.emphasisStyle !== undefined ? { emphasisStyle: current.emphasisStyle } : {}), ...(current.color !== undefined ? { color: current.color } : {}), ...(current.tabularRegisters !== undefined ? { tabularRegisters: current.tabularRegisters } : {}) };
   }
   if (command === "itshape") {
     return { ...current, shape: "italic" };

@@ -48,8 +48,8 @@ export function buildStatementSnapshotFromStatements(
     depth: number
   ): void => {
     const refs: StatementRef[] = [];
-    for (let index = 0; index < nestedStatements.length; index += 1) {
-      const statement = nestedStatements[index];
+    for (const [index, statement] of nestedStatements.entries()) {
+
       if (!statement) {
         continue;
       }

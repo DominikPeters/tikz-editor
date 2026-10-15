@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -44,7 +45,7 @@ export function resolveSizeAwareGraphNodePoints(
     return resolved;
   }
 
-  const baseHint = hintedNodes[0].placementHint;
+  const baseHint = requireArrayValue(hintedNodes, 0).placementHint;
   if (baseHint.mode !== "cartesian" && baseHint.mode !== "grid") {
     return resolved;
   }
@@ -90,7 +91,7 @@ export function resolveSizeAwareGraphNodePoints(
   const columnOffset = buildAxisOffsets(columnKeys, columnExtent, chainSep, chainStep);
   const rowOffset = buildAxisOffsets(rowKeys, rowExtent, groupSep, groupStep);
 
-  const anchorNode = measured[0].node;
+  const anchorNode = requireArrayValue(measured, 0).node;
   const anchorColOffset = columnOffset.get(anchorNode.placementHint.logicalWidth) ?? 0;
   const anchorRowOffset = rowOffset.get(anchorNode.placementHint.logicalDepth) ?? 0;
   const anchorComputed = {
@@ -183,10 +184,10 @@ function buildAxisOffsets(
     return offsets;
   }
 
-  offsets.set(keys[0], 0);
+  offsets.set(requireArrayValue(keys, 0), 0);
   for (let index = 1; index < keys.length; index += 1) {
-    const previousKey = keys[index - 1];
-    const currentKey = keys[index];
+    const previousKey = requireArrayValue(keys, index - 1);
+    const currentKey = requireArrayValue(keys, index);
     const previousOffset = offsets.get(previousKey) ?? 0;
     const keyGap = Math.max(1, currentKey - previousKey);
 

@@ -56,7 +56,7 @@ export function useCanvasGuideEffects(args: UseCanvasGuideEffectsArgs) {
             ? {
                 orientation: drag.orientation,
                 value: drag.value,
-                hideValue: drag.sourceValue,
+                ...(drag.sourceValue !== undefined ? { hideValue: drag.sourceValue } : {}),
                 visible: false
               }
             : null
@@ -71,7 +71,7 @@ export function useCanvasGuideEffects(args: UseCanvasGuideEffectsArgs) {
           ? {
               orientation: drag.orientation,
               value: guide.value,
-              hideValue: drag.sourceValue,
+              ...(drag.sourceValue !== undefined ? { hideValue: drag.sourceValue } : {}),
               visible: guide.overViewport && !drag.overDeleteZone
             }
           : guide.overViewport

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { CalcCoordinateEditHandle } from "../semantic/types.js";
 import type { WorldPoint } from "../coords/points.js";
 import { worldVector } from "../coords/points.js";
@@ -31,8 +32,8 @@ export function rewriteCalcCoordinate(newWorld: WorldPoint, handle: CalcCoordina
     const end = inner.trimEnd().length;
     rewritten = `${inner.slice(0, end)}+(${formatNumber(delta.x, { fractionDigits: 6 })}pt,${formatNumber(delta.y, { fractionDigits: 6 })}pt)${inner.slice(end)}`;
   } else if (numeric) {
-    const x = rewriteScalar(numeric[1], tail.sign * delta.x);
-    const y = rewriteScalar(numeric[2], tail.sign * delta.y);
+    const x = rewriteScalar(requireArrayValue(numeric, 1), tail.sign * delta.x);
+    const y = rewriteScalar(requireArrayValue(numeric, 2), tail.sign * delta.y);
     if (x != null && y != null) {
       rewritten = inner.slice(0, tail.from) + `(${x},${y})` + inner.slice(tail.to);
     } else {
@@ -57,7 +58,9 @@ function rewriteScalar(raw: string, deltaPt: number): string | null {
   const unitPt = parseLength(`1${unit}`, "cm");
   if (unitPt == null || unitPt === 0) return null;
   const value = Number(match[2]) + deltaPt / unitPt;
-  const [mantissa, exponent = "0"] = match[2].toLowerCase().split("e");
+  const parts = requireArrayValue(match, 2).toLowerCase().split("e");
+  const mantissa = requireArrayValue(parts, 0);
+  const exponent = parts[1] ?? "0";
   const digits = Math.max(0, (mantissa.split(".")[1]?.length ?? 0) - Number(exponent));
   const formatted = formatNumber(value, { fractionDigits: Math.min(12, Math.max(2, digits)) });
   const displayDigits = Math.min(12, Math.max(digits, formatted.split(".")[1]?.length ?? 0));
@@ -71,7 +74,8 @@ function trailingTerm(inner: string): { text: string; from: number; to: number; 
   let from = 0;
   let sign = 1;
   for (let i = 0; i < inner.length; i += 1) {
-    const ch = inner[i];
+    const ch = inner.charAt(i);
+
     if (ch === "\\") { i += 1; continue; }
     if ("({[".includes(ch)) depth += 1;
     else if (")}]".includes(ch)) depth -= 1;

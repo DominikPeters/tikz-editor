@@ -29,7 +29,11 @@ export function lineForOffset(offset: number, lineStarts: number[]): number {
 
   while (low <= high) {
     const mid = (low + high) >> 1;
-    if (lineStarts[mid] <= offset) {
+    const start = lineStarts[mid];
+    if (start === undefined) {
+      throw new Error(`Missing line start at index ${mid}`);
+    }
+    if (start <= offset) {
       answer = mid;
       low = mid + 1;
     } else {

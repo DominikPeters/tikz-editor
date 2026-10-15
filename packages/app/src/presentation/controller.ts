@@ -63,7 +63,9 @@ export class PresentationController {
     if (frame < 0 || frame >= this.renderer.frames.length) return cursor;
     if (direction === 1) return first(frame);
     const last = await this.renderer.pageCount(frame, signal);
-    const lastSteps = this.renderer.frames[frame].steps;
+    const lastFrame = this.renderer.frames[frame];
+    if (!lastFrame) return cursor;
+    const lastSteps = lastFrame.steps;
     return last <= lastSteps ? { frame, step: last, continuation: 1 } : { frame, step: 1, continuation: last - lastSteps + 1 };
   }
 
@@ -113,7 +115,9 @@ export class PresentationController {
     const frame = Math.max(0, Math.min(cursor.frame, renderer.frames.length - 1));
     this.queue = (async () => {
       const count = await renderer.pageCount(frame, signal);
-      const steps = renderer.frames[frame].steps;
+      const targetFrame = renderer.frames[frame];
+      if (!targetFrame) throw new RangeError(`Missing presentation frame ${frame}`);
+      const steps = targetFrame.steps;
       const target = { frame, step: Math.min(cursor.step, steps), continuation: Math.min(cursor.continuation, Math.max(1, count - steps + 1)) };
       await this.commit(target, generation, signal, { frames: renderer.frames, revision, thumbnails: {}, title }, renderer);
     })().catch((error: unknown) => { this.renderError(error, signal); });

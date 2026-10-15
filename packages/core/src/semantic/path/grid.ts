@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { defaultAxisBasis, type AxisBasis } from "../coords/axis-basis.js";
 import { PT_PER_CM } from "../../coords/source.js";
 import type { WorldTransform } from "../../coords/transforms.js";
@@ -113,7 +114,7 @@ export function extractGridStepsFromOptionLists(
   inheritedSteps: GridStepValues = DEFAULT_GRID_STEP_VALUES
 ): GridSpacing | null {
   if (optionLists.length === 0) return null;
-  return extractGridStepsFromOptionList({ ...optionLists[0], entries: optionLists.flatMap(list => list.entries) }, pushDiagnostic, macroBindings, basis, inheritedSteps);
+  return extractGridStepsFromOptionList({ ...requireArrayValue(optionLists, 0), entries: optionLists.flatMap(list => list.entries) }, pushDiagnostic, macroBindings, basis, inheritedSteps);
 }
 
 function parsePolarStep(raw: string, basis: AxisBasis): GridPolarStep | null {
@@ -122,7 +123,7 @@ function parsePolarStep(raw: string, basis: AxisBasis): GridPolarStep | null {
   const parts = splitAllAtTopLevel(inner, ":").map(part => part.trim());
   if (parts.length !== 2) return null;
   const angle = Number(parts[0]);
-  const radius = parseLengthWithInfo(parts[1], "cm");
+  const radius = parseLengthWithInfo(requireArrayValue(parts, 1), "cm");
   if (!Number.isFinite(angle) || !radius) return null;
   const radians = toRadians(angle);
   const x = radius.value * Math.cos(radians);

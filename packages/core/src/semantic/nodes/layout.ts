@@ -191,7 +191,7 @@ export function resolveNodeLayout(
       return normalizedText.trim().length > 0 ? textEngine?.measure({
         text: measureText,
         textWidthPt: textWidth,
-        alignment: paragraphAlignment,
+        ...(paragraphAlignment === undefined ? {} : { alignment: paragraphAlignment }),
         fontStyle: style.fontStyle,
         fontWeight: style.fontWeight,
         fontFamily: style.fontFamily,
@@ -219,7 +219,7 @@ export function resolveNodeLayout(
       paragraphId: measuredText.paragraphId,
       renderSourceText: measuredText.renderSourceText,
       layoutKind,
-      paragraphAlignment,
+      ...(paragraphAlignment === undefined ? {} : { paragraphAlignment }),
       ...(measuredText.graphicsPlacements?.length
         ? { graphicsPlacements: measuredText.graphicsPlacements }
         : {})

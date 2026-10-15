@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { NodeItem } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
@@ -131,7 +132,7 @@ function isLivePosition(position: number, spans: RecoverySource["inertSpans"]): 
   let to = spans.length;
   while (from < to) {
     const middle = (from + to) >>> 1;
-    const span = spans[middle];
+    const span = requireArrayValue(spans, middle);
     if (position < span.from) to = middle;
     else if (position >= span.to) from = middle + 1;
     else return false;
@@ -178,7 +179,7 @@ function normalizeSimpleSymbolName(raw: string): string | null {
 
 function skipWhitespace(input: string, index: number): number {
   let cursor = index;
-  while (cursor < input.length && /\s/.test(input[cursor] ?? "")) {
+  while (cursor < input.length && /\s/.test(input.charAt(cursor))) {
     cursor += 1;
   }
   return cursor;

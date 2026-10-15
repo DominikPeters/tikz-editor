@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import { isCaretSlot, isDeclarationGroup, isRevealedCode, isTerminatorGroup, itemRole, type ItemRole } from "../ownership/kinds.js";
 import { slotChain } from "../tree/navigate.js";
 import type { EditTree, NodeId, SlotId } from "../tree/types.js";
@@ -78,9 +80,9 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
   const hiddenDescendants = new Set(hidden);
   const hideNode = (node: NodeId) => {
     hiddenDescendants.add(node);
-    for (const slot of tree.nodes[node].slots) for (const child of tree.slots[slot].children) hideNode(child);
+    for (const slot of editNodeAt(tree.nodes, node).slots) for (const child of editSlotAt(tree.slots, slot).children) hideNode(child);
   };
-  for (const slot of hiddenSlots) for (const child of tree.slots[slot].children) hideNode(child);
+  for (const slot of hiddenSlots) for (const child of editSlotAt(tree.slots, slot).children) hideNode(child);
   const revealed = options.revealCodes === true;
   const baseRole = (node: NodeId): ItemRole => hiddenDescendants.has(node) ? "invisible"
     : revealed && isRevealedCode(tree, node) ? "construct" : itemRole(tree, node);
@@ -107,14 +109,14 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
   };
 
   const suppressed = (slot: SlotId, at: number): boolean => {
-    const record = tree.slots[slot];
-    const owner = tree.nodes[record.node];
+    const record = editSlotAt(tree.slots, slot);
+    const owner = editNodeAt(tree.nodes, record.node);
     if (owner.kind === "group" && isDeclarationGroup(tree, owner.id)) {
       // `{\bf x}` is a style wrapper (P8): its inside starts after the
       // declaration, and its end is a stop of its own.
-      return at === 0 || (at > 1 && role(record.children[at - 1]) === "invisible");
+      return at === 0 || (at > 1 && role(requireArrayValue(record.children, at - 1)) === "invisible");
     }
-    if (at > 0 && role(record.children[at - 1]) === "invisible") {
+    if (at > 0 && role(requireArrayValue(record.children, at - 1)) === "invisible") {
       return true;
     }
     if (owner.kind === "scripted" && record.role === "base" && at === 0) {
@@ -132,14 +134,14 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
     if (hiddenDescendants.has(node)) {
       return;
     }
-    for (const slot of tree.nodes[node].slots) {
-      if (tree.slots[slot].presence === "present" && !hiddenSlots.has(slot)) {
+    for (const slot of editNodeAt(tree.nodes, node).slots) {
+      if (editSlotAt(tree.slots, slot).presence === "present" && !hiddenSlots.has(slot)) {
         visitSlot(slot);
       }
     }
   };
   const visitSlot = (slot: SlotId) => {
-    const record = tree.slots[slot];
+    const record = editSlotAt(tree.slots, slot);
     const caret = isCaretSlot(tree, slot);
     const before = stops.length;
     for (let at = 0; at <= record.children.length; at += 1) {
@@ -149,7 +151,7 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
         stopRanks.push(rank(position));
       }
       if (at < record.children.length) {
-        visitNode(record.children[at]);
+        visitNode(requireArrayValue(record.children, at));
       }
     }
     // A flow with no text in it (`\vspace{1em}`, `\pause`) keeps one stop, after that: somewhere to type.
@@ -169,7 +171,7 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
     let found = -1;
     while (low <= high) {
       const middle = (low + high) >> 1;
-      if (stopRanks[middle] <= target) {
+      if (requireArrayValue(stopRanks, middle) <= target) {
         found = middle;
         low = middle + 1;
       } else {
@@ -210,16 +212,16 @@ export function createEditView(tree: EditTree, options: EditViewOptions = {}): E
       // Inside a unit's or a delimiter's source: the last stop before it.
       let best: Position | null = null;
       for (let at = 0; at < stops.length; at += 1) {
-        if (positionOffset(tree, stops[at]) <= offset) {
-          best = stops[at];
+        if (positionOffset(tree, requireArrayValue(stops, at)) <= offset) {
+          best = requireArrayValue(stops, at);
         }
       }
-      return best ?? stops[0];
+      return best ?? requireArrayValue(stops, 0);
     },
     step(position, direction) {
       const from = representativeIndex(position);
       const next = from + direction;
-      return next >= 0 && next < stops.length ? stops[next] : null;
+      return next >= 0 && next < stops.length ? requireArrayValue(stops, next) : null;
     },
   };
   return view;
@@ -232,10 +234,10 @@ function paragraphEdgeSpaces(tree: EditTree, role: (node: NodeId) => ItemRole): 
     if (node.kind !== "paragraph") {
       continue;
     }
-    const children = tree.slots[node.slots[0]].children;
+    const children = editSlotAt(tree.slots, requireArrayValue(node.slots, 0)).children;
     const mark = (order: readonly NodeId[]) => {
       for (const child of order) {
-        if (tree.nodes[child].kind === "space") {
+        if (editNodeAt(tree.nodes, child).kind === "space") {
           dropped.add(child);
         } else if (role(child) !== "invisible") {
           return;

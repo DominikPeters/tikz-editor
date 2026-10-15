@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { RiArrowDownSLine, RiArrowLeftSLine, RiArrowRightSLine, RiMoreLine } from "@remixicon/react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
@@ -155,7 +156,7 @@ export function BuildsPanel() {
   const openMenu = model && menu && !locked && !drag && menu.documentId === documentId && menu.frameId === frameId && menu.revision === sourceRevision ? menu : null;
 
   return (
-    <SidePanel className={inspector.panel}>
+    <SidePanel className={inspector.panel ?? ""}>
       <SidePanel.Header>
         Overlays
         {model && model.stepCount > PAGE_SIZE ? <div className={inspector.multiArrangeGroup}>
@@ -163,7 +164,7 @@ export function BuildsPanel() {
           <button type="button" className={inspector.multiArrangeIconButton} aria-label="Later overlay steps" title="Later overlay steps" disabled={(page + 1) * PAGE_SIZE >= model.stepCount} onClick={() => { setPageOverride(page + 1); }}><RiArrowRightSLine size={14} /></button>
         </div> : null}
       </SidePanel.Header>
-      <SidePanel.Content className={css.content}>
+      <SidePanel.Content className={css.content ?? ""}>
         {!model ? <p className={inspector.hint}>Select a slide to view its overlays.</p>
           : model.rows.length === 0 ? <p className={inspector.hint}>No overlays on this slide.</p>
             : <>
@@ -189,7 +190,7 @@ export function BuildsPanel() {
                     {row.kind === "list" ? <td colSpan={steps.length} /> : sourceOnly ? <td colSpan={steps.length}>
                       <button type="button" className={inspector.moreOptionsToggle} onClick={() => { reveal(row); }}>Edit in source</button>
                     </td> : steps.map((value, index) => {
-                      const cell = cells[index];
+                      const cell = requireArrayValue(cells, index);
                       return <td key={value} data-state={cell.visibility} title={`Step ${value}: ${cell.label}`}>
                         <button type="button" aria-label={`${row.label}, step ${value}: ${cell.label}`} onClick={() => { select(row); preview(value); }}
                           onContextMenu={(event) => {
@@ -229,7 +230,7 @@ export function BuildsPanel() {
               {hasTimeline ? <div className={css.legend}><span>● Visible</span><span title="Hidden, with its space retained">○ Covered</span><span>— Absent</span></div> : null}
             </>}
       </SidePanel.Content>
-      {model && selected ? <SidePanel.Footer className={css.details}>
+      {model && selected ? <SidePanel.Footer className={css.details ?? ""}>
         <section aria-label="Overlay rule">
           <SidePanel.SectionHeader>
             <span className={css.detailTitle} title={selected.label}>{selected.label}</span>

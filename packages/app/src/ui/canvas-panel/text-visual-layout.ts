@@ -335,8 +335,7 @@ function resolveLineIndexForOffset(ranges: LogicalLineRange[], textLength: numbe
     return 0;
   }
   const pivot = textLength === 0 ? 0 : Math.min(Math.max(0, offset), textLength - 1);
-  for (let index = 0; index < ranges.length; index += 1) {
-    const range = ranges[index];
+  for (const [index, range] of ranges.entries()) {
     if (pivot >= range.start && pivot < range.end) {
       return index;
     }

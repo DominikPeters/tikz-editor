@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt } from "../tree/lookup.js";
 import type { EditTree, NodeId, SlotId, Span } from "../tree/types.js";
 import type { EditViewOptions } from "./view.js";
 
@@ -35,7 +37,7 @@ export function renderedVisibility(tree: EditTree, rendered: RenderedStops, buff
     // Test arguments separately: a visible branch does not make its siblings visible.
     // With no renderer fact yet, a newly typed empty argument remains editable.
     if (node.kind === "overlay") {
-      const slots = node.slots.map((slot) => tree.slots[slot]).filter((slot) => slot.presence === "present");
+      const slots = node.slots.map((slot) => editSlotAt(tree.slots, slot)).filter((slot) => slot.presence === "present");
       for (const slot of slots) {
         const { from, to } = slot.contentSpan;
         const visible = branches.get(`${bufferFrom + from}:${bufferFrom + to}`);
@@ -58,11 +60,11 @@ function hasOffsetIn(offsets: readonly number[], from: number, to: number): bool
   let high = offsets.length;
   while (low < high) {
     const middle = (low + high) >> 1;
-    if (offsets[middle] < from) {
+    if (requireArrayValue(offsets, middle) < from) {
       low = middle + 1;
     } else {
       high = middle;
     }
   }
-  return low < offsets.length && offsets[low] <= to;
+  return low < offsets.length && requireArrayValue(offsets, low) <= to;
 }

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Statement } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
 import { frameTransform, type FrameTransform } from "../coords/transforms.js";
@@ -85,7 +86,7 @@ function resolveStatementFrameResolver(
   const index = run.expandedFigureBody.findIndex(statement => statement.id === sourceId);
   if (index < 0) return;
   for (let i = 0; i < index; i++) evaluateSemanticStatementByIndex(run, i);
-  return createStatementFrameResolver(run.context, run.expandedFigureBody[index]);
+  return createStatementFrameResolver(run.context, requireArrayValue(run.expandedFigureBody, index));
 }
 
 export function resolveStatementParentFrame(

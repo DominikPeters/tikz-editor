@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { WorldBounds } from "../coords/points.js";
 import type { EditHandle, SceneFigure } from "../semantic/types.js";
 import { collectSourceWorldBounds } from "./snapping/index.js";
@@ -377,8 +378,8 @@ function makePathRule(
       if (facts.selectedSourceIds.length !== 2) {
         return "Select exactly two open paths to join.";
       }
-      const first = resolveExplicitPathEligibility(facts, facts.selectedSourceIds[0]);
-      const second = resolveExplicitPathEligibility(facts, facts.selectedSourceIds[1]);
+      const first = resolveExplicitPathEligibility(facts, requireArrayValue(facts.selectedSourceIds, 0));
+      const second = resolveExplicitPathEligibility(facts, requireArrayValue(facts.selectedSourceIds, 1));
       if (first.kind !== "eligible") return first.reason;
       if (second.kind !== "eligible") return second.reason;
       if (first.analysis.closed || second.analysis.closed) {
@@ -390,7 +391,7 @@ function makePathRule(
     if (facts.selectedSourceIds.length !== 1) {
       return "Select a single editable path.";
     }
-    const selectedId = facts.selectedSourceIds[0];
+    const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
     const eligible = resolveExplicitPathEligibility(facts, selectedId);
     if (eligible.kind !== "eligible") {
       return eligible.reason;
@@ -531,7 +532,7 @@ function makeRepeatRule(): AvailabilityRule {
       return "Wait for recompute to finish before repeating the selection.";
     }
     if (facts.selectedSourceIds.length === 1) {
-      const selectedId = facts.selectedSourceIds[0];
+      const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
       if (!selectedId.startsWith("foreach:")) {
         return null;
       }
@@ -554,7 +555,7 @@ function makeUngroupRule(): AvailabilityRule {
       return "Select exactly one scope to ungroup.";
     }
 
-    const selectedId = facts.selectedSourceIds[0];
+    const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
     const parsedTarget = parseEditableTargetId(selectedId);
     if (parsedTarget.kind !== "statement" || !parsedTarget.id.startsWith("scope:")) {
       return "Ungroup currently supports scope selections only.";

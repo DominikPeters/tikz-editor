@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { parseSimpleTexInlineNodes } from "../text/tex/ir.js";
@@ -90,7 +91,7 @@ export function parseBeamerFrameBody(
   const tikzLayer = beamerTikzLayerState(source) === "ours";
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     // The editor's drawing layer stays in the paragraph, as an overlay picture does.
     if (tikzLayer && token.kind === "begin" && token.name === "tikzlayer") {
       const endIndex = matchingEnvironmentEnd(tokens, index);
@@ -111,10 +112,10 @@ export function parseBeamerFrameBody(
       children.push({
         kind: "unsupported",
         id: `${frame.id}:unsupported:${token.span.from}`,
-        span: { from: token.span.from, to: tokens[unsupportedEndIndex].span.to },
+        span: { from: token.span.from, to: requireArrayValue(tokens, unsupportedEndIndex).span.to },
         message: `The ${token.name} environment is not supported in this preview.`,
       });
-      cursor = tokens[unsupportedEndIndex].span.to;
+      cursor = requireArrayValue(tokens, unsupportedEndIndex).span.to;
       index = unsupportedEndIndex;
       continue;
     }
@@ -142,7 +143,7 @@ export function parseBeamerFrameBody(
       });
       break;
     }
-    const end = tokens[endIndex];
+    const end = requireArrayValue(tokens, endIndex);
     const tikzNode = frameTikzFlowNode({
       source,
       context,
@@ -326,8 +327,8 @@ function parseTheorem(params: {
     span: { from: begin.span.from, to: end.span.to },
     beginSpan: begin.span,
     endSpan: end.span,
-    overlay,
-    addition,
+    ...(overlay !== undefined ? { overlay } : {}),
+    ...(addition !== undefined ? { addition } : {}),
     title,
     titleMapped,
     bodySpan,
@@ -664,10 +665,10 @@ function frameTikzFlowNode(params: {
   }
   const innerSpan = { from: begin.span.to, to: end.span.from };
   const roots = scanTikzRootsInSpan(context, frameId, innerSpan);
-  if (roots.length !== 1 || readBeamerOverlayPicture(context, roots[0].span)) {
+  const root = roots[0];
+  if (roots.length !== 1 || !root || readBeamerOverlayPicture(context, root.span)) {
     return null;
   }
-  const root = roots[0];
   const surroundingMaterial =
     source.slice(innerSpan.from, root.span.from) +
     source.slice(root.span.to, innerSpan.to);
@@ -714,11 +715,11 @@ function parseBlock(params: {
       span: nestedBox?.span ?? { from: lowerPart!.from, to: lowerPart!.to }, message: "Lower, subtitle and nested package boxes are not supported in this tcolorbox preview." });
     diagnostics.push(...parsed.diagnostics);
     const id = `${ownerId}:tcolorbox:${nodeIndex}`;
-    if (parsed.diagnostics.length) return { kind: "unsupported", id, span: { from: begin.span.from, to: end.span.to }, message: parsed.diagnostics[0].message };
+    if (parsed.diagnostics.length) return { kind: "unsupported", id, span: { from: begin.span.from, to: end.span.to }, message: requireArrayValue(parsed.diagnostics, 0).message };
     return {
       kind: "block", packageBox: "tcolorbox", environment: "block", id,
       span: { from: begin.span.from, to: end.span.to }, beginSpan: begin.span, endSpan: end.span,
-      options, title: parsed.title, bodySpan,
+      ...(options !== undefined ? { options } : {}), title: parsed.title, bodySpan,
       children: parseBlockLeafContent(context, bodySpan, id, params.overlays, params.theoremOccurrences),
     };
   }
@@ -765,7 +766,7 @@ function parseBlock(params: {
     span: { from: begin.span.from, to: end.span.to },
     beginSpan: begin.span,
     endSpan: end.span,
-    options,
+    ...(options !== undefined ? { options } : {}),
     title: fallbackTitle,
     bodySpan,
     children,
@@ -784,15 +785,15 @@ function parseBlockLeafContent(
   const children: BeamerLeafFlowNode[] = [];
   let cursor = bodySpan.from;
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     // Beamer block leaves do not recursively lower package boxes. Keep their
     // complete source local instead of feeding begin/end tokens to prose.
     const endIndex = token.kind === "begin" && token.name === "tcolorbox"
       ? matchingEnvironmentEnd(tokens, index)
       : findUnsupportedEnvironmentEndIndex(context, tokens, index, overlays, theoremOccurrences);
     if (endIndex < 0) continue;
-    const begin = tokens[index];
-    const span = { from: begin.span.from, to: tokens[endIndex].span.to };
+    const begin = requireArrayValue(tokens, index);
+    const span = { from: begin.span.from, to: requireArrayValue(tokens, endIndex).span.to };
     pushTextNode(context.source, { from: cursor, to: span.from }, ownerId, children);
     children.push({ kind: "unsupported", id: `${ownerId}:unsupported:${span.from}`,
       span, message: `The ${begin.name} environment is not supported in this preview.` });
@@ -837,7 +838,7 @@ function parseColumns(params: {
   const columns: BeamerColumnBodyNode[] = [];
   const heads: { beginSpan: Span; endSpan: Span; bodyTo: number }[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     if (token.kind !== "begin" || token.name !== "column") {
       continue;
     }
@@ -851,7 +852,7 @@ function parseColumns(params: {
       });
       continue;
     }
-    const columnEnd = tokens[endIndex];
+    const columnEnd = requireArrayValue(tokens, endIndex);
     heads.push({ beginSpan: token.span, endSpan: columnEnd.span,
       bodyTo: columnEnd.span.from });
     index = endIndex;
@@ -908,7 +909,7 @@ function parseColumns(params: {
       span: { from: head.beginSpan.from, to: head.endSpan.to },
       beginSpan: head.beginSpan,
       endSpan: head.endSpan,
-      options: columnOptions,
+      ...(columnOptions !== undefined ? { options: columnOptions } : {}),
       alignment: resolveColumnAlignment(columnOptions?.value, alignment),
       width,
       bodySpan,
@@ -931,7 +932,7 @@ function parseColumns(params: {
     span: { from: begin.span.from, to: end.span.to },
     beginSpan: begin.span,
     endSpan: end.span,
-    options,
+    ...(options !== undefined ? { options } : {}),
     alignment,
     bodySpan: {
       from: options?.span.to ?? begin.span.to,
@@ -1020,8 +1021,8 @@ function parseColumnFlow(
     if (endIndex < 0) {
       continue;
     }
-    const begin = tokens[index];
-    const span = { from: begin.span.from, to: tokens[endIndex].span.to };
+    const begin = requireArrayValue(tokens, index);
+    const span = { from: begin.span.from, to: requireArrayValue(tokens, endIndex).span.to };
     structural.push({
       span,
       node: {
@@ -1036,7 +1037,7 @@ function parseColumnFlow(
   let nodeIndex = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     if (
       token.kind !== "begin" ||
       (
@@ -1052,7 +1053,7 @@ function parseColumnFlow(
     if (endIndex < 0) {
       continue;
     }
-    const end = tokens[endIndex];
+    const end = requireArrayValue(tokens, endIndex);
     const node = isProofEnvironment(token.name) ||
         theoremOccurrences.has(token.span.from)
       ? parseTheorem({
@@ -1082,7 +1083,7 @@ function parseColumnFlow(
   }
 
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     if (
       token.kind !== "begin" ||
       !LIST_ENVIRONMENTS.has(token.name)
@@ -1093,7 +1094,7 @@ function parseColumnFlow(
     if (endIndex < 0) {
       continue;
     }
-    const end = tokens[endIndex];
+    const end = requireArrayValue(tokens, endIndex);
     const span = { from: token.span.from, to: end.span.to };
     structural.push({
       span,
@@ -1177,7 +1178,7 @@ function scanTikzRootsInSpan(
     endSpan: Span;
   }> = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     if (token.kind !== "begin" || token.name !== "tikzpicture") {
       continue;
     }
@@ -1185,7 +1186,7 @@ function scanTikzRootsInSpan(
     if (endIndex < 0) {
       continue;
     }
-    const end = tokens[endIndex];
+    const end = requireArrayValue(tokens, endIndex);
     roots.push({
       kind: "tikzpicture",
       id: `${frameId}:tikz:${roots.length}`,
@@ -1208,7 +1209,7 @@ function matchingEnvironmentEnd(
   }
   let depth = 0;
   for (let index = beginIndex; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = requireArrayValue(tokens, index);
     if (token.name !== begin.name) {
       continue;
     }
@@ -1239,10 +1240,10 @@ function pushTextNode(
 
 function trimSpan(source: string, span: Span): Span {
   let { from, to } = span;
-  while (from < to && /\s/u.test(source[from])) {
+  while (from < to && /\s/u.test(source.charAt(from))) {
     from += 1;
   }
-  while (to > from && /\s/u.test(source[to - 1])) {
+  while (to > from && /\s/u.test(source.charAt(to - 1))) {
     to -= 1;
   }
   return { from, to };
@@ -1301,7 +1302,7 @@ function findUnsupportedEnvironmentEndIndex(
   overlays: BeamerOverlayModel,
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
 ): number {
-  const begin = tokens[index];
+  const begin = requireArrayValue(tokens, index);
   if (
     begin.kind !== "begin" ||
     [
@@ -1341,7 +1342,7 @@ function findUnsupportedEnvironmentEndIndex(
   }
   // Reuse native recognition so supported text environments keep their renderer.
   const firstNode = parseSimpleTexInlineNodes(
-    context.source.slice(begin.span.from, tokens[endIndex].span.to)
+    context.source.slice(begin.span.from, requireArrayValue(tokens, endIndex).span.to)
   ).nodes[0];
   if (
     firstNode?.kind === "literal" &&

@@ -537,8 +537,7 @@ export function simpleTexSegmentToLayoutItems(
   let spaceFactor = 1000;
   let hasSeenText = false;
 
-  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
-    const token = tokens[tokenIndex];
+  for (const [tokenIndex, token] of tokens.entries()) {
     if (token.kind === "space" && !hasSeenText) {
       continue;
     }
@@ -567,7 +566,7 @@ export function simpleTexSegmentToLayoutItems(
 
     if (token.kind === "math") {
       const box = mathBoxProvider?.getInlineMathBox({
-        atPt: token.fontState.sizePt,
+        ...(token.fontState.sizePt !== undefined ? { atPt: token.fontState.sizePt } : {}),
         source: token.text,
         content: token.content ?? "",
         delimiter: token.delimiter ?? "dollar",
@@ -615,12 +614,12 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "transform-box" && token.transformBox) {
-      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, mathBoxProvider, textFontProfile, graphicsResolver, dimensionContext, tabularProfile });
+      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}), textFontProfile, ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}), ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}), ...(tabularProfile !== undefined ? { tabularProfile: tabularProfile } : {}) });
       items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
       hasSeenText = true; spaceFactor = 1000; continue;
     }
     if (token.kind === "tabular" && token.table) {
-      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, mathBoxProvider, textFontProfile, graphicsResolver, dimensionContext, tabularProfile });
+      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}), textFontProfile, ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}), ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}), ...(tabularProfile !== undefined ? { tabularProfile: tabularProfile } : {}) });
       items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
       hasSeenText = true; spaceFactor = 1000; continue;
     }
@@ -635,18 +634,18 @@ export function simpleTexSegmentToLayoutItems(
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
-        boxWidth: token.boxWidth,
-        boxAlign: token.boxAlign,
-        backgroundColor: token.backgroundColor,
-        frameColor: token.frameColor,
+        ...(token.boxWidth !== undefined ? { boxWidth: token.boxWidth } : {}),
+        ...(token.boxAlign !== undefined ? { boxAlign: token.boxAlign } : {}),
+        ...(token.backgroundColor !== undefined ? { backgroundColor: token.backgroundColor } : {}),
+        ...(token.frameColor !== undefined ? { frameColor: token.frameColor } : {}),
         fontState: token.fontState,
         atPt,
         metricProvider,
         spaceGlueProfile,
-        mathBoxProvider,
+        ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}),
         textFontProfile,
-        graphicsResolver,
-        dimensionContext,
+        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
+        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -675,7 +674,7 @@ export function simpleTexSegmentToLayoutItems(
         raise: token.ruleRaise ?? texHBoxOffsetY(0),
         width: token.ruleWidth ?? texLength(0),
         height: token.ruleHeight ?? texLength(0),
-        strutBaselineSkipPt: token.ruleIsStrut ? token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? atPt) * 1.2) : undefined,
+        ...(token.ruleIsStrut ? { strutBaselineSkipPt: token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? atPt) * 1.2) } : {}),
         metricProvider,
         textFontProfile,
       });
@@ -709,10 +708,8 @@ export function simpleTexSegmentToLayoutItems(
         filenameStart: token.graphicsFilenameStart ?? token.sourceStart,
         filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
         options: token.graphicsOptions ?? { raw: "" },
-        graphicsResolver,
-        dimensionContext: dimensionContext
-          ? texDimensionContextForFont(dimensionContext, activeFont)
-          : undefined,
+        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
+        ...(dimensionContext ? { dimensionContext: texDimensionContextForFont(dimensionContext, activeFont) } : {}),
       });
       items.push({
         kind: "text-box",
@@ -744,17 +741,17 @@ export function simpleTexSegmentToLayoutItems(
           (token.lift ?? texHBoxOffsetY(0)) +
           (token.relativeLiftEm ?? 0) * surroundingSizePt
         )),
-        boxHeight: token.boxHeight,
-        boxDepth: token.boxDepth,
+        ...(token.boxHeight !== undefined ? { boxHeight: token.boxHeight } : {}),
+        ...(token.boxDepth !== undefined ? { boxDepth: token.boxDepth } : {}),
         fontState: token.fontState,
-        childFontScale: token.childFontScale,
+        ...(token.childFontScale !== undefined ? { childFontScale: token.childFontScale } : {}),
         atPt,
         metricProvider,
         spaceGlueProfile,
-        mathBoxProvider,
+        ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}),
         textFontProfile,
-        graphicsResolver,
-        dimensionContext,
+        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
+        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -790,10 +787,10 @@ export function simpleTexSegmentToLayoutItems(
         atPt,
         metricProvider,
         spaceGlueProfile,
-        mathBoxProvider,
+        ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}),
         textFontProfile,
-        graphicsResolver,
-        dimensionContext,
+        ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}),
+        ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -832,7 +829,7 @@ export function simpleTexSegmentToLayoutItems(
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
-        lineLeading: token.lineLeading,
+        ...(token.lineLeading !== undefined ? { lineLeading: token.lineLeading } : {}),
         spaceFactor,
         spaceGlueProfile,
       });
@@ -900,10 +897,10 @@ function texMBoxFromInlineNodes(params: {
     atPt: params.atPt,
     metricProvider: params.metricProvider,
     spaceGlueProfile: params.spaceGlueProfile,
-    mathBoxProvider: params.mathBoxProvider,
+    ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}),
     textFontProfile: params.textFontProfile,
-    graphicsResolver: params.graphicsResolver,
-    dimensionContext: params.dimensionContext,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+    ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
     trimEdges: false,
   });
   const hlist = texMBoxHListFromLayoutItems({
@@ -928,11 +925,11 @@ function texMBoxFromInlineNodes(params: {
           start: params.contentStart,
           end: params.contentEnd,
         },
-        boxWidth: params.command === "framebox" ? params.boxWidth : undefined,
-        boxAlign: params.boxAlign,
+        ...(params.command === "framebox" ? { boxWidth: params.boxWidth } : {}),
+        ...(params.boxAlign !== undefined ? { boxAlign: params.boxAlign } : {}),
         frame: params.command !== "colorbox",
-        backgroundColor: params.backgroundColor,
-        frameColor: params.frameColor,
+        ...(params.backgroundColor !== undefined ? { backgroundColor: params.backgroundColor } : {}),
+        ...(params.frameColor !== undefined ? { frameColor: params.frameColor } : {}),
       })
     : params.command === "underline"
       ? texUnderlineMBoxHList(hlist, {
@@ -940,8 +937,8 @@ function texMBoxFromInlineNodes(params: {
           end: params.sourceEnd,
         })
       : texReboxMBoxHList(hlist, {
-        boxWidth: params.boxWidth,
-        boxAlign: params.boxAlign,
+        ...(params.boxWidth !== undefined ? { boxWidth: params.boxWidth } : {}),
+        ...(params.boxAlign !== undefined ? { boxAlign: params.boxAlign } : {}),
       });
   return {
     source: params.source,
@@ -1056,7 +1053,7 @@ export function texFrameMBoxHList(
       y: texHBoxLocalY(0 - height),
       width,
       height: rule,
-      color: params.frameColor,
+      ...(params.frameColor !== undefined ? { color: params.frameColor } : {}),
       sourceSpan: params.sourceSpan,
     },
     {
@@ -1066,7 +1063,7 @@ export function texFrameMBoxHList(
       y: texHBoxLocalY(0 - height),
       width: rule,
       height: sideHeight,
-      color: params.frameColor,
+      ...(params.frameColor !== undefined ? { color: params.frameColor } : {}),
       sourceSpan: params.sourceSpan,
     },
     {
@@ -1076,7 +1073,7 @@ export function texFrameMBoxHList(
       y: texHBoxLocalY(0 - height),
       width: rule,
       height: sideHeight,
-      color: params.frameColor,
+      ...(params.frameColor !== undefined ? { color: params.frameColor } : {}),
       sourceSpan: params.sourceSpan,
     },
     {
@@ -1086,7 +1083,7 @@ export function texFrameMBoxHList(
       y: texHBoxLocalY(roundTexPt(framedBody.depth + sep)),
       width,
       height: rule,
-      color: params.frameColor,
+      ...(params.frameColor !== undefined ? { color: params.frameColor } : {}),
       sourceSpan: params.sourceSpan,
     },
   ] : [];
@@ -1255,6 +1252,9 @@ function texIncludeGraphicsBox(params: {
     params.dimensionContext
   );
   const sourceSpan = { start: params.sourceStart, end: params.sourceEnd };
+  const placeholderReason = resolution.status === "resolved"
+    ? "Could not determine image dimensions."
+    : resolution.status === "unsupported" ? resolution.reason : undefined;
   const svgBody = resolution.status === "resolved" && assetNatural
     ? renderTexIncludeGraphicsImageSvgBody({
         sourceSpan,
@@ -1274,11 +1274,7 @@ function texIncludeGraphicsBox(params: {
         width: size.width,
         height: size.height,
         status: resolution.status === "resolved" ? "unsupported" : resolution.status,
-        reason: resolution.status === "resolved"
-          ? "Could not determine image dimensions."
-          : resolution.status === "unsupported"
-            ? resolution.reason
-            : undefined,
+        ...(placeholderReason !== undefined ? { reason: placeholderReason } : {}),
       });
   const width = roundTexPt(size.width);
   const height = roundTexPt(size.height);
@@ -1601,10 +1597,10 @@ function texRaiseBoxFromInlineNodes(params: {
     atPt: params.atPt,
     metricProvider: params.metricProvider,
     spaceGlueProfile: params.spaceGlueProfile,
-    mathBoxProvider: params.mathBoxProvider,
+    ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}),
     textFontProfile: params.textFontProfile,
-    graphicsResolver: params.graphicsResolver,
-    dimensionContext: params.dimensionContext,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+    ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -1698,10 +1694,10 @@ function texDimensionBoxFromInlineNodes(params: {
     atPt: params.atPt,
     metricProvider: params.metricProvider,
     spaceGlueProfile: params.spaceGlueProfile,
-    mathBoxProvider: params.mathBoxProvider,
+    ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}),
     textFontProfile: params.textFontProfile,
-    graphicsResolver: params.graphicsResolver,
-    dimensionContext: params.dimensionContext,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+    ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -1835,8 +1831,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   let spaceFactor = 1000;
   let hasSeenText = false;
 
-  for (let tokenIndex = 0; tokenIndex < params.tokens.length; tokenIndex += 1) {
-    const token = params.tokens[tokenIndex];
+  for (const [tokenIndex, token] of params.tokens.entries()) {
     if (params.trimEdges && token.kind === "space" && !hasSeenText) {
       continue;
     }
@@ -1865,7 +1860,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
 
     if (token.kind === "math") {
       const box = params.mathBoxProvider?.getInlineMathBox({
-        atPt: token.fontState.sizePt,
+        ...(token.fontState.sizePt !== undefined ? { atPt: token.fontState.sizePt } : {}),
         source: token.text,
         content: token.content ?? "",
         delimiter: token.delimiter ?? "dollar",
@@ -1905,12 +1900,12 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     }
 
     if (token.kind === "transform-box" && token.transformBox) {
-      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, mathBoxProvider: params.mathBoxProvider, textFontProfile: params.textFontProfile, graphicsResolver: params.graphicsResolver, dimensionContext: params.dimensionContext, tabularProfile: params.tabularProfile });
+      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), textFontProfile: params.textFontProfile, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}) });
       items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
       hasSeenText = true; spaceFactor = 1000; continue;
     }
     if (token.kind === "tabular" && token.table) {
-      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, mathBoxProvider: params.mathBoxProvider, textFontProfile: params.textFontProfile, graphicsResolver: params.graphicsResolver, dimensionContext: params.dimensionContext, tabularProfile: params.tabularProfile });
+      const box = layoutTexTabularBox({ table: token.table, source: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), textFontProfile: params.textFontProfile, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}) });
       items.push({ kind: "text-box", command: "tabular", text: token.text, content: token.text, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.table.contentStart, contentEnd: token.table.contentEnd, box });
       hasSeenText = true; spaceFactor = 1000; continue;
     }
@@ -1925,16 +1920,16 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         contentStart: token.contentStart ?? token.sourceStart,
         contentEnd: token.contentEnd ?? token.sourceEnd,
         children: token.children ?? [],
-        boxWidth: token.boxWidth,
-        boxAlign: token.boxAlign,
+        ...(token.boxWidth !== undefined ? { boxWidth: token.boxWidth } : {}),
+        ...(token.boxAlign !== undefined ? { boxAlign: token.boxAlign } : {}),
         fontState: token.fontState,
         atPt: params.atPt,
         metricProvider: params.metricProvider,
         spaceGlueProfile: params.spaceGlueProfile,
-        mathBoxProvider: params.mathBoxProvider,
+        ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}),
         textFontProfile: params.textFontProfile,
-        graphicsResolver: params.graphicsResolver,
-        dimensionContext: params.dimensionContext,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${token.command ?? "mbox"} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -1963,7 +1958,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         raise: token.ruleRaise ?? texHBoxOffsetY(0),
         width: token.ruleWidth ?? texLength(0),
         height: token.ruleHeight ?? texLength(0),
-        strutBaselineSkipPt: token.ruleIsStrut ? token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? params.atPt) * 1.2) : undefined,
+        ...(token.ruleIsStrut ? { strutBaselineSkipPt: token.ruleStrutBaselineSkipPt ?? texLength(Number(token.fontState.sizePt ?? params.atPt) * 1.2) } : {}),
         metricProvider: params.metricProvider,
         textFontProfile: params.textFontProfile,
       });
@@ -1997,10 +1992,8 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         filenameStart: token.graphicsFilenameStart ?? token.sourceStart,
         filenameEnd: token.graphicsFilenameEnd ?? token.sourceEnd,
         options: token.graphicsOptions ?? { raw: "" },
-        graphicsResolver: params.graphicsResolver,
-        dimensionContext: params.dimensionContext
-          ? texDimensionContextForFont(params.dimensionContext, activeFont)
-          : undefined,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        ...(params.dimensionContext ? { dimensionContext: texDimensionContextForFont(params.dimensionContext, activeFont) } : {}),
       });
       items.push({
         kind: "text-box",
@@ -2032,17 +2025,17 @@ export function simpleTexInlineTokensToLayoutItems(params: {
           (token.lift ?? texHBoxOffsetY(0)) +
           (token.relativeLiftEm ?? 0) * surroundingSizePt
         )),
-        boxHeight: token.boxHeight,
-        boxDepth: token.boxDepth,
+        ...(token.boxHeight !== undefined ? { boxHeight: token.boxHeight } : {}),
+        ...(token.boxDepth !== undefined ? { boxDepth: token.boxDepth } : {}),
         fontState: token.fontState,
-        childFontScale: token.childFontScale,
+        ...(token.childFontScale !== undefined ? { childFontScale: token.childFontScale } : {}),
         atPt: params.atPt,
         metricProvider: params.metricProvider,
         spaceGlueProfile: params.spaceGlueProfile,
-        mathBoxProvider: params.mathBoxProvider,
+        ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}),
         textFontProfile: params.textFontProfile,
-        graphicsResolver: params.graphicsResolver,
-        dimensionContext: params.dimensionContext,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\raisebox for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -2078,10 +2071,10 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         atPt: params.atPt,
         metricProvider: params.metricProvider,
         spaceGlueProfile: params.spaceGlueProfile,
-        mathBoxProvider: params.mathBoxProvider,
+        ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}),
         textFontProfile: params.textFontProfile,
-        graphicsResolver: params.graphicsResolver,
-        dimensionContext: params.dimensionContext,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
       });
       if (!box) {
         throw new Error(`Failed to lay out TeX \\${command} for source range ${token.sourceStart}:${token.sourceEnd}.`);
@@ -2120,7 +2113,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
-        lineLeading: token.lineLeading,
+        ...(token.lineLeading !== undefined ? { lineLeading: token.lineLeading } : {}),
         spaceFactor,
         spaceGlueProfile: params.spaceGlueProfile,
       });

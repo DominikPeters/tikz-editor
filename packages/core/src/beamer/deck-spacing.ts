@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { texDimensionUnitFactor } from "../text/tex/dimensions.js";
@@ -31,16 +32,16 @@ export function beamerSpacingTargets(source: string, layout: BeamerFrameLayout):
       if (argument?.span.to !== spacing.sourceSpan.to) continue;
       const match = /^(\s*)([+-]?(?:\d+(?:\.\d*)?|\.\d+))(\s*)([a-z]+)\s*$/u.exec(argument.value);
       if (!match) continue;
-      value = Number(match[2]); unit = match[4];
+      value = Number(match[2]); unit = requireArrayValue(match, 4);
       unitPt = (unit === "em" || unit === "ex" ? spacing.relativeUnitPt : texDimensionUnitFactor(unit)) ?? 0;
       if (!Number.isFinite(value) || !(unitPt > 0)) continue;
       // A handle must describe the same fixed amount as the rendered source.
       if (Math.abs(value * unitPt - spacing.sizePt) > .001) continue;
-      const from = argument.contentSpan.from + match[1].length;
-      numericSpan = { from, to: from + match[2].length };
+      const from = argument.contentSpan.from + requireArrayValue(match, 1).length;
+      numericSpan = { from, to: from + requireArrayValue(match, 2).length };
     } else if (command.to !== spacing.sourceSpan.to) continue;
     seen.add(spacing.sourceSpan.from);
-    targets.push({ ...spacing, id: `spacing:${spacing.sourceSpan.from}`, value, unit, unitPt, numericSpan });
+    targets.push({ ...spacing, id: `spacing:${spacing.sourceSpan.from}`, value, unit, unitPt, ...(numericSpan !== undefined ? { numericSpan } : {}) });
   }
   return targets;
 }

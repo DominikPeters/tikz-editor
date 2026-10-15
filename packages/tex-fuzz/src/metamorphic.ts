@@ -28,8 +28,7 @@ export interface TexFuzzMetamorphicRelation {
 }
 
 function mapFirstBreakingSpace(nodes: readonly TexFuzzNode[]): readonly TexFuzzNode[] | null {
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index];
+  for (const [index, node] of nodes.entries()) {
     if (node.kind === "space" && !node.nonBreaking) {
       return [...nodes.slice(0, index), { kind: "space", nonBreaking: true }, ...nodes.slice(index + 1)];
     }
@@ -155,16 +154,21 @@ export function checkTexFuzzMetamorphicInvariants(
       if (pair.relationId === "leading-comment-source-shift" && original.supported && transformed.supported
         && original.report && transformed.report && !original.fallbackReason && !transformed.fallbackReason
         && ![original, transformed].some((result) => result.report?.lines.some((line) => line.segments.some((segment) => segment.literal)))) {
-        const paint = (result: TexParagraphLayoutResult) => renderTexParagraphSvgBody(result.report!, {
-          lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider, vlistLayout: result.vlistLayout,
-        }).replace(/\sdata-source-[\w-]+="[^"]*"/g, "");
+        const paint = (result: TexParagraphLayoutResult) => {
+          if (!result.report) throw new Error("Metamorphic paint comparison requires a layout report.");
+          return renderTexParagraphSvgBody(result.report, {
+            lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider,
+            ...(result.vlistLayout === undefined ? {} : { vlistLayout: result.vlistLayout }),
+          }).replace(/\sdata-source-[\w-]+="[^"]*"/g, "");
+        };
         const delta = pair.transformedSource.length - pair.originalSource.length;
-        const sourceRanges = (result: TexParagraphLayoutResult, shift: number) => result.report!.lines.flatMap((line) =>
-          line.segments.map((segment) => [
-            segment.sourceStartRaw === undefined ? null : segment.sourceStartRaw - shift,
-            segment.sourceEndRaw === undefined ? null : segment.sourceEndRaw - shift,
-          ])
-        );
+        const sourceRanges = (result: TexParagraphLayoutResult, shift: number) => {
+          if (!result.report) throw new Error("Metamorphic source comparison requires a layout report.");
+          return result.report.lines.flatMap((line) => line.segments.map((segment) => [
+              segment.sourceStartRaw === undefined ? null : segment.sourceStartRaw - shift,
+              segment.sourceEndRaw === undefined ? null : segment.sourceEndRaw - shift,
+            ]));
+        };
         if (paint(original) !== paint(transformed)
           || JSON.stringify(sourceRanges(original, 0)) !== JSON.stringify(sourceRanges(transformed, delta))) {
           findings.push({

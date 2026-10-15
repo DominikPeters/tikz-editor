@@ -31,8 +31,7 @@ function collectTexVListParagraphEntries(
   pathPrefix: readonly number[] = [],
   entries: TexVListParagraphEntry[]
 ): void {
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
     if (!item) {
       continue;
     }

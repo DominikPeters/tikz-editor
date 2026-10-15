@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { createBoundsIndex, createMutableBoundsIndex, createPointIndex } from "./spatial-index.js";
 import { worldPoint, worldBounds } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -38,7 +39,7 @@ export function buildVisibleGaps(
 
   const xIndices = new Map(sortedX.map((bounds, index) => [bounds, index]));
   for (let i = 0; i < sortedX.length && pairs < maxPairsPerAxis; i += 1) {
-    const start = sortedX[i];
+    const start = requireArrayValue(sortedX, i);
     const last = Math.min(sortedX.length - 1, i + maxPairsPerAxis - pairs);
     pairs += sortedX.length - i - 1;
     const candidates = query(worldBounds(start.maxX, start.minY, pt(Infinity), start.maxY))
@@ -80,7 +81,7 @@ export function buildVisibleGaps(
 
   const yIndices = new Map(sortedY.map((bounds, index) => [bounds, index]));
   for (let i = 0; i < sortedY.length && pairs < maxPairsPerAxis; i += 1) {
-    const start = sortedY[i];
+    const start = requireArrayValue(sortedY, i);
     const last = Math.min(sortedY.length - 1, i + maxPairsPerAxis - pairs);
     pairs += sortedY.length - i - 1;
     const candidates = query(worldBounds(start.minX, start.maxY, start.maxX, pt(Infinity)))
@@ -488,12 +489,12 @@ function dedupeGapLines(lines: SnapLine[]): SnapLine[] {
     deduped.push({
       ...line,
       segments: normalizedSegments.map((entry) => {
-        const [a, b] = entry.split(";");
-        const [ax, ay] = a.split(",").map(Number);
-        const [bx, by] = b.split(",").map(Number);
+        const endpoints = entry.split(";");
+        const a = requireArrayValue(endpoints, 0).split(",").map(Number);
+        const b = requireArrayValue(endpoints, 1).split(",").map(Number);
         return [
-          worldPoint(pt(ax), pt(ay)),
-          worldPoint(pt(bx), pt(by))
+          worldPoint(pt(requireArrayValue(a, 0)), pt(requireArrayValue(a, 1))),
+          worldPoint(pt(requireArrayValue(b, 0)), pt(requireArrayValue(b, 1)))
         ];
       })
     });
@@ -515,11 +516,11 @@ function queryGaps(gaps: readonly Gap[], bounds: WorldBounds, radius: number, ax
     const positions = (g: Gap) => axis === "x"
       ? [g.startSide[0].x + g.length / 2, g.endBounds.maxX + g.length, g.startBounds.minX - g.length]
       : [g.startSide[0].y + g.length / 2, g.startBounds.minY - g.length, g.endBounds.maxY + g.length];
-    index = { axis, order: new Map(gaps.map((gap, i) => [gap, i])), queries: [0, 1, 2].map(i => createPointIndex(gaps.map(gap => ({ ...worldPoint(pt(positions(gap)[i]), pt(0)), gap })))) };
+    index = { axis, order: new Map(gaps.map((gap, i) => [gap, i])), queries: [0, 1, 2].map(i => createPointIndex(gaps.map(gap => ({ ...worldPoint(pt(requireArrayValue(positions(gap), i)), pt(0)), gap })))) };
     gapIndexes.set(gaps, index);
   }
   const coordinates = axis === "x" ? [(bounds.minX + bounds.maxX) / 2, bounds.minX, bounds.maxX] : [(bounds.minY + bounds.maxY) / 2, bounds.maxY, bounds.minY];
   const found = new Set<Gap>();
-  index.queries.forEach((query, i) => { for (const candidate of query(worldPoint(pt(coordinates[i]), pt(0)), radius + SNAP_EPSILON, -1)) found.add(candidate.gap); });
+  index.queries.forEach((query, i) => { for (const candidate of query(worldPoint(pt(requireArrayValue(coordinates, i)), pt(0)), radius + SNAP_EPSILON, -1)) found.add(candidate.gap); });
   return [...found].sort((a, b) => index.order.get(a)! - index.order.get(b)!);
 }

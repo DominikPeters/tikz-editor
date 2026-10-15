@@ -79,7 +79,9 @@ export function reconcileEditingIdentities(
   const newByText = groupByText(candidates.filter(candidate => !assigned.has(candidate.sourceId)));
   for (const [text, next] of newByText) {
     const before = oldByText.get(text);
-    if (before?.length === 1 && next.length === 1) assigned.set(next[0].sourceId, before[0]);
+    const previousEntry = before?.[0];
+    const nextEntry = next[0];
+    if (before?.length === 1 && next.length === 1 && previousEntry && nextEntry) assigned.set(nextEntry.sourceId, previousEntry);
   }
   let nextId = Math.max(previous?.nextId ?? 0, nextAvailableId);
   return {
@@ -146,12 +148,25 @@ export function updateDocumentIdentities(before: DocumentSession, after: Documen
   const history = [...after.history];
   const entry = history[after.historyIndex];
   if (entry?.sourceAfter === after.source && after.history !== before.history) {
-    history[after.historyIndex] = { ...entry,
-      identitiesBefore: entry.identitiesBefore ?? before.editingIdentities,
-      identitiesAfter: identities, identityRootsBefore: entry.identityRootsBefore ?? before.editingIdentityRoots, identityRootsAfter: roots };
+    const nextEntry = { ...entry, identityRootsAfter: roots };
+    const identitiesBefore = entry.identitiesBefore ?? before.editingIdentities;
+    const identityRootsBefore = entry.identityRootsBefore ?? before.editingIdentityRoots;
+    if (identitiesBefore === undefined) delete nextEntry.identitiesBefore;
+    else nextEntry.identitiesBefore = identitiesBefore;
+    if (identities === undefined) delete nextEntry.identitiesAfter;
+    else nextEntry.identitiesAfter = identities;
+    if (identityRootsBefore === undefined) delete nextEntry.identityRootsBefore;
+    else nextEntry.identityRootsBefore = identityRootsBefore;
+    history[after.historyIndex] = nextEntry;
   }
   const editingTargetsStale = after.lastEditPatchBaseRevision !== before.sourceRevision && before.editingIdentities ? true : after.editingTargetsStale;
-  return { ...after, editingTargetsStale, editingIdentityRoots: roots, editingIdentities: identities, pendingIdentityMoves: undefined, history: after.history === before.history ? after.history : history };
+  const next = { ...after, editingIdentityRoots: roots, history: after.history === before.history ? after.history : history };
+  if (editingTargetsStale === undefined) delete next.editingTargetsStale;
+  else next.editingTargetsStale = editingTargetsStale;
+  if (identities === undefined) delete next.editingIdentities;
+  else next.editingIdentities = identities;
+  delete next.pendingIdentityMoves;
+  return next;
 }
 
 function identityPatches(before: string, after: string): SourcePatch[] {

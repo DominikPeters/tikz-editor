@@ -66,7 +66,7 @@ function resolveTransformCoordinate(
 
 function normalizeOptionColor(valueRaw: string, style: ResolvedStyle, resolveColorAlias?: ColorAliasResolver): string {
   const currentColor = style.textColor ?? style.stroke ?? style.fill ?? "black";
-  return normalizeColor(valueRaw, { currentColor, resolveAlias: resolveColorAlias });
+  return normalizeColor(valueRaw, { currentColor, ...(resolveColorAlias === undefined ? {} : { resolveAlias: resolveColorAlias }) });
 }
 
 export function applyKvEntry(
@@ -92,8 +92,8 @@ export function applyKvEntry(
       transform,
       applyOptionEntry,
       axisState,
-      resolveCoordinate,
-      resolveColorAlias
+      ...(resolveCoordinate === undefined ? {} : { resolveCoordinate: resolveCoordinate }),
+      ...(resolveColorAlias === undefined ? {} : { resolveColorAlias: resolveColorAlias })
     });
   }
 

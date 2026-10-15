@@ -343,7 +343,7 @@ export function createDefaultBridge(): DesktopBridge {
       const update = await check();
       pendingUpdate = update;
       return update
-        ? { version: update.version, currentVersion: update.currentVersion, date: update.date, body: update.body }
+        ? { version: update.version, currentVersion: update.currentVersion, ...(update.date === undefined ? {} : { date: update.date }), ...(update.body === undefined ? {} : { body: update.body }) }
         : null;
     },
     installUpdate: async (onProgress) => {
@@ -353,7 +353,7 @@ export function createDefaultBridge(): DesktopBridge {
       await pendingUpdate.downloadAndInstall((event) => {
         switch (event.event) {
           case "Started":
-            onProgress({ type: "started", contentLength: event.data.contentLength });
+            onProgress({ type: "started", ...(event.data.contentLength === undefined ? {} : { contentLength: event.data.contentLength }) });
             break;
           case "Progress":
             onProgress({ type: "progress", chunkLength: event.data.chunkLength });

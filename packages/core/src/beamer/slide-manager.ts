@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import { analyzeBeamerSlideMove } from "./slide-move-analysis.js";
@@ -134,7 +135,7 @@ function pastedTikzLayers(source: string, origin: BeamerDocumentModel, frames: r
   }
   return { preamble: null, replacements: layers.flatMap(({ span }) => {
     const boundaries = beamerEnvironmentBoundariesIn(context, span);
-    const begin = boundaries[0], end = boundaries.at(-1)!.span;
+    const begin = requireArrayValue(boundaries, 0), end = boundaries.at(-1)!.span;
     const options = beamerOptionalArgumentAfter(context, begin.span.to, span.to);
     const own = options ? origin.source.slice(options.contentSpan.from, options.contentSpan.to).trim() : "";
     return [
@@ -169,7 +170,7 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
   const wanted = new Set(edit.kind === "insert" ? [] : edit.kind === "paste" ? origin.frames.map(frame => frame.id) : edit.frameIds);
   const frames = origin.frames.filter(frame => wanted.has(frame.id));
   if (edit.kind !== "insert" && (!frames.length || frames.length !== wanted.size || frames.some(frame => !beamerSlideIsEditable(origin.source, frame)))) return null;
-  if (edit.kind === "move" && frames.length === 1 && "frameId" in edit.destination && edit.destination.frameId === frames[0].id) return null;
+  if (edit.kind === "move" && frames.length === 1 && "frameId" in edit.destination && edit.destination.frameId === requireArrayValue(frames, 0).id) return null;
   const analysis = edit.kind === "move" ? analyzeBeamerSlideMove(source, edit) : null;
   if (analysis && (analysis.status === "blocked" || (analysis.status === "review" && !options.allowWarnings))) return null;
   const spans = frames.map(frame => beamerSlideSourceSpan(origin.source, frame));
@@ -200,7 +201,7 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
           const text = source.slice(dependency.span.from, dependency.span.to);
           payload += text + (text.endsWith("\n") ? "" : "\n");
         }
-        const span = spans[i];
+        const span = requireArrayValue(spans, i);
         let text = origin.source.slice(span.from, span.to);
         for (const replacement of rename.filter(item => span.from <= item.span.from && item.span.to <= span.to).sort((a, b) => b.span.from - a.span.from)) {
           text = text.slice(0, replacement.span.from - span.from) + replacement.text + text.slice(replacement.span.to - span.from);
@@ -243,6 +244,6 @@ export function editBeamerSlides(source: string, edit: BeamerSlideEdit, options:
     selectedFrameIds.push(id);
     if (edit.kind === "move" && item.oldId) frameIds[item.oldId] = id;
   }
-  if (edit.kind === "delete" && updated.frames.length) selectedFrameIds.push(updated.frames[Math.min(document.frames.indexOf(frames[0]), updated.frames.length - 1)].id);
+  if (edit.kind === "delete" && updated.frames.length) selectedFrameIds.push(requireArrayValue(updated.frames, Math.min(document.frames.indexOf(requireArrayValue(frames, 0)), updated.frames.length - 1)).id);
   return { source: next, patches, frameIds, selectedFrameIds };
 }

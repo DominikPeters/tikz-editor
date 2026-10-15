@@ -23,7 +23,7 @@ export const NAMED_COLORS = new Set([
   "brown",
 ]);
 
-export const COLOR_HEX: Record<string, string> = {
+const NAMED_COLOR_HEX = {
   black: "#000000",
   darkgray: "#404040",
   white: "#ffffff",
@@ -44,6 +44,8 @@ export const COLOR_HEX: Record<string, string> = {
   teal: "#008080",
   brown: "#bf8040"
 };
+
+export const COLOR_HEX: typeof NAMED_COLOR_HEX & Record<string, string> = NAMED_COLOR_HEX;
 
 export const NON_STYLE_OPTION_KEYS = new Set([
   "remember picture",

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { ArrowTipWriteContext } from "../property-write-builders.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { uniqueStrings } from "../statement-find.js";
@@ -188,7 +189,7 @@ function resolvePathMorphingDecorationSuboptionProperties(
       label: spec.label,
       value: resolvePathMorphingDecorationSuboptionValue(spec, decoration.params),
       step: spec.step,
-      unit: spec.unit,
+      ...(spec.unit === undefined ? {} : { unit: spec.unit }),
       clearKeys: uniqueStrings(spec.clearKeys),
       write: context.writeProperty(spec.writeKey)
     };
@@ -278,7 +279,7 @@ function parseDecorationNameFromOptionValue(valueRaw: string): string | null {
 function arrowPresetFromMarker(marker: ArrowMarker | null): ArrowTipPresetId {
   if (!marker || marker.tips.length === 0) return "none";
   if (marker.tips.length !== 1) return "custom";
-  return arrowPresetFromKind(marker.tips[0].kind);
+  return arrowPresetFromKind(requireArrayValue(marker.tips, 0).kind);
 }
 
 function arrowPresetFromKind(kind: ArrowTipKind): ArrowTipPresetId {

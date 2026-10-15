@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { currentFrame } from "../context.js";
 import { worldTransform } from "../../coords/transforms.js";
 import { pt } from "../../coords/scalars.js";
 import { PT_PER_CM } from "../../coords/source.js";
@@ -142,8 +144,8 @@ export function parseNodeDistance(raw: string, opts: { allowNegative?: boolean }
     .filter((part) => part.length > 0);
 
   if (parts.length === 2) {
-    const vertical = parseNodeDistanceValue(parts[0]);
-    const horizontal = parseNodeDistanceValue(parts[1]);
+    const vertical = parseNodeDistanceValue(requireArrayValue(parts, 0));
+    const horizontal = parseNodeDistanceValue(requireArrayValue(parts, 1));
     if (!vertical || !horizontal) {
       return null;
     }
@@ -173,7 +175,7 @@ export function resolveNodePositioningTarget(
   }
 
   const diagnostics: string[] = [];
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const activeTransform = frame?.transform ?? IDENTITY_MATRIX;
   let onGrid = frame?.onGrid ?? false;
   let nodeDistance = frame?.nodeDistance ?? {
@@ -306,7 +308,7 @@ export function resolveNodePositioningTarget(
     }
   }
 
-  return { anchorPoint, anchorOverride, diagnostics, relativePlacement: relativePlacementResult };
+  return { anchorPoint, ...(anchorOverride === undefined ? {} : { anchorOverride: anchorOverride }), diagnostics, ...(relativePlacementResult === undefined ? {} : { relativePlacement: relativePlacementResult }) };
 }
 
 function parseDirectionalOffset(direction: PositioningDirection, raw: string, transform: typeof IDENTITY_MATRIX): WorldVector | null {

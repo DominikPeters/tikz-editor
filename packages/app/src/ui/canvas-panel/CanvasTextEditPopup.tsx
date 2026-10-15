@@ -184,11 +184,11 @@ const GLYPH_CLASS_NAMES: Record<
   NonNullable<CanvasTextFormatToolbarItem["glyphClass"]>,
   string
 > = {
-  bold: css.textEditToolbarGlyphBold,
-  italic: css.textEditToolbarGlyphItalic,
-  underline: css.textEditToolbarGlyphUnderline,
-  mono: css.textEditToolbarGlyphMono,
-  alert: css.textEditToolbarGlyphAlert
+  bold: css.textEditToolbarGlyphBold ?? "",
+  italic: css.textEditToolbarGlyphItalic ?? "",
+  underline: css.textEditToolbarGlyphUnderline ?? "",
+  mono: css.textEditToolbarGlyphMono ?? "",
+  alert: css.textEditToolbarGlyphAlert ?? ""
 };
 
 /** Keeps pointer interactions from moving focus out of the session inputs. */

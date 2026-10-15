@@ -41,9 +41,9 @@ export function createPathToolDraft(
 ): PathToolDraft {
   return {
     startWorld: { ...startWorld },
-    startAnchor,
+    ...(startAnchor !== undefined ? { startAnchor: startAnchor } : {}),
     segments: [],
-    appendTarget
+    ...(appendTarget !== undefined ? { appendTarget: appendTarget } : {})
   };
 }
 
@@ -154,8 +154,8 @@ export function undoLastPathToolSegment(draft: PathToolDraft): PathToolDraft {
 export function generatePathToolSource(draft: PathToolDraft, options: { closed: boolean; strokeColor?: string }): string | null {
   return generateComplexPathSource(draft.startWorld, draft.segments, {
     closed: options.closed,
-    startAnchor: draft.startAnchor,
-    strokeColor: options.strokeColor
+    ...(draft.startAnchor !== undefined ? { startAnchor: draft.startAnchor } : {}),
+    ...(options.strokeColor !== undefined ? { strokeColor: options.strokeColor } : {})
   });
 }
 

@@ -32,7 +32,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const doc = getActiveDocument(next);
       const snapshot = claimCachedDeckSnapshot({ id: requestId, documentId: doc.id, source: doc.source,
         sourceRevision: doc.sourceRevision, documentFileRef: doc.fileRef, activeRootId: doc.activeRootId,
-        drawingLayerRootId: doc.drawingLayerRootId, includeDrawingLayer: true,
+        ...(doc.drawingLayerRootId !== undefined ? { drawingLayerRootId: doc.drawingLayerRootId } : {}), includeDrawingLayer: true,
         deckStep: next.deckStepByRootKey[deckStepRootKey(doc.id, doc.activeRootId)] ?? 1,
         schedulingTrigger: action.type === "SET_DECK_STEP" ? "overlay-step" : action.type === "SWITCH_DOCUMENT" ? "document-switch" : "root-switch" });
       if (snapshot) {

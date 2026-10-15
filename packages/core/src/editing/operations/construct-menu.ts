@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { CommandTable } from "../commands/table.js";
 import type { EditView } from "../position/view.js";
 import { presentSlots } from "../tree/navigate.js";
@@ -27,7 +29,7 @@ const UNWRAPPABLE = new Set<EditNode["kind"]>(["style", "overlay", "link", "grou
 
 /** `title`: the buffer is a title, one line, where no display can stand. */
 export function constructMenu(view: EditView, node: NodeId, commands: CommandTable, title = false): ConstructMenuEntry[] {
-  const record = view.tree.nodes[node];
+  const record = editNodeAt(view.tree.nodes, node);
   const variants = variantNames(view, record, commands)
     .filter((name) => name !== record.command)
     .map((name): ConstructMenuEntry => ({ id: `variant:${name}`, label: `\\${name}`, group: "variant" }));
@@ -48,7 +50,7 @@ export function constructMenu(view: EditView, node: NodeId, commands: CommandTab
 /** The edit a variant or Unwrap makes, or null (stale, or not offered for this construct). */
 export function constructMenuEdit(view: EditView, node: NodeId, id: string, commands: CommandTable, caret: number, title = false): EditOutcome | null {
   const { tree } = view;
-  const record = tree.nodes[node];
+  const record = editNodeAt(tree.nodes, node);
   const offered = constructMenu(view, node, commands, title).some((entry) => entry.id === id);
   if (!offered) {
     return null;
@@ -58,7 +60,7 @@ export function constructMenuEdit(view: EditView, node: NodeId, id: string, comm
     const content = tree.text.slice(slot.contentSpan.from, slot.contentSpan.to);
     // R5: a control word before the construct stays one (`\alpha\sqrt{x}` is `\alpha x`).
     const terminated = /\\[A-Za-z@]+$/u.test(tree.text.slice(0, record.span.from)) && /^[A-Za-z@]/u.test(content);
-    const word = tree.slots[record.parent!].mode === "math" ? " " : "{}";
+    const word = editSlotAt(tree.slots, record.parent!).mode === "math" ? " " : "{}";
     const terminator = terminated ? word : "";
     // And one the content ends with (`\textbf{\LaTeX}x`).
     const closing = /\\[A-Za-z@]+$/u.test(content) && /^[A-Za-z@]/u.test(tree.text.slice(record.span.to)) ? word : "";
@@ -95,7 +97,7 @@ function variantNames(view: EditView, record: EditNode, commands: CommandTable):
   if (command == null || !view.tree.text.startsWith(`\\${command}`, record.span.from)) {
     return [];
   }
-  const mode = record.parent == null ? "text" : view.tree.slots[record.parent].mode;
+  const mode = record.parent == null ? "text" : editSlotAt(view.tree.slots, record.parent).mode;
   for (const family of [FRACTIONS, MATH_ALPHABETS]) {
     if (family.includes(command)) {
       return family;
@@ -115,8 +117,8 @@ function variantNames(view: EditView, record: EditNode, commands: CommandTable):
  */
 function inFlowParagraph(view: EditView, record: EditNode): boolean {
   const { tree } = view;
-  const holder = record.parent == null ? null : tree.nodes[tree.slots[record.parent].node];
-  const flow = holder?.kind === "paragraph" && holder.parent != null ? tree.slots[holder.parent] : null;
+  const holder = record.parent == null ? null : editNodeAt(tree.nodes, editSlotAt(tree.slots, record.parent).node);
+  const flow = holder?.kind === "paragraph" && holder.parent != null ? editSlotAt(tree.slots, holder.parent) : null;
   return flow?.flow === true;
 }
 
@@ -136,5 +138,5 @@ function unwrapSlot(view: EditView, record: EditNode) {
   }
   const slots = presentSlots(view.tree, record.id);
   // With nothing to keep, deleting it is the way (an empty formula's `$$` would be display math).
-  return slots.length === 1 && view.tree.text.slice(slots[0].contentSpan.from, slots[0].contentSpan.to).trim() !== "" ? slots[0] : null;
+  return slots.length === 1 && view.tree.text.slice(requireArrayValue(slots, 0).contentSpan.from, requireArrayValue(slots, 0).contentSpan.to).trim() !== "" ? requireArrayValue(slots, 0) : null;
 }

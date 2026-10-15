@@ -200,8 +200,8 @@ export function InspectorPanel() {
     }
     if (!write.transformContext) {
       applySetProperty(write, formatNumberWriteValue(property, next), {
-        clearKeys: property.clearKeys,
-        recordInHistory: options.recordInHistory
+        ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys }),
+        ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
       });
       return;
     }
@@ -217,17 +217,18 @@ export function InspectorPanel() {
 
     const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
       actions.push({
         kind: "setProperty",
         elementId: write.elementId,
         level: write.level,
         key: mutation.key,
         value: mutation.value,
-        propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
         clearKeys: mutation.clearKeys
       });
     }
-    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", recordInHistory: options.recordInHistory, action: { kind: "setProperties", actions } });
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }
 
   function renderSingleTextField(
@@ -273,14 +274,15 @@ export function InspectorPanel() {
     const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const write of writableWrites) {
       if (!write.transformContext) {
+        const resolvedPropertyId = write.propertyId ?? propertyIdForWriteKey(write.key) ?? undefined;
         actions.push({
           kind: "setProperty",
           elementId: write.elementId,
           level: write.level,
           key: write.key,
           value: formatNumberWriteValue(property, next),
-          propertyId: write.propertyId ?? propertyIdForWriteKey(write.key) ?? undefined,
-          clearKeys: property.clearKeys
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
+          ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
         });
         continue;
       }
@@ -290,18 +292,19 @@ export function InspectorPanel() {
         next
       );
       for (const mutation of mutations) {
+        const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
         actions.push({
           kind: "setProperty",
           elementId: write.elementId,
           level: write.level,
           key: mutation.key,
           value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
           clearKeys: mutation.clearKeys
         });
       }
     }
-    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", recordInHistory: options.recordInHistory, action: { kind: "setProperties", actions } });
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }
 
   function formatNumberWriteValue(
@@ -582,17 +585,18 @@ export function InspectorPanel() {
       }
       const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
       for (const mutation of mutations) {
+        const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
         actions.push({
           kind: "setProperty",
           elementId: property.write.elementId,
           level: property.write.level,
           key: mutation.key,
           value: mutation.value,
-          propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+          ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
           clearKeys: mutation.clearKeys
         });
       }
-      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", recordInHistory: options.recordInHistory, action: { kind: "setProperties", actions } });
+      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
       return;
     }
     if (property.write.shadowContext) {
@@ -600,8 +604,8 @@ export function InspectorPanel() {
       return;
     }
     applySetProperty(property.write, `${formatNumber(value)}pt`, {
-      clearKeys: property.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys }),
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -631,17 +635,18 @@ export function InspectorPanel() {
     if (mutations.length === 0) return;
     const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
       actions.push({
         kind: "setProperty",
         elementId: write.elementId,
         level: write.level,
         key: mutation.key,
         value: mutation.value,
-        propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
         clearKeys: mutation.clearKeys
       });
     }
-    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", recordInHistory: options.recordInHistory, action: { kind: "setProperties", actions } });
+    if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
   }
 
   function applyShadowPresetValue(
@@ -656,13 +661,14 @@ export function InspectorPanel() {
     if (mutations.length === 0) return;
     const actions: Extract<EditAction, { kind: "setProperty" }>[] = [];
     for (const mutation of mutations) {
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
       actions.push({
         kind: "setProperty",
         elementId: write.elementId,
         level: write.level,
         key: mutation.key,
         value: mutation.value,
-        propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
         clearKeys: mutation.clearKeys
       });
     }
@@ -702,23 +708,24 @@ export function InspectorPanel() {
       for (const { write, context } of writableEntries) {
         const mutations = buildNodeMinimumDimensionSetPropertyMutations(context, editedKey, value);
         for (const mutation of mutations) {
+          const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
           actions.push({
             kind: "setProperty",
             elementId: write.elementId,
             level: write.level,
             key: mutation.key,
             value: mutation.value,
-            propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+            ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
             clearKeys: mutation.clearKeys
           });
         }
       }
-      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", recordInHistory: options.recordInHistory, action: { kind: "setProperties", actions } });
+      if (actions.length > 0) dispatch({ type: "APPLY_EDIT_ACTION", ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory }), action: { kind: "setProperties", actions } });
       return;
     }
     applySetPropertyMany(property.writes, `${formatNumber(value)}pt`, {
-      clearKeys: property.clearKeys,
-      recordInHistory: options.recordInHistory
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys }),
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -728,7 +735,7 @@ export function InspectorPanel() {
     options: NumberChangeOptions = {}
   ): void {
     applyFillPatternOptionValue(property.write, property.option, value, property.context, {
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -738,7 +745,7 @@ export function InspectorPanel() {
     options: NumberChangeOptions = {}
   ): void {
     applyFillPatternOptionValueMany(property.writes, property.option, value, property.contexts, {
-      recordInHistory: options.recordInHistory
+      ...(options.recordInHistory === undefined ? {} : { recordInHistory: options.recordInHistory })
     });
   }
 
@@ -785,7 +792,7 @@ export function InspectorPanel() {
     const trimmed = draftRaw.trim();
     if (trimmed.length === 0) {
       applySetProperty(property.write, "", {
-        clearKeys: property.clearKeys
+        ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
       });
       return;
     }
@@ -794,7 +801,7 @@ export function InspectorPanel() {
       return;
     }
     applySetProperty(property.write, `${formatNumber(next)}pt`, {
-      clearKeys: property.clearKeys
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
     });
   }
 
@@ -805,7 +812,7 @@ export function InspectorPanel() {
     const trimmed = draftRaw.trim();
     if (trimmed.length === 0) {
       applySetPropertyMany(property.writes, "", {
-        clearKeys: property.clearKeys
+        ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
       });
       return;
     }
@@ -814,7 +821,7 @@ export function InspectorPanel() {
       return;
     }
     applySetPropertyMany(property.writes, `${formatNumber(next)}pt`, {
-      clearKeys: property.clearKeys
+      ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
     });
   }
 
@@ -905,8 +912,8 @@ export function InspectorPanel() {
           writable,
           value: property.value,
           step: property.step,
-          min: property.min,
-          max: property.max,
+          ...(property.min === undefined ? {} : { min: property.min }),
+          ...(property.max === undefined ? {} : { max: property.max }),
           onPreview: (next) => { handleNumberChange(property, String(next), { recordInHistory: false }); },
           onCommit: (next) => { handleNumberChange(property, String(next)); }
         })}
@@ -977,8 +984,8 @@ export function InspectorPanel() {
           writable,
           value: property.value,
           step: property.step,
-          min: property.min,
-          max: property.max,
+          ...(property.min === undefined ? {} : { min: property.min }),
+          ...(property.max === undefined ? {} : { max: property.max }),
           onPreview: (next) => { handleMultiNumberChange(property, String(next), { recordInHistory: false }); },
           onCommit: (next) => { handleMultiNumberChange(property, String(next)); }
         })}
@@ -1168,7 +1175,7 @@ export function InspectorPanel() {
           const trimmed = raw.trim();
           if (trimmed.length === 0) {
             applySetProperty(property.write, "", {
-              clearKeys: property.clearKeys
+              ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
             });
             return;
           }
@@ -1177,7 +1184,7 @@ export function InspectorPanel() {
             return;
           }
           applySetProperty(property.write, `${formatNumber(next)}pt`, {
-            clearKeys: property.clearKeys
+            ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
           });
         }}
         onBlur={(event) => {
@@ -1234,7 +1241,7 @@ export function InspectorPanel() {
           const trimmed = raw.trim();
           if (trimmed.length === 0) {
             applySetPropertyMany(property.writes, "", {
-              clearKeys: property.clearKeys
+              ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
             });
             return;
           }
@@ -1243,7 +1250,7 @@ export function InspectorPanel() {
             return;
           }
           applySetPropertyMany(property.writes, `${formatNumber(next)}pt`, {
-            clearKeys: property.clearKeys
+            ...(property.clearKeys === undefined ? {} : { clearKeys: property.clearKeys })
           });
         }}
         onBlur={(event) => {
@@ -1776,7 +1783,7 @@ export function InspectorPanel() {
     return (
       <>
         <SidePanel.Header>tikzpicture</SidePanel.Header>
-        <SidePanel.Content className={css.content}>
+        <SidePanel.Content className={css.content ?? ""}>
           <div className={css.elementInfo}>
             <SidePanel.Section>
               <SidePanel.SectionHeader>
@@ -1806,7 +1813,7 @@ export function InspectorPanel() {
     return (
       <>
         <SidePanel.Header>{toolLabel} Tool</SidePanel.Header>
-        <SidePanel.Content className={css.content}>
+        <SidePanel.Content className={css.content ?? ""}>
           <div className={css.elementInfo}>
             {hint ? (
               <div className={css.toolHint}>{hint}</div>
@@ -1944,7 +1951,7 @@ export function InspectorPanel() {
   }
 
   return (
-    <SidePanel className={css.panel}>
+    <SidePanel className={css.panel ?? ""}>
       {isCreationToolMode(toolMode) ? (
         renderToolOptionsPanel()
       ) : selectedSourceIds.length === 0 ? (
@@ -1957,7 +1964,7 @@ export function InspectorPanel() {
         ) : (
           <>
             <SidePanel.Header>{renderedDescriptor.elementKind}</SidePanel.Header>
-            <SidePanel.Content className={css.content}>
+            <SidePanel.Content className={css.content ?? ""}>
               <div className={css.elementInfo}>
                 {renderedDescriptor.readOnlyReason ? (
                   <div className={css.globalNote}>{renderedDescriptor.readOnlyReason}</div>
@@ -1994,7 +2001,7 @@ export function InspectorPanel() {
           <SidePanel.Header>
             {renderedMultiModel?.selectionCount ?? selectedSourceIds.length} selected
           </SidePanel.Header>
-          <SidePanel.Content className={css.content}>
+          <SidePanel.Content className={css.content ?? ""}>
             <div className={css.elementInfo}>
               {renderMultiArrangeQuickActions()}
               {!renderedMultiModel || renderedMultiModel.sections.length === 0 ? (

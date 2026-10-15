@@ -213,7 +213,7 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
     <div className={css.main} style={mainStyle}>
       <div className={css.previews} data-vertical={vertical || undefined} style={previewsStyle}>
         <section className={css.preview}><h2>Current <span>{current ? `Slide ${current.cursor.frame + 1} / ${snapshot?.frames.length ?? 0} · Build ${current.cursor.step} / ${frame?.steps ?? 1}${current.cursor.continuation > 1 ? ` · Page ${current.cursor.continuation}` : ""}` : ""}</span></h2>
-          <Slide svg={current?.svg ?? null} cursor={current?.cursor} label="Current slide" />
+          <Slide svg={current?.svg ?? null} {...(current?.cursor === undefined ? {} : { cursor: current.cursor })} label="Current slide" />
         </section>
         <Splitter label="Resize current and next previews" orientation={vertical ? "horizontal" : "vertical"} value={arrangement.previewRatio} onChange={previewRatio => { setArrangement(value => ({ ...value, previewRatio })); }} />
         <section className={css.preview}><h2>Next</h2>{snapshot?.next ? <Slide svg={snapshot.next.svg} cursor={snapshot.next.cursor} label="Next build or page" /> : <div className={css.empty} />}</section>
@@ -229,8 +229,8 @@ export function PresentationWindow({ role, sessionId }: { role: PresentationRole
       <Modal.SecondaryButton onClick={() => { send({ type: "next" }); }} title="Next build/page (Right, Space, or Page Down)">Next</Modal.SecondaryButton>
       <Modal.SecondaryButton onClick={() => { send({ type: "next-frame" }); }} title="Next slide (Shift+Right)">Next Slide</Modal.SecondaryButton>
       <span className={css.spacer} />
-      <Modal.SecondaryButton className={css.blankButton} aria-pressed={snapshot?.blank === "black"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "black" ? "none" : "black" }); }} title="Black screen (B)">Black</Modal.SecondaryButton>
-      <Modal.SecondaryButton className={css.blankButton} aria-pressed={snapshot?.blank === "white"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "white" ? "none" : "white" }); }} title="White screen (W)">White</Modal.SecondaryButton>
+      <Modal.SecondaryButton className={css.blankButton ?? ""} aria-pressed={snapshot?.blank === "black"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "black" ? "none" : "black" }); }} title="Black screen (B)">Black</Modal.SecondaryButton>
+      <Modal.SecondaryButton className={css.blankButton ?? ""} aria-pressed={snapshot?.blank === "white"} onClick={() => { send({ type: "blank", value: snapshot?.blank === "white" ? "none" : "white" }); }} title="White screen (W)">White</Modal.SecondaryButton>
       {getActiveEditorPlatform().id.startsWith("desktop") ? <Modal.SecondaryButton onClick={() => { send({ type: "swap-displays" }); }}>Swap Displays</Modal.SecondaryButton> : null}
       <select className={settingsCss.select} aria-label="Presenter layout" value={arrangement.preset} onChange={event => { const preset = event.target.value as Arrangement["preset"]; setArrangement({ preset, notesRatio: preset === "notes" ? 52 : 34, previewRatio: preset === "compact" ? 75 : 60 }); }}>
         <option value="balanced">Balanced</option><option value="notes">Notes</option><option value="compact">Compact</option>

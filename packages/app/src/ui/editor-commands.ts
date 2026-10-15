@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { EditAction } from "@tikz-editor/core/edit/actions";
 import { applyEditAction, type ReorderDirection } from "@tikz-editor/core/edit/actions";
 import { getEditActionAvailability } from "@tikz-editor/core/edit/action-availability";
@@ -29,7 +30,7 @@ import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { EditorAction, EditorState } from "../store/types";
 import { beginDocumentEdit, canContinueDocumentEdit, type DocumentEditSession } from "../edit-session";
 import { executeDocumentEdit, nestedEditBaseSource, resolveNestedEditSpan, type EditExecutionContext } from "../edit-execution";
-import { buildEditParseOptions } from "../edit-parse-options";
+import { buildEditParseOptions, type BuildEditParseOptionsInput } from "../edit-parse-options";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
 import { useEditorStore } from "../store/store";
 import {
@@ -107,10 +108,17 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
   const editContext: EditExecutionContext = {
     documentId: session.documentId, source: session.latestSource, sourceRevision: session.latestRevision,
     activeRootId: session.activeRootId, snapshot: document.snapshot,
-    drawingLayerRootId: document.drawingLayerRootId
+    ...(document.drawingLayerRootId === undefined ? {} : { drawingLayerRootId: document.drawingLayerRootId })
   };
   const nestedSpan = resolveNestedEditSpan(editContext);
   const parseSource = nestedSpan ? maskTikzPictureSource(nestedEditBaseSource(context.source, document.snapshot), nestedSpan) : context.source;
+  const parseRootId = nestedSpan ? document.snapshot.parseResult?.activeFigureId : session.activeRootId;
+  const parseInput: BuildEditParseOptionsInput & { analysis: "none" } = {
+    ...editContext, source: parseSource, analysis: "none",
+    overrides: { ...(context.parseOptions?.indentSize === undefined ? {} : { indentSize: context.parseOptions.indentSize }) }
+  };
+  if (parseRootId === undefined) delete parseInput.activeRootId;
+  else parseInput.activeRootId = parseRootId;
   return {
     ...context,
     getState,
@@ -118,11 +126,7 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
     clipboardEditContext: editContext,
     parseSource,
     activeRootId: session.activeRootId,
-    parseOptions: buildEditParseOptions({
-      ...editContext, source: parseSource,
-      activeRootId: nestedSpan ? document.snapshot.parseResult?.activeFigureId : session.activeRootId,
-      analysis: "none", overrides: { indentSize: context.parseOptions?.indentSize }
-    }),
+    parseOptions: buildEditParseOptions(parseInput),
     dispatch: action => {
       if (!canContinueDocumentEdit(session, getState())) return;
       context.dispatch(action.type === "APPLY_EDIT_ACTION" ? {
@@ -226,17 +230,17 @@ export function deleteSelection(context: SelectionCommandContext): boolean {
       type: "APPLY_EDIT_ACTION",
       action: {
         kind: "removeTreeChild",
-        childSourceId: ids[0]
+        childSourceId: requireArrayValue(ids, 0)
       }
     });
     return true;
   }
-  if (ids.length === 1 && parseEditableTargetId(ids[0]).kind === "node-adornment") {
+  if (ids.length === 1 && parseEditableTargetId(requireArrayValue(ids, 0)).kind === "node-adornment") {
     context.dispatch({
       type: "APPLY_EDIT_ACTION",
       action: {
         kind: "deleteAdornment",
-        targetId: ids[0]
+        targetId: requireArrayValue(ids, 0)
       }
     });
     return true;
@@ -246,7 +250,7 @@ export function deleteSelection(context: SelectionCommandContext): boolean {
     action: ids.length === 1
       ? {
           kind: "deleteElement",
-          elementId: ids[0]
+          elementId: requireArrayValue(ids, 0)
         }
       : {
           kind: "deleteElements",
@@ -342,15 +346,16 @@ function runPasteFromPayload(context: PasteCommandContext, payload: TikzClipboar
   const action = {
     kind: "pasteStatements" as const,
     snippets: [...payload.snippets],
-    anchorElementId: anchor?.id,
+    ...(anchor === null || anchor === undefined ? {} : { anchorElementId: anchor.id }),
     delta
   };
+  const activeFigureId = resolvedContextActiveFigureId(context);
   const precomputedResult = context.clipboardEditContext
-    ? executeDocumentEdit(context.clipboardEditContext, action, { parseOptions: { indentSize: context.parseOptions?.indentSize } })
+    ? executeDocumentEdit(context.clipboardEditContext, action, { parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions?.indentSize }) } })
     : applyEditAction(context.source, context.editHandles as EditHandle[], action, {
     parseOptions: {
-      activeFigureId: resolvedContextActiveFigureId(context),
-      sourceFingerprint: context.parseOptions?.sourceFingerprint
+      ...(activeFigureId === undefined ? {} : { activeFigureId }),
+      ...((context.parseOptions?.sourceFingerprint) === undefined ? {} : { sourceFingerprint: context.parseOptions?.sourceFingerprint })
     }
   });
   if (precomputedResult.kind !== "success" && precomputedResult.kind !== "partial") {
@@ -408,12 +413,12 @@ export function duplicateSelection(context: SelectionCommandContext): boolean {
   }
 
   const ids = [...context.selectedElementIds];
-  if (ids.length === 1 && parseEditableTargetId(ids[0]).kind === "node-adornment") {
+  if (ids.length === 1 && parseEditableTargetId(requireArrayValue(ids, 0)).kind === "node-adornment") {
     context.dispatch({
       type: "APPLY_EDIT_ACTION",
       action: {
         kind: "duplicateAdornment",
-        targetId: ids[0]
+        targetId: requireArrayValue(ids, 0)
       }
     });
     return true;
@@ -474,7 +479,7 @@ export function groupSelection(context: SelectionCommandContext): boolean {
     kind: "groupElements" as const,
     elementIds: [...context.selectedElementIds]
   };
-  context.dispatch({ type: "APPLY_EDIT_ACTION", action, parseOptions: { indentSize: context.parseOptions?.indentSize } });
+  context.dispatch({ type: "APPLY_EDIT_ACTION", action, parseOptions: { ...((context.parseOptions?.indentSize) === undefined ? {} : { indentSize: context.parseOptions?.indentSize }) } });
   return true;
 }
 
@@ -1008,7 +1013,7 @@ export function splitSelectedPath(context: SelectionCommandContext): boolean {
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "splitPath",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       handleId: context.activeHandleId
     }
   });
@@ -1024,7 +1029,7 @@ export function joinSelectedPaths(context: SelectionCommandContext): boolean {
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "joinPaths",
-      elementIds: [ids[0], ids[1]]
+      elementIds: [requireArrayValue(ids, 0), requireArrayValue(ids, 1)]
     }
   });
   return true;
@@ -1039,7 +1044,7 @@ export function reverseSelectedPath(context: SelectionCommandContext): boolean {
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "reversePath",
-      elementId: ids[0]
+      elementId: requireArrayValue(ids, 0)
     }
   });
   return true;
@@ -1055,7 +1060,7 @@ export function setSelectedPathClosed(context: SelectionCommandContext, closed: 
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "toggleClosedPath",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       closed
     }
   });
@@ -1071,7 +1076,7 @@ export function deleteSelectedPathPoint(context: SelectionCommandContext): boole
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "deletePathPoint",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       handleId: context.activeHandleId
     }
   });
@@ -1088,7 +1093,7 @@ export function setSelectedPathPointKind(context: SelectionCommandContext, point
     type: "APPLY_EDIT_ACTION",
     action: {
       kind: "setPathPointKind",
-      elementId: ids[0],
+      elementId: requireArrayValue(ids, 0),
       handleId: context.activeHandleId,
       pointKind
     }
@@ -1508,9 +1513,10 @@ function availabilityFor(context: SelectionCommandContext) {
   if (cached) {
     return cached;
   }
+  const activeFigureId = resolvedContextActiveFigureId(context);
   const availability = getEditActionAvailability({
     source: context.source,
-    activeFigureId: resolvedContextActiveFigureId(context),
+    ...(activeFigureId === undefined ? {} : { activeFigureId }),
     parseOptions: parseOptionsForContext(context),
     snapshotSource: context.snapshotSource,
     selectedSourceIds: [...context.selectedElementIds],
@@ -1586,13 +1592,14 @@ function transformSelection(
       resolveNextValue(transformContext.values, key)
     );
     for (const mutation of mutations) {
+      const resolvedPropertyId = propertyIdForWriteKey(mutation.key) ?? undefined;
       actions.push({
         kind: "setProperty",
         elementId: targetId,
         level: "command",
         key: mutation.key,
         value: mutation.value,
-        propertyId: propertyIdForWriteKey(mutation.key) ?? undefined,
+        ...(resolvedPropertyId == null ? {} : { propertyId: resolvedPropertyId }),
         clearKeys: mutation.clearKeys
       });
     }
@@ -1683,12 +1690,13 @@ function resolvedContextActiveFigureId(context: SelectionCommandContext): string
 
 function parseOptionsForContext(context: SelectionCommandContext): EditParseOptions {
   const options = context.parseOptions;
+  const activeFigureId = resolvedContextActiveFigureId(context);
   // The analysis stays lazy (see buildEditParseOptions): reading it here would
   // analyse the document whenever availability is computed.
   return Object.defineProperties({
-    activeFigureId: resolvedContextActiveFigureId(context),
-    indentSize: options?.indentSize,
-    sourceFingerprint: options?.sourceFingerprint
+    ...(activeFigureId === undefined ? {} : { activeFigureId }),
+    ...(options?.indentSize === undefined ? {} : { indentSize: options.indentSize }),
+    ...(options?.sourceFingerprint === undefined ? {} : { sourceFingerprint: options.sourceFingerprint })
   }, {
     analysisView: { enumerable: true, get: () => options?.analysisView },
     analysisSession: { enumerable: true, get: () => options?.analysisSession }

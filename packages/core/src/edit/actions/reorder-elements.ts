@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { Span } from "../../ast/types.js";
 import type { SourcePatch } from "../types.js";
@@ -133,7 +134,7 @@ export function applyReorderElementsAction(
     newSource: currentSource,
     identityMoves: initialSnapshot.all.map(ref => ({ oldSpan: ref.span, newSpan: identitySpans.get(ref.id)! })),
     patches,
-    selectedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
+    ...(selectedSourceIds.length > 0 ? { selectedSourceIds } : {}),
     changedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : normalizedIds
   };
 }
@@ -151,18 +152,18 @@ export function buildParentReorderReplacement(
   const refsById = new Map(sortedRefs.map((ref) => [ref.id, ref] as const));
 
   const replacementSpan: Span = {
-    from: sortedRefs[0].span.from,
-    to: sortedRefs[sortedRefs.length - 1].span.to
+    from: requireArrayValue(sortedRefs, 0).span.from,
+    to: requireArrayValue(sortedRefs, sortedRefs.length - 1).span.to
   };
 
-  const indent = lineIndentAtOffset(source, sortedRefs[0].span.from);
+  const indent = lineIndentAtOffset(source, requireArrayValue(sortedRefs, 0).span.from);
   const separator = resolveReorderStatementSeparator(source, sortedRefs, indent);
 
   let text = "";
   let cursor = replacementSpan.from;
   const newSpansById = new Map<string, Span>();
-  for (let index = 0; index < orderedIds.length; index += 1) {
-    const id = orderedIds[index];
+  for (const [index, id] of orderedIds.entries()) {
+
     const ref = refsById.get(id);
     if (!ref) {
       continue;
@@ -197,8 +198,8 @@ function resolveReorderStatementSeparator(
 ): string {
   const newline = detectPreferredNewline(source, sortedRefs[0]?.span.from ?? 0);
   for (let index = 0; index < sortedRefs.length - 1; index += 1) {
-    const left = sortedRefs[index];
-    const right = sortedRefs[index + 1];
+    const left = requireArrayValue(sortedRefs, index);
+    const right = requireArrayValue(sortedRefs, index + 1);
     const gap = source.slice(left.span.to, right.span.from);
     if (gap.includes("\n")) {
       return `${gap.includes("\r\n") ? "\r\n" : "\n"}${indent}`;
@@ -242,19 +243,19 @@ function reorderStatementIds(
   const reordered = [...ids];
   if (direction === "sendBackward") {
     for (let index = 1; index < reordered.length; index += 1) {
-      if (!selected.has(reordered[index]) || selected.has(reordered[index - 1])) {
+      if (!selected.has(requireArrayValue(reordered, index)) || selected.has(requireArrayValue(reordered, index - 1))) {
         continue;
       }
-      [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
+      [reordered[index - 1], reordered[index]] = [requireArrayValue(reordered, index), requireArrayValue(reordered, index - 1)];
     }
     return reordered;
   }
 
   for (let index = reordered.length - 2; index >= 0; index -= 1) {
-    if (!selected.has(reordered[index]) || selected.has(reordered[index + 1])) {
+    if (!selected.has(requireArrayValue(reordered, index)) || selected.has(requireArrayValue(reordered, index + 1))) {
       continue;
     }
-    [reordered[index], reordered[index + 1]] = [reordered[index + 1], reordered[index]];
+    [reordered[index], reordered[index + 1]] = [requireArrayValue(reordered, index + 1), requireArrayValue(reordered, index)];
   }
   return reordered;
 }

@@ -276,7 +276,7 @@ export function buildParagraphLayoutReport({
     sourceStart: layoutSourceOffset(run.sourceStart),
     sourceEnd: layoutSourceOffset(run.sourceEnd),
     width: texLength(runWidths.get(run.runIndex) ?? 0),
-    text: run.kind === 'text' || run.kind === 'space' ? run.text : undefined,
+    ...(run.kind === 'text' || run.kind === 'space' ? { text: run.text } : {}),
   }));
 
   const lineReports: LineReport<"layout">[] = lines.map((line) => {
@@ -344,7 +344,7 @@ export function buildParagraphLayoutReport({
       segments.push({
         runIndex: run.runIndex,
         kind: run.kind,
-        text: run.kind === 'space' ? run.text : undefined,
+        ...(run.kind === 'space' ? { text: run.text } : {}),
         x,
         width: segmentWidth,
         caretStops:
@@ -401,12 +401,10 @@ export function buildParagraphLayoutReport({
             runIndex: resolvedBreak.runIndex,
             sourceOffset: layoutSourceOffset(resolvedBreak.sourceOffset),
             visibleHyphen: resolvedBreak.visibleHyphen,
-            lineLeading: resolvedBreak.lineLeading,
-            hyphenSource: resolvedBreak.hyphenSource,
-            splitOffset: resolvedBreak.splitOffset,
-            width: resolvedBreak.width === undefined
-              ? undefined
-              : texLength(resolvedBreak.width),
+            ...(resolvedBreak.lineLeading !== undefined ? { lineLeading: resolvedBreak.lineLeading } : {}),
+            ...(resolvedBreak.hyphenSource !== undefined ? { hyphenSource: resolvedBreak.hyphenSource } : {}),
+            ...(resolvedBreak.splitOffset !== undefined ? { splitOffset: resolvedBreak.splitOffset } : {}),
+            ...(!(resolvedBreak.width === undefined) ? { width: texLength(resolvedBreak.width) } : {}),
           }
         : null,
     };

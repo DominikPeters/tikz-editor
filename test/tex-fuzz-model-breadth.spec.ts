@@ -268,4 +268,12 @@ describe("TeX fuzz model and printer breadth", () => {
       children: [],
     }])).toThrow(/alignment without an explicit width/);
   });
+
+  it("rejects missing entries in random choice tables", () => {
+    const random = new TexFuzzRandom(1);
+    const missing: string[] = [];
+    missing.length = 1;
+    expect(() => random.pick("missing", missing)).toThrow(/Missing choice value/);
+    expect(() => random.weightedPick("missing", missing, [1])).toThrow(/Missing weighted choice value/);
+  });
 });

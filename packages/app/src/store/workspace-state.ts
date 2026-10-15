@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { getActiveDocument } from "./document-sessions";
 import type {
   CanvasTransform,
@@ -103,7 +104,7 @@ export function createDocumentSession(params: {
     source: params.source,
     sourceRevision: 0,
     activeRootId: layer ? formatDocumentRootId({ kind: "beamer-frame", index: layer.frameIndex }) : params.activeRootId ?? null,
-    drawingLayerRootId: layer ? params.activeRootId : null,
+    drawingLayerRootId: layer ? params.activeRootId ?? null : null,
     hasInitializedRootSelection: false,
     snapshot: makeEmptySnapshot(params.source),
     pendingRequestId: null,
@@ -181,7 +182,7 @@ export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePer
   if (tabOrder.length === 0) {
     return createInitialWorkspaceState();
   }
-  const activeDocumentId = hasDocument(docs, seed.activeDocumentId) ? seed.activeDocumentId : tabOrder[0];
+  const activeDocumentId = hasDocument(docs, seed.activeDocumentId) ? seed.activeDocumentId : requireArrayValue(tabOrder, 0);
   const seededRecents = [...new Set(seed.recentDocumentIds.filter((id) => hasDocument(docs, id)))];
   const normalizedRecents = seededRecents.length > 0 ? seededRecents : [activeDocumentId];
   return {

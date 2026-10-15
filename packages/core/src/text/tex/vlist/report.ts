@@ -145,7 +145,7 @@ export function layoutTexVListFromBrokenParagraphs(
 ): TexVListBrokenParagraphReportAssemblyResult {
   const combined = combineTexBrokenLayoutParagraphs({
     entries: options.entries,
-    initialErrors: options.initialErrors,
+    ...(options.initialErrors !== undefined ? { initialErrors: options.initialErrors } : {}),
   });
   if ((combined.runs.length === 0 || combined.lines.length === 0) &&
       (document.items.length === 0 || texVListParagraphEntries(document.items).length > 0)) {
@@ -158,17 +158,17 @@ export function layoutTexVListFromBrokenParagraphs(
     status: "laid-out",
     ...layoutTexVListFromCombinedParagraphReport(document, {
       width: options.width,
-      height: options.height,
-      verticalAlign: options.verticalAlign,
+      ...(options.height !== undefined ? { height: options.height } : {}),
+      ...(options.verticalAlign !== undefined ? { verticalAlign: options.verticalAlign } : {}),
       paragraphId: options.paragraphId,
       alignment: options.alignment,
       layoutMode: options.layoutMode,
       font: options.font,
       metricProvider: options.metricProvider,
       combined,
-      baselineSkip: options.baselineSkip,
-      initialPreviousDepth: options.initialPreviousDepth,
-      displayMathProfile: options.displayMathProfile,
+      ...(options.baselineSkip !== undefined ? { baselineSkip: options.baselineSkip } : {}),
+      ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
+      ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
     }),
     combined,
   };
@@ -206,15 +206,16 @@ export function layoutTexVListFromCombinedParagraphReport(
     baselineSkips: new Map(texVListParagraphEntries(document.items).flatMap(({ item }) =>
       item.paragraph.baselineSkip != null ? [[item.blockIndex, item.paragraph.baselineSkip] as const] : [])),
   });
+  const firstLineIndex = horizontalLayout.report.lines[0]?.lineIndex;
   const layout = layoutTexVListFromHorizontalParagraphs(document, {
     width: options.width,
-    height: options.height,
-    verticalAlign: options.verticalAlign,
+    ...(options.height !== undefined ? { height: options.height } : {}),
+    ...(options.verticalAlign !== undefined ? { verticalAlign: options.verticalAlign } : {}),
     paragraphAlignment: options.alignment,
     lineHeight,
-    initialPreviousDepth: options.initialPreviousDepth,
-    displayMathProfile: options.displayMathProfile,
-    firstLineIndex: horizontalLayout.report.lines[0]?.lineIndex,
+    ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
+    ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
+    ...(firstLineIndex !== undefined ? { firstLineIndex } : {}),
     firstLineAscent: texLatexNormalFirstLineAscent(
       builtReport.report,
       options.font
@@ -288,8 +289,8 @@ export function layoutTexVListFromMeasuredParagraphs(
     paragraphMeasurements,
     {
       lineHeight: options.lineHeight,
-      initialPreviousDepth: options.initialPreviousDepth,
-      displayMathProfile: options.displayMathProfile,
+      ...(options.initialPreviousDepth !== undefined ? { initialPreviousDepth: options.initialPreviousDepth } : {}),
+      ...(options.displayMathProfile !== undefined ? { displayMathProfile: options.displayMathProfile } : {}),
     }
   );
   const measurer = createMeasuredParagraphVListMeasurer(paragraphMeasurements);

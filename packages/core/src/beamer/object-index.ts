@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { buildBeamerCaretStopDomain } from "./caret-stops.js";
 import type {
@@ -164,7 +165,7 @@ export function buildBeamerObjectIndex(args: {
       const listId = `${paragraph.paragraphId}:list:${list.beginSpan.from}`;
       const itemNodes: MutableNode[] = [];
       for (let index = 0; index < list.items.length; index += 1) {
-        const item = list.items[index];
+        const item = requireArrayValue(list.items, index);
         const span: Span = {
           from: item.commandSpan.from,
           to: item.contentSpan.to,

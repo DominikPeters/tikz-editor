@@ -103,6 +103,26 @@ function applySourcePatches(
 // ── CODE_EDITED ────────────────────────────────────────────────────────────────
 
 describe("editorReducer – CODE_EDITED", () => {
+  it("clears stale identity moves when a transient source update has no moves", () => {
+    const initial = makeInitialState();
+    const doc = getActiveDocument(initial);
+    const state: EditorState = {
+      ...initial,
+      documents: {
+        ...initial.documents,
+        [doc.id]: {
+          ...doc,
+          pendingIdentityMoves: [{ oldSpan: { from: 0, to: 1 }, newSpan: { from: 1, to: 2 } }]
+        }
+      }
+    };
+
+    const after = editorReducer(state, { type: "SET_SOURCE_TRANSIENT", source: `${doc.source}\n` });
+
+    expect(getActiveDocument(after)).not.toHaveProperty("pendingIdentityMoves");
+    expect(getActiveDocument(state)).toHaveProperty("pendingIdentityMoves");
+  });
+
   it("updates source when it changes", () => {
     const state = applyActions([{ type: "CODE_EDITED", source: "new source" }]);
     expect(state.source).toBe("new source");

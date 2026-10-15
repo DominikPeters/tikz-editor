@@ -331,7 +331,7 @@ export function renderMultiInspectorProperty(property: MultiInspectorProperty, a
               options={property.options}
               namedColorSwatches={projectNamedColorSwatches}
               disabled={!writable}
-              triggerLabelClassName={valueClassName}
+              triggerLabelClassName={valueClassName ?? ""}
               onChange={(nextValue) => {
                 const firstWrite = property.writes[0];
                 if (!firstWrite) {

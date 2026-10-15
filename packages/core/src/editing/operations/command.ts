@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import type { CommandSchema, CommandTable } from "../commands/table.js";
 import { capabilityChain, decideOwner } from "../ownership/keys.js";
 import type { InteractionState } from "../input/interaction.js";
@@ -49,7 +51,7 @@ export function commitCommand(
   held: Span | null
 ): CommandCommit {
   const { tree } = view;
-  const mode = tree.slots[caret.slot].mode;
+  const mode = editSlotAt(tree.slots, caret.slot).mode;
   const schema = table.command(name, mode === "verbatim" ? "text" : mode);
   const mandatory = schema?.args.filter((arg) => arg.kind === "mandatory") ?? [];
   const optionalFirst = schema?.args.find((arg) => arg.kind !== "overlay")?.kind === "optional";
@@ -58,7 +60,7 @@ export function commitCommand(
   if (key === "overlay" && schema?.args.some((arg) => arg.kind === "overlay")) {
     // The specification goes right after the name; a held selection into the content, as for ␣.
     const rest = held && mandatory.length > 0 ? commitCommand(view, table, caret, at, name, "structure", state, held).outcome : null;
-    const after = rest?.kind === "patch" && rest.patches.length === 1 ? rest.patches[0].insert.slice(command.length) : "{}".repeat(mandatory.length);
+    const after = rest?.kind === "patch" && rest.patches.length === 1 ? requireArrayValue(rest.patches, 0).insert.slice(command.length) : "{}".repeat(mandatory.length);
     const range = held ?? { from: at, to: at };
     return { outcome: edit(range, `${command}<>${after}`, range.from + command.length + 1) };
   }
@@ -111,12 +113,12 @@ export function commitCommand(
     const inside = span.from + (bare ? 0 : 1) + command.length;
     return {
       outcome: { kind: "patch", patches, caret: mandatory.length === 0 ? span.from + insert.length : inside, run: null },
-      pending: optionalFirst ? inside : undefined,
+      ...(optionalFirst ? { pending: inside } : {}),
     };
   }
   return {
     outcome: edit(range, text, range.from + text.length),
-    pending: optionalFirst && key === "typed" ? range.from + command.length : undefined,
+    ...(optionalFirst && key === "typed" ? { pending: range.from + command.length } : {}),
   };
 }
 
@@ -143,7 +145,7 @@ export function commitAcrossModes(
   delimiter = "("
 ): CommandCommit | "refused" | null {
   const { tree } = view;
-  const mode = tree.slots[caret.slot].mode;
+  const mode = editSlotAt(tree.slots, caret.slot).mode;
   if (mode === "verbatim" || table.command(name, mode)) {
     return null;
   }
@@ -195,11 +197,11 @@ export function commitAcrossModes(
  */
 export function lineEndable(view: EditView, caret: Position, at: number): boolean {
   const { tree } = view;
-  if (tree.slots[caret.slot].role === "cell") {
+  if (editSlotAt(tree.slots, caret.slot).role === "cell") {
     return true;
   }
   const decision = decideOwner(capabilityChain(tree, "line-break", caret.slot));
-  return decision.kind !== "stop" && tree.nodes[decision.node].kind !== "row" && inkOnLine(view, caret.slot, at);
+  return decision.kind !== "stop" && editNodeAt(tree.nodes, decision.node).kind !== "row" && inkOnLine(view, caret.slot, at);
 }
 
 /** Text commands that survive bold math (`\bm`, `\boldsymbol`): LR boxes, and colour without beamer's overlays. */
@@ -208,8 +210,8 @@ const BOLD_MATH_TEXT = new Set(["text", "mbox", "textcolor", "colorbox", "underl
 /** Whether a slot is inside `\bm{…}` or `\boldsymbol{…}`. */
 export function inBoldMath(view: EditView, slot: SlotId): boolean {
   const { tree } = view;
-  for (let current: SlotId | null = slot; current != null; current = tree.nodes[tree.slots[current].node].parent) {
-    const command = tree.nodes[tree.slots[current].node].command;
+  for (let current: SlotId | null = slot; current != null; current = editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).parent) {
+    const command = editNodeAt(tree.nodes, editSlotAt(tree.slots, current).node).command;
     if (command === "bm" || command === "boldsymbol") {
       return true;
     }
@@ -252,7 +254,7 @@ export function isControlSymbol(char: string, mode: EditMode): boolean {
 /** `\\`, `\%`, `\{`: a control symbol, committed as soon as its character is typed. */
 export function commitControlSymbol(view: EditView, caret: Position, at: number, char: string, held: Span | null): CommandCommit | null {
   const { tree } = view;
-  const mode = tree.slots[caret.slot].mode;
+  const mode = editSlotAt(tree.slots, caret.slot).mode;
   const range = held ?? { from: at, to: at };
   switch (char) {
     case "{":
@@ -379,10 +381,11 @@ function wrapSelection(text: string, schema: CommandSchema, command: string, hel
   const after = openings[target + 1];
   const before = openings.slice(0, target)[0];
   const patches = [{ from: held.from, to: held.to, insert }];
-  if (after != null || before != null) {
-    return { kind: "patch", patches, caret: (after ?? before), run: null, exact: true };
+  const caret = after ?? before;
+  if (caret != null) {
+    return { kind: "patch", patches, caret, run: null, exact: true };
   }
-  const start = openings[target];
+  const start = requireArrayValue(openings, target);
   return { kind: "patch", patches, caret: start, run: null, exact: true, selectionEnd: start + selected.length };
 }
 

@@ -334,10 +334,10 @@ describe("editor-commands", () => {
       action: expect.objectContaining({
         kind: "pasteStatements",
         snippets: ["\\draw (0,0) -- (1,0);"],
-        anchorElementId: undefined,
         delta: { x: 0, y: 0 }
       })
     }));
+    expect(dispatch.mock.calls[0]?.[0]).not.toHaveProperty("action.anchorElementId");
   });
 
   it("pasteSelectionFromClipboardData increases offset based on payload pasteCount", async () => {

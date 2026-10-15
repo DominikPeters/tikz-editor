@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { ARGUMENT_ROLES } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
@@ -54,9 +56,9 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
   let at = caret.index;
   let throughScript = false;
   for (;;) {
-    const record = tree.slots[slot];
+    const record = editSlotAt(tree.slots, slot);
     const owner = record.node;
-    while (at > 0 && view.role(record.children[at - 1]) === "invisible") {
+    while (at > 0 && view.role(requireArrayValue(record.children, at - 1)) === "invisible") {
       at -= 1;
     }
     if (at === 0) {
@@ -64,11 +66,11 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
       if (edge.kind !== "walk-out") {
         return edge.outcome;
       }
-      slot = tree.nodes[owner].parent!;
+      slot = editNodeAt(tree.nodes, owner).parent!;
       at = childIndex(tree, owner);
       continue;
     }
-    const child = record.children[at - 1];
+    const child = requireArrayValue(record.children, at - 1);
     switch (view.role(child)) {
       case "transparent": {
         const content = presentSlots(tree, child).at(-1);
@@ -85,7 +87,7 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
           return { kind: "select", anchor: { slot, index: at }, focus: { slot, index: at - 1 } };
         }
         slot = script;
-        at = tree.slots[script].children.length;
+        at = editSlotAt(tree.slots, script).children.length;
         throughScript = true;
         continue;
       }
@@ -94,7 +96,7 @@ export function deleteBackward(view: EditView, caret: Position): EditOutcome {
         // would re-attach to whatever precedes it); the scripted atom is
         // selected first, as ⌦ does from before it.
         if (record.role === "base" && record.children.every((other) => other === child || view.role(other) === "invisible")) {
-          const scripted = tree.nodes[owner];
+          const scripted = editNodeAt(tree.nodes, owner);
           const parent = scripted.parent!;
           const index = childIndex(tree, owner);
           return { kind: "select", anchor: { slot: parent, index: index + 1 }, focus: { slot: parent, index } };
@@ -116,9 +118,9 @@ export function deleteForward(view: EditView, caret: Position): EditOutcome {
   let slot = caret.slot;
   let at = caret.index;
   for (;;) {
-    const record = tree.slots[slot];
+    const record = editSlotAt(tree.slots, slot);
     const owner = record.node;
-    while (at < record.children.length && view.role(record.children[at]) === "invisible") {
+    while (at < record.children.length && view.role(requireArrayValue(record.children, at)) === "invisible") {
       at += 1;
     }
     if (at === record.children.length) {
@@ -126,11 +128,11 @@ export function deleteForward(view: EditView, caret: Position): EditOutcome {
       if (edge.kind !== "walk-out") {
         return edge.outcome;
       }
-      slot = tree.nodes[owner].parent!;
+      slot = editNodeAt(tree.nodes, owner).parent!;
       at = childIndex(tree, owner) + 1;
       continue;
     }
-    const child = record.children[at];
+    const child = requireArrayValue(record.children, at);
     switch (view.role(child)) {
       case "transparent": {
         const content = presentSlots(tree, child)[0];
@@ -163,7 +165,7 @@ type EdgeDecision = { kind: "walk-out" } | { kind: "outcome"; outcome: EditOutco
  */
 function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDecision {
   const { tree } = view;
-  const record = tree.slots[slot];
+  const record = editSlotAt(tree.slots, slot);
   const owner = record.node;
   const role = view.role(owner);
   const outcome = (value: EditOutcome): EdgeDecision => ({ kind: "outcome", outcome: value });
@@ -171,7 +173,7 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
     // Paragraph and item edges are structural; the edges of a display or
     // a block title stop the key rather than eat the block's delimiters.
     // An item's label edges are not block edges: ⌦ at its end goes into the item's text.
-    const kind = tree.nodes[owner].kind;
+    const kind = editNodeAt(tree.nodes, owner).kind;
     if (kind === "item" && record.role === "label") {
       const flow = presentSlots(tree, owner).find((candidate) => candidate.role === "flow");
       return outcome(edge === "end" && flow ? { kind: "move", to: { slot: flow.id, index: 0 } } : NONE);
@@ -185,7 +187,7 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   }
   const allSlots = presentSlots(tree, owner);
   const slots = allSlots.filter((candidate) => !view.hiddenSlots.has(candidate.id));
-  if (tree.nodes[owner].kind === "row" && slots[edge === "start" ? 0 : slots.length - 1]?.id === slot) {
+  if (editNodeAt(tree.nodes, owner).kind === "row" && slots[edge === "start" ? 0 : slots.length - 1]?.id === slot) {
     // A row's edges are its breaks (D3), empty or not.
     return outcome(neighbouringRow(view, owner, edge));
   }
@@ -206,11 +208,11 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
       to: { slot: neighbour.id, index: edge === "start" ? neighbour.children.length : 0 },
     });
   }
-  const node = tree.nodes[owner];
+  const node = editNodeAt(tree.nodes, owner);
   if (node.kind === "row") {
     return outcome(neighbouringRow(view, owner, edge));
   }
-  if (node.parent == null || tree.nodes[tree.slots[node.parent].node].kind === "alignment") {
+  if (node.parent == null || editNodeAt(tree.nodes, editSlotAt(tree.slots, node.parent).node).kind === "alignment") {
     return outcome(NONE);
   }
   const index = childIndex(tree, owner);
@@ -228,8 +230,8 @@ function neighbouringRow(view: EditView, row: NodeId, edge: "start" | "end"): Ed
     return joined;
   }
   const { tree } = view;
-  const parent = tree.slots[tree.nodes[row].parent!];
-  const rows = parent.children.filter((child) => tree.nodes[child].kind === "row");
+  const parent = editSlotAt(tree.slots, editNodeAt(tree.nodes, row).parent!);
+  const rows = parent.children.filter((child) => editNodeAt(tree.nodes, child).kind === "row");
   const neighbour = rows[rows.indexOf(row) + (edge === "start" ? -1 : 1)];
   if (neighbour == null) {
     return NONE;
@@ -241,7 +243,7 @@ function neighbouringRow(view: EditView, row: NodeId, edge: "start" | "end"): Ed
 
 /** A slot with nothing visible in it. */
 function isEmptySlot(view: EditView, slot: SlotId): boolean {
-  return view.tree.slots[slot].children.every((child) => view.role(child) === "invisible");
+  return editSlotAt(view.tree.slots, slot).children.every((child) => view.role(child) === "invisible");
 }
 
 /** The script slot last in source (the one ⌫ reaches first), or null. */
@@ -259,9 +261,9 @@ function lastScript(view: EditView, scripted: NodeId): SlotId | null {
  */
 function deleteItem(view: EditView, node: NodeId, direction: "backward" | "forward", throughScript: boolean): EditOutcome {
   const { tree } = view;
-  const record = tree.nodes[node];
+  const record = editNodeAt(tree.nodes, node);
   let span: Span = record.span;
-  const slot = tree.slots[record.parent!];
+  const slot = editSlotAt(tree.slots, record.parent!);
   if (slot.mode === "math" && /^\\[A-Za-z@]+$/u.test(tree.text.slice(span.from, span.to))) {
     span = { from: span.from, to: gapEnd(view, slot.id, span.to) };
   }
@@ -276,8 +278,8 @@ function deleteItem(view: EditView, node: NodeId, direction: "backward" | "forwa
  */
 function removeNode(view: EditView, node: NodeId): EditOutcome {
   const { tree } = view;
-  const record = tree.nodes[node];
-  const parent = record.parent == null ? null : tree.slots[record.parent];
+  const record = editNodeAt(tree.nodes, node);
+  const parent = record.parent == null ? null : editSlotAt(tree.slots, record.parent);
   if (parent && isDollarFormula(view, parent.node) && parent.children.every((child) => child === node || view.role(child) === "invisible")) {
     return removeNode(view, parent.node);
   }
@@ -307,7 +309,7 @@ function removeWithCleanup(
 
 /** An inline formula delimited by `$`: empty, it would read as `$$` (display math), so it holds `{}` instead. */
 export function isDollarFormula(view: EditView, node: NodeId): boolean {
-  const record = view.tree.nodes[node];
+  const record = editNodeAt(view.tree.nodes, node);
   return record.kind === "formula" && view.tree.text[record.span.from] === "$";
 }
 
@@ -322,25 +324,25 @@ function emptiedSlotCleanup(
   throughScript: boolean
 ): { span: Span; insert?: string } | null {
   const { tree } = view;
-  const record = tree.slots[slot];
+  const record = editSlotAt(tree.slots, slot);
   const owner = record.node;
   if (view.role(owner) === "transparent" && presentSlots(tree, owner).length === 1) {
-    const parent = tree.nodes[owner].parent;
-    if (parent != null && tree.slots[parent].children.length === 1) {
+    const parent = editNodeAt(tree.nodes, owner).parent;
+    if (parent != null && editSlotAt(tree.slots, parent).children.length === 1) {
       const outer = emptiedSlotCleanup(view, parent, throughScript);
       if (outer) {
         return outer;
       }
     }
-    return { span: tree.nodes[owner].span };
+    return { span: editNodeAt(tree.nodes, owner).span };
   }
   if (throughScript && (record.role === "sup" || record.role === "sub")) {
     // A formula that was only this script (`$_a$`) keeps placeholder braces, as for an item.
-    const parent = tree.nodes[owner].parent;
-    const alone = parent != null && isDollarFormula(view, tree.slots[parent].node) &&
-      tree.slots[parent].children.every((child) => child === owner || view.role(child) === "invisible") &&
+    const parent = editNodeAt(tree.nodes, owner).parent;
+    const alone = parent != null && isDollarFormula(view, editSlotAt(tree.slots, parent).node) &&
+      editSlotAt(tree.slots, parent).children.every((child) => child === owner || view.role(child) === "invisible") &&
       presentSlots(tree, owner).every((candidate) => candidate.id === slot || isEmptySlot(view, candidate.id));
-    return alone ? { span: tree.slots[parent].contentSpan, insert: "{}" } : { span: slotOuterSpan(tree, slot) };
+    return alone ? { span: editSlotAt(tree.slots, parent).contentSpan, insert: "{}" } : { span: slotOuterSpan(tree, slot) };
   }
   if ((!record.braced && ARGUMENT_ROLES.has(record.role)) || isDollarFormula(view, owner)) {
     return { span: record.contentSpan, insert: "{}" };
@@ -350,11 +352,11 @@ function emptiedSlotCleanup(
 
 /** The end of the insignificant whitespace after an offset inside a slot. */
 function gapEnd(view: EditView, slot: SlotId, from: number): number {
-  const record = view.tree.slots[slot];
-  const next = record.children.map((child) => view.tree.nodes[child].span.from).find((start) => start >= from);
+  const record = editSlotAt(view.tree.slots, slot);
+  const next = record.children.map((child) => editNodeAt(view.tree.nodes, child).span.from).find((start) => start >= from);
   const limit = next ?? record.contentSpan.to;
   let end = from;
-  while (end < limit && /\s/u.test(view.tree.text[end])) {
+  while (end < limit && /\s/u.test(view.tree.text.charAt(end))) {
     end += 1;
   }
   return end;
@@ -369,7 +371,7 @@ function finishDeletion(view: EditView, set: PatchSet, seam: number, mode: EditM
   const raw = set.patches();
   const caret = mapThrough(raw, seam);
   const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
-  const single = raw.length === 1 && raw[0].insert === "" && raw[0].to - raw[0].from === 1;
+  const single = raw.length === 1 && requireArrayValue(raw, 0).insert === "" && requireArrayValue(raw, 0).to - requireArrayValue(raw, 0).from === 1;
   return { kind: "patch", patches, caret, run: single ? run : null };
 }
 
@@ -401,7 +403,7 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
     if (node.kind !== "item") {
       return false;
     }
-    const flow = node.slots.map((slot) => tree.slots[slot]).find((slot) => slot.role === "flow");
+    const flow = node.slots.map((slot) => editSlotAt(tree.slots, slot)).find((slot) => slot.role === "flow");
     const prefixEnd = flow?.contentSpan.from ?? node.span.to;
     return [from, to].some((offset) => offset > node.span.from && offset < prefixEnd);
   });
@@ -438,11 +440,11 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
   const covered = (span: Span) =>
     (span.from >= from && span.to <= to) || removals.some((removal) => span.from >= removal.span.from && span.to <= removal.span.to);
   for (const node of partial) {
-    const slot = isDollarFormula(view, node.id) ? tree.slots[node.slots[0]] : null;
+    const slot = isDollarFormula(view, node.id) ? editSlotAt(tree.slots, requireArrayValue(node.slots, 0)) : null;
     if (slot && !insert && slot.children.length > 0 &&
-      slot.children.every((child) => view.role(child) === "invisible" && tree.nodes[child].kind !== "group" || covered(tree.nodes[child].span))) {
+      slot.children.every((child) => view.role(child) === "invisible" && editNodeAt(tree.nodes, child).kind !== "group" || covered(editNodeAt(tree.nodes, child).span))) {
       for (let index = removals.length - 1; index >= 0; index -= 1) {
-        if (removals[index].span.from >= slot.contentSpan.from && removals[index].span.to <= slot.contentSpan.to) {
+        if (requireArrayValue(removals, index).span.from >= slot.contentSpan.from && requireArrayValue(removals, index).span.to <= slot.contentSpan.to) {
           removals.splice(index, 1);
         }
       }
@@ -474,5 +476,5 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
     const placeholder = mapThrough(patches, seam);
     return { kind: "patch", patches, caret: placeholder + 1, run: null, placeholder };
   }
-  return finishDeletion(view, set, seam, tree.slots[start.slot].mode, null);
+  return finishDeletion(view, set, seam, editSlotAt(tree.slots, start.slot).mode, null);
 }

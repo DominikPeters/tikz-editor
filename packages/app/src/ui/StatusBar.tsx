@@ -353,7 +353,7 @@ export function StatusBar() {
               <option key={level} value={level}>{level}%</option>
             ))}
           </select>
-          <RiArrowDownSLine className={css.zoomSelectCaret} size={14} aria-hidden="true" />
+          <RiArrowDownSLine className={css.zoomSelectCaret ?? ""} size={14} aria-hidden="true" />
         </span>
       </div>
     </div>

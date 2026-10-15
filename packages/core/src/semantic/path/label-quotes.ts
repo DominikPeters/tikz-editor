@@ -266,7 +266,7 @@ export function extractNodeAdornmentPlan(
             textSpan: parsed.textSpan,
             text: parsed.text,
             angleRaw: parsed.angleRaw,
-            angleSpan: parsed.angleSpan,
+            ...(parsed.angleSpan === undefined ? {} : { angleSpan: parsed.angleSpan }),
             options: parsed.options,
             distancePt: parsed.distancePt,
             defaultDistancePt: parsed.defaultDistancePt,
@@ -323,7 +323,7 @@ export function extractNodeAdornmentPlan(
       textSpan: parsedQuote.textSpan,
       text: parsedQuote.text,
       angleRaw: parsedQuote.angleRaw,
-      angleSpan: parsedQuote.angleSpan,
+      ...(parsedQuote.angleSpan === undefined ? {} : { angleSpan: parsedQuote.angleSpan }),
       options: parsedQuote.options,
       distancePt: parsedQuote.distancePt,
       defaultDistancePt: parsedQuote.defaultDistancePt,
@@ -399,15 +399,16 @@ export function materializeNodeAdornment(params: {
       ? (parseStyleValueAsOptionList(spec.pinEdgeRaw) ?? undefined)
       : undefined;
 
+  const optionalOwnerGeometry1 = cloneAdornmentOwnerGeometry(mainGeometry);
   const node: NodeItem = {
     kind: "Node",
     id: `${ownerId}:adornment:${adornmentIndex}`,
     span: spec.span,
     raw: spec.text,
     templateRaw: spec.text,
-    name: resolvedName,
-    optionsSpan: options?.span,
-    options,
+    ...(resolvedName === undefined ? {} : { name: resolvedName }),
+    ...(options?.span === undefined ? {} : { optionsSpan: options?.span }),
+    ...(options === undefined ? {} : { options: options }),
     textSource: "group",
     textSpan: spec.textSpan,
     text: spec.text,
@@ -420,12 +421,12 @@ export function materializeNodeAdornment(params: {
       valueSpan: spec.valueSpan,
       textSpan: spec.textSpan,
       angleRaw: spec.angleRaw,
-      angleSpan: spec.angleSpan,
+      ...(spec.angleSpan === undefined ? {} : { angleSpan: spec.angleSpan }),
       distancePt: spec.distancePt,
       defaultDistancePt: spec.defaultDistancePt,
       distanceExplicit: spec.distanceExplicit,
       pinEdgeRaw: spec.pinEdgeRaw,
-      ownerGeometry: cloneAdornmentOwnerGeometry(mainGeometry),
+      ...(optionalOwnerGeometry1 === undefined ? {} : { ownerGeometry: optionalOwnerGeometry1 }),
     }
   };
 
@@ -455,14 +456,16 @@ export function cloneAdornmentOwnerGeometry(
   if (!geometry) {
     return undefined;
   }
+  const optionalAnchorTransform2 = geometry.anchorTransform ? { ...geometry.anchorTransform } : undefined;
+  const optionalAnchorPolygon3 = geometry.anchorPolygon?.map((point) => ({ ...point }));
   return {
     shape: geometry.shape,
     center: { ...geometry.center },
-    anchorTransform: geometry.anchorTransform ? { ...geometry.anchorTransform } : undefined,
+    ...(optionalAnchorTransform2 === undefined ? {} : { anchorTransform: optionalAnchorTransform2 }),
     anchorHalfWidth: geometry.anchorHalfWidth,
     anchorHalfHeight: geometry.anchorHalfHeight,
     anchorRadius: geometry.anchorRadius,
-    anchorPolygon: geometry.anchorPolygon?.map((point) => ({ ...point }))
+    ...(optionalAnchorPolygon3 === undefined ? {} : { anchorPolygon: optionalAnchorPolygon3 })
   };
 }
 
@@ -534,14 +537,15 @@ export function extractToLikeOptionPlan<T extends ToOperationItem | EdgeOperatio
     return { item, generatedNodes };
   }
 
-  return {
-    item: {
-      ...item,
-      options: cleanedOptions,
-      optionsSpan: cleanedOptions?.span
-    },
-    generatedNodes
-  };
+  const cleanedItem = { ...item };
+  if (cleanedOptions === undefined) {
+    delete cleanedItem.options;
+    delete cleanedItem.optionsSpan;
+  } else {
+    cleanedItem.options = cleanedOptions;
+    cleanedItem.optionsSpan = cleanedOptions.span;
+  }
+  return { item: cleanedItem, generatedNodes };
 }
 
 function parseAdornmentValue(
@@ -621,7 +625,7 @@ function parseAdornmentValue(
     textSpan,
     text: stripWrappingBraces(textRaw),
     angleRaw,
-    angleSpan,
+    ...(angleSpan === undefined ? {} : { angleSpan: angleSpan }),
     options: cleanedOptions,
     distancePt,
     defaultDistancePt,
@@ -639,7 +643,7 @@ function parseQuoteToken(raw: string, absoluteFrom: number): ParsedQuoteToken | 
 
   let cursor = 1;
   while (cursor < trimmed.length) {
-    const char = trimmed[cursor];
+    const char = trimmed.charAt(cursor);
     if (char === "\\") {
       cursor += 2;
       continue;
@@ -650,7 +654,7 @@ function parseQuoteToken(raw: string, absoluteFrom: number): ParsedQuoteToken | 
     cursor += 1;
   }
 
-  if (cursor >= trimmed.length || trimmed[cursor] !== "\"") {
+  if (cursor >= trimmed.length || trimmed.charAt(cursor) !== "\"") {
     return null;
   }
 
@@ -908,12 +912,12 @@ function parseSingleEdgeNodeSpec(source: string): {
   }
   cursor += nodeKeyword.length;
 
-  while (cursor < source.length && /\s/u.test(source[cursor] ?? "")) {
+  while (cursor < source.length && /\s/u.test(source.charAt(cursor))) {
     cursor += 1;
   }
 
   let options: OptionListAst | undefined;
-  if ((source[cursor] ?? "") === "[") {
+  if ((source.charAt(cursor)) === "[") {
     const block = readBalancedBlock(source, cursor, "[", "]");
     if (!block) {
       return null;
@@ -923,13 +927,13 @@ function parseSingleEdgeNodeSpec(source: string): {
       to: block.nextIndex
     });
     cursor = block.nextIndex;
-    while (cursor < source.length && /\s/u.test(source[cursor] ?? "")) {
+    while (cursor < source.length && /\s/u.test(source.charAt(cursor))) {
       cursor += 1;
     }
   }
 
   let name: string | undefined;
-  if ((source[cursor] ?? "") === "(") {
+  if ((source.charAt(cursor)) === "(") {
     const block = readBalancedBlock(source, cursor, "(", ")");
     if (!block) {
       return null;
@@ -939,12 +943,12 @@ function parseSingleEdgeNodeSpec(source: string): {
       name = normalizedName;
     }
     cursor = block.nextIndex;
-    while (cursor < source.length && /\s/u.test(source[cursor] ?? "")) {
+    while (cursor < source.length && /\s/u.test(source.charAt(cursor))) {
       cursor += 1;
     }
   }
 
-  if ((source[cursor] ?? "") !== "{") {
+  if ((source.charAt(cursor)) !== "{") {
     return null;
   }
   const block = readBalancedBlock(source, cursor, "{", "}");
@@ -953,7 +957,7 @@ function parseSingleEdgeNodeSpec(source: string): {
   }
 
   return {
-    name,
+    ...(name === undefined ? {} : { name: name }),
     options,
     text: stripWrappingBraces(block.content),
     rest: source.slice(block.nextIndex)
@@ -975,9 +979,9 @@ function makeSyntheticOperationNode(
     span,
     raw,
     templateRaw: raw,
-    name,
-    optionsSpan: options?.span,
-    options,
+    ...(name === undefined ? {} : { name: name }),
+    ...(options?.span === undefined ? {} : { optionsSpan: options?.span }),
+    ...(options === undefined ? {} : { options: options }),
     textSource: "group",
     textSpan: span,
     text

@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { isDeclarationGroup } from "../ownership/kinds.js";
 import { slotChain } from "../tree/navigate.js";
 import type { EditNode, NodeId, SlotId, Span } from "../tree/types.js";
@@ -39,8 +41,8 @@ export function caretContext(view: EditView, position: Position): ContextCrumb[]
   const { tree } = view;
   const crumbs: ContextCrumb[] = [];
   for (const slotId of slotChain(tree, position.slot)) {
-    const slot = tree.slots[slotId];
-    const node = tree.nodes[slot.node];
+    const slot = editSlotAt(tree.slots, slotId);
+    const node = editNodeAt(tree.nodes, slot.node);
     if (NAMED_SLOTS.has(slot.role)) {
       const outlined = slot.contentSpan.to > slot.contentSpan.from;
       crumbs.push({ label: slot.role, node: node.id, slot: slotId, span: slot.contentSpan, outlined });
@@ -65,7 +67,7 @@ const UNNAMED_KINDS = new Set<EditNode["kind"]>(["scope", "paragraph", "group", 
 function nodeLabel(view: EditView, node: EditNode): string | null {
   const { text } = view.tree;
   if (node.kind === "group" && isDeclarationGroup(view.tree, node.id)) {
-    const declaration = view.tree.nodes[view.tree.slots[node.slots[0]].children[0]];
+    const declaration = editNodeAt(view.tree.nodes, requireArrayValue(editSlotAt(view.tree.slots, requireArrayValue(node.slots, 0)).children, 0));
     return declaration.command == null ? null : commandLabel(text, declaration);
   }
   if (UNNAMED_KINDS.has(node.kind)) {
@@ -111,14 +113,14 @@ export type CaretEdge = { readonly side: "before" | "after"; readonly within: Sp
  */
 export function caretEdge(view: EditView, position: Position): CaretEdge | null {
   const { tree } = view;
-  const slot = tree.slots[position.slot];
+  const slot = editSlotAt(tree.slots, position.slot);
   if (slot.mode !== "math" || slot.children.length === 0) {
     return null;
   }
   if (position.index < slot.children.length) {
-    return { side: "before", within: tree.nodes[slot.children[position.index]].span };
+    return { side: "before", within: editNodeAt(tree.nodes, requireArrayValue(slot.children, position.index)).span };
   }
-  const last = tree.nodes[slot.children[slot.children.length - 1]];
+  const last = editNodeAt(tree.nodes, requireArrayValue(slot.children, slot.children.length - 1));
   return last.slots.length === 0
     ? { side: "after", within: last.span }
     : { side: "after", within: last.span, whole: true };

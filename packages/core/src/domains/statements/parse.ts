@@ -32,9 +32,8 @@ import type {
 } from "../../ast/types.js";
 import { mapPathStatement } from "../paths/parse.js";
 import { mapUnknownStatement } from "../../transform/unknown.js";
-import { parseOptionListRaw } from "../../options/parse.js";
+import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import { parseForeachHeaderRaw } from "../../foreach/header.js";
-import { parseStyleValueAsOptionList } from "../../semantic/style/option-utils.js";
 import { findFirstChildByName, findFirstNodeByName, firstNamedChild, forEachChild } from "../../syntax/cursor.js";
 
 export type StatementMappingState = {
@@ -129,7 +128,7 @@ function mapScopeStatement(node: SyntaxNode, source: string, state: StatementMap
     kind: "Scope",
     id: scopeStatementId(statementIndex),
     span: { from: node.from, to: node.to },
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
+    ...(optionsNode ? { options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) } : {}),
     body: mapBodyStatements(node, source, state)
   };
 }
@@ -171,15 +170,15 @@ function mapForeachStatement(node: SyntaxNode, source: string, state: StatementM
     kind: "Foreach",
     id: foreachStatementId(statementIndex),
     span: { from: node.from, to: node.to },
-    options,
-    optionsSpan,
-    headerSpan,
+    ...(options !== undefined ? { options } : {}),
+    ...(optionsSpan !== undefined ? { optionsSpan } : {}),
+    ...(headerSpan !== undefined ? { headerSpan } : {}),
     headerRaw: parsedHeader.headerRaw,
     variablesRaw: parsedHeader.variablesRaw,
     listRaw: parsedHeader.listRaw,
     prefixRaw: parsedHeader.headerRaw,
     bodyRaw,
-    bodySpan
+    ...(bodySpan !== undefined ? { bodySpan } : {})
   };
 }
 
@@ -195,9 +194,9 @@ function mapMacroDefinitionStatement(node: SyntaxNode, source: string, state: St
     raw: source.slice(node.from, node.to),
     commandRaw: "\\def",
     nameRaw: nameNode ? source.slice(nameNode.from, nameNode.to) : "",
-    nameSpan: toSpan(nameNode),
+    ...(nameNode ? { nameSpan: toSpan(nameNode) } : {}),
     valueRaw: valueNode ? extractGroupInnerRaw(valueNode, source) : "",
-    valueSpan: valueNode ? toGroupInnerSpan(valueNode, source) : undefined
+    ...(valueNode ? { valueSpan: toGroupInnerSpan(valueNode, source) } : {})
   };
 }
 
@@ -215,17 +214,17 @@ function mapMacroAliasStatement(node: SyntaxNode, source: string, state: Stateme
     raw: source.slice(node.from, node.to),
     commandRaw: "\\let",
     nameRaw: nameNode ? source.slice(nameNode.from, nameNode.to) : "",
-    nameSpan: toSpan(nameNode),
+    ...(nameNode ? { nameSpan: toSpan(nameNode) } : {}),
     targetRaw: targetCommandNode
       ? source.slice(targetCommandNode.from, targetCommandNode.to)
       : targetGroupNode
         ? extractGroupInnerRaw(targetGroupNode, source)
         : "",
-    targetSpan: targetCommandNode
-      ? toSpan(targetCommandNode)
+    ...(targetCommandNode
+      ? { targetSpan: toSpan(targetCommandNode) }
       : targetGroupNode
-        ? toGroupInnerSpan(targetGroupNode, source)
-        : undefined
+        ? { targetSpan: toGroupInnerSpan(targetGroupNode, source) }
+        : {})
   };
 }
 
@@ -281,15 +280,15 @@ function mapMacroCommandDefinitionStatement(
     raw: source.slice(node.from, node.to),
     commandRaw,
     nameRaw,
-    nameSpan,
+    ...(nameSpan !== undefined ? { nameSpan } : {}),
     arity,
-    aritySpan: toSpan(arityNumberNode),
-    optionalDefaultRaw: defaultArgNode ? extractBracketInnerRaw(defaultArgNode, source) : undefined,
-    optionalDefaultSpan: defaultArgNode ? toBracketInnerSpan(defaultArgNode, source) : undefined,
+    ...(arityNumberNode ? { aritySpan: toSpan(arityNumberNode) } : {}),
+    ...(defaultArgNode ? { optionalDefaultRaw: extractBracketInnerRaw(defaultArgNode, source) } : {}),
+    ...(defaultArgNode ? { optionalDefaultSpan: toBracketInnerSpan(defaultArgNode, source) } : {}),
     bodyRaw: commandRaw === "\\DeclareMathOperator"
       ? toDeclareMathOperatorBody(bodyNode ? extractGroupInnerRaw(bodyNode, source) : "", starred)
       : bodyNode ? extractGroupInnerRaw(bodyNode, source) : "",
-    bodySpan: bodyNode ? toGroupInnerSpan(bodyNode, source) : undefined,
+    ...(bodyNode ? { bodySpan: toGroupInnerSpan(bodyNode, source) } : {}),
     starred
   };
 }
@@ -376,7 +375,7 @@ function mapTikzSetStatement(node: SyntaxNode, source: string, state: StatementM
     raw: source.slice(node.from, node.to),
     commandRaw: "\\tikzset",
     payloadRaw,
-    payloadSpan: toSpan(payloadNode),
+    ...(payloadNode ? { payloadSpan: toSpan(payloadNode) } : {}),
     optionList
   };
 }
@@ -414,10 +413,10 @@ function mapTikzStyleStatement(node: SyntaxNode, source: string, state: Statemen
     raw: source.slice(node.from, node.to),
     commandRaw: "\\tikzstyle",
     styleNameRaw: styleNameRaw.trim(),
-    styleNameSpan: styleNameNode?.type.name === "Group" ? toGroupInnerSpan(styleNameNode, source) : toSpan(styleNameNode),
+    ...(styleNameNode ? { styleNameSpan: styleNameNode.type.name === "Group" ? toGroupInnerSpan(styleNameNode, source) : toSpan(styleNameNode) } : {}),
     definitionKind: betweenRaw.includes("+") ? "append" : "style",
     payloadRaw,
-    payloadSpan: toSpan(payloadNode),
+    ...(payloadNode ? { payloadSpan: toSpan(payloadNode) } : {}),
     optionList
   };
 }
@@ -435,7 +434,7 @@ function mapPgfkeysStatement(node: SyntaxNode, source: string, state: StatementM
     raw: source.slice(node.from, node.to),
     commandRaw: "\\pgfkeys",
     payloadRaw,
-    payloadSpan: toSpan(payloadNode),
+    ...(payloadNode ? { payloadSpan: toSpan(payloadNode) } : {}),
     optionList
   };
 }
@@ -456,7 +455,7 @@ function mapTikzLibraryStatement(node: SyntaxNode, source: string, state: Statem
     raw: source.slice(node.from, node.to),
     commandRaw: "\\usetikzlibrary",
     librariesRaw,
-    librariesSpan: groupNode ? toGroupInnerSpan(groupNode, source) : undefined,
+    ...(groupNode ? { librariesSpan: toGroupInnerSpan(groupNode, source) } : {}),
     libraries
   };
 }
@@ -473,9 +472,9 @@ function mapColorletStatement(node: SyntaxNode, source: string, state: Statement
     raw: source.slice(node.from, node.to),
     commandRaw: "\\colorlet",
     nameRaw: nameGroup ? extractGroupInnerRaw(nameGroup, source) : "",
-    nameSpan: nameGroup ? toGroupInnerSpan(nameGroup, source) : undefined,
+    ...(nameGroup ? { nameSpan: toGroupInnerSpan(nameGroup, source) } : {}),
     valueRaw: valueGroup ? extractGroupInnerRaw(valueGroup, source) : "",
-    valueSpan: valueGroup ? toGroupInnerSpan(valueGroup, source) : undefined
+    ...(valueGroup ? { valueSpan: toGroupInnerSpan(valueGroup, source) } : {})
   };
 }
 
@@ -493,11 +492,11 @@ function mapDefineColorStatement(node: SyntaxNode, source: string, state: Statem
     raw: source.slice(node.from, node.to),
     commandRaw: "\\definecolor",
     nameRaw: nameGroup ? extractGroupInnerRaw(nameGroup, source) : "",
-    nameSpan: nameGroup ? toGroupInnerSpan(nameGroup, source) : undefined,
+    ...(nameGroup ? { nameSpan: toGroupInnerSpan(nameGroup, source) } : {}),
     modelRaw: modelGroup ? extractGroupInnerRaw(modelGroup, source) : "",
-    modelSpan: modelGroup ? toGroupInnerSpan(modelGroup, source) : undefined,
+    ...(modelGroup ? { modelSpan: toGroupInnerSpan(modelGroup, source) } : {}),
     specificationRaw: specificationGroup ? extractGroupInnerRaw(specificationGroup, source) : "",
-    specificationSpan: specificationGroup ? toGroupInnerSpan(specificationGroup, source) : undefined
+    ...(specificationGroup ? { specificationSpan: toGroupInnerSpan(specificationGroup, source) } : {})
   };
 }
 
@@ -512,7 +511,7 @@ function resolveMacroCommandBodyNode(node: SyntaxNode): SyntaxNode | null {
   if (groups.length === 0) {
     return null;
   }
-  return groups[groups.length - 1];
+  return groups.at(-1) ?? null;
 }
 
 function parseCommandNameFromGroup(
@@ -566,10 +565,7 @@ function extractBracketInnerRaw(node: SyntaxNode, source: string): string {
   return source.slice(span.from, span.to);
 }
 
-function toSpan(node: SyntaxNode | null): Span | undefined {
-  if (!node) {
-    return undefined;
-  }
+function toSpan(node: SyntaxNode): Span {
   return { from: node.from, to: node.to };
 }
 

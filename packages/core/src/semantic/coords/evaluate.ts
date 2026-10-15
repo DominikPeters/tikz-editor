@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { coordinateTransform, type AxisBasis } from "./axis-basis.js";
 import type { CoordinateForm, CoordinateItem } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
@@ -5,6 +6,7 @@ import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { splitAllAtTopLevel } from "../../domains/coordinates/parse.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, type MacroBinding } from "../../macros/index.js";
 import {
+  currentFrame,
   readNamedCoordinate,
   readNamedNodeGeometry,
   type NamedNodeGeometry,
@@ -51,7 +53,7 @@ type ParsedLineSpec = {
 
 /** Transform-option points are scanned before CTM application; named anchors remain world-valued. */
 export function evaluateTransformCoordinate(raw: string, context: SemanticContext, basis?: AxisBasis): WorldPoint | null {
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const parsed = parseCoordinate(raw);
   if (parsed.form === "named") return evaluateRawCoordinate(raw, context).world;
   const localContext = { ...context, stack: [...context.stack.slice(0, -1), {
@@ -62,7 +64,7 @@ export function evaluateTransformCoordinate(raw: string, context: SemanticContex
 
 export function evaluateCoordinate(item: CoordinateItem, context: SemanticContext): EvaluatedCoordinate {
   const diagnostics: string[] = [];
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const traceCollector = context.macroTraceCollector ?? undefined;
 
   if (item.form === "named") {
@@ -124,6 +126,8 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
 
       const localPt = frameLocalPoint(pt(x), pt(y));
       const frameMatrix = asFrameTransform(frame.transform);
+      const optionalX1 = coordinateSourceUnit(parsed.x);
+      const optionalY2 = coordinateSourceUnit(parsed.y);
       return transformedCoordinate(
         "explicit",
         localPt,
@@ -132,7 +136,7 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
         diagnostics,
         item.relativePrefix === "++",
         item.relativePrefix,
-        { x: coordinateSourceUnit(parsed.x), y: coordinateSourceUnit(parsed.y) }
+        { ...(optionalX1 === undefined ? {} : { x: optionalX1 }), ...(optionalY2 === undefined ? {} : { y: optionalY2 }) }
       );
     }
 
@@ -228,7 +232,8 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
     const angle = angleQuantity.value;
     const radians = (angle * Math.PI) / 180;
     scalarX = scalarY = !radius.hasExplicitUnit;
-    sourceUnits = { radius: coordinateSourceUnit(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector)) };
+    const optionalRadius3 = coordinateSourceUnit(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector));
+    sourceUnits = { ...(optionalRadius3 === undefined ? {} : { radius: optionalRadius3 }) };
     localPoint = frameLocalPoint(pt(radius.value * Math.cos(radians)), pt(radius.value * Math.sin(radians)));
   } else {
     const x = parseLengthWithInfo(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector), "cm");
@@ -240,9 +245,11 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
 
     scalarX = !x.hasExplicitUnit;
     scalarY = !y.hasExplicitUnit;
+    const optionalX4 = coordinateSourceUnit(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector));
+    const optionalY5 = coordinateSourceUnit(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector));
     sourceUnits = {
-      x: coordinateSourceUnit(expandCoordinateComponent(item.x, frame.macroBindings, traceCollector)),
-      y: coordinateSourceUnit(expandCoordinateComponent(item.y, frame.macroBindings, traceCollector))
+      ...(optionalX4 === undefined ? {} : { x: optionalX4 }),
+      ...(optionalY5 === undefined ? {} : { y: optionalY5 })
     };
     localPoint = frameLocalPoint(pt(x.value), pt(y.value));
   }
@@ -301,14 +308,14 @@ function transformedCoordinate(
 ): EvaluatedCoordinate {
   return {
     kind: "transformed",
-    sourceUnits,
+    ...(sourceUnits === undefined ? {} : { sourceUnits: sourceUnits }),
     coordinateForm,
     local,
     world,
     frame,
     diagnostics,
     advancesCurrentPoint,
-    relativePrefix
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })
   };
 }
 
@@ -327,7 +334,7 @@ function worldOnlyCoordinate(
     origin,
     diagnostics,
     advancesCurrentPoint,
-    relativePrefix
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })
   };
 }
 
@@ -343,7 +350,7 @@ function invalidCoordinate(
     world: null,
     diagnostics,
     advancesCurrentPoint,
-    relativePrefix
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix })
   };
 }
 
@@ -354,8 +361,8 @@ function parseExplicitCoordinate(raw: string): ParsedExplicitCoordinate | null {
     return null;
   }
 
-  const system = csMatch[1].trim().toLowerCase();
-  const kvValues = parseTopLevelKvPairs(csMatch[2]);
+  const system = requireArrayValue(csMatch, 1).trim().toLowerCase();
+  const kvValues = parseTopLevelKvPairs(requireArrayValue(csMatch, 2));
   if (system === "perpendicular") {
     const horizontalLineThrough = kvValues.get("horizontal line through");
     const verticalLineThrough = kvValues.get("vertical line through");
@@ -604,7 +611,7 @@ function tokenizeCalcTerms(input: string): Array<{ op: "+" | "-"; term: string }
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
 
     if (char === "\\") {
       index += 1;
@@ -685,6 +692,7 @@ function tryParseCalcInterpolation(term: string): { left: string; right: string;
   }
 
   const [left, factorRaw, right] = parts;
+  if (left === undefined || factorRaw === undefined || right === undefined) return null;
   if (!left.startsWith("(") || !left.endsWith(")") || !right.startsWith("(") || !right.endsWith(")")) {
     return null;
   }
@@ -781,7 +789,7 @@ function tryEvaluateIntersectionCoordinate(
 
   const diagnostics: string[] = [];
   const solution = prefixMatch[1] ? Number(prefixMatch[1]) : 1;
-  const objectPair = splitAtTopLevelKeyword(prefixMatch[2], "and");
+  const objectPair = splitAtTopLevelKeyword(requireArrayValue(prefixMatch, 2), "and");
   if (!objectPair) {
     return { point: null, diagnostics: ["invalid-intersection-coordinate"] };
   }
@@ -873,7 +881,7 @@ function findTopLevelEquals(input: string): number {
   let bracketDepth = 0;
 
   for (let i = 0; i < input.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -921,7 +929,7 @@ function splitAtTopLevelOperator(
   let bracketDepth = 0;
 
   for (let i = 0; i < input.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -977,7 +985,7 @@ function splitAtTopLevelKeyword(input: string, keyword: string): { left: string;
   let bracketDepth = 0;
 
   for (let i = 0; i <= input.length - needle.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -1084,23 +1092,24 @@ export function evaluateRawCoordinate(
   relativePrefix?: CoordinateItem["relativePrefix"]
 ): EvaluatedCoordinate {
   const parsed = parseCoordinate(raw);
-  const pseudo: CoordinateItem = {
-    kind: "Coordinate",
-    id: "raw-coordinate",
-    span: { from: 0, to: raw.length },
-    relativePrefix,
-    x: parsed.x,
-    y: parsed.y,
-    z: parsed.z,
-    raw,
-    form: parsed.form,
-    optionsSpan: parsed.optionsSpan
+  const optionalOptionsSpan6 = parsed.optionsSpan
       ? {
           from: parsed.optionsSpan.from,
           to: parsed.optionsSpan.to
         }
-      : undefined,
-    options: undefined
+      : undefined;
+  const pseudo: CoordinateItem = {
+    kind: "Coordinate",
+    id: "raw-coordinate",
+    span: { from: 0, to: raw.length },
+    ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix }),
+    x: parsed.x,
+    y: parsed.y,
+    ...(parsed.z === undefined ? {} : { z: parsed.z }),
+    raw,
+    form: parsed.form,
+    ...(optionalOptionsSpan6 === undefined ? {} : { optionsSpan: optionalOptionsSpan6 }),
+
   };
   return evaluateCoordinate(pseudo, context);
 }
@@ -1110,8 +1119,9 @@ function expandCoordinateComponent(
   bindings: ReadonlyMap<string, MacroBinding>,
   trace: SemanticContext["macroTraceCollector"] | undefined
 ): string {
+  const optionalTrace7 = trace ?? undefined;
   return expandMacroBindings(raw, bindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
-    trace: trace ?? undefined
+    ...(optionalTrace7 === undefined ? {} : { trace: optionalTrace7 })
   });
 }

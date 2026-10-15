@@ -35,7 +35,8 @@ function imbalance(text: string): string | null {
   if (missing.length > 0) {
     return `Missing ${[...missing].reverse().join(" ")}`;
   }
-  return recovery.strays.length > 0 ? `Unmatched ${text.slice(recovery.strays[0].from, recovery.strays[0].to)}` : null;
+  const stray = recovery.strays[0];
+  return stray ? `Unmatched ${text.slice(stray.from, stray.to)}` : null;
 }
 
 export function CanvasSourceLens({ model }: { model: CanvasSourceLensModel }) {

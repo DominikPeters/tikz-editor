@@ -9,10 +9,48 @@ import {
   projectInputOffset,
   projectInputRange,
   sliceMappedText,
+  translateTextSourceMap,
   type TextSourceProjection
 } from "../packages/core/src/text/source-map.js";
 
 describe("text source maps", () => {
+  it("translates optional projection metadata while preserving its absence", () => {
+    const translated = translateTextSourceMap({
+      inputText: "abcd",
+      charOrigins: [
+        { kind: "macro-argument", from: 1, to: 2, invocation: { from: 0, to: 3 } },
+        { kind: "macro-generated", invocation: { from: 0, to: 3 }, definition: { from: 10, to: 12 } },
+        { kind: "generated", reason: "padding" },
+        { kind: "generated", reason: "padding", owner: { from: 4, to: 5 } }
+      ],
+      boundaryOrigins: [
+        { kind: "range", from: 1, to: 2, policy: "select" },
+        { kind: "range", from: 2, to: 3, policy: "macro", projection: {
+          kind: "macro-argument", from: 2, to: 3, invocation: { from: 0, to: 3 }, definition: { from: 10, to: 12 }
+        } },
+        { kind: "offset", offset: 3 },
+        { kind: "offset", offset: 4 },
+        { kind: "offset", offset: 5 }
+      ]
+    }, 20);
+
+    expect(translated.charOrigins).toStrictEqual([
+      { kind: "macro-argument", from: 21, to: 22, invocation: { from: 20, to: 23 } },
+      { kind: "macro-generated", invocation: { from: 20, to: 23 }, definition: { from: 30, to: 32 } },
+      { kind: "generated", reason: "padding" },
+      { kind: "generated", reason: "padding", owner: { from: 24, to: 25 } }
+    ]);
+    expect(translated.boundaryOrigins).toStrictEqual([
+      { kind: "range", from: 21, to: 22, policy: "select" },
+      { kind: "range", from: 22, to: 23, policy: "macro", projection: {
+        kind: "macro-argument", from: 22, to: 23, invocation: { from: 20, to: 23 }, definition: { from: 30, to: 32 }
+      } },
+      { kind: "offset", offset: 23 },
+      { kind: "offset", offset: 24 },
+      { kind: "offset", offset: 25 }
+    ]);
+  });
+
   it("creates identity maps in absolute source coordinates", () => {
     const mapped = createIdentityMappedText("Alpha", 10);
 

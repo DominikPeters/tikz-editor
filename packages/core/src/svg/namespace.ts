@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { SvgRenderModel } from "./types.js";
 
 /** Give each embedded picture its own SVG definitions and fragment references. */
@@ -7,7 +8,7 @@ export function namespaceSvgModel(model: SvgRenderModel, namespace: string): Svg
   const ids = new Map<string, string>();
   const idAttribute = /(\s)id\s*=\s*(["'])([^"']+)\2/gu;
   for (const markup of [...model.defs, ...model.parts.map(part => part.markup)]) {
-    for (const match of markup.matchAll(idAttribute)) ids.set(match[3], prefix + match[3]);
+    for (const match of markup.matchAll(idAttribute)) ids.set(requireArrayValue(match, 3), prefix + match[3]);
   }
   if (ids.size === 0) return model;
   const rewrite = (markup: string): string => markup

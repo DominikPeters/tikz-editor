@@ -93,22 +93,16 @@ export class TexParagraphLayoutState {
       }
     }
 
+    const scopedAlignmentProfile = texScopeParagraphAlignmentProfile(
+      params.scopePolicy,
+      alignment,
+      alignmentProfile
+    );
     return {
       inheritedAlignment,
-      ...(inheritedAlignmentProfile ? { inheritedAlignmentProfile } : {}),
+      ...(inheritedAlignmentProfile ? { inheritedAlignmentProfile: inheritedAlignmentProfile } : {}),
       alignment: texScopeParagraphAlignment(params.scopePolicy, alignment),
-      ...(texScopeParagraphAlignmentProfile(
-        params.scopePolicy,
-        alignment,
-        alignmentProfile
-      ) ? {
-          alignmentProfile: texScopeParagraphAlignmentProfile(
-            params.scopePolicy,
-            alignment,
-            alignmentProfile
-          ),
-        }
-      : {}),
+      ...(scopedAlignmentProfile !== undefined ? { alignmentProfile: scopedAlignmentProfile } : {}),
       spaceGlueProfile: params.scopePolicy.resetSpaceGlueProfile
         ? params.scopePolicy.preserveSpaceGlueProfile
           ? this.activeSpaceGlueProfile
@@ -116,7 +110,7 @@ export class TexParagraphLayoutState {
             this.options.spaceGlueProfile ??
             texInitialSpaceGlueProfile(resetAlignment)
         : this.activeSpaceGlueProfile,
-      ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits } : {}),
+      ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits: finalHyphenDemerits } : {}),
     };
   }
 }

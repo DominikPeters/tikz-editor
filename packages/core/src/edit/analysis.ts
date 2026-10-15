@@ -74,7 +74,7 @@ export function createEditAnalysisSession(capacity = 2, sessionOptions: { increm
     const base = sessionOptions.incremental ? entries.find((entry) => entry.activeFigureId === activeFigureId) : undefined;
     const parseResult = base ? parseFrom(base, source, activeFigureId) : parseTikz(source, {
       recover: true,
-      activeFigureId,
+      ...(activeFigureId === undefined ? {} : { activeFigureId }),
       includeContextDefinitions: true
     });
     const entry = createCache(source, parseResult, activeFigureId);
@@ -104,9 +104,9 @@ export function createEditAnalysisSession(capacity = 2, sessionOptions: { increm
 function parseFrom(base: EditAnalysisCache, source: string, activeFigureId: string | null | undefined): ParseTikzResult {
   if (!base.incremental) {
     base.incremental = createIncrementalParseSession();
-    base.incremental.prime(base.parseResult, { activeFigureId, includeContextDefinitions: true });
+    base.incremental.prime(base.parseResult, { ...(activeFigureId === undefined ? {} : { activeFigureId }), includeContextDefinitions: true });
   }
-  return base.incremental.fork().evaluate({ source, activeFigureId, includeContextDefinitions: true, inferChanges: true }).parse;
+  return base.incremental.fork().evaluate({ source, ...(activeFigureId === undefined ? {} : { activeFigureId }), includeContextDefinitions: true, inferChanges: true }).parse;
 }
 
 function createCache(

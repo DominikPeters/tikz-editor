@@ -259,12 +259,10 @@ function buildFrameModel(
     endSpan: candidate.end?.span ?? null,
     headerSpan: header.headerSpan,
     bodySpan,
-    overlay: header.overlay,
-    options: header.options
-      ? parseFrameOptions(source, header.options)
-      : undefined,
-    title,
-    subtitle,
+    ...(header.overlay !== undefined ? { overlay: header.overlay } : {}),
+    ...(header.options ? { options: parseFrameOptions(source, header.options) } : {}),
+    ...(title !== undefined ? { title } : {}),
+    ...(subtitle !== undefined ? { subtitle } : {}),
     sectionId: null,
     subsectionId: null,
     children,
@@ -314,10 +312,10 @@ function scanFrameHeader(
 
   return {
     headerSpan: { from, to: headerEnd },
-    overlay,
-    options,
-    title,
-    subtitle,
+    ...(overlay !== undefined ? { overlay } : {}),
+    ...(options !== undefined ? { options } : {}),
+    ...(title !== undefined ? { title } : {}),
+    ...(subtitle !== undefined ? { subtitle } : {}),
   };
 }
 
@@ -334,7 +332,7 @@ function parseFrameOptions(
       return {
         span: entry.span,
         keySpan: entry.keySpan ?? entry.span,
-        valueSpan: entry.valueSpan ?? undefined,
+        ...(entry.valueSpan != null ? { valueSpan: entry.valueSpan } : {}),
         key: entry.key,
         value: entry.valueRaw,
       };
@@ -345,7 +343,6 @@ function parseFrameOptions(
         ? entry.keySpan ?? entry.span
         : entry.span,
       key: entry.kind === "flag" ? entry.key : entry.raw.trim(),
-      value: undefined,
     };
   });
   let alignment: BeamerFrameOptions["alignment"] = "center";
@@ -387,7 +384,7 @@ function parseFrameOptions(
     plain,
     ...(allowFrameBreaks == null ? {} : { allowFrameBreaks }),
     ...(noFrameNumbering ? { noFrameNumbering } : {}),
-    label,
+    ...(label !== undefined ? { label } : {}),
   };
 }
 
@@ -468,7 +465,7 @@ function scanSections(
       starred: command.starred,
       span: { from: command.from, to: title.span.to },
       commandSpan: { from: command.from, to: command.to },
-      shortTitle,
+      ...(shortTitle !== undefined ? { shortTitle } : {}),
       title,
       parentSectionId: null,
     });
@@ -954,7 +951,7 @@ function readDocumentClass(
   return {
     span: { from: command.from, to: className.span.to },
     commandSpan: { from: command.from, to: command.to },
-    options,
+    ...(options !== undefined ? { options } : {}),
     className,
   };
 }
@@ -979,7 +976,7 @@ function readThemeUse(
     kind,
     span: { from: command.from, to: name.span.to },
     commandSpan: { from: command.from, to: command.to },
-    options,
+    ...(options !== undefined ? { options } : {}),
     name,
   };
 }
@@ -1004,7 +1001,7 @@ function readMetadataField(
     name,
     span: { from: command.from, to: value.span.to },
     commandSpan: { from: command.from, to: command.to },
-    shortValue,
+    ...(shortValue !== undefined ? { shortValue } : {}),
     value,
   };
 }

@@ -40,7 +40,7 @@ function texVListBoxReportItem(
   const report: TexVListBoxReportItem = {
     itemKind: item.item.kind,
     path: item.path ?? [],
-    ...(sourceSpan ? { sourceSpan } : {}),
+    ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
     x: item.x,
     y: item.y,
     width: item.metrics.width,

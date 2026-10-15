@@ -67,19 +67,19 @@ export function prepareSimpleTexLayoutScope(
   const baseVList = params.items
     ? lowerSimpleTexBlockItemsToVList(params.items, {
         font: params.font,
-        mathBoxProvider: params.options.mathBoxProvider,
-        graphicsResolver: params.options.graphicsResolver,
-        width: params.options.width,
-        tikzTextWidthNode: params.options.tikzTextWidthNode,
-        dimensionContext: params.options.dimensionContext,
+        ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
+        ...(params.options.graphicsResolver !== undefined ? { graphicsResolver: params.options.graphicsResolver } : {}),
+        ...(params.options.width !== undefined ? { width: params.options.width } : {}),
+        ...(params.options.tikzTextWidthNode !== undefined ? { tikzTextWidthNode: params.options.tikzTextWidthNode } : {}),
+        ...(params.options.dimensionContext !== undefined ? { dimensionContext: params.options.dimensionContext } : {}),
       })
     : lowerSimpleTexBlocksToVList(params.blocks, {
         font: params.font,
-        mathBoxProvider: params.options.mathBoxProvider,
-        graphicsResolver: params.options.graphicsResolver,
-        width: params.options.width,
-        tikzTextWidthNode: params.options.tikzTextWidthNode,
-        dimensionContext: params.options.dimensionContext,
+        ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
+        ...(params.options.graphicsResolver !== undefined ? { graphicsResolver: params.options.graphicsResolver } : {}),
+        ...(params.options.width !== undefined ? { width: params.options.width } : {}),
+        ...(params.options.tikzTextWidthNode !== undefined ? { tikzTextWidthNode: params.options.tikzTextWidthNode } : {}),
+        ...(params.options.dimensionContext !== undefined ? { dimensionContext: params.options.dimensionContext } : {}),
       });
   const preparedVList = prepareSimpleTexVList(
     baseVList,

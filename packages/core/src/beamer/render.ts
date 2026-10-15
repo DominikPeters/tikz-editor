@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
 import { projectBeamerOverprints } from "./overprint.js";
 import { buildBeamerFrameFootnotes, beamerFootnoteTextMapped, projectBeamerFootnotes } from "./footnotes.js";
@@ -426,13 +427,15 @@ export function prepareBeamerDocument(
     if (cached) {
       return cached;
     }
+    const frame = requireFrame(frameIndex);
+    const overlays = context.overlaysByFrameId.get(frame.id);
     const bodyIr = parseBeamerFrameBody({
       source: context.source,
       frame: requireFrame(frameIndex),
       document: context.document,
       syntax: context.syntax,
       theoremOccurrences: context.theoremOccurrences,
-      overlays: context.overlaysByFrameId.get(requireFrame(frameIndex).id),
+      ...(overlays !== undefined ? { overlays } : {}),
     });
     bodyIrByFrameIndex.set(frameIndex, bodyIr);
     return bodyIr;
@@ -466,7 +469,7 @@ export function prepareBeamerDocument(
           if (frame.options?.noFrameNumbering) continue;
           if (frame.options?.allowFrameBreaks == null) { totalFrames++; continue; }
           if (work) await work.checkpoint();
-          const measured = await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr: frameBodyIr(frameIndex), step: 1, graphicsResolver, work });
+          const measured = await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr: frameBodyIr(frameIndex), step: 1, ...(graphicsResolver !== undefined ? { graphicsResolver } : {}), ...(work !== undefined ? { work } : {}) });
           totalFrames += measured.layout.continuation?.count ?? 1;
         }
         return { beforeFrames, totalFrames };
@@ -509,11 +512,11 @@ export function prepareBeamerDocument(
         frameIndex,
         bodyIr,
         step,
-        continuation: options.continuation,
-        frameCounter: { beforeFrame: counters.beforeFrames[frameIndex], totalFrames: counters.totalFrames },
-        graphicsResolver: options.graphicsResolver,
-        drawingLayer: options.drawingLayer,
-        work,
+        ...(options.continuation !== undefined ? { continuation: options.continuation } : {}),
+        frameCounter: { beforeFrame: requireArrayValue(counters.beforeFrames, frameIndex), totalFrames: counters.totalFrames },
+        ...(options.graphicsResolver !== undefined ? { graphicsResolver: options.graphicsResolver } : {}),
+        ...(options.drawingLayer !== undefined ? { drawingLayer: options.drawingLayer } : {}),
+        ...(work !== undefined ? { work } : {}),
       });
     },
     async renderFramePages(options = {}) {
@@ -525,7 +528,7 @@ export function prepareBeamerDocument(
       const pages: RenderBeamerFrameResult[] = [];
       const work = options.cooperative ? new BeamerRenderWork(options.cooperative) : undefined;
       const counters = await frameCounterContext(options.graphicsResolver, work);
-      const frameCounter = { beforeFrame: counters.beforeFrames[frameIndex], totalFrames: counters.totalFrames };
+      const frameCounter = { beforeFrame: requireArrayValue(counters.beforeFrames, frameIndex), totalFrames: counters.totalFrames };
       for (let step = 1; step <= stepCount; step += 1) {
         if (work) await work.checkpoint();
         pages.push(
@@ -536,15 +539,15 @@ export function prepareBeamerDocument(
             bodyIr,
             step,
             frameCounter,
-            graphicsResolver: options.graphicsResolver,
-            work,
+            ...(options.graphicsResolver !== undefined ? { graphicsResolver: options.graphicsResolver } : {}),
+            ...(work !== undefined ? { work } : {}),
           })
         );
       }
       const continuationCount = pages[0]?.layout.continuation?.count ?? 1;
       for (let continuation = 2; continuation <= continuationCount; continuation += 1) {
         if (work) await work.checkpoint();
-        pages.push(await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr, step: 1, continuation, frameCounter, graphicsResolver: options.graphicsResolver, work }));
+        pages.push(await renderBeamerFrameStep({ context, frame, frameIndex, bodyIr, step: 1, continuation, frameCounter, ...(options.graphicsResolver !== undefined ? { graphicsResolver: options.graphicsResolver } : {}), ...(work !== undefined ? { work } : {}) }));
       }
       return {
         document: context.document,
@@ -597,15 +600,12 @@ async function renderBeamerFrameStep(params: {
     frameIndex,
     context.navigationModel
   );
+  const chromeFrame = { ...frame };
+  if (frame.title && resolveBeamerOverlaySpanVisibility(bodyIr.overlays, frame.title.contentSpan, step) === "removed") delete chromeFrame.title;
+  if (frame.subtitle && resolveBeamerOverlaySpanVisibility(bodyIr.overlays, frame.subtitle.contentSpan, step) === "removed") delete chromeFrame.subtitle;
   const chrome = planBeamerFrameChrome({
     document,
-    frame: {
-      ...frame,
-      title: frame.title && resolveBeamerOverlaySpanVisibility(bodyIr.overlays, frame.title.contentSpan, step) === "removed"
-        ? undefined : frame.title,
-      subtitle: frame.subtitle && resolveBeamerOverlaySpanVisibility(bodyIr.overlays, frame.subtitle.contentSpan, step) === "removed"
-        ? undefined : frame.subtitle,
-    },
+    frame: chromeFrame,
     frameIndex: (params.frameCounter?.beforeFrame ?? frameIndex) + (frame.options?.noFrameNumbering ? -1 : allowFrameBreaks == null ? 0 : continuationIndex - 1),
     totalFrames: params.frameCounter?.totalFrames ?? document.frames.length,
     navigation,
@@ -621,7 +621,7 @@ async function renderBeamerFrameStep(params: {
       const measured = layoutParagraph({ mapped, sourceSpan: value.contentSpan, paragraphId: `${frame.id}:${role}:measure`, role,
         bounds: { x: 0, y: 0, width, height: 0 }, font, alignment: "left", macroBindings,
         initialBaselineSkipPt: font.lineHeightPt,
-        references: { ...context.references, theme, step, renderDiagnostics: [] }, graphicsResolver: params.graphicsResolver, paperWidth: page.page.width });
+        references: { ...context.references, theme, step, renderDiagnostics: [] }, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: page.page.width });
       return measured ? { firstHeight: paragraphStartingMaterialHeight(measured), extent: paragraphMaterialExtent(measured),
         endingDepth: paragraphEndingMaterialDepth(measured), baselineSkip: paragraphStartingBaselineSkip(measured, font.lineHeightPt),
         xHeight: fontXHeightPt(font) } : null;
@@ -636,8 +636,8 @@ async function renderBeamerFrameStep(params: {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
     tikzLayer: beamerTikzLayerState(source) === "ours",
     overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
-    crampedLists: shrink != null || frame.options?.entries.some(entry => entry.key === "squeeze"),
-    continuationBreaks: allowFrameBreaks == null ? undefined : collectBeamerContinuationBreaks(context.syntax, frame),
+    crampedLists: shrink != null || (frame.options?.entries.some(entry => entry.key === "squeeze") ?? false),
+    ...(allowFrameBreaks != null ? { continuationBreaks: collectBeamerContinuationBreaks(context.syntax, frame) } : {}),
     footnotes: buildBeamerFrameFootnotes(document, context.syntax, frame, context.overlaysByFrameId, step, theme.templates.block.id.includes("/rounded")),
     tableRegisters: parseSimpleTexTabularRegisters(source.slice(document.preamble.span.from, document.preamble.span.to)),
     arrayPackage: context.syntax.controlsIn(document.preamble.span).some(control => {
@@ -671,7 +671,7 @@ async function renderBeamerFrameStep(params: {
   const footnoteInsertion = prepareFrameFootnoteInsertion({
     source, frame, references, theme, textWidth: page.textArea.width,
     paperWidth: page.page.width, macroBindings, overlays: bodyIr.overlays, step,
-    graphicsResolver: params.graphicsResolver,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
   });
   const availableContentBounds: BeamerRect = {
     x: page.textArea.x,
@@ -699,8 +699,8 @@ async function renderBeamerFrameStep(params: {
     references,
     overlays: bodyIr.overlays,
     step,
-    graphicsResolver: params.graphicsResolver,
-    work: params.work,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+    ...(params.work !== undefined ? { work: params.work } : {}),
   });
   const continuationPages = allowFrameBreaks == null ? null : splitBeamerFrameContinuations({
     flow: preparedFrameFlow, baselineSkip: theme.fonts["normal-text"].lineHeightPt,
@@ -713,9 +713,9 @@ async function renderBeamerFrameStep(params: {
   const continuationCount = continuationPages?.length ?? 1;
   if (continuationIndex > continuationCount) throw new RangeError(`Beamer continuation page ${continuationIndex} is outside the frame's ${continuationCount} pages.`);
   renderChrome({ chrome, theme, items, paragraphs, modelBuilder, macroBindings, references,
-    graphicsResolver: params.graphicsResolver, paperWidth: page.page.width,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: page.page.width,
     overlays: bodyIr.overlays, step,
-    continuationSuffix: continuationPages ? beamerContinuationTitleSuffix(document, continuationIndex, continuationCount) : undefined,
+    ...(continuationPages ? { continuationSuffix: beamerContinuationTitleSuffix(document, continuationIndex, continuationCount) } : {}),
   });
   const bodyItemStart = items.length;
   const bodyParagraphStart = paragraphs.length;
@@ -786,7 +786,7 @@ async function renderBeamerFrameStep(params: {
           embeddedTikz,
           modelBuilder: bodyModelBuilder,
           theme,
-          work: params.work,
+          ...(params.work !== undefined ? { work: params.work } : {}),
         });
       } else if (placement.item.kind === "tikzpicture") {
         const tikz = placement.item.tikz;
@@ -818,7 +818,7 @@ async function renderBeamerFrameStep(params: {
       } else if (placement.item.kind === "vertical-space") {
         const item = placement.item;
         spacing.push({ command: item.node.command, sourceSpan: item.node.span, sizePt: item.height,
-          relativeUnitPt: item.relativeUnitPt,
+          ...(item.relativeUnitPt !== undefined ? { relativeUnitPt: item.relativeUnitPt } : {}),
           bounds: { x: availableContentBounds.x, y: frameBlockTop + placement.contentTop,
             width: availableContentBounds.width, height: item.height } });
       } else {
@@ -941,9 +941,9 @@ async function renderBeamerFrameStep(params: {
     items,
     embeddedTikz,
     modelBuilder,
-    graphicsResolver: params.graphicsResolver,
-    drawingLayer: params.drawingLayer,
-    work: params.work,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+    ...(params.drawingLayer !== undefined ? { drawingLayer: params.drawingLayer } : {}),
+    ...(params.work !== undefined ? { work: params.work } : {}),
   });
   const model = modelBuilder.build({
     viewBox: page.page,
@@ -966,7 +966,8 @@ async function renderBeamerFrameStep(params: {
         item.sourceSpan.from <= candidate.beginSpan.from &&
         candidate.beginSpan.to <= item.sourceSpan.to
     );
-    item.rootId = child?.id;
+    if (child) item.rootId = child.id;
+    else delete item.rootId;
   }
   const editScopes = collectBeamerEditScopes(frame, bodyIr, document.preamble.metadata);
   const recovery = collectBeamerRecovery(source, editScopes);
@@ -1178,11 +1179,11 @@ function renderChrome(params: {
       font,
       colorResolver: beamerAlertColorResolver(theme),
       alignment: primitive.alignment,
-      interwordSpacePt: primitive.interwordSpacePt,
-      disableAutomaticHyphenation: primitive.disableAutomaticHyphenation,
+      ...(primitive.interwordSpacePt !== undefined ? { interwordSpacePt: primitive.interwordSpacePt } : {}),
+      ...(primitive.disableAutomaticHyphenation !== undefined ? { disableAutomaticHyphenation: primitive.disableAutomaticHyphenation } : {}),
       macroBindings: params.macroBindings,
       references: params.references,
-      graphicsResolver: params.graphicsResolver,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       paperWidth: params.paperWidth,
       hiddenSourceSpans: projection.hiddenSourceSpans,
     });
@@ -1278,7 +1279,7 @@ function prepareFrameFootnoteInsertion(params: {
       bounds: { x: 0, y: 0, width: params.textWidth, height: 0 }, font,
       alignment: "left", references: params.references, macroBindings: params.macroBindings,
       hiddenSourceSpans: visibility === "hidden" ? [...projection.hiddenSourceSpans, note.span] : projection.hiddenSourceSpans,
-      graphicsResolver: params.graphicsResolver, paperWidth: params.paperWidth,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: params.paperWidth,
     });
     if (!paragraph) {
       params.references.renderDiagnostics.push({ severity: "warning", code: "beamer-render-unsupported-footnote", message: "This frame footnote's content could not be laid out.", span: note.bodySpan });
@@ -1307,7 +1308,7 @@ function emitFrameFootnoteInsertion(params: {
   theme: ResolvedBeamerTheme;
 }): void {
   if (!params.prepared.notes.length) return;
-  const owner = params.prepared.notes[0].paragraph.layout;
+  const owner = requireArrayValue(params.prepared.notes, 0).paragraph.layout;
   const color = textColor(params.theme, "footnote");
   const bounds = { x: params.x, y: params.y - 3, width: .4 * params.width, height: .4 };
   params.items.push({ id: `${owner.paragraphId}:rule:background`, kind: "text", sourceSpan: owner.sourceSpan, bounds, parentId: null });
@@ -1363,7 +1364,7 @@ async function prepareFrameFlow(params: {
           metadata: params.metadata,
           macroBindings: params.macroBindings,
           references: params.references,
-          graphicsResolver: params.graphicsResolver,
+          ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
           paperWidth: params.paperWidth,
         })),
       });
@@ -1380,7 +1381,7 @@ async function prepareFrameFlow(params: {
         references: params.references,
         overlays: params.overlays,
         step: params.step,
-        graphicsResolver: params.graphicsResolver,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         colorResolver: beamerAlertColorResolver(params.theme),
         paperWidth: params.paperWidth,
       }));
@@ -1440,9 +1441,9 @@ async function prepareFrameFlow(params: {
         leftSidebarWidth: params.leftSidebarWidth,
         overlays: params.overlays,
         step: params.step,
-        graphicsResolver: params.graphicsResolver,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         paperWidth: params.paperWidth,
-        work: params.work,
+        ...(params.work !== undefined ? { work: params.work } : {}),
       })));
       result.push({
         kind: "columns",
@@ -1464,8 +1465,8 @@ async function prepareFrameFlow(params: {
         bodyFont,
         diagnostics: params.diagnostics,
         visibility,
-        graphicsResolver: params.graphicsResolver,
-        work: params.work,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        ...(params.work !== undefined ? { work: params.work } : {}),
       });
       if (tikz) {
         const surroundingGlue = node.horizontalAlignment === "center"
@@ -1506,7 +1507,7 @@ async function prepareFrameFlow(params: {
         references: params.references,
         overlays: params.overlays,
         step: params.step,
-        graphicsResolver: params.graphicsResolver,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         paperWidth: params.paperWidth,
         diagnostics: params.diagnostics,
       }));
@@ -1547,10 +1548,10 @@ async function prepareFrameFlow(params: {
     references: params.references,
     overlays: params.overlays,
     step: params.step,
-    graphicsResolver: params.graphicsResolver,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
     colorResolver: beamerAlertColorResolver(params.theme),
     paperWidth: params.paperWidth,
-    work: params.work,
+    ...(params.work !== undefined ? { work: params.work } : {}),
   });
 }
 
@@ -1586,7 +1587,7 @@ function prepareTitlePage(params: {
         alignment,
         macroBindings: params.macroBindings,
         references: params.references,
-        graphicsResolver: params.graphicsResolver,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         paperWidth: params.paperWidth,
       })
     : null;
@@ -1605,7 +1606,7 @@ function prepareTitlePage(params: {
         alignment,
         macroBindings: params.macroBindings,
         references: params.references,
-        graphicsResolver: params.graphicsResolver,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         paperWidth: params.paperWidth,
       })
     : null;
@@ -1658,7 +1659,7 @@ function prepareTitlePage(params: {
           alignment,
           macroBindings: params.macroBindings,
           references: params.references,
-          graphicsResolver: params.graphicsResolver,
+          ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
           paperWidth: params.paperWidth,
         })
       : null;
@@ -1715,7 +1716,7 @@ function prepareFrameParagraph(params: {
     width: raw => raw === undefined ? params.textWidth : resolveBeamerColumnWidth(raw, params.textWidth, params.paperWidth),
     measure: (mapped, width) => {
       const measured = layoutParagraph({ mapped, sourceSpan: params.node.span, paragraphId: `${params.node.id}:overprint-measure`, role: "body", bounds: { x: 0, y: 0, width, height: 0 }, font: params.bodyFont,
-        colorResolver: params.colorResolver, alignment: "left", listProfile: params.listProfile, macroBindings: params.macroBindings, references: params.references, graphicsResolver: params.graphicsResolver, paperWidth: params.paperWidth });
+        ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}), alignment: "left", listProfile: params.listProfile, macroBindings: params.macroBindings, references: params.references, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), paperWidth: params.paperWidth });
       if (!measured) return null;
       const height = paragraphStartingMaterialHeight(measured);
       return { height, depth: paragraphMaterialExtent(measured) - height };
@@ -1728,14 +1729,14 @@ function prepareFrameParagraph(params: {
     role: "body",
     bounds: { x: 0, y: 0, width: params.textWidth, height: 0 },
     font: params.bodyFont,
-    colorResolver: params.colorResolver,
+    ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}),
     alignment: "left",
     listProfile: params.listProfile,
     macroBindings: params.macroBindings,
     references: params.references,
-    targetHeight: params.targetHeight,
+    ...(params.targetHeight !== undefined ? { targetHeight: params.targetHeight } : {}),
     hiddenSourceSpans: projection.hiddenSourceSpans,
-    graphicsResolver: params.graphicsResolver,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
     paperWidth: params.paperWidth,
   });
   if (!paragraph) {
@@ -2070,7 +2071,7 @@ function prepareBlock(params: {
     macroBindings: params.macroBindings,
     references: params.references,
     hiddenSourceSpans: titleProjection.hiddenSourceSpans,
-    graphicsResolver: params.graphicsResolver,
+    ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
     paperWidth: params.paperWidth,
     textWidth: params.width,
     columnWidth: params.width,
@@ -2111,7 +2112,7 @@ function prepareBlock(params: {
         macroBindings: params.macroBindings,
         references: params.references,
         hiddenSourceSpans: bodyProjection.hiddenSourceSpans,
-        graphicsResolver: params.graphicsResolver,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
         paperWidth: params.paperWidth,
       });
   };
@@ -2156,7 +2157,7 @@ function prepareBlock(params: {
     }
     if (flow.length > 0) {
       const positioned = positionPreparedFrameFlow(flow, theoremBodyFont.lineHeightPt);
-      const origin = positioned.items[0].contentTop;
+      const origin = requireArrayValue(positioned.items, 0).contentTop;
       bodyFlow = {
         extent: positioned.extent - origin,
         items: positioned.items.map(item => ({
@@ -2167,8 +2168,8 @@ function prepareBlock(params: {
       };
     }
   }
-  const firstBody = body ?? (bodyFlow?.items[0].item.kind === "paragraph"
-    ? bodyFlow.items[0].item.paragraph : null);
+  const firstFlowItem = bodyFlow?.items[0]?.item;
+  const firstBody = body ?? (firstFlowItem?.kind === "paragraph" ? firstFlowItem.paragraph : null);
   const bodyExtent = body ? (plan.style === "default"
     ? paragraphMaterialExtent(body) + trailingBeamerListSkip(params.source.slice(params.node.bodySpan.from, params.node.bodySpan.to))
     : paragraphLineExtent(body)) : bodyFlow?.extent ?? 0;
@@ -2305,7 +2306,7 @@ function prepareTcolorbox(params: Parameters<typeof prepareBlock>[0]): PreparedB
       initialBaselineSkipPt: font.lineHeightPt,
       listProfile: { ...beamerListLayoutProfile(params.theme, params.references.crampedLists), suppressInitialTopsep: true },
       macroBindings: params.macroBindings, references: params.references, hiddenSourceSpans: projection.hiddenSourceSpans,
-      graphicsResolver: params.graphicsResolver, colorResolver: beamerAlertColorResolver(params.theme),
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), colorResolver: beamerAlertColorResolver(params.theme),
       paperWidth: params.paperWidth, textWidth: params.width, columnWidth: params.width });
   };
   const title = plan.title.value ? measure(plan.title.contentSpan, "block-title", plan.titleWidthPt) : null;
@@ -2369,7 +2370,7 @@ function emitPreparedBlock(params: {
         height: block.titleBackgroundHeight,
       },
       parentId: block.node.id,
-      visibility: params.visibility,
+      ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
     });
   }
   if (block.plan.style === "default" && bodyColor.bg) {
@@ -2384,7 +2385,7 @@ function emitPreparedBlock(params: {
         height: block.bodyBackgroundHeight,
       },
       parentId: block.node.id,
-      visibility: params.visibility,
+      ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
     });
   }
   params.modelBuilder.addPart({
@@ -2420,7 +2421,7 @@ function emitPreparedBlock(params: {
     bounds: block.title.layout.bounds,
     parentId: block.node.id,
     paragraphId: block.title.layout.paragraphId,
-    visibility: params.visibility,
+    ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
   });
   params.modelBuilder.addPart({
     basePartId: block.title.layout.paragraphId,
@@ -2528,7 +2529,7 @@ function emitPreparedBlock(params: {
           sourceSpan: block.node.endSpan,
           bounds,
           parentId: block.node.id,
-          visibility: params.visibility,
+          ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
         });
       }
       params.modelBuilder.addPart({
@@ -2550,7 +2551,7 @@ function emitPreparedBlock(params: {
     bounds: outerBounds,
     parentId: params.parentId,
     childIds,
-    visibility: params.visibility,
+    ...(params.visibility !== undefined ? { visibility: params.visibility } : {}),
   });
 }
 
@@ -2573,7 +2574,7 @@ function emitPreparedTcolorbox(params: Parameters<typeof emitPreparedBlock>[0]):
     params.paragraphs.push(paragraph.layout);
     childIds.push(paragraph.layout.paragraphId);
     params.items.push({ id: paragraph.layout.paragraphId, kind: "text", sourceSpan: paragraph.layout.sourceSpan,
-      bounds: paragraph.layout.bounds, parentId: block.node.id, paragraphId: paragraph.layout.paragraphId, visibility: params.visibility });
+      bounds: paragraph.layout.bounds, parentId: block.node.id, paragraphId: paragraph.layout.paragraphId, ...(params.visibility !== undefined ? { visibility: params.visibility } : {}) });
     for (const marker of paragraph.listMarkers) params.items.push({ id: marker.id, kind: "list-marker",
       sourceSpan: marker.sourceSpan ?? paragraph.layout.sourceSpan,
       bounds: { ...marker.bounds, x: x + marker.bounds.x, y: y + marker.bounds.y },
@@ -2583,7 +2584,7 @@ function emitPreparedTcolorbox(params: Parameters<typeof emitPreparedBlock>[0]):
   }
   params.items.push({ id: block.node.id, kind: "block", sourceSpan: block.node.span,
     bounds: { x: params.x, y: params.y, width: plan.widthPt, height: geometry.heightPt }, parentId: params.parentId,
-    childIds, visibility: params.visibility });
+    childIds, ...(params.visibility !== undefined ? { visibility: params.visibility } : {}) });
 }
 
 function overlayVisibilityMarkup(
@@ -2953,11 +2954,11 @@ async function emitPreparedColumns(params: {
   const visualTop = Math.min(...columnTops);
   const visualBottom = Math.max(
     ...prepared.map(
-      (column, index) => columnTops[index] + column.naturalHeight
+      (column, index) => requireArrayValue(columnTops, index) + column.naturalHeight
     )
   );
   const positions = resolveBeamerColumnPositions({
-    options: params.prepared.node.options?.value,
+    ...(params.prepared.node.options?.value !== undefined ? { options: params.prepared.node.options?.value } : {}),
     widths: prepared.map(column => column.width),
     textWidth: params.bounds.width,
     paperWidth: params.paperWidth,
@@ -2967,20 +2968,14 @@ async function emitPreparedColumns(params: {
   });
   const columnsId = params.prepared.node.id;
   const columnChildIds: string[] = [];
-  for (let index = 0; index < prepared.length; index += 1) {
-    const x = positions[index];
-    const preparedColumn = prepared[index];
+  for (const [index, preparedColumn] of prepared.entries()) {
+    const x = requireArrayValue(positions, index);
     const columnId = preparedColumn.column.id;
     const childIds: string[] = [];
-    const columnTop = columnTops[index];
+    const columnTop = requireArrayValue(columnTops, index);
     let flowY = columnTop;
     columnChildIds.push(columnId);
-    for (
-      let flowIndex = 0;
-      flowIndex < preparedColumn.flow.length;
-      flowIndex += 1
-    ) {
-      const flowItem = preparedColumn.flow[flowIndex];
+    for (const [flowIndex, flowItem] of preparedColumn.flow.entries()) {
       if (params.work) await params.work.checkpoint();
       if (
         flowItem.visibility === "hidden" &&
@@ -2995,7 +2990,7 @@ async function emitPreparedColumns(params: {
       if (flowItem.kind === "paragraph" || flowItem.kind === "block") flowY += flowItem.leadingSkipPt ?? 0;
       if (flowItem.kind === "vertical-space") {
         params.spacing.push({ command: flowItem.node.command, sourceSpan: flowItem.node.span,
-          sizePt: flowItem.height, relativeUnitPt: flowItem.relativeUnitPt,
+          sizePt: flowItem.height, ...(flowItem.relativeUnitPt !== undefined ? { relativeUnitPt: flowItem.relativeUnitPt } : {}),
           bounds: { x, y: flowY, width: preparedColumn.width, height: flowItem.height } });
         flowY += flowItem.height;
       } else if (flowItem.kind === "paragraph") {
@@ -3173,19 +3168,18 @@ async function prepareColumnContent(params: {
       theme,
       diagnostics,
       listProfile,
-      initialPreviousDepth:
-        node.kind === "list" ? previousDepth : undefined,
+      ...(node.kind === "list" && previousDepth !== undefined ? { initialPreviousDepth: previousDepth } : {}),
       macroBindings,
       references,
       leftSidebarWidth: params.leftSidebarWidth,
       overlays: params.overlays,
       step: params.step,
-      graphicsResolver: params.graphicsResolver,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       paperWidth: params.paperWidth,
-      work: params.work,
+      ...(params.work !== undefined ? { work: params.work } : {}),
       // T's \colheadskip ships the leading empty line before \vskip-1ex.
       // A first display selects short skips without another baseline skip.
-      leadingDisplayBaselineSkipPt: column.alignment === "T" && flow.length === 0 ? 0 : undefined,
+      ...(column.alignment === "T" && flow.length === 0 ? { leadingDisplayBaselineSkipPt: 0 } : {}),
     });
     if (prepared) {
       const previous = flow.at(-1);
@@ -3309,7 +3303,7 @@ async function prepareColumnFlowNode(params: {
       references,
       overlays,
       step,
-      graphicsResolver,
+      ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
       paperWidth,
       diagnostics,
     }));
@@ -3334,13 +3328,13 @@ async function prepareColumnFlowNode(params: {
       font: bodyFont,
       colorResolver: beamerAlertColorResolver(theme),
       alignment: "left",
-      initialPreviousDepth,
-      leadingDisplayBaselineSkipPt: params.leadingDisplayBaselineSkipPt,
+      ...(initialPreviousDepth !== undefined ? { initialPreviousDepth } : {}),
+      ...(params.leadingDisplayBaselineSkipPt !== undefined ? { leadingDisplayBaselineSkipPt: params.leadingDisplayBaselineSkipPt } : {}),
       listProfile,
       macroBindings,
       references,
       hiddenSourceSpans: projection.hiddenSourceSpans,
-      graphicsResolver,
+      ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
       paperWidth,
     }));
     if (!paragraph) {
@@ -3404,8 +3398,8 @@ async function prepareColumnFlowNode(params: {
     bodyFont,
     diagnostics,
     visibility,
-    graphicsResolver,
-    work: params.work,
+    ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
+    ...(params.work !== undefined ? { work: params.work } : {}),
   });
 }
 
@@ -3432,8 +3426,8 @@ async function prepareEmbeddedTikz(params: {
       textEngine,
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont) },
-      graphicsResolver: params.graphicsResolver,
-      cooperative: params.work?.options,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+      ...(params.work?.options !== undefined ? { cooperative: params.work?.options } : {}),
       // A TikZ picture contributes its natural PGF bounding box to the
       // surrounding TeX hbox. The standalone renderer's presentation padding
       // is useful for an isolated SVG, but it is not part of that box.
@@ -3448,7 +3442,7 @@ async function prepareEmbeddedTikz(params: {
   ]) {
     params.diagnostics.push({
       severity: diagnostic.severity,
-      code: diagnostic.code,
+      ...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}),
       message: diagnostic.message,
       span: params.node.root.span,
     });
@@ -3514,8 +3508,8 @@ async function emitBeamerOverlayPictures(params: {
           model: { viewBox: { x: 0, y: 0, width: 1, height: 1 }, defs: [], defsFingerprint: "", parts: [], diagnostics: [] } },
         x: origin.x, y: origin.y, parentId: null, items: params.items, embeddedTikz: params.embeddedTikz, modelBuilder: params.modelBuilder,
       });
-      Object.assign(params.items[params.items.length - 1], { overlayPicture: true, rootId });
-      params.embeddedTikz[params.embeddedTikz.length - 1].overlay = { rootId, origin, rememberPicture: picture.rememberPicture, elements: [], sourceOffset: 0 };
+      Object.assign(requireArrayValue(params.items, params.items.length - 1), { overlayPicture: true, rootId });
+      requireArrayValue(params.embeddedTikz, params.embeddedTikz.length - 1).overlay = { rootId, origin, rememberPicture: picture.rememberPicture, elements: [], sourceOffset: 0 };
       continue;
     }
     const rendered = await renderTikzToSvgAsync(
@@ -3523,8 +3517,8 @@ async function emitBeamerOverlayPictures(params: {
       {
         textEngine,
         parse: { includeContextDefinitions: true },
-        graphicsResolver: params.graphicsResolver,
-        cooperative: params.work?.options,
+        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+        ...(params.work?.options !== undefined ? { cooperative: params.work?.options } : {}),
         svg: { padding: 0 },
         // With `remember picture`, PGF knows where the picture is on the page;
         // without, `current page` takes the picture's origin for the page's corner.
@@ -3538,7 +3532,7 @@ async function emitBeamerOverlayPictures(params: {
       }
     );
     for (const diagnostic of [...rendered.parse.diagnostics, ...rendered.semantic.diagnostics]) {
-      params.diagnostics.push({ severity: diagnostic.severity, code: diagnostic.code, message: diagnostic.message, span: picture.span });
+      params.diagnostics.push({ severity: diagnostic.severity, ...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}), message: diagnostic.message, span: picture.span });
     }
     const viewBox = rendered.svg.viewBox;
     // The picture's origin, world (0, 0), is at SVG (0, 2·y + height) of its view box.
@@ -3561,8 +3555,8 @@ async function emitBeamerOverlayPictures(params: {
       embeddedTikz: params.embeddedTikz,
       modelBuilder: params.modelBuilder,
     });
-    Object.assign(params.items[params.items.length - 1], { overlayPicture: true, rootId });
-    params.embeddedTikz[params.embeddedTikz.length - 1].overlay = {
+    Object.assign(requireArrayValue(params.items, params.items.length - 1), { overlayPicture: true, rootId });
+    requireArrayValue(params.embeddedTikz, params.embeddedTikz.length - 1).overlay = {
       rootId,
       origin,
       rememberPicture: picture.rememberPicture,
@@ -3836,7 +3830,7 @@ function layoutParagraph(params: {
   });
   const referenceProjection = projectBeamerReferences(mapped, params.references, (widestLabel, sourceStart) =>
     beamerBibliographyStyle({
-      source: params.references.source, sourceStart, theme: params.references.theme,
+      source: params.references.source, sourceStart, ...(params.references.theme !== undefined ? { theme: params.references.theme } : {}),
       widestLabel, fontSizePt: namedSize?.sizePt ?? params.font.sizePt,
       layoutFontSizePt: params.font.sizePt,
       measure: (tex) => {
@@ -3859,11 +3853,13 @@ function layoutParagraph(params: {
       mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
     }).report?.lines[0]?.naturalWidth ?? 0;
   });
+  const blockDisplayProfile = { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE };
+  delete blockDisplayProfile.leadingDisplay;
   const layoutOptions = {
     namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
     paragraphId: params.paragraphId,
     width: texLength(params.bounds.width),
-    height: params.targetHeight,
+    ...(params.targetHeight !== undefined ? { height: params.targetHeight } : {}),
     alignment,
     font: resolvedFont,
     metricProvider,
@@ -3894,33 +3890,31 @@ function layoutParagraph(params: {
     }),
     baselineSkip: params.initialBaselineSkipPt ?? namedSize?.lineHeightPt ?? params.font.lineHeightPt,
     tabularProfile: {
-      arrayPackage: params.references.arrayPackage,
-      registers: params.references.tableRegisters,
+      ...(params.references.arrayPackage !== undefined ? { arrayPackage: params.references.arrayPackage } : {}),
+      ...(params.references.tableRegisters !== undefined ? { registers: params.references.tableRegisters } : {}),
       baselineSkipPt: namedSize?.lineHeightPt ?? params.font.lineHeightPt,
       booktabsFontSizePt: params.references?.theme?.fonts["normal-text"].sizePt ?? params.font.sizePt,
       booktabsXHeightPt: fontXHeightPt(params.references?.theme?.fonts["normal-text"] ?? params.font),
     },
-    initialPreviousDepth: params.initialPreviousDepth,
+    ...(params.initialPreviousDepth !== undefined ? { initialPreviousDepth: params.initialPreviousDepth } : {}),
     listProfile: {
       ...(params.listProfile ?? BEAMER_LIST_LAYOUT_PROFILE),
-      bibliographyMargins: referenceProjection.bibliographyMargins,
+      ...(referenceProjection.bibliographyMargins !== undefined ? { bibliographyMargins: referenceProjection.bibliographyMargins } : {}),
       ...(descriptionLabelWidths.size > 0 ? { descriptionLabelWidths } : {}),
       bibliographyParsepPt: (leadingSize?.command ?? namedSize?.command) === "small"
         ? 3
         : (leadingSize?.command ?? namedSize?.command) === "footnotesize" ? 2 : 0,
     },
     displayMathProfile: params.role === "block-body"
-      ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE, leadingDisplay: undefined }
+      ? blockDisplayProfile
       : params.leadingDisplayBaselineSkipPt != null
         ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE, leadingDisplay: {
             emptyLineBaselineSkipPt: params.leadingDisplayBaselineSkipPt,
           } }
         : BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
-    hyphenator: params.disableAutomaticHyphenation
-      ? { hyphenate: () => [] }
-      : undefined,
-    graphicsResolver,
-    colorResolver: params.colorResolver,
+    ...(params.disableAutomaticHyphenation ? { hyphenator: { hyphenate: () => [] } } : {}),
+    ...(graphicsResolver !== undefined ? { graphicsResolver } : {}),
+    ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}),
     dimensionContext: {
       linewidth: texLength(params.bounds.width),
       textwidth: texLength(params.textWidth ?? params.bounds.width),
@@ -3968,17 +3962,17 @@ function layoutParagraph(params: {
             segments: line.segments.map((segment) => ({
               ...segment,
               x: texLineX(segment.x + delta),
-              caretStops: segment.caretStops?.map((stop) =>
+              ...(segment.caretStops ? { caretStops: segment.caretStops.map((stop) =>
                 texLineX(stop + delta)
-              ),
-              mathConstructRanges: segment.mathConstructRanges?.map(
+              ) } : {}),
+              ...(segment.mathConstructRanges ? { mathConstructRanges: segment.mathConstructRanges.map(
                 (range) => ({
                   ...range,
                   xStart: texLineX(range.xStart + delta),
                   xEnd: texLineX(range.xEnd + delta),
                 })
-              ),
-              mathCaretEntries: segment.mathCaretEntries?.map((entry) => ({
+              ) } : {}),
+              ...(segment.mathCaretEntries ? { mathCaretEntries: segment.mathCaretEntries.map((entry) => ({
                 ...entry,
                 x: texLineX(entry.x + delta),
                 hitBounds: {
@@ -3986,13 +3980,13 @@ function layoutParagraph(params: {
                   xStart: texLineX(entry.hitBounds.xStart + delta),
                   xEnd: texLineX(entry.hitBounds.xEnd + delta),
                 },
-              })),
-              mathBreakpoints: segment.mathBreakpoints?.map(
+              })) } : {}),
+              ...(segment.mathBreakpoints ? { mathBreakpoints: segment.mathBreakpoints.map(
                 (breakpoint) => ({
                   ...breakpoint,
                   x: texLineX(breakpoint.x + delta),
                 })
-              ),
+              ) } : {}),
             })),
           };
         }),

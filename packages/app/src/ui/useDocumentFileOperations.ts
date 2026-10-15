@@ -75,8 +75,8 @@ export function useDocumentFileOperations({ dispatch, showMessage }: {
       } else if (decision.kind === "mark-status") {
         dispatch({ type: "SET_DOCUMENT_LINKED_FILE_STATUS", documentId: doc.id,
           externalChangeStatus: decision.externalChangeStatus,
-          diskRevision: decision.externalChangeStatus === "changed" ? undefined : decision.revision,
-          lastKnownDiskSource: decision.externalChangeStatus === "changed" ? undefined : decision.source });
+          ...(decision.externalChangeStatus === "changed" ? {} : { diskRevision: decision.revision }),
+          ...(decision.externalChangeStatus === "changed" ? {} : { lastKnownDiskSource: decision.source }) });
       } else if (duringSave && result.status === "ok" && result.source === current.lastKnownDiskSource) {
         // Save As adopts a new binding before this read; initialize only its disk metadata.
         dispatch({ type: "SET_DOCUMENT_LINKED_FILE_STATUS", documentId: doc.id,

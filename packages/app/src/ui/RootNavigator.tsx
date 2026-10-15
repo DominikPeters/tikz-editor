@@ -195,7 +195,7 @@ export function RootNavigator() {
     if (!mirrorActiveRoot) return;
     const root = roots.find(root => root.id === activeRootId);
     if (!root) return;
-    return { figureId: root.thumbnailId, deckFrameIndex: root.deckFrameIndex, url: mainUrl };
+    return { figureId: root.thumbnailId, ...(root.deckFrameIndex === undefined ? {} : { deckFrameIndex: root.deckFrameIndex }), url: mainUrl };
   }, [activeRootId, mainUrl, mirrorActiveRoot, roots]);
   const visibleIds = useMemo(() => {
     const byId = new Map(roots.map(root => [root.id, root.thumbnailId]));
@@ -203,9 +203,9 @@ export function RootNavigator() {
   }, [roots, visibleRootIds]);
   const priorities = useMemo(() => [...new Set([...visibleIds, ...roots.filter(root => root.id === activeRootId).map(root => root.thumbnailId)])], [visibleIds, roots, activeRootId]);
   const thumbnails = useFigureThumbnails(model ? model.source : snapshot.source, thumbnailRoots, {
-    documentKey: documentId, graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey,
+    documentKey: documentId, ...(snapshot.graphicsPreviewBundleKey === undefined ? {} : { graphicsPreviewBundleKey: snapshot.graphicsPreviewBundleKey }),
     priorityFigureIds: priorities, maxToRender: Math.max(8, visibleIds.length + 4),
-    externalThumbnail,
+    ...(externalThumbnail === undefined ? {} : { externalThumbnail }),
   });
   // Cards are memoized on what they show; their handlers read the latest
   // panel state through this ref instead of being new closures each render.
@@ -227,13 +227,13 @@ export function RootNavigator() {
         if (ids.length > 1) {
           dragPreview.current?.remove();
           const ghost = document.createElement("div");
-          ghost.className = css.dragPreview; ghost.setAttribute("aria-hidden", "true");
+          ghost.className = css.dragPreview ?? ""; ghost.setAttribute("aria-hidden", "true");
           ghost.dataset.testid = "slide-drag-preview";
           const image = event.currentTarget.querySelector("img")?.cloneNode(true);
           if (image) ghost.appendChild(image);
           else {
             const title = document.createElement("div");
-            title.className = css.dragTitle; title.textContent = label; ghost.appendChild(title);
+            title.className = css.dragTitle ?? ""; title.textContent = label; ghost.appendChild(title);
           }
           const count = document.createElement("span");
           count.textContent = `${ids.length} slides`; ghost.appendChild(count);

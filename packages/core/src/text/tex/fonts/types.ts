@@ -32,9 +32,20 @@ export interface GeneratedTexFont {
   readonly checksum: string;
   readonly designSize: number;
   readonly source: GeneratedTexFontSourceMetadata;
-  readonly fontdimen: Readonly<Record<string, number>>;
+  readonly fontdimen: GeneratedTexFontDimensions;
   readonly chars: Readonly<Record<string, GeneratedTexCharMetric>>;
   readonly ligKerns: readonly GeneratedTexLigKern[];
+}
+
+/** The six common TFM parameters are present in every generated font. */
+export interface GeneratedTexFontDimensions {
+  readonly slant: number;
+  readonly space: number;
+  readonly stretch: number;
+  readonly shrink: number;
+  readonly xheight: number;
+  readonly quad: number;
+  readonly [parameter: string]: number;
 }
 
 export type GeneratedTexFontTable = Readonly<Record<string, GeneratedTexFont>>;

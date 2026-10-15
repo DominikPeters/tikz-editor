@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editNodeAt, editSlotAt } from "./lookup.js";
 import type { EditTree, NodeId, SlotId } from "./types.js";
 
 /**
@@ -11,7 +13,7 @@ export function printEditTree(tree: EditTree, node: NodeId = tree.root): string 
 }
 
 function printNode(tree: EditTree, id: NodeId): string {
-  const node = tree.nodes[id];
+  const node = editNodeAt(tree.nodes, id);
   const source = tree.text.slice(node.span.from, node.span.to);
   const leaf = printLeaf(node.kind, source, node.command);
   if (leaf != null) {
@@ -22,11 +24,11 @@ function printNode(tree: EditTree, id: NodeId): string {
     : node.kind;
   const slots = node.slots;
   const values = node.values.map((value) => ` ${value.role}=${tree.text.slice(value.contentSpan.from, value.contentSpan.to)}`).join("");
-  if (slots.length === 1 && ["content", "flow"].includes(tree.slots[slots[0]].role)) {
-    return `(${head}${values} ${printSlotContent(tree, slots[0])})`.replace(/ \)$/u, ")");
+  if (slots.length === 1 && ["content", "flow"].includes(editSlotAt(tree.slots, requireArrayValue(slots, 0)).role)) {
+    return `(${head}${values} ${printSlotContent(tree, requireArrayValue(slots, 0))})`.replace(/ \)$/u, ")");
   }
   const parts = slots.map((slot) => {
-    const record = tree.slots[slot];
+    const record = editSlotAt(tree.slots, slot);
     return record.presence === "absent" ? `${record.role}:∅` : `${record.role}:[${printSlotContent(tree, slot)}]`;
   });
   return `(${[head + values, ...parts].join(" ")})`;
@@ -50,8 +52,8 @@ function printSlotContent(tree: EditTree, slot: SlotId): string {
       run = "";
     }
   };
-  for (const child of tree.slots[slot].children) {
-    const node = tree.nodes[child];
+  for (const child of editSlotAt(tree.slots, slot).children) {
+    const node = editNodeAt(tree.nodes, child);
     if (node.kind === "char") {
       run += tree.text.slice(node.span.from, node.span.to);
       continue;

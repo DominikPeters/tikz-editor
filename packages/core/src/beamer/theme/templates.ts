@@ -120,7 +120,9 @@ export function planBeamerFrameChrome(
   // \frametitle ignores blank arguments instead of constructing an empty
   // strut/colorbox. Keep the authored value in the document/edit model.
   if (context.frame.title && isBlankBeamerFrameHeading(context.document.source, context.frame.title)) {
-    context = { ...context, frame: { ...context.frame, title: undefined } };
+    const frame = { ...context.frame };
+    delete frame.title;
+    context = { ...context, frame };
   }
   const sidebar = getPlanner(
     sidebarPlanners,

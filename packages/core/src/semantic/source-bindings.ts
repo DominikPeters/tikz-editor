@@ -61,7 +61,7 @@ export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourc
       const sourceRef = metadata(entry.sourceRef);
       const rawOptions = entry.sourceRef?.identityRef ? entry.rawOptions : metadata(entry.rawOptions);
       return sourceRef === entry.sourceRef && rawOptions === entry.rawOptions
-        ? entry : { ...entry, sourceRef, rawOptions };
+        ? entry : { ...entry, ...(sourceRef === undefined ? {} : { sourceRef: sourceRef }), rawOptions };
     });
     const bound = result.every((entry, index) => entry === chain[index]) ? chain : result;
     rebound.set(chain, bound);

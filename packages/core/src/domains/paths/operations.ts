@@ -81,10 +81,12 @@ export function mapChildOperationItem(
     span: { from: node.from, to: node.to },
     raw: source.slice(node.from, node.to),
     templateRaw,
-    optionsSpan: toSpan(optionsNode),
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
-    foreachClauses: foreachClauses.length > 0 ? foreachClauses : undefined,
-    bodySpan: toSpan(bodyNode),
+    ...(optionsNode ? {
+      optionsSpan: toSpan(optionsNode),
+      options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+    } : {}),
+    ...(foreachClauses.length > 0 ? { foreachClauses } : {}),
+    ...(bodyNode ? { bodySpan: toSpan(bodyNode) } : {}),
     bodyRaw,
     body: parsedBody.value
   };
@@ -107,9 +109,11 @@ export function mapEdgeFromParentOperationItem(
     kind: "EdgeFromParentOperation",
     id: edgeFromParentOperationItemId(statementIndex, itemIndex),
     span: { from: node.from, to: node.to },
-    optionsSpan: toSpan(optionsNode),
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
-    nodes: nodes.length > 0 ? nodes : undefined,
+    ...(optionsNode ? {
+      optionsSpan: toSpan(optionsNode),
+      options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+    } : {}),
+    ...(nodes.length > 0 ? { nodes } : {}),
     alias,
     raw
   };
@@ -148,11 +152,13 @@ function mapToLikeOperationItem(
     kind,
     id,
     span: { from: node.from, to: node.to },
-    optionsSpan: toSpan(optionsNode),
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
-    nodes: nodes.length > 0 ? nodes : undefined,
-    pics: pics.length > 0 ? pics : undefined,
-    target,
+    ...(optionsNode ? {
+      optionsSpan: toSpan(optionsNode),
+      options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+    } : {}),
+    ...(nodes.length > 0 ? { nodes } : {}),
+    ...(pics.length > 0 ? { pics } : {}),
+    ...(target !== undefined ? { target } : {}),
     raw: source.slice(node.from, node.to)
   };
 }
@@ -170,9 +176,11 @@ export function mapSvgOperationItem(
     kind: "SvgOperation",
     id: svgOperationItemId(statementIndex, itemIndex),
     span: { from: node.from, to: node.to },
-    optionsSpan: toSpan(optionsNode),
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
-    dataSpan: toSpan(payloadNode),
+    ...(optionsNode ? {
+      optionsSpan: toSpan(optionsNode),
+      options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+    } : {}),
+    ...(payloadNode ? { dataSpan: toSpan(payloadNode) } : {}),
     dataRaw: payloadNode ? source.slice(payloadNode.from, payloadNode.to) : ""
   };
 }
@@ -205,11 +213,12 @@ export function mapCoordinateOperationItem(
     kind: "CoordinateOperation",
     id: coordinateOperationItemId(statementIndex, itemIndex),
     span: { from: node.from, to: node.to },
-    optionsSpan: toSpan(optionsNode),
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
-    name,
-    nameSpan: toSpan(nameNode),
-    placementSpan: undefined,
+    ...(optionsNode ? {
+      optionsSpan: toSpan(optionsNode),
+      options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+    } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(nameNode ? { nameSpan: toSpan(nameNode) } : {}),
     raw: source.slice(node.from, node.to)
   };
 }
@@ -226,8 +235,10 @@ export function mapDecorateOperationItem(
     kind: "DecorateOperation",
     id: decorateOperationItemId(statementIndex, itemIndex),
     span: { from: keywordNode.from, to: subpathNode.to },
-    optionsSpan: toSpan(optionsNode),
-    options: optionsNode ? parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) : undefined,
+    ...(optionsNode ? {
+      optionsSpan: toSpan(optionsNode),
+      options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
+    } : {}),
     subpathSpan: { from: subpathNode.from, to: subpathNode.to },
     subpathRaw: source.slice(subpathNode.from, subpathNode.to),
     raw: source.slice(keywordNode.from, subpathNode.to)
@@ -285,8 +296,8 @@ export function mapPathForeachOperationItem(
     headerRaw: parsedHeader.headerRaw,
     variablesRaw: parsedHeader.variablesRaw,
     listRaw: parsedHeader.listRaw,
-    options,
-    optionsSpan,
+    ...(options !== undefined ? { options } : {}),
+    ...(optionsSpan !== undefined ? { optionsSpan } : {}),
     bodyRaw: bodyNode ? source.slice(bodyNode.from, bodyNode.to) : ""
   };
 }
@@ -322,7 +333,7 @@ function mapToOperationTarget(node: SyntaxNode, source: string): ToOperationTarg
     return {
       kind: "coordinate",
       raw: source.slice(coordinateNode.from, coordinateNode.to),
-      relativePrefix,
+      ...(relativePrefix !== undefined ? { relativePrefix } : {}),
       span: { from: coordinateNode.from, to: coordinateNode.to }
     };
   }
@@ -430,8 +441,8 @@ function mapChildForeachClauses(
       headerRaw: parsed.headerRaw,
       variablesRaw: parsed.variablesRaw,
       listRaw: parsed.listRaw,
-      options,
-      optionsSpan
+      ...(options !== undefined ? { options } : {}),
+      ...(optionsSpan !== undefined ? { optionsSpan } : {})
     });
     clauseIndex += 1;
   }
@@ -440,12 +451,13 @@ function mapChildForeachClauses(
 }
 
 function buildChildTemplateRaw(node: SyntaxNode, source: string, clauses: ChildForeachClause[]): string {
-  if (clauses.length === 0) {
+  const firstClause = clauses[0];
+  if (!firstClause) {
     return source.slice(node.from, node.to);
   }
 
-  const firstClauseStart = clauses.reduce((min, clause) => Math.min(min, clause.span.from), clauses[0].span.from);
-  const lastClauseEnd = clauses.reduce((max, clause) => Math.max(max, clause.span.to), clauses[0].span.to);
+  const firstClauseStart = clauses.reduce((min, clause) => Math.min(min, clause.span.from), firstClause.span.from);
+  const lastClauseEnd = clauses.reduce((max, clause) => Math.max(max, clause.span.to), firstClause.span.to);
   return `${source.slice(node.from, firstClauseStart)}${source.slice(lastClauseEnd, node.to)}`;
 }
 
@@ -478,6 +490,8 @@ export function mapPicOperationItem(
   const placement = extractPlacementFromPic(node, source) ?? extractPlacementFromOptions(options.options);
   const explicitName = extractExplicitPicName(node, source);
   const optionName = extractPicNameFromOptions(options.options);
+  const name = explicitName?.name ?? optionName?.name;
+  const nameSpan = explicitName?.span ?? optionName?.span;
   const groupNode = findFirstChildByName(node, "Group");
   const optionType = extractPicTypeFromOptions(options.options);
   const groupType = groupNode
@@ -497,16 +511,16 @@ export function mapPicOperationItem(
     span: { from: node.from, to: node.to },
     raw: source.slice(node.from, node.to),
     templateRaw,
-    optionsSpan: options.span,
-    options: options.options,
-    foreachClauses: foreachClauses.length > 0 ? foreachClauses : undefined,
-    name: explicitName?.name ?? optionName?.name,
-    nameSpan: explicitName?.span ?? optionName?.span,
-    atSpan: placement?.span,
-    atRaw: placement?.raw,
-    atRelativePrefix: placement?.relativePrefix,
+    ...(options.span !== undefined ? { optionsSpan: options.span } : {}),
+    ...(options.options !== undefined ? { options: options.options } : {}),
+    ...(foreachClauses.length > 0 ? { foreachClauses } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(nameSpan !== undefined ? { nameSpan } : {}),
+    ...(placement?.span !== undefined ? { atSpan: placement.span } : {}),
+    ...(placement?.raw !== undefined ? { atRaw: placement.raw } : {}),
+    ...(placement?.relativePrefix !== undefined ? { atRelativePrefix: placement.relativePrefix } : {}),
     typeSource: picType?.source ?? "group",
-    typeSpan: picType?.span,
+    ...(picType?.span !== undefined ? { typeSpan: picType.span } : {}),
     typeRaw: picType?.raw ?? ""
   };
 }
@@ -550,8 +564,8 @@ function mapPicForeachClauses(
       headerRaw: parsed.headerRaw,
       variablesRaw: parsed.variablesRaw,
       listRaw: parsed.listRaw,
-      optionsSpan,
-      options
+      ...(optionsSpan !== undefined ? { optionsSpan } : {}),
+      ...(options !== undefined ? { options } : {})
     });
     clauseIndex += 1;
   }
@@ -599,20 +613,21 @@ function mergePicOptionLists(
   span?: Span;
   options?: OptionListAst;
 } {
-  if (optionNodes.length === 0) {
+  const first = optionNodes[0];
+  const last = optionNodes.at(-1);
+  if (!first || !last) {
     return {};
   }
 
   const parsed = optionNodes.map((node) => parseOptionListRaw(source.slice(node.from, node.to), node.from));
-  if (parsed.length === 1) {
+  const onlyOptions = parsed[0];
+  if (parsed.length === 1 && onlyOptions) {
     return {
-      span: { from: optionNodes[0].from, to: optionNodes[0].to },
-      options: parsed[0]
+      span: { from: first.from, to: first.to },
+      options: onlyOptions
     };
   }
 
-  const first = optionNodes[0];
-  const last = optionNodes[optionNodes.length - 1];
   return {
     span: { from: first.from, to: last.to },
     options: {
@@ -684,7 +699,7 @@ function extractPlacementFromPlacementNode(
     return {
       span: { from: coordinate.from, to: coordinate.to },
       raw: source.slice(coordinate.from, coordinate.to),
-      relativePrefix: prefix
+      ...(prefix !== undefined ? { relativePrefix: prefix } : {})
     };
   }
 
@@ -727,11 +742,14 @@ function extractExplicitPicName(node: SyntaxNode, source: string): { name: strin
       continue;
     }
     const coordinate = findFirstChildByName(actual, "Coordinate");
-    const parsed = coordinate ? parseCoordinate(source.slice(coordinate.from, coordinate.to)) : null;
-    if (parsed?.form === "named" && parsed.x.trim().length > 0 && parsed.y.trim().length === 0) {
+    if (!coordinate) {
+      continue;
+    }
+    const parsed = parseCoordinate(source.slice(coordinate.from, coordinate.to));
+    if (parsed.form === "named" && parsed.x.trim().length > 0 && parsed.y.trim().length === 0) {
       return {
         name: parsed.x.trim(),
-        span: { from: coordinate!.from, to: coordinate!.to }
+        span: { from: coordinate.from, to: coordinate.to }
       };
     }
   }
@@ -796,10 +814,6 @@ function findSvgPayloadNode(node: SyntaxNode): SyntaxNode | null {
   return firstNamedChild(wrapper) ?? wrapper;
 }
 
-function toSpan(node: SyntaxNode | null): Span | undefined {
-  if (!node) {
-    return undefined;
-  }
-
+function toSpan(node: SyntaxNode): Span {
   return { from: node.from, to: node.to };
 }

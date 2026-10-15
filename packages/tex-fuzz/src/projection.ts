@@ -50,6 +50,7 @@ export function projectTexFuzzCaseToParagraph(caseData: TexFuzzCase): TexFuzzCas
   // These word/width pairs are calibration controls: both engines choose the
   // same automatic breaks, but non-final lines have non-zero glue ratios.
   const word = (["Alpha", "Beta", "Delta"] as const)[Math.abs(hash) % 3];
+  if (word === undefined) throw new Error("Invalid paragraph projection word index.");
   const effectiveWords = Array.from({ length: 24 }, () => word);
   const ast: TexFuzzNode[] = [];
   effectiveWords.forEach((word, index) => {

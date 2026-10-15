@@ -1483,6 +1483,7 @@ test("selecting non-resizable multi-edge draw statements does not render an extr
 
 test("canvas context menu exposes snapping submenu check states", async ({ page }) => {
   await gotoApp(page);
+  await expect(page.getByRole("img", { name: "TikZ SVG preview" })).toBeVisible();
 
   await page.getByTestId("canvas-viewport").click({ button: "right" });
   await expect(page.getByTestId("canvas-context-menu")).toBeVisible();
@@ -1546,6 +1547,8 @@ test("canvas paste custom svg fallback shows warning for invalid svg data", asyn
   await gotoApp(page);
   await setSource(page, String.raw`\begin{tikzpicture}
 \end{tikzpicture}`);
+  // The initial empty snapshot has the same source before its first render.
+  await expect(page.getByRole("img", { name: "TikZ SVG preview" })).toBeVisible();
 
   await page.evaluate(() => {
     const viewport = document.querySelector("[data-canvas-viewport='true']");

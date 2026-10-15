@@ -45,7 +45,7 @@ export function createBeamerSyntaxContext(
     source,
     syntax: buildTexSyntaxIndex(source, beamerDocumentParser, {
       parseSource,
-      previous: exact ? undefined : previous,
+      ...(!exact && previous !== undefined ? { previous } : {}),
     }),
   };
 }

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { TreeFragment, type SyntaxNodeRef, type Tree } from "@lezer/common";
 import type { LRParser } from "@lezer/lr";
 
@@ -819,7 +820,7 @@ function valuesInRange<T>(
   let high = values.length;
   while (low < high) {
     const middle = (low + high) >>> 1;
-    if (position(values[middle]) < range.from) {
+    if (position(requireArrayValue(values, middle)) < range.from) {
       low = middle + 1;
     } else {
       high = middle;
@@ -827,7 +828,7 @@ function valuesInRange<T>(
   }
   const result: T[] = [];
   for (let index = low; index < values.length; index += 1) {
-    const value = values[index];
+    const value = requireArrayValue(values, index);
     if (position(value) >= range.to) {
       break;
     }

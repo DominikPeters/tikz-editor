@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { worldToLocal } from "@tikz-editor/core/edit/coords";
 import type { ResizeRole } from "@tikz-editor/core/edit/actions";
 import type { EditHandle, SceneCircle, SceneElement, SceneEllipse, ScenePath, ScenePathShapeHint, SceneText } from "@tikz-editor/core/semantic/types";
@@ -87,7 +88,7 @@ export function resolveResizeFrameForSource(
   }
 
   if (nonTextElements.length === 0 && textElements.length === 1) {
-    return resolveTextResizeFrame(sourceId, textElements[0], viewBox);
+    return resolveTextResizeFrame(sourceId, requireArrayValue(textElements, 0), viewBox);
   }
   return null;
 }
@@ -602,10 +603,10 @@ function resolveRectangleBasis(corners: readonly WorldPoint[]): { u: WorldVector
     return null;
   }
 
-  const edge01 = subtractPoints(corners[1], corners[0]);
-  const edge12 = subtractPoints(corners[2], corners[1]);
-  const edge23 = subtractPoints(corners[3], corners[2]);
-  const edge30 = subtractPoints(corners[0], corners[3]);
+  const edge01 = subtractPoints(requireArrayValue(corners, 1), requireArrayValue(corners, 0));
+  const edge12 = subtractPoints(requireArrayValue(corners, 2), requireArrayValue(corners, 1));
+  const edge23 = subtractPoints(requireArrayValue(corners, 3), requireArrayValue(corners, 2));
+  const edge30 = subtractPoints(requireArrayValue(corners, 0), requireArrayValue(corners, 3));
   const len01 = Math.hypot(edge01.x, edge01.y);
   const len12 = Math.hypot(edge12.x, edge12.y);
   const len23 = Math.hypot(edge23.x, edge23.y);

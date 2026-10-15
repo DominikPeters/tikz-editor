@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { Intent } from "./intent.js";
 
 /**
@@ -40,7 +41,7 @@ export function createIntentScheduler(options: IntentSchedulerOptions): IntentSc
     degraded || !options.needsFreshLayout(intent) || options.isLayoutFresh();
 
   const drain = () => {
-    while (queue.length > 0 && canRun(queue[0])) {
+    while (queue.length > 0 && canRun(requireArrayValue(queue, 0))) {
       options.run(queue.shift()!);
     }
   };

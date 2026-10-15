@@ -286,7 +286,7 @@ function columnFields(
       value: parsed.value,
       step: stepForSuffix(parsed.suffix),
       min: 0.01,
-      unit: parsed.suffix || undefined,
+      ...(parsed.suffix ? { unit: parsed.suffix } : {}),
       write: { kind: "setColumnWidth", suffix: parsed.suffix },
     },
   ];
@@ -307,7 +307,7 @@ function optionNumberField(args: {
       value: null,
       step: stepForSuffix(args.defaultSuffix),
       min: 0.01,
-      unit: args.defaultSuffix || undefined,
+      ...(args.defaultSuffix ? { unit: args.defaultSuffix } : {}),
       write: args.write(args.defaultSuffix),
     };
   }
@@ -323,7 +323,7 @@ function optionNumberField(args: {
     value: parsed.value,
     step: stepForSuffix(parsed.suffix),
     min: 0.01,
-    unit: parsed.suffix || undefined,
+    ...(parsed.suffix ? { unit: parsed.suffix } : {}),
     write: args.write(parsed.suffix),
   };
 }

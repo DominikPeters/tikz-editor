@@ -139,16 +139,17 @@ export function evaluateTurnCoordinate(
     pt(radius.value * Math.sin(radians))
   );
 
+  const optionalRadius1 = coordinateSourceUnit(item.y);
   return {
     kind: "transformed",
     world: applyFrameTransform(coordinateFrame, localVector),
     local: localVector,
     frame: coordinateFrame,
-    sourceUnits: { radius: coordinateSourceUnit(item.y) },
+    sourceUnits: { ...(optionalRadius1 === undefined ? {} : { radius: optionalRadius1 }) },
     origin: "turn",
     relativeBase: currentPoint,
     coordinateForm: polarForm,
-    relativePrefix: item.relativePrefix,
+    ...(item.relativePrefix === undefined ? {} : { relativePrefix: item.relativePrefix }),
     diagnostics: [],
     advancesCurrentPoint: true
   };

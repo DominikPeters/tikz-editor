@@ -1,3 +1,4 @@
+import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import { childIndex, slotChain } from "../tree/navigate.js";
 import type { NodeId, SlotId } from "../tree/types.js";
 import type { Position } from "./position.js";
@@ -31,7 +32,7 @@ export function promoteSelection(view: EditView, raw: SelectionEnds): SelectionE
     if (construct == null) {
       return end;
     }
-    const parent = tree.nodes[construct].parent!;
+    const parent = editNodeAt(tree.nodes, construct).parent!;
     const at = childIndex(tree, construct);
     return { slot: parent, index: isStart ? at : at + 1 };
   };
@@ -47,12 +48,12 @@ function outermostConstructBelow(view: EditView, slot: SlotId, common: SlotId): 
   let found: NodeId | null = null;
   let current: SlotId | null = slot;
   while (current != null && current !== common) {
-    const owner: NodeId = tree.slots[current].node;
+    const owner: NodeId = editSlotAt(tree.slots, current).node;
     const role = view.role(owner);
     if (role === "construct" || role === "scripted") {
       found = owner;
     }
-    current = tree.nodes[owner].parent;
+    current = editNodeAt(tree.nodes, owner).parent;
   }
   return found;
 }

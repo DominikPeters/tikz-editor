@@ -408,7 +408,7 @@ function unwrapSingleOuterBracePair(raw: string): string | null {
 
   let depth = 0;
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;
@@ -442,7 +442,7 @@ function splitTopLevelOnce(input: string, separator: string): { left: string; ri
   let bracketDepth = 0;
 
   for (let index = 0; index < input.length; index += 1) {
-    const char = input[index];
+    const char = input.charAt(index);
     if (char === "\\") {
       index += 1;
       continue;

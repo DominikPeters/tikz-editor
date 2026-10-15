@@ -133,9 +133,9 @@ export function texListItemParagraphAttachments(params: {
   }
   return {
     inlineLabelItems,
-    firstLineIndentWidth,
-    ...(marginLabel ? { marginLabel } : {}),
-    ...(marginLabelHBox ? { marginLabelHBox } : {}),
+    ...(firstLineIndentWidth !== undefined ? { firstLineIndentWidth: firstLineIndentWidth } : {}),
+    ...(marginLabel ? { marginLabel: marginLabel } : {}),
+    ...(marginLabelHBox ? { marginLabelHBox: marginLabelHBox } : {}),
   };
 }
 

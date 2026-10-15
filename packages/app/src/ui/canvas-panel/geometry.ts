@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { formatNumber, PT_PER_CM } from "@tikz-editor/core/edit/format";
 import { clamp as clampValue } from "@tikz-editor/core/utils/math";
 export { clamp, distanceSquared } from "@tikz-editor/core/utils/math";
@@ -76,7 +77,7 @@ export function buildTicks(
     ticks.push({
       viewportPos: mapWorldToViewport(worldValue),
       major,
-      label: major ? formatCm(worldValue / PT_PER_CM) : undefined
+      ...(major ? { label: formatCm(worldValue / PT_PER_CM) } : {})
     });
   }
 
@@ -260,7 +261,7 @@ export function resizeCursorForVector(vector: WorldVector): string {
     { angle: 135, cursor: "nesw-resize" }
   ];
 
-  let best = candidates[0];
+  let best = requireArrayValue(candidates, 0);
   let bestDiff = Number.POSITIVE_INFINITY;
   for (const candidate of candidates) {
     const diff = Math.min(Math.abs(angle - candidate.angle), 180 - Math.abs(angle - candidate.angle));

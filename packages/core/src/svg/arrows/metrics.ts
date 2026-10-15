@@ -56,12 +56,10 @@ export function computeArrowShortening(side: ArrowSide, tips: NormalizedArrowTip
     return { lineEndShortening: 0, totalLength: 0, plans: [] };
   }
 
-  const metricsList = tips.map((tip) => buildArrowTipMetrics(tip, contextLineWidth));
+  const measuredTips = tips.map((tip) => ({ tip, metrics: buildArrowTipMetrics(tip, contextLineWidth) }));
   let lineEndShortening = 0;
   let totalLength = 0;
-  for (let index = 0; index < tips.length; index += 1) {
-    const tip = tips[index];
-    const metrics = metricsList[index];
+  for (const { tip, metrics } of measuredTips) {
     const delta = metrics.tipEnd - metrics.backEnd + metrics.sep;
     totalLength += delta;
     if (tip.afterLineEnd) {
@@ -73,9 +71,7 @@ export function computeArrowShortening(side: ArrowSide, tips: NormalizedArrowTip
 
   let prefixLength = 0;
   const plans: ArrowTipPlan[] = [];
-  for (let index = 0; index < tips.length; index += 1) {
-    const tip = tips[index];
-    const metrics = metricsList[index];
+  for (const [index, { tip, metrics }] of measuredTips.entries()) {
     const delta = metrics.tipEnd - metrics.backEnd + metrics.sep;
     const offset = lineEndShortening - totalLength + prefixLength - metrics.backEnd + metrics.lineEnd;
     plans.push({

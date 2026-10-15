@@ -82,8 +82,7 @@ export function normalizeTexMathAtomClasses(list: TexMathList): TexMathList {
   const nestedItems = list.items.map(normalizeNestedItem);
   const normalizedItems: TexMathItem[] = [];
   let previousAtom: TexMathAtom | null = null;
-  for (let index = 0; index < nestedItems.length; index += 1) {
-    const item = nestedItems[index];
+  for (const [index, item] of nestedItems.entries()) {
     const normalizedItem: TexMathItem = item.kind === "atom" && item.atomClass === "bin" && shouldReclassifyBin(nestedItems, index, previousAtom)
       ? { ...item, atomClass: "ord" as const }
       : item;

@@ -67,8 +67,8 @@ export function composeSourcePatches(source: string, steps: readonly (readonly S
   const length = (piece: Piece) => "text" in piece ? piece.text.length : piece.to - piece.from;
   const split = (offset: number): number => {
     let position = 0;
-    for (let index = 0; index < pieces.length; index++) {
-      const piece = pieces[index];
+    for (const [index, piece] of pieces.entries()) {
+
       if (offset === position) return index;
       const size = length(piece);
       if (offset < position + size) {

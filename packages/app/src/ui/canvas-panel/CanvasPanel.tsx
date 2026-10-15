@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { deckPageDerived } from "../../deck-page-derived-cache";
 import { beginDocumentEdit } from "../../edit-session";
 import { executeDocumentEdit, nestedEditBaseSource } from "../../edit-execution";
@@ -728,18 +729,20 @@ export const CanvasPanel = memo(function CanvasPanel({
   }, [isNestedFigureMode, snapshot]);
 
   const editParseOptions = useMemo(
-    () =>
-      buildEditParseOptions({
+    () => {
+      const rootId = nestedFigureSpan ? snapshot.parseResult?.activeFigureId : activeRootId;
+      return buildEditParseOptions({
         documentId: activeDocumentId,
         sourceRevision,
         // Nested figure edits parse the masked document (statement ids and
         // spans then match the snapshot's edit handles exactly) under the
         // snapshot's own tikz root id.
         source: nestedFigureSpan ? maskTikzPictureSource(nestedEditBaseSource(source, snapshot), nestedFigureSpan) : source,
-        activeRootId: nestedFigureSpan ? snapshot.parseResult?.activeFigureId : activeRootId,
+        ...(rootId !== undefined ? { activeRootId: rootId } : {}),
         snapshot,
         analysis: "shared"
-      }),
+      });
+    },
     [activeDocumentId, activeRootId, nestedFigureSpan, snapshot, source, sourceRevision]
   );
 
@@ -1089,10 +1092,12 @@ export const CanvasPanel = memo(function CanvasPanel({
         targetNodeName: anchor.nodeName,
         targetNodeSourceId: targetSourceId
       };
+      const { sourceFingerprint: _sourceFingerprint, ...positionParseOptions } = editParseOptions;
+      const geometry = prepareEditGeometry();
       const preflight = preflightPositionNodeRelativeToAction(source, action, {
-        geometry: prepareEditGeometry(),
-        evaluateOptions: { sourceFingerprint, textEngine: activeTextEngine, ...snapshot.overlayLayer?.evaluate },
-        parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame", sourceFingerprint }
+        ...(geometry !== undefined ? { geometry } : {}),
+        evaluateOptions: { ...(sourceFingerprint !== undefined ? { sourceFingerprint: sourceFingerprint } : {}), textEngine: activeTextEngine, ...snapshot.overlayLayer?.evaluate },
+        parseOptions: { ...positionParseOptions, propertyWriteMode: "drag-frame", ...(sourceFingerprint !== undefined ? { sourceFingerprint } : {}) }
       });
       const { result } = preflight;
       const status: NodePositionTargetStatus =
@@ -1248,7 +1253,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       links.push({
         key: `selected:${handle.id}`,
         sourceId: handle.sourceRef.sourceId,
-        targetSourceId: targetCenterAnchor?.nodeSourceId,
+        ...(targetCenterAnchor?.nodeSourceId !== undefined ? { targetSourceId: targetCenterAnchor?.nodeSourceId } : {}),
         from: endpoints.from,
         to: endpoints.to
       });
@@ -1260,7 +1265,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         links.push({
           key: `pending:${pendingNodePositionTargetPick.nodeSourceId}:${status.anchor.nodeSourceId ?? status.anchor.nodeName}`,
           sourceId: pendingNodePositionTargetPick.nodeSourceId,
-          targetSourceId: status.anchor.nodeSourceId,
+          ...(status.anchor.nodeSourceId !== undefined ? { targetSourceId: status.anchor.nodeSourceId } : {}),
           from: status.preview.currentAnchor,
           to: status.preview.targetAnchor
         });
@@ -1640,9 +1645,14 @@ export const CanvasPanel = memo(function CanvasPanel({
       const viewBox = { x: layer.pageCoordinates ? 0 : -layer.origin.x,
         y: layer.pageCoordinates ? 0 : layer.origin.y - page.height, width: page.width, height: page.height };
       for (const region of buildHitRegions([...layer.elements], viewBox, canvasTransform.scale)) {
+        // Enter the layer before editing a node's text in it.
+        const layerRegion = { ...region };
+        if (layerRegion.shape === "rect") {
+          delete layerRegion.interactionMode;
+          delete layerRegion.sceneTextKey;
+        }
         over.push({
-          // A node's text is part of its shape here: entering the layer comes first.
-          ...(region.shape === "rect" ? { ...region, interactionMode: undefined, sceneTextKey: undefined } : region),
+          ...layerRegion,
           key: `deck-layer:${layer.rootId}:${region.key}`,
           offset: layer.pageCoordinates ? { x: 0, y: 0 } : { x: layer.origin.x, y: page.height - layer.origin.y },
           layerEntry: { rootId: layer.rootId, sourceId: region.targetId }
@@ -1822,9 +1832,10 @@ export const CanvasPanel = memo(function CanvasPanel({
         const toPicture = worldToPictureCoordinates(snapshot.scene);
         action = { ...action, at: toPicture(action.at), template: templateInPictureCoordinates(action.template, toPicture) };
       }
+      const drawingLayerRootId = useEditorStore.getState().documents[activeDocumentId]?.drawingLayerRootId;
       const result = executeDocumentEdit({ documentId: activeDocumentId, source: sourceForEdit, sourceRevision, activeRootId, snapshot,
-        drawingLayerRootId: useEditorStore.getState().documents[activeDocumentId]?.drawingLayerRootId }, action, {
-        geometry,
+        ...(drawingLayerRootId !== undefined ? { drawingLayerRootId } : {}) }, action, {
+        ...(geometry !== undefined ? { geometry: geometry } : {}),
         parseOptions: { ...editParseOptions, propertyWriteMode: "drag-frame" },
         evaluateOptions: { textEngine: textEngineRef.current },
         nestedFigureSpan: nestedFigureSpan ? { from: nestedFigureSpan.from,
@@ -1842,13 +1853,13 @@ export const CanvasPanel = memo(function CanvasPanel({
           dispatch({
             type: "APPLY_EDIT_ACTION",
             action,
-            historyMergeKey,
-            recordInHistory,
+            ...(historyMergeKey !== undefined ? { historyMergeKey: historyMergeKey } : {}),
+            ...(recordInHistory !== undefined ? { recordInHistory: recordInHistory } : {}),
             precomputedSource: sourceForEdit,
             precomputedResult: result
           });
         }
-        return { sourceChanged, newSource: sourceChanged ? result.newSource : undefined, result };
+        return { sourceChanged, ...(sourceChanged ? { newSource: result.newSource } : {}), result };
       }
 
       if (result.kind === "unsupported") {
@@ -1880,7 +1891,7 @@ export const CanvasPanel = memo(function CanvasPanel({
       for (const element of snapshot.scene?.elements ?? []) {
         beforeIds.add(element.sourceRef.sourceId);
       }
-      pendingAddedSelectionRef.current = { beforeIds, preferredWorld, preferredSourceId };
+      pendingAddedSelectionRef.current = { beforeIds, preferredWorld, ...(preferredSourceId !== undefined ? { preferredSourceId: preferredSourceId } : {}) };
     },
     [snapshot.scene]
   );
@@ -1991,8 +2002,8 @@ export const CanvasPanel = memo(function CanvasPanel({
       strokeColor: creationStrokeColor
     });
     if (snippet) {
-      const firstPoint = draft.points[0];
-      const lastPoint = draft.points[draft.points.length - 1];
+      const firstPoint = requireArrayValue(draft.points, 0);
+      const lastPoint = requireArrayValue(draft.points, draft.points.length - 1);
       queueSelectionForAddedElement(
         makeWorldPoint(
           pt((firstPoint.x + lastPoint.x) / 2),
@@ -2120,6 +2131,7 @@ export const CanvasPanel = memo(function CanvasPanel({
               : paragraph?.report.alignment === "justified"
                 ? "justify"
                 : "left";
+        const atomicSelectionSpan = deckEditing.atomSpanByRegionKey.get(region.key);
         return {
           sourceId: scope.id,
           sceneTextId: paragraph?.paragraphId ?? scope.id,
@@ -2127,7 +2139,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           text,
           structuralMaskRanges: deckScopeEntry.maskRanges,
           scopeParagraphs: deckScopeEntry.scopeParagraphs,
-          atomicSelectionSpan: deckEditing.atomSpanByRegionKey.get(region.key),
+          ...(atomicSelectionSpan !== undefined ? { atomicSelectionSpan } : {}),
           layoutSourceSpan: paragraph?.sourceSpan ?? scope.span,
           layoutSourceText,
           renderSourceText: layoutSourceText,
@@ -2146,7 +2158,7 @@ export const CanvasPanel = memo(function CanvasPanel({
           totalWidth: paragraph?.bounds.width ?? region.width,
           region,
           editMode: "default",
-          popupAnchorBox: deckScopeEntry.anchorBounds ?? undefined
+          ...(deckScopeEntry.anchorBounds != null ? { popupAnchorBox: deckScopeEntry.anchorBounds } : {})
         };
       }
       const sceneText = sceneTextByRegionKey.get(region.sceneTextKey ?? region.key);
@@ -2601,7 +2613,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     onPositionNodeRelativeTo: handlePositionNodeRelativeToCommand,
     onConvertNodePositionToAbsolute: handleConvertNodePositionToAbsoluteCommand,
     onOpenEditEquation: handleOpenEditEquationCommand,
-    activeHandleIdOverride: contextMenuHandleIdOverride
+    ...(contextMenuHandleIdOverride !== undefined ? { activeHandleIdOverride: contextMenuHandleIdOverride } : {})
   });
 
   const handleNodePositionTargetPick = useCallback(
@@ -3253,7 +3265,7 @@ export const CanvasPanel = memo(function CanvasPanel({
             : pickClosestSourceId(sceneElements, newSourceIds, pending.preferredWorld)
         );
 
-    dispatch({ type: "SELECT", id: selectedId, additive: false });
+    if (selectedId !== undefined) dispatch({ type: "SELECT", id: selectedId, additive: false });
   }, [dispatch, snapshot.scene, snapshot.source, source]);
 
   const dragControllerConfig = useMemo(() => ({
@@ -3549,7 +3561,7 @@ export const CanvasPanel = memo(function CanvasPanel({
         hoveredElementId={hoveredElementId}
         editableTextRegionKeys={editableTextRegionKeys}
         draggableSourceIds={draggableSourceIds}
-        hitRegionCursorByTargetId={pendingNodePositionHitRegionCursorByTargetId}
+        {...(pendingNodePositionHitRegionCursorByTargetId !== undefined ? { hitRegionCursorByTargetId: pendingNodePositionHitRegionCursorByTargetId } : {})}
         onElementPointerDown={onElementPointerDown}
         onElementContextMenu={(event, id, region, handle) => {
           if (!deckOverlayMenu.onContextMenu(event, region)) onElementContextMenu(event, id, region, handle);
@@ -3573,13 +3585,9 @@ export const CanvasPanel = memo(function CanvasPanel({
         curveControlLines={curveControlLines}
         curveControlStrokeWidth={curveControlStrokeWidth}
         nodeAnchorOverlay={pendingNodePositionAnchorOverlay ?? nodeAnchorOverlay}
-        onNodeAnchorPointerDown={pendingNodePositionTargetPick ? handleNodeAnchorPointerDown : undefined}
-        onNodeAnchorClick={pendingNodePositionTargetPick ? handleNodeAnchorClick : undefined}
-        onNodeAnchorHoverChange={
-          pendingNodePositionTargetPick
-            ? setPendingNodePositionAnchorHoverSourceId
-            : undefined
-        }
+        {...(pendingNodePositionTargetPick ? { onNodeAnchorPointerDown: handleNodeAnchorPointerDown } : {})}
+        {...(pendingNodePositionTargetPick ? { onNodeAnchorClick: handleNodeAnchorClick } : {})}
+        {...(pendingNodePositionTargetPick ? { onNodeAnchorHoverChange: setPendingNodePositionAnchorHoverSourceId } : {})}
         nodePositionTargetTooltip={nodePositionTargetTooltip}
         handleHalfSize={handleHalfSize}
         handleDisplays={handleDisplays}

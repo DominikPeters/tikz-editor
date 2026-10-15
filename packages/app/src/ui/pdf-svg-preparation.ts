@@ -97,7 +97,8 @@ function isolateEffect(svg: SVGSVGElement, effect: Element): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   cursor = clone;
   for (const index of indices) {
-    const child = cursor.children[index];
+    const child = cursor.children.item(index);
+    if (!child) throw new Error(`Cloned SVG is missing child ${index}`);
     for (const sibling of Array.from(cursor.children)) {
       if (sibling !== child && !["defs", "style"].includes(sibling.localName)) sibling.remove();
     }

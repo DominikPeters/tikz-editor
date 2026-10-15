@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { editingIdentityRootId, reconcileEditingIdentities, updateDocumentIdentities, withEditingHandleIdentities } from "../editing-identities";
 import { executeDocumentEdit } from "../edit-execution";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
@@ -215,7 +216,7 @@ function boundHistory(doc: DocumentSession): DocumentSession {
   let bytes = 0;
   let keepFrom = doc.history.length;
   while (keepFrom > 0 && doc.history.length - keepFrom < MAX_HISTORY_ENTRIES) {
-    bytes += doc.history[keepFrom - 1].sourceAfter.length * 2;
+    bytes += requireArrayValue(doc.history, keepFrom - 1).sourceAfter.length * 2;
     if (bytes > MAX_HISTORY_SOURCE_BYTES && keepFrom < doc.history.length) break;
     keepFrom -= 1;
   }
@@ -400,11 +401,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         doc.activeRootId === rootId && (!layer || doc.drawingLayerRootId === action.rootId)
           ? doc
           : {
-              ...doc,
+              ...withoutDeckSlideSelection(doc),
               activeRootId: rootId,
               drawingLayerRootId: layer ? action.rootId : null,
               selectedElementIds: new Set(),
-              deckSlideSelection: undefined,
               hasInitializedRootSelection: true
             }
       );
@@ -449,7 +449,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
       const nextActiveId =
         workspace.activeDocumentId === closeId
-          ? nextOrder[Math.max(0, workspace.tabOrder.indexOf(closeId) - 1)] ?? nextOrder[0]
+          ? nextOrder[Math.max(0, workspace.tabOrder.indexOf(closeId) - 1)] ?? requireArrayValue(nextOrder, 0)
           : workspace.activeDocumentId;
       workspace = {
         ...workspace,
@@ -618,27 +618,30 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         const history = [...doc.history];
         if (identities) {
           const currentEntry = history.at(doc.historyIndex < 0 ? history.length : doc.historyIndex);
-          if (currentEntry?.sourceAfter === doc.source) history[doc.historyIndex] = { ...currentEntry, identitiesAfter: identities, identityRootsAfter: roots };
+          if (currentEntry?.sourceAfter === doc.source) history[doc.historyIndex] = { ...currentEntry, identitiesAfter: identities, ...(roots !== undefined ? { identityRootsAfter: roots } : {}) };
           const undoneEntry = history.at(doc.historyIndex + 1);
-          if (undoneEntry?.sourceBefore === doc.source) history[doc.historyIndex + 1] = { ...undoneEntry, identitiesBefore: identities, identityRootsBefore: roots };
+          if (undoneEntry?.sourceBefore === doc.source) history[doc.historyIndex + 1] = { ...undoneEntry, identitiesBefore: identities, ...(roots !== undefined ? { identityRootsBefore: roots } : {}) };
         }
         const recoveredSelection = identities?.selection?.flatMap(id => byIdentity.get(id) ?? []);
         const selectedElementIds = recoveredSelection && (recoveredSelection.length !== doc.selectedElementIds.size ||
           recoveredSelection.some(id => !doc.selectedElementIds.has(id)))
           ? new Set(recoveredSelection) : doc.selectedElementIds;
+        const nextEditingIdentityId = identities?.nextId ?? doc.nextEditingIdentityId;
+        const editingIdentities = identities ? { ...identities, selection: null } : doc.editingIdentities;
+        const drawingLayerRootId = action.snapshot.overlayLayer?.pageCoordinates ? action.snapshot.overlayLayer.rootId : doc.drawingLayerRootId;
         return {
           ...doc,
           history: identities ? history : doc.history,
-          editingIdentityRoots: roots,
-          nextEditingIdentityId: identities?.nextId ?? doc.nextEditingIdentityId,
-          editingTargetsStale: matchesCurrent ? false : doc.editingTargetsStale,
-          editingIdentities: identities ? { ...identities, selection: null } : doc.editingIdentities,
+          ...(roots !== undefined ? { editingIdentityRoots: roots } : {}),
+          ...(nextEditingIdentityId !== undefined ? { nextEditingIdentityId } : {}),
+          ...(matchesCurrent ? { editingTargetsStale: false } : {}),
+          ...(editingIdentities !== undefined ? { editingIdentities } : {}),
           selectedElementIds,
           focusedScopeId: identities && doc.editingIdentities?.focused
             ? byIdentity.get(doc.editingIdentities.focused) ?? null : doc.focusedScopeId,
           snapshot: identities ? withEditingHandleIdentities(action.snapshot, identities) : action.snapshot,
           activeRootId: rootSelection.activeRootId,
-          drawingLayerRootId: action.snapshot.overlayLayer?.pageCoordinates ? action.snapshot.overlayLayer.rootId : doc.drawingLayerRootId,
+          ...(drawingLayerRootId !== undefined ? { drawingLayerRootId } : {}),
           hasInitializedRootSelection: rootSelection.hasInitializedRootSelection,
           pendingRequestId: isCurrentPendingRequest ? null : doc.pendingRequestId,
           activeHandleId:
@@ -744,7 +747,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           return doc;
         }
         const nextItems = [...doc.assistantItems];
-        nextItems[index] = appendAssistantDelta(nextItems[index], action.deltaType, action.delta);
+        nextItems[index] = appendAssistantDelta(requireArrayValue(nextItems, index), action.deltaType, action.delta);
         return {
           ...doc,
           assistantItems: nextItems
@@ -949,9 +952,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
       if (!recordInHistory) {
         workspace = updateDocument(workspace, documentId, (doc) => ({
-          ...doc,
+          ...withoutPendingIdentityMoves(doc),
           source: result.newSource,
-          pendingIdentityMoves: result.identityMoves,
+          ...(result.identityMoves !== undefined ? { pendingIdentityMoves: result.identityMoves } : {}),
           editingTargetsStale,
           sourceRevision: doc.sourceRevision + 1,
           lastSourceChangeOrigin: "edit-command",
@@ -1014,9 +1017,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           selectedElementIdsAfter: [...nextSelection]
         };
         workspace = updateDocument(workspace, documentId, (doc) => ({
-          ...doc,
+          ...withoutPendingIdentityMoves(doc),
           source: result.newSource,
-          pendingIdentityMoves: result.identityMoves,
+          ...(result.identityMoves !== undefined ? { pendingIdentityMoves: result.identityMoves } : {}),
           editingTargetsStale,
           sourceRevision: doc.sourceRevision + 1,
           lastSourceChangeOrigin: "edit-command",
@@ -1042,7 +1045,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const entry: HistoryEntry = {
         kind: historyKind,
         label: actionLabel(historyKind),
-        mergeKey,
+        ...(mergeKey !== undefined ? { mergeKey } : {}),
         forward: result.patches,
         sourceBefore: activeDoc.source,
         sourceAfter: result.newSource,
@@ -1051,9 +1054,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       };
 
       workspace = updateDocument(workspace, documentId, (doc) => ({
-        ...doc,
+        ...withoutPendingIdentityMoves(doc),
         source: result.newSource,
-        pendingIdentityMoves: result.identityMoves,
+        ...(result.identityMoves !== undefined ? { pendingIdentityMoves: result.identityMoves } : {}),
         editingTargetsStale,
         sourceRevision: doc.sourceRevision + 1,
         lastSourceChangeOrigin: "edit-command",
@@ -1090,7 +1093,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const doc = readDocument(workspace.documents, action.documentId);
       if (doc?.sourceRevision !== action.baseRevision || doc.assistantLockReason ||
         ui.activeCanvasTextEditSourceId || ui.activeInspectorEditDocumentId || action.documentId !== activeId) return state;
-      const result = editBeamerSlides(doc.source, action.edit, { allowWarnings: action.allowWarnings });
+      const result = editBeamerSlides(doc.source, action.edit, { ...(action.allowWarnings !== undefined ? { allowWarnings: action.allowWarnings } : {}) });
       if (!result) return state;
       const prefix = `${doc.id}::`;
       const stepsBefore = Object.fromEntries(Object.entries(ui.deckStepByRootKey).filter(([key]) => key.startsWith(prefix)));
@@ -1199,7 +1202,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           {
             kind: "text-edit",
             label: actionLabel("text-edit"),
-            mergeKey: action.historyMergeKey,
+            ...(action.historyMergeKey !== undefined ? { mergeKey: action.historyMergeKey } : {}),
             forward: action.patches,
             sourceBefore: activeDoc.source,
             sourceAfter: applied.source,
@@ -1250,9 +1253,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         )) return doc;
         const patches = action.patches ?? deriveSingleSourcePatch(doc.source, action.source);
         return {
-          ...doc,
+          ...withoutPendingIdentityMoves(doc),
           source: action.source,
-          pendingIdentityMoves: action.identityMoves,
+          ...(action.identityMoves !== undefined ? { pendingIdentityMoves: action.identityMoves } : {}),
           sourceRevision: doc.sourceRevision + 1,
           lastSourceChangeOrigin: "edit-command",
           lastEditChangedSourceIds: action.changedSourceIds ?? null,
@@ -1281,11 +1284,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         return state;
       }
       workspace = updateDocument(workspace, activeId, (current) => ({
-        ...current,
+        ...withoutEditingIdentities(current),
         source: entry.sourceBefore,
         ...(entry.deckSlidesBefore ? { activeRootId: entry.deckSlidesBefore.activeRootId, deckSlideSelection: entry.deckSlidesBefore.selection } : {}),
-        editingIdentityRoots: entry.identityRootsBefore,
-        editingIdentities: entry.identitiesBefore ? { ...entry.identitiesBefore, nextId: Math.max(entry.identitiesBefore.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
+        ...(entry.identityRootsBefore !== undefined ? { editingIdentityRoots: entry.identityRootsBefore } : {}),
+        ...(entry.identitiesBefore ? { editingIdentities: { ...entry.identitiesBefore, nextId: Math.max(entry.identitiesBefore.nextId, current.editingIdentities?.nextId ?? 0) } } : {}),
         sourceRevision: current.sourceRevision + 1,
         lastSourceChangeOrigin: "history",
         lastEditChangedSourceIds: null,
@@ -1319,11 +1322,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         return state;
       }
       workspace = updateDocument(workspace, activeId, (current) => ({
-        ...current,
+        ...withoutEditingIdentities(current),
         source: entry.sourceAfter,
         ...(entry.deckSlidesAfter ? { activeRootId: entry.deckSlidesAfter.activeRootId, deckSlideSelection: entry.deckSlidesAfter.selection } : {}),
-        editingIdentityRoots: entry.identityRootsAfter,
-        editingIdentities: entry.identitiesAfter ? { ...entry.identitiesAfter, nextId: Math.max(entry.identitiesAfter.nextId, current.editingIdentities?.nextId ?? 0) } : undefined,
+        ...(entry.identityRootsAfter !== undefined ? { editingIdentityRoots: entry.identityRootsAfter } : {}),
+        ...(entry.identitiesAfter ? { editingIdentities: { ...entry.identitiesAfter, nextId: Math.max(entry.identitiesAfter.nextId, current.editingIdentities?.nextId ?? 0) } } : {}),
         sourceRevision: current.sourceRevision + 1,
         lastSourceChangeOrigin: "history",
         lastEditChangedSourceIds: null,
@@ -1419,7 +1422,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       ui = { ...ui, toolMode: action.mode };
       if (layerRootId) {
         workspace = updateDocument(workspace, activeId, (current) => ({
-          ...current, drawingLayerRootId: layerRootId, deckSlideSelection: undefined
+          ...withoutDeckSlideSelection(current), drawingLayerRootId: layerRootId
         }));
       } else if (doc?.snapshot.overlayLayer?.insertion) {
         // Putting the tool down drops a layer still to come.
@@ -1684,4 +1687,23 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     return state;
   }
   return projectState(workspace, ui);
+}
+
+function withoutPendingIdentityMoves(doc: DocumentSession): DocumentSession {
+  const next = { ...doc };
+  delete next.pendingIdentityMoves;
+  return next;
+}
+
+function withoutEditingIdentities(doc: DocumentSession): DocumentSession {
+  const next = { ...doc };
+  delete next.editingIdentityRoots;
+  delete next.editingIdentities;
+  return next;
+}
+
+function withoutDeckSlideSelection(doc: DocumentSession): DocumentSession {
+  const next = { ...doc };
+  delete next.deckSlideSelection;
+  return next;
 }

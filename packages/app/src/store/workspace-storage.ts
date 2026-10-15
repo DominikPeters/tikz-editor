@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { getActiveEditorPlatform } from "../platform/current";
 import type { DocumentFileRef, ExternalChangeStatus, FileRevision } from "./types";
 import { normalizeWorkspaceTabOrder, WORKSPACE_VERSION, type WorkspaceSeed } from "./workspace-state";
@@ -81,12 +82,9 @@ function normalizeFileRef(raw: unknown): DocumentFileRef | null {
   return {
     kind,
     name: candidate.name,
-    handleId: typeof candidate.handleId === "string" ? candidate.handleId : undefined,
-    path: typeof candidate.path === "string" ? candidate.path : undefined,
-    provider:
-      candidate.provider === "browser-fsa" || candidate.provider === "download" || candidate.provider === "desktop-fs"
-        ? candidate.provider
-        : undefined
+    ...(typeof candidate.handleId === "string" ? { handleId: candidate.handleId } : {}),
+    ...(typeof candidate.path === "string" ? { path: candidate.path } : {}),
+    ...(candidate.provider === "browser-fsa" || candidate.provider === "download" || candidate.provider === "desktop-fs" ? { provider: candidate.provider } : {})
   };
 }
 
@@ -100,8 +98,8 @@ function normalizeFileRevision(raw: unknown): FileRevision | null {
   }
   return {
     hash: candidate.hash,
-    mtimeMs: typeof candidate.mtimeMs === "number" ? candidate.mtimeMs : undefined,
-    size: typeof candidate.size === "number" ? candidate.size : undefined
+    ...(typeof candidate.mtimeMs === "number" ? { mtimeMs: candidate.mtimeMs } : {}),
+    ...(typeof candidate.size === "number" ? { size: candidate.size } : {})
   };
 }
 
@@ -153,7 +151,7 @@ function migrateWorkspace(parsed: unknown): WorkspaceSeed | null {
   const activeDocumentId =
     typeof parsed.activeDocumentId === "string" && docIds.has(parsed.activeDocumentId)
       ? parsed.activeDocumentId
-      : tabOrder.at(0) ?? docs[0].id;
+      : tabOrder.at(0) ?? requireArrayValue(docs, 0).id;
   if (!Array.isArray(parsed.recentDocumentIds)) {
     return null;
   }
@@ -193,7 +191,7 @@ export function saveWorkspace(state: {
   const documentIds = Object.keys(state.documents).filter((id) => state.documents[id] !== undefined);
   const tabOrder = normalizeWorkspaceTabOrder(state.tabOrder, documentIds);
   const validIds = new Set(tabOrder);
-  const activeDocumentId = validIds.has(state.activeDocumentId) ? state.activeDocumentId : tabOrder[0];
+  const activeDocumentId = validIds.has(state.activeDocumentId) ? state.activeDocumentId : tabOrder[0] ?? state.activeDocumentId;
   const recentDocumentIds = [...new Set(state.recentDocumentIds.filter((id) => validIds.has(id)))];
   const payload: PersistedWorkspace = {
     workspaceVersion: WORKSPACE_VERSION,

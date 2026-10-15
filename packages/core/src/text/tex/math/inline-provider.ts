@@ -194,7 +194,7 @@ function getMathBox(
     caretStops: projectInlineMathCaretStops(caretMap, hlist.width),
     constructRanges: buildInlineMathConstructRanges(hlist),
     breakpoints: buildInlineMathBreakpoints(list, hlist),
-    svgBody: renderSvg ? renderTexMathHListSvgBody(hlist, { fontProfile }) : undefined,
+    ...(renderSvg ? { svgBody: renderTexMathHListSvgBody(hlist, { fontProfile }) } : {}),
     hlist,
     fontProfile,
   } satisfies TexMathBox;
@@ -920,8 +920,7 @@ function addFractionCaretMapEntries(
   originY: TexHBoxY,
   addEntry: (entry: TexMathCaretEntry) => void
 ): void {
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
+  for (const [index, item] of items.entries()) {
     if (item?.kind !== "rule" || item.role !== "fraction-rule") {
       continue;
     }
@@ -1082,7 +1081,7 @@ function mathCaretEntry(
     depth,
     hitBounds,
     kind,
-    ...(sourceSpan ? { sourceSpan } : {}),
+    ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
     priority,
   };
 }
@@ -1302,7 +1301,8 @@ function projectedMathCaretKindScore(kind: TexMathCaretEntry["kind"]): number {
 function enforceMonotoneProjectedCaretStops(stops: number[], width: number): void {
   let previous = 0;
   for (let index = 0; index < stops.length; index += 1) {
-    const value = Number.isFinite(stops[index]) ? stops[index] : previous;
+    const stop = stops[index];
+    const value = stop !== undefined && Number.isFinite(stop) ? stop : previous;
     previous = roundTexPt(Math.max(previous, Math.min(width, value)));
     stops[index] = previous;
   }

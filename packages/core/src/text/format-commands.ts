@@ -156,8 +156,8 @@ export function scanTextFormatWrappers(text: string): readonly TextFormatWrapper
       contentFrom: cursor + 1,
       contentTo: contentEnd - 1,
       to: contentEnd,
-      ...(colorValue !== undefined ? { colorValue } : {}),
-      ...(colorSpan !== undefined ? { colorSpan } : {}),
+      ...(colorValue !== undefined ? { colorValue: colorValue } : {}),
+      ...(colorSpan !== undefined ? { colorSpan: colorSpan } : {}),
     });
   }
   return wrappers;
@@ -245,10 +245,10 @@ function trimSelection(
 ): [number, number] {
   let start = Math.min(selectionStart, selectionEnd);
   let end = Math.max(selectionStart, selectionEnd);
-  while (start < end && /\s/.test(text[start])) {
+  while (start < end && /\s/.test(text.charAt(start))) {
     start += 1;
   }
-  while (end > start && /\s/.test(text[end - 1])) {
+  while (end > start && /\s/.test(text.charAt(end - 1))) {
     end -= 1;
   }
   return [start, end];

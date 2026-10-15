@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { replaceSpan } from "../patch.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -137,7 +138,7 @@ export function applyTransposeMatrixAction(
   for (let column = 0; column < colCount; column += 1) {
     const nextRow: string[] = [];
     for (let row = 0; row < rowCount; row += 1) {
-      nextRow.push(rows[row][column]);
+      nextRow.push(requireArrayValue(requireArrayValue(rows, row), column));
     }
     transposed.push(trimTrailingEmptyCells(nextRow));
   }

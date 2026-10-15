@@ -123,8 +123,6 @@ describe("simple TeX paragraph IR", () => {
         command: "makebox",
         text: String.raw`\makebox{b}`,
         content: "b",
-        boxWidth: undefined,
-        boxAlign: undefined,
       },
       {
         kind: "mbox",
@@ -165,6 +163,8 @@ describe("simple TeX paragraph IR", () => {
         boxAlign: "left",
       },
     ]);
+    expect(boxes[0]).not.toHaveProperty("boxWidth");
+    expect(boxes[0]).not.toHaveProperty("boxAlign");
   });
 
   it("parses colorbox and fcolorbox colors with source-backed contents", () => {
@@ -179,7 +179,6 @@ describe("simple TeX paragraph IR", () => {
         command: "colorbox",
         content: String.raw`b \textbf{c} $x$`,
         backgroundColor: "#ffff00",
-        frameColor: undefined,
         children: [
           { kind: "text", text: "b" },
           { kind: "space" },
@@ -196,6 +195,7 @@ describe("simple TeX paragraph IR", () => {
       },
     ]);
     expect(boxes[0]).toMatchObject({ contentStart: 19, contentEnd: 35 });
+    expect(boxes[0]).not.toHaveProperty("frameColor");
   });
 
   it("parses inline rule and raisebox commands", () => {
@@ -2287,8 +2287,8 @@ Beta`;
 
       expect(layout.paragraphPlans[0]).toMatchObject({
         alignment: "justified",
-        alignmentProfile: undefined,
       });
+      expect(layout.paragraphPlans[0]).not.toHaveProperty("alignmentProfile");
       expect(layout.paragraphPlans[0]?.breakContext).toMatchObject({
         scopePolicy: {
           forceParfillStretch: true,

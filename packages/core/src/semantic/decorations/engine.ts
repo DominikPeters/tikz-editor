@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { parseCoordinateLike, parseLength } from "../coords/parse-length.js";
 import { pt } from "../../coords/scalars.js";
 import { worldTransform } from "../../coords/transforms.js";
@@ -140,6 +141,7 @@ export function applyDecorationToPath(
 }
 
 function clonePath(path: ScenePath): ScenePath {
+  const optionalUndecoratedCommands1 = path.undecoratedCommands?.map((command) => cloneCommand(command));
   return {
     ...path,
     style: {
@@ -158,7 +160,7 @@ function clonePath(path: ScenePath): ScenePath {
       }))
     },
     styleChain: path.styleChain.map((entry) => ({ ...entry })),
-    undecoratedCommands: path.undecoratedCommands?.map((command) => cloneCommand(command)),
+    ...(optionalUndecoratedCommands1 === undefined ? {} : { undecoratedCommands: optionalUndecoratedCommands1 }),
     commands: path.commands.map((command) => cloneCommand(command))
   };
 }
@@ -218,8 +220,7 @@ function decorateCommands(
       pieces.push({ name: canonicalDecorationName(decoration.post) ?? "lineto", start: mainEnd, end: totalLength });
     }
 
-    for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
-      const piece = pieces[pieceIndex];
+    for (const [pieceIndex, piece] of pieces.entries()) {
       const pieceSegments = sliceSegmentsByRange(segments, piece.start, piece.end);
       if (pieceSegments.length === 0) {
         continue;
@@ -231,9 +232,9 @@ function decorateCommands(
         if (polyline.length === 0) {
           continue;
         }
-        allCommands.push({ kind: "M", to: polyline[0] });
+        allCommands.push({ kind: "M", to: requireArrayValue(polyline, 0) });
         for (let index = 1; index < polyline.length; index += 1) {
-          allCommands.push({ kind: "L", to: polyline[index] });
+          allCommands.push({ kind: "L", to: requireArrayValue(polyline, index) });
         }
         const coversFullSubpath = piece.start <= 1e-6 && Math.abs(piece.end - totalLength) <= 1e-6;
         if (isClosed && coversFullSubpath) {
@@ -271,8 +272,7 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
   const subpaths = splitPathIntoSubpaths(path.commands).filter(hasDrawablePathCommands);
   const elements: SceneElement[] = [];
 
-  for (let subpathIndex = 0; subpathIndex < subpaths.length; subpathIndex += 1) {
-    const subpath = subpaths[subpathIndex];
+  for (const [subpathIndex, subpath] of subpaths.entries()) {
     const expandedSubpath = expandSubpathForDecoration(subpath);
     const segments = commandsToSegments(expandedSubpath);
     if (segments.length === 0) {
@@ -303,9 +303,8 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
     }
     const sampleCursor = createPathSampleCursor(segments);
 
-    for (let characterIndex = 0; characterIndex < characters.length; characterIndex += 1) {
-      const character = characters[characterIndex];
-      const advance = advances[characterIndex];
+    for (const [characterIndex, character] of characters.entries()) {
+      const advance = requireArrayValue(advances, characterIndex);
       const centerDistance = cursor + advance / 2;
       const endDistance = cursor + advance;
       if (endDistance > endLimit + 1e-6) {
@@ -331,7 +330,7 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
           sourceId: path.sourceRef.sourceId,
           sourceSpan: path.sourceRef.sourceSpan
         },
-        origin: path.origin,
+        ...(path.origin === undefined ? {} : { origin: path.origin }),
         style,
         styleChain: path.styleChain.map((entry) => ({ ...entry })),
         position,
@@ -635,7 +634,7 @@ function decorateStraightZigzag(segments: PathSegment[], decoration: DecorationS
   const filtered: WorldPoint[] = [];
   for (let index = 0; index < zigzag.length; index += 1) {
     if (index === 0 || index === zigzag.length - 1 || index % 2 === 1) {
-      filtered.push(zigzag[index]);
+      filtered.push(requireArrayValue(zigzag, index));
     }
   }
   return filtered;
@@ -658,7 +657,7 @@ function decorateRandomSteps(
       : index === 0
         ? random
         : makeDeterministicRandom(segmentSeed);
-    const segmentWorldPoints = decorateRandomStepsOnSegment(segments[index], decoration, transformSpec, segmentRandom);
+    const segmentWorldPoints = decorateRandomStepsOnSegment(requireArrayValue(segments, index), decoration, transformSpec, segmentRandom);
     if (segmentWorldPoints.length > 0) {
       polylines.push(segmentWorldPoints);
     }
@@ -1090,8 +1089,8 @@ function applyFractal(
   if (variant === "cantor") {
     const polylines: WorldPoint[][] = [];
     for (let index = 0; index < base.length - 1; index += 1) {
-      const from = base[index];
-      const to = base[index + 1];
+      const from = requireArrayValue(base, index);
+      const to = requireArrayValue(base, index + 1);
       const p1 = interpolateWorldPoint(from, to, 0);
       const p2 = interpolateWorldPoint(from, to, 1 / 3);
       const p3 = interpolateWorldPoint(from, to, 2 / 3);
@@ -1134,13 +1133,12 @@ function applyFractal(
 
   const out: WorldPoint[] = [];
   for (let index = 0; index < base.length - 1; index += 1) {
-    const from = base[index];
-    const to = base[index + 1];
+    const from = requireArrayValue(base, index);
+    const to = requireArrayValue(base, index + 1);
     const dx = to.x - from.x;
     const dy = to.y - from.y;
 
-    for (let patternIndex = 0; patternIndex < pattern.length; patternIndex += 1) {
-      const local = pattern[patternIndex];
+    for (const [patternIndex, local] of pattern.entries()) {
       if (index > 0 && patternIndex === 0) {
         continue;
       }
@@ -1510,7 +1508,7 @@ function flattenSegmentPolylines(polylines: WorldPoint[][]): WorldPoint[] {
       output.push(...polyline);
       continue;
     }
-    const first = polyline[0];
+    const first = requireArrayValue(polyline, 0);
     const last = output[output.length - 1];
     if (!last || Math.hypot(last.x - first.x, last.y - first.y) > 1e-6) {
       output.push(first);

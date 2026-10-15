@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { worldBounds, worldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldBounds, WorldPoint } from "../coords/points.js";
@@ -108,7 +109,7 @@ export function planDistributeDeltas(
 
   const order = new Map<string, number>();
   for (let index = 0; index < normalized.length; index += 1) {
-    order.set(normalized[index], index);
+    order.set(requireArrayValue(normalized, index), index);
   }
 
   const sorted = [...selectedBounds.value].sort((left, right) => {
@@ -130,8 +131,8 @@ export function planDistributeDeltas(
   const deltas = new Map<string, WorldPoint>();
 
   if (axis === "horizontal") {
-    const first = sorted[0];
-    const last = sorted[sorted.length - 1];
+    const first = requireArrayValue(sorted, 0);
+    const last = requireArrayValue(sorted, sorted.length - 1);
     const totalSpan = last.maxX - first.minX;
     const totalWidth = sorted.reduce((sum, entry) => sum + (entry.maxX - entry.minX), 0);
     const gap = (totalSpan - totalWidth) / (sorted.length - 1);
@@ -141,15 +142,15 @@ export function planDistributeDeltas(
 
     let cursor = first.maxX + gap;
     for (let index = 1; index < sorted.length - 1; index += 1) {
-      const entry = sorted[index];
+      const entry = requireArrayValue(sorted, index);
       const targetMinX = cursor;
       const dx = targetMinX - entry.minX;
       deltas.set(entry.sourceId, wp(Math.abs(dx) <= epsilon ? 0 : dx, 0));
       cursor = targetMinX + (entry.maxX - entry.minX) + gap;
     }
   } else {
-    const top = sorted[0];
-    const bottom = sorted[sorted.length - 1];
+    const top = requireArrayValue(sorted, 0);
+    const bottom = requireArrayValue(sorted, sorted.length - 1);
     const totalSpan = top.maxY - bottom.minY;
     const totalHeight = sorted.reduce((sum, entry) => sum + (entry.maxY - entry.minY), 0);
     const gap = (totalSpan - totalHeight) / (sorted.length - 1);
@@ -159,7 +160,7 @@ export function planDistributeDeltas(
 
     let previousTargetMinY: number = top.minY;
     for (let index = 1; index < sorted.length - 1; index += 1) {
-      const entry = sorted[index];
+      const entry = requireArrayValue(sorted, index);
       const targetMaxY = previousTargetMinY - gap;
       const height = entry.maxY - entry.minY;
       const targetMinY = targetMaxY - height;

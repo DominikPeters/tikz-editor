@@ -58,7 +58,7 @@ export function DevPanel() {
     () => summarizeDependencies(snapshot.semanticResult?.dependencies ?? null),
     [snapshot.semanticResult?.dependencies]
   );
-  const currentHistoryEntry = historyIndex >= 0 ? history[historyIndex] : null;
+  const currentHistoryEntry = historyIndex >= 0 ? history[historyIndex] ?? null : null;
 
   if (!showDevPanel) return null;
 
@@ -73,7 +73,7 @@ export function DevPanel() {
       initialHeight={PANEL_INITIAL_HEIGHT}
       labelledBy={PANEL_TITLE_ID}
       dataTestId="developer-panel"
-      className={css.dialog}
+      className={css.dialog ?? ""}
       onClose={close}
     >
       <Modal.Header

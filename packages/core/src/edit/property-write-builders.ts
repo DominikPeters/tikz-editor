@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { OptionEntry } from "../options/types.js";
 import { splitAllAtTopLevel } from "../domains/coordinates/parse.js";
 import { parseCoordinateLike, parseLength } from "../semantic/coords/parse-length.js";
@@ -853,7 +854,7 @@ export function buildShadowSetPropertyMutations(
   const allKeys = [...SHADOW_ALL_KEYS] as string[];
 
   if (nextContext.preset === "none") {
-    return [{ key: allKeys[0], value: "", clearKeys: allKeys }];
+    return [{ key: requireArrayValue(allKeys, 0), value: "", clearKeys: allKeys }];
   }
 
   const tikzKey = SHADOW_PRESET_TIKZ_KEY[nextContext.preset];

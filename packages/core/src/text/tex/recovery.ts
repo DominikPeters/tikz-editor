@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { Span } from "../../ast/types.js";
 
 /**
@@ -90,7 +91,7 @@ function scan(text: string): TexRecovery {
   /** The run's content ends before trailing spaces, but never before the opener, nor inside a comment. */
   const trimmed = (at: number, floor: number) => {
     let end = at;
-    while (end > floor && /\s/u.test(text[end - 1])) {
+    while (end > floor && /\s/u.test(text.charAt(end - 1))) {
       end -= 1;
     }
     // A control space (`\ `) is content: its space stays with its backslash.
@@ -126,7 +127,7 @@ function scan(text: string): TexRecovery {
   /** The innermost frame of a kind above the innermost environment or text group. */
   const nearest = (test: (frame: Frame) => boolean): number => {
     for (let index = stack.length - 1; index >= 0; index -= 1) {
-      const frame = stack[index];
+      const frame = requireArrayValue(stack, index);
       if (test(frame)) {
         return index;
       }
@@ -165,7 +166,7 @@ function scan(text: string): TexRecovery {
       // Math and everything opened in it.
       let lowest = math;
       for (let index = math - 1; index >= 0; index -= 1) {
-        const frame = stack[index];
+        const frame = requireArrayValue(stack, index);
         if (frame.kind === "env" || (frame.kind === "group" && frame.text)) {
           break;
         }
@@ -198,7 +199,7 @@ function scan(text: string): TexRecovery {
       }
       if (text[next] === "\n") {
         runEnds(index);
-        while (next < text.length && /\s/u.test(text[next])) {
+        while (next < text.length && /\s/u.test(text.charAt(next))) {
           next += 1;
         }
         index = next;
@@ -236,7 +237,7 @@ function scan(text: string): TexRecovery {
           index = text[end] === "{" ? end + 1 : end;
           continue;
         }
-        const envName = environment[1].trim();
+        const envName = requireArrayValue(environment, 1).trim();
         const after = end + environment[0].length;
         if (name === "begin") {
           if (OPAQUE_ENVIRONMENTS.has(envName)) {
@@ -252,7 +253,7 @@ function scan(text: string): TexRecovery {
           stack.push({ kind: "env", name: envName });
         } else {
           let open = stack.length - 1;
-          while (open >= 0 && !(stack[open].kind === "env" && (stack[open] as { name: string }).name === envName)) {
+          while (open >= 0 && !(requireArrayValue(stack, open).kind === "env" && (stack[open] as { name: string }).name === envName)) {
             open -= 1;
           }
           if (open >= 0) {
@@ -335,7 +336,7 @@ function scan(text: string): TexRecovery {
     if (char === "{") {
       const command = /\\([A-Za-z@]+)\s*$/u.exec(text.slice(Math.max(0, index - 40), index));
       const inMath = nearest((frame) => frame.kind === "math") >= 0;
-      stack.push({ kind: "group", opener: { from: index, to: index + 1 }, text: inMath && command != null && TEXT_ARGUMENT.has(command[1]), runEnd: null });
+      stack.push({ kind: "group", opener: { from: index, to: index + 1 }, text: inMath && command != null && TEXT_ARGUMENT.has(requireArrayValue(command, 1)), runEnd: null });
       index += 1;
       continue;
     }

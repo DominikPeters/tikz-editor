@@ -406,7 +406,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
                   ? undefined
                   : {
                       nodeName: startEndpointAnchor.nodeName,
-                      nodeSourceId: startEndpointAnchor.nodeSourceId,
+                      ...(startEndpointAnchor.nodeSourceId !== undefined ? { nodeSourceId: startEndpointAnchor.nodeSourceId } : {}),
                       anchor: startEndpointAnchor.anchor
                     }
               )
@@ -422,7 +422,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
               context: toolSnapContext,
               rawPoint: world,
               snappedPoint: draftStart,
-              offset: startSnapResult.offset,
+              ...(startSnapResult.offset !== undefined ? { offset: startSnapResult.offset } : {}),
               lines: startSnapResult.lines
             });
             return;
@@ -474,7 +474,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
             context: toolSnapContext,
             rawPoint: world,
             snappedPoint: resolvedStart,
-            offset: startSnapResult.offset,
+            ...(startSnapResult.offset !== undefined ? { offset: startSnapResult.offset } : {}),
             lines: startSnapResult.lines
           });
           return;
@@ -510,7 +510,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
             context: toolSnapContext,
             rawPoint: world,
             snappedPoint: bendStart,
-            offset: bendSnap.offset,
+            ...(bendSnap.offset !== undefined ? { offset: bendSnap.offset } : {}),
             lines: bendSnap.lines
           });
           return;
@@ -544,7 +544,7 @@ export function useCanvasToolInteractions(args: UseCanvasToolInteractionsArgs) {
             context: toolSnapContext,
             rawPoint: world,
             snappedPoint: nodeAt,
-            offset: snapResult.offset,
+            ...(snapResult.offset !== undefined ? { offset: snapResult.offset } : {}),
             lines: snapResult.lines
           });
           if (toolMode !== "addMatrix") {

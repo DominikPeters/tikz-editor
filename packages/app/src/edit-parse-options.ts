@@ -48,17 +48,19 @@ export function buildEditParseOptions(input: BuildEditParseOptionsInput): EditPa
     input.snapshot.figures.length
   );
   const options: EditParseOptions = {
-    activeFigureId: activeRootId,
+    ...((activeRootId) === undefined ? {} : { activeFigureId: activeRootId }),
     ...(input.snapshot.overlayLayer && input.snapshot.parseResult && (input.source === input.snapshot.source || input.source === input.snapshot.parseResult.source)
-      ? { preparedParse: { source: input.source, activeFigureId: activeRootId, result: input.snapshot.parseResult } } : {}),
+      ? { preparedParse: { source: input.source, ...((activeRootId) === undefined ? {} : { activeFigureId: activeRootId }), result: input.snapshot.parseResult } } : {}),
     ...input.overrides,
-    sourceFingerprint: buildSnapshotEditSourceFingerprint({
-      documentId: input.documentId,
-      sourceRevision: input.sourceRevision,
+  };
+  const sourceFingerprint = buildSnapshotEditSourceFingerprint({
+      ...((input.documentId) === undefined ? {} : { documentId: input.documentId }),
+      ...((input.sourceRevision) === undefined ? {} : { sourceRevision: input.sourceRevision }),
       sourceLength: input.source.length,
       sourceRefs: input.snapshot.editHandles.map((handle) => handle.sourceRef)
-    })
-  };
+    });
+  if (sourceFingerprint === undefined) delete options.sourceFingerprint;
+  else options.sourceFingerprint = sourceFingerprint;
   if (input.analysis !== "shared") return options;
   // Analysed on first use: the command runtime builds these options at every
   // render, and in a deck, which has no TikZ parse to prime the analysis

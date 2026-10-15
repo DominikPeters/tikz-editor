@@ -16,7 +16,7 @@ export function OpenExampleModal({ examples, onClose, onSelectExample }: OpenExa
       size="xl"
       labelledBy="open-example-title"
       dataTestId="open-example-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Open Example"

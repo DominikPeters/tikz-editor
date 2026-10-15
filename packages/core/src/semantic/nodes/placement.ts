@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import { coordinateTransform } from "../coords/axis-basis.js";
 import { nextEditHandleId } from "../edit-handles.js";
 import type { PathItem, PathOptionItem, Span } from "../../ast/types.js";
@@ -77,7 +78,7 @@ export function resolveNodeTargetPoint(
   }
 
   if (opts.allowImplicitOriginHandle) {
-    const frame = context.stack[context.stack.length - 1];
+    const frame = currentFrame(context);
     const coordinateFrame = coordinateTransform(frame.transform, frame.axisBasis);
     const insertionOffset = resolveImplicitNodePlacementInsertionOffset(item, context.source);
     const implicitWorldPoint = defaultPoint ?? context.currentPoint ?? wp(0, 0);
@@ -111,7 +112,7 @@ function resolveImplicitNodePlacementInsertionOffset(
   item: PathItem & { kind: "Node"; textSource: "group" | "option"; textSpan: Span },
   source: string
 ): number {
-  if (item.textSource === "group" && item.textSpan.from > item.span.from && source[item.textSpan.from - 1] === "{") {
+  if (item.textSource === "group" && item.textSpan.from > item.span.from && source.charAt(item.textSpan.from - 1) === "{") {
     return item.textSpan.from - 1;
   }
   return item.span.to;

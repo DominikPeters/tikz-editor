@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import type { Statement } from "../ast/types.js";
 import type { OptionEntry } from "../options/types.js";
@@ -90,7 +91,7 @@ export function createEditGeometrySession(
       if (run.scopeSteps.get(run.expandedFigureBody[index]) === "enter") {
         for (let i = index + 1; i < run.expandedFigureBody.length; i++) {
           elements.push(...evaluateSemanticStatementByIndex(run, i).elements);
-          if (run.expandedFigureBody[i].id === `${statement.id}:leave`) break;
+          if (requireArrayValue(run.expandedFigureBody, i).id === `${statement.id}:leave`) break;
         }
       }
       // Node resize tries several candidates per frame. Keep recent candidates,

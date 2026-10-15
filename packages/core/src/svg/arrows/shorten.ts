@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { Frame } from "./types.js";
@@ -62,7 +63,7 @@ export function shortenOpenSubpath(
   const keepTo = Math.max(keepFrom, originalLength - appliedEnd);
 
   if (keepTo - keepFrom <= EPSILON) {
-    const anchor = samplePointFromStartExtrapolated(segments, keepFrom) ?? segments[0].from;
+    const anchor = samplePointFromStartExtrapolated(segments, keepFrom) ?? requireArrayValue(segments, 0).from;
     return {
       commands: [{ kind: "M", to: anchor }],
       appliedStartShortening: appliedStart,
@@ -91,7 +92,7 @@ export function shortenOpenSubpath(
   }
 
   if (keptSegments.length === 0) {
-    const anchor = samplePointFromStartExtrapolated(segments, keepFrom) ?? segments[0].from;
+    const anchor = samplePointFromStartExtrapolated(segments, keepFrom) ?? requireArrayValue(segments, 0).from;
     return {
       commands: [{ kind: "M", to: anchor }],
       appliedStartShortening: appliedStart,
@@ -100,7 +101,7 @@ export function shortenOpenSubpath(
     };
   }
 
-  const head = keptSegments[0];
+  const head = requireArrayValue(keptSegments, 0);
   const resultCommands: ScenePathCommand[] = [];
   resultCommands.push({ kind: "M", to: { ...head.from } });
   for (const segment of keptSegments) {
@@ -121,8 +122,8 @@ export function shortenOpenSubpath(
 function shortenEndpointCommands(commands: ScenePathCommand[], start: number, end: number): ShortenSubpathResult {
   const originalLength = commandsToSegments(commands).reduce((sum, segment) => sum + segment.length, 0);
   if (commands.length === 0) return { commands, appliedStartShortening: 0, appliedEndShortening: 0, originalLength };
-  const first = commands[0];
-  const last = commands[commands.length - 1];
+  const first = requireArrayValue(commands, 0);
+  const last = requireArrayValue(commands, commands.length - 1);
   if (first.kind !== "M" || last.kind === "Z") {
     return { commands, appliedStartShortening: 0, appliedEndShortening: 0, originalLength };
   }

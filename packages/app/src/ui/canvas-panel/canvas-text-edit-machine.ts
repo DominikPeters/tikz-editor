@@ -412,7 +412,10 @@ function sameMaskRanges(
   if (!left || left.length !== right?.length) {
     return false;
   }
-  return left.every((span, index) => sameSpan(span, right[index]));
+  return left.every((span, index) => {
+    const other = right[index];
+    return other !== undefined && sameSpan(span, other);
+  });
 }
 
 function applySessionTextUpdate(
@@ -528,7 +531,7 @@ export function reduceCanvasTextEdit(
             renderSourceText: action.target.renderSourceText,
             layoutKind: action.target.layoutKind,
             region: action.target.region,
-            popupAnchorBox: action.target.popupAnchorBox,
+            ...(action.target.popupAnchorBox !== undefined ? { popupAnchorBox: action.target.popupAnchorBox } : {}),
             isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
             editMode: action.target.editMode ?? "default",
             isScopeSession: action.target.scopeParagraphs != null
@@ -570,7 +573,7 @@ export function reduceCanvasTextEdit(
             renderSourceText: action.target.renderSourceText,
             layoutKind: action.target.layoutKind,
             region: action.target.region,
-            popupAnchorBox: action.target.popupAnchorBox,
+            ...(action.target.popupAnchorBox !== undefined ? { popupAnchorBox: action.target.popupAnchorBox } : {}),
             isForeachTemplateEdit: action.target.isForeachTemplateEdit === true,
             editMode: action.target.editMode ?? "default",
             isScopeSession: action.target.scopeParagraphs != null
@@ -835,6 +838,7 @@ export function reduceCanvasTextEdit(
       const nextLayoutKind = targetMatchesSessionText ? action.target.layoutKind : session.layoutKind;
       const nextRegion = targetMatchesSessionText ? action.target.region : session.region;
       const nextPopupAnchorBox = targetMatchesSessionText ? action.target.popupAnchorBox : session.popupAnchorBox;
+      const { popupAnchorBox: _popupAnchorBox, ...reconciledSession } = session;
       const nextIsForeachTemplateEdit = targetMatchesSessionText
         ? action.target.isForeachTemplateEdit === true
         : session.isForeachTemplateEdit;
@@ -871,7 +875,7 @@ export function reduceCanvasTextEdit(
               ? normalizeRange(session.text.length, state.compositionRange)
               : null,
           session: {
-            ...session,
+            ...reconciledSession,
             sceneTextId: nextSceneTextId,
             sourceSpan: reconciledSourceSpan,
             workingSource: action.source,
@@ -881,7 +885,7 @@ export function reduceCanvasTextEdit(
             renderSourceText: nextRenderSourceText,
             layoutKind: nextLayoutKind,
             region: nextRegion,
-            popupAnchorBox: nextPopupAnchorBox,
+            ...(nextPopupAnchorBox !== undefined ? { popupAnchorBox: nextPopupAnchorBox } : {}),
             isForeachTemplateEdit: nextIsForeachTemplateEdit
           }
         },

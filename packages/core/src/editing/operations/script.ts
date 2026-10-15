@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { ARGUMENT_ROLES } from "../ownership/kinds.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
@@ -14,28 +16,28 @@ import { PatchSet } from "./source.js";
  */
 export function enterExistingScript(view: EditView, caret: Position, marker: "^" | "_"): EditOutcome | null {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   if (slot.mode !== "math") {
     return null;
   }
   let scripted: NodeId | null = null;
-  const owner = tree.nodes[slot.node];
+  const owner = editNodeAt(tree.nodes, slot.node);
   if (owner.kind === "scripted" && slot.role === "base" && caret.index === slot.children.length) {
     scripted = owner.id;
   } else {
     let at = caret.index;
-    while (at > 0 && view.role(slot.children[at - 1]) === "invisible") {
+    while (at > 0 && view.role(requireArrayValue(slot.children, at - 1)) === "invisible") {
       at -= 1;
     }
     const previous = at > 0 ? slot.children[at - 1] : null;
-    if (previous != null && tree.nodes[previous].kind === "scripted") {
+    if (previous != null && editNodeAt(tree.nodes, previous).kind === "scripted") {
       scripted = previous;
     }
   }
   // Right before a script whose base is gone (`\(‸^n\)`, its `\mathbb R` deleted): into it, at its start.
   let atStart = false;
   const next = caret.index < slot.children.length ? slot.children[caret.index] : null;
-  if (scripted == null && next != null && tree.nodes[next].kind === "scripted") {
+  if (scripted == null && next != null && editNodeAt(tree.nodes, next).kind === "scripted") {
     const base = presentSlots(tree, next).find((candidate) => candidate.role === "base");
     if (!base || base.children.length === 0) {
       scripted = next;
@@ -58,9 +60,9 @@ const COMMAND_WRAPPERS: ReadonlySet<string> = new Set(["style", "link", "overlay
  * there (`x_{\left(\right)i}`) stays inside it. Other outcomes pass.
  */
 export function braceUnbracedArgument(view: EditView, caret: Position, outcome: EditOutcome): EditOutcome {
-  const slot = view.tree.slots[caret.slot];
+  const slot = editSlotAt(view.tree.slots, caret.slot);
   // (Also a text command's content: `\textbf(` typed into gives `\textbf{…(}`, F7.)
-  const argument = ARGUMENT_ROLES.has(slot.role) || (slot.role === "content" && COMMAND_WRAPPERS.has(view.tree.nodes[slot.node].kind));
+  const argument = ARGUMENT_ROLES.has(slot.role) || (slot.role === "content" && COMMAND_WRAPPERS.has(editNodeAt(view.tree.nodes, slot.node).kind));
   if (outcome.kind !== "patch" || slot.braced || !argument || slot.children.length === 0) {
     return outcome;
   }
@@ -73,13 +75,11 @@ export function braceUnbracedArgument(view: EditView, caret: Position, outcome: 
     set.replace({ from: patch.from, to: patch.to }, patch.insert);
   }
   const patches = set.replace({ from: to, to }, "}").patches();
-  return {
-    ...outcome,
-    patches,
-    caret: outcome.caret + 1,
-    selectionEnd: outcome.selectionEnd == null ? undefined : outcome.selectionEnd + 1,
-    placeholder: undefined,
-  };
+  const adjusted = { ...outcome, patches, caret: outcome.caret + 1 };
+  delete adjusted.placeholder;
+  if (outcome.selectionEnd == null) delete adjusted.selectionEnd;
+  else adjusted.selectionEnd = outcome.selectionEnd + 1;
+  return adjusted;
 }
 
 /**
@@ -89,7 +89,7 @@ export function braceUnbracedArgument(view: EditView, caret: Position, outcome: 
  */
 export function insertIntoUnbracedArgument(view: EditView, caret: Position, text: string): EditOutcome | null {
   const { tree } = view;
-  const slot = tree.slots[caret.slot];
+  const slot = editSlotAt(tree.slots, caret.slot);
   if (slot.braced || !ARGUMENT_ROLES.has(slot.role) || slot.children.length === 0) {
     return null;
   }

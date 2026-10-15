@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
@@ -130,7 +131,7 @@ function finishEdits(
 ): EditActionResult {
   const sorted = [...edits].sort((a, b) => a.span.from - b.span.from);
   for (let i = 1; i < sorted.length; i += 1) {
-    if (sorted[i].span.from < sorted[i - 1].span.to) {
+    if (requireArrayValue(sorted, i).span.from < requireArrayValue(sorted, i - 1).span.to) {
       return { kind: "error", message: "Deck edit produced overlapping edits." };
     }
   }
@@ -409,7 +410,7 @@ function buildOptionEdits(
       return { edits: [] };
     }
     if (targetIndex >= 0) {
-      const target = list.entries[targetIndex];
+      const target = requireArrayValue(list.entries, targetIndex);
       return source.slice(target.span.from, target.span.to) === entryText
         ? { edits: [] }
         : { edits: [{ span: target.span, insert: entryText }] };

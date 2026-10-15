@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import {
   useCallback,
   type MutableRefObject,
@@ -365,7 +366,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         selectedIds.length === 1
           ? {
               kind: "moveElement",
-              elementId: selectedIds[0],
+              elementId: requireArrayValue(selectedIds, 0),
               delta
             }
           : {

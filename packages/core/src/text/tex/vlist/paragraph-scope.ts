@@ -46,6 +46,7 @@ export interface TexParagraphScopeContext {
 export function texParagraphScopeContext(
   ancestors: readonly TexVBoxItem[]
 ): TexParagraphScopeContext {
+  const listItemLayout = ancestors.at(-1)?.layout?.listItem;
   return {
     policy: texParagraphScopePolicy(ancestors),
     layout: texParagraphScopeLayout(ancestors),
@@ -54,7 +55,7 @@ export function texParagraphScopeContext(
     listContextActive: ancestors.some((ancestor) =>
       ancestor.role?.kind === "list" || ancestor.role?.kind === "list-item"
     ),
-    listItemLayout: ancestors.at(-1)?.layout?.listItem,
+    ...(listItemLayout !== undefined ? { listItemLayout } : {}),
   };
 }
 
@@ -190,8 +191,8 @@ function texParagraphScopeLayout(
     rightMarginWidth,
     ...(scopedLineWidth !== undefined
       ? {
-          scopedWidth,
-          scopedLineWidth,
+          ...(scopedWidth !== undefined ? { scopedWidth: scopedWidth } : {}),
+          ...(scopedLineWidth !== undefined ? { scopedLineWidth: scopedLineWidth } : {}),
           scopedLeftMarginWidth,
           scopedRightMarginWidth,
         }

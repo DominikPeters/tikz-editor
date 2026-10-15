@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { hexToRgb, rgbToHex } from "@tikz-editor/core/utils/color-convert";
 import { clamp01 } from "@tikz-editor/core/utils/math";
@@ -989,12 +990,12 @@ function isStandardTabColorSupported(
   }
 
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
     return true;
   }
 
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
     return true;
   }
 
@@ -1116,12 +1117,12 @@ function baseColorFromValue(driverValue: string | null, toneSelectableTokens: Re
   }
 
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
-    return darkMatch[1];
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
+    return requireArrayValue(darkMatch, 1);
   }
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
-    return lightMatch[1];
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
+    return requireArrayValue(lightMatch, 1);
   }
   return null;
 }
@@ -1147,15 +1148,15 @@ function deriveToneState(
   }
 
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
-    const baseColor = isToneBaseColor(darkMatch[1]) ? darkMatch[1] : fallbackBaseColor;
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
+    const baseColor = isToneBaseColor(requireArrayValue(darkMatch, 1)) ? requireArrayValue(darkMatch, 1) : fallbackBaseColor;
     const percent = clampPercent(Number(darkMatch[2]));
     return { baseColor, position: percent };
   }
 
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
-    const baseColor = isToneBaseColor(lightMatch[1]) ? lightMatch[1] : fallbackBaseColor;
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
+    const baseColor = isToneBaseColor(requireArrayValue(lightMatch, 1)) ? requireArrayValue(lightMatch, 1) : fallbackBaseColor;
     const percent = clampPercent(Number(lightMatch[2]));
     return { baseColor, position: TONE_MAX - percent };
   }
@@ -1181,12 +1182,12 @@ function resolveSelectedSwatchColor(
     return driverValue;
   }
   const darkMatch = driverValue.match(DARK_MIX_RE);
-  if (darkMatch && toneSelectableTokens.has(darkMatch[1])) {
-    return darkMatch[1];
+  if (darkMatch && toneSelectableTokens.has(requireArrayValue(darkMatch, 1))) {
+    return requireArrayValue(darkMatch, 1);
   }
   const lightMatch = driverValue.match(LIGHT_MIX_RE);
-  if (lightMatch && toneSelectableTokens.has(lightMatch[1])) {
-    return lightMatch[1];
+  if (lightMatch && toneSelectableTokens.has(requireArrayValue(lightMatch, 1))) {
+    return requireArrayValue(lightMatch, 1);
   }
   return null;
 }
@@ -1315,8 +1316,9 @@ function resolveMixedColorForPicker(
     }
     cursor += 1;
 
-    const mixToken = parts[cursor] && parts[cursor].length > 0 ? parts[cursor] : "white";
-    if (parts[cursor] && parts[cursor].length > 0) {
+    const nextToken = parts[cursor];
+    const mixToken = nextToken && nextToken.length > 0 ? nextToken : "white";
+    if (nextToken && nextToken.length > 0) {
       cursor += 1;
     }
 
@@ -1461,7 +1463,7 @@ function buildToneHitBuckets(): ToneHitBucket[] {
   const buckets: ToneHitBucket[] = [];
   let cursor = 0;
   for (let index = 0; index < weights.length; index += 1) {
-    const weight = weights[index];
+    const weight = requireArrayValue(weights, index);
     const start = cursor / totalWeight;
     cursor += weight;
     const end = cursor / totalWeight;

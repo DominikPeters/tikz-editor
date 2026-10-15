@@ -174,8 +174,8 @@ function* supportedCandidates(
   while (cases.length < count && attempts < maximumAttempts) {
     const candidate = generateTexFuzzCase(seed + attempts, {
       profile: "supported-aggressive",
-      coverageFeedback: attempts === 0 ? undefined : featureCounts,
-      adaptiveNoveltyBudget: options.adaptiveNoveltyBudget,
+      ...(attempts === 0 ? {} : { coverageFeedback: featureCounts }),
+      ...(options.adaptiveNoveltyBudget === undefined ? {} : { adaptiveNoveltyBudget: options.adaptiveNoveltyBudget }),
     });
     attempts += 1;
     if (!(yield candidate)) {

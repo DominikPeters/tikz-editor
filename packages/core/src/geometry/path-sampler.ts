@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import { worldPoint, worldVector } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../coords/points.js";
@@ -299,13 +300,13 @@ function sampleFrameFromStartWithLocator(
 
   const totalLength = metrics.totalLength;
   if (distance <= 0) {
-    const frame = sampleSegmentFrameAtDistance(segments[0], 0);
+    const frame = sampleSegmentFrameAtDistance(requireArrayValue(segments, 0), 0);
     const shifted = addPoint(frame.point, scaleVector(frame.tangent, distance));
     return { point: shifted, tangent: frame.tangent, normal: frame.normal };
   }
 
   if (distance >= totalLength) {
-    const last = segments[segments.length - 1];
+    const last = requireArrayValue(segments, segments.length - 1);
     const frame = sampleSegmentFrameAtDistance(last, last.length);
     const shifted = addPoint(frame.point, scaleVector(frame.tangent, distance - totalLength));
     return { point: shifted, tangent: frame.tangent, normal: frame.normal };
@@ -328,8 +329,8 @@ function sampleFrameFromEndWithLocator(
   }
 
   const totalLength = metrics.totalLength;
-  const first = segments[0];
-  const last = segments[segments.length - 1];
+  const first = requireArrayValue(segments, 0);
+  const last = requireArrayValue(segments, segments.length - 1);
 
   if (distance <= 0) {
     const frame = sampleSegmentFrameAtDistance(last, last.length);
@@ -386,7 +387,7 @@ function segmentHitAtIndex(
   index: number,
   distance: number
 ): SegmentHit {
-  const segment = segments[index] ?? segments[segments.length - 1];
+  const segment = segments[index] ?? requireArrayValue(segments, segments.length - 1);
   const previousDistance = index > 0 ? metrics.cumulativeLengths[index - 1] ?? 0 : 0;
   return {
     segment,

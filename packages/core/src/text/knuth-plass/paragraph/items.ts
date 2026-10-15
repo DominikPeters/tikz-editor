@@ -99,7 +99,7 @@ function addExplicitHyphenPenaltiesForTextRun(
   }
 
   for (let i = 0; i < run.text.length - 1; i++) {
-    const char = run.text[i];
+    const char = run.text.charAt(i);
     if (!EXPLICIT_HYPHEN_CHARS.has(char)) {
       continue;
     }
@@ -173,7 +173,7 @@ function addAutomaticHyphenPenaltiesForTextRun(
           visibleHyphen: true,
           splitOffset,
           hyphenSource: 'automatic',
-          discretionary,
+          ...(discretionary !== undefined ? { discretionary: discretionary } : {}),
         },
       });
     }

@@ -53,7 +53,7 @@ export function getSharedEditAnalysisView(params: {
   }
 
   return session.ensure(analysisSource, {
-    activeFigureId: params.activeRootId
+    ...((params.activeRootId) === undefined ? {} : { activeFigureId: params.activeRootId })
   });
 }
 

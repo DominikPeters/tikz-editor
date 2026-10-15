@@ -317,6 +317,11 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
   const mergedEnv = { ...readInjectedTestEnvironment(), ...env };
   const storage = resolvePlatformStorage(mergedEnv.storage);
   const clipboard = resolveClipboard(mergedEnv);
+  const readClipboardText = clipboard?.readText?.bind(clipboard);
+  const writeClipboardText = clipboard?.writeText?.bind(clipboard);
+  const readClipboardCustomText = clipboard?.readCustomText?.bind(clipboard);
+  const readClipboardCustomBytes = clipboard?.readCustomBytes?.bind(clipboard);
+  const writeClipboardBundle = clipboard?.writeBundle?.bind(clipboard);
   const fsApi = resolveFsApi(mergedEnv);
   const fsHandleStore = resolveFsHandleStore(mergedEnv);
   const knownHandleIds = new Set(loadKnownHandleIds(storage));
@@ -458,7 +463,7 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
       return {
         status: "ok",
         source,
-        revision: revisionForText(source, { mtimeMs: file.lastModified, size: file.size }),
+        revision: revisionForText(source, { ...(file.lastModified === undefined ? {} : { mtimeMs: file.lastModified }), ...(file.size === undefined ? {} : { size: file.size }) }),
         fileRef: {
           ...fileRef,
           name: maybeHandle.name ?? fileRef.name
@@ -567,11 +572,11 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
       }
     },
     clipboard: {
-      readText: clipboard?.readText ? async () => clipboard.readText!() : undefined,
-      writeText: clipboard?.writeText ? async (text) => clipboard.writeText!(text) : undefined,
-      readCustomText: clipboard?.readCustomText ? async (formats) => clipboard.readCustomText!(formats) : undefined,
-      readCustomBytes: clipboard?.readCustomBytes ? async (formats) => clipboard.readCustomBytes!(formats) : undefined,
-      writeBundle: clipboard?.writeBundle ? async (payload) => clipboard.writeBundle!(payload) : undefined
+      ...(readClipboardText === undefined ? {} : { readText: async () => readClipboardText() }),
+      ...(writeClipboardText === undefined ? {} : { writeText: async (text) => writeClipboardText(text) }),
+      ...(readClipboardCustomText === undefined ? {} : { readCustomText: async (formats) => readClipboardCustomText(formats) }),
+      ...(readClipboardCustomBytes === undefined ? {} : { readCustomBytes: async (formats) => readClipboardCustomBytes(formats) }),
+      ...(writeClipboardBundle === undefined ? {} : { writeBundle: async (payload) => writeClipboardBundle(payload) })
     },
     menu: {
       usesNativeMenuBar: false,
@@ -689,6 +694,6 @@ export function createBrowserPlatformAdapter(env: BrowserPlatformEnvironment = {
         }
       }
     },
-    updates: mergedEnv.updates
+    ...(mergedEnv.updates === undefined ? {} : { updates: mergedEnv.updates })
   };
 }

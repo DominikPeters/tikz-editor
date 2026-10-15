@@ -258,7 +258,8 @@ export async function runTexFuzzEditSequence<T>(
   sequence: TexFuzzEditSequence,
   adapter: TexFuzzEditAdapter<T>
 ): Promise<TexFuzzEditRun<T>> {
-  if (initialNodes.length === 0) throw new Error("A stateful TeX fuzz run needs at least one node.");
+  const firstNode = initialNodes[0];
+  if (!firstNode) throw new Error("A stateful TeX fuzz run needs at least one node.");
   const nodes = new Map<string, NodeState<T>>();
   for (const initial of initialNodes) {
     if (nodes.has(initial.id)) throw new Error(`Duplicate editor node id ${initial.id}.`);
@@ -270,13 +271,12 @@ export async function runTexFuzzEditSequence<T>(
       redo: [],
     });
   }
-  let activeNodeId = initialNodes[0].id;
+  let activeNodeId = firstNode.id;
   const requests = new Map<string, Snapshot<T>>();
   const steps: TexFuzzEditStep[] = [];
   const reuseComparisons: TexFuzzReuseComparison[] = [];
 
-  for (let index = 0; index < sequence.operations.length; index += 1) {
-    const operation = sequence.operations[index];
+  for (const [index, operation] of sequence.operations.entries()) {
     let node = nodes.get(activeNodeId);
     if (!node) throw new Error(`Unknown active editor node ${activeNodeId}.`);
     let outcome: TexFuzzEditStep["outcome"];
@@ -308,11 +308,11 @@ export async function runTexFuzzEditSequence<T>(
           source: node.source,
           revision: node.revision,
           purpose: "session",
-          previous: node.installed ? {
+          ...(node.installed ? { previous: {
             source: node.installed.source,
             revision: node.installed.revision,
             computed: node.installed.computed,
-          } : undefined,
+          } } : {}),
         };
         const computed = await adapter.compute(context);
         validateStages(computed.stages);

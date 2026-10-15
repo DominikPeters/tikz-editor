@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { concatMappedText, createGeneratedMappedText, createIdentityMappedText, sliceMappedText, type MappedText } from "../text/source-map.js";
 import { beamerOverlaySpecContains, projectBeamerOverlayText, type BeamerOverlayModel } from "./overlay.js";
@@ -25,7 +26,7 @@ export function projectBeamerOverprints(params: {
     let selectedHeight = 0;
     let valid = true;
     for (const branch of overprint.branches) {
-      const body = branch.branches[0];
+      const body = requireArrayValue(branch.branches, 0);
       const ownStep = branch === active[0] ? params.step : branch.spec.minimumStep ?? 1;
       const projected = projectBeamerOverlayText(createIdentityMappedText(body.value, body.contentSpan.from), body.contentSpan, params.overlays, ownStep).mapped;
       const measured = params.measure(projected, width);
@@ -36,7 +37,7 @@ export function projectBeamerOverprints(params: {
     }
     if (!valid) continue;
     const owner = overprint.span;
-    const start = indices[0], end = indices.at(-1)! + 1;
+    const start = requireArrayValue(indices, 0), end = requireArrayValue(indices, indices.length - 1) + 1;
     const generated = (text: string) => createGeneratedMappedText(text, "Beamer overprint minipage dimensions", owner);
     mapped = concatMappedText([
       sliceMappedText(mapped, 0, start),

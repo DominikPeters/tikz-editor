@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { nextEditHandleId } from "../edit-handles.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -323,8 +324,8 @@ function parseToTarget(
   const prefix = match[2] === "++" ? "++" : match[2] === "+" ? "+" : undefined;
   return {
     kind: "coordinate",
-    raw: match[3],
-    relativePrefix: prefix
+    raw: requireArrayValue(match, 3),
+    ...(prefix === undefined ? {} : { relativePrefix: prefix })
   };
 }
 

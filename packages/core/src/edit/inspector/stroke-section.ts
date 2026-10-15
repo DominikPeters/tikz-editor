@@ -52,7 +52,7 @@ export const buildStrokeSection: SectionBuilder = (context) => {
         options: colorOptionsForValue(strokeColor),
         write: {
           ...context.writeProperty("draw"),
-          clearOnNoneKeys: strokeClearOnNoneKeys
+          ...(strokeClearOnNoneKeys === undefined ? {} : { clearOnNoneKeys: strokeClearOnNoneKeys })
         }
       },
       {

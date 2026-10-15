@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import type {
   TexMathAtom,
   TexMathAtomClass,
@@ -246,7 +247,7 @@ export function parseTexMathAlignedBody(
   const atom = parser.parseAlignedBody({
     beginSourceSpan: { start: sourceOffset, end: sourceOffset },
     initialSourceSpan: { start: sourceOffset, end: sourceOffset },
-    columnSeparation: options.columnSeparation,
+    ...(options.columnSeparation !== undefined ? { columnSeparation: options.columnSeparation } : {}),
     allowDisplayBreak: options.allowDisplayBreak ?? false,
     allowIntertext: options.allowIntertext ?? false,
     allowScripts: false,
@@ -366,7 +367,7 @@ class TexMathParser {
       "error",
       "unsupported-command",
       String.raw`Multiple \tag`,
-      spanUnion(tagTokens[0]?.sourceSpan, tagTokens[1]?.sourceSpan)
+      spanUnion(requireArrayValue(tagTokens, 0).sourceSpan, requireArrayValue(tagTokens, 1).sourceSpan)
     );
   }
 
@@ -1489,8 +1490,8 @@ class TexMathParser {
         text: content.text,
         nodes: content.nodes,
         parts: content.parts,
-        boxWidth,
-        boxAlign,
+        ...(boxWidth !== undefined ? { boxWidth: boxWidth } : {}),
+        ...(boxAlign !== undefined ? { boxAlign: boxAlign } : {}),
         textSourceSpan: content.textSourceSpan,
         sourceSpan,
       },
@@ -2507,10 +2508,10 @@ class TexMathParser {
     return this.parseAlignedBody({
       beginSourceSpan,
       initialSourceSpan: spanUnion(initialSourceSpan, pairCount?.sourceSpan ?? initialSourceSpan),
-      preambleSourceSpan: pairCount?.sourceSpan,
+      ...(pairCount?.sourceSpan !== undefined ? { preambleSourceSpan: pairCount?.sourceSpan } : {}),
       stopAtEnvironmentEnd: environmentName.name,
       columnSeparation: "none",
-      maxFields: pairCount ? pairCount.value * 2 : undefined,
+      ...(pairCount ? { maxFields: pairCount.value * 2 } : {}),
       allowAlignmentTags: true,
       allowDisplayBreak: true,
       allowIntertext: true,
@@ -2535,10 +2536,10 @@ class TexMathParser {
     return this.parseAlignedBody({
       beginSourceSpan,
       initialSourceSpan: spanUnion(initialSourceSpan, pairCount?.sourceSpan ?? initialSourceSpan),
-      preambleSourceSpan: pairCount?.sourceSpan,
+      ...(pairCount?.sourceSpan !== undefined ? { preambleSourceSpan: pairCount?.sourceSpan } : {}),
       stopAtEnvironmentEnd: environmentName.name,
       columnSeparation: "none",
-      maxFields: pairCount ? pairCount.value * 2 : undefined,
+      ...(pairCount ? { maxFields: pairCount.value * 2 } : {}),
       allowAlignmentTags: false,
       allowDisplayBreak: false,
       allowIntertext: false,
@@ -2793,8 +2794,8 @@ class TexMathParser {
         sourceSpan = spanUnion(sourceSpan, endSourceSpan);
         return this.maybeParseScripts(
           alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan, {
-            columnSeparation: params.columnSeparation,
-            maxFields: params.maxFields,
+            ...(params.columnSeparation !== undefined ? { columnSeparation: params.columnSeparation } : {}),
+            ...(params.maxFields !== undefined ? { maxFields: params.maxFields } : {}),
           }),
           params.allowScripts
         );
@@ -2832,9 +2833,9 @@ class TexMathParser {
           stopAtAlignmentTab: true,
           stopAtRowBreak: true,
           stopAtAlignmentMetadata: true,
-          stopAtEnvironmentEnd: params.stopAtEnvironmentEnd,
+          ...(params.stopAtEnvironmentEnd !== undefined ? { stopAtEnvironmentEnd: params.stopAtEnvironmentEnd } : {}),
           suppressEllipsisGlueBeforeAlignmentTab: true,
-          alignmentColumnSeparation: params.columnSeparation,
+          ...(params.columnSeparation !== undefined ? { alignmentColumnSeparation: params.columnSeparation } : {}),
         });
         cells.push({
           list: cellList,
@@ -2889,7 +2890,7 @@ class TexMathParser {
           ...(suppressTag ? { suppressTag } : {}),
           ...(intertextsBefore.length > 0 ? { intertextsBefore } : {}),
           ...(labels.length > 0 ? { labels } : {}),
-          ...(multlineShove ? { multlineShove } : {}),
+          ...(multlineShove ? { multlineShove: multlineShove } : {}),
         });
         continue;
       }
@@ -2902,12 +2903,12 @@ class TexMathParser {
           ...(suppressTag ? { suppressTag } : {}),
           ...(intertextsBefore.length > 0 ? { intertextsBefore } : {}),
           ...(labels.length > 0 ? { labels } : {}),
-          ...(multlineShove ? { multlineShove } : {}),
+          ...(multlineShove ? { multlineShove: multlineShove } : {}),
         });
         return this.maybeParseScripts(
           alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, endSourceSpan, sourceSpan, {
-            columnSeparation: params.columnSeparation,
-            maxFields: params.maxFields,
+            ...(params.columnSeparation !== undefined ? { columnSeparation: params.columnSeparation } : {}),
+            ...(params.maxFields !== undefined ? { maxFields: params.maxFields } : {}),
           }),
           params.allowScripts
         );
@@ -2919,7 +2920,7 @@ class TexMathParser {
           ...(suppressTag ? { suppressTag } : {}),
           ...(intertextsBefore.length > 0 ? { intertextsBefore } : {}),
           ...(labels.length > 0 ? { labels } : {}),
-          ...(multlineShove ? { multlineShove } : {}),
+          ...(multlineShove ? { multlineShove: multlineShove } : {}),
         });
       }
     }
@@ -2934,8 +2935,8 @@ class TexMathParser {
     }
     return this.maybeParseScripts(
       alignedAtom(rows, params.beginSourceSpan, params.preambleSourceSpan, undefined, sourceSpan, {
-        columnSeparation: params.columnSeparation,
-        maxFields: params.maxFields,
+        ...(params.columnSeparation !== undefined ? { columnSeparation: params.columnSeparation } : {}),
+        ...(params.maxFields !== undefined ? { maxFields: params.maxFields } : {}),
       }),
       params.allowScripts
     );
@@ -2972,8 +2973,8 @@ class TexMathParser {
         const end = this.consumeEnvironmentEnd(environmentName);
         sourceSpan = spanUnion(sourceSpan ?? end, end);
         return {
-          ...(sourceSpan ? { sourceSpan } : {}),
-          ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan } : {}),
+          ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
+          ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan: extraAlignmentTabSourceSpan } : {}),
         };
       }
       const token = this.advance();
@@ -2990,8 +2991,8 @@ class TexMathParser {
       }
     }
     return {
-      ...(sourceSpan ? { sourceSpan } : {}),
-      ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan } : {}),
+      ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
+      ...(extraAlignmentTabSourceSpan ? { extraAlignmentTabSourceSpan: extraAlignmentTabSourceSpan } : {}),
     };
   }
 
@@ -3111,7 +3112,7 @@ class TexMathParser {
     return {
       suppressTag,
       labels,
-      ...(sourceSpan ? { sourceSpan } : {}),
+      ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
     };
   }
 
@@ -4038,7 +4039,7 @@ class TexMathParser {
     const text = argument.tokens.map((argumentToken) => argumentToken.text).join("");
     const parsed = parseTexMath(text, {
       sourceOffset: argument.sourceSpan.start + 1,
-      suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
+      ...(this.options.suppressTerminalEllipsisGlue !== undefined ? { suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue } : {}),
     });
     this.diagnostics.push(...parsed.diagnostics);
     if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
@@ -4064,7 +4065,7 @@ class TexMathParser {
     const text = argument.tokens.map((argumentToken) => argumentToken.text).join("");
     const parsed = parseTexMath(text, {
       sourceOffset: argument.sourceSpan.start + 1,
-      suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
+      ...(this.options.suppressTerminalEllipsisGlue !== undefined ? { suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue } : {}),
     });
     this.diagnostics.push(...parsed.diagnostics);
     if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
@@ -4450,7 +4451,7 @@ class TexMathParser {
         flushTextRun(node.sourceStart);
         const parsed = parseTexMath(node.content, {
           sourceOffset: node.contentStart,
-          suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue,
+          ...(this.options.suppressTerminalEllipsisGlue !== undefined ? { suppressTerminalEllipsisGlue: this.options.suppressTerminalEllipsisGlue } : {}),
         });
         this.diagnostics.push(...parsed.diagnostics);
         parts.push({
@@ -5067,8 +5068,8 @@ class TexMathParser {
     }
     return {
       ...atom,
-      ...(subscript ? { subscript } : {}),
-      ...(superscript ? { superscript } : {}),
+      ...(subscript ? { subscript: subscript } : {}),
+      ...(superscript ? { superscript: superscript } : {}),
       sourceSpan,
     };
   }
@@ -5111,7 +5112,7 @@ class TexMathParser {
       let cursor = this.index;
       let spaces = "";
       while (this.tokens[cursor]?.kind === "space") {
-        spaces += this.tokens[cursor].text;
+        spaces += requireArrayValue(this.tokens, cursor).text;
         cursor += 1;
       }
       const open = this.tokens[cursor];
@@ -5122,7 +5123,7 @@ class TexMathParser {
       let depth = 0;
       let argument = "";
       for (; cursor < this.tokens.length; cursor += 1) {
-        const token = this.tokens[cursor];
+        const token = requireArrayValue(this.tokens, cursor);
         argument += token.text;
         depth += token.kind === "group-open" ? 1 : token.kind === "group-close" ? -1 : 0;
         if (bracket ? depth === 0 && token.kind === "character" && token.text === "]" : depth === 0) {
@@ -5134,7 +5135,7 @@ class TexMathParser {
         cursor = this.tokens.length - 1;
       }
       text += spaces + argument;
-      end = this.tokens[cursor].sourceSpan.end;
+      end = requireArrayValue(this.tokens, cursor).sourceSpan.end;
       this.index = cursor + 1;
     }
     return { text, sourceSpan: { start: command.sourceSpan.start, end } };

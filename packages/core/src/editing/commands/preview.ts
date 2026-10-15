@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { layoutTexMathList, parseTexMath, renderTexMathHListSvgBody, TEX_MATH_SVG_UNITS_PER_PT } from "../../text/tex/math/index.js";
 import type { CommandTable } from "./table.js";
 
@@ -12,7 +13,7 @@ import type { CommandTable } from "./table.js";
 export function mathCompletionPreview(table: CommandTable, name: string): { readonly svg: string; readonly widthEm: number } | null {
   const variant = /^(?:left|right)(.+)$/u.exec(name);
   if (variant) {
-    return render(variant[1]);
+    return render(requireArrayValue(variant, 1));
   }
   const schema = table.command(name, "math");
   // A math alphabet shows a letter in it (`\mathbb{R}`).

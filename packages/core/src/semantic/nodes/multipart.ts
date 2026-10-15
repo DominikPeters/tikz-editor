@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { OptionListAst } from "../../options/types.js";
 import { texFragmentParser } from "@tikz-editor/lezer-tex";
 import { normalizeOptionValue } from "./utils.js";
@@ -91,7 +92,7 @@ function collectNodePartDirectives(text: string): readonly NodePartDirective[] {
   const directives: NodePartDirective[] = [];
 
   for (let index = 0; index < items.length; index += 1) {
-    const command = items[index];
+    const command = requireArrayValue(items, index);
     if (
       command?.name !== "GenericCommand" ||
       text.slice(command.from, command.to) !== String.raw`\nodepart`
@@ -245,7 +246,7 @@ export function resolveRectangleSplitPartTexts(parts: NodePartText[], partCount:
     if (targetIndex < 0 || targetIndex >= resolved.length) {
       continue;
     }
-    const existing = resolved[targetIndex];
+    const existing = requireArrayValue(resolved, targetIndex);
     resolved[targetIndex] = existing.length > 0 ? `${existing} ${part.text}`.trim() : part.text;
   }
 

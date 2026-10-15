@@ -51,7 +51,7 @@ export async function exportStandaloneLatexDownload(
   const artifact = createStandaloneLatexExportArtifact({
     source,
     activeFigureId: activeRootId,
-    fileName: options.fileName
+    ...(options.fileName === undefined ? {} : { fileName: options.fileName })
   });
   if (!artifact.complete) {
     console.warn("[tikz-editor] Standalone LaTeX export emitted with unresolved diagnostics.", artifact.diagnostics);
@@ -98,7 +98,7 @@ export async function renderPngExport(
   }
 
   const text = await serializeSvgForExport(svgResult);
-  const artifact = createPngExportArtifact({ fileName: options.fileName });
+  const artifact = createPngExportArtifact({ ...(options.fileName === undefined ? {} : { fileName: options.fileName }) });
   const dpi = normalizePngExportDpi(options.dpi);
   const scale = dpi / 72;
   const pixelWidth = Math.max(1, Math.ceil(svgResult.viewBox.width * scale));
@@ -194,7 +194,7 @@ export async function exportPdfDownload(
       return reportExportFailure(error instanceof Error ? error.message : "Failed to prepare SVG effects for PDF export.", error);
     }
 
-    const artifact = createPdfExportArtifact({ fileName: options.fileName });
+    const artifact = createPdfExportArtifact({ ...(options.fileName === undefined ? {} : { fileName: options.fileName }) });
     const exportPdf = await loadPdfExporter();
     const blob = await exportPdf(svgElement, svgResult.viewBox.width, svgResult.viewBox.height);
     const files = getActiveEditorPlatform().files;
@@ -259,7 +259,7 @@ export async function downloadSvgMarkup(
 ): Promise<boolean> {
   const artifact = createSvgExportArtifact({
     svg: svgMarkup,
-    fileName: options.fileName
+    ...(options.fileName === undefined ? {} : { fileName: options.fileName })
   });
   try {
     const files = getActiveEditorPlatform().files;
@@ -337,7 +337,8 @@ export function validateSvgMarkup(svgMarkup: string): { valid: true } | { valid:
   const parsed = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
   if (parsed.getElementsByTagName("parsererror").length > 0) {
     const parserError = parsed.getElementsByTagName("parsererror")[0];
-    const message = parserError?.textContent?.trim() || "The SVG markup could not be parsed.";
+    const parserMessage = parserError?.textContent?.trim() ?? "";
+    const message = parserMessage.length > 0 ? parserMessage : "The SVG markup could not be parsed.";
     return { valid: false, message };
   }
   const root = parsed.documentElement;
@@ -402,7 +403,7 @@ function loadSvgOptimizer(): Promise<SvgOptimizer> {
       ({ optimize }) => (svgMarkup: string, preset: SvgTransformPreset) =>
         optimize(svgMarkup, {
           multipass: preset === "compress",
-          js2svg: preset === "beautify" ? { pretty: true, indent: 2 } : undefined,
+          ...(preset === "beautify" ? { js2svg: { pretty: true, indent: 2 } } : {}),
           plugins: [
             {
               name: "preset-default",

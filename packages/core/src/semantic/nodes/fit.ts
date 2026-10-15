@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { WorldPoint } from "../../coords/points.js";
@@ -109,7 +110,7 @@ function extractTopLevelCoordinateTokens(raw: string): string[] {
   let depth = 0;
 
   for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
+    const char = raw.charAt(index);
     if (char === "\\" && index + 1 < raw.length) {
       index += 1;
       continue;
@@ -184,7 +185,7 @@ function isBareNodeReference(nameRaw: string): boolean {
 }
 
 function resolveScopedNamedNodeGeometry(name: string, context: SemanticContext) {
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
   const prefix = frame?.namePrefix ?? "";
   const suffix = frame?.nameSuffix ?? "";
   const scoped = applyRawNameScope(name, prefix, suffix);

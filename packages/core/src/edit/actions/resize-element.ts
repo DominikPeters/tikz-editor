@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type {
@@ -171,7 +172,10 @@ export function applyResizeElementAction(
   if (geometry) {
     source = geometry.source;
     parseOptions = { ...parseOptions, analysisView: null, analysisSession: null,
-      sourceFingerprint: geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint };
+      };
+    const sourceFingerprint = geometry.semantic.editHandles[0]?.sourceRef.sourceFingerprint;
+    if (sourceFingerprint === undefined) delete parseOptions.sourceFingerprint;
+    else parseOptions.sourceFingerprint = sourceFingerprint;
   }
   const resolved = resolvePropertyTarget(source, elementId, parseOptions);
   if (resolved.kind === "not-found") {
@@ -307,7 +311,7 @@ export function applyResizeElementAction(
       requestedHeight,
       currentWidth: liveLocalSize.width,
       currentHeight: liveLocalSize.height,
-      formatPrecision: action.formatPrecision
+      ...(action.formatPrecision === undefined ? {} : { formatPrecision: action.formatPrecision })
     });
     if (rewritten) {
       return {
@@ -334,7 +338,7 @@ export function applyResizeElementAction(
     intrinsicHeight,
     preserveExplicitWidthFloor: preserveExplicitWidthFloor && !preservePathAttachedWidthFloor,
     preserveExplicitHeightFloor,
-    formatPrecision: action.formatPrecision
+    ...(action.formatPrecision === undefined ? {} : { formatPrecision: action.formatPrecision })
   });
   const rewritten = chooseBestNodeResizeMutationCandidate({
     source,
@@ -1043,7 +1047,7 @@ function resolvePathRectangleResizeContext(
     return { kind: "not-rectangle" };
   }
 
-  const rectangle = nonTextElements[0];
+  const rectangle = requireArrayValue(nonTextElements, 0);
   if (rectangle.kind !== "Path") {
     return { kind: "not-rectangle" };
   }
@@ -1061,7 +1065,8 @@ function resolvePathRectangleResizeContext(
     };
   }
 
-  const [startHandle, oppositeHandle] = pathPointHandles;
+  const startHandle = requireArrayValue(pathPointHandles, 0);
+  const oppositeHandle = requireArrayValue(pathPointHandles, 1);
   if (startHandle.rewriteMode === "unsupported" || oppositeHandle.rewriteMode === "unsupported") {
     return {
       kind: "unsupported",
@@ -1106,7 +1111,7 @@ function resolvePathShapeHintFromItems(items: readonly PathItem[]): ScenePathSha
   if (hints.size !== 1) {
     return null;
   }
-  return [...hints][0];
+  return requireArrayValue([...hints], 0);
 }
 
 function collectPathShapeHints(items: readonly PathItem[], hints: Set<ScenePathShapeHint>): void {
@@ -1284,12 +1289,12 @@ function resolvePathShapeResizeContext(
   let requireSingleCenterHandle = false;
 
   if (explicitShapeElements.length === 1 && nonTextElements.length === 1) {
-    const explicitShape = explicitShapeElements[0];
+    const explicitShape = requireArrayValue(explicitShapeElements, 0);
     shapeKind = explicitShape.kind === "Circle" ? "circle" : "ellipse";
     center = explicitShape.center;
-  } else if (explicitShapeElements.length === 0 && nonTextElements.length === 1 && nonTextElements[0].kind === "Path") {
-    const pathElement = nonTextElements[0];
-    const hint = resolveScenePathShapeHint(pathElement, pathStatement);
+  } else if (explicitShapeElements.length === 0 && nonTextElements.length === 1 && requireArrayValue(nonTextElements, 0).kind === "Path") {
+    const pathElement = requireArrayValue(nonTextElements, 0);
+    const hint = pathElement.kind === "Path" ? resolveScenePathShapeHint(pathElement, pathStatement) : null;
     if (hint === "circle" || hint === "ellipse") {
       shapeKind = hint;
       requireSingleCenterHandle = true;
@@ -1315,7 +1320,7 @@ function resolvePathShapeResizeContext(
     return { kind: "unsupported", reason: "Resize requires circle/ellipse paths with explicit center coordinates." };
   }
 
-  let centerHandle = candidateHandles[0];
+  let centerHandle = requireArrayValue(candidateHandles, 0);
   if (center) {
     let bestDistanceSq = Number.POSITIVE_INFINITY;
     for (const handle of candidateHandles) {
@@ -1346,13 +1351,13 @@ function resolvePathShapeResizeSyntax(items: readonly PathItem[]): PathShapeResi
   if (keywordItems.length !== 1) {
     return null;
   }
-  const keywordItem = keywordItems[0];
+  const keywordItem = requireArrayValue(keywordItems, 0);
   const keywordIndex = items.findIndex((item) => item.id === keywordItem.id);
 
   const optionItems: PathOptionItem[] = [];
   let payloadCoordinate: CoordinateItem | null = null;
   for (let index = keywordIndex + 1; index < items.length; index += 1) {
-    const next = items[index];
+    const next = requireArrayValue(items, index);
     if (next.kind === "PathComment") {
       continue;
     }
@@ -1550,7 +1555,7 @@ function pickPathShapeResizeOptionTarget(
     return null;
   }
   for (let index = optionItems.length - 1; index >= 0; index -= 1) {
-    const item = optionItems[index];
+    const item = requireArrayValue(optionItems, index);
     const hasRadiusEntry = item.options.entries.some(
       (entry) =>
         entry.kind === "kv" &&
@@ -1560,7 +1565,7 @@ function pickPathShapeResizeOptionTarget(
       return item;
     }
   }
-  return optionItems[optionItems.length - 1];
+  return requireArrayValue(optionItems, optionItems.length - 1);
 }
 
 function applySpanTextReplacement(
@@ -1675,7 +1680,7 @@ function resolveNodeResizeBounds(
  * overestimates both dimensions after rotation or skew. */
 function resolveNodeResizeLocalSize(elements: readonly SceneElement[], sourceId: string): { width: number; height: number } | null {
   const localElements = elements.filter(element => element.sourceRef.sourceId === sourceId)
-    .map(element => ({ ...element, transform: undefined }));
+    .map(element => { const local = { ...element }; delete local.transform; return local; });
   const bounds = resolveNodeResizeBounds(localElements, sourceId);
   return bounds ? { width: bounds.maxX - bounds.minX, height: bounds.maxY - bounds.minY } : null;
 }
@@ -2071,7 +2076,7 @@ function resolveResizePropertyTarget(
     return defaultTarget;
   }
 
-  const nodeTarget = resolvePropertyTarget(source, nodeIds[0], parseOptions);
+  const nodeTarget = resolvePropertyTarget(source, requireArrayValue(nodeIds, 0), parseOptions);
   if (nodeTarget.kind === "found") {
     return nodeTarget.target;
   }
@@ -2138,7 +2143,7 @@ function isDiamondNodeShapeInPathStatement(statements: readonly Statement[], ele
   if (nodes.length !== 1) {
     return false;
   }
-  return resolveNodeShape(nodes[0].options) === "diamond";
+  return resolveNodeShape(requireArrayValue(nodes, 0).options) === "diamond";
 }
 
 function collectPathNodeItems(items: readonly PathItem[]): NodeItem[] {

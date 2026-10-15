@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 export type EditableTargetKind = "statement" | "node-adornment";
 
 export type ParsedEditableTargetId =
@@ -26,9 +27,9 @@ export function parseEditableTargetId(id: string): ParsedEditableTargetId {
   return {
     kind: "node-adornment",
     id: trimmed,
-    ownerNodeId: match[1],
+    ownerNodeId: requireArrayValue(match, 1),
     adornmentKind: match[2] as "label" | "pin",
-    adornmentIndex: Number.parseInt(match[3], 10)
+    adornmentIndex: Number.parseInt(requireArrayValue(match, 3), 10)
   };
 }
 

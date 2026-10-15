@@ -1018,5 +1018,5 @@ function Tok({ kind, children }: { kind: "keyword" | "type" | "string" | "number
 }
 
 function line(id: string, number: string, content: ReactNode, active = false, folded = false, foldControl?: "open" | "closed"): CodeLine {
-  return { id, number, content, active, folded, foldControl };
+  return { id, number, content, active, folded, ...(foldControl === undefined ? {} : { foldControl }) };
 }

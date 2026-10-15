@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { matchTexSyntaxEnvironments, type TexSyntaxIndex } from "../text/tex/syntax-index.js";
 import { createBeamerSyntaxContext } from "./syntax.js";
@@ -28,9 +29,9 @@ function enclosedByEnvironment(syntax: TexSyntaxIndex, span: Span): boolean {
   let low = 0, high = index.starts.length;
   while (low < high) {
     const middle = (low + high) >> 1;
-    if (index.starts[middle] < span.from) low = middle + 1; else high = middle;
+    if (requireArrayValue(index.starts, middle) < span.from) low = middle + 1; else high = middle;
   }
-  return low > 0 && index.furthestEnd[low - 1] > span.to;
+  return low > 0 && requireArrayValue(index.furthestEnd, low - 1) > span.to;
 }
 
 export function isDocumentLevelSpan(source: string, span: Span): boolean {

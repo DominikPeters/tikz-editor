@@ -1,6 +1,5 @@
 import { COMPUTER_MODERN_OT1_FONTS } from "./data/computer-modern-ot1.generated.js";
 import type {
-  GeneratedTexFont,
   ResolveTexFontOptions,
   ResolvedTexFont,
   ShapeTexTextOptions,
@@ -145,7 +144,7 @@ export class ComputerModernTexMetricProvider implements TexMetricProvider {
   public resolveFont(options: ResolveComputerModernFontOptions = {}): ResolvedTexFont {
     const id = options.fontId ?? "cmr10";
     const data = Object.hasOwn(COMPUTER_MODERN_OT1_FONTS, id)
-      ? COMPUTER_MODERN_OT1_FONTS[id] as GeneratedTexFont | undefined
+      ? COMPUTER_MODERN_OT1_FONTS[id]
       : undefined;
     if (!data) {
       throw new Error(`Computer Modern font '${id}' is not available in the generated OT1 table.`);

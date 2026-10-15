@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import {
   concatMappedText,
@@ -220,7 +221,7 @@ export function scanBeamerFrameOverlays(
           ? beamerOptionalArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to)
           : null;
         const content = beamerRequiredArgumentAfter(context, optional?.span.to ?? rawSpec.span.to, frame.bodySpan.to);
-        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, contentSpan: content?.contentSpan });
+        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content?.contentSpan } : {}) });
       }
       continue;
     }
@@ -236,7 +237,7 @@ export function scanBeamerFrameOverlays(
         const target = beamerRequiredArgumentAfter(context, rawSpec.span.to, frame.bodySpan.to);
         const content = command.name !== "label" && target
           ? beamerRequiredArgumentAfter(context, target.span.to, frame.bodySpan.to) : null;
-        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, contentSpan: content?.contentSpan });
+        pending.push({ kind: "reference", sourceOrder: command.from, rawSpec, ...(content?.contentSpan !== undefined ? { contentSpan: content?.contentSpan } : {}) });
       }
       continue;
     }
@@ -447,7 +448,7 @@ export function scanBeamerFrameOverlays(
     } else if (entry.kind === "switch") {
       switches.push({ ...entry.switch, spec: resolved.spec });
     } else if (entry.kind === "reference") {
-      referenceSpecs.push({ sourceStart: entry.sourceOrder, spec: resolved.spec, contentSpan: entry.contentSpan });
+      referenceSpecs.push({ sourceStart: entry.sourceOrder, spec: resolved.spec, ...(entry.contentSpan !== undefined ? { contentSpan: entry.contentSpan } : {}) });
     } else {
       items.push({
         commandSpan: entry.commandSpan,
@@ -594,7 +595,7 @@ export function projectBeamerOverlayText(
         ? !beamerOverlaySpecContains(command.spec, step)
         : beamerOverlaySpecContains(command.spec, step);
       if (!shouldPaint) {
-        hidden.push(command.branches[selected].contentSpan);
+        hidden.push(requireArrayValue(command.branches, selected).contentSpan);
         if (command.leadingItemCommandSpan) hidden.push(command.leadingItemCommandSpan);
       }
     }
@@ -793,7 +794,7 @@ function resolveOverlaySpec(
   // selector must never contaminate the presentation overlay numbers.
   const presentation = source.value.split("|").flatMap(part => {
     const mode = /^\s*([A-Za-z]+)\s*:\s*([\s\S]*)$/u.exec(part);
-    return mode ? ["presentation", "beamer", "all"].includes(mode[1]) ? [mode[2]] : [] : [part];
+    return mode ? ["presentation", "beamer", "all"].includes(requireArrayValue(mode, 1)) ? [mode[2]] : [] : [part];
   }).join(",");
   const resolved = presentation
     .replace(/([+.])(?:\(([-+]?\d+)\))?/gu, (_whole, symbol, offsetRaw) => {
@@ -909,7 +910,7 @@ function overlayEnvironmentSpecs(
     let depth = 0;
     let endIndex = -1;
     for (let candidate = index; candidate < tokens.length; candidate += 1) {
-      const token = tokens[candidate];
+      const token = requireArrayValue(tokens, candidate);
       if (token.name !== begin.name) {
         continue;
       }

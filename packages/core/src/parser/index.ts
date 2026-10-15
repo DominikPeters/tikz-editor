@@ -70,9 +70,9 @@ export function parseTikz(input: string, opts: ParseTikzOptions = {}): ParseTikz
   const tree = parseSyntax(parseSource);
 
   const mapped = fromCst(tree, input, {
-    activeFigureId: opts.activeFigureId,
+    ...(opts.activeFigureId !== undefined ? { activeFigureId: opts.activeFigureId } : {}),
     includeContextDefinitions: opts.includeContextDefinitions ?? false,
-    contextDefinitions,
+    ...(contextDefinitions !== undefined ? { contextDefinitions } : {}),
     scannedFigures
   });
   const diagnostics = [...mapped.diagnostics];

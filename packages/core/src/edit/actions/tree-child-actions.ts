@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { ChildOperationItem, PathStatement, Span } from "../../ast/types.js";
 import { lineIndentAtOffset } from "../statement-ops.js";
@@ -172,7 +173,7 @@ function resolveRootInsertionAnchor(
   if (Number.isInteger(afterChildIndexRaw)) {
     const afterChildIndex = Math.max(0, afterChildIndexRaw!);
     if (afterChildIndex < children.length) {
-      const child = children[afterChildIndex];
+      const child = requireArrayValue(children, afterChildIndex);
       return {
         offset: skipHorizontalWhitespace(source, child.span.to),
         childIndent: lineIndentAtOffset(source, child.span.from)
@@ -180,7 +181,7 @@ function resolveRootInsertionAnchor(
     }
   }
 
-  const lastChild = children[children.length - 1];
+  const lastChild = requireArrayValue(children, children.length - 1);
   return {
     offset: skipHorizontalWhitespace(source, lastChild.span.to),
     childIndent: lineIndentAtOffset(source, lastChild.span.from)

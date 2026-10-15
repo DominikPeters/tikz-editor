@@ -126,6 +126,11 @@ export default tseslint.config(
   },
   {
     files: ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        project: "./tsconfig.prod.json"
+      }
+    },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/consistent-type-exports": "error",
@@ -216,10 +221,29 @@ export default tseslint.config(
     files: [
       "packages/app/src/store/{document-sessions,store,workspace-state,workspace-storage}.ts",
       "packages/app/src/ui/editor-clipboard.ts",
-      "packages/app/src/validation.ts"
+      "packages/app/src/validation.ts",
+      "packages/{lezer-tex,lezer-tikz,lang-tikz}/src/**/*.ts"
     ],
     rules: {
       "@typescript-eslint/no-unsafe-type-assertion": "error",
+      "@typescript-eslint/no-non-null-assertion": "error"
+    }
+  },
+  {
+    files: ["packages/tex-fuzz/src/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "error"
+    }
+  },
+  {
+    files: [
+      "packages/core/src/{ast,diagnostics,domains,foreach,macros,options,parser,syntax,transform}/**/*.ts",
+      "packages/core/src/conditionals/**/*.ts",
+      "packages/core/src/semantic/coords/parse-length.ts",
+      "packages/core/src/semantic/pgfmath/**/*.ts",
+      "packages/core/src/text/{line-map,source-map}.ts"
+    ],
+    rules: {
       "@typescript-eslint/no-non-null-assertion": "error"
     }
   },

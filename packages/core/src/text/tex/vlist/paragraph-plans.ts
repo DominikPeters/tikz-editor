@@ -177,24 +177,19 @@ export function prepareTexLayoutParagraphsFromVList(
       layoutMode = "wrapped-explicit";
     }
 
-    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
-      const segment = segments[segmentIndex];
+    for (const [segmentIndex, segment] of segments.entries()) {
       const listAttachments = texListItemParagraphAttachments({
         blockIndex,
         segmentIndex,
-        listContext: suppressAncestorBreakMargins
-          ? undefined
-          : paragraph.listContext,
-        listItemLayout: suppressAncestorBreakMargins
-          ? undefined
-          : scopeContext.listItemLayout,
+        ...(!suppressAncestorBreakMargins && paragraph.listContext !== undefined ? { listContext: paragraph.listContext } : {}),
+        ...(!suppressAncestorBreakMargins && scopeContext.listItemLayout !== undefined ? { listItemLayout: scopeContext.listItemLayout } : {}),
         font: scopeContext.listItemLayout?.label?.content.kind === "marker" ? params.font : paragraphFont,
         metricProvider: params.metricProvider,
         spaceGlueProfile,
         inlineNodesToItems: simpleTexInlineNodesToLayoutItems,
-        graphicsResolver: params.options.graphicsResolver,
-        mathBoxProvider: params.options.mathBoxProvider,
-        textFontProfile: params.options.textFontProfile,
+        ...(params.options.graphicsResolver !== undefined ? { graphicsResolver: params.options.graphicsResolver } : {}),
+        ...(params.options.mathBoxProvider !== undefined ? { mathBoxProvider: params.options.mathBoxProvider } : {}),
+        ...(params.options.textFontProfile !== undefined ? { textFontProfile: params.options.textFontProfile } : {}),
         paragraphOriginX: texVListX(scopeContext.layout.leftMarginWidth),
       });
       if (listAttachments.marginLabelHBox) {
@@ -230,17 +225,18 @@ export function prepareTexLayoutParagraphsFromVList(
         trailingNode?.kind === "space" &&
         firstAdjustment?.sourceSpan !== undefined &&
         trailingNode.sourceEnd <= firstAdjustment.sourceSpan.start;
+      const firstLineIndentWidth = listAttachments.firstLineIndentWidth ?? quotationPrefix.firstLineIndentWidth;
       paragraphPlans.push({
-        fontSizePt: paragraph.fontSizePt,
+        ...(paragraph.fontSizePt !== undefined ? { fontSizePt: paragraph.fontSizePt } : {}),
         ...(paragraph.inheritedFontState ? { inheritedFontState: paragraph.inheritedFontState } : {}),
         blockIndex,
         vlistPath: entry.path,
         segmentIndex,
         segment,
         alignment: paragraphStateResult.alignment,
-        alignmentProfile: paragraphStateResult.alignmentProfile,
+        ...(paragraphStateResult.alignmentProfile !== undefined ? { alignmentProfile: paragraphStateResult.alignmentProfile } : {}),
         inheritedAlignment: paragraphStateResult.inheritedAlignment,
-        inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile,
+        ...(paragraphStateResult.inheritedAlignmentProfile !== undefined ? { inheritedAlignmentProfile: paragraphStateResult.inheritedAlignmentProfile } : {}),
         spaceGlueProfile,
         inlinePrefixItems: [
           ...listAttachments.inlineLabelItems,
@@ -261,8 +257,7 @@ export function prepareTexLayoutParagraphsFromVList(
           blockIndex,
           segmentIndex,
           ...(scopedBreakWidth !== undefined ? { width: scopedBreakWidth } : {}),
-          firstLineIndentWidth: listAttachments.firstLineIndentWidth ??
-            quotationPrefix.firstLineIndentWidth,
+          ...(firstLineIndentWidth !== undefined ? { firstLineIndentWidth } : {}),
           ...(quotationPrefix.forcedBreakIndentWidth !== undefined
             ? { forcedBreakIndentWidth: quotationPrefix.forcedBreakIndentWidth }
             : {}),
@@ -418,15 +413,15 @@ function texQuotationFirstLinePrefix(params: {
 function texParagraphScopeContextWithoutBreakMargins(
   scopeContext: ReturnType<typeof texParagraphScopeContext>
 ): ReturnType<typeof texParagraphScopeContext> {
+  const { listItemLayout: _listItemLayout, ...unscopedContext } = scopeContext;
   return {
-    ...scopeContext,
+    ...unscopedContext,
     layout: {
       leftMarginWidth: texLength(0),
       rightMarginWidth: texLength(0),
     },
     quoteContextActive: false,
     listContextActive: false,
-    listItemLayout: undefined,
   };
 }
 
@@ -490,7 +485,7 @@ function texParagraphBreakScopePolicy(
   return {
     leftMarginWidth: scopeContext.layout.leftMarginWidth,
     rightMarginWidth: scopeContext.layout.rightMarginWidth,
-    ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits } : {}),
+    ...(finalHyphenDemerits !== undefined ? { finalHyphenDemerits: finalHyphenDemerits } : {}),
     allowParagraphIndent: scopeContext.policy.allowParagraphIndent !== false && !inList,
     allowForcedBreakIndent: scopeContext.policy.allowForcedBreakIndent !== false && !inList,
     forceParfillStretch: inQuote || inList,

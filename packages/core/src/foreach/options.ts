@@ -191,15 +191,13 @@ export function buildForeachIterations(params: {
   }
 
   const iterations: ForeachIteration[] = [];
-  for (let index = 0; index < listEntries.length; index += 1) {
-    const listEntry = listEntries[index];
+  for (const [index, listEntry] of listEntries.entries()) {
     const normalizedEntry = normalizeListEntryForSplit(listEntry);
     const splitValues = splitAllAtTopLevel(normalizedEntry, "/").map((entry) => entry.trim()).filter((entry) => entry.length > 0);
-    const fallbackValue = splitValues.length > 0 ? splitValues[splitValues.length - 1] : "";
+    const fallbackValue = splitValues.at(-1) ?? "";
 
     const bindingScope: Partial<ForeachIterationBinding> = { ...params.baseBindings };
-    for (let variableIndex = 0; variableIndex < variables.length; variableIndex += 1) {
-      const variable = variables[variableIndex];
+    for (const [variableIndex, variable] of variables.entries()) {
       const assigned = splitValues[variableIndex] ?? fallbackValue;
       bindingScope[variable] = assigned;
     }

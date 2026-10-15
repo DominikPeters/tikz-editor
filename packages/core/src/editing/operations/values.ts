@@ -1,3 +1,5 @@
+import { requireArrayValue } from "../../utils/collections.js";
+import { editSlotAt } from "../tree/lookup.js";
 import type { CommandSchema, CommandTable } from "../commands/table.js";
 import type { Position } from "../position/position.js";
 import type { EditView } from "../position/view.js";
@@ -139,7 +141,8 @@ export function valueSource(kind: ValueKind, text: string, open = "{"): string {
 function balancedBraces(text: string): boolean {
   let depth = 0;
   for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
+    const char = text.charAt(index);
+
     if (char === "\\") {
       index += 1;
     } else if (char === "{") {
@@ -158,7 +161,8 @@ function balancedBraces(text: string): boolean {
 function closesBracket(text: string): boolean {
   let depth = 0;
   for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
+    const char = text.charAt(index);
+
     if (char === "\\") {
       index += 1;
     } else if (char === "{") {
@@ -198,7 +202,7 @@ export function commitWithValues(
   values: readonly string[]
 ): EditOutcome {
   const { tree } = view;
-  const mode = tree.slots[caret.slot].mode === "math" ? "math" : "text";
+  const mode = editSlotAt(tree.slots, caret.slot).mode === "math" ? "math" : "text";
   const own = table.command(name, mode);
   const schema = own ?? table.command(name, mode === "math" ? "text" : "math");
   if (!schema || fieldProblems(fields, values)) {
@@ -213,8 +217,8 @@ export function commitWithValues(
   schema.args.forEach((arg, argument) => {
     const index = fields.findIndex((field) => field.argument === argument);
     if (index >= 0) {
-      const field = fields[index];
-      const value = values[index].trim();
+      const field = requireArrayValue(fields, index);
+      const value = requireArrayValue(values, index).trim();
       if (value !== "" || !field.optional) {
         command += field.open + valueSource(field.kind, value, field.open) + field.close;
       }
@@ -265,7 +269,7 @@ export function writtenValueAt(view: EditView, span: Span): WrittenValue | null 
     const value = node.values.find((candidate) => candidate.contentSpan.from === span.from && candidate.contentSpan.to === span.to);
     if (value) {
       // (An unbraced value, `\bigr)`, has no delimiter: its first character is its content.)
-      const open = value.span.from < value.contentSpan.from ? view.tree.text[value.span.from] : "";
+      const open = value.span.from < value.contentSpan.from ? view.tree.text.charAt(value.span.from) : "";
       return { node, value, open, optional: open === "[" || open === "<" };
     }
   }
@@ -312,18 +316,18 @@ export function editValues(view: EditView, edits: readonly { readonly span: Span
     if (spec && (specColumns(final(spec)) ?? 0) < widestRow(view, node.id)) {
       return null;
     }
-    const model = node.values.some((value) => text[value.span.from] === "[" && final(value) !== "");
+    const model = node.values.some((value) => text.charAt(value.span.from) === "[" && final(value) !== "");
     if (node.values.some((value) => value.role === "color" && valueProblem("color", final(value), false, model) != null)) {
       return null;
     }
   }
   patches.sort((left, right) => left.from - right.from);
   let delta = 0;
-  for (let index = 0; index < patches.length; index += 1) {
-    const patch = patches[index];
+  for (const [index, patch] of patches.entries()) {
+
     const seam = patch.from + delta + patch.insert.length;
     patches = withTerminator(text, patches, seam, modes.get(patch.from)!);
-    delta += patches[index].insert.length - (patch.to - patch.from);
+    delta += requireArrayValue(patches, index).insert.length - (patch.to - patch.from);
   }
   return patches;
 }
@@ -337,7 +341,7 @@ export function valueEditorFields(
   key: CommitKey
 ): { readonly schema: CommandSchema; readonly fields: readonly ValueField[] } | null {
   const slot = view.index.resolve(at, "after")?.slot ?? view.positionAt(at).slot;
-  const mode = view.tree.slots[slot].mode === "math" ? "math" : "text";
+  const mode = editSlotAt(view.tree.slots, slot).mode === "math" ? "math" : "text";
   const schema = table.command(name, mode) ?? table.command(name, mode === "math" ? "text" : "math");
   return schema ? { schema, fields: valueFields(schema, key) } : null;
 }
@@ -363,8 +367,8 @@ export function taggedValues(view: EditView, node: EditNode): { readonly command
   }
   const { text } = view.tree;
   const values = [...node.values].sort((left, right) => left.span.from - right.span.from).map((value): TaggedValue => {
-    const open = value.span.from < value.contentSpan.from ? text[value.span.from] : "";
-    const close = value.contentSpan.to < value.span.to ? text[value.span.to - 1] : "";
+    const open = value.span.from < value.contentSpan.from ? text.charAt(value.span.from) : "";
+    const close = value.contentSpan.to < value.span.to ? text.charAt(value.span.to - 1) : "";
     return { kind: value.role, open, close, text: text.slice(value.contentSpan.from, value.contentSpan.to), span: value.contentSpan, optional: open === "[" || open === "<" };
   });
   return { command: node.command, values };

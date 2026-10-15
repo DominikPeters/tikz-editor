@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint as makeWorldPoint, worldVector as makeWorldVector, type WorldPoint, type WorldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { PlacementSegment } from "./types.js";
@@ -105,7 +106,7 @@ export function roundClosedPathStartCorner(
     return;
   }
 
-  const firstSegment = commands[firstSegmentIndex];
+  const firstSegment = requireArrayValue(commands, firstSegmentIndex);
   if (firstSegment.kind !== "L" && firstSegment.kind !== "C" && firstSegment.kind !== "A") {
     return;
   }
@@ -117,7 +118,7 @@ export function roundClosedPathStartCorner(
   move.to = rounded.exit;
 
   for (let index = commands.length - 1; index >= 0; index -= 1) {
-    const command = commands[index];
+    const command = requireArrayValue(commands, index);
     if (command.kind === "L" || command.kind === "C" || command.kind === "A") {
       command.to = rounded.entry;
       break;

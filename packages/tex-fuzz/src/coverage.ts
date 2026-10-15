@@ -52,25 +52,35 @@ export function measureTexFuzzCoverage(cases: readonly TexFuzzCoverageCase[]): T
 function countFeatureCombinations(cases: readonly TexFuzzCoverageCase[], coverage: MutableCoverage): void {
   const names = Object.keys(coverage.featureCounts).sort();
   const words = Math.ceil(cases.length / 32);
-  const members = names.map(() => new Uint32Array(words));
-  const byName = new Map(names.map((name, index) => [name, members[index]]));
+  const members = names.map((name) => ({ name, bits: new Uint32Array(words) }));
+  const byName = new Map(members.map(({ name, bits }) => [name, bits]));
   cases.forEach((caseData, index) => {
-    for (const feature of caseData.features) byName.get(feature)![index >>> 5] |= 1 << (index & 31);
+    for (const feature of caseData.features) {
+      const bits = byName.get(feature);
+      if (!bits) throw new Error(`Missing coverage membership for ${feature}.`);
+      const word = index >>> 5;
+      bits[word] = (bits[word] ?? 0) | (1 << (index & 31));
+    }
   });
   const pair = new Uint32Array(words);
-  for (let a = 0; a < names.length; a += 1) {
+  for (const [a, first] of members.entries()) {
     for (let b = a + 1; b < names.length; b += 1) {
+      const second = members[b];
+      if (!second) throw new Error("Missing second coverage membership.");
       let pairCount = 0;
       for (let word = 0; word < words; word += 1) {
-        pair[word] = members[a][word] & members[b][word];
-        pairCount += bitCount(pair[word]);
+        const common = (first.bits[word] ?? 0) & (second.bits[word] ?? 0);
+        pair[word] = common;
+        pairCount += bitCount(common);
       }
       if (!pairCount) continue;
-      coverage.featurePairCounts[texFuzzCombinationKey([names[a], names[b]])] = pairCount;
+      coverage.featurePairCounts[texFuzzCombinationKey([first.name, second.name])] = pairCount;
       for (let c = b + 1; c < names.length; c += 1) {
+        const third = members[c];
+        if (!third) throw new Error("Missing third coverage membership.");
         let count = 0;
-        for (let word = 0; word < words; word += 1) count += bitCount(pair[word] & members[c][word]);
-        if (count) coverage.featureTripleCounts[texFuzzCombinationKey([names[a], names[b], names[c]])] = count;
+        for (let word = 0; word < words; word += 1) count += bitCount((pair[word] ?? 0) & (third.bits[word] ?? 0));
+        if (count) coverage.featureTripleCounts[texFuzzCombinationKey([first.name, second.name, third.name])] = count;
       }
     }
   }
@@ -126,7 +136,9 @@ function sampledCombinationKeys(features: readonly string[], size: 2 | 3): reado
       for (let index = start; index <= features.length - remaining; index++) {
         const suffixes = ways(features.length - index - 1, remaining - 1);
         if (rank >= suffixes) { rank -= suffixes; continue; }
-        values.push(features[index]);
+        const feature = features[index];
+        if (feature === undefined) throw new Error("Missing ranked coverage feature.");
+        values.push(feature);
         start = index + 1;
         break;
       }
@@ -160,7 +172,8 @@ export class TexFuzzNoveltyTracker {
   }
 
   public choose<T extends { readonly features: readonly string[] }>(candidates: readonly T[]): T {
-    if (candidates.length === 0) throw new RangeError("Novelty selection requires candidates.");
+    let selected = candidates[0];
+    if (!selected) throw new RangeError("Novelty selection requires candidates.");
     const score = (candidate: T) => {
       const keys = this.keys(candidate.features);
       let total = 0;
@@ -171,7 +184,6 @@ export class TexFuzzNoveltyTracker {
       }
       return total;
     };
-    let selected = candidates[0];
     let best = score(selected);
     for (const candidate of candidates.slice(1)) {
       const current = score(candidate);
@@ -306,7 +318,9 @@ function combinations(values: readonly string[], size: number, emit: (values: re
       return;
     }
     for (let index = start; index <= values.length - (size - selected.length); index += 1) {
-      selected.push(values[index]);
+      const value = values[index];
+      if (value === undefined) throw new Error("Missing coverage combination value.");
+      selected.push(value);
       choose(index + 1);
       selected.pop();
     }

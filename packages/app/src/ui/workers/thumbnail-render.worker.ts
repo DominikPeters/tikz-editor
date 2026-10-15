@@ -71,9 +71,9 @@ async function pumpQueue(): Promise<void> {
             activeFigureId: next.parseOptions.activeRootId,
             includeContextDefinitions: next.parseOptions.includeContextDefinitions
           },
-          evaluate: { graphicsResolver },
+          evaluate: { ...(graphicsResolver === undefined ? {} : { graphicsResolver }) },
           svg: {
-            padding: next.svgOptions?.padding
+            ...((next.svgOptions?.padding) === undefined ? {} : { padding: next.svgOptions?.padding })
           }
         })).svg.svg);
 
@@ -169,7 +169,7 @@ async function renderDeckFrameThumbnail(
   const result = await deckPrepared.prepared.renderFrame({
     frameIndex,
     step,
-    graphicsResolver
+    ...(graphicsResolver === undefined ? {} : { graphicsResolver })
   });
   return result.svg.svg;
 }

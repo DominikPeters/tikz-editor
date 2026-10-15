@@ -46,7 +46,7 @@ export function UpdateModal({ update, phase, isWindows, onInstall, onClose, onLa
         title="Update Available"
         titleId="update-modal-title"
         showCloseButton={!installing}
-        onClose={installing ? undefined : onClose}
+        {...(installing ? {} : { onClose })}
         closeAriaLabel="Close update"
       />
       <Modal.Body>

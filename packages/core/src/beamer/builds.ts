@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import type { SourcePatch } from "../edit/types.js";
 import {
@@ -102,7 +103,7 @@ function contentLabel(context: BeamerSyntaxContext, span: Span): string {
     cursor = optional?.span.to ?? cursor;
     const title = beamerRequiredArgumentAfter(context, cursor, span.to);
     if (["block", "alertblock", "exampleblock", "theorem", "lemma", "definition", "proof", "corollary", "proposition"].includes(begin.name)) {
-      return `${begin.name.includes("block") ? "Block" : begin.name[0].toUpperCase() + begin.name.slice(1)} · ${excerpt(title?.value ?? optional?.value ?? raw) || "Untitled"}`;
+      return `${begin.name.includes("block") ? "Block" : begin.name.charAt(0).toUpperCase() + begin.name.slice(1)} · ${excerpt(title?.value ?? optional?.value ?? raw) || "Untitled"}`;
     }
     if (begin.name === "tikzpicture") return "Diagram · TikZ picture";
     if (["equation", "equation*", "align", "align*"].includes(begin.name)) return `Equation · ${excerpt(raw)}`;
@@ -143,7 +144,7 @@ export function buildBeamerBuildModel(source: string, frameId: string): BeamerBu
       id, parentId: null, kind: "content", sourceSpan: command.span,
       contentSpans: command.branches.map((branch) => branch.contentSpan),
       label: alternatives ? `${command.kind === "alt" ? "Alternatives" : "Before / during / after"} · ${command.branches.map((branch) => excerpt(branch.value)).join(" / ")}`
-        : contentLabel(context, command.branches[0].contentSpan),
+        : contentLabel(context, requireArrayValue(command.branches, 0).contentSpan),
       command, ...ruleFields(command.spec),
     });
     if (alternatives) {
@@ -230,8 +231,8 @@ export function beamerBuildStateAt(model: BeamerBuildModel, row: BeamerBuildRow,
     const matches = beamerOverlaySpecContains(command.spec, step);
     const branch = command.kind === "alt" ? (matches ? 0 : 1)
       : matches ? 1 : step < (command.spec.minimumStep ?? 1) ? 0 : 2;
-    spans = [command.branches[branch].contentSpan];
-    branchLabel = excerpt(command.branches[branch].value) || "Empty branch";
+    spans = [requireArrayValue(command.branches, branch).contentSpan];
+    branchLabel = excerpt(requireArrayValue(command.branches, branch).value) || "Empty branch";
   }
   if (model.rows.some((candidate) => candidate !== row && candidate.kind !== "list" &&
     (candidate.kind === "unsupported" || (candidate.spec && !understoodSpec(candidate.spec))) &&

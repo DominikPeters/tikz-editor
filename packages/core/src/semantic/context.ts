@@ -385,7 +385,7 @@ export function createSemanticContext(
     currentPoint: null,
     pathStartPoint: null,
     textEngine,
-    graphicsResolver,
+    ...(graphicsResolver === undefined ? {} : { graphicsResolver: graphicsResolver }),
     macroTraceCollector: null,
     picEvaluationStack: [],
     editHandles: [],
@@ -429,7 +429,9 @@ export function listContextSceneLayers(context: SemanticContext): SceneLayer[] {
 }
 
 export function currentFrame(context: SemanticContext): SemanticContextFrame {
-  return context.stack[context.stack.length - 1];
+  const frame = context.stack[context.stack.length - 1];
+  if (!frame) throw new Error("Semantic context requires a root frame");
+  return frame;
 }
 
 export function pushFrame(context: SemanticContext, frame: SemanticContextFrame): void {
@@ -521,8 +523,7 @@ export function retargetEditHandlesSourceFingerprint(
   handles: EditHandle[],
   sourceFingerprint: string
 ): void {
-  for (let index = 0; index < handles.length; index += 1) {
-    const handle = handles[index];
+  for (const [index, handle] of handles.entries()) {
     if (!handle || handle.sourceRef.sourceFingerprint === sourceFingerprint) {
       continue;
     }

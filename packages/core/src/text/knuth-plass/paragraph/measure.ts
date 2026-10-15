@@ -124,7 +124,8 @@ export function createMeasurementService(): MeasurementService {
   ): number => {
     const widths = buildPrefixWidths(word, mtextWrapper);
     const clamped = Math.max(0, Math.min(n, word.length));
-    return widths[clamped] || 0;
+    const width = widths[clamped] ?? 0;
+    return width || 0;
   };
 
   const measureHyphenatedPrefix = (

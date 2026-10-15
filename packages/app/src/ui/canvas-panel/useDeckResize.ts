@@ -98,7 +98,7 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
     pendingSelection.current = null;
     const edit = beginDocumentEdit(state, []);
     const imageFrom = target.kind === "image" ? layout.graphics.find((item) => item.itemId === target.image.objectId)?.sourceSpan.from : undefined;
-    return { edit, imageFrom, step: state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1,
+    return { edit, ...(imageFrom !== undefined ? { imageFrom: imageFrom } : {}), step: state.deckStepByRootKey[deckStepRootKey(edit.documentId, layout.frameId)] ?? 1,
       patches: [], cleanup: () => {} };
   };
 

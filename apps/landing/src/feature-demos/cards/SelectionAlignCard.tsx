@@ -80,7 +80,8 @@ function padBounds(bounds: Rect, pad: number): Rect {
 
 function parseViewBox(viewBox: string): Rect {
   const [x, y, width, height] = viewBox.split(/\s+/).map(Number);
-  if ([x, y, width, height].some((value) => !Number.isFinite(value))) {
+  if (x === undefined || y === undefined || width === undefined || height === undefined ||
+    [x, y, width, height].some((value) => !Number.isFinite(value))) {
     throw new Error(`Invalid viewBox: ${viewBox}`);
   }
   return { x: x, y: y, width: width, height: height };
@@ -177,8 +178,8 @@ export function SelectionAlignCard() {
   const allBounds = useMemo(() => unionBounds([...leftInitial, ...rightInitial]), [leftInitial, rightInitial]);
 
   const toolbar = useMemo(() => {
-    const [vbX, , vbW] = selectionAlignCommonViewBox.split(/\s+/).map(Number);
-    const imageCenterX = vbX + vbW / 2;
+    const viewBox = parseViewBox(selectionAlignCommonViewBox);
+    const imageCenterX = viewBox.x + viewBox.width / 2;
     const totalWidth = BUTTON.width * 3;
     return {
       x: imageCenterX - totalWidth / 2,
@@ -280,7 +281,8 @@ export function SelectionAlignCard() {
         for (const right of rightStates) {
           const from = { x: left.bounds.x + left.bounds.width, y: left.center.y };
           const to = { x: right.bounds.x, y: right.center.y };
-          applyLinePathEndpoints(edgePaths[edgeIndex], from, to);
+          const path = edgePaths[edgeIndex];
+          if (path) applyLinePathEndpoints(path, from, to);
           edgeIndex += 1;
         }
       }
@@ -359,14 +361,18 @@ export function SelectionAlignCard() {
       sourceStateRef.current.leftTargetX = leftTargetX;
       commitSource();
       leftStates.forEach((state, index) => {
-        Object.assign(state.bounds, leftInitial[index].bounds);
-        Object.assign(state.center, leftInitial[index].center);
-        Object.assign(state.labelPos, leftInitial[index].labelPos);
+        const initial = leftInitial[index];
+        if (!initial) return;
+        Object.assign(state.bounds, initial.bounds);
+        Object.assign(state.center, initial.center);
+        Object.assign(state.labelPos, initial.labelPos);
       });
       rightStates.forEach((state, index) => {
-        Object.assign(state.bounds, rightInitial[index].bounds);
-        Object.assign(state.center, rightInitial[index].center);
-        Object.assign(state.labelPos, rightInitial[index].labelPos);
+        const initial = rightInitial[index];
+        if (!initial) return;
+        Object.assign(state.bounds, initial.bounds);
+        Object.assign(state.center, initial.center);
+        Object.assign(state.labelPos, initial.labelPos);
       });
       updateAll();
     };
@@ -474,6 +480,7 @@ export function SelectionAlignCard() {
       tl.call(() => {
         options.states.forEach((state, index) => {
           const final = options.finals[index];
+          if (!final) return;
           Object.assign(state.bounds, final.bounds);
           Object.assign(state.center, final.center);
           Object.assign(state.labelPos, final.labelPos);
@@ -664,18 +671,19 @@ function buildSelectionAlignSourceLines(state: SelectionAlignSourceState): Sourc
   const leftLabels = ["Start", "Mid", "Bottom"];
   const rightLabels = ["End", "End", "End"];
   const lines: SourceLine[] = [];
-  const rowYs = [1, 0, -1.3];
+  const rowYs: readonly [number, number, number] = [1, 0, -1.3];
   const leftPositions = state.leftNodes.map((node, index) => ({
     x: state.leftAligned ? state.leftTargetX : node.center.x / 25,
-    y: rowYs[index] ?? rowYs[rowYs.length - 1]
+    y: rowYs[index] ?? rowYs[2]
   }));
   const rightPositions = state.rightNodes.map((node, index) => ({
     x: state.rightAligned ? 1.9 : node.center.x / 25,
-    y: rowYs[index] ?? rowYs[rowYs.length - 1]
+    y: rowYs[index] ?? rowYs[2]
   }));
 
   leftLabels.forEach((labelText, index) => {
-    const pos = leftPositions[index] ?? leftPositions[leftPositions.length - 1];
+    const pos = leftPositions[index] ?? leftPositions.at(-1);
+    if (!pos) return;
     lines.push(
       sourceLine(
         sourceKeyword("\\node"),
@@ -693,7 +701,8 @@ function buildSelectionAlignSourceLines(state: SelectionAlignSourceState): Sourc
   });
 
   rightLabels.forEach((labelText, index) => {
-    const pos = rightPositions[index] ?? rightPositions[rightPositions.length - 1];
+    const pos = rightPositions[index] ?? rightPositions.at(-1);
+    if (!pos) return;
     lines.push(
       sourceLine(
         sourceKeyword("\\node"),

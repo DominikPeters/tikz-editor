@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete";
 import type { EditorState } from "@codemirror/state";
 import { NAMED_COLORS, NON_STYLE_OPTION_FLAGS, NON_STYLE_OPTION_KEYS } from "@tikz-editor/core/semantic/style/constants";
@@ -122,7 +123,7 @@ function getKeyBeforeEquals(text: string): string | null {
   // Match: key = partial_value (value may be empty)
   const match = text.match(/([\w][\w ]*?)\s*=\s*[A-Za-z ]*$/);
   if (!match) return null;
-  return match[1].trim().toLowerCase();
+  return requireArrayValue(match, 1).trim().toLowerCase();
 }
 
 // ── Main completion function ────────────────────────────────────────────────
@@ -179,11 +180,12 @@ export function tikzCompletion(
       }
 
       // Known value sets: always show after =
-      if (key in VALUE_MAP) {
-        const boost = VALUE_MAP[key].length;
+      const knownValues = VALUE_MAP[key];
+      if (knownValues) {
+        const boost = knownValues.length;
         return {
           from: valueStart,
-          options: VALUE_MAP[key].map((v, i) => ({
+          options: knownValues.map((v, i) => ({
             label: v,
             type: "enum",
             detail: key,

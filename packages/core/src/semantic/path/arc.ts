@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { coordinateTransform, defaultAxisBasis, type AxisBasis } from "../coords/axis-basis.js";
 import { worldTransform } from "../../coords/transforms.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
@@ -122,11 +123,11 @@ export function parseArcShorthand(raw: string): ArcParameters | null {
     return null;
   }
 
-  const radiiSpec = parts[2];
+  const radiiSpec = requireArrayValue(parts, 2);
   const elliptical = radiiSpec.match(/^(.+?)\s+and\s+(.+)$/i);
   if (elliptical) {
-    const rx = parseLengthWithInfo(elliptical[1].trim(), "cm");
-    const ry = parseLengthWithInfo(elliptical[2].trim(), "cm");
+    const rx = parseLengthWithInfo(requireArrayValue(elliptical, 1).trim(), "cm");
+    const ry = parseLengthWithInfo(requireArrayValue(elliptical, 2).trim(), "cm");
     if (rx == null || ry == null) {
       return null;
     }

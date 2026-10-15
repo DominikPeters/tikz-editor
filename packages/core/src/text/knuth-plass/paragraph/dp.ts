@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 import { englishDefaults } from '../languages/en.js';
 import type { ParagraphModel } from './items.js';
 import type { DiscretionaryMeasurement } from './measure.js';
@@ -216,14 +217,14 @@ function normalizeCursor(
   const pending = cursor.pendingText
     ? {
         pendingText: cursor.pendingText,
-        pendingSourceStart: cursor.pendingSourceStart,
-        pendingSourceEnd: cursor.pendingSourceEnd,
-        pendingWidth: cursor.pendingWidth,
+        ...(cursor.pendingSourceStart !== undefined ? { pendingSourceStart: cursor.pendingSourceStart } : {}),
+        ...(cursor.pendingSourceEnd !== undefined ? { pendingSourceEnd: cursor.pendingSourceEnd } : {}),
+        ...(cursor.pendingWidth !== undefined ? { pendingWidth: cursor.pendingWidth } : {}),
       }
     : {};
 
   while (runIndex < model.runs.length) {
-    const run = model.runs[runIndex];
+    const run = requireArrayValue(model.runs, runIndex);
     if (run.kind === 'space') {
       if (forcedPenalties.has(runIndex)) {
         return { runIndex, textOffset: 0 };
@@ -284,10 +285,7 @@ function collectForcedPenalties(model: ParagraphModel): Map<number, ForcedPenalt
     map.set(runIndex, {
       penalty: item.penalty,
       sourceOffset: item.payload.sourceOffset,
-      lineLeading:
-        item.payload.breakRef?.kind === 'mspace'
-          ? item.payload.breakRef.lineLeading
-          : undefined,
+      ...(item.payload.breakRef?.kind === 'mspace' ? { lineLeading: item.payload.breakRef.lineLeading } : {}),
     });
   }
 
@@ -326,8 +324,8 @@ function collectTextPenalties(model: ParagraphModel): Map<number, TextPenalty[]>
       visibleHyphen: item.payload.visibleHyphen,
       width: item.width,
       flagged: !!item.flagged,
-      hyphenSource: item.payload.hyphenSource,
-      discretionary: item.payload.discretionary,
+      ...(item.payload.hyphenSource !== undefined ? { hyphenSource: item.payload.hyphenSource } : {}),
+      ...(item.payload.discretionary !== undefined ? { discretionary: item.payload.discretionary } : {}),
     });
     map.set(runIndex, list);
   }
@@ -401,7 +399,7 @@ function* generateCandidates(
   }
 
   for (let runIndex = cursor.runIndex; runIndex < model.runs.length; runIndex++) {
-    const run = model.runs[runIndex];
+    const run = requireArrayValue(model.runs, runIndex);
 
     if (run.kind === 'text') {
       const offset = runIndex === cursor.runIndex ? cursor.textOffset : 0;
@@ -437,26 +435,20 @@ function* generateCandidates(
             sourceOffset: textPenalty.sourceOffset,
             visibleHyphen: textPenalty.visibleHyphen,
             splitOffset: textPenalty.splitOffset,
-            hyphenSource: textPenalty.hyphenSource,
+            ...(textPenalty.hyphenSource !== undefined ? { hyphenSource: textPenalty.hyphenSource } : {}),
             flagged: textPenalty.flagged,
             width: textPenalty.width,
-            discretionary: textPenalty.discretionary,
+            ...(textPenalty.discretionary !== undefined ? { discretionary: textPenalty.discretionary } : {}),
           },
           breakPenalty: textPenalty.penalty,
           flagged: textPenalty.flagged,
           nextCursor: normalizeCursor(model, {
             runIndex,
             textOffset: nextTextOffset,
-            pendingText,
-            pendingSourceStart: pendingText
-              ? run.sourceStart + textPenalty.splitOffset
-              : undefined,
-            pendingSourceEnd: pendingText
-              ? run.sourceStart + (discretionary?.replaceEnd ?? textPenalty.splitOffset)
-              : undefined,
-            pendingWidth: pendingText
-              ? model.measurement.measureText(pendingText, run.wrapper)
-              : undefined,
+            ...(pendingText !== undefined ? { pendingText: pendingText } : {}),
+            ...(pendingText ? { pendingSourceStart: run.sourceStart + textPenalty.splitOffset } : {}),
+            ...(pendingText ? { pendingSourceEnd: run.sourceStart + (discretionary?.replaceEnd ?? textPenalty.splitOffset) } : {}),
+            ...(pendingText ? { pendingWidth: model.measurement.measureText(pendingText, run.wrapper) } : {}),
           }, forcedPenalties),
         };
       }
@@ -491,7 +483,7 @@ function* generateCandidates(
             sourceOffset: forcedPenalty.sourceOffset,
             visibleHyphen: false,
             flagged: false,
-            lineLeading: forcedPenalty.lineLeading,
+            ...(forcedPenalty.lineLeading !== undefined ? { lineLeading: forcedPenalty.lineLeading } : {}),
           },
           breakPenalty: forcedPenalty.penalty,
           flagged: false,
@@ -1239,7 +1231,7 @@ export function breakWithDp(
     let minimumDemerits = Infinity;
 
     for (let stateIndex = 0; stateIndex < activeStates.length; stateIndex++) {
-      const state = activeStates[stateIndex];
+      const state = requireArrayValue(activeStates, stateIndex);
       let stream = candidateStreams.get(state.id);
       if (!stream) {
         stream = {
@@ -1474,17 +1466,16 @@ export function breakWithDp(
   let currentCursor = firstCursor;
   let usedConstraintViolation = false;
 
-  for (let lineIndex = 0; lineIndex < choices.length; lineIndex++) {
+  for (const [lineIndex, { candidate, score }] of choices.entries()) {
     const normalizedCursor = normalizeCursor(model, currentCursor, forcedPenalties);
-    const { candidate, score } = choices[lineIndex];
     usedConstraintViolation ||= score.constraintViolation;
     lines.push({
       lineIndex,
       startRun: normalizedCursor.runIndex,
       startTextOffset: normalizedCursor.textOffset,
-      startPendingText: normalizedCursor.pendingText,
-      startPendingSourceStart: normalizedCursor.pendingSourceStart,
-      startPendingSourceEnd: normalizedCursor.pendingSourceEnd,
+      ...(normalizedCursor.pendingText !== undefined ? { startPendingText: normalizedCursor.pendingText } : {}),
+      ...(normalizedCursor.pendingSourceStart !== undefined ? { startPendingSourceStart: normalizedCursor.pendingSourceStart } : {}),
+      ...(normalizedCursor.pendingSourceEnd !== undefined ? { startPendingSourceEnd: normalizedCursor.pendingSourceEnd } : {}),
       endRun: candidate.endRun,
       endTextOffset: candidate.endTextOffset,
       width: candidate.naturalWidth,

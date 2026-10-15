@@ -174,10 +174,10 @@ export function finalizeExpandedStatementElements(args: {
       || (macroStack != null && macroStack.length > 0)
         ? {
             foreachStack,
-            foreachTemplateLocalTargetId,
-            picStack,
-            picTemplateLocalTargetId,
-            macroStack
+            ...(foreachTemplateLocalTargetId === undefined ? {} : { foreachTemplateLocalTargetId }),
+            ...(picStack === undefined ? {} : { picStack }),
+            ...(picTemplateLocalTargetId === undefined ? {} : { picTemplateLocalTargetId }),
+            ...(macroStack === undefined ? {} : { macroStack })
           }
         : undefined;
 
@@ -198,17 +198,20 @@ export function finalizeExpandedStatementElements(args: {
       : shouldOverrideSource
         ? attribution.sourceSpan
         : element.sourceRef.sourceSpan;
-    return {
+    const result: SceneElement = {
       ...element,
       sourceRef: {
         ...element.sourceRef,
         sourceId: nextSourceId,
         sourceSpan: nextSourceSpan
       },
-      identityRef,
       styleChain: remapStyleChainSourceRefs(element.styleChain, effectiveSourceMap, authoredSourceIds),
-      origin: nextOrigin
     };
+    if (identityRef === undefined) delete result.identityRef;
+    else result.identityRef = identityRef;
+    if (nextOrigin === undefined) delete result.origin;
+    else result.origin = nextOrigin;
+    return result;
   });
 }
 
@@ -243,15 +246,16 @@ export function finalizeExpandedStatementHandles(args: {
       continue;
     }
     const mappedSpan = effectiveSourceMap ? mapExpansionSpan(effectiveSourceMap, handle.sourceRef.sourceSpan) : handle.sourceRef.sourceSpan;
-    handles[index] = {
-      ...handle,
-      identityRef: effectiveSourceMap
+    const optionalIdentityRef1 = effectiveSourceMap
         ? {
             sourceId: itemSourceMap && pathItem ? pathItem.id : handle.sourceRef.sourceId,
             sourceSpan: { ...handle.sourceRef.sourceSpan },
             sourceKind: "expanded-handle"
           }
-        : handle.identityRef,
+        : handle.identityRef;
+    handles[index] = {
+      ...handle,
+      ...(optionalIdentityRef1 === undefined ? {} : { identityRef: optionalIdentityRef1 }),
       sourceText: effectiveSourceMap
         ? source.slice(mappedSpan.from, mappedSpan.to)
         : handle.sourceText,
@@ -503,12 +507,7 @@ function clonePicStack(stack: PicOriginFrame[]): PicOriginFrame[] {
       to: origin.invocationSpan.to
     },
     picType: origin.picType,
-    codeSpan: origin.codeSpan
-      ? {
-          from: origin.codeSpan.from,
-          to: origin.codeSpan.to
-        }
-      : undefined,
+    ...(origin.codeSpan === undefined ? {} : { codeSpan: { ...origin.codeSpan } }),
     codeSource: origin.codeSource,
     parameterized: origin.parameterized
   }));

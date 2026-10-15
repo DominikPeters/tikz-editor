@@ -1,3 +1,4 @@
+import { editNodeAt, editSlotAt } from "../tree/lookup.js";
 import type { SlotId } from "../tree/types.js";
 import type { EditView } from "./view.js";
 
@@ -22,15 +23,15 @@ const CENTERED_ROLES = new Set(["numerator", "denominator", "above", "below"]);
 export function emptyMathSlots(view: EditView): EmptySlot[] {
   const { tree } = view;
   return tree.slots.flatMap((slot): EmptySlot[] => {
-    const owner = tree.nodes[slot.node];
+    const owner = editNodeAt(tree.nodes, slot.node);
     if (slot.mode !== "math" || slot.presence !== "present" || slot.children.length > 0 ||
       view.hiddenSlots.has(slot.id) || view.hidden.has(owner.id) || slot.flow) {
       return [];
     }
     if (owner.kind === "group") {
       // Placeholder braces holding a whole formula (`${}$`) are its emptiness; elsewhere `{}` is an atom.
-      const parent = owner.parent == null ? null : tree.slots[owner.parent];
-      const holder = parent ? tree.nodes[parent.node] : null;
+      const parent = owner.parent == null ? null : editSlotAt(tree.slots, owner.parent);
+      const holder = parent ? editNodeAt(tree.nodes, parent.node) : null;
       if (parent?.children.length !== 1 || (holder?.kind !== "formula" && holder?.kind !== "display")) {
         return [];
       }

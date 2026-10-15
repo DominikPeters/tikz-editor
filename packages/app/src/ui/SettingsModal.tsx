@@ -72,7 +72,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       size="lg"
       labelledBy="settings-title"
       dataTestId="settings-modal"
-      className={css.dialog}
+      className={css.dialog ?? ""}
     >
       <Modal.Header
         title="Settings"

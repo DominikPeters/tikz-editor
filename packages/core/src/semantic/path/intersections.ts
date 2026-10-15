@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -96,7 +97,7 @@ export function collectPathIntersectionDirectives(optionLists: OptionListAst[]):
 
   return {
     namedPathNames: Array.from(new Set(namedPathNames)),
-    nameIntersections,
+    ...(nameIntersections === undefined ? {} : { nameIntersections: nameIntersections }),
     diagnostics
   };
 }
@@ -128,17 +129,17 @@ export function applyNameIntersectionsDirective(directive: NameIntersectionsDire
   sortIntersections(intersections, directive.sortBy, firstLookup.name, secondLookup.name, firstSampled.hasCubic, secondSampled.hasCubic);
 
   for (let i = 0; i < intersections.length; i += 1) {
-    const point = intersections[i].point;
+    const point = requireArrayValue(intersections, i).point;
     const generatedName = `${directive.prefix}-${i + 1}`;
     writeNamedCoordinate(context, applyNameScope(generatedName, context), point);
   }
 
   for (let i = 0; i < directive.byNames.length && i < intersections.length; i += 1) {
-    const alias = directive.byNames[i];
+    const alias = requireArrayValue(directive.byNames, i);
     if (alias.length === 0) {
       continue;
     }
-    writeNamedCoordinate(context, applyNameScope(alias, context), intersections[i].point);
+    writeNamedCoordinate(context, applyNameScope(alias, context), requireArrayValue(intersections, i).point);
   }
 
   if (directive.totalMacro) {
@@ -247,8 +248,8 @@ function parseNameIntersectionsDirective(
       secondPathName,
       prefix,
       byNames,
-      sortBy,
-      totalMacro,
+      ...(sortBy === undefined ? {} : { sortBy: sortBy }),
+      ...(totalMacro === undefined ? {} : { totalMacro: totalMacro }),
       span
     },
     diagnostics
@@ -297,7 +298,7 @@ function findTopLevelEquals(input: string): number {
   let bracketDepth = 0;
 
   for (let i = 0; i < input.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -343,7 +344,7 @@ function splitAtTopLevelKeyword(input: string, keyword: string): { left: string;
   const needle = ` ${keyword} `;
 
   for (let i = 0; i <= input.length - needle.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;
@@ -749,13 +750,13 @@ function normalizeMacroToken(raw: string): string | null {
 }
 
 function findMatchingBracket(input: string, start: number): number {
-  if (input[start] !== "[") {
+  if (input.charAt(start) !== "[") {
     return -1;
   }
 
   let depth = 0;
   for (let i = start; i < input.length; i += 1) {
-    const char = input[i];
+    const char = input.charAt(i);
     if (char === "\\") {
       i += 1;
       continue;

@@ -399,7 +399,7 @@ export function checkTexFuzzLayoutResultInvariants(
       }
       const stops = segment.caretStops ?? [];
       if (stops.some((value) => !finite(value))
-        || stops.some((value, index) => index > 0 && value < stops[index - 1])) {
+        || stops.some((value, index) => index > 0 && value < (stops[index - 1] ?? -Infinity))) {
         add("invalid-caret-stops", `paragraph/line/${line.lineIndex}/${segment.kind}`, { stops });
       }
       for (const entry of segment.mathCaretEntries ?? []) {
@@ -415,7 +415,7 @@ export function checkTexFuzzLayoutResultInvariants(
           kind: segment.kind,
           start: paintedRange.start,
           end: paintedRange.end,
-          text: segment.text,
+          ...(segment.text === undefined ? {} : { text: segment.text }),
         });
       }
       const next = line.segments[segmentIndex + 1];
@@ -460,7 +460,7 @@ export function checkTexFuzzLayoutResultInvariants(
     if (!hasLiteralDegradation) {
       const svgBody = renderTexParagraphSvgBody(result.report, {
         lineHeightPt: texLength(12), metricProvider: computerModernTexMetricProvider,
-        vlistLayout: result.vlistLayout,
+        ...(result.vlistLayout === undefined ? {} : { vlistLayout: result.vlistLayout }),
       });
       findings.push(...checkTexFuzzPaintedMathContent(caseData, width, svgBody));
     }

@@ -202,6 +202,6 @@ function successResult(
     kind: "success",
     newSource,
     patches: [{ oldSpan, newSpan, replacement }],
-    changedSourceIds
+    ...(changedSourceIds === undefined ? {} : { changedSourceIds })
   };
 }

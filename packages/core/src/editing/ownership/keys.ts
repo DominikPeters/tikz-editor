@@ -1,3 +1,4 @@
+import { editSlotAt, editNodeAt } from "../tree/lookup.js";
 import { isDeclarationGroup, itemRole } from "./kinds.js";
 import type { EditNodeKind, EditTree, NodeId, SlotId } from "../tree/types.js";
 
@@ -41,8 +42,8 @@ const MATH_SLOTS = new Set(["numerator", "denominator", "radicand", "index", "su
 const TITLE_COMMANDS = new Set(["frametitle", "framesubtitle", "caption", "title", "subtitle", "author", "institute", "date"]);
 
 function isTitle(tree: EditTree, node: NodeId, slot: SlotId): boolean {
-  const role = tree.slots[slot].role;
-  const command = tree.nodes[node].command;
+  const role = editSlotAt(tree.slots, slot).role;
+  const command = editNodeAt(tree.nodes, node).command;
   return role === "title" || role === "label" || (command != null && TITLE_COMMANDS.has(command));
 }
 
@@ -52,8 +53,8 @@ export function inTitle(tree: EditTree, slot: SlotId): boolean {
 }
 
 export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slot: SlotId): Capability {
-  const record = tree.nodes[node];
-  const role = tree.slots[slot].role;
+  const record = editNodeAt(tree.nodes, node);
+  const role = editSlotAt(tree.slots, slot).role;
   if (isTitle(tree, node, slot)) {
     return key === "tab" ? PASS : barrier("⏎ does nothing in a title");
   }
@@ -72,7 +73,7 @@ export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slo
   }
   if (record.kind === "paragraph") {
     // In an item, the item splits.
-    return record.parent != null && tree.nodes[tree.slots[record.parent].node].kind === "item" ? PASS : OWNS;
+    return record.parent != null && editNodeAt(tree.nodes, editSlotAt(tree.slots, record.parent).node).kind === "item" ? PASS : OWNS;
   }
   if (record.kind === "formula") {
     return key === "enter" ? TRANSPARENT : barrier("⇧⏎ does nothing in math");
@@ -87,9 +88,9 @@ export function capability(tree: EditTree, key: StructuralKey, node: NodeId, slo
     }
     // Only a wrapper with a single text slot closes and reopens cleanly:
     // reopening `\alt<2>{During}{…}` would repeat its first branch.
-    const textSlots = record.slots.filter((id) => tree.slots[id].presence === "present");
+    const textSlots = record.slots.filter((id) => editSlotAt(tree.slots, id).presence === "present");
     return textSlots.length === 1 && textSlots[0] === slot &&
-      (record.kind !== "group" || isDeclarationGroup(tree, node) || tree.slots[slot].children.length > 0)
+      (record.kind !== "group" || isDeclarationGroup(tree, node) || editSlotAt(tree.slots, slot).children.length > 0)
       ? TRANSPARENT
       : barrier("⏎ does nothing here");
   }
@@ -119,9 +120,9 @@ const FLOW_CONTAINERS = new Set<EditNodeKind>(["list", "container", "alignment"]
 export function capabilityChain(tree: EditTree, key: StructuralKey, slot: SlotId): ChainLink[] {
   const links: ChainLink[] = [];
   for (let current: SlotId | null = slot; current != null;) {
-    const node: NodeId = tree.slots[current].node;
+    const node: NodeId = editSlotAt(tree.slots, current).node;
     links.push({ node, slot: current, capability: capability(tree, key, node, current) });
-    current = tree.nodes[node].parent;
+    current = editNodeAt(tree.nodes, node).parent;
   }
   return links;
 }

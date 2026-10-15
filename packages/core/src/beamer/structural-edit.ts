@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import {
   isBlank,
@@ -24,7 +25,7 @@ export function applyBeamerStructuralEdits(
 ): string {
   let result = source;
   for (let index = edits.length - 1; index >= 0; index -= 1) {
-    const edit = edits[index];
+    const edit = requireArrayValue(edits, index);
     result = result.slice(0, edit.span.from) + edit.insert + result.slice(edit.span.to);
   }
   return result;

@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { resolveEligibleExplicitPath, type ExplicitPathAnalysis } from "@tikz-editor/core/edit/path-editing";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import type { EditHandle, SceneElement } from "@tikz-editor/core/semantic/types";
@@ -33,7 +34,7 @@ export function resolvePathSelectionHint(input: {
 }): string | null {
   const { source, selectedElementIds, editHandles, elements, collapsedDensePathSourceIds, parseOptions } = input;
   if (selectedElementIds.size !== 1) return null;
-  const sourceId = [...selectedElementIds][0];
+  const sourceId = requireArrayValue([...selectedElementIds], 0);
   const isNodeSource = editHandles.some(
     (handle) => handle.sourceRef.sourceId === sourceId && handle.kind === "node-position"
   );

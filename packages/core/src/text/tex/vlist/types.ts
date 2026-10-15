@@ -343,7 +343,8 @@ export interface TexVBoxParagraphPolicy {
 
 export interface TexVBoxItem {
   readonly kind: "vbox";
-  readonly sourceSpan?: TexSourceSpan;
+  /** Scope boxes expose a live getter while their child spans accumulate. */
+  readonly sourceSpan?: TexSourceSpan | undefined;
   readonly scopePath?: readonly TexVBoxRole[];
   readonly role?: TexVBoxRole;
   readonly material?: {

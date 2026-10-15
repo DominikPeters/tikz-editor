@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../../utils/collections.js";
 export type MathDelimiterKind = 'dollar' | 'paren';
 
 export interface TextSourceSpan {
@@ -149,7 +150,7 @@ export function parseSourceSpans(sourceText: string): SourceParseResult {
     cursor = end;
   }
 
-  const finalEnd = spans.length ? spans[spans.length - 1].rawEnd : 0;
+  const finalEnd = spans.length ? requireArrayValue(spans, spans.length - 1).rawEnd : 0;
   if (finalEnd < len) {
     spans.push({
       kind: 'text',

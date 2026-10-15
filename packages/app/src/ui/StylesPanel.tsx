@@ -133,7 +133,7 @@ export function StylesPanel() {
 
   const applySimpleMutation = useCallback(
     (writeTargets: readonly SetPropertyWriteTarget[], key: string, value: string, clearKeys?: string[]) => {
-      dispatchActions(planStylesSetPropertyActions(writeTargets, { key, value, clearKeys }));
+      dispatchActions(planStylesSetPropertyActions(writeTargets, { key, value, ...(clearKeys === undefined ? {} : { clearKeys }) }));
     },
     [dispatchActions]
   );
@@ -162,7 +162,13 @@ export function StylesPanel() {
           applySimpleMutation(writeTargets, property.write.key, String(nextValue));
           return;
         case "number": {
-          const writes = property.write ? writeTargets.map((target) => ({ ...target, key: property.write!.key, transformContext: property.write!.transformContext })) : [];
+          const write = property.write;
+          const writes = write ? writeTargets.map((target) => {
+            const updated = { ...target, key: write.key };
+            if (write.transformContext === undefined) delete updated.transformContext;
+            else updated.transformContext = write.transformContext;
+            return updated;
+          }) : [];
           if (property.write?.transformContext) {
             applyRegistryMutations(writes, buildPropertyMutationsFromRequest({
               kind: "transform",
@@ -375,7 +381,7 @@ export function StylesPanel() {
 
   if (selectedSourceIds.length === 0) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Select an element to inspect its style cascade.</p>
         </SidePanel.Content>
@@ -385,7 +391,7 @@ export function StylesPanel() {
 
   if (selectedSourceIds.length > 1 && !areStylesCascadeModelsIdentical(models)) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Styles are available for a single element, or for multiple selected elements with identical cascades.</p>
         </SidePanel.Content>
@@ -395,7 +401,7 @@ export function StylesPanel() {
 
   if (!model) {
     return (
-      <SidePanel className={css.panel}>
+      <SidePanel className={css.panel ?? ""}>
         <SidePanel.Content>
           <p className={css.hint}>Styles data is unavailable for the current selection.</p>
         </SidePanel.Content>
@@ -404,11 +410,11 @@ export function StylesPanel() {
   }
 
   return (
-    <SidePanel className={css.panel}>
+    <SidePanel className={css.panel ?? ""}>
       <SidePanel.Header>
         {model.elementIds.length > 1 ? `${model.elementIds.length} selected (matching styles)` : model.elementKind}
       </SidePanel.Header>
-      <SidePanel.Content className={css.content}>
+      <SidePanel.Content className={css.content ?? ""}>
         {model.sections.map((section) => (
           <SidePanel.Section key={section.id}>
             <SidePanel.SectionHeader>
@@ -418,7 +424,7 @@ export function StylesPanel() {
               </div>
               {section.sourceLocation ? <div className={css.sectionLocation}>{section.sourceLocation}</div> : null}
             </SidePanel.SectionHeader>
-            <SidePanel.SectionBody className={css.ruleBody}>
+            <SidePanel.SectionBody className={css.ruleBody ?? ""}>
               {section.declarations.map((declaration) => (
                 <DeclarationRow
                   key={declaration.id}
@@ -509,7 +515,7 @@ function DeclarationRow({
             options={ALL_KEY_SUGGESTIONS}
             onChange={(newKey) => { onRenameKey(declaration, newKey); }}
             onCommit={(newKey) => { onRenameKey(declaration, newKey); }}
-            triggerClassName={css.keyInput}
+            triggerClassName={css.keyInput ?? ""}
           />
         ) : (
           <span className={css.propertyName}>{keySlug}</span>
@@ -603,7 +609,7 @@ function renderValueEditor(
           options={options}
           onChange={(value) => { onPropertyChange(declaration, property, value); }}
           onCommit={(rawText) => { onRawValueCommit(declaration, rawText); }}
-          triggerClassName={css.valueInput}
+          triggerClassName={css.valueInput ?? ""}
         />
       );
     }
@@ -758,7 +764,7 @@ function AddPropertyRow({
             onAdd(section, value);
           }
         }}
-        triggerClassName={css.keyInput}
+        triggerClassName={css.keyInput ?? ""}
       />
     </div>
   );

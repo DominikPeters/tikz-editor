@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import {
   useCallback,
   useEffect,
@@ -85,7 +86,7 @@ function selectionBand(overlay: TextSelectionOverlay | null): { left: number; to
     return null;
   }
   return {
-    left: boxes[0].bounds.minX,
+    left: requireArrayValue(boxes, 0).bounds.minX,
     top: Math.min(...boxes.map((box) => box.bounds.minY)),
     bottom: Math.max(...boxes.map((box) => box.bounds.maxY))
   };
@@ -730,7 +731,7 @@ function estimateTextLineRangeFromClient(
     return { start: 0, end: 0 };
   }
   if (ranges.length === 1) {
-    return ranges[0];
+    return requireArrayValue(ranges, 0);
   }
 
   const contentBox = resolveRectHitRegionContentBox(target.region);
@@ -746,7 +747,7 @@ function estimateTextLineRangeFromClient(
       ? 0
       : clamp((localPoint.y - contentBox.y) / contentBox.height, 0, 0.999999);
   const index = Math.min(ranges.length - 1, Math.max(0, Math.floor(yRatio * ranges.length)));
-  return ranges[index] ?? ranges[ranges.length - 1];
+  return ranges[index] ?? requireArrayValue(ranges, ranges.length - 1);
 }
 
 function viewportPointFromClient(clientPoint: ClientPoint, viewport: HTMLDivElement | null): ViewportPoint {
@@ -844,12 +845,10 @@ export function useCanvasTextEditSession(
             replacement: effect.replacement
           }
         ],
-        canvasTextEditMask: effect.maskSpan
-          ? {
+        ...(effect.maskSpan ? { canvasTextEditMask: {
               elementId: effect.sourceId,
               span: effect.maskSpan
-            }
-          : undefined
+            } } : {})
       });
       sourceRevisionRef.current += 1;
     }
@@ -2266,7 +2265,7 @@ export function useCanvasTextEditSession(
           session.selectionEnd,
           name
         ) === null;
-      return { id, label, glyph, glyphClass, active, disabled };
+      return { id, label, glyph, ...(glyphClass !== undefined ? { glyphClass: glyphClass } : {}), active, disabled };
     };
     const items: CanvasTextFormatToolbarItem[] = [
       wrapItem("bold", "textbf", "Bold", "B", "bold"),
@@ -2278,7 +2277,7 @@ export function useCanvasTextEditSession(
     if (session.isScopeSession) {
       const view = canvasEditView(session.text, editCommands);
       const caret = view.positionAt(Math.min(session.selectionStart, session.selectionEnd));
-      const listContext = listItemOf(view.tree, view.tree.slots[caret.slot].node);
+      const listContext = listItemOf(view.tree, requireArrayValue(view.tree.slots, caret.slot).node);
       items.push(
         {
           id: "bullets",
@@ -2482,7 +2481,7 @@ export function useCanvasTextEditSession(
     const outlined = (caretCrumbs ?? []).filter((crumb) => crumb.outlined);
     const focus = outlined.at(-1);
     const parent = outlined.at(-2);
-    const values = focus && view && focus.slot == null ? taggedValues(view, view.tree.nodes[focus.node]) : null;
+    const values = focus && view && focus.slot == null ? taggedValues(view, requireArrayValue(view.tree.nodes, focus.node)) : null;
     // A slot (`sub`) is selected or edited as source; a construct has its variants too (V4).
     const title = textEditingSession?.sourceId.endsWith(":scope:title") ?? false;
     const menu = !focus || !view ? [] : focus.slot == null ? constructMenu(view, focus.node, editCommands, title) : SLOT_MENU;
@@ -2538,7 +2537,7 @@ export function useCanvasTextEditSession(
       return null;
     }
     const view = canvasEditView(textEditingSession.text, editCommands);
-    const mode = view.tree.slots[view.positionAt(chip.at).slot].mode;
+    const mode = requireArrayValue(view.tree.slots, view.positionAt(chip.at).slot).mode;
     // A pending `\right` (M14) is offered first.
     const pending = recorded.interaction.pendingCloser;
     const closerSpan = pending == null ? null : pendingCloserSpan(view, pending);
@@ -2646,7 +2645,7 @@ export function useCanvasTextEditSession(
       return null;
     }
     const fields = tagged.values.map((value) => ({ kind: value.kind, open: value.open, close: value.close, optional: value.optional }));
-    const edits = (values: readonly string[]) => tagged.values.map((value, index) => ({ span: value.span, text: values[index] }));
+    const edits = (values: readonly string[]) => tagged.values.map((value, index) => ({ span: value.span, text: requireArrayValue(values, index) }));
     return {
       key: `edit:${target.span.from}:${target.span.to}:${target.text.length}`,
       command: tagged.command,
@@ -2657,7 +2656,7 @@ export function useCanvasTextEditSession(
       band: { top: target.top, bottom: target.bottom },
       prefer: "above",
       problems: (values) => {
-        const each = tagged.values.map((value, index) => valueProblem(value.kind, values[index], value.optional, true));
+        const each = tagged.values.map((value, index) => valueProblem(value.kind, requireArrayValue(values, index), value.optional, true));
         if (each.some((problem) => problem != null)) {
           return each;
         }
@@ -2665,7 +2664,7 @@ export function useCanvasTextEditSession(
         return editValues(view, edits(values)) ? null : each.map((_, index) => (index === 0 ? "These values do not fit the command" : null));
       },
       onSubmit: (values) => {
-        const changed = edits(values).filter((edit, index) => edit.text !== tagged.values[index].text);
+        const changed = edits(values).filter((edit, index) => edit.text !== requireArrayValue(tagged.values, index).text);
         if (changed.length > 0) {
           intentScheduler.submit({ type: "setValues", edits: changed, origin: "pointer", repeat: false });
         }

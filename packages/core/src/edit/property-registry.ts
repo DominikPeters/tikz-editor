@@ -470,7 +470,7 @@ export function buildPropertyMutations(context: PropertyWriteContext): PropertyW
     return semanticMutations.map((mutation) => ({
       ...mutation,
       propertyId: mutation.propertyId ?? semantics.id,
-      clearKeys: mutation.clearKeys ? uniqueStrings(mutation.clearKeys) : undefined
+      ...(mutation.clearKeys === undefined ? {} : { clearKeys: uniqueStrings(mutation.clearKeys) })
     }));
   }
   const key = context.key ?? semantics?.primaryKey;
@@ -481,8 +481,8 @@ export function buildPropertyMutations(context: PropertyWriteContext): PropertyW
     {
       key,
       value: context.value,
-      clearKeys: context.clearKeys ? uniqueStrings(context.clearKeys) : undefined,
-      propertyId: semantics?.id
+      ...(context.clearKeys ? { clearKeys: uniqueStrings(context.clearKeys) } : {}),
+      ...(semantics?.id === undefined ? {} : { propertyId: semantics?.id })
     }
   ];
 }
@@ -517,11 +517,15 @@ export function buildPropertyMutationsFromRequest(request: PropertyMutationReque
     }
   })();
   const propertyId = propertyIdForMutationRequest(request);
-  return mutations.map((mutation) => ({
-    ...mutation,
-    propertyId: propertyId ?? propertyIdForWriteKey(mutation.key) ?? undefined,
-    clearKeys: mutation.clearKeys ? uniqueStrings(mutation.clearKeys) : undefined
-  }));
+  return mutations.map((mutation) => {
+    const updated: PropertyWriteMutation = { ...mutation };
+    const resolvedId = propertyId ?? propertyIdForWriteKey(mutation.key);
+    if (resolvedId == null) delete updated.propertyId;
+    else updated.propertyId = resolvedId;
+    if (mutation.clearKeys === undefined) delete updated.clearKeys;
+    else updated.clearKeys = uniqueStrings(mutation.clearKeys);
+    return updated;
+  });
 }
 
 export function buildSetPropertyActionsForTargets(
@@ -536,7 +540,7 @@ export function buildSetPropertyActionsForTargets(
     const mutations = buildPropertyMutations({
       ...context,
       key: context.key ?? target.key,
-      propertyId: context.propertyId ?? target.propertyId
+      ...((context.propertyId ?? target.propertyId) === undefined ? {} : { propertyId: context.propertyId ?? target.propertyId })
     });
     for (const mutation of mutations) {
       actions.push({
@@ -545,8 +549,8 @@ export function buildSetPropertyActionsForTargets(
         level: target.level,
         key: mutation.key,
         value: mutation.value,
-        propertyId: mutation.propertyId,
-        clearKeys: mutation.clearKeys
+        ...(mutation.propertyId === undefined ? {} : { propertyId: mutation.propertyId }),
+        ...(mutation.clearKeys === undefined ? {} : { clearKeys: mutation.clearKeys })
       });
     }
   }

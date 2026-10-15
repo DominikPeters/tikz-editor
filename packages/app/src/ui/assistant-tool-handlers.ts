@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { EmitSvgResult, SvgRenderModel, SvgRenderPart } from "@tikz-editor/core/svg/index";
 import type { SessionSnapshot } from "../compute";
 import type { Diagnostic } from "@tikz-editor/core/diagnostics/types";
@@ -49,7 +50,7 @@ export function buildFigureContext(
   if (activeIndex < 0) {
     return null;
   }
-  const figure = figures[activeIndex];
+  const figure = requireArrayValue(figures, activeIndex);
   const figureSource = fullSource.slice(figure.span.from, figure.span.to);
   const linesBeforeFigure = fullSource.slice(0, figure.span.from).split("\n").length;
   const numberedLines = figureSource

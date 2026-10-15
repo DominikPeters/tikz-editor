@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { RiAddLine, RiSendPlane2Line, RiStopMiniLine } from "@remixicon/react";
@@ -305,12 +306,12 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                 type="button"
                 className={css.installButton}
                 disabled={installingMethod !== null}
-                onClick={() => void handleInstall(methods[0].method)}
+                onClick={() => void handleInstall(requireArrayValue(methods, 0).method)}
               >
-                {installingMethod === methods[0].method ? (
+                {installingMethod === requireArrayValue(methods, 0).method ? (
                   <><div className={css.spinnerInline} /> Installing...</>
                 ) : (
-                  `Install via ${methods[0].label}`
+                  `Install via ${requireArrayValue(methods, 0).label}`
                 )}
               </button>
             ) : (
@@ -433,9 +434,10 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
     requestId: string,
     decision: string
   ): Promise<void> {
+    const sessionGeneration = useEditorStore.getState().documents[activeDocumentId]?.assistantSessionGeneration;
     await getActiveEditorPlatform().assistant?.respondToApproval?.({
       documentId: activeDocumentId,
-      sessionGeneration: useEditorStore.getState().documents[activeDocumentId]?.assistantSessionGeneration,
+      ...(sessionGeneration === undefined ? {} : { sessionGeneration }),
       requestId,
       decision
     });
@@ -444,11 +446,11 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   // Show login prompt if auth is required but user is not logged in
   if (authState.requiresAuth && !authState.isLoggedIn) {
     return (
-      <SidePanel className={css.panel} data-testid="assistant-panel">
-        <SidePanel.Header className={css.header}>
+      <SidePanel className={css.panel ?? ""} data-testid="assistant-panel">
+        <SidePanel.Header className={css.header ?? ""}>
           <div className={css.title}>Assistant</div>
         </SidePanel.Header>
-        <SidePanel.Content className={css.authRequired}>
+        <SidePanel.Content className={css.authRequired ?? ""}>
           <div className={css.authRequiredContent}>
             <p data-select="text">Sign in to use the assistant.</p>
             <button
@@ -470,8 +472,8 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
   }
 
   return (
-    <SidePanel className={css.panel} data-testid="assistant-panel">
-      <SidePanel.Header className={css.header}>
+    <SidePanel className={css.panel ?? ""} data-testid="assistant-panel">
+      <SidePanel.Header className={css.header ?? ""}>
         <div>
           <div className={css.title}>Assistant</div>
         </div>
@@ -490,7 +492,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
       {assistantState.assistantError ? <div className={css.error} data-select="text">{assistantState.assistantError}</div> : null}
 
       <SidePanel.Content
-        className={css.timeline}
+        className={css.timeline ?? ""}
         data-testid="assistant-timeline"
         ref={timelineRef}
         onScroll={(event) => {
@@ -645,10 +647,10 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
                     ) : null}
                   </div>
                 )}
-                triggerClassName={css.modelTrigger}
-                menuClassName={css.modelMenu}
-                optionClassName={css.modelOption}
-                optionSelectedClassName={css.modelOptionSelected}
+                triggerClassName={css.modelTrigger ?? ""}
+                menuClassName={css.modelMenu ?? ""}
+                optionClassName={css.modelOption ?? ""}
+                optionSelectedClassName={css.modelOptionSelected ?? ""}
               />
             </div>
             <button
@@ -1075,7 +1077,7 @@ function formatAvailableDecisions(choices: unknown[] | undefined): string | null
         return null;
       }
       const keys = Object.keys(record);
-      return keys.length > 0 ? keys[0] : null;
+      return keys[0] ?? null;
     })
     .filter((value): value is string => value !== null && value.trim().length > 0);
   return labels.length > 0 ? labels.join(", ") : null;
@@ -1164,7 +1166,7 @@ function approvalActions(approval: AssistantPendingApproval): Array<{ value: str
           return null;
         }
         const keys = Object.keys(record);
-        return keys.length > 0 ? keys[0] : null;
+        return keys[0] ?? null;
       })
       .filter((value): value is string => value !== null && value.trim().length > 0)
     : [];

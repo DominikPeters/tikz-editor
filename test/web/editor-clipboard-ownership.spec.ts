@@ -13,7 +13,7 @@ import type { EditorPlatform } from "../../packages/app/src/platform/types";
 import { setActiveEditorPlatform } from "../../packages/app/src/platform/current";
 import { APP_MENU_COMMAND_IDS } from "../../packages/app/src/app-menu";
 import { createEditorCommandRuntime } from "../../packages/app/src/ui/editor-command-runtime";
-import { pasteSelectionFromSystemClipboard } from "../../packages/app/src/ui/editor-commands";
+import { beginClipboardEdit, pasteSelectionFromSystemClipboard } from "../../packages/app/src/ui/editor-commands";
 import { useCanvasKeyboardClipboard } from "../../packages/app/src/ui/canvas-panel/useCanvasKeyboardClipboard";
 import * as imports from "../../packages/app/src/ui/svg-import";
 import { formatDocumentRootId } from "../../packages/core/src/document/root-id";
@@ -259,6 +259,35 @@ describe("clipboard operation ownership", () => {
     const pictures = rendered.parse.figures;
     expect(state().source.slice(pictures[1 - index].span.from, pictures[1 - index].span.to)).toBe(index ? BASE : OTHER);
     expect(state().selectedElementIds.size).toBe(1);
+  });
+
+  it("clears the nested root when its clipboard parse snapshot is unavailable", async () => {
+    const source = String.raw`\documentclass{beamer}
+\begin{document}
+\begin{frame}{Nested}
+` + BASE + String.raw`
+\end{frame}
+\end{document}`;
+    dispatch({ type: "CODE_EDITED", source });
+    const nestedRoot = formatDocumentRootId({ kind: "beamer-frame-tikz", frameIndex: 0, index: 0 });
+    dispatch({ type: "SET_ACTIVE_ROOT", rootId: nestedRoot });
+    const response = await computeSnapshot({ id: "nested-parse-unavailable", documentId: state().activeDocumentId,
+      source, sourceRevision: state().sourceRevision, activeRootId: nestedRoot });
+    dispatch({ type: "COMPUTE_REQUESTED", requestId: response.id });
+    dispatch({ type: "SNAPSHOT_READY", requestId: response.id, snapshot: response.snapshot });
+    const current = state();
+    const document = getActiveDocument(current);
+    const snapshot = { ...document.snapshot, source: "", parseResult: null };
+    const clipboard = beginClipboardEdit({
+      source, documentId: current.activeDocumentId, sourceRevision: current.sourceRevision,
+      activeRootId: nestedRoot, snapshotSource: snapshot.source, scene: snapshot.scene,
+      editHandles: snapshot.editHandles, selectedElementIds: current.selectedElementIds,
+      activeHandleId: current.activeHandleId, dispatch,
+      getState: () => ({ ...current, documents: { ...current.documents,
+        [current.activeDocumentId]: { ...document, snapshot } } })
+    });
+    expect(clipboard).not.toBeNull();
+    expect(clipboard?.parseOptions?.activeFigureId).toBeUndefined();
   });
 
   it("pastes only in the selected nested Beamer picture and preserves its surrounding deck", async () => {

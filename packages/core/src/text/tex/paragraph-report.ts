@@ -2,6 +2,7 @@ import type { KnuthPlassLayoutMode } from "../knuth-plass/index.js";
 import type {
   BreakReport,
   LineReport,
+  LineSegmentReport,
   ParagraphLayoutReport,
 } from "../knuth-plass/paragraph/report.js";
 import type {
@@ -89,7 +90,7 @@ export function buildTexParagraphReport(params: {
     sourceStart: layoutSourceOffset(run.sourceStart),
     sourceEnd: layoutSourceOffset(run.sourceEnd),
     width: params.runWidths.get(run.runIndex) ?? texLength(0),
-    text: run.kind === "text" || run.kind === "space" ? run.text : undefined,
+    ...(run.kind === "text" || run.kind === "space" ? { text: run.text } : {}),
   }));
   // Coalescing probes and final segment construction may inspect the same
   // math box several times. Normalize it once within this report build.
@@ -145,15 +146,18 @@ function buildTexLineReport(
     const metrics = texShapedRunMetrics(shaped);
     ascent = texLength(Math.max(ascent, metrics.ascent));
     descent = texLength(Math.max(descent, metrics.descent));
+    const pendingRole = params.runs[line.startRun]?.role;
+    const sourceStartRaw = optionalLayoutSourceOffset(line.startPendingSourceStart);
+    const sourceEndRaw = optionalLayoutSourceOffset(line.startPendingSourceEnd);
     segments.push({
       runIndex: line.startRun,
       kind: "text",
-      role: params.runs[line.startRun]?.role,
+      ...(pendingRole !== undefined ? { role: pendingRole } : {}),
       text: line.startPendingText,
       startOffset: 0,
       endOffset: line.startPendingText.length,
-      sourceStartRaw: optionalLayoutSourceOffset(line.startPendingSourceStart),
-      sourceEndRaw: optionalLayoutSourceOffset(line.startPendingSourceEnd),
+      ...(sourceStartRaw !== undefined ? { sourceStartRaw } : {}),
+      ...(sourceEndRaw !== undefined ? { sourceEndRaw } : {}),
       sourceKind: "text",
       fontId: runFont.id,
       fontAtPt: runFont.atPt,
@@ -205,7 +209,7 @@ function buildTexLineReport(
       segments.push({
         runIndex: run.runIndex,
         kind: "text",
-        role: run.role,
+        ...(run.role !== undefined ? { role: run.role } : {}),
         ...(run.literal ? { literal: run.literal } : {}),
         text: run.text.slice(startOffset, endOffset),
         startOffset,
@@ -243,7 +247,7 @@ function buildTexLineReport(
       segments.push({
         runIndex: run.runIndex,
         kind: "math",
-        role: run.role,
+        ...(run.role !== undefined ? { role: run.role } : {}),
         text: box?.content ?? "",
         sourceStartRaw: layoutSourceOffset(run.sourceStart),
         sourceEndRaw: layoutSourceOffset(run.sourceEnd),
@@ -251,12 +255,9 @@ function buildTexLineReport(
         x,
         width,
         caretStops: texMathBoxCaretStops(box, x, width),
-        mathConstructRanges: texMathBoxConstructRanges(box, x, width),
-        mathCaretEntries: texMathBoxCaretEntries(box, x, width),
-        mathBreakpoints: texMathBoxBreakpoints(box, x, width),
-        graphics: texMathBoxGraphics(box, x),
-        mathSvgBody: texMathBoxSvgBody(box, width, {
+        ...texMathBoxLineReportFields(box, x, width, {
           omitLineInitialOperator: continuationLineStart && box?.sourceStart === box?.contentStart,
+          includeGraphics: true,
         }),
       });
       x = texLineX(roundTexPt(x + width));
@@ -279,7 +280,7 @@ function buildTexLineReport(
     segments.push({
       runIndex: run.runIndex,
       kind: "space",
-      role: run.role,
+      ...(run.role !== undefined ? { role: run.role } : {}),
       text: isHiddenGlue ? "" : " ",
       sourceStartRaw: layoutSourceOffset(run.sourceStart),
       sourceEndRaw: layoutSourceOffset(run.sourceEnd),
@@ -313,10 +314,11 @@ function buildTexLineReport(
     const segmentX = isSimpleInsertedDiscretionary
       ? texLineX(roundTexPt(x + insertedWidth - shaped.width))
       : x;
+    const breakRole = params.runs[line.break.runIndex]?.role;
     segments.push({
       runIndex: line.break.runIndex,
       kind: "text",
-      role: params.runs[line.break.runIndex]?.role,
+      ...(breakRole !== undefined ? { role: breakRole } : {}),
       text: discretionary.preBreakText,
       startOffset: discretionary.replaceStart,
       endOffset: splitOffset,
@@ -345,10 +347,11 @@ function buildTexLineReport(
     descent = texLength(Math.max(descent, metrics.descent));
     const insertedWidth = line.break.width ?? width;
     const hyphenX = texLineX(roundTexPt(x + insertedWidth - width));
+    const breakRole = params.runs[line.break.runIndex]?.role;
     segments.push({
       runIndex: line.break.runIndex,
       kind: "text",
-      role: params.runs[line.break.runIndex]?.role,
+      ...(breakRole !== undefined ? { role: breakRole } : {}),
       text: "-",
       startOffset: line.break.splitOffset ?? 0,
       endOffset: line.break.splitOffset ?? 0,
@@ -418,7 +421,7 @@ function buildTexLineReport(
     report,
     lineBox: {
       lineIndex: report.lineIndex,
-      ...(sourceSpan ? { sourceSpan } : {}),
+      ...(sourceSpan ? { sourceSpan: sourceSpan } : {}),
       y: texVListLocalY(0),
       targetWidth: texLength(report.targetWidth),
       metrics: {
@@ -426,7 +429,7 @@ function buildTexLineReport(
         height: texLength(report.ascent),
         depth: texLength(report.descent),
       },
-      lineLeading: report.break?.lineLeading,
+      ...(report.break?.lineLeading !== undefined ? { lineLeading: report.break?.lineLeading } : {}),
       preDisplaySize: texLinePreDisplaySize(report, params.font),
     },
   };
@@ -509,7 +512,7 @@ function coalescedSameLineMathSegment(
     segment: {
       runIndex: firstRun.runIndex,
       kind: "math",
-      role: firstRun.role,
+      ...(firstRun.role !== undefined ? { role: firstRun.role } : {}),
       text: rootBox.content,
       sourceStartRaw: layoutSourceOffset(rootBox.contentStart),
       sourceEndRaw: layoutSourceOffset(rootBox.contentEnd),
@@ -517,11 +520,7 @@ function coalescedSameLineMathSegment(
       x,
       width,
       caretStops: contentCaretStops(rootBox, texMathBoxCaretStops(rootBox, x, width)),
-      mathConstructRanges: texMathBoxConstructRanges(rootBox, x, width),
-      mathCaretEntries: texMathBoxCaretEntries(rootBox, x, width),
-      mathBreakpoints: texMathBoxBreakpoints(rootBox, x, width),
-      graphics: texMathBoxGraphics(rootBox, x),
-      mathSvgBody: texMathBoxSvgBody(rootBox, width, { omitLineInitialOperator }),
+      ...texMathBoxLineReportFields(rootBox, x, width, { omitLineInitialOperator, includeGraphics: true }),
     },
     ascent: rootBox.height,
     descent: rootBox.depth,
@@ -650,6 +649,8 @@ function texMathBoxFromWrapper(
     readonly rootBox?: unknown;
     readonly graphics?: unknown;
   };
+  const constructRanges = parseTexMathConstructRanges(typedBox.constructRanges);
+  const breakpoints = parseTexMathBreakpoints(typedBox.breakpoints);
   const normalized: TexMathBox = {
     source: typeof typedBox.source === "string" ? typedBox.source : "",
     content: typeof typedBox.content === "string" ? typedBox.content : "",
@@ -657,36 +658,22 @@ function texMathBoxFromWrapper(
     sourceEnd: Number(typedBox.sourceEnd) || 0,
     contentStart: Number(typedBox.contentStart) || 0,
     contentEnd: Number(typedBox.contentEnd) || 0,
-    sourceKind: typedBox.sourceKind === "text" || typedBox.sourceKind === "math"
-      ? typedBox.sourceKind
-      : undefined,
+    ...(typedBox.sourceKind === "text" || typedBox.sourceKind === "math" ? { sourceKind: typedBox.sourceKind } : {}),
     width: texLength(Number(typedBox.width) || 0),
     height: texLength(Number(typedBox.height) || 0),
     depth: texLength(Number(typedBox.depth) || 0),
-    caretMap: typeof typedBox.caretMap === "object" && typedBox.caretMap !== null
-      ? typedBox.caretMap as TexMathBox["caretMap"]
-      : undefined,
-    caretStops: Array.isArray(typedBox.caretStops)
-      ? typedBox.caretStops
+    ...(typeof typedBox.caretMap === "object" && typedBox.caretMap !== null ? { caretMap: typedBox.caretMap as NonNullable<TexMathBox["caretMap"]> } : {}),
+    ...(Array.isArray(typedBox.caretStops) ? { caretStops: typedBox.caretStops
           .filter((stop): stop is number => Number.isFinite(stop))
-          .map(texHBoxX)
-      : undefined,
-    constructRanges: parseTexMathConstructRanges(typedBox.constructRanges),
-    breakpoints: parseTexMathBreakpoints(typedBox.breakpoints),
-    svgBody: typeof typedBox.svgBody === "string" ? typedBox.svgBody : undefined,
-    hlist: typeof typedBox.hlist === "object" && typedBox.hlist !== null
-      ? typedBox.hlist as TexMathHList
-      : undefined,
-    fontProfile: typeof typedBox.fontProfile === "object" && typedBox.fontProfile !== null
-      ? typedBox.fontProfile as TexMathFontProfile
-      : undefined,
-    color: typeof typedBox.color === "string" ? typedBox.color : undefined,
-    rootBox: typeof typedBox.rootBox === "object" && typedBox.rootBox !== null
-      ? typedBox.rootBox as TexMathBox
-      : undefined,
-    graphics: Array.isArray(typedBox.graphics)
-      ? typedBox.graphics as readonly TexGraphicsBox[]
-      : undefined,
+          .map(texHBoxX) } : {}),
+    ...(constructRanges !== undefined ? { constructRanges } : {}),
+    ...(breakpoints !== undefined ? { breakpoints } : {}),
+    ...(typeof typedBox.svgBody === "string" ? { svgBody: typedBox.svgBody } : {}),
+    ...(typeof typedBox.hlist === "object" && typedBox.hlist !== null ? { hlist: typedBox.hlist as TexMathHList } : {}),
+    ...(typeof typedBox.fontProfile === "object" && typedBox.fontProfile !== null ? { fontProfile: typedBox.fontProfile as TexMathFontProfile } : {}),
+    ...(typeof typedBox.color === "string" ? { color: typedBox.color } : {}),
+    ...(typeof typedBox.rootBox === "object" && typedBox.rootBox !== null ? { rootBox: typedBox.rootBox as TexMathBox } : {}),
+    ...(Array.isArray(typedBox.graphics) ? { graphics: typedBox.graphics as readonly TexGraphicsBox[] } : {}),
   };
   cache.set(box, normalized);
   return normalized;
@@ -787,10 +774,7 @@ function buildTexLineLabelSegments(
         x,
         width: mathWidth,
         caretStops: texMathBoxCaretStops(item.box, x, mathWidth),
-        mathConstructRanges: texMathBoxConstructRanges(item.box, x, mathWidth),
-        mathCaretEntries: texMathBoxCaretEntries(item.box, x, mathWidth),
-        mathBreakpoints: texMathBoxBreakpoints(item.box, x, mathWidth),
-        mathSvgBody: texMathBoxSvgBody(item.box, mathWidth),
+        ...texMathBoxLineReportFields(item.box, x, mathWidth, { }),
       });
       x = texLineX(roundTexPt(x + mathWidth));
       continue;
@@ -810,11 +794,7 @@ function buildTexLineLabelSegments(
         x,
         width: boxWidth,
         caretStops: texMathBoxCaretStops(item.box, x, boxWidth),
-        mathConstructRanges: texMathBoxConstructRanges(item.box, x, boxWidth),
-        mathCaretEntries: texMathBoxCaretEntries(item.box, x, boxWidth),
-        mathBreakpoints: texMathBoxBreakpoints(item.box, x, boxWidth),
-        graphics: texMathBoxGraphics(item.box, x),
-        mathSvgBody: texMathBoxSvgBody(item.box, boxWidth),
+        ...texMathBoxLineReportFields(item.box, x, boxWidth, { includeGraphics: true }),
       });
       x = texLineX(roundTexPt(x + boxWidth));
       continue;
@@ -845,6 +825,26 @@ function buildTexLineLabelSegments(
     x = texLineX(roundTexPt(x + glue.width));
   }
   return { segments, ascent, descent };
+}
+
+function texMathBoxLineReportFields(
+  box: TexMathBox | null | undefined,
+  x: TexLineX,
+  width: TexLength,
+  options: { readonly omitLineInitialOperator?: boolean; readonly includeGraphics?: boolean } = {}
+): Pick<LineSegmentReport<"layout">, "mathConstructRanges" | "mathCaretEntries" | "mathBreakpoints" | "graphics" | "mathSvgBody"> {
+  const mathConstructRanges = texMathBoxConstructRanges(box, x, width);
+  const mathCaretEntries = texMathBoxCaretEntries(box, x, width);
+  const mathBreakpoints = texMathBoxBreakpoints(box, x, width);
+  const graphics = options.includeGraphics ? texMathBoxGraphics(box, x) : undefined;
+  const mathSvgBody = texMathBoxSvgBody(box, width, options);
+  return {
+    ...(mathConstructRanges !== undefined ? { mathConstructRanges } : {}),
+    ...(mathCaretEntries !== undefined ? { mathCaretEntries } : {}),
+    ...(mathBreakpoints !== undefined ? { mathBreakpoints } : {}),
+    ...(graphics !== undefined ? { graphics } : {}),
+    ...(mathSvgBody !== undefined ? { mathSvgBody } : {}),
+  };
 }
 
 function texMathBoxSvgBody(

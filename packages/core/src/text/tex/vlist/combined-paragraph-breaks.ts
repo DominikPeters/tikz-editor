@@ -214,6 +214,6 @@ function createForcedBreakDecision(
     sourceOffset: forcedBreak.sourceOffset,
     visibleHyphen: false,
     flagged: false,
-    lineLeading: forcedBreak.lineLeading,
+    ...(forcedBreak.lineLeading !== undefined ? { lineLeading: forcedBreak.lineLeading } : {}),
   };
 }

@@ -65,12 +65,10 @@ export function planTreeHeadline(
     text: section,
     colorRole: "section in head/foot",
     x: HORIZONTAL_MARGIN_PT + (hooks ? 8.4 : 6),
-    hook: hooks && section
-      ? {
+    ...(hooks && section ? { hook: {
           x: HORIZONTAL_MARGIN_PT + 2,
           verticalTopOffset: -0.2349853515625,
-        }
-      : undefined,
+        } } : {}),
   });
   const subsection = context.navigation.currentSubsection?.title;
   y = appendTreeRow({
@@ -81,12 +79,10 @@ export function planTreeHeadline(
     text: subsection,
     colorRole: "subsection in head/foot",
     x: HORIZONTAL_MARGIN_PT + (hooks ? 15.8 : 12),
-    hook: hooks && subsection
-      ? {
+    ...(hooks && subsection ? { hook: {
           x: HORIZONTAL_MARGIN_PT + 9.4,
           verticalTopOffset: -0.2349853515625,
-        }
-      : undefined,
+        } } : {}),
   });
   y += appendSeparationLine(
     primitives,

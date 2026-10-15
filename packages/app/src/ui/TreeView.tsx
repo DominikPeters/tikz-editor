@@ -1,3 +1,4 @@
+import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { Tree } from "@lezer/common";
 import { useState, useMemo } from "react";
 
@@ -24,7 +25,7 @@ function buildTree(tree: Tree, source: string): TreeNodeData[] {
         children: [],
         text: source.slice(node.from, node.to)
       };
-      stack[stack.length - 1].push(data);
+      requireArrayValue(stack, stack.length - 1).push(data);
       stack.push(data.children);
     },
     leave() {

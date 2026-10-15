@@ -44,6 +44,20 @@ function rowText(source: string, domain: BeamerCaretDomain, rowIndex: number): s
 }
 
 describe("beamer caret-stop domain", () => {
+  it("keeps vertical motion on the current caret when the adjacent row has no stops", () => {
+    const domain: BeamerCaretDomain = {
+      ...buildBeamerCaretStopDomain({ source: "a", paragraphs: [] }),
+      offsets: [0],
+      rows: [
+        { paragraphId: "body", y: 0, height: 10, stops: [{ offset: 0, x: 2 }] },
+        { paragraphId: "empty", y: 10, height: 10, stops: [] }
+      ]
+    };
+
+    expect(verticalBeamerCaretOffset(domain, 0, 1)).toBeNull();
+    expect(beamerCaretRowEdgeOffset(domain, 0, "start")).toBe(0);
+  });
+
   it.each(["tiny", "scriptsize", "footnotesize", "small", "normalsize", "large", "Large", "LARGE", "huge", "Huge"])("preserves authored prose, caret and math origins after %s", async size => {
     const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}${"\\"}${size} Before $x^2$ after.\[y\]\end{frame}\end{document}`;
     const page = await renderBeamerFrame(source);

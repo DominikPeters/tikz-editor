@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../utils/collections.js";
 import type { Span } from "../ast/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import { normalizeOptionValue } from "../semantic/style/option-utils.js";
@@ -97,20 +98,20 @@ export function beamerOverlayPicturesIn(
   const tokens = beamerEnvironmentBoundariesIn(context, span);
   const pictures: BeamerOverlayPicture[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    const begin = tokens[index];
+    const begin = requireArrayValue(tokens, index);
     if (begin.kind !== "begin" || !(begin.name === "tikzpicture" || (tikzLayer && begin.name === "tikzlayer"))) continue;
     let depth = 0;
     let endIndex = -1;
     for (let next = index; next < tokens.length; next += 1) {
-      if (tokens[next].name !== begin.name) continue;
-      depth += tokens[next].kind === "begin" ? 1 : -1;
+      if (requireArrayValue(tokens, next).name !== begin.name) continue;
+      depth += requireArrayValue(tokens, next).kind === "begin" ? 1 : -1;
       if (depth === 0) {
         endIndex = next;
         break;
       }
     }
     if (endIndex < 0) break;
-    const end = tokens[endIndex];
+    const end = requireArrayValue(tokens, endIndex);
     if (begin.name === "tikzlayer") {
       pictures.push({ span: { from: begin.span.from, to: end.span.to }, rememberPicture: true, tikzLayer: true });
       index = endIndex;
@@ -282,11 +283,11 @@ export function beamerDrawingLayerInsertions(
 ): Array<{ at: number; text: string; definesLayer?: true }> {
   const source = context.source;
   let at = bodySpan.to;
-  while (at > bodySpan.from && /\s/u.test(source[at - 1])) at -= 1;
+  while (at > bodySpan.from && /\s/u.test(source.charAt(at - 1))) at -= 1;
   // The last material, before trailing comment lines.
   let last = at;
   for (;;) {
-    while (last > bodySpan.from && /\s/u.test(source[last - 1])) last -= 1;
+    while (last > bodySpan.from && /\s/u.test(source.charAt(last - 1))) last -= 1;
     const lineStart = Math.max(source.lastIndexOf("\n", last - 1) + 1, bodySpan.from);
     if (last > bodySpan.from && /^\s*%/u.test(source.slice(lineStart, last))) last = lineStart;
     else break;

@@ -113,7 +113,7 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
         return (await prepared.renderFrame({
           frameIndex: request.deckFrameIndex,
           step,
-          graphicsResolver
+          ...(graphicsResolver === undefined ? {} : { graphicsResolver })
         })).svg.svg;
       }
       const { renderTikzToSvgAsync } = await import("@tikz-editor/core/render/index");
@@ -123,9 +123,9 @@ async function renderThumbnailFallback(request: ThumbnailRenderRequest): Promise
           activeFigureId: request.parseOptions.activeRootId,
           includeContextDefinitions: request.parseOptions.includeContextDefinitions
         },
-        evaluate: { graphicsResolver },
+        evaluate: { ...(graphicsResolver === undefined ? {} : { graphicsResolver }) },
         svg: {
-          padding: request.svgOptions?.padding
+          ...((request.svgOptions?.padding) === undefined ? {} : { padding: request.svgOptions?.padding })
         }
       })).svg.svg;
     });

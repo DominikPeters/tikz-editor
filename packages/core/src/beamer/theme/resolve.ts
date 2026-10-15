@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { Diagnostic } from "../../diagnostics/types.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
@@ -147,8 +148,8 @@ function resolveBeamerColorRecord(colors: Readonly<Record<string, BeamerThemeCol
   const roleNameForAlias = (name: string) => Object.keys(colors).find(key => key.toLowerCase() === name.toLowerCase());
   const expressionRgb = (raw: string, seen: ReadonlySet<string>): BeamerColorRgb | null => resolveBeamerColorExpressionRgb(raw, alias => {
     const match = /^(.*)\.(fg|bg)$/u.exec(alias);
-    const roleName = match && roleNameForAlias(match[1]);
-    if (match && roleName) return roleRgb(roleName, match[2] as "fg" | "bg", seen);
+    const roleName = match && roleNameForAlias(requireArrayValue(match, 1));
+    if (match && roleName) return roleRgb(roleName, requireArrayValue(match, 2) as "fg" | "bg", seen);
     return aliasRgb[alias] ?? (aliases[alias] ? resolveBeamerColorExpressionRgb(aliases[alias], () => null) : null);
   });
   const roleRgb = (name: string, field: "fg" | "bg", ancestors: ReadonlySet<string>): BeamerColorRgb | null => {
@@ -207,15 +208,24 @@ function resolveBeamerColorRecord(colors: Readonly<Record<string, BeamerThemeCol
       const channels = raw === "" ? null : expressionRgb(raw, seen);
       return channels ? beamerColorRgbToCss(channels) : undefined;
     };
-    return {
+    const result: ResolvedBeamerThemeColor = {
       ...parent,
       ...(mixedForeground ? { fg: mixedForeground } : {}),
       ...(mixedBackground ? { bg: mixedBackground } : {}),
       ...(color.fg ? { fg: color.fg } : {}),
       ...(color.bg ? { bg: color.bg } : {}),
-      ...(color.fgExpression ? { fg: resolveExpression(color.fgExpression.value) } : {}),
-      ...(color.bgExpression ? { bg: resolveExpression(color.bgExpression.value) } : {}),
     };
+    if (color.fgExpression) {
+      const foreground = resolveExpression(color.fgExpression.value);
+      if (foreground === undefined) delete result.fg;
+      else result.fg = foreground;
+    }
+    if (color.bgExpression) {
+      const background = resolveExpression(color.bgExpression.value);
+      if (background === undefined) delete result.bg;
+      else result.bg = background;
+    }
+    return result;
   };
   const result = resolve(role, new Set());
   if (captureRgb) { captureRgb("fg", roleRgb(role, "fg", new Set())); captureRgb("bg", roleRgb(role, "bg", new Set())); }
@@ -232,7 +242,7 @@ function mixThemeForeground(
   }
   const ratio = Math.max(0, Math.min(100, foregroundPercent)) / 100;
   const channels = foreground.map((value, index) =>
-    Math.round(value * ratio + background[index] * (1 - ratio))
+    Math.round(value * ratio + requireArrayValue(background, index) * (1 - ratio))
   );
   return `#${channels.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
@@ -256,9 +266,9 @@ function parseHexColor(
   );
   return match
     ? [
-        Number.parseInt(match[1], 16),
-        Number.parseInt(match[2], 16),
-        Number.parseInt(match[3], 16),
+        Number.parseInt(requireArrayValue(match, 1), 16),
+        Number.parseInt(requireArrayValue(match, 2), 16),
+        Number.parseInt(requireArrayValue(match, 3), 16),
       ]
     : null;
 }
@@ -1082,7 +1092,10 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
     // structure.fg!20/25/30/35!white from beamercolorthemeseahorse.sty.
     const expression = (value: string) => ({ value, span: use.source.span });
     for (const [role, percent] of [["primary", 20], ["secondary", 25], ["tertiary", 30], ["quaternary", 35]] as const) {
-      state.colors[`palette ${role}`] = { ...state.colors[`palette ${role}`], fg: "#000000", fgExpression: undefined, fgRgb: undefined, use: ["structure"], bgExpression: expression(`structure.fg!${percent}!white`) };
+      const palette = { ...state.colors[`palette ${role}`], fg: "#000000", use: ["structure"], bgExpression: expression(`structure.fg!${percent}!white`) };
+      delete palette.fgExpression;
+      delete palette.fgRgb;
+      state.colors[`palette ${role}`] = palette;
     }
     state.colors.sidebar = { ...state.colors.sidebar, use: ["structure"], bgExpression: expression("structure.fg!20!white") };
     state.colors.titlelike = { parent: "palette primary" };
@@ -1873,8 +1886,8 @@ function optionLengthPt(
   if (!match) {
     return fallbackPt;
   }
-  const amount = Number(match[1]);
-  switch (match[2].toLocaleLowerCase()) {
+  const amount = Number(requireArrayValue(match, 1));
+  switch (requireArrayValue(match, 2).toLocaleLowerCase()) {
     case "cm":
       return cmToTexPt(amount);
     case "mm":

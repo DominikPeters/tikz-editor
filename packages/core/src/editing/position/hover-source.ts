@@ -1,3 +1,4 @@
+import { editSlotAt } from "../tree/lookup.js";
 import type { EditNode } from "../tree/types.js";
 import type { EditView } from "./view.js";
 
@@ -29,7 +30,7 @@ export function hoverSource(view: EditView, offset: number): HoverSource | null 
       continue;
     }
     if (WRAPPER_KINDS.has(node.kind) && node.command != null && source.startsWith(`\\${node.command}`)) {
-      const slots = node.slots.map((id) => tree.slots[id]).filter((slot) => slot.presence === "present");
+      const slots = node.slots.map((id) => editSlotAt(tree.slots, id)).filter((slot) => slot.presence === "present");
       let text = "";
       let cursor = node.span.from;
       for (const slot of slots) {

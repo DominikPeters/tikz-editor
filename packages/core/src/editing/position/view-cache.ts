@@ -1,3 +1,4 @@
+import { requireArrayValue } from "../../utils/collections.js";
 import type { CommandTable } from "../commands/table.js";
 import { buildEditTree } from "../tree/build.js";
 import type { EditTree } from "../tree/types.js";
@@ -21,7 +22,7 @@ export function createEditViewCache(size = 4): EditViewCache {
       entry.text === text && entry.commands === commands && entry.hiddenKey === hiddenKey
     );
     if (index >= 0) {
-      const [entry] = entries.splice(index, 1);
+      const entry = requireArrayValue(entries.splice(index, 1), 0);
       entries.unshift(entry);
       return entry.view;
     }

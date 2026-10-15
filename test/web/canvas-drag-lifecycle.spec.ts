@@ -188,6 +188,18 @@ describe("canvas drag ownership and cancellation", () => {
     expect(dragRef.current?.kind).toBe("tool-create"); expect(state().source).toBe(BASE);
     await act(async () => pointer("pointerup")); expect(state().source).not.toBe(BASE);
   });
+  it("does not interpret inherited object keys as adornment drag angles", async () => {
+    const source = String.raw`\begin{tikzpicture}\node[label=constructor:Label] (a) at (0,0) {A};\end{tikzpicture}`;
+    await act(async () => { dispatch({ type: "CODE_EDITED", source }); ready(); });
+    const label = state().snapshot.scene?.elements.find(element => element.adornment?.angleRaw === "constructor");
+    if (!label?.adornment) throw new Error("Expected source-backed label adornment");
+    const drag = elementDrag();
+    drag.elementIds = [label.adornment.targetId];
+    await act(async () => setDragState(drag));
+    await act(async () => { pointer("pointermove"); flush(); });
+    expect(drag.adornmentDrag).toBeUndefined();
+    expect(state().source).toBe(source);
+  });
   it.each(["pointercancel", "blur", "Escape", "unmount"])("rolls back owned movement on %s and leaves no aborted redo entry", async interruption => {
     const history = state().history, index = state().historyIndex;
     await act(async () => setDragState(elementDrag()));

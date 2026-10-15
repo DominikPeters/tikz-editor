@@ -120,9 +120,10 @@ export function lowerSimpleTexBlockItemsToVList(
       paragraph: paragraphInputFromSimpleTexBlock(item.block, item.blockIndex, options),
     });
   }
+  const sourceSpan = sourceSpanForVListItems(items);
   return {
     kind: "vlist",
-    sourceSpan: sourceSpanForVListItems(items),
+    ...(sourceSpan !== undefined ? { sourceSpan } : {}),
     items,
   };
 }
@@ -147,15 +148,16 @@ function vboxItemFromSimpleTexBox(
     ...options,
     width: item.width,
     tikzTextWidthNode: false,
-    dimensionContext,
+    ...(dimensionContext !== undefined ? { dimensionContext } : {}),
   });
+  const itemScopePath = scopePathForVerticalBlockItem(item);
   return {
     kind: "vbox",
     sourceSpan: {
       start: item.sourceStart,
       end: item.sourceEnd,
     },
-    scopePath: scopePathForVerticalBlockItem(item),
+    ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     material: {
       command: item.command,
     },
@@ -190,8 +192,8 @@ function displayMathItemFromSimpleTexDisplayMath(
   };
   const scopePath = scopePathForVerticalBlockItem(item);
   const targetWidth = scopedDisplayMathTargetWidth(scopePath, options);
-  const displayState = { fontSizePt: item.fontSizePt, baselineSkip: item.baselineSkip,
-    displaySkipCommand: item.displaySkipCommand, normalFontSizePt: item.normalFontSizePt };
+  const displayState = { ...(item.fontSizePt !== undefined ? { fontSizePt: item.fontSizePt } : {}), ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}),
+    ...(item.displaySkipCommand !== undefined ? { displaySkipCommand: item.displaySkipCommand } : {}), ...(item.normalFontSizePt !== undefined ? { normalFontSizePt: item.normalFontSizePt } : {}) };
   if (
     item.delimiter === "align" ||
     item.delimiter === "align-star" ||
@@ -203,8 +205,8 @@ function displayMathItemFromSimpleTexDisplayMath(
     item.delimiter === "multline-star"
   ) {
     const alignment = options.mathBoxProvider?.getDisplayMathAlignment?.({
-      atPt: item.fontSizePt,
-      baselineSkip: item.baselineSkip,
+      ...(item.fontSizePt !== undefined ? { atPt: item.fontSizePt } : {}),
+      ...(item.baselineSkip !== undefined ? { ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}) } : {}),
       source: item.text,
       content: item.content,
       delimiter: item.delimiter,
@@ -213,7 +215,7 @@ function displayMathItemFromSimpleTexDisplayMath(
       contentStart: item.contentStart,
       contentEnd: item.contentEnd,
       targetWidth: targetWidth ?? texLength(0),
-      ...(displayLabels ? { displayLabels } : {}),
+      ...(displayLabels ? { displayLabels: displayLabels } : {}),
     }) ?? null;
     if (!alignment) {
       return unsupportedDisplayMathPlaceholder(item, sourceSpan);
@@ -222,7 +224,7 @@ function displayMathItemFromSimpleTexDisplayMath(
       kind: "display-alignment",
       ...displayState,
       sourceSpan,
-      scopePath,
+      ...(scopePath !== undefined ? { scopePath: scopePath } : {}),
       text: item.text,
       content: item.content,
       delimiter: item.delimiter,
@@ -233,8 +235,8 @@ function displayMathItemFromSimpleTexDisplayMath(
     };
   }
   const box = options.mathBoxProvider?.getDisplayMathBox?.({
-    atPt: item.fontSizePt,
-    baselineSkip: item.baselineSkip,
+    ...(item.fontSizePt !== undefined ? { atPt: item.fontSizePt } : {}),
+    ...(item.baselineSkip !== undefined ? { ...(item.baselineSkip !== undefined ? { baselineSkip: item.baselineSkip } : {}) } : {}),
     source: item.text,
     content: item.content,
     delimiter: item.delimiter,
@@ -242,7 +244,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     sourceEnd: item.sourceEnd,
     contentStart: item.contentStart,
     contentEnd: item.contentEnd,
-    targetWidth,
+    ...(targetWidth !== undefined ? { targetWidth: targetWidth } : {}),
     ...(displayLabels?.[0] ? { displayLabel: displayLabels[0] } : {}),
   }) ?? null;
   if (!box) {
@@ -252,7 +254,7 @@ function displayMathItemFromSimpleTexDisplayMath(
     kind: "display-math",
     ...displayState,
     sourceSpan,
-    scopePath,
+    ...(scopePath !== undefined ? { scopePath: scopePath } : {}),
     text: item.text,
     content: item.content,
     delimiter: item.delimiter,
@@ -376,11 +378,12 @@ function unsupportedDisplayMathPlaceholder(
   const reason = "TeX display math rendering is not implemented for this formula.";
   // The literal run renders one line of monospaced source at 10pt; both
   // cmtt10 and lmmono10 advance 5.25pt per character.
+  const itemScopePath = scopePathForVerticalBlockItem(item);
   return {
     kind: "placeholder",
     sourceSpan,
     reason,
-    scopePath: scopePathForVerticalBlockItem(item),
+    ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     literalText: item.text,
     estimated: {
       width: texLength(5.25 * item.text.length),
@@ -393,6 +396,7 @@ function unsupportedDisplayMathPlaceholder(
 function placeholderItemFromSimpleTexPlaceholder(
   item: SimpleTexPlaceholderBlockItem
 ): TexPlaceholderItem {
+  const itemScopePath = scopePathForVerticalBlockItem(item);
   return {
     kind: "placeholder",
     sourceSpan: {
@@ -400,7 +404,7 @@ function placeholderItemFromSimpleTexPlaceholder(
       end: item.sourceEnd,
     },
     reason: item.reason,
-    scopePath: scopePathForVerticalBlockItem(item),
+    ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     estimated: {
       width: texLength(0),
       height: texLength(8.5),
@@ -418,6 +422,7 @@ function glueItemFromSimpleTexVerticalGlue(
       ? Number(font.atPt)
       : Number(font.atPt) * font.data.fontdimen.xheight
     : null;
+  const itemScopePath = scopePathForVerticalBlockItem(item);
   return {
     kind: "glue",
     sourceSpan: {
@@ -428,15 +433,15 @@ function glueItemFromSimpleTexVerticalGlue(
       kind: "explicit-command",
       command: item.command,
     },
-    scopePath: scopePathForVerticalBlockItem(item),
+    ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     size: relativeUnitPt == null
       ? item.size
       : texLength(item.relativeSize!.value * relativeUnitPt),
     ...(relativeUnitPt != null ? { relativeUnitPt: texLength(relativeUnitPt) } : {}),
-    stretch: item.stretch,
-    shrink: item.shrink,
-    stretchOrder: item.stretchOrder,
-    shrinkOrder: item.shrinkOrder,
+    ...(item.stretch !== undefined ? { stretch: item.stretch } : {}),
+    ...(item.shrink !== undefined ? { shrink: item.shrink } : {}),
+    ...(item.stretchOrder !== undefined ? { stretchOrder: item.stretchOrder } : {}),
+    ...(item.shrinkOrder !== undefined ? { shrinkOrder: item.shrinkOrder } : {}),
   };
 }
 
@@ -557,13 +562,14 @@ function postDisplayEmptyLineHBox(
   display: SimpleTexDisplayMathBlockItem,
   sourceEnd: number
 ): TexHBoxItem {
+  const scopePath = scopePathForVerticalBlockItem(display);
   return {
     kind: "hbox",
     sourceSpan: {
       start: display.sourceEnd,
       end: sourceEnd,
     },
-    scopePath: scopePathForVerticalBlockItem(display),
+    ...(scopePath !== undefined ? { scopePath } : {}),
     role: {
       kind: "display-empty-line",
       position: "after-display-vspace",
@@ -580,13 +586,14 @@ function postDisplayEmptyLineHBox(
 }
 
 function ruleItemFromSimpleTexVerticalRule(item: SimpleTexVerticalRuleBlockItem): TexRuleItem {
+  const itemScopePath = scopePathForVerticalBlockItem(item);
   return {
     kind: "rule",
     sourceSpan: {
       start: item.sourceStart,
       end: item.sourceEnd,
     },
-    scopePath: scopePathForVerticalBlockItem(item),
+    ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     width: item.width,
     height: item.height,
     depth: item.depth,
@@ -594,13 +601,14 @@ function ruleItemFromSimpleTexVerticalRule(item: SimpleTexVerticalRuleBlockItem)
 }
 
 function penaltyItemFromSimpleTexPenalty(item: SimpleTexPenaltyBlockItem): TexPenaltyItem {
+  const itemScopePath = scopePathForVerticalBlockItem(item);
   return {
     kind: "penalty",
     sourceSpan: {
       start: item.sourceStart,
       end: item.sourceEnd,
     },
-    scopePath: scopePathForVerticalBlockItem(item),
+    ...(itemScopePath !== undefined ? { scopePath: itemScopePath } : {}),
     penalty: item.penalty,
   };
 }
@@ -682,12 +690,12 @@ function paragraphInputFromSimpleTexBlock(
     ...(options.dimensionContext
       ? { dimensionContext: options.dimensionContext }
       : {}),
-    alignment: block.alignment,
-    alignmentProfile: block.alignmentProfile,
+    ...(block.alignment !== undefined ? { alignment: block.alignment } : {}),
+    ...(block.alignmentProfile !== undefined ? { alignmentProfile: block.alignmentProfile } : {}),
     quoteDepth: block.quoteDepth,
     quotationDepth: block.quotationDepth,
-    listContext: block.listContext,
-    ...(scopePath ? { scopePath } : {}),
+    ...(block.listContext !== undefined ? { listContext: block.listContext } : {}),
+    ...(scopePath ? { scopePath: scopePath } : {}),
     ...(useFontSpaceGlueProfile ? { spaceGlueProfile: "font" as const } : {}),
   };
 }

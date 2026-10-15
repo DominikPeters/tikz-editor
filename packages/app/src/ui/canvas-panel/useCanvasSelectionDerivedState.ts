@@ -509,7 +509,7 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     }
     const statements = snapshot.parseResult?.figure.body;
     const geometry = snapshot.parseResult && snapshot.semanticResult && scopeResizeSourceIds.size > 0
-      ? createEditGeometrySession({ source: snapshot.parseResult.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { textEngine: args.textEngine, ...snapshot.overlayLayer?.evaluate })
+      ? createEditGeometrySession({ source: snapshot.parseResult.source, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, { ...(args.textEngine !== undefined ? { textEngine: args.textEngine } : {}), ...snapshot.overlayLayer?.evaluate })
       : null;
     for (const sourceId of resizeFrameSourceIds) {
       if (scopeResizeSourceIds.has(sourceId)) {

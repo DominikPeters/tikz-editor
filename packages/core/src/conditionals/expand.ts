@@ -181,20 +181,20 @@ function evaluateIfthenelseCondition(condition: string): boolean {
 
   // \isodd{n}
   const isoddMatch = /^\\isodd\s*\{([^}]*)\}$/.exec(trimmed);
-  if (isoddMatch) {
+  if (isoddMatch?.[1] !== undefined) {
     const n = tryParseInt(isoddMatch[1].trim());
     return n != null && n % 2 !== 0;
   }
 
   // \equal{a}{b}
   const equalMatch = /^\\equal\s*\{([^}]*)\}\s*\{([^}]*)\}$/.exec(trimmed);
-  if (equalMatch) {
+  if (equalMatch?.[1] !== undefined && equalMatch[2] !== undefined) {
     return equalMatch[1].trim() === equalMatch[2].trim();
   }
 
   // \NOT <cond>
   const notMatch = /^\\NOT\s+(.+)$/.exec(trimmed);
-  if (notMatch) {
+  if (notMatch?.[1] !== undefined) {
     return !evaluateIfthenelseCondition(notMatch[1]);
   }
 
@@ -216,7 +216,7 @@ function evaluateIfthenelseCondition(condition: string): boolean {
 
   // numeric comparison: a < b, a > b, a = b
   const cmpMatch = /^(-?\d+)\s*([<>=])\s*(-?\d+)$/.exec(trimmed);
-  if (cmpMatch) {
+  if (cmpMatch?.[1] !== undefined && cmpMatch[3] !== undefined) {
     const a = Number.parseInt(cmpMatch[1], 10);
     const b = Number.parseInt(cmpMatch[3], 10);
     const op = cmpMatch[2];
@@ -292,7 +292,7 @@ function findElseAndFi(
     }
 
     // Check for \fi
-    if (input.slice(cursor, cursor + 3) === "\\fi" && !isAlpha(input[cursor + 3])) {
+    if (input.slice(cursor, cursor + 3) === "\\fi" && !isAlpha(input.charAt(cursor + 3))) {
       if (depth === 0) {
         return {
           elseIndex,
@@ -306,7 +306,7 @@ function findElseAndFi(
     }
 
     // Check for \else (only at depth 0)
-    if (depth === 0 && input.slice(cursor, cursor + 5) === "\\else" && !isAlpha(input[cursor + 5])) {
+    if (depth === 0 && input.slice(cursor, cursor + 5) === "\\else" && !isAlpha(input.charAt(cursor + 5))) {
       elseIndex = cursor;
       cursor += 5;
       continue;
@@ -323,7 +323,7 @@ function findElseAndFi(
 
     // Skip other control sequences
     cursor += 1;
-    while (cursor < input.length && isAlpha(input[cursor])) {
+    while (cursor < input.length && isAlpha(input.charAt(cursor))) {
       cursor += 1;
     }
   }
@@ -347,7 +347,7 @@ function parseInteger(input: string, startIndex: number): { value: number; nextI
   }
 
   const digitStart = cursor;
-  while (cursor < input.length && isDigit(input[cursor])) {
+  while (cursor < input.length && isDigit(input.charAt(cursor))) {
     cursor += 1;
   }
 
@@ -373,13 +373,13 @@ function parseToken(input: string, startIndex: number): { value: string; nextInd
   if (input[cursor] === "\\") {
     const tokenStart = cursor;
     cursor += 1;
-    while (cursor < input.length && isAlpha(input[cursor])) {
+    while (cursor < input.length && isAlpha(input.charAt(cursor))) {
       cursor += 1;
     }
     return { value: input.slice(tokenStart, cursor), nextIndex: cursor };
   }
 
-  return { value: input[cursor], nextIndex: cursor + 1 };
+  return { value: input.charAt(cursor), nextIndex: cursor + 1 };
 }
 
 function readBracedContent(input: string, startIndex: number): { value: string; nextIndex: number } | null {
@@ -417,7 +417,7 @@ function readBracedContent(input: string, startIndex: number): { value: string; 
 }
 
 function skipWhitespace(input: string, index: number): number {
-  while (index < input.length && /\s/.test(input[index])) {
+  while (index < input.length && /\s/.test(input.charAt(index))) {
     index += 1;
   }
   return index;
@@ -425,7 +425,7 @@ function skipWhitespace(input: string, index: number): number {
 
 function skipRelax(input: string, index: number): number {
   const cursor = skipWhitespace(input, index);
-  if (input.slice(cursor, cursor + 6) === "\\relax" && !isAlpha(input[cursor + 6])) {
+  if (input.slice(cursor, cursor + 6) === "\\relax" && !isAlpha(input.charAt(cursor + 6))) {
     return cursor + 6;
   }
   return cursor;

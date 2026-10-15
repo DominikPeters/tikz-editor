@@ -1,3 +1,4 @@
+import { currentFrame } from "../context.js";
 import { worldPoint, worldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import type { WorldPoint, WorldVector } from "../../coords/points.js";
@@ -49,7 +50,7 @@ export function parseParabolaFromItems(
     bendSpec = {
       kind: "coordinate",
       raw: bendCoordinate.raw,
-      relativePrefix: bendCoordinate.relativePrefix
+      ...(bendCoordinate.relativePrefix === undefined ? {} : { relativePrefix: bendCoordinate.relativePrefix })
     };
     cursor += 2;
   }
@@ -111,7 +112,7 @@ function parseParabolaOptions(
     | { kind: "saved" }
     | { kind: "height"; height: number }
     | { kind: "coordinate"; raw: string; relativePrefix?: "+" | "++" } = { kind: "saved" };
-  const frame = context.stack[context.stack.length - 1];
+  const frame = currentFrame(context);
 
   if (!options) {
     return { bendPos, bend };
@@ -150,7 +151,7 @@ function parseParabolaOptions(
     if (entry.key === "bend") {
       const parsed = parseBendCoordinateValue(expandPathMacroBindings(entry.valueRaw, frame?.macroBindings));
       if (parsed) {
-        bend = { kind: "coordinate", raw: parsed.raw, relativePrefix: parsed.relativePrefix };
+        bend = { kind: "coordinate", raw: parsed.raw, ...(parsed.relativePrefix === undefined ? {} : { relativePrefix: parsed.relativePrefix }) };
       }
     }
   }
@@ -178,7 +179,7 @@ function parseBendCoordinateValue(raw: string): { raw: string; relativePrefix?: 
     return null;
   }
 
-  return { raw: coordinateRaw, relativePrefix };
+  return { raw: coordinateRaw, ...(relativePrefix === undefined ? {} : { relativePrefix: relativePrefix }) };
 }
 
 function evaluateParabolaBendCoordinate(
