@@ -41,6 +41,17 @@ describe("compute shortcuts match cold renders", () => {
     ]);
   });
 
+  it("redraws what referred to a node that is renamed away, now resolving to an earlier node of that name", async () => {
+    // Twelve copies of a picture redefine its node names; typing into the
+    // ninth copy's (src) leaves its references on the eighth copy's node.
+    const source = longFigure({ label: "node-graph", source: readFileSync("test/fixtures/differential/node-graph.tex", "utf8") }, 12).source;
+    const at = source.indexOf("(src)", source.indexOf("xshift=48cm")) + 3;
+    await expectLastMatchesCold([
+      { id: "a", documentId: "d", source, sourceRevision: 0, activeRootId: "figure:0" },
+      { id: "b", documentId: "d", source: insertAt(source, at, "$"), sourceRevision: 1, activeRootId: "figure:0", inferSourceChanges: true }
+    ]);
+  });
+
   it("resolves a requested root the source no longer has, as a full parse does", async () => {
     const edited = picture.replace("(0,0) --", "(0.19,0) --");
     await expectLastMatchesCold([

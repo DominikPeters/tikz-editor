@@ -100,6 +100,12 @@ export type IncrementalSemanticEvaluateInput = {
 export type IncrementalSemanticEvaluateResult = {
   semantic: EvaluateTikzResult;
   stats: IncrementalSemanticStats;
+  /**
+   * The statements the previous run's dependencies tied to the changed ones,
+   * for an incremental run. A statement that stops depending on a changed one
+   * (its node renamed away from the reference) is tied to it only there.
+   */
+  invalidatedSourceIds?: readonly string[];
 };
 
 export type IncrementalSemanticSession = {
@@ -308,7 +314,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
           checkpointPreparation
         });
         if (version === runVersion) cached = selective.cached;
-        return selective.output;
+        return { ...selective.output, invalidatedSourceIds: invalidation.affectedSourceIds };
       } catch {
         try {
           const suffix = yield* evaluateIncrementalSuffix({
@@ -325,7 +331,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
             checkpointPreparation
           });
           if (version === runVersion) cached = suffix.cached;
-          return suffix.output;
+          return { ...suffix.output, invalidatedSourceIds: invalidation.affectedSourceIds };
         } catch {
           const full = yield* evaluateFullyAndCache(
             createSemanticEvaluationRun(input.figure, input.source, options),
@@ -352,7 +358,7 @@ function createSession(defaultOptions: EvaluateOptions, initial: CachedSemanticR
         checkpointPreparation
       });
       if (version === runVersion) cached = suffix.cached;
-      return suffix.output;
+      return { ...suffix.output, invalidatedSourceIds: invalidation.affectedSourceIds };
     } catch {
       const full = yield* evaluateFullyAndCache(
         createSemanticEvaluationRun(input.figure, input.source, options),

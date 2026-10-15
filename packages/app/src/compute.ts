@@ -1390,6 +1390,7 @@ async function computeSnapshotIncremental(
     parseResult,
     semanticResult,
     changedSourceIds,
+    incremental.invalidatedSourceIds,
     collectGeometryInvalidation
   );
   phases.geometryInvalidation = performance.now() - phaseStartedAt;
@@ -1429,6 +1430,7 @@ async function computeSnapshotIncremental(
       parseResult,
       semanticResult,
       changedSourceIds,
+      incremental.invalidatedSourceIds,
       collectGeometryInvalidation
     );
     const texAffectedSourceIds = collectTexTextSourceIdsByCacheKeys(semanticResult, flushedPendingTextKeys);
@@ -1503,6 +1505,8 @@ function collectSvgReuseAffectedSourceIds(
   parseResult: ParseTikzResult,
   semanticResult: EvaluateTikzResult,
   changedSourceIds: string[],
+  /** Tied to the changed statements by the previous run's dependencies, which the new ones may no longer show. */
+  previouslyDependentSourceIds: readonly string[] | undefined,
   collectGeometryInvalidation: (
     graph: EvaluateTikzResult["dependencies"],
     query: { changedSourceIds: readonly string[] }
@@ -1523,7 +1527,7 @@ function collectSvgReuseAffectedSourceIds(
     return null;
   }
   const dependencyAffectedSourceIds = mergeSourceIds(
-    invalidation.affectedSourceIds,
+    mergeSourceIds(invalidation.affectedSourceIds, previouslyDependentSourceIds ? [...previouslyDependentSourceIds] : null),
     generatedDescendantSourceIds
   );
   if (!dependencyAffectedSourceIds || dependencyAffectedSourceIds.length === 0) {
