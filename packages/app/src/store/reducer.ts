@@ -96,6 +96,7 @@ function initialUiState(): WorkspaceEphemeralState {
     showStylesPanel: true,
     showFiguresPanel: false,
     showBuildsPanel: false,
+    showNotesPanel: false,
     showAssistantPanel: false,
     rightSidebarTab: "inspector",
     showDevPanel: false,
@@ -1649,6 +1650,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         showStylesPanel: action.stylesVisible,
         showFiguresPanel: action.figuresVisible,
         showBuildsPanel: action.buildsVisible ?? ui.showBuildsPanel,
+        showNotesPanel: action.notesVisible ?? ui.showNotesPanel,
         showAssistantPanel: action.assistantVisible,
         rightSidebarTab: action.activeRightTab,
       };

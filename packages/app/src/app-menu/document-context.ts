@@ -25,7 +25,7 @@ export function appMenuForDocument(definition: AppMenuDefinition, context: { kin
         const launch = LAUNCH_COMMANDS.includes(item.commandId);
         if (launch ? !deck || context.presenting : item.commandId !== IDS.PRESENT_OPTIONS && !context.presenting) return [];
       }
-      if (!deck && item.commandId === IDS.TOGGLE_BUILDS_PANEL) return [];
+      if (!deck && (item.commandId === IDS.TOGGLE_BUILDS_PANEL || item.commandId === IDS.TOGGLE_NOTES_PANEL)) return [];
       // On a slide, Insert's drawing tools open the slide's drawing layer.
       if (!drawing && item.commandId === IDS.SHOW_COMPILED_PICTURE) return [];
       if (item.commandId === IDS.TOGGLE_FIGURES_PANEL) return [{ ...item, label: deck ? "Slides Panel" : "Figures Panel" }];

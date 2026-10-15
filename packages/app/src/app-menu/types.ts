@@ -113,6 +113,7 @@ export const APP_MENU_COMMAND_IDS = {
   TOGGLE_OBJECTS_PANEL: "view.toggle-objects-panel",
   TOGGLE_STYLES_PANEL: "view.toggle-styles-panel",
   TOGGLE_BUILDS_PANEL: "view.toggle-builds-panel",
+  TOGGLE_NOTES_PANEL: "view.toggle-notes-panel",
   OVERLAY_NEXT: "overlay.next",
   OVERLAY_FROM: "overlay.from",
   OVERLAY_ONLY: "overlay.only",

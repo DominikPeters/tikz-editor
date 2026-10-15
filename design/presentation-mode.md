@@ -63,6 +63,19 @@ excluded from audience content. Private frames/diagrams do not enter the public
 root inventory. The text engine formats presenter notes with macros and math;
 custom note-page templates and scoped hooks remain outside the supported subset.
 
+The Notes panel (View > Notes Panel, docked under the slide) edits the active
+slide's notes as the `\note` commands that write them, one LaTeX field per note,
+labelled by its builds, `[item]`, or a note page after the frame when the slide has
+more than a plain note. Typing into an empty slide's field writes `\note{…}` on its
+own line at the end of the frame: inside, so it moves with the frame in the slide
+manager (a note after `\end{frame}` does not), and without an overlay
+specification, so it shows with every build, like the notes of presentation
+software. A note emptied and left is removed with its line. Text TeX would not read
+as the note's argument (unbalanced braces, a `%` or `\` that would hide the closing
+brace, `\end{frame}`) stays in the field, unsaved, with the reason; a `%` elsewhere
+gets a hint, as TeX skips the rest of its line. Hooks and notes from macros are not
+listed.
+
 ## Platforms and lifecycle
 
 Desktop placement uses Tauri monitor/window APIs, simple fullscreen on macOS, and

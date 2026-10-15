@@ -762,9 +762,9 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "partial",
     semantic: "not-applicable",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["beamer_speaker_notes"],
-    notes: "Literal standard note commands are excluded from audience output and exposed separately for the presenter. Supports overlay specifications, accumulated prose and [item] entries, the final outside-frame note, and unscoped AtBeginNote/AtEndNote hooks. Custom note macros, scoped hooks and note-page PDF templates are not implemented.",
+    notes: "Literal standard note commands are excluded from audience output and exposed separately for the presenter. Supports overlay specifications, accumulated prose and [item] entries, the final outside-frame note, and unscoped AtBeginNote/AtEndNote hooks. The Notes panel edits a slide's literal notes inside and after its frame as LaTeX, writes a new note at the end of the frame, removes emptied notes, and holds back text that would end a note or frame early. Custom note macros, scoped hooks and note-page PDF templates are not implemented, and hooks and notes from macros are not editable.",
   },
   beamer_footnotes: {
     parser: "partial",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
+import { beamerFrameNotes, checkBeamerNoteBody, editBeamerFrameNote, prepareBeamerDocument, scanBeamerDocument } from "../packages/core/src/beamer/index.js";
 
 describe("Beamer speaker notes", () => {
   it("accumulates build-specific prose and items without adding notes to audience output", async () => {
@@ -52,3 +52,82 @@ Hello\note{\pause\begin{itemize}\item<9> Secret\end{itemize}}\end{frame}\end{doc
     expect(prepareBeamerDocument(source).document.frames[0].children).toHaveLength(1);
   });
 });
+
+describe("Beamer speaker note editing", () => {
+  const deck = (frames: string) => String.raw`\documentclass{beamer}
+\begin{document}
+` + frames + String.raw`\end{document}
+`;
+  const frameId = (source: string, index = 0) => scanBeamerDocument(source).frames[index].id;
+
+  it("lists a frame's notes inside it, then those after it, with their specifications", () => {
+    const source = deck(String.raw`\begin{frame}{One}
+  Text\note<2->{Later}
+  \note[item]{Point}
+\end{frame}
+\note[enumerate]{\item After}
+\section{Next}
+\begin{frame}{Two}\note{Other}\end{frame}
+`);
+    const notes = beamerFrameNotes(source, frameId(source));
+    expect(notes?.map(note => [note.placement, note.overlay, note.option, note.text])).toEqual([
+      ["frame", "2-", "", "Later"], ["frame", "", "item", "Point"], ["after", "", "enumerate", String.raw`\item After`]]);
+    expect(beamerFrameNotes(source, frameId(source, 1))?.map(note => note.text)).toEqual(["Other"]);
+    expect(beamerFrameNotes(source, "missing")).toBeNull();
+  });
+
+  it("writes a first note on its own line at the end of the frame, shown with every build", () => {
+    const source = deck(String.raw`\begin{frame}{One}
+	Text\pause More
+\end{frame}
+`);
+    const result = editBeamerFrameNote(source, { kind: "set", frameId: frameId(source), index: 0, text: "Say hello." });
+    expect(result?.source).toBe(deck(String.raw`\begin{frame}{One}
+	Text\pause More
+	\note{Say hello.}
+\end{frame}
+`));
+    const prepared = prepareBeamerDocument(requireValue(result).source);
+    expect([1, 2].map(step => prepared.speakerNotes(0, step))).toEqual(["Say hello.", "Say hello."]);
+    const oneLine = deck(String.raw`\begin{frame}Public\end{frame}
+`);
+    expect(editBeamerFrameNote(oneLine, { kind: "set", frameId: frameId(oneLine), index: 0, text: "x" })?.source)
+      .toContain(String.raw`\begin{frame}Public\note{x}\end{frame}`);
+  });
+
+  it("replaces a note's text, keeping its specification, and removes a note with its line", () => {
+    const source = deck(String.raw`\begin{frame}
+  Text
+  \note<2>{Old}
+\end{frame}
+`);
+    const id = frameId(source);
+    const set = requireValue(editBeamerFrameNote(source, { kind: "set", frameId: id, index: 0, text: "New\n\nSecond paragraph" }));
+    expect(set.source).toContain("\\note<2>{New\n\nSecond paragraph}");
+    expect(set.source.slice(0, set.patch.oldSpan.from) + set.patch.replacement + source.slice(set.patch.oldSpan.to)).toBe(set.source);
+    expect(editBeamerFrameNote(set.source, { kind: "remove", frameId: id, index: 0 })?.source).toBe(deck(String.raw`\begin{frame}
+  Text
+\end{frame}
+`));
+  });
+
+  it("refuses text that would change where the note or frame ends", () => {
+    const source = deck(String.raw`\begin{frame}\note{Old}\end{frame}
+`);
+    const id = frameId(source);
+    for (const text of ["a}b{c", "{open", "50% done", "ends \\", "\\end{frame}"]) {
+      expect(editBeamerFrameNote(source, { kind: "set", frameId: id, index: 0, text })).toBeNull();
+    }
+    for (const text of ["\\{ \\} \\% \\\\", "50% done\n", "{\\bf bold} $x^{2}$"]) {
+      expect(editBeamerFrameNote(source, { kind: "set", frameId: id, index: 0, text })?.source).toContain(`\\note{${text}}`);
+    }
+    expect(checkBeamerNoteBody("a % b\n")).toEqual({ problem: null, comment: true });
+    expect(checkBeamerNoteBody("a % b")).toEqual({ problem: "open-comment", comment: true });
+    expect(checkBeamerNoteBody("a \\% b")).toEqual({ problem: null, comment: false });
+  });
+});
+
+function requireValue<T>(value: T | null | undefined): T {
+  if (value == null) throw new Error("Expected a value");
+  return value;
+}

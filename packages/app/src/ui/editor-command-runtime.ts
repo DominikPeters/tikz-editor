@@ -118,6 +118,7 @@ type RuntimeInput = {
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
   showBuildsPanel?: boolean;
+  showNotesPanel?: boolean;
   showAssistantPanel: boolean;
   rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
   assistantAvailable: boolean;
@@ -188,6 +189,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     showStylesPanel,
     showFiguresPanel,
     showBuildsPanel = false,
+    showNotesPanel = false,
     showAssistantPanel,
     rightSidebarTab,
     assistantAvailable,
@@ -1034,6 +1036,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
       checked: showBuildsPanel,
       run: () => { getDockLayoutHandle()?.togglePanel("builds"); }
     },
+    [APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL]: {
+      enabled: documentKindForSource(source) === "beamer",
+      checked: showNotesPanel,
+      run: () => { getDockLayoutHandle()?.togglePanel("notes"); }
+    },
     [APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL]: {
       enabled: true,
       checked: showFiguresPanel,
@@ -1184,6 +1191,7 @@ export function useEditorCommandRuntime(
   const showObjectsPanel = useEditorStore((s) => s.showObjectsPanel);
   const showStylesPanel = useEditorStore((s) => s.showStylesPanel);
   const showBuildsPanel = useEditorStore((s) => s.showBuildsPanel);
+  const showNotesPanel = useEditorStore((s) => s.showNotesPanel);
   const showFiguresPanel = useEditorStore((s) => s.showFiguresPanel);
   const showAssistantPanel = useEditorStore((s) => s.showAssistantPanel);
   const rightSidebarTab = useEditorStore((s) => s.rightSidebarTab);
@@ -1249,6 +1257,7 @@ export function useEditorCommandRuntime(
         showStylesPanel,
         showFiguresPanel,
         showBuildsPanel,
+        showNotesPanel,
         showAssistantPanel,
         rightSidebarTab,
         assistantAvailable,
@@ -1305,6 +1314,7 @@ export function useEditorCommandRuntime(
       showStylesPanel,
       showFiguresPanel,
       showBuildsPanel,
+      showNotesPanel,
       showAssistantPanel,
       rightSidebarTab,
       assistantAvailable,

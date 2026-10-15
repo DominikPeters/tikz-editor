@@ -563,6 +563,7 @@ export const APP_MENU_DEFINITION = [
         label: "Styles Panel"
       },
       { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_BUILDS_PANEL, label: "Overlays Panel" },
+      { kind: "command", commandId: APP_MENU_COMMAND_IDS.TOGGLE_NOTES_PANEL, label: "Notes Panel" },
       {
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.TOGGLE_FIGURES_PANEL,

@@ -11,6 +11,7 @@ import { CanvasPanel } from "./canvas-panel/CanvasPanel";
 import { RootNavigator } from "./RootNavigator";
 import { InspectorPanel } from "./inspector-panel/InspectorPanel";
 import { BuildsPanel } from "./builds-panel/BuildsPanel";
+import { NotesPanel } from "./notes-panel/NotesPanel";
 import { DeckInspectorPanel } from "./inspector-panel/DeckInspectorPanel";
 import { ObjectsPanel } from "./objects-panel/ObjectsPanel";
 import { StylesPanel } from "./StylesPanel";
@@ -31,6 +32,7 @@ export const PANEL_IDS = {
   figureNavigator: "figure-navigator",
   inspector: "inspector",
   builds: "builds",
+  notes: "notes",
   objects: "objects",
   styles: "styles",
   assistant: "assistant",
@@ -61,6 +63,8 @@ const PANEL_HOMES: Record<string, PanelHome> = {
     edgeLocation: DockLocation.RIGHT,
   },
   [PANEL_IDS.builds]: { tabsetId: "right-tabset", dockLocation: DockLocation.CENTER, edgeLocation: DockLocation.RIGHT },
+  // Under the slide, as presentation software shows its notes.
+  [PANEL_IDS.notes]: { tabsetId: "canvas-tabset", dockLocation: DockLocation.BOTTOM, edgeLocation: DockLocation.BOTTOM },
   [PANEL_IDS.objects]: {
     tabsetId: "right-tabset",
     dockLocation: DockLocation.CENTER,
@@ -326,6 +330,7 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
   const objectsVisible = model.getNodeById(PANEL_IDS.objects) != null;
   const stylesVisible = model.getNodeById(PANEL_IDS.styles) != null;
   const buildsVisible = model.getNodeById(PANEL_IDS.builds) != null;
+  const notesVisible = model.getNodeById(PANEL_IDS.notes) != null;
   const figuresVisible = model.getNodeById(PANEL_IDS.figureNavigator) != null;
   const assistantVisible = model.getNodeById(PANEL_IDS.assistant) != null;
 
@@ -354,6 +359,7 @@ function syncLayoutStateToStore(model: Model, dispatch: (action: EditorAction) =
     stylesVisible,
     figuresVisible,
     buildsVisible,
+    notesVisible,
     assistantVisible,
     activeRightTab,
   });
@@ -407,6 +413,7 @@ const MemoRootNavigator = memo(RootNavigator);
 const MemoInspectorPanel = memo(InspectorPanel);
 const MemoDeckInspectorPanel = memo(DeckInspectorPanel);
 const MemoBuildsPanel = memo(BuildsPanel);
+const MemoNotesPanel = memo(NotesPanel);
 
 /**
  * Deck mode gets the deck object/frame inspector, tikz the full one.
@@ -504,6 +511,8 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
           return <WhileTabVisible node={node}><InspectorPanelSwitch /></WhileTabVisible>;
         case "builds":
           return <WhileTabVisible node={node}><MemoBuildsPanel /></WhileTabVisible>;
+        case "notes":
+          return <WhileTabVisible node={node}><MemoNotesPanel /></WhileTabVisible>;
         case "objects":
           return <WhileTabVisible node={node}><MemoObjectsPanel /></WhileTabVisible>;
         case "styles":
@@ -555,6 +564,7 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
           "figure-navigator": useEditorStore.getState().documentKind === "beamer" ? "Slides" : "Figures",
           inspector: "Inspector",
           builds: "Overlays",
+          notes: "Notes",
           objects: "Objects",
           styles: "Styles",
           assistant: "Assistant",
@@ -581,13 +591,14 @@ function DocumentDockLayout({ repeatPreviewModel, onSubmitPrompt, onInterruptTur
           m.doAction(Actions.addNode(tabJson, m.getFirstTabSet().getId(), DockLocation.CENTER, -1));
         }
 
-        // For figure-navigator docked below canvas, use a small weight
-        if (panelId === PANEL_IDS.figureNavigator) {
-          const figTabset = m.getNodeById(PANEL_IDS.figureNavigator)?.getParent();
-          if (figTabset) {
-            m.doAction(Actions.updateNodeAttributes(figTabset.getId(), { weight: 15 }));
+        // Panels docked below the canvas take a small part of its height.
+        const belowCanvasWeight = { [PANEL_IDS.figureNavigator]: 15, [PANEL_IDS.notes]: 20 }[panelId];
+        if (belowCanvasWeight !== undefined) {
+          const belowTabset = m.getNodeById(panelId)?.getParent();
+          if (belowTabset) {
+            m.doAction(Actions.updateNodeAttributes(belowTabset.getId(), { weight: belowCanvasWeight }));
             const canvasTs = m.getNodeById("canvas-tabset");
-            if (canvasTs) m.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 85 }));
+            if (canvasTs) m.doAction(Actions.updateNodeAttributes("canvas-tabset", { weight: 100 - belowCanvasWeight }));
           }
         }
       }

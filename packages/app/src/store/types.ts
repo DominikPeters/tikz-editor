@@ -291,6 +291,7 @@ export type WorkspaceEphemeralState = {
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
   showBuildsPanel: boolean;
+  showNotesPanel: boolean;
   showAssistantPanel: boolean;
   rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
 
@@ -393,6 +394,7 @@ export type EditorState = {
   showStylesPanel: boolean;
   showFiguresPanel: boolean;
   showBuildsPanel: boolean;
+  showNotesPanel: boolean;
   showAssistantPanel: boolean;
   rightSidebarTab: "inspector" | "objects" | "styles" | "assistant" | "builds";
 
@@ -560,7 +562,7 @@ export type EditorAction =
   | { type: "SET_CANVAS_STATUS_HINT"; hint: string | null }
   // Layout
   | { type: "TOGGLE_PANEL"; panel: "source" | "inspector" }
-  | { type: "SYNC_LAYOUT_STATE"; sourceVisible: boolean; inspectorVisible: boolean; objectsVisible: boolean; stylesVisible: boolean; figuresVisible: boolean; buildsVisible?: boolean; assistantVisible: boolean; activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
+  | { type: "SYNC_LAYOUT_STATE"; sourceVisible: boolean; inspectorVisible: boolean; objectsVisible: boolean; stylesVisible: boolean; figuresVisible: boolean; buildsVisible?: boolean; notesVisible?: boolean; assistantVisible: boolean; activeRightTab: "inspector" | "objects" | "styles" | "assistant" | "builds" }
   // Debug
   | { type: "TOGGLE_DEV_PANEL" }
   | { type: "SET_SNAP_DEBUG"; snapDebug: DeveloperSnapDebugState | null; log?: DeveloperLogEntry }

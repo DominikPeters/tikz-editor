@@ -12,6 +12,8 @@ export type BeamerNoteCommand = {
   bodySpan: Span;
   text: string;
   option: string;
+  /** The overlay specification inside its angle brackets; empty when none. */
+  overlay: string;
 };
 
 // Per index: each frame's overlay scan asks for the whole document's notes.
@@ -40,13 +42,15 @@ function collectNoteCommands(source: string, context: ReturnType<typeof beamerSy
     const trailingOverlay = !overlay && optional ? context.syntax.argumentAfter(optional.span.to, "overlay", limit) : null;
     const start = trailingOverlay?.span.to ?? optional?.span.to ?? overlay?.span.to ?? command.span.to;
     const body = context.syntax.argumentAfter(start, "required", limit);
+    const spec = overlay ?? trailingOverlay;
     // An unfinished note is private too. Never expose its partial body on a slide.
     consumed = body?.span.to ?? start;
     result.push({ kind: command.name,
       span: { from: command.span.from, to: consumed },
       bodySpan: body?.contentSpan ?? { from: start, to: start },
       text: body ? source.slice(body.contentSpan.from, body.contentSpan.to) : "",
-      option: optional ? source.slice(optional.contentSpan.from, optional.contentSpan.to).trim() : "" });
+      option: optional ? source.slice(optional.contentSpan.from, optional.contentSpan.to).trim() : "",
+      overlay: spec ? source.slice(spec.contentSpan.from, spec.contentSpan.to).trim() : "" });
   }
   return result;
 }

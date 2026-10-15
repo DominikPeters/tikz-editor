@@ -1,5 +1,5 @@
 import type { Span } from "../ast/types.js";
-import type { BeamerDocumentModel } from "./types.js";
+import type { BeamerDocumentModel, BeamerFrameModel } from "./types.js";
 
 export type BeamerSlideTemplateId =
   | "title" | "title-and-bullets" | "title-only" | "two-columns" | "block" | "theorem" | "statement" | "blank";
@@ -35,7 +35,7 @@ type Line = string | { text: string; select: string };
  * most frames indent theirs.
  */
 export function beamerSlideTemplateFrame(document: BeamerDocumentModel, id: BeamerSlideTemplateId): BeamerSlideTemplateFrame {
-  const { indent, titleCommand } = deckConventions(document);
+  const { indent, titleCommand } = beamerDeckConventions(document);
   const title = "Slide title";
   const titled = (...body: Line[]): Line[] => titleCommand ? [{ text: `\\frametitle{${title}}`, select: title }, ...body] : body;
   const lines: Line[] = {
@@ -67,18 +67,23 @@ export function beamerSlideTemplateFrame(document: BeamerDocumentModel, id: Beam
   return { text: text + "\\end{frame}\n", placeholder };
 }
 
-function deckConventions(document: BeamerDocumentModel): { indent: string; titleCommand: boolean } {
+/** How most of the deck's frames are written: their body indentation and title form. */
+export function beamerDeckConventions(document: BeamerDocumentModel): { indent: string; titleCommand: boolean } {
   const indents = new Map<string, number>();
   let argument = 0, command = 0;
   for (const frame of document.frames) {
-    const body = document.source.slice(frame.bodySpan.from, frame.bodySpan.to);
     if (frame.title) {
       if (frame.title.span.from < frame.bodySpan.from) argument++;
       else command++;
     }
-    const line = /^[ \t]*\n(?:[ \t]*\n)*([ \t]*)\S/u.exec(body);
-    if (line?.[1] !== undefined) indents.set(line[1], (indents.get(line[1]) ?? 0) + 1);
+    const indent = beamerFrameBodyIndent(document.source, frame);
+    if (indent !== null) indents.set(indent, (indents.get(indent) ?? 0) + 1);
   }
   const indent = [...indents].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "  ";
   return { indent, titleCommand: command > argument };
+}
+
+/** The indentation of a frame's first body line, or null when its body starts on the `\begin{frame}` line. */
+export function beamerFrameBodyIndent(source: string, frame: Pick<BeamerFrameModel, "bodySpan">): string | null {
+  return /^[ \t]*\n(?:[ \t]*\n)*([ \t]*)\S/u.exec(source.slice(frame.bodySpan.from, frame.bodySpan.to))?.[1] ?? null;
 }
