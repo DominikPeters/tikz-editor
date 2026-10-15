@@ -1,7 +1,9 @@
+import { getActiveDocument } from "./document-sessions";
 import type {
   CanvasTransform,
   DocumentFileRef,
   DocumentSession,
+  DocumentSessions,
   EditorState,
   ExternalChangeStatus,
   FileRevision,
@@ -67,13 +69,13 @@ function createDocumentId(): string {
 }
 
 function readDocument(
-  documents: Record<string, DocumentSession>,
+  documents: DocumentSessions,
   documentId: string
 ): DocumentSession | undefined {
-  return (documents as Partial<Record<string, DocumentSession>>)[documentId];
+  return documents[documentId];
 }
 
-function hasDocument(documents: Record<string, DocumentSession>, documentId: string): boolean {
+function hasDocument(documents: DocumentSessions, documentId: string): boolean {
   return readDocument(documents, documentId) !== undefined;
 }
 
@@ -153,7 +155,7 @@ export function createInitialWorkspaceState(): WorkspacePersistedState {
 }
 
 export function hydrateWorkspaceStateFromSeed(seed: WorkspaceSeed): WorkspacePersistedState {
-  const docs: Record<string, DocumentSession> = {};
+  const docs: DocumentSessions = {};
   for (const raw of seed.documents) {
     const doc = createDocumentSession({
       source: raw.source,
@@ -195,7 +197,8 @@ function normalizeWorkspaceActiveDocument(workspace: WorkspacePersistedState): W
   if (hasDocument(workspace.documents, workspace.activeDocumentId)) {
     return workspace;
   }
-  const tabOrder = normalizeWorkspaceTabOrder(workspace.tabOrder, Object.keys(workspace.documents));
+  const documentIds = Object.keys(workspace.documents).filter((id) => workspace.documents[id] !== undefined);
+  const tabOrder = normalizeWorkspaceTabOrder(workspace.tabOrder, documentIds);
   const fallbackId = tabOrder[0];
   if (fallbackId) {
     return {
@@ -231,7 +234,7 @@ export function documentKindForSource(source: string): DocumentKind {
 
 export function projectState(workspace: WorkspacePersistedState, ui: WorkspaceEphemeralState): EditorState {
   const normalizedWorkspace = normalizeWorkspaceActiveDocument(workspace);
-  const active = normalizedWorkspace.documents[normalizedWorkspace.activeDocumentId];
+  const active = getActiveDocument(normalizedWorkspace);
   return {
     source: active.source,
     sourceRevision: active.sourceRevision,

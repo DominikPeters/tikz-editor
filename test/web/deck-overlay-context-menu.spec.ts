@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { getActiveDocument } from "../../packages/app/src/store/document-sessions.js";
 import React, { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
@@ -53,7 +55,7 @@ async function setup(source = SOURCE, native = false) {
   node = index.nodes.find((candidate) => candidate.kind === "block")!;
   const current = useEditorStore.getState();
   const snapshot = { ...current.snapshot, source };
-  useEditorStore.setState({ snapshot, documents: { ...current.documents, [current.activeDocumentId]: { ...current.documents[current.activeDocumentId], snapshot } } });
+  useEditorStore.setState({ snapshot, documents: { ...current.documents, [current.activeDocumentId]: { ...getActiveDocument(current), snapshot } } });
   if (native) setActiveEditorPlatform({ ...originalPlatform, menu: { usesNativeContextMenus: true, showNativeContextMenu: showNative } });
   act(() => { root.render(React.createElement(Harness)); });
 }

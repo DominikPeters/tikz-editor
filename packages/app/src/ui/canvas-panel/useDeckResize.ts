@@ -61,9 +61,10 @@ export function useDeckResize({ source, layout, svgRef, closeText }: {
       dispatch({ type: "APPLY_SOURCE_PATCHES", documentId: current.edit.documentId,
         baseRevision: current.edit.latestRevision, patches: current.patches, changedSourceIds: [] });
     }
-    if (restored && current.imageFrom != null) {
+    const document = useEditorStore.getState().documents[current.edit.documentId];
+    if (restored && document && current.imageFrom != null) {
       pendingSelection.current = { documentId: current.edit.documentId, frameId: current.edit.activeRootId!,
-        source: useEditorStore.getState().documents[current.edit.documentId].source, from: current.imageFrom };
+        source: document.source, from: current.imageFrom };
     }
     setDragging(null);
   }, [valid]);

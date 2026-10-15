@@ -1,3 +1,4 @@
+import { getActiveDocument, requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,7 +37,7 @@ const SABOTAGES: { name: string; mocks: ModuleMock[] }[] = [
     name: "undo goes back one entry too far",
     mocks: [reducerMock((reduce) => (state, action) => {
       if (action.type !== "UNDO") return reduce(state, action);
-      const doc = state.documents[state.activeDocumentId];
+      const doc = getActiveDocument(state);
       return reduce(doc.historyIndex >= 1 ? reduce(state, action) : state, action);
     })]
   },
@@ -45,7 +46,7 @@ const SABOTAGES: { name: string; mocks: ModuleMock[] }[] = [
     mocks: [reducerMock((reduce) => (state, action) => {
       if (action.type !== "APPLY_EDIT_ACTION") return reduce(state, action);
       const id = action.documentId ?? state.activeDocumentId;
-      const doc = state.documents[id];
+      const doc = requireDocumentSession(state.documents, id);
       return reduce({ ...state, documents: { ...state.documents, [id]: { ...doc, editingTargetsStale: false } } }, action);
     }), {
       path: "../../packages/app/src/edit-execution.js",

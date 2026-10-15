@@ -94,6 +94,30 @@ describe("workspace storage migration", () => {
     expect(seed?.documents[0]?.assistantThreadId).toBe("thr_123");
   });
 
+  it("validates unknown workspace documents and nested metadata before restoring them", () => {
+    setupMemoryPersistence(JSON.stringify({
+      workspaceVersion: 4,
+      documents: [null, [], "invalid", { id: 42, source: "invalid" }, {
+        id: "valid", source: "unsaved source", title: { text: "untrusted" },
+        fileRef: ["file"], diskRevision: { hash: 12 },
+        assistantSessionGeneration: "2", assistantThreadId: {},
+        activeRootId: 42, savedSource: false
+      }],
+      tabOrder: [null, "valid", 42], activeDocumentId: {}, recentDocumentIds: [null, "valid", 42]
+    }));
+    expect(loadWorkspaceSeed()).toMatchObject({
+      documents: [{ id: "valid", title: "Untitled", source: "unsaved source", savedSource: "unsaved source",
+        fileRef: null, diskRevision: null, activeRootId: null,
+        assistantSessionGeneration: 0, assistantThreadId: null }],
+      tabOrder: ["valid"], activeDocumentId: "valid", recentDocumentIds: ["valid"]
+    });
+  });
+
+  it.each([null, [], true, 42, "workspace"])("rejects non-object workspace JSON: %j", (payload) => {
+    setupMemoryPersistence(JSON.stringify(payload));
+    expect(loadWorkspaceSeed()).toBeNull();
+  });
+
   it("normalizes invalid optional document metadata while migrating", () => {
     setupMemoryPersistence(JSON.stringify({
       workspaceVersion: 3,

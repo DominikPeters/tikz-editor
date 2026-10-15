@@ -4,6 +4,7 @@ import type { EditActionResult } from "@tikz-editor/core/edit/actions";
 import { editBeamerSlides, isDeckEditAction } from "@tikz-editor/core/beamer/index";
 import type {
   DocumentSession,
+  DocumentSessions,
   EditorAction,
   EditorState,
   HistoryEntry,
@@ -195,13 +196,13 @@ function applyEditWarningToDocument(doc: DocumentSession, message: string | null
 }
 
 function readDocument(
-  documents: Record<string, DocumentSession>,
+  documents: DocumentSessions,
   documentId: string
 ): DocumentSession | undefined {
-  return (documents as Partial<Record<string, DocumentSession>>)[documentId];
+  return documents[documentId];
 }
 
-function hasDocument(documents: Record<string, DocumentSession>, documentId: string): boolean {
+function hasDocument(documents: DocumentSessions, documentId: string): boolean {
   return readDocument(documents, documentId) !== undefined;
 }
 
@@ -363,7 +364,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
   switch (action.type) {
     case "NEW_DOCUMENT": {
-      const untitledCount = Object.values(workspace.documents).filter((doc) => doc.fileRef == null).length + 1;
+      const untitledCount = Object.values(workspace.documents).filter((doc) => doc != null && doc.fileRef == null).length + 1;
       const next = createDocumentSession({
         source: action.source ?? DEFAULT_SOURCE,
         title: action.title ?? `Untitled ${untitledCount}`
@@ -1503,17 +1504,18 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
 
     case "REVEAL_SOURCE": {
       const doc = workspace.documents[workspace.activeDocumentId];
-      if (action.documentId !== doc.id || action.sourceRevision !== doc.sourceRevision ||
+      if (action.documentId !== doc?.id || action.sourceRevision !== doc.sourceRevision ||
         action.span.from < 0 || action.span.to > doc.source.length || action.span.from > action.span.to) return state;
       ui = { ...ui, sourceReveal: { documentId: action.documentId, sourceRevision: action.sourceRevision, span: action.span }, deckBuildSelection: null };
       break;
     }
 
     case "SET_DECK_BUILD_SELECTION": {
+      const doc = workspace.documents[workspace.activeDocumentId];
       if (action.selection && (
-        action.selection.documentId !== workspace.activeDocumentId ||
-        action.selection.frameId !== workspace.documents[workspace.activeDocumentId].activeRootId ||
-        action.selection.sourceRevision !== workspace.documents[workspace.activeDocumentId].sourceRevision
+        !doc || action.selection.documentId !== workspace.activeDocumentId ||
+        action.selection.frameId !== doc.activeRootId ||
+        action.selection.sourceRevision !== doc.sourceRevision
       )) return state;
       if (!action.selection && !ui.deckBuildSelection) return state;
       ui = { ...ui, deckBuildSelection: action.selection,

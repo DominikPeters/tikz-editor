@@ -23,6 +23,8 @@
  * the state they meet, so a failing run replays from its operation list and
  * shrinks by dropping operations.
  */
+
+import { getActiveDocument, requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { appendFileSync } from "node:fs";
 import { vi } from "vitest";
 
@@ -101,6 +103,7 @@ async function createHarness(documents: readonly FuzzDocument[], mocks: readonly
     const harness: Harness = { store, compute, storage, scheduler: { running: null, queued: null }, saves: [], disk: new Map(), diskClock: 0, gesture: null, requestCounter: 0 };
     // The documents are files on disk, as when opened from the file system.
     for (const doc of Object.values(store.getState().documents)) {
+      if (!doc) throw new Error("Undefined document session in fuzz state");
       const path = `/fuzz/${doc.id}.tex`;
       const revision = nextDiskRevision(harness, doc.source);
       harness.disk.set(path, { source: doc.source, revision, history: new Set([doc.source]) });
@@ -136,7 +139,7 @@ function writeLinked(harness: Harness, path: string, text: string, expected: Fil
 // ── The app's compute request (App.tsx, useScheduledCompute) ────────────────
 
 function appRequest(state: EditorState, id: string): ComputeRequest {
-  const doc = state.documents[state.activeDocumentId];
+  const doc = getActiveDocument(state);
   const isDeck = doc.snapshot.deck != null || /\\documentclass(\[[^\]]*\])?\{beamer\}/u.test(doc.source);
   const mask = state.canvasTextEditMask?.documentId === doc.id && state.canvasTextEditMask.sourceRevision === doc.sourceRevision
     ? state.canvasTextEditMask.span : null;
@@ -210,12 +213,12 @@ async function settle(harness: Harness): Promise<void> {
     await finishAll(harness);
     // The new snapshot can change the root selection, which renders again.
     const after = harness.store.getState();
-    const doc = after.documents[after.activeDocumentId];
-    if (doc.activeRootId === before.documents[before.activeDocumentId].activeRootId && isShownFor(doc.snapshot, appRequest(after, "check"))) break;
+    const doc = getActiveDocument(after);
+    if (doc.activeRootId === getActiveDocument(before).activeRootId && isShownFor(doc.snapshot, appRequest(after, "check"))) break;
   }
   // As the app does once typing pauses on a deck whose reparse recovered from errors.
   const state = harness.store.getState();
-  if (state.documents[state.activeDocumentId].snapshot.deck?.exactParse === false) {
+  if (getActiveDocument(state).snapshot.deck?.exactParse === false) {
     schedule(harness, false, true);
     await finishAll(harness);
   }
@@ -236,6 +239,7 @@ type Before = { state: EditorState };
 function checkInvariants(before: Before, after: EditorState, diskFiles?: Harness["disk"]): string[] {
   const problems: string[] = [];
   for (const doc of Object.values(after.documents)) {
+    if (!doc) throw new Error("Undefined document session in fuzz state");
     const file = doc.fileRef?.path ? diskFiles?.get(doc.fileRef.path) : undefined;
     if (file && !doc.dirty && !file.history.has(doc.source)) {
       problems.push(`saved: ${doc.title} counts as saved, but its text was never written to its file`);
@@ -278,6 +282,7 @@ function checkPersistence(harness: Harness): string[] {
   const state = harness.store.getState();
   const problems: string[] = [];
   for (const doc of Object.values(state.documents)) {
+    if (!doc) throw new Error("Undefined document session in fuzz state");
     const stored = saved.documents.find((entry) => entry.id === doc.id);
     if (!stored) problems.push(`persistence: ${doc.title} is missing from the saved workspace`);
     else if (stored.source !== doc.source) problems.push(`persistence: ${doc.title}'s saved source is not its source`);
@@ -289,7 +294,7 @@ function checkPersistence(harness: Harness): string[] {
 
 async function checkSettledRender(harness: Harness): Promise<string[]> {
   const state = harness.store.getState();
-  const doc = state.documents[state.activeDocumentId];
+  const doc = getActiveDocument(state);
   if (doc.snapshot.source !== doc.source) return [`settled render: ${doc.title} still shows an older source`];
   const request = appRequest(state, "settled");
   const expected = await coldCompute(request);
@@ -393,7 +398,7 @@ export async function runStoreOps(documents: readonly FuzzDocument[], ops: reado
     const store = harness.store;
     const before: Before = { state: store.getState() };
     harness.storage.savesThisOp = 0;
-    const doc = before.state.documents[before.state.activeDocumentId];
+    const doc = getActiveDocument(before.state);
     const fail = (invariant: string, details: string[]) => ({ failure: { opIndex, op, invariant, details }, counts });
     try {
       switch (op.kind) {
@@ -414,7 +419,7 @@ export async function runStoreOps(documents: readonly FuzzDocument[], ops: reado
           }
           const target = mappedTargetSpan(doc.snapshot, doc.source, sourceId);
           store.getState().dispatch({ type: "APPLY_EDIT_ACTION", action, historyMergeKey: op.kind === "drag" ? harness.gesture!.key : undefined });
-          const after = store.getState().documents[doc.id];
+          const after = requireDocumentSession(store.getState().documents, doc.id);
           count(doc.snapshot.source === doc.source ? "action:current" : "action:stale");
           if (after.source === doc.source) {
             count(`action:unchanged:${after.lastEditWarningMessage?.slice(0, 40) ?? "no warning"}`);
@@ -460,7 +465,7 @@ export async function runStoreOps(documents: readonly FuzzDocument[], ops: reado
           if (doc.historyIndex < 0) break;
           store.getState().dispatch({ type: "UNDO" });
           store.getState().dispatch({ type: "REDO" });
-          const after = store.getState().documents[doc.id];
+          const after = requireDocumentSession(store.getState().documents, doc.id);
           count("undo-redo");
           if (after.source !== doc.source) return fail("undo then redo", ["redo after undo did not restore the source"]);
           break;

@@ -167,7 +167,7 @@ export function createDesktopPresentationApi(): PlatformPresentationApi {
             audienceDisplay = target.id;
             await place(audience, target, audienceFullscreen);
           }
-        })().catch(error => { console.info("[tikz-editor] Couldn’t refresh presentation displays", error); }).finally(() => { checking = false; });
+        })().catch((error: unknown) => { console.info("[tikz-editor] Couldn’t refresh presentation displays", error); }).finally(() => { checking = false; });
       };
       const unlistenDisplays = await listen("presentation-displays-changed", refreshDisplays);
       const timer = window.setInterval(refreshDisplays, 2000);

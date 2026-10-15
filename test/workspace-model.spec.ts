@@ -1,3 +1,4 @@
+import { requireDocumentSession } from "../packages/app/src/store/document-sessions.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SOURCE, editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 import {
@@ -188,11 +189,20 @@ describe("workspace model", () => {
     }, ui);
     expect(recovered.activeDocumentId).toBe(documentId);
     expect(recovered.tabOrder).toEqual([documentId]);
-    expect(recovered.documents[documentId].source).toBe(workspace.documents[documentId].source);
+    expect(requireDocumentSession(recovered.documents, documentId).source).toBe(requireDocumentSession(workspace.documents, documentId).source);
+
+    const sparse = projectState({
+      ...workspace,
+      documents: { missing: undefined, ...workspace.documents },
+      activeDocumentId: "missing",
+      tabOrder: ["missing", documentId]
+    }, ui);
+    expect(sparse.activeDocumentId).toBe(documentId);
+    expect(sparse.tabOrder).toEqual([documentId]);
 
     const replacement = projectState({
       ...workspace,
-      documents: {},
+      documents: { missing: undefined },
       activeDocumentId: "missing",
       tabOrder: ["missing"],
       recentDocumentIds: ["missing"]

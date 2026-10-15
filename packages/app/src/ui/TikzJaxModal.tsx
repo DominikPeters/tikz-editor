@@ -167,7 +167,7 @@ export function TikzJaxModal({
         renderSvgIntoOutput(svg);
         setPhase("done");
       });
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       if (cancelled) return;
       if (pollId != null) {
         window.clearInterval(pollId);

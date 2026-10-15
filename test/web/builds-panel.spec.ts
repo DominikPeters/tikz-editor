@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -138,7 +140,7 @@ describe("Builds panel", () => {
     beginDrag();
     act(() => { window.dispatchEvent(pointer("pointermove", 124)); });
     act(() => { useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT" }); });
-    expect(useEditorStore.getState().documents[documentId].source).toBe(SOURCE);
+    expect(requireDocumentSession(useEditorStore.getState().documents, documentId).source).toBe(SOURCE);
     expect(useEditorStore.getState().activeDocumentId).not.toBe(documentId);
   });
 

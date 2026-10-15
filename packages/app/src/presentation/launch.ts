@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../store/document-sessions";
 import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { useEditorStore } from "../store/store";
 import { loadPresentationOptions, presentationService } from "./service";
@@ -9,7 +10,7 @@ export function launchPresentation(from: "current" | "beginning", mode?: Present
   const root = parseDocumentRootId(state.activeRootId ?? "");
   const frame = from === "beginning" ? 0 : root?.kind === "beamer-frame" ? root.index : root?.kind === "beamer-frame-tikz" ? root.frameIndex : 0;
   const setup = { ...(options ?? loadPresentationOptions()), ...(mode ? { mode } : {}) };
-  void presentationService.start(state.documents[state.activeDocumentId], setup, frame);
+  void presentationService.start(getActiveDocument(state), setup, frame);
 }
 
 export const NEW_BEAMER_SOURCE = String.raw`\documentclass{beamer}

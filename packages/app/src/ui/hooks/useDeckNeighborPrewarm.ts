@@ -22,7 +22,7 @@ export function useDeckNeighborPrewarm(): void {
     };
     const schedule = () => {
       const state = useEditorStore.getState(), doc = state.documents[state.activeDocumentId];
-      if (pointerHeld || keysHeld.size || document.visibilityState !== "visible" ||
+      if (!doc || pointerHeld || keysHeld.size || document.visibilityState !== "visible" ||
         state.documentKind !== "beamer" || state.pendingRequestId != null || state.activeCanvasDragKind != null ||
         state.activeSourceScrubSourceId != null || state.activeCanvasTextEditSourceId != null ||
         state.activeInspectorEditDocumentId != null || doc.assistantLockReason) { cancel(); return; }

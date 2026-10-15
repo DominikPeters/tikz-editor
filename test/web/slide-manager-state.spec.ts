@@ -1,3 +1,4 @@
+import { getActiveDocument, requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { describe, it, expect } from "vitest";
 import { editorReducer, makeInitialState } from "../../packages/app/src/store/reducer.js";
 import { rootKey } from "../../packages/app/src/root-key.js";
@@ -19,13 +20,13 @@ describe("slide manager store transactions", () => {
     state = editorReducer(state, { type: "EDIT_DECK_SLIDES", documentId: id, baseRevision: state.sourceRevision,
       edit: { kind: "move", frameIds: ["frame:0", "frame:2"], destination: { kind: "end" } } });
     expect(state.activeRootId).toBe("frame:1");
-    expect(state.documents[id].deckSlideSelection?.frameIds).toEqual(["frame:1", "frame:2"]);
+    expect(requireDocumentSession(state.documents, id).deckSlideSelection?.frameIds).toEqual(["frame:1", "frame:2"]);
     expect(state.deckStepByRootKey[rootKey(id, "frame:1")]).toBe(3);
     expect(state.history).toHaveLength(1);
     const after = state.source;
     state = editorReducer(state, { type: "UNDO" });
     expect(state.source).toBe(source); expect(state.activeRootId).toBe("frame:0");
-    expect(state.documents[id].deckSlideSelection?.frameIds).toEqual(["frame:0", "frame:2"]);
+    expect(requireDocumentSession(state.documents, id).deckSlideSelection?.frameIds).toEqual(["frame:0", "frame:2"]);
     expect(state.deckStepByRootKey[rootKey(id, "frame:0")]).toBe(3);
     state = editorReducer(state, { type: "REDO" });
     expect(state.source).toBe(after); expect(state.activeRootId).toBe("frame:1");
@@ -34,7 +35,7 @@ describe("slide manager store transactions", () => {
     const state = setup(), documentId = state.activeDocumentId;
     const action = { type: "EDIT_DECK_SLIDES", documentId, baseRevision: state.sourceRevision, edit: { kind: "delete", frameIds: ["frame:0"] } } as const;
     expect(editorReducer(state, { ...action, baseRevision: state.sourceRevision - 1 })).toBe(state);
-    const locked = { ...state, documents: { ...state.documents, [documentId]: { ...state.documents[documentId], assistantLockReason: "Editing" } } };
+    const locked = { ...state, documents: { ...state.documents, [documentId]: { ...requireDocumentSession(state.documents, documentId), assistantLockReason: "Editing" } } };
     expect(editorReducer(locked, action)).toBe(locked);
     const other = editorReducer(state, { type: "NEW_DOCUMENT", source: "Other" });
     expect(editorReducer(other, action)).toBe(other);
@@ -45,13 +46,13 @@ describe("slide manager store transactions", () => {
     state = editorReducer(state, { type: "EDIT_DECK_SLIDES", documentId, baseRevision: state.sourceRevision, edit: { kind: "duplicate", frameIds: ["frame:0"] } });
     state = editorReducer(state, { type: "UNDO" });
     expect(state.activeRootId).toBe("frame:0:tikzpicture:0");
-    expect(state.documents[documentId].deckSlideSelection?.frameIds).toEqual(["frame:0"]);
+    expect(requireDocumentSession(state.documents, documentId).deckSlideSelection?.frameIds).toEqual(["frame:0"]);
   });
   it("selects copies and restores the original selection on undo", () => {
     let state = setup(); const documentId = state.activeDocumentId;
     state = editorReducer(state, { type: "EDIT_DECK_SLIDES", documentId, baseRevision: state.sourceRevision, edit: { kind: "duplicate", frameIds: ["frame:0"] } });
     expect(state.activeRootId).toBe("frame:1");
-    expect(state.documents[documentId].deckSlideSelection?.frameIds).toEqual(["frame:1"]);
+    expect(requireDocumentSession(state.documents, documentId).deckSlideSelection?.frameIds).toEqual(["frame:1"]);
     state = editorReducer(state, { type: "UNDO" });
     expect(state.activeRootId).toBe("frame:0");
   });
@@ -107,7 +108,7 @@ it("pastes multiple slides as one undo transaction with restored selection", () 
     edit: { kind: "paste", source: "\\begin{frame}{D}D\\end{frame}\n\\begin{frame}{E}E\\end{frame}", destination: { kind: "after", frameId: "frame:0" } } });
   expect(state.history).toHaveLength(1);
   expect(state.history[0].label).toBe("Paste slides");
-  expect(state.documents[state.activeDocumentId].deckSlideSelection?.frameIds).toEqual(["frame:1", "frame:2"]);
+  expect(getActiveDocument(state).deckSlideSelection?.frameIds).toEqual(["frame:1", "frame:2"]);
   const pasted = state.source;
   state = editorReducer(state, { type: "UNDO" });
   expect(state.source).toBe(before.source);

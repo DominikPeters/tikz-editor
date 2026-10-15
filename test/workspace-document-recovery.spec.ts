@@ -59,7 +59,7 @@ describe("workspace document recovery", () => {
     } });
     const workspace = hydrateWorkspaceStateFromSeed({ workspaceVersion: 4, documents,
       tabOrder: ["b"], activeDocumentId: "c", recentDocumentIds: ["c", "b"] });
-    saveWorkspace({ ...workspace, tabOrder: ["b", "b", "missing"] });
+    saveWorkspace({ ...workspace, documents: { missing: undefined, ...workspace.documents }, tabOrder: ["b", "b", "missing"] });
     expect(loadWorkspaceSeed()).toMatchObject({ tabOrder: ["b", "a", "c"], activeDocumentId: "c", recentDocumentIds: ["c", "b"] });
     expect(loadWorkspaceSeed()!.documents).toHaveLength(3);
   });

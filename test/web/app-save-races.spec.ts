@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { appCallbacks, deferred, memoryPersistence, mountFileApp, unmountFileApp } from "./app-file-operations-fixtures";
@@ -20,7 +22,7 @@ it("keeps an edit made during Save As dirty and records the bytes actually saved
   expect(save.mock.calls[0]?.[0]).toBe(OLD);
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: NEW }); });
   await act(async () => { result.resolve({ status: "saved", fileRef: FILE }); });
-  const doc = useEditorStore.getState().documents[id];
+  const doc = requireDocumentSession(useEditorStore.getState().documents, id);
   expect(doc.savedSource).toBe(OLD);
   expect(doc.source).toBe(NEW);
   expect(doc.dirty).toBe(true);
@@ -41,7 +43,7 @@ it("keeps an edit made during linked Save dirty", async () => {
   expect(save.mock.calls[0]?.[1]).toBe(savedSource);
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: NEW }); });
   await act(async () => { result.resolve({ status: "saved", fileRef: linked, revision: revisionForText(savedSource) }); });
-  const doc = useEditorStore.getState().documents[id];
+  const doc = requireDocumentSession(useEditorStore.getState().documents, id);
   expect(doc.savedSource).toBe(savedSource);
   expect(doc.dirty).toBe(true);
 });
@@ -63,6 +65,6 @@ it("marks the unchanged document clean on a successful save", async () => {
   const id = await mountFileApp({ id: "web", persistence: memoryPersistence, files: { saveText: () => result.promise } }, OLD);
   await act(async () => { appCallbacks.current.onRequestSaveDocument(id, "save-as"); });
   await act(async () => { result.resolve({ status: "saved", fileRef: FILE }); });
-  expect(useEditorStore.getState().documents[id].savedSource).toBe(OLD);
-  expect(useEditorStore.getState().documents[id].dirty).toBe(false);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).savedSource).toBe(OLD);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).dirty).toBe(false);
 });

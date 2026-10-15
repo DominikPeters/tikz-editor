@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import React, { act, type PointerEvent as ReactPointerEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -64,7 +66,7 @@ it("restores hover previews in their original tab when switching documents", asy
   await act(async () => { api.applyHoverPreview("color", () => dispatch({ type: "SET_SOURCE_TRANSIENT", source: "preview" })); });
   await act(async () => { dispatch({ type: "NEW_DOCUMENT", source: "other tab" }); });
   expect(useEditorStore.getState().source).toBe("other tab");
-  expect(useEditorStore.getState().documents[originalId].source).toBe("base");
+  expect(requireDocumentSession(useEditorStore.getState().documents, originalId).source).toBe("base");
 });
 
 it("does not restore or commit over an intervening source edit, even when the text returns", async () => {

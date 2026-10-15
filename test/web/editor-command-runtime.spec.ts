@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../../packages/app/src/store/document-sessions.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installNodeSvgEnvironment } from "svg2tikz/node-env";
 import { APP_MENU_COMMAND_IDS } from "../../packages/app/src/app-menu/index.js";
@@ -1435,7 +1436,7 @@ function makeInput({
     getState: () => {
       const initial = makeInitialState();
       return { activeDocumentId: "doc-1", documents: { "doc-1": {
-        ...initial.documents[initial.activeDocumentId], id: "doc-1", source, activeRootId, snapshot
+        ...getActiveDocument(initial), id: "doc-1", source, activeRootId, snapshot
       } } };
     },
     snapshot,

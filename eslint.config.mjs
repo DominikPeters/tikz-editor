@@ -139,6 +139,8 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-unary-minus": "error",
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/use-unknown-in-catch-callback-variable": "error",
+      "@typescript-eslint/return-await": ["error", "error-handling-correctness-only"],
       "@typescript-eslint/require-await": "error",
       "@typescript-eslint/await-thenable": "error",
       "@typescript-eslint/no-base-to-string": "error",
@@ -208,6 +210,17 @@ export default tseslint.config(
     ],
     rules: {
       "@typescript-eslint/no-unnecessary-condition": "error"
+    }
+  },
+  {
+    files: [
+      "packages/app/src/store/{document-sessions,store,workspace-state,workspace-storage}.ts",
+      "packages/app/src/ui/editor-clipboard.ts",
+      "packages/app/src/validation.ts"
+    ],
+    rules: {
+      "@typescript-eslint/no-unsafe-type-assertion": "error",
+      "@typescript-eslint/no-non-null-assertion": "error"
     }
   },
   {

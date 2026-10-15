@@ -3499,7 +3499,7 @@ async function getParagraphHitMap(
     sourceText,
     sourceTextStartOffset,
     containerElement
-  )).catch((error) => {
+  )).catch((error: unknown) => {
     const current = map.get(report.paragraphId);
     if (current?.mapPromise === mapPromise) {
       map.delete(report.paragraphId);

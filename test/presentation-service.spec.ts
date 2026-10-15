@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../packages/app/src/store/document-sessions.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PresentationService } from "../packages/app/src/presentation/service.js";
 import type { PlatformPresentationApi, PresentationMessage, PresentationOptions } from "../packages/app/src/presentation/types.js";
@@ -35,7 +36,7 @@ describe("presentation ownership and lifecycle", () => {
   afterEach(async () => { firstClose.resolve(); await service.stop(); useEditorStore.setState(original); });
 
   it("keeps presentation attached to its original document when editor tabs change", async () => {
-    const doc = useEditorStore.getState().documents[useEditorStore.getState().activeDocumentId];
+    const doc = getActiveDocument(useEditorStore.getState());
     await service.start(doc, OPTIONS, 0);
     const current = service.getState().snapshot!.current;
     useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT" });
@@ -46,7 +47,7 @@ describe("presentation ownership and lifecycle", () => {
   });
 
   it("keeps a lost-output notice until explicit recovery and uses a lightweight heartbeat for synchronized windows", async () => {
-    const doc = useEditorStore.getState().documents[useEditorStore.getState().activeDocumentId];
+    const doc = getActiveDocument(useEditorStore.getState());
     await service.start(doc, OPTIONS, 0);
     lost();
     const snapshot = service.getState().snapshot!;
@@ -58,7 +59,7 @@ describe("presentation ownership and lifecycle", () => {
   });
 
   it("waits for an older session to release its power assertion before acquiring the next one", async () => {
-    const doc = useEditorStore.getState().documents[useEditorStore.getState().activeDocumentId];
+    const doc = getActiveDocument(useEditorStore.getState());
     await service.start(doc, OPTIONS, 0);
     slowClose = true;
     const stopping = service.stop();

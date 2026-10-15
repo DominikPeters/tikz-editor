@@ -1,8 +1,9 @@
+import { getActiveDocument } from "../packages/app/src/store/document-sessions.js";
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer";
 import type { EditorState } from "../packages/app/src/store/types";
 
-const origin = (state: EditorState) => state.documents[state.activeDocumentId].lastSourceChangeOrigin;
+const origin = (state: EditorState) => getActiveDocument(state).lastSourceChangeOrigin;
 
 describe("source revision provenance", () => {
   it("records source typing even after a targeted command left object IDs behind", () => {

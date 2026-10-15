@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../../packages/app/src/store/document-sessions.js";
 import { describe, expect, it } from "vitest";
 import { parseTikz } from "../../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../../packages/core/src/semantic/evaluate.js";
@@ -24,7 +25,7 @@ function ready(state: EditorState) {
   return editorReducer(state, { type: "SNAPSHOT_READY", requestId: "ready", snapshot: snapshot(state.source, state.activeRootId ?? undefined) });
 }
 function setup(source = wrap(`${a}\n${b}`)) { return ready(editorReducer(makeInitialState(), { type: "CODE_EDITED", source })); }
-function entries(state: EditorState) { return state.documents[state.activeDocumentId].editingIdentities!.entries.filter(entry => entry.kind === "Path"); }
+function entries(state: EditorState) { return getActiveDocument(state).editingIdentities!.entries.filter(entry => entry.kind === "Path"); }
 
 describe("document editing identities", () => {
   it.each(["->", "->,red", "->,blue", "->,draw=red"])("preserves selected arrow identity through a %s property preview (#32)", options => {

@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../packages/app/src/store/document-sessions.js";
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState, DEFAULT_SOURCE } from "../packages/app/src/store/reducer.js";
 import type { EditorAction, EditorState, HistoryEntry } from "../packages/app/src/store/types.js";
@@ -912,7 +913,7 @@ describe("editorReducer – SET_TOOL_MODE", () => {
   it("keeps a legacy overlay-root navigation on its owning slide", () => {
     const state = editorReducer(makeInitialState(), { type: "SET_ACTIVE_ROOT", rootId: "frame:2:overlay:1" });
     expect(state.activeRootId).toBe("frame:2");
-    expect(state.documents[state.activeDocumentId].drawingLayerRootId).toBe("frame:2:overlay:1");
+    expect(getActiveDocument(state).drawingLayerRootId).toBe("frame:2:overlay:1");
   });
   it("updates tool mode", () => {
     const state = applyActions([{ type: "SET_TOOL_MODE", mode: "addNode" }]);
@@ -951,7 +952,7 @@ Text.
       const drawing = editorReducer(shown, { type: "SET_TOOL_MODE", mode: "addRect" });
       expect(drawing.toolMode).toBe("addRect");
       expect(drawing.activeRootId).toBe(frame);
-      expect(drawing.documents[drawing.activeDocumentId].drawingLayerRootId).toBe(layer);
+      expect(getActiveDocument(drawing).drawingLayerRootId).toBe(layer);
     }
   });
 
@@ -964,7 +965,7 @@ Text.
       { type: "SET_TOOL_MODE", mode: "addRect" }
     ]);
     expect(initial.activeRootId).toBe("frame:0");
-    expect(initial.documents[initial.activeDocumentId].drawingLayerRootId).toBe("frame:0:overlay:0");
+    expect(getActiveDocument(initial).drawingLayerRootId).toBe("frame:0:overlay:0");
     const changed = editorReducer(initial, { type: "SET_DECK_STEP", rootId: initial.activeRootId!, step: 3 });
     expect(changed.deckStepByRootKey[`${changed.activeDocumentId}::frame:0`]).toBe(3);
     expect(changed.deckStepByRootKey[`${changed.activeDocumentId}::frame:0:overlay:0`]).toBeUndefined();
@@ -1287,7 +1288,7 @@ describe("editorReducer – branch edge cases", () => {
       documents: {
         ...requested.documents,
         [requested.activeDocumentId]: {
-          ...requested.documents[requested.activeDocumentId],
+          ...getActiveDocument(requested),
           activeHandleId
         }
       }
@@ -1475,7 +1476,7 @@ describe("editorReducer – assistant integration", () => {
 
   it("updates assistant thread metadata, items, deltas, approvals, and error state", () => {
     let state = makeInitialState();
-    const activeDoc = () => state.documents[state.activeDocumentId];
+    const activeDoc = () => getActiveDocument(state);
     state = editorReducer(state, {
       type: "ASSISTANT_THREAD_READY",
       threadId: "thread-1",
@@ -1503,7 +1504,7 @@ describe("editorReducer – assistant integration", () => {
       documents: {
         ...state.documents,
         [state.activeDocumentId]: {
-          ...state.documents[state.activeDocumentId],
+          ...getActiveDocument(state),
           assistantItems: [
             { type: "userMessage", id: "optimistic-user-message:1", content: [] },
             ...activeDoc().assistantItems
@@ -1601,7 +1602,7 @@ describe("editorReducer – assistant integration", () => {
       documents: {
         ...unchangedSource.documents,
         [unchangedSource.activeDocumentId]: {
-          ...unchangedSource.documents[unchangedSource.activeDocumentId],
+          ...getActiveDocument(unchangedSource),
           lastEditWarningMessage: "old warning",
           lastEditWarningToken: 3
         }

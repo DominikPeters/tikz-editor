@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { getActiveDocument, requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -58,7 +60,7 @@ afterEach(async () => {
 
 it("retains selection and identity when canceling a color preview", async () => {
   await act(async () => { dispatch({ type: "SELECT", id: "path:0", additive: false }); });
-  const identities = useEditorStore.getState().documents[useEditorStore.getState().activeDocumentId].editingIdentities?.entries.map(entry => entry.id);
+  const identities = getActiveDocument(useEditorStore.getState()).editingIdentities?.entries.map(entry => entry.id);
   const history = useEditorStore.getState().history.length;
   await hover("path:0");
   expect(useEditorStore.getState().source).toContain("fill=red!60");
@@ -68,7 +70,7 @@ it("retains selection and identity when canceling a color preview", async () => 
   expect(useEditorStore.getState().source).toBe(SOURCE);
   expect(useEditorStore.getState().history).toHaveLength(history);
   expect([...useEditorStore.getState().selectedElementIds]).toEqual(["path:0"]);
-  expect(useEditorStore.getState().documents[useEditorStore.getState().activeDocumentId].editingIdentities?.entries.map(entry => entry.id)).toEqual(identities);
+  expect(getActiveDocument(useEditorStore.getState()).editingIdentities?.entries.map(entry => entry.id)).toEqual(identities);
 });
 
 it("switches preview targets and colors without carrying the old fill forward", async () => {
@@ -141,7 +143,7 @@ it("restores only the original document on tab switch", async () => {
   const originalId = useEditorStore.getState().activeDocumentId;
   await hover("path:0");
   await act(async () => { dispatch({ type: "NEW_DOCUMENT", source: SOURCE + "\n% other document" }); ready(); });
-  expect(useEditorStore.getState().documents[originalId].source).toBe(SOURCE);
+  expect(requireDocumentSession(useEditorStore.getState().documents, originalId).source).toBe(SOURCE);
   expect(useEditorStore.getState().source).toBe(SOURCE + "\n% other document");
 });
 

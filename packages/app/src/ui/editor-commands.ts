@@ -103,6 +103,7 @@ export function beginClipboardEdit(context: SelectionCommandContext): SelectionC
     (context.sourceRevision !== undefined && context.sourceRevision !== session.latestRevision) ||
     (context.activeRootId !== undefined && context.activeRootId !== session.activeRootId)) return null;
   const document = state.documents[session.documentId];
+  if (!document) return null;
   const editContext: EditExecutionContext = {
     documentId: session.documentId, source: session.latestSource, sourceRevision: session.latestRevision,
     activeRootId: session.activeRootId, snapshot: document.snapshot,

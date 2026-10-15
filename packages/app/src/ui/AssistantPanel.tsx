@@ -192,7 +192,7 @@ export function AssistantPanel({ onSubmitPrompt, onInterruptTurn, onNewChat }: A
         setCodexStatusError(null);
         setCodexStatusChecked(true);
       }
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       if (!disposed) {
         setCodexStatusError(error instanceof Error ? error.message : String(error));
         setCodexStatusChecked(true);

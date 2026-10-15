@@ -92,7 +92,7 @@ export class PresentationService {
       await this.cleaningUp;
       if (this.controller !== controller) return;
       controller.setOutputAvailable(options.mode !== "rehearse");
-      void api.keepAwake?.(true).catch(error => { console.info("[tikz-editor] Couldn’t prevent display sleep", error); });
+      void api.keepAwake?.(true).catch((error: unknown) => { console.info("[tikz-editor] Couldn’t prevent display sleep", error); });
       const renderer = await BeamerPresentationRenderer.create(document.source, document.fileRef);
       if (this.controller !== controller) return;
       this.renderer = renderer;
@@ -168,7 +168,7 @@ export class PresentationService {
     const controller = this.controller;
     if (!controller) return;
     if (command.type === "stop") { void this.stop(); return; }
-    if (command.type === "close-view") { void Promise.resolve(this.windows?.closeView(command.role)).then(this.focusEditor).catch(error => { controller.setError(error instanceof Error ? error.message : "Couldn’t close the presentation window."); }); return; }
+    if (command.type === "close-view") { void Promise.resolve(this.windows?.closeView(command.role)).then(this.focusEditor).catch((error: unknown) => { controller.setError(error instanceof Error ? error.message : "Couldn’t close the presentation window."); }); return; }
     if (!this.renderer && ["next", "previous", "next-frame", "previous-frame", "jump"].includes(command.type)) {
       if (command.type === "jump") this.launchCommands = [];
       if (command.type === "next" && !controller.getSnapshot().timer.started) controller.timer("start");
@@ -180,7 +180,7 @@ export class PresentationService {
       void Promise.resolve(action).then(result => {
         if (command.type === "recover-output") { this.outputNeedsSelection = false; controller.setOutputAvailable(true); }
         if (command.type === "swap-displays" && result) savePresentationOptions({ ...loadPresentationOptions(), ...result });
-      }).catch(error => { controller.setError(error instanceof Error ? error.message : "Couldn’t change presentation windows."); });
+      }).catch((error: unknown) => { controller.setError(error instanceof Error ? error.message : "Couldn’t change presentation windows."); });
       return;
     }
     void controller.command(command);
@@ -200,7 +200,7 @@ export class PresentationService {
     const cleanup = (async () => {
       try { await windows?.close(); }
       catch (error) { console.info("[tikz-editor] Couldn’t close a presentation window", error); }
-      finally { transport?.close(); await api?.keepAwake?.(false).catch(error => { console.info("[tikz-editor] Couldn’t release presentation power assertion", error); }); }
+      finally { transport?.close(); await api?.keepAwake?.(false).catch((error: unknown) => { console.info("[tikz-editor] Couldn’t release presentation power assertion", error); }); }
     })();
     this.cleaningUp = cleanup;
     await cleanup;

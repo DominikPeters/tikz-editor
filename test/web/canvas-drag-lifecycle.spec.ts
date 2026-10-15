@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { getActiveDocument, requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,7 +69,7 @@ describe("canvas drag ownership and cancellation", () => {
       activeRootId: rendered.parse.activeFigureId, figures: rendered.parse.figures,
       scene: rendered.semantic.scene, editHandles: rendered.semantic.editHandles, svg: rendered.svg
     } });
-    expect(state().documents[state().activeDocumentId].editingIdentities?.entries.length).toBeGreaterThan(0);
+    expect(getActiveDocument(state()).editingIdentities?.entries.length).toBeGreaterThan(0);
   }
   const suppress = { current: false }, liveFrames = { current: new Map() }, bounds = { current: new Map() };
   const pendingSelection = { current: null };
@@ -269,7 +271,7 @@ describe("canvas drag ownership and cancellation", () => {
     expect(state().history).toHaveLength(historyLength + 1);
     expect(state().history.at(-1)?.sourceBefore).toBe(fixture.source);
     expect(state().history.at(-1)?.sourceAfter).toBe(preview);
-    expect(state().documents[state().activeDocumentId].lastEditWarningMessage).toBeNull();
+    expect(getActiveDocument(state()).lastEditWarningMessage).toBeNull();
     expect(dragRef.current).toBeNull();
     await act(async () => ready());
     expect(state().snapshot.editHandles.at(-1)!.editingId).toBe(identity);
@@ -327,8 +329,8 @@ describe("canvas drag ownership and cancellation", () => {
     expect(state().source).toBe(boundary === "active root" ? original : afterInterruption.source);
     expect(state().activeDocumentId).toBe(afterInterruption.activeDocumentId);
     expect(state().activeRootId).toBe(afterInterruption.activeRootId);
-    expect(state().documents[documentId].source).toBe(boundary === "source revision" ? preview : original);
-    expect(state().documents[documentId].history.some(entry => entry.mergeKey === "test-owned-handle")).toBe(false);
+    expect(requireDocumentSession(state().documents, documentId).source).toBe(boundary === "source revision" ? preview : original);
+    expect(requireDocumentSession(state().documents, documentId).history.some(entry => entry.mergeKey === "test-owned-handle")).toBe(false);
     expect(dragRef.current).toBeNull();
   });
   it("retains the real partial edit warning and changed owners through gesture commit", async () => {
@@ -351,8 +353,8 @@ describe("canvas drag ownership and cancellation", () => {
     await act(async () => ready());
     await act(async () => pointer("pointerup", 1, target));
     expect(state().source).toBe(partial.newSource);
-    expect(state().documents[state().activeDocumentId].lastEditWarningMessage).toBe(partial.reason);
-    expect(state().documents[state().activeDocumentId].lastEditChangedSourceIds).toEqual(partial.changedSourceIds);
+    expect(getActiveDocument(state()).lastEditWarningMessage).toBe(partial.reason);
+    expect(getActiveDocument(state()).lastEditChangedSourceIds).toEqual(partial.changedSourceIds);
     expect(state().history.at(-1)?.sourceBefore).toBe(source);
     await act(async () => dispatch({ type: "UNDO" })); expect(state().source).toBe(source);
     await act(async () => dispatch({ type: "REDO" })); expect(state().source).toBe(partial.newSource);
@@ -370,14 +372,14 @@ describe("canvas drag ownership and cancellation", () => {
     await act(async () => dispatch(action));
     expect(state().source).toBe(current.source);
     expect(state().sourceRevision).toBe(current.sourceRevision);
-    expect(state().documents[state().activeDocumentId].editingIdentities).toBe(current.documents[current.activeDocumentId].editingIdentities);
+    expect(getActiveDocument(state()).editingIdentities).toBe(getActiveDocument(current).editingIdentities);
   });
   it("restores an owned inactive document when context cancellation runs", async () => {
     const originId = state().activeDocumentId;
     await act(async () => setDragState(elementDrag()));
     await act(async () => { pointer("pointermove"); flush(); });
     await act(async () => { dispatch({ type: "NEW_DOCUMENT", source: OTHER }); cancel(); ready(); });
-    expect(state().source).toBe(OTHER); expect(state().documents[originId].source).toBe(BASE);
+    expect(state().source).toBe(OTHER); expect(requireDocumentSession(state().documents, originId).source).toBe(BASE);
   });
   it("cancels when the interaction SVG surface is replaced", async () => {
     await act(async () => setDragState(elementDrag()));

@@ -26,7 +26,7 @@ class ColorSwatchWidget extends WidgetType {
     super();
   }
 
-  eq(other: ColorSwatchWidget): boolean {
+  override eq(other: ColorSwatchWidget): boolean {
     return (
       this.occurrence.from === other.occurrence.from &&
       this.occurrence.to === other.occurrence.to &&
@@ -73,7 +73,7 @@ class ColorSwatchWidget extends WidgetType {
     return dom;
   }
 
-  ignoreEvent(): boolean {
+  override ignoreEvent(): boolean {
     return true;
   }
 }

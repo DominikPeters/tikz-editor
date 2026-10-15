@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { getActiveDocument, requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,8 +53,8 @@ describe("clipboard operation ownership", () => {
       activeRootId: rendered.parse.activeFigureId, figures: rendered.parse.figures,
       scene: rendered.semantic.scene, editHandles: rendered.semantic.editHandles, svg: rendered.svg
     } });
-    expect(state().documents[state().activeDocumentId].editingIdentities?.entries.length).toBeGreaterThan(0);
-    expect(state().documents[state().activeDocumentId].editingTargetsStale).toBe(false);
+    expect(getActiveDocument(state()).editingIdentities?.entries.length).toBeGreaterThan(0);
+    expect(getActiveDocument(state()).editingTargetsStale).toBe(false);
   }
 
   function Harness() {
@@ -74,7 +76,7 @@ describe("clipboard operation ownership", () => {
 
   function runtime() {
     const current = state();
-    const doc = current.documents[current.activeDocumentId];
+    const doc = getActiveDocument(current);
     return createEditorCommandRuntime({ ...current, historyLength: current.history.length, tabCount: current.tabOrder.length,
       fileRef: doc.fileRef, dirty: doc.dirty, snapHapticsEnabled: true, dispatch, updateCanvasSettings() {}, assistantAvailable: false });
   }
@@ -136,7 +138,7 @@ describe("clipboard operation ownership", () => {
     beginNativePaste();
     switchToOther();
     await act(async () => read.resolve({ format: "tikz", text: PAYLOAD }));
-    expect(state().documents[origin].source).toBe(BASE);
+    expect(requireDocumentSession(state().documents, origin).source).toBe(BASE);
     expect(state().source).toBe(OTHER);
     expect(warning).not.toHaveBeenCalled();
   });
@@ -149,7 +151,7 @@ describe("clipboard operation ownership", () => {
     dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "setProperty", elementId: "path:0", level: "command", key: "draw", value: "blue" } });
     const changed = state().source;
     expect(changed).toContain(String.raw`\draw[blue]`);
-    expect(state().documents[state().activeDocumentId].editingTargetsStale).toBe(false);
+    expect(getActiveDocument(state()).editingTargetsStale).toBe(false);
     await act(async () => read.resolve({ format: "tikz", text: PAYLOAD }));
     expect(state().source).toBe(changed);
     expect(warning).not.toHaveBeenCalled();
@@ -299,7 +301,7 @@ describe("clipboard operation ownership", () => {
     });
     switchToOther();
     await act(async () => text.resolve(SVG));
-    expect(state().documents[origin].source).toBe(BASE);
+    expect(requireDocumentSession(state().documents, origin).source).toBe(BASE);
     expect(state().source).toBe(OTHER);
     expect(warning).not.toHaveBeenCalled();
   });

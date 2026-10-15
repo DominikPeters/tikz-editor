@@ -36,7 +36,7 @@ export function createSingleFlightScheduler<Input, Output>(
         }
         options.onSuccess?.(input, output);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (disposed || controller.signal.aborted) {
           return;
         }

@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import React, { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -100,7 +102,7 @@ describe("canvas resize gestures", () => {
     act(() => { dispatch({ type: "NEW_DOCUMENT", source: "other document" }); });
     pointer("pointerup", 60);
     expect(useEditorStore.getState().source).toBe("other document");
-    expect(useEditorStore.getState().documents[id].source).toBe(SOURCE);
+    expect(requireDocumentSession(useEditorStore.getState().documents, id).source).toBe(SOURCE);
   });
   it("never overwrites an intervening source edit", () => {
     begin(); pointer("pointermove", 40); flush();

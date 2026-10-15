@@ -1,3 +1,4 @@
+import { getActiveDocument } from "./store/document-sessions";
 import type { EditorAction, EditorState } from "./store/types";
 import type { EditActionResult } from "@tikz-editor/core/edit/actions";
 import { composeSourcePatches, patchesMatchSourceTransition } from "@tikz-editor/core/edit/source-patches";
@@ -18,7 +19,7 @@ export type DocumentEditSession = {
 };
 
 export function beginDocumentEdit(state: SessionState, changedSourceIds: string[] | null = null): DocumentEditSession {
-  const doc = state.documents[state.activeDocumentId];
+  const doc = getActiveDocument(state);
   return { documentId: doc.id, activeRootId: doc.activeRootId, drawingLayerRootId: doc.drawingLayerRootId, rootChosen: doc.hasInitializedRootSelection, baseSource: doc.source,
     latestSource: doc.source, latestRevision: doc.sourceRevision, changedSourceIds, patches: [] };
 }

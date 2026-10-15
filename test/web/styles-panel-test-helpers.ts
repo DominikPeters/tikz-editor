@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions";
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -28,7 +29,7 @@ export function seedStylesPanelState(source: string, selectedSourceIds: string[]
   const base = makeInitialState();
   const dispatch = useEditorStore.getState().dispatch;
   const activeDocumentId = base.activeDocumentId;
-  const doc = base.documents[activeDocumentId];
+  const doc = requireDocumentSession(base.documents, activeDocumentId);
   const selected = new Set(selectedSourceIds);
 
   useEditorStore.setState({

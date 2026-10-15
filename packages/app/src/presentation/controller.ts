@@ -100,7 +100,7 @@ export class PresentationController {
     if (this.snapshot.ended || !this.renderer.frames[frame]) return Promise.resolve();
     const generation = this.supersede();
     const signal = this.work.signal;
-    this.queue = this.commit(first(frame), generation, signal).catch(error => { this.renderError(error, signal); });
+    this.queue = this.commit(first(frame), generation, signal).catch((error: unknown) => { this.renderError(error, signal); });
     return this.queue;
   }
 
@@ -116,7 +116,7 @@ export class PresentationController {
       const steps = renderer.frames[frame].steps;
       const target = { frame, step: Math.min(cursor.step, steps), continuation: Math.min(cursor.continuation, Math.max(1, count - steps + 1)) };
       await this.commit(target, generation, signal, { frames: renderer.frames, revision, thumbnails: {}, title }, renderer);
-    })().catch(error => { this.renderError(error, signal); });
+    })().catch((error: unknown) => { this.renderError(error, signal); });
     await this.queue;
     return !signal.aborted && generation === this.generation && this.snapshot.revision === revision;
   }
@@ -131,7 +131,7 @@ export class PresentationController {
       const direction = type === "next" || type === "next-frame" ? 1 : -1;
       const target = type.endsWith("-frame") ? first(Math.max(0, Math.min(this.renderer.frames.length - 1, cursor.frame + direction))) : await this.neighbor(cursor, direction, signal);
       if (!same(cursor, target) || !this.snapshot.current) await this.commit(target, generation, signal);
-    }).catch(error => { this.renderError(error, signal); });
+    }).catch((error: unknown) => { this.renderError(error, signal); });
     return this.queue;
   }
 

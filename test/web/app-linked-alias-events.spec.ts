@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
@@ -73,6 +75,6 @@ it("routes a canonical native target event through authored aliases, desktop ada
   await act(async () => { for (const path of authoredEvents) emit?.({ path }); await vi.advanceTimersByTimeAsync(350); });
   expect(read).toHaveBeenCalledExactlyOnceWith(alias);
   await act(async () => { await read.mock.results[0].value; });
-  expect(useEditorStore.getState().documents[id].source).toBe("external edit");
-  expect(useEditorStore.getState().documents[id].fileRef).toEqual(fileRef);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).source).toBe("external edit");
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).fileRef).toEqual(fileRef);
 });

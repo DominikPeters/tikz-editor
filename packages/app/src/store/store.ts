@@ -1,6 +1,7 @@
+import { getActiveDocument } from "./document-sessions";
 import { create } from "zustand";
 import { editorReducer, makeInitialState } from "./reducer";
-import type { DocumentFileRef, DocumentSession, EditorAction, EditorState, WorkspacePersistedState } from "./types";
+import type { DocumentFileRef, DocumentSession, DocumentSessions, EditorAction, EditorState, WorkspacePersistedState } from "./types";
 import { loadWorkspaceSeed, saveWorkspace } from "./workspace-storage";
 import { workspaceStateFromEditorState } from "./workspace-state";
 import { claimCachedDeckSnapshot, cancelDeckPrewarm } from "../compute";
@@ -28,7 +29,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       next.activeCanvasDragKind == null && next.activeSourceScrubSourceId == null &&
       next.activeCanvasTextEditSourceId == null && next.activeInspectorEditDocumentId == null) {
       const requestId = crypto.randomUUID();
-      const doc = next.documents[next.activeDocumentId];
+      const doc = getActiveDocument(next);
       const snapshot = claimCachedDeckSnapshot({ id: requestId, documentId: doc.id, source: doc.source,
         sourceRevision: doc.sourceRevision, documentFileRef: doc.fileRef, activeRootId: doc.activeRootId,
         drawingLayerRootId: doc.drawingLayerRootId, includeDrawingLayer: true,
@@ -72,8 +73,8 @@ function shouldDebounceWorkspaceSave(action: EditorAction): boolean {
 }
 
 function persistedDocumentsChanged(
-  previous: Record<string, DocumentSession>,
-  next: Record<string, DocumentSession>
+  previous: DocumentSessions,
+  next: DocumentSessions
 ): boolean {
   const previousIds = Object.keys(previous);
   const nextIds = Object.keys(next);
@@ -81,8 +82,8 @@ function persistedDocumentsChanged(
     return true;
   }
   for (const id of nextIds) {
-    const previousDoc = (previous as Partial<Record<string, DocumentSession>>)[id];
-    const nextDoc = (next as Partial<Record<string, DocumentSession>>)[id];
+    const previousDoc = previous[id];
+    const nextDoc = next[id];
     if (!previousDoc || !nextDoc || persistedDocumentChanged(previousDoc, nextDoc)) {
       return true;
     }

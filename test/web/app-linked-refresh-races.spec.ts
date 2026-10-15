@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { appCallbacks, deferred, memoryPersistence, mountFileApp, unmountFileApp } from "./app-file-operations-fixtures";
@@ -30,9 +32,9 @@ it("ignores a read of the old linked file which finishes after Save As", async (
   await focus();
   expect(read).toHaveBeenCalledTimes(1);
   await act(async () => { appCallbacks.current.onRequestSaveDocument(id, "save-as"); });
-  expect(useEditorStore.getState().documents[id].fileRef?.path).toBe(FILE_B.path);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).fileRef?.path).toBe(FILE_B.path);
   await act(async () => { oldRead.resolve(ok(REMOTE_1)); });
-  const doc = useEditorStore.getState().documents[id];
+  const doc = requireDocumentSession(useEditorStore.getState().documents, id);
   expect(doc.fileRef?.path).toBe(FILE_B.path);
   expect(doc.source).toBe(OLD);
 });
@@ -48,9 +50,9 @@ it("does not revert a newer linked refresh when an older read finishes later", a
   await focus();
   expect(read).toHaveBeenCalledTimes(2);
   await act(async () => { second.resolve(ok(REMOTE_2)); });
-  expect(useEditorStore.getState().documents[id].source).toBe(REMOTE_2);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).source).toBe(REMOTE_2);
   await act(async () => { first.resolve(ok(REMOTE_1)); });
-  expect(useEditorStore.getState().documents[id].source).toBe(REMOTE_2);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).source).toBe(REMOTE_2);
 });
 
 it("preserves an unsaved local edit made while a linked read is pending", async () => {
@@ -61,7 +63,7 @@ it("preserves an unsaved local edit made while a linked read is pending", async 
   await focus();
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: REMOTE_2 }); });
   await act(async () => { pendingRead.resolve(ok(REMOTE_1)); });
-  const doc = useEditorStore.getState().documents[id];
+  const doc = requireDocumentSession(useEditorStore.getState().documents, id);
   expect(doc.source).toBe(REMOTE_2);
   expect(doc.dirty).toBe(true);
   expect(doc.externalChangeStatus).toBe("changed");

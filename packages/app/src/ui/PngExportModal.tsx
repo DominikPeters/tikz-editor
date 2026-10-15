@@ -104,7 +104,7 @@ export function PngExportModal({ svgResult, onClose }: PngExportModalProps) {
           dpi: result.dpi
         });
       },
-      (error) => {
+      (error: unknown) => {
         if (!active) {
           return;
         }

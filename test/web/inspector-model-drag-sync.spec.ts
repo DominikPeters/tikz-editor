@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { getActiveDocument } from "../../packages/app/src/store/document-sessions.js";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -25,7 +27,7 @@ function ready() {
     activeRootId: rendered.parse.activeFigureId, figures: rendered.parse.figures, scene: rendered.semantic.scene,
     editHandles: rendered.semantic.editHandles, svg: rendered.svg
   } });
-  expect(useEditorStore.getState().documents[useEditorStore.getState().activeDocumentId].editingIdentities).toBeDefined();
+  expect(getActiveDocument(useEditorStore.getState()).editingIdentities).toBeDefined();
 }
 function Harness() {
   const selectedIds = useEditorStore(s => s.selectedElementIds);

@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appCallbacks, mountFileApp, unmountFileApp } from "./app-file-operations-fixtures.js";
@@ -29,7 +31,7 @@ describe("native Quit through App's existing close policy", () => {
     const app = await mount("cancel");
     await act(async () => { quit(); });
     expect(app.confirm).toHaveBeenCalledOnce(); expect(app.close).not.toHaveBeenCalled(); expect(app.save).not.toHaveBeenCalled();
-    expect(useEditorStore.getState().documents[app.id].dirty).toBe(true);
+    expect(requireDocumentSession(useEditorStore.getState().documents, app.id).dirty).toBe(true);
   });
   it("Discard flushes the last debounced recovery source before native termination", async () => {
     const app = await mount("discard");
@@ -50,7 +52,7 @@ describe("native Quit through App's existing close policy", () => {
       useEditorStore.getState().dispatch({ type: "NEW_DOCUMENT", source: "second initial", title: "Second" });
       useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: "second dirty source" });
     });
-    app.close.mockImplementation(async () => { expect(app.save).toHaveBeenCalledTimes(2); expect(Object.values(useEditorStore.getState().documents).every(doc => !doc.dirty)).toBe(true); });
+    app.close.mockImplementation(async () => { expect(app.save).toHaveBeenCalledTimes(2); expect(Object.values(useEditorStore.getState().documents).every(doc => doc != null && !doc.dirty)).toBe(true); });
     await act(async () => { quit(); });
     expect(app.save.mock.calls.map(call => call[0])).toEqual(["initial dirty source", "second dirty source"]);
     expect(app.close).toHaveBeenCalledOnce();

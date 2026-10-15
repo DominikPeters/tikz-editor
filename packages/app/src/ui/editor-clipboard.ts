@@ -1,5 +1,6 @@
 import { renderTikzToSvg } from "@tikz-editor/core/render/index";
 import { serializeSvgModel, serializeSvgModelAsync } from "@tikz-editor/core/svg/index";
+import { isRecord } from "../validation";
 
 // Chromium custom clipboard formats require the "web " prefix.
 export const TIKZ_CLIPBOARD_MIME = "web application/x-tikz-editor+json";
@@ -92,12 +93,12 @@ function describeError(error: unknown): string {
 
 export function parseClipboardPayloadJson(raw: string): TikzClipboardPayload | null {
   try {
-    const parsed = JSON.parse(raw) as Partial<TikzClipboardPayload> | null;
-    if (parsed?.version !== 1 || !Array.isArray(parsed.snippets)) {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.snippets)) {
       return null;
     }
     const snippets = parsed.snippets
-      .filter((snippet): snippet is string => typeof snippet === "string")
+      .filter((snippet: unknown): snippet is string => typeof snippet === "string")
       .map((snippet) => snippet.replace(/\r\n?/g, "\n").trim())
       .filter((snippet) => snippet.length > 0);
     if (snippets.length === 0) {

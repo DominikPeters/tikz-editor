@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../../store/document-sessions";
 import { Actions } from "flexlayout-react";
 import { useCallback, useEffect, useMemo, useState, type RefObject, type MouseEvent } from "react";
 import { analyzeBeamerSlideMove, copyBeamerSlides, beamerSlideIsEditable, editBeamerSlides, type BeamerSlideMoveAnalysis, type BeamerDocumentModel, type BeamerSlideDestination, type BeamerSlideEdit } from "@tikz-editor/core/beamer/index";
@@ -13,7 +14,7 @@ import type { CommandBinding, CommandBindings } from "../editor-command-runtime"
 
 export function useSlideManager(model: BeamerDocumentModel | null, containerRef: RefObject<HTMLDivElement | null>) {
   const documentId = useEditorStore(s => s.activeDocumentId);
-  const doc = useEditorStore(s => s.documents[s.activeDocumentId]);
+  const doc = useEditorStore(getActiveDocument);
   const dispatch = useEditorStore(s => s.dispatch);
   const busy = useEditorStore(s => !!s.activeCanvasTextEditSourceId || !!s.activeInspectorEditDocumentId);
   const selection = doc.deckSlideSelection?.source === doc.source ? doc.deckSlideSelection : null;

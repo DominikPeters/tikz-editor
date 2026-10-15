@@ -38,7 +38,7 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
     <form className={css.options} onSubmit={event => {
       event.preventDefault(); savePresentationOptions(options);
       if (active) {
-        void presentationService.recoverOutput(options.audienceDisplay).then(onClose).catch(error_ => { setError(error_ instanceof Error ? error_.message : "Couldn’t restore the audience output."); });
+        void presentationService.recoverOutput(options.audienceDisplay).then(onClose).catch((error_: unknown) => { setError(error_ instanceof Error ? error_.message : "Couldn’t restore the audience output."); });
       } else { onClose(); launchPresentation(from, undefined, options); }
     }}>
       <Modal.Header
@@ -73,7 +73,7 @@ export function PresentationOptionsModal({ onClose, active }: { onClose: () => v
           </div> : null}
           {getActiveEditorPlatform().presentation?.identifyDisplays ? <div className={[settingsCss.settingRow, css.identifyRow].join(" ")}>
             <Modal.SecondaryButton onClick={() => {
-              void getActiveEditorPlatform().presentation?.identifyDisplays?.().catch(error_ => { setError(error_ instanceof Error ? error_.message : "Couldn’t identify the displays."); });
+              void getActiveEditorPlatform().presentation?.identifyDisplays?.().catch((error_: unknown) => { setError(error_ instanceof Error ? error_.message : "Couldn’t identify the displays."); });
             }}>Identify Displays</Modal.SecondaryButton>
           </div> : null}
         </div> : null}

@@ -188,9 +188,12 @@ export type DocumentSession = {
   assistantError: string | null;
 };
 
+/** Document IDs are dynamic; an arbitrary ID may have no session. */
+export type DocumentSessions = Partial<Record<string, DocumentSession>>;
+
 export type WorkspacePersistedState = {
   workspaceVersion: number;
-  documents: Record<string, DocumentSession>;
+  documents: DocumentSessions;
   tabOrder: string[];
   activeDocumentId: string;
   recentDocumentIds: string[];
@@ -330,7 +333,7 @@ export type EditorState = {
   activeHandleId: string | null;
   activeDocumentId: string;
   tabOrder: string[];
-  documents: Record<string, DocumentSession>;
+  documents: DocumentSessions;
   workspaceVersion: number;
   recentDocumentIds: string[];
 

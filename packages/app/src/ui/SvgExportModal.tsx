@@ -64,7 +64,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
         setBaselineMarkup(text);
         setLoadingMarkup(false);
       },
-      (error) => {
+      (error: unknown) => {
         if (!active) {
           return;
         }
@@ -79,7 +79,7 @@ export function SvgExportModal({ svgResult, onClose }: SvgExportModalProps) {
           setOptimizerState({ status: "ready" });
         }
       },
-      (error) => {
+      (error: unknown) => {
         if (active) {
           setOptimizerState({
             status: "error",

@@ -1,8 +1,5 @@
 import type { IJsonModel } from "flexlayout-react";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === "object" && !Array.isArray(value);
-}
+import { isRecord } from "../validation";
 
 function hasOptionalString(node: Record<string, unknown>, key: string): boolean {
   return node[key] === undefined || typeof node[key] === "string";

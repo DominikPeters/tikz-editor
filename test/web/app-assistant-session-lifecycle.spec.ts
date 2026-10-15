@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appCallbacks, deferred, mountAssistantApp, unmountAssistantApp } from "./assistant-session-fixtures";
@@ -52,14 +54,14 @@ describe("App assistant chat lifecycle", () => {
     expect(app.ensure).toHaveBeenLastCalledWith(expect.objectContaining({ documentId: app.id, sessionGeneration: 0, threadId: null }));
     await act(async () => { appCallbacks.current.onNewChat(); });
     expect(app.reset).toHaveBeenLastCalledWith({ documentId: app.id, sessionGeneration: 1 });
-    const fresh = useEditorStore.getState().documents[app.id];
+    const fresh = requireDocumentSession(useEditorStore.getState().documents, app.id);
     expect([fresh.assistantThreadId, fresh.assistantWorkspacePath, fresh.assistantFigurePath, fresh.assistantPreviewPath]).toEqual([null, null, null, null]);
     expect(fresh.assistantItems).toEqual([]);
     expect(fresh.assistantPendingApprovals).toEqual([]);
     await act(async () => { await appCallbacks.current.onSubmitPrompt("new chat", null, []); });
     expect(app.ensure).toHaveBeenLastCalledWith(expect.objectContaining({ sessionGeneration: 1, threadId: null }));
     expect(app.start).toHaveBeenLastCalledWith(expect.objectContaining({ sessionGeneration: 1, threadId: "thread-1" }));
-    expect(useEditorStore.getState().documents[app.id].assistantThreadId).toBe("thread-1");
+    expect(requireDocumentSession(useEditorStore.getState().documents, app.id).assistantThreadId).toBe("thread-1");
   });
 
   it("discards an old ensure result without starting a turn or restoring the old thread", async () => {
@@ -70,8 +72,8 @@ describe("App assistant chat lifecycle", () => {
     await act(async () => { appCallbacks.current.onNewChat(); });
     await act(async () => { pending.resolve(summary(0)); await submitting; });
     expect(app.start).not.toHaveBeenCalled();
-    expect(useEditorStore.getState().documents[app.id].assistantThreadId).toBeNull();
-    expect(useEditorStore.getState().documents[app.id].assistantItems).toEqual([]);
+    expect(requireDocumentSession(useEditorStore.getState().documents, app.id).assistantThreadId).toBeNull();
+    expect(requireDocumentSession(useEditorStore.getState().documents, app.id).assistantItems).toEqual([]);
   });
 
   it("rejects retired events and reducer actions while accepting the current generation", async () => {
@@ -88,13 +90,13 @@ describe("App assistant chat lifecycle", () => {
       app.emit({ type: "item-started", documentId: app.id, item: { id: "legacy", type: "agentMessage", text: "old" } });
       app.emit({ type: "item-started", documentId: app.id, sessionGeneration: 1, item: { id: "current", type: "agentMessage", text: "new" } });
     });
-    const doc = useEditorStore.getState().documents[app.id];
+    const doc = requireDocumentSession(useEditorStore.getState().documents, app.id);
     expect(doc.source).toBe(source);
     expect(doc.assistantThreadId).toBeNull();
     expect(doc.assistantItems.map(item => item.id)).toEqual(["current"]);
     expect(tool).not.toHaveBeenCalled();
     await act(async () => { app.emit({ type: "error", message: "Current transport error" }); });
-    expect(useEditorStore.getState().documents[app.id].assistantError).toBe("Current transport error");
+    expect(requireDocumentSession(useEditorStore.getState().documents, app.id).assistantError).toBe("Current transport error");
   });
 
   it("persists the chat generation and safely restores legacy workspaces at generation zero", async () => {
@@ -103,9 +105,9 @@ describe("App assistant chat lifecycle", () => {
     saveWorkspace(useEditorStore.getState());
     const seed = loadWorkspaceSeed();
     expect(seed?.documents.find(doc => doc.id === app.id)?.assistantSessionGeneration).toBe(1);
-    expect(makeInitialState(seed ?? undefined).documents[app.id].assistantSessionGeneration).toBe(1);
+    expect(requireDocumentSession(makeInitialState(seed ?? undefined).documents, app.id).assistantSessionGeneration).toBe(1);
     const legacy = makeInitialState({ workspaceVersion: 1, documents: [{ id: "legacy", title: "Legacy", source }],
       tabOrder: ["legacy"], activeDocumentId: "legacy", recentDocumentIds: ["legacy"] });
-    expect(legacy.documents.legacy.assistantSessionGeneration).toBe(0);
+    expect(requireDocumentSession(legacy.documents, "legacy").assistantSessionGeneration).toBe(0);
   });
 });

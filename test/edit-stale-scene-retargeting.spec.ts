@@ -1,3 +1,4 @@
+import { getActiveDocument } from "../packages/app/src/store/document-sessions.js";
 import { describe, expect, it } from "vitest";
 import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
 import type { EditorState } from "../packages/app/src/store/types.js";
@@ -77,7 +78,7 @@ function makeState(source: string, selectedIds: readonly string[] = []): EditorS
   };
   state = editorReducer(state, { type: "COMPUTE_REQUESTED", requestId: "ready" });
   state = editorReducer(state, { type: "SNAPSHOT_READY", requestId: "ready", snapshot });
-  expect(state.documents[state.activeDocumentId].editingIdentities).toBeDefined();
+  expect(getActiveDocument(state).editingIdentities).toBeDefined();
   for (const id of selectedIds) state = editorReducer(state, { type: "SELECT", id, additive: true });
   return state;
 }

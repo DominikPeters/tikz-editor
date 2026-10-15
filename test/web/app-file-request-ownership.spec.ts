@@ -1,4 +1,6 @@
 /** @vitest-environment jsdom */
+
+import { requireDocumentSession } from "../../packages/app/src/store/document-sessions.js";
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { appCallbacks, deferred, memoryPersistence, mountFileApp, unmountFileApp } from "./app-file-operations-fixtures";
@@ -40,10 +42,10 @@ it("serializes changed-source saves and writes the queued source against the com
   expect(write).toHaveBeenCalledTimes(1);
   await act(async () => { first.resolve(saved("old")); });
   expect(write.mock.calls[1]?.slice(1)).toEqual(["new", revisionForText("old")]);
-  expect(useEditorStore.getState().documents[id].dirty).toBe(true);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).dirty).toBe(true);
   await act(async () => { second.resolve(saved("new")); });
-  expect(useEditorStore.getState().documents[id].savedSource).toBe("new");
-  expect(useEditorStore.getState().documents[id].dirty).toBe(false);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).savedSource).toBe("new");
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).dirty).toBe(false);
 });
 
 it("coalesces duplicate pending saves without opening a second conflict dialog", async () => {
@@ -109,7 +111,7 @@ it("does not reload over an edit made while a conflict choice was open", async (
   await act(async () => { appCallbacks.current.onRequestSaveDocument(id, "save"); });
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: "new local" }); });
   await choose("reload");
-  expect(useEditorStore.getState().documents[id].source).toBe("new local");
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).source).toBe("new local");
   expect(showMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "warning" }));
 });
 
@@ -122,7 +124,7 @@ it("uses an explicit overwrite choice to save the current source without queue d
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: "new local" }); });
   await choose("save-anyway");
   expect(write.mock.calls[1]?.slice(1)).toEqual(["new local", null]);
-  expect(useEditorStore.getState().documents[id].dirty).toBe(false);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).dirty).toBe(false);
 });
 
 it("initializes only disk metadata when Save As baseline lookup overlaps an edit", async () => {
@@ -133,7 +135,7 @@ it("initializes only disk metadata when Save As baseline lookup overlaps an edit
   await act(async () => { appCallbacks.current.onRequestSaveDocument(id, "save-as"); });
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: "new local" }); });
   await act(async () => { pending.resolve(readResult("written")); });
-  const doc = useEditorStore.getState().documents[id];
+  const doc = requireDocumentSession(useEditorStore.getState().documents, id);
   expect(doc.savedSource).toBe("written");
   expect(doc.dirty).toBe(true);
   expect(doc.diskRevision).toEqual(revisionForText("written"));
@@ -149,8 +151,8 @@ it("ignores a late old-file read failure after Save As", async () => {
   await act(async () => { window.dispatchEvent(new Event("focus")); });
   await act(async () => { appCallbacks.current.onRequestSaveDocument(id, "save-as"); });
   await act(async () => { pending.reject(new Error("Old file is gone")); });
-  expect(useEditorStore.getState().documents[id].fileRef?.path).toBe(B.path);
-  expect(useEditorStore.getState().documents[id].externalChangeStatus).toBe("none");
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).fileRef?.path).toBe(B.path);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).externalChangeStatus).toBe("none");
 });
 
 it("invalidates a pending refresh when saving and suppresses refreshes during the write", async () => {
@@ -167,7 +169,7 @@ it("invalidates a pending refresh when saving and suppresses refreshes during th
   expect(read).toHaveBeenCalledTimes(1);
   await act(async () => { pendingWrite.resolve(saved("local")); });
   await act(async () => { pendingRead.resolve(readResult("old remote")); });
-  expect(useEditorStore.getState().documents[id].source).toBe("local");
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).source).toBe("local");
 });
 
 it("rechecks all documents before close-all, including an initially clean tab", async () => {
@@ -181,8 +183,8 @@ it("rechecks all documents before close-all, including an initially clean tab", 
   await act(async () => { useEditorStore.getState().dispatch({ type: "CODE_EDITED", source: "new b" }); });
   await act(async () => { pending.resolve({ status: "saved", fileRef: A }); });
   expect(useEditorStore.getState().documents[idA]).toBeDefined();
-  expect(useEditorStore.getState().documents[idB].source).toBe("new b");
-  expect(useEditorStore.getState().documents[idB].dirty).toBe(true);
+  expect(requireDocumentSession(useEditorStore.getState().documents, idB).source).toBe("new b");
+  expect(requireDocumentSession(useEditorStore.getState().documents, idB).dirty).toBe(true);
 });
 
 it("does not publish an in-flight save completion after the App is unmounted", async () => {
@@ -196,6 +198,6 @@ it("does not publish an in-flight save completion after the App is unmounted", a
   });
   await unmountFileApp();
   await act(async () => { pending.resolve(saved("local change")); });
-  expect(useEditorStore.getState().documents[id].savedSource).toBe("written baseline");
-  expect(useEditorStore.getState().documents[id].dirty).toBe(true);
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).savedSource).toBe("written baseline");
+  expect(requireDocumentSession(useEditorStore.getState().documents, id).dirty).toBe(true);
 });

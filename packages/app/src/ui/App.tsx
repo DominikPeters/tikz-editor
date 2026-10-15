@@ -1,3 +1,4 @@
+import { listDocumentSessions } from "../store/document-sessions";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -278,7 +279,7 @@ function EditorApp() {
     selectedElementIds: s.selectedElementIds,
     activeDocumentId: s.activeDocumentId,
     activeDocumentFileRef: s.documents[s.activeDocumentId]?.fileRef ?? null,
-    linkedFileWatchSignature: Object.values(s.documents)
+    linkedFileWatchSignature: listDocumentSessions(s.documents)
       .map((doc) => linkedFilePathKey(doc.fileRef))
       .filter((path): path is string => path != null)
       .sort()
@@ -613,7 +614,7 @@ function EditorApp() {
   }, [activeDocumentId, snapshot, source]);
 
   useEffect(() => {
-    for (const doc of Object.values(useEditorStore.getState().documents)) {
+    for (const doc of listDocumentSessions(useEditorStore.getState().documents)) {
       applyLinkedReadDecision(doc, "restore");
     }
   }, [applyLinkedReadDecision]);
@@ -654,7 +655,7 @@ function EditorApp() {
     if (typeof sync !== "function") {
       return;
     }
-    const fileRefs = Object.values(useEditorStore.getState().documents)
+    const fileRefs = listDocumentSessions(useEditorStore.getState().documents)
       .map((doc) => doc.fileRef)
       .filter((fileRef): fileRef is DocumentFileRef => Boolean(fileRef && linkedFilePathKey(fileRef)));
     void sync(fileRefs);
@@ -681,7 +682,7 @@ function EditorApp() {
       }
       const timer = window.setTimeout(() => {
         timers.delete(pathKey);
-        const docsForPath = Object.values(useEditorStore.getState().documents).filter(
+        const docsForPath = listDocumentSessions(useEditorStore.getState().documents).filter(
           (doc) => linkedFilePathKey(doc.fileRef) === pathKey
         );
         const activeDoc = docsForPath.find((doc) => doc.id === activeDocumentIdRef.current);
