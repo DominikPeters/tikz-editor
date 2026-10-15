@@ -167,7 +167,7 @@ export function makeGridElements(
         id: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
         runtimeId: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
         layer: MAIN_SCENE_LAYER,
-        sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+        sourceRef: { sourceId, sourceSpan: span },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
         commands: [
@@ -184,7 +184,7 @@ export function makeGridElements(
         id: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
         runtimeId: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
         layer: MAIN_SCENE_LAYER,
-        sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+        sourceRef: { sourceId, sourceSpan: span },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
         commands: [
@@ -235,7 +235,7 @@ function makeAffineGridElements(
         id: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
         runtimeId: `scene-grid-x:${sourceId}:${itemId}:${x.toFixed(3)}`,
         layer: MAIN_SCENE_LAYER,
-        sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+        sourceRef: { sourceId, sourceSpan: span },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
         commands: [
@@ -255,7 +255,7 @@ function makeAffineGridElements(
         id: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
         runtimeId: `scene-grid-y:${sourceId}:${itemId}:${y.toFixed(3)}`,
         layer: MAIN_SCENE_LAYER,
-        sourceRef: { sourceId, sourceSpan: span, sourceFingerprint: "" },
+        sourceRef: { sourceId, sourceSpan: span },
         style: { ...style },
         styleChain: cloneStyleChain(styleChain),
         commands: [

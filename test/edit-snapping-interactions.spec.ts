@@ -17,8 +17,7 @@ function makeCircle(sourceId: string, centerX: number, centerY: number, radius: 
     layer: "main",
     sourceRef: {
       sourceId,
-      sourceSpan: { from: 0, to: 0 },
-      sourceFingerprint: "test-fingerprint"
+      sourceSpan: { from: 0, to: 0 }
     },
     style: {} as SceneCircle["style"],
     styleChain: [],

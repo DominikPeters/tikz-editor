@@ -12,8 +12,7 @@ function makePath(sourceId: string, commands: ScenePath["commands"]): SceneEleme
     layer: "main",
     sourceRef: {
       sourceId,
-      sourceSpan: { from: 0, to: 0 },
-      sourceFingerprint: "test-fingerprint"
+      sourceSpan: { from: 0, to: 0 }
     },
     style: {} as ScenePath["style"],
     styleChain: [],

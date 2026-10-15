@@ -146,9 +146,17 @@ export type ScenePathAttachment = {
 
 export type SceneElement = ScenePath | SceneCircle | SceneEllipse | SceneText;
 
+/**
+ * Where a scene element comes from. It names no source revision: a reused
+ * element whose source did not move stays as it is.
+ */
 export type SourceRef = {
   sourceId: string;
   sourceSpan: Span;
+};
+
+/** An edit handle's source, with the source revision an edit through it must find. */
+export type EditHandleSourceRef = SourceRef & {
   sourceFingerprint: string;
 };
 
@@ -567,7 +575,7 @@ type EditHandleBase = {
   editingId?: string;
   id: string;
   runtimeId: string;
-  sourceRef: SourceRef;
+  sourceRef: EditHandleSourceRef;
   identityRef?: IdentitySourceRef;
   world: WorldPoint;
   transform: WorldTransform;

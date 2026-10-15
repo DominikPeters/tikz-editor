@@ -34,7 +34,7 @@ export function renderFillPatternPreviewSvg(pattern: PreviewPatternPreset): stri
     id: `preview:pattern:${pattern}`,
     runtimeId: `preview:pattern:${pattern}`,
     layer: MAIN_SCENE_LAYER,
-    sourceRef: { sourceId: `preview:pattern:${pattern}`, sourceSpan: PREVIEW_SOURCE_SPAN, sourceFingerprint: "" },
+    sourceRef: { sourceId: `preview:pattern:${pattern}`, sourceSpan: PREVIEW_SOURCE_SPAN },
     style,
     styleChain: [],
     commands: [

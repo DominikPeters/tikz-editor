@@ -2714,8 +2714,7 @@ function buildClipPath(
     id: `scene-clip:${statement.id}`,
     sourceRef: {
       sourceId: statement.id,
-      sourceSpan: statement.span,
-      sourceFingerprint: ""
+      sourceSpan: statement.span
     },
     commands,
     fillRule

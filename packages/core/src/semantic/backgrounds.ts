@@ -172,8 +172,7 @@ export function makeEveryOnBackgroundLayerOptionLayer(sourceRef: StyleSourceRef)
 
 export function generateBackgroundHookElements(
   context: SemanticContext,
-  contentBounds: WorldBounds | null,
-  sourceFingerprint: string
+  contentBounds: WorldBounds | null
 ): { elements: SceneElement[]; diagnostics: Diagnostic[] } {
   const hooks = [...context.backgroundState.hooks].sort((left, right) => left.sequence - right.sequence);
   if (hooks.length === 0 || !contentBounds) {
@@ -221,8 +220,7 @@ export function generateBackgroundHookElements(
             resolved.style,
             resolved.styleChain,
             span
-          ),
-          sourceFingerprint
+          )
         )
       );
       continue;
@@ -255,7 +253,7 @@ export function generateBackgroundHookElements(
           resolved.style,
           resolved.styleChain,
           span
-        ).map((element) => withBackgroundLayer(element, sourceFingerprint))
+        ).map((element) => withBackgroundLayer(element))
       );
       continue;
     }
@@ -270,8 +268,7 @@ export function generateBackgroundHookElements(
           resolved.style,
           resolved.styleChain,
           span
-        ),
-        sourceFingerprint
+        )
       )
     );
   }
@@ -366,8 +363,7 @@ function makeBackgroundLineElement(
     layer: BACKGROUND_SCENE_LAYER,
     sourceRef: {
       sourceId,
-      sourceSpan: span,
-      sourceFingerprint: ""
+      sourceSpan: span
     },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
@@ -379,15 +375,11 @@ function makeBackgroundLineElement(
   };
 }
 
-function withBackgroundLayer<T extends SceneElement>(element: T, sourceFingerprint: string): T {
+function withBackgroundLayer<T extends SceneElement>(element: T): T {
   return {
     ...element,
     layer: BACKGROUND_SCENE_LAYER,
-    runtimeId: element.runtimeId ?? element.id,
-    sourceRef: {
-      ...element.sourceRef,
-      sourceFingerprint
-    }
+    runtimeId: element.runtimeId ?? element.id
   };
 }
 

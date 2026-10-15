@@ -206,6 +206,15 @@ corridor that draws a different number of random numbers falls back to suffix
 replay, since every later `rand` changes. Effect replay sets the recorded seed,
 so checkpoints past the corridor keep the right one.
 
+Scene elements name no source revision; only edit handles carry the source
+fingerprint that an edit through them must find. Each fragment records the
+least span holding every source location in its elements and diagnostics. A new
+source rebinds a reused fragment's handles. It rebinds the fragment's elements
+only when that span moves. An edit that keeps its length, as most drag frames
+do, keeps every other element object, and SVG reuse sees them unchanged. The
+early-shape drag above went from ~4 to ~2.3 ms per frame. When the length
+changes, every later fragment moves and is still rebound (~4.4 ms).
+
 Synchronous and cooperative semantic evaluation use the same generator, including
 full evaluation, suffix replay, selective replay and source rebinding. The app
 runs batches with an 8 ms budget and checks the budget between statements or

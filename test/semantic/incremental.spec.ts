@@ -857,6 +857,24 @@ describe("selective replay past an unchanged corridor", () => {
     expect(stats).toMatchObject({ replayMode: "selective", suffixReplay: "skipped" });
   });
 
+  it("keeps the elements whose source does not move, and rebinds those after an edit that changes its length", () => {
+    let source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
+    const id = shapeId(source);
+    const session = createIncrementalSemanticSession();
+    session.evaluate({ figure: parseTikz(source).figure, source });
+    source = source.replace("rectangle (1,1)", "rectangle (2,1)");
+    const before = session.evaluate({ figure: parseTikz(source).figure, source, hints: { trigger: "drag-element", changedSourceIds: [id] } }).semantic.scene.elements;
+    source = source.replace("rectangle (2,1)", "rectangle (3,1)");
+    const kept = session.evaluate({ figure: parseTikz(source).figure, source, hints: { trigger: "drag-element", changedSourceIds: [id] } });
+    expect(kept.semantic).toEqual(evaluateTikzFigure(parseTikz(source).figure, source));
+    // The statements from the checkpoint before the shape to the shape are evaluated again.
+    const evaluated = new Set(parseTikz(source).figure.body.slice(kept.stats.recomputeFromStatementIndex!, 10).map((statement) => statement.id));
+    const reused = before.filter((element) => !evaluated.has(element.sourceRef.sourceId));
+    expect(reused.length).toBeGreaterThan(40);
+    expect(reused.every((element) => kept.semantic.scene.elements.includes(element))).toBe(true);
+    expect(edit(session, source.replace("rectangle (3,1)", "rectangle (3.5,1)"), [id]).suffixReplay).toBe("skipped");
+  });
+
   it("keeps the bounds the corridor drew in the checkpoints past it, for a later edit that restores one", () => {
     let source = picture("\\draw[fill=red] (0,0) rectangle (1,1);");
     const session = createIncrementalSemanticSession();

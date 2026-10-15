@@ -17,8 +17,7 @@ const span = { from: 0, to: 0 };
 function sourceRef(sourceId: string): SourceRef {
   return {
     sourceId,
-    sourceSpan: span,
-    sourceFingerprint: sourceId
+    sourceSpan: span
   };
 }
 

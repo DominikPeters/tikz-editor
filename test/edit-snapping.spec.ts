@@ -43,8 +43,7 @@ function makeCircle(sourceId: string, centerX: number, centerY: number, radius: 
     layer: "main",
     sourceRef: {
       sourceId,
-      sourceSpan: { from: 0, to: 0 },
-      sourceFingerprint: "test-fingerprint"
+      sourceSpan: { from: 0, to: 0 }
     },
     style: {} as SceneCircle["style"],
     styleChain: [],
@@ -63,8 +62,7 @@ function makePath(sourceId: string, commands: ScenePathCommand[]): SceneElement 
     layer: "main",
     sourceRef: {
       sourceId,
-      sourceSpan: { from: 0, to: 0 },
-      sourceFingerprint: "test-fingerprint"
+      sourceSpan: { from: 0, to: 0 }
     },
     style: {} as ScenePath["style"],
     styleChain: [],
@@ -82,8 +80,7 @@ function makeEllipse(sourceId: string, centerX: number, centerY: number, rx: num
     layer: "main",
     sourceRef: {
       sourceId,
-      sourceSpan: { from: 0, to: 0 },
-      sourceFingerprint: "test-fingerprint"
+      sourceSpan: { from: 0, to: 0 }
     },
     style: {} as SceneEllipse["style"],
     styleChain: [],
@@ -104,8 +101,7 @@ function makeText(sourceId: string, text: string, x: number, y: number): SceneTe
     layer: "main",
     sourceRef: {
       sourceId,
-      sourceSpan: { from: 0, to: 0 },
-      sourceFingerprint: "test-fingerprint"
+      sourceSpan: { from: 0, to: 0 }
     },
     style: { fontSize: 10 } as SceneText["style"],
     styleChain: [],

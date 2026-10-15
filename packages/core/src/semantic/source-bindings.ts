@@ -88,3 +88,43 @@ export function createSceneSourceBinder(resolveSpan: (span: Span) => Span, sourc
 
   return { element, handle, metadata };
 }
+
+/**
+ * The least span holding every source location a binder would move in these
+ * elements and diagnostics, and `span`. While a source transition leaves it
+ * where it was, none of them moves and binding would change nothing.
+ */
+export function sceneSourceExtent(elements: readonly SceneElement[], diagnostics: unknown, span: Span): Span {
+  let from = span.from;
+  let to = span.to;
+  const seen = new WeakSet<object>();
+  // As the binder's metadata: what it would resolve, it reaches.
+  function visit(value: unknown): void {
+    if (!value || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    const record = value as Record<string, unknown>;
+    if (typeof record.from === "number" && typeof record.to === "number" && Object.keys(record).length === 2) {
+      from = Math.min(from, record.from);
+      to = Math.max(to, record.to);
+      return;
+    }
+    for (const key of Object.keys(record)) {
+      if (key !== "identityRef") visit(record[key]);
+    }
+  }
+  for (const element of elements) {
+    visit(element.sourceRef);
+    for (const entry of element.styleChain) {
+      visit(entry.sourceRef);
+      if (!entry.sourceRef?.identityRef) visit(entry.rawOptions);
+    }
+    visit(element.matrixCell);
+    visit(element.treeChild);
+    visit(element.adornment);
+    visit(element.origin);
+    for (const clip of element.clipChain ?? []) visit(clip.sourceRef);
+    if (element.kind === "Text" && element.textSourceSpan) visit(element.textSourceSpan);
+  }
+  visit(diagnostics);
+  return { from, to };
+}

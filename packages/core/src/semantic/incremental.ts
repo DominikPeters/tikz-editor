@@ -44,7 +44,7 @@ import type { SourcePatch } from "../edit/types.js";
 import type { WorldBounds } from "../coords/points.js";
 import { computeMinimalReplacementPatch } from "../edit/patch.js";
 import { patchesMatchSourceTransition } from "../edit/source-patches.js";
-import { createSceneSourceBinder, createSourceSpanResolver } from "./source-bindings.js";
+import { createSceneSourceBinder, createSourceSpanResolver, sceneSourceExtent } from "./source-bindings.js";
 
 export type IncrementalSemanticTrigger = "drag-element" | "drag-handle" | "other";
 export type IncrementalSemanticReplayMode = "full" | "suffix" | "selective";
@@ -127,6 +127,8 @@ type SemanticStatementFragment = {
   featureUsage: FeatureUsage;
   /** The random number generator's seed after the statement, which a replay of its effects does not advance. */
   mathRandomSeed: number;
+  /** Holds every source location in the elements and diagnostics: while it stands, they stand. */
+  sourceExtent: Span;
 };
 
 type CapturedSemanticCheckpoints = {
@@ -812,7 +814,8 @@ function createStatementFragment(
     editHandles: evaluated.editHandles,
     diagnostics: evaluated.diagnostics,
     effectSummary: evaluated.effectSummary,
-    featureUsage: evaluated.featureUsage
+    featureUsage: evaluated.featureUsage,
+    sourceExtent: sceneSourceExtent(evaluated.elements, evaluated.diagnostics, evaluated.sourceSpan)
   };
 }
 
@@ -1198,7 +1201,11 @@ function normalizeChangedSourceIds(
   return [...unique];
 }
 
-/** Eagerly bind compact source metadata; never clone the reusable geometry. */
+/**
+ * Eagerly bind compact source metadata; never clone the reusable geometry.
+ * Edit handles name the source revision, so they are bound for every new
+ * source; elements only when their source locations move.
+ */
 function* bindFragmentsToCurrentSource(
   run: ReturnType<typeof createSemanticEvaluationRun>,
   fragments: readonly SemanticStatementFragment[],
@@ -1209,6 +1216,12 @@ function* bindFragmentsToCurrentSource(
   const current: SemanticStatementFragment[] = [];
   for (const fragment of fragments) {
     if (fragment.sourceFingerprint === sourceFingerprint) { current.push(fragment); continue; }
+    const editHandles = fragment.editHandles.map(binder.handle);
+    const sourceExtent = resolveSpan(fragment.sourceExtent);
+    if (sourceExtent === fragment.sourceExtent) {
+      current.push({ ...fragment, sourceFingerprint, editHandles });
+      continue;
+    }
     const mappedSpan = resolveSpan(fragment.sourceSpan);
     // The AST is authoritative for authored statement boundaries. Expansion
     // fragments use their mapped attribution spans instead of synthetic spans.
@@ -1226,8 +1239,7 @@ function* bindFragmentsToCurrentSource(
       }
       return bound;
     });
-    current.push({ ...fragment, sourceSpan, sourceFingerprint, elements,
-      editHandles: fragment.editHandles.map(binder.handle),
+    current.push({ ...fragment, sourceSpan, sourceFingerprint, sourceExtent, elements, editHandles,
       diagnostics: binder.metadata(fragment.diagnostics) });
     yield;
   }

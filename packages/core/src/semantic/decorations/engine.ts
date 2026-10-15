@@ -329,8 +329,7 @@ function decorateTextAlongPath(path: ScenePath, decoration: DecorationStyle, see
         layer: path.layer,
         sourceRef: {
           sourceId: path.sourceRef.sourceId,
-          sourceSpan: path.sourceRef.sourceSpan,
-          sourceFingerprint: path.sourceRef.sourceFingerprint
+          sourceSpan: path.sourceRef.sourceSpan
         },
         origin: path.origin,
         style,

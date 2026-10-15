@@ -28,8 +28,7 @@ export function makePath(
     layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
-      sourceSpan: span,
-      sourceFingerprint: ""
+      sourceSpan: span
     },
     shapeHint: shapeHint ?? null,
     style: { ...style },
@@ -193,8 +192,7 @@ export function makeRectangleElement(
     layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
-      sourceSpan: span,
-      sourceFingerprint: ""
+      sourceSpan: span
     },
     shapeHint: "rectangle",
     style: { ...style },
@@ -249,8 +247,7 @@ export function makeCircleElement(
     layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
-      sourceSpan: span,
-      sourceFingerprint: ""
+      sourceSpan: span
     },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),
@@ -278,8 +275,7 @@ export function makeEllipseElement(
     layer: MAIN_SCENE_LAYER,
     sourceRef: {
       sourceId,
-      sourceSpan: span,
-      sourceFingerprint: ""
+      sourceSpan: span
     },
     style: { ...style },
     styleChain: cloneStyleChain(styleChain),

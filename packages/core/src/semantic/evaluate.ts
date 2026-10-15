@@ -448,8 +448,7 @@ export function evaluateSemanticStatementByIndex(
       statementMacroAttribution: run.statementMacroAttribution,
       templateLocalIdByExpandedId: run.templateLocalIdByExpandedId,
       authoredSourceIds: run.sourceStatementSpanById
-    }),
-    run.context.sourceFingerprint
+    })
   );
   finalizeExpandedStatementHandles({
     statement,
@@ -520,11 +519,7 @@ export function finalizeSemanticEvaluationRun(
 
   const colorAliases = new Map(currentFrame(run.context).colorAliases);
   const contentBounds = run.context.pictureBounds ?? computeBounds(elements) ?? null;
-  const generatedBackground = generateBackgroundHookElements(
-    run.context,
-    contentBounds,
-    run.context.sourceFingerprint
-  );
+  const generatedBackground = generateBackgroundHookElements(run.context, contentBounds);
   if (generatedBackground.elements.length > 0) {
     elements.push(...generatedBackground.elements);
   }
@@ -541,11 +536,7 @@ export function finalizeSemanticEvaluationRun(
     elements[index] = {
       ...element,
       layer: element.layer || MAIN_SCENE_LAYER,
-      runtimeId: element.runtimeId ?? element.id,
-      sourceRef: {
-        ...element.sourceRef,
-        sourceFingerprint: run.context.sourceFingerprint
-      }
+      runtimeId: element.runtimeId ?? element.id
     };
   }
 
@@ -751,18 +742,11 @@ function buildSourceStatementSpanById(
   return spans;
 }
 
-function finalizeStatementElements(
-  elements: SceneElement[],
-  sourceFingerprint: string
-): SceneElement[] {
+function finalizeStatementElements(elements: SceneElement[]): SceneElement[] {
   return elements.map((element) => ({
     ...element,
     layer: element.layer || MAIN_SCENE_LAYER,
-    runtimeId: element.runtimeId ?? element.id,
-    sourceRef: {
-      ...element.sourceRef,
-      sourceFingerprint
-    }
+    runtimeId: element.runtimeId ?? element.id
   }));
 }
 
