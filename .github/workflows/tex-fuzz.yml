@@ -27,6 +27,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y texlive-luatex texlive-latex-extra texlive-fonts-recommended
+      - name: Initialize and validate LuaLaTeX oracle
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from "node:child_process";
+          import { runTexOracleDocument, texOracleEnv } from "./scripts/lib/tex-oracle.mjs";
+          execFileSync("luaotfload-tool", ["--update"], { env: texOracleEnv(), stdio: "inherit" });
+          console.log(runTexOracleDocument({
+            engine: "lualatex",
+            source: String.raw`\documentclass{article}\begin{document}Oracle ready: $x^2$.\end{document}`,
+          }));
+          JS
       - name: Shared generator, invariants, coverage, and oracle canary
         run: node scripts/run-tex-fuzz.mjs --cases 10000 --seed ${{ github.run_number }} --profile document --malformed-cases 500 --prefix-base-cases 8 --prefix-limit-per-case 128 --metamorphic-cases 200 --projection-control-cases 128 --supported-cases 128 --supported-max-attempts 16384 --boundary-cases 128 --engine-history-cases 24 --math-oracle-cases 16 --math-oracle-policy diagnostic --oracle-sample-cases 128 --oracle-geometry-policy fail --out artifacts/tex-fuzz/nightly-bundle.json --coverage-out artifacts/tex-fuzz/nightly-coverage.json
       - name: Mandatory math symbol and layout comparisons

@@ -391,15 +391,19 @@ export function checkTexFuzzLayoutResultInvariants(
       add("negative-layout-extent", `paragraph/line/${line.lineIndex}`, { lineMetrics });
     }
     for (const [segmentIndex, segment] of line.segments.entries()) {
-      if (!finite(segment.x) || !finite(segment.width) || segment.width < 0) {
+      // Hidden glue segments also represent pair kerns between separately
+      // styled text runs. Their advance (and caret direction) can be negative.
+      const signedAdvance = segment.kind === "space" && segment.text === "";
+      if (!finite(segment.x) || !finite(segment.width) || (!signedAdvance && segment.width < 0)) {
         add("invalid-segment-geometry", `paragraph/line/${line.lineIndex}/${segment.kind}/${segmentIndex}`, {
           x: segment.x,
           width: segment.width,
         });
       }
       const stops = segment.caretStops ?? [];
+      const direction = signedAdvance && segment.width < 0 ? -1 : 1;
       if (stops.some((value) => !finite(value))
-        || stops.some((value, index) => index > 0 && value < (stops[index - 1] ?? -Infinity))) {
+        || stops.some((value, index) => index > 0 && direction * (value - (stops[index - 1] ?? value)) < 0)) {
         add("invalid-caret-stops", `paragraph/line/${line.lineIndex}/${segment.kind}`, { stops });
       }
       for (const entry of segment.mathCaretEntries ?? []) {

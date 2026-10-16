@@ -13,6 +13,19 @@ const workerUrl = new URL(`data:text/javascript,${encodeURIComponent(`
 const source = (value: string) => caseFromTexFuzzAst([{ kind: "text", value }]);
 
 describe("bounded native TeX fuzz execution", () => {
+  it("loads font outlines before checking painted math in a fresh worker", async () => {
+    const caseData = caseFromTexFuzzAst([{ kind: "display-math", delimiter: "flalign-star", body: {
+      kind: "radical",
+      degree: { kind: "alphabet", command: "boldsymbol", body: {
+        kind: "script", base: { kind: "atom", value: "<" },
+        subscript: { kind: "atom", value: "x" }, superscript: { kind: "atom", value: "+" },
+      } },
+      body: { kind: "atom", value: "y" },
+    } }], { profile: "document" });
+    const [record] = await runTexFuzzNativeCases([caseData]);
+    expect(record.observations).toEqual([]);
+  });
+
   it("terminates a hung case, preserves its witness, and continues in a fresh worker", async () => {
     const records = await runTexFuzzNativeCases([source("hang"), source("valid")], {
       workerUrl, timeoutMs: 1000, checks: () => ({ history: true, churnRequests: 4100 }),

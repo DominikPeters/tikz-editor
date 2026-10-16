@@ -5,7 +5,10 @@ import {
 } from "../../packages/tex-fuzz/dist/index.js";
 
 import { layoutSimpleTexParagraph } from "../../packages/core/dist/text/tex/index.js";
+import { loadAllTexGlyphOutlines } from "../../packages/core/dist/text/tex/fonts/glyph-outlines.js";
 import { compareTexFuzzMathOracle } from "./tex-fuzz-math-oracle.mjs";
+
+await loadAllTexGlyphOutlines();
 
 let engine;
 parentPort.on("message", async ({ caseData, checks }) => {

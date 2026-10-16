@@ -6,8 +6,8 @@ import { join } from "node:path";
 export function texOracleEnv(extra = {}) {
   return {
     ...process.env,
-    TEXMFVAR: process.env.TEXMFVAR ?? "/private/tmp",
-    TEXMFCACHE: process.env.TEXMFCACHE ?? "/private/tmp",
+    TEXMFVAR: process.env.TEXMFVAR ?? tmpdir(),
+    TEXMFCACHE: process.env.TEXMFCACHE ?? tmpdir(),
     ...extra,
   };
 }

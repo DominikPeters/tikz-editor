@@ -28,6 +28,26 @@ function layout(source: string, width = 160) {
 }
 
 describe("TeX fuzz renderer hard invariants", () => {
+  it("accepts negative pair kerns between styled text runs", () => {
+    const caseData = caseFromTexFuzzAst([
+      { kind: "group", children: [{ kind: "text", value: "T" }] },
+      { kind: "text", value: "o" },
+    ]);
+    for (const width of TEX_FUZZ_HARD_INVARIANT_WIDTHS) {
+      const result = layout(caseData.source, width);
+      const kern = result.report!.lines.flatMap(line => line.segments)
+        .find(segment => segment.kind === "space" && segment.text === "");
+      expect(kern?.width).toBeLessThan(0);
+      expect(checkTexFuzzLayoutResultInvariants(caseData, width, result)).toEqual([]);
+
+      const corrupted = structuredClone(result);
+      const text = corrupted.report!.lines[0].segments[0];
+      text.width = texLength(-1);
+      expect(checkTexFuzzLayoutResultInvariants(caseData, width, corrupted).map(finding => finding.fingerprint.code))
+        .toContain("invalid-segment-geometry");
+    }
+  });
+
   it("keeps leading comments from changing vertical glue before a display", () => {
     const caseData = caseFromTexFuzzAst([
       { kind: "vertical-glue", command: "medskip" },
