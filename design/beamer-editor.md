@@ -1678,8 +1678,10 @@ render correctly across the supported themes.
 - Desktop enhancement: compiled-preview frame fallback via local TeX.
   File > Show Compiled Slide already compiles the whole deck on desktop
   (`createBeamerCompileDocument`, `desktop_compile_latex_pdf`): the deck's
-  engine, a build directory kept per document so `.aux`/`.nav` carry over,
-  and a `.marks` file naming each PDF page's source frame. A frame fallback
+  engine, a build directory kept per document so `.aux`/`.nav`/`.bbl` carry
+  over, BibTeX or Biber when the deck cites, no compile at all while neither
+  the document nor any file it read (the `-recorder` list, the `.bib` files)
+  has changed, and a `.marks` file naming each PDF page's source frame. A frame fallback
   can take its pages from the same compile.
 
 Exit: rectangle-anywhere works and round-trips as `[remember picture,
