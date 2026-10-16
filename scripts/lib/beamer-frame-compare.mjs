@@ -1226,6 +1226,7 @@ function oracleLine(glyphs, baselineY) {
 
 function featuresFromNativeMathSvg(params) {
   const glyphs = []; const rules = []; const transforms = [identityMatrix()];
+  const graphics = [false], imageViewports = [false];
   const transformedRect = (matrix, x, y, width, height) => {
     const corners = [[x,y], [x+width,y], [x,y+height], [x+width,y+height]].map(([a,b]) => transformPoint(matrix,a,b));
     const left = Math.min(...corners.map(p => p.x)); const top = Math.min(...corners.map(p => p.y));
@@ -1233,9 +1234,16 @@ function featuresFromNativeMathSvg(params) {
   };
   for (const match of params.svgBody.matchAll(/<\/?[A-Za-z][^>]*>/gu)) {
     const tag = match[0];
-    if (tag.startsWith("</")) { if (transforms.length > 1) transforms.pop(); continue; }
+    if (tag.startsWith("</")) { if (transforms.length > 1) { transforms.pop(); graphics.pop(); imageViewports.pop(); } continue; }
     const name = /^<([\w:-]+)/u.exec(tag)?.[1];
     const local = parseSvgTransform(readSvgAttribute(tag, "transform") ?? ""); const transform = multiplyMatrices(transforms.at(-1), local);
+    const graphic = graphics.at(-1) || readSvgAttribute(tag, "data-tex-includegraphics") === "true";
+    const viewport = graphic && name === "svg" && readSvgAttribute(tag, "overflow") === "hidden" && readSvgAttribute(tag, "viewBox") != null;
+    if (viewport && !imageViewports.at(-1)) {
+      // Cropped graphicx raster content paints through this viewport. The
+      // nested image retains intrinsic dimensions in viewBox coordinates.
+      rules.push({ role: "image", ...transformedRect(transform, numericSvgAttribute(tag, "x", 0), numericSvgAttribute(tag, "y", 0), Number(readSvgAttribute(tag, "width")), Number(readSvgAttribute(tag, "height"))) });
+    }
     if (name === "path") {
       const fontId = readSvgAttribute(tag, "data-tex-font"); const code = Number(readSvgAttribute(tag, "data-tex-glyph"));
       const explicitSize = Number(readSvgAttribute(tag, "data-tex-font-at-pt"));
@@ -1248,9 +1256,9 @@ function featuresFromNativeMathSvg(params) {
     } else if (name === "rect" || name === "image") {
       const role = name === "image" ? "image" : readSvgAttribute(tag,"data-tex-rule");
       const x = numericSvgAttribute(tag,"x",0); const y = numericSvgAttribute(tag,"y",0); const width = Number(readSvgAttribute(tag,"width")); const height = Number(readSvgAttribute(tag,"height"));
-      if (role && Number.isFinite(width) && Number.isFinite(height)) rules.push({role, ...transformedRect(transform,x,y,width,height)});
+      if (role && !imageViewports.at(-1) && Number.isFinite(width) && Number.isFinite(height)) rules.push({role, ...transformedRect(transform,x,y,width,height)});
     }
-    if (!tag.endsWith("/>") && !isVoidSvgElement(name)) transforms.push(transform);
+    if (!tag.endsWith("/>") && !isVoidSvgElement(name)) { transforms.push(transform); graphics.push(graphic); imageViewports.push(imageViewports.at(-1) || viewport); }
   }
   return {glyphs,rules};
 }

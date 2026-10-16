@@ -228,9 +228,9 @@ class Binder {
     let target = run.slot;
     if (run.flow) {
       if (run.paragraph == null) {
-        const paragraph = this.node("paragraph", "text", span);
+        const paragraph = this.node("paragraph", run.mode, span);
         this.attach(run.slot, paragraph);
-        run.paragraph = this.slot(paragraph, "content", span, { mode: "text" });
+        run.paragraph = this.slot(paragraph, "content", span, { mode: run.mode });
         run.pendingSpace = null;
       }
       target = run.paragraph;
@@ -326,6 +326,10 @@ class Binder {
     return closer?.kind === "group" && closer.at <= limit ? { end: closer.at, complete: false } : match;
   }
 
+  private inAlltt(offset: number): boolean {
+    return [...this.environments.values()].some(env => env.name === "alltt" && env.contentSpan.from <= offset && offset < env.contentSpan.to);
+  }
+
   private matchDelimited(
     at: number,
     limit: number,
@@ -338,7 +342,7 @@ class Binder {
       const char = text[cursor];
       if (char === "\\") {
         cursor += 1;
-      } else if (char === "%") {
+      } else if (char === "%" && !this.inAlltt(cursor)) {
         cursor = this.commentEnd(cursor) - 1;
       } else if (char === "{" && open !== "{") {
         const inner = this.groupEnd(cursor, limit);
@@ -366,7 +370,7 @@ class Binder {
     let cursor = at;
     let newlines = 0;
     while (cursor < limit) {
-      if (this.text[cursor] === "%") {
+      if (this.text[cursor] === "%" && !this.inAlltt(cursor)) {
         cursor = Math.min(this.commentEnd(cursor), limit);
         if (cursor < limit && this.text[cursor] === "\r") cursor += 1;
         if (cursor < limit && this.text[cursor] === "\n") {
@@ -450,6 +454,9 @@ class Binder {
         continue;
       }
       run.skipSpace = false;
+      if ("%$&_~^".includes(char) && this.inAlltt(cursor)) {
+        this.leaf(run, "char", cursor, cursor + 1); cursor++; continue;
+      }
       if (char === "%") {
         const end = this.commentEnd(cursor);
         this.attachComment(run, cursor, end);
@@ -623,9 +630,9 @@ class Binder {
       case "end":
         return this.strayEnd(run, at);
       case "(":
-        return run.mode === "text" ? this.math(run, at, 2, "formula", "paren") : this.stray(run, at, end);
+        return run.mode !== "math" ? this.math(run, at, 2, "formula", "paren") : this.stray(run, at, end);
       case "[":
-        return run.mode === "text" ? this.math(run, at, 2, "display", "bracket") : this.stray(run, at, end);
+        return run.mode !== "math" ? this.math(run, at, 2, "display", "bracket") : this.stray(run, at, end);
       case ")":
       case "]":
         return this.stray(run, at, end);
@@ -635,6 +642,7 @@ class Binder {
         if (run.mode === "math") return this.delimited(run, at, end);
         break;
       case "right":
+        if (run.mode === "verbatim") break;
         return this.stray(run, at, this.delimiterTokenEnd(end, run.end));
       case "middle":
         if (run.mode === "math") {
@@ -829,7 +837,7 @@ class Binder {
   private bindArgument(run: Run, node: NodeId, arg: ArgSchema, cursor: number): number {
     const text = this.text;
     const start = this.skipSpaces(cursor, run.end);
-    const mode = arg.mode ?? run.mode;
+    const mode = arg.mode === "text" && this.inAlltt(cursor) ? "verbatim" : arg.mode ?? run.mode;
     let span: Span | null = null;
     let content: Span | null = null;
     let braced = false;
@@ -859,7 +867,7 @@ class Binder {
       if (!match.complete) {
         this.diagnose("unclosed-group", start, match.end, "Unclosed argument");
       }
-    } else if (start < run.end && !this.atStop(run, start) && !"}$&%".includes(text.charAt(start)) &&
+    } else if (start < run.end && !this.atStop(run, start) && !(this.inAlltt(start) ? "}" : "}$&%").includes(text.charAt(start)) &&
       !(text[start] === "\\" && this.isControl(start, "\\"))) {
       // TeX's undelimited argument: exactly one token (\frac1n, x^2).
       const end = this.tokenEnd(start);
@@ -989,9 +997,21 @@ class Binder {
       cursor = this.bindArgument(bodyRun, node, arg, cursor);
     }
     switch (schema.body) {
+      case "literal": {
+        const slot = this.slot(node, "content", { from: cursor, to: bodyEnd }, { mode: "verbatim" });
+        const literalRun = this.run(slot, "verbatim", bodyEnd);
+        while (cursor < bodyEnd) {
+          const end = cursor + ((this.text.codePointAt(cursor) ?? 0) > 0xffff ? 2 : 1);
+          this.leaf(literalRun, /\s/u.test(this.text.charAt(cursor)) ? "space" : "char", cursor, end);
+          cursor = end;
+        }
+        this.finish(literalRun);
+        break;
+      }
       case "flow": {
-        const slot = this.slot(node, "flow", { from: cursor, to: bodyEnd }, { mode: "text", flow: true });
-        this.scanSlot(slot, "text", cursor, bodyEnd, NO_STOPS, { flow: true, trim: true });
+        const mode = name === "alltt" ? "verbatim" : "text";
+        const slot = this.slot(node, "flow", { from: cursor, to: bodyEnd }, { mode, flow: true });
+        this.scanSlot(slot, mode, cursor, bodyEnd, NO_STOPS, { flow: true, trim: true });
         break;
       }
       case "math": {

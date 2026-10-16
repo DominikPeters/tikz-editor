@@ -7,6 +7,17 @@ const font = textFontProfile.resolveTextFont(textFontProfile.defaultFontState, t
 const layout = (source: string) => layoutSimpleTexParagraph(source, { width: texLength(300), font, textFontProfile });
 
 describe("Beamer's scoped emphasis", () => {
+
+  it.each(["serif", "sans"] as const)("honors explicit font-state sizes in %s profiles", family => {
+    const profile = createBeamerTexTextFontProfile({ family, ...(family === "sans" ? { typeface: "fira" as const } : {}), series: "medium", shape: "upright", sizePt: 12, lineHeightPt: 14.5 });
+    const state = { ...profile.defaultFontState, sizePt: texLength(10), color: "#3333b3" };
+    const selected = profile.resolveTextFont(state, texLength(12), computerModernTexMetricProvider);
+    expect(selected.atPt).toBe(10);
+    expect(selected.color).toBe("#3333b3");
+    expect(selected.id).toBe(family === "serif" ? "lmroman10-regular" : "firasans-light");
+    expect(profile.resolveTextFontId(state, texLength(12))).toBe(selected.id);
+  });
+
   it("matches a scoped itshape without LaTeX's implicit italic correction", () => {
     const emphasized = layout(String.raw`Ordinary \emph{emphasis} and text.`);
     const declared = layout(String.raw`Ordinary {\itshape emphasis} and text.`);

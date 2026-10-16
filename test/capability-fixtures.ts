@@ -1,4 +1,11 @@
 export const capabilityFixtures: Record<string, string> = {
+  text_dirac_notation: String.raw`\begin{tikzpicture}\node {$\bra{a}\ket\psi+\braket{a|b}$};\end{tikzpicture}`,
+  beamer_scientific_notation: String.raw`\documentclass{beamer}\usepackage{siunitx}\begin{document}\begin{frame}$\SI{6.67e-5}{\metre\squared\per\second}$\end{frame}\end{document}`,
+  beamer_preformatted: String.raw`\documentclass{beamer}\usepackage{listings}\lstset{columns=fullflexible,basicstyle=\ttfamily}\begin{document}\begin{frame}[fragile]
+\begin{lstlisting}
+  code(x)
+\end{lstlisting}
+\end{frame}\end{document}`,
   basic_draw: String.raw`\begin{tikzpicture}
   \draw[thick, ->] (0,0) -- (1,1) -| (2,0) |- (3,1);
 \end{tikzpicture}`,

@@ -24,11 +24,11 @@
     { "id": "size-and-list-spacing", "file": "flow.tex", "frame": 20, "family": "nested-flow", "todos": ["B09"], "evidence": ["r2-09", "r2-23"], "pages": 1, "oracleText": ["Alpha", "Beta", "Gamma", "Delta"] }
   ],
   "recognition": [
-    { "id": "alltt-top-level", "file": "unsupported-code.tex", "frame": 1, "environment": "alltt", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
+    { "id": "verbatim-top-level", "file": "unsupported-code.tex", "frame": 1, "environment": "verbatim", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
     { "id": "lstlisting-top-level", "file": "unsupported-code.tex", "frame": 2, "environment": "lstlisting", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
-    { "id": "alltt-column", "file": "unsupported-code.tex", "frame": 3, "environment": "alltt", "requiredText": ["BeforeOpaque", "AfterOpaque", "OtherColumn"] },
+    { "id": "verbatim-column", "file": "unsupported-code.tex", "frame": 3, "environment": "verbatim", "requiredText": ["BeforeOpaque", "AfterOpaque", "OtherColumn"] },
     { "id": "lstlisting-column", "file": "unsupported-code.tex", "frame": 4, "environment": "lstlisting", "requiredText": ["BeforeOpaque", "AfterOpaque", "OtherColumn"] },
-    { "id": "alltt-block", "file": "unsupported-code.tex", "frame": 5, "environment": "alltt", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
+    { "id": "verbatim-block", "file": "unsupported-code.tex", "frame": 5, "environment": "verbatim", "requiredText": ["BeforeOpaque", "AfterOpaque"] },
     { "id": "lstlisting-block", "file": "unsupported-code.tex", "frame": 6, "environment": "lstlisting", "requiredText": ["BeforeOpaque", "AfterOpaque"] }
   ]
 }

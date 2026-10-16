@@ -787,13 +787,28 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_overlay_pictures"],
     notes: "A tikzpicture with `overlay` among its own options is set as TeX sets it, an empty box in the paragraph around it, and drawn from that place over the page; with `remember picture` its `current page` node is the page. Explicit true/false options respect source order. Paragraph glue, the picture's origin and its text are checked against LuaLaTeX in frames, lists, columns, blocks and under \\only/\\uncover. Shapes can be selected and edited directly on the slide without changing the active frame or text-editing surface. Drawing tools reuse a visible layer or create one with the first drawing, in one undo step: a `tikzlayer` environment at the end of the frame, defined in the preamble (with the TikZ package when needed) as `\\par\\nointerlineskip` and a remembered overlay picture, so the frame's text does not move (checked against LuaLaTeX). A `tikzlayer` is a drawing layer only while every definition of it is the editor's; where the author defines their own, new layers are plain pictures joined to the frame without moving its text. Copied slides carry the definition, and pasting adds it where it is missing (or, into a deck with its own `tikzlayer`, writes each layer as a plain picture). Deleting the last drawing removes the empty picture. The viewed overlay step and slide viewport are shared with the layer. Pictures inherit visible preamble/frame styles, colors and macros, and have separate SVG IDs for clips, gradients and patterns. Drags, inspector scrubs and structurally masked node typing reuse parsing, semantic checkpoints and per-object SVG paint; the slide is laid out with the layer undrawn, and that layout stands while the layer keeps its length; 500-object, text-heavy layers and resize/rotate/paste/cancellation are covered by regressions. The `\\tikz` command form, references between remembered pictures, `remember picture` set through styles, scaling by frame shrink and drawing covered pictures invisibly are not implemented.",
   },
+  text_dirac_notation: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
+    fixtures: ["text_dirac_notation"],
+    notes: "Source-backed math supports braket's fixed bra, ket and braket, including a single unbraced token, plus scalable Bra/Ket. Delimiter classes, nested fractions, glyphs and spacing are checked against LuaLaTeX. Braket/Set/set and automatic middle delimiters are not implemented."
+  },
+  beamer_scientific_notation: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
+    fixtures: ["beamer_scientific_notation"],
+    notes: "Beamer body paragraphs lower default SI/si/num decimal and e-notation quantities, named SI units, milli/kilo/centi/nano prefixes, squared/cubed and nonsticky per. Numeric input keeps source ranges and unit output owns its authored factor. Package configuration, localization, uncertainty, grouping, micro and S columns are outside this subset and expressions receive package diagnostics."
+  },
+  beamer_preformatted: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
+    fixtures: ["beamer_preformatted"],
+    notes: "Beamer listings supports fullflexible typewriter blocks, preserved spaces/tabs and blank lines, basic font sizes and Python token styles; alltt retains TeX controls and groups. Literal source has structural editing ownership. Unsupported listing options/styles receive a package diagnostic. Line numbers, frames, line wrapping, escape modes and arbitrary language definitions are not implemented."
+  },
   beamer_float_captions: {
     parser: "partial",
     semantic: "not-applicable",
     svg: "partial",
     edit: "partial",
     fixtures: ["beamer_float_captions"],
-    notes: "Beamer figure/table environments participate in centered source-backed flow. Captions support the default and numbered stock templates, optional short text, stock label separators, caption-name color and class-size-specific caption fonts. Ordinary caption/subcaption-package captions support short centered or wrapped ragged-right text and unnumbered caption* without advancing counters. Struts, bottom minipage depth and caption skips are checked against LuaLaTeX. Arbitrary caption template/font/package-option redefinitions are not implemented.",
+    notes: "Beamer figure/table environments participate in centered source-backed flow. Captions support the default and numbered stock templates, optional short text, stock label separators, caption-name color and class-size-specific caption fonts. Ordinary caption/subcaption-package captions support short centered or wrapped ragged-right text and unnumbered caption* without advancing counters. Struts, bottom minipage depth and caption skips are checked against LuaLaTeX. Subcaption image panels support explicit widths, bottom alignment, letter labels and hfill composition with local graphicx trim/clip. Arbitrary caption template/font/package-option redefinitions are not implemented.",
   },
   beamer_frame_continuations: {
     parser: "partial",

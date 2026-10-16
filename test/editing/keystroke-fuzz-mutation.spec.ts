@@ -103,7 +103,12 @@ describe("keystroke fuzzing catches broken operations", () => {
   ])("%s → %s", (mutant, invariants) => {
     sabotage.mutant = mutant;
     try {
-      const result = runCampaign({ starts, seed: 7, cases: 400, length: 24, maxFailures: 1, shrink: false });
+      // Keep the list-merge mutation exercised as the general fixture corpus grows.
+      // Titles and non-list bodies cannot trigger this operation.
+      const mutationStarts = mutant === "item merge eats a word"
+        ? starts.filter(start => /\\item\b/u.test(start.text))
+        : starts;
+      const result = runCampaign({ starts: mutationStarts, seed: 7, cases: 400, length: 24, maxFailures: 1, shrink: false });
       expect(invariants.split("|")).toContain(result.invariants[0]);
     } finally {
       sabotage.mutant = null;

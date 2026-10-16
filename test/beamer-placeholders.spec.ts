@@ -104,7 +104,7 @@ After.
 Before.
 ${UNSUPPORTED_ENVIRONMENT}
 Between.
-\begin{alltt}second opaque region\end{alltt}
+\begin{verbatim}second opaque region\end{verbatim}
 After.
 \end{${environment}}`);
     const result = await renderBeamerFrame(source);

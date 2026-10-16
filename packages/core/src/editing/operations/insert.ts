@@ -32,7 +32,11 @@ export function typeCharacter(
   const { tree } = view;
   const slot = editSlotAt(tree.slots, caret.slot);
   if (slot.mode === "verbatim") {
-    return insert(at, char);
+    // Listings is literal; alltt keeps TeX groups and controls active while
+    // the other TeX special characters print as typed.
+    let owner: EditNode = editNodeAt(tree.nodes, slot.node);
+    while (owner.command !== "alltt" && owner.parent != null) owner = editNodeAt(tree.nodes, editSlotAt(tree.slots, owner.parent).node);
+    if (owner.command !== "alltt" || "%$&_~^".includes(char)) return insert(at, char);
   }
   if (beforeMulticolumn(view, caret)) {
     // `\multicolumn` must open its cell ("Misplaced \omit"): nothing goes before it.

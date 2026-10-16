@@ -30,7 +30,7 @@ describe("Beamer corpus-priority reproduction contracts", () => {
     expect([...flow.frames, ...code.frames].every(frame => frame.endSpan)).toBe(true);
     expect(new Set([...manifest.fidelity, ...manifest.recognition].map(f => f.id)).size).toBe(26);
     expect(manifest.fidelity.every(f => f.file === "flow.tex")).toBe(true);
-    expect(new Set(manifest.recognition.map(f => f.environment))).toEqual(new Set(["alltt", "lstlisting"]));
+    expect(new Set(manifest.recognition.map(f => f.environment))).toEqual(new Set(["verbatim", "lstlisting"]));
   });
 
   it("retains the exact glyph and rectangle tolerances, including invalid measurements", () => {

@@ -1,3 +1,5 @@
+import { projectBeamerPreformatted } from "./preformatted.js";
+import { projectBeamerScientificNotation } from "./package-notation.js";
 import { createBeamerScopedTheme } from "./theme/scoped-declarations.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
@@ -3842,10 +3844,12 @@ function layoutParagraph(params: {
       : params.alignment === "right"
         ? "ragged-left"
         : "ragged-right";
+  params = { ...params, mapped: projectBeamerPreformatted(params.mapped, params.references.source, params.references.renderDiagnostics, params.references.theme, params.font) };
   let mapped = params.macroBindings
     ? expandMacroBindingsMapped(params.mapped, params.macroBindings)
     : params.mapped;
   if (params.references.theme?.options["alert-bold"] === true) mapped = projectBeamerAlertWeight(mapped, params.sourceSpan);
+  mapped = projectBeamerScientificNotation(mapped, params.references.renderDiagnostics, params.references.source);
   const namedSize = activeBeamerNamedSize(mapped.text, params.references.theme);
   const namedSizes = beamerNamedFontSizes(params.references.theme);
   mapped = projectBeamerSpeakerNotes(mapped);
@@ -3858,6 +3862,7 @@ function layoutParagraph(params: {
   const graphicsResolver = beamerBibliographyGraphicsResolver(params.graphicsResolver);
   mapped = projectBeamerCaptions(mapped, params.references.source, params.references.theme, {
     widthPt: params.bounds.width,
+    diagnostics: params.references.renderDiagnostics,
     measure: tex => layoutSimpleTexParagraph(tex, {
       width: texLength(10000), font: resolvedFont, metricProvider, textFontProfile,
       alignment: "ragged-right", graphicsResolver,

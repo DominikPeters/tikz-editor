@@ -43,6 +43,7 @@ import {
   type BeamerTheoremOccurrence,
 } from "./theorems.js";
 import type { BeamerTheoremTemplateVariant } from "./types.js";
+import { projectBeamerPreformatted } from "./preformatted.js";
 import { parseTcolorboxOptions } from "./tcolorbox.js";
 
 const LIST_ENVIRONMENTS = new Set([
@@ -75,6 +76,11 @@ export function parseBeamerFrameBody(
   const { source, frame } = params;
   const context = beamerSyntaxContext(source, params.syntax);
   const diagnostics: Diagnostic[] = [];
+  // Validate at the package boundary even when unsupported listings become
+  // source cards before paragraph layout runs.
+  if (/\\begin\s*\{lstlisting\}/u.test(source.slice(frame.bodySpan.from, frame.bodySpan.to))) {
+    projectBeamerPreformatted(createIdentityMappedText(source.slice(frame.bodySpan.from, frame.bodySpan.to), frame.bodySpan.from), source, diagnostics);
+  }
   const tokens = beamerEnvironmentBoundariesIn(context, frame.bodySpan);
   const theoremOccurrences =
     params.theoremOccurrences ??
@@ -1332,6 +1338,13 @@ function findUnsupportedEnvironmentEndIndex(
   theoremOccurrences: ReadonlyMap<number, BeamerTheoremOccurrence>
 ): number {
   const begin = requireArrayValue(tokens, index);
+  if (begin.kind === "begin" && begin.name === "lstlisting" && !isInsideNativeTextFlow(context, begin.span.from, overlays)) {
+    const endIndex = matchingEnvironmentEnd(tokens, index);
+    if (endIndex < 0) return -1;
+    const raw = context.source.slice(begin.span.from, requireArrayValue(tokens, endIndex).span.to);
+    const projected = projectBeamerPreformatted(createIdentityMappedText(raw, begin.span.from), context.source, []);
+    return projected.text === raw ? endIndex : -1;
+  }
   if (
     begin.kind !== "begin" ||
     [
@@ -1339,6 +1352,9 @@ function findUnsupportedEnvironmentEndIndex(
       "column",
       "tikzpicture",
       "tabular",
+      "lstlisting",
+      "alltt",
+      "subfigure",
       "figure",
       "table",
       "tcolorbox",

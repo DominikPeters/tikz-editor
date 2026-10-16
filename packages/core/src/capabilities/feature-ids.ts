@@ -93,6 +93,9 @@ export const FEATURE_IDS = [
   "text_includegraphics",
   "text_tabular", // Source-backed LaTeX tabular and booktabs alignments.
   "text_math_fonts", // Literal mathcodes, genuine math alphabets, scoped bold math and class font substitutions.
+  "text_dirac_notation", // Fixed braket delimiters and scalable Bra/Ket with source-owned math.
+  "beamer_scientific_notation", // Default decimal/scientific quantities and named units.
+  "beamer_preformatted", // Bounded listings and alltt blocks.
   "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
   "beamer_document_scan",
   "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.

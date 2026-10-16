@@ -22,6 +22,24 @@ function tree(text: string) {
 }
 
 describe("edit tree binding", () => {
+
+  it("binds listing characters literally and alltt controls structurally", () => {
+    const source = R`\begin{lstlisting}[language=Python]
+\note{literal} % $ _ { }
+\end{lstlisting}`;
+    const built = tree(source);
+    expect(built.diagnostics).toEqual([]);
+    expect(built.nodes.some(node => node.command === "note" || node.kind === "formula")).toBe(false);
+    for (const char of ["%", "$", "_", "{", "}"]) {
+      const from = source.indexOf(char, source.indexOf("\n"));
+      expect(built.nodes.some(node => node.kind === "char" && node.span.from === from)).toBe(true);
+    }
+    const alltt = tree(R`\begin{alltt}\textbf{bold} % $ _\end{alltt}`);
+    expect(alltt.diagnostics).toEqual([]);
+    expect(alltt.nodes.some(node => node.command === "textbf")).toBe(true);
+    expect(alltt.nodes.some(node => node.kind === "formula")).toBe(false);
+  });
+
   it("binds scripts by TeX's single-token rule", () => {
     expect(printEditTree(tree(R`$x^23 + x_i^{n+1}$`))).toBe(
       `(scope (paragraph (formula (scripted base:["x"] sup:["2"]) "3+" (scripted base:["x"] sub:["i"] sup:["n+1"]))))`
@@ -211,7 +229,7 @@ describe("edit tree over the Beamer fixture corpus", () => {
   });
 
   it("compares supported math next to an unsupported package macro's literal argument", () => {
-    const source = R`$\ket{\Phi^+}+x^2$`;
+    const source = R`$\unregisteredket{\Phi^+}+x^2$`;
     const built = tree(source);
     expect(compareEditTreeWithEngines(built)).toEqual([]);
     const adjacent = built.nodes.find(node => node.kind === "scripted" && source.slice(node.span.from, node.span.to) === "x^2")!;

@@ -64,7 +64,7 @@ export function createBeamerTexTextFontProfile(
     label: `LuaLaTeX Beamer ${role.family}`,
     resolveTextFontId(state, atPt) {
       const normalized = normalize(state);
-      const roman = romanFontId(normalized, atPt ?? role.sizePt);
+      const roman = romanFontId(normalized, state.sizePt ?? atPt ?? role.sizePt);
       if (roman) return roman;
       if (role.typeface === "fira" && normalized.family === "sans") {
         const italic = normalized.shape === "italic" || normalized.shape === "slanted";
@@ -77,12 +77,19 @@ export function createBeamerTexTextFontProfile(
     },
     resolveTextFont(state, atPt, metricProvider) {
       const normalized = normalize(state);
+      atPt = state.sizePt ?? atPt;
       const roman = romanFontId(normalized, atPt);
-      if (roman) return (metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: roman, atPt });
+      if (roman) return {
+        ...(metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: roman, atPt }),
+        ...(state.color ? { color: state.color } : {}),
+      };
       if (role.typeface === "fira" && normalized.family === "sans") {
         const italic = normalized.shape === "italic" || normalized.shape === "slanted";
         const face = normalized.series === "bold" ? italic ? "italic" : "regular" : italic ? "lightitalic" : "light";
-        return (metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: `firasans-${face}`, atPt });
+        return {
+          ...(metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: `firasans-${face}`, atPt }),
+          ...(state.color ? { color: state.color } : {}),
+        };
       }
       return luaLatexDefaultTextFontProfile.resolveTextFont(
         normalize(state),

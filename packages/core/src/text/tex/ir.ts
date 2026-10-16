@@ -2279,6 +2279,10 @@ function scanSimpleTexProseControl(
 
   for (const [name, replacement] of [
     ["textbackslash", "\\"],
+    ["textasciicircum", "^"],
+    ["textasciitilde", "~"],
+    ["textquotesingle", "'"],
+    ["textasciigrave", "`"],
     ["textellipsis", "\u2026"],
     ["ldots", "\u2026"],
   ] as const) {

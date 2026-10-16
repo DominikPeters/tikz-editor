@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "scope": "Observed breadth-deck package interfaces; no additional support approved or implemented.",
+  "scope": "Observed breadth-deck interfaces at the pre-implementation baseline; current first-tranche support is recorded in design/beamer-package-frontends.md.",
   "packages": [
     {
       "package": "pgfplots",

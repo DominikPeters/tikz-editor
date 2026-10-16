@@ -58,3 +58,10 @@ dependency is introduced by this inventory.
 The installed TeX Live 2025 package sources and the original fixture preambles
 are the semantic references for this inventory. It describes observed syntax;
 it does not infer compatibility from merely recognizing a package name.
+
+## Accepted first stage
+
+The user accepted the recommended first tranche. Its implemented boundary and
+independent checks are recorded in [First Beamer package tranche](beamer-package-frontends.md).
+The table above preserves the pre-implementation audit; the remaining package
+rows still require a support decision.

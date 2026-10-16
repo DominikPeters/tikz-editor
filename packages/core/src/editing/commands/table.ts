@@ -50,7 +50,7 @@ export type CommandSchema = {
   readonly userMacro?: boolean;
 };
 
-export type EnvironmentBody = "flow" | "list" | "math" | "math-alignment" | "text-alignment" | "opaque";
+export type EnvironmentBody = "flow" | "list" | "math" | "math-alignment" | "text-alignment" | "literal" | "opaque";
 
 export type EnvironmentSchema = {
   readonly name: string;
@@ -235,6 +235,7 @@ function mathFamilyEntry(name: string): Entry | null {
     case "alphabet":
     case "phantom":
     case "atom-class":
+    case "dirac":
       return { category: "style", node: "style", args: [content()] };
     case "alphabet-declaration":
     case "style":
@@ -309,6 +310,11 @@ function environmentEntry(name: string): EnvironmentSchema | null {
       item: { command: "bibitem", args: [slot("label", "optional", "text"), value("label-key")] },
     };
   }
+  if (name === "lstlisting") {
+    return { name, node: "container", body: "literal", args: [value("options", "optional")] };
+  }
+  if (name === "alltt") return { name, node: "container", body: "flow", args: [] };
+  if (name === "subfigure") return { name, node: "container", body: "flow", args: [value("options", "optional"), value("dimension")] };
   if (FLOATS.includes(name)) {
     return { name, node: "container", body: "flow", args: [value("options", "optional")] };
   }
@@ -369,6 +375,7 @@ function environmentEntry(name: string): EnvironmentSchema | null {
  * built), so the list cannot drift from what renders.
  */
 const MATH_VOCABULARY = [
+  "bra", "ket", "braket", "Bra", "Ket",
   "frac", "dfrac", "tfrac", "binom", "sqrt", "sum", "prod", "coprod", "int", "iint", "oint", "bigcup", "bigcap",
   "bigoplus", "bigotimes", "bigvee", "bigwedge", "lim", "liminf", "limsup", "max", "min", "sup", "inf", "arg", "argmax",
   "argmin", "det", "dim", "exp", "log", "ln", "sin", "cos", "tan", "deg", "gcd", "Pr", "hat", "widehat", "bar",

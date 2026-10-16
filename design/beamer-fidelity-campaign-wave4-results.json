@@ -1,0 +1,132 @@
+{
+  "formatVersion": 1,
+  "scope": "First bounded native package tranche: braket, siunitx, listings/alltt and subcaption. Strict geometry does not establish complete package or whole-deck fidelity.",
+  "findings": "design/beamer-package-frontends.md",
+  "focused": {
+    "report": "artifacts/beamer-fidelity-campaign/wave4/report.json",
+    "reportSha256": "a4fd858764197f03c6bcc2f4a6f8fecfc15bdcccbec21864dfb15ea9752e69c5",
+    "manifest": "test/fixtures/beamer/fidelity-campaign-wave4/cases.json",
+    "manifestSha256": "c5e96503db042b08e2abeabadf8a7fa1ab158cb90d828a8a2411ad162f473940",
+    "cases": 11,
+    "states": 11,
+    "failed": 0,
+    "maxAbsoluteGlyphDxPt": 0.007445,
+    "maxAbsoluteGlyphDyPt": 0.001401,
+    "maxRectangleEdgeDeltaPt": 0.007003,
+    "fontAndGlyphMatch": true,
+    "pinnedIndependentTeXTraces": true,
+    "sources": [
+      {
+        "file": "braket.tex",
+        "sourceSha256": "979e74db31ca392530cde41cfca25541b93a4e713a0b47b1685fd574fe2aed04",
+        "oracleSha256": "25ab8ed13b697f9dc74a32b5a5fa56835a04c626d1195a1fdc7ee4deef18407a"
+      },
+      {
+        "file": "siunitx.tex",
+        "sourceSha256": "1080f1da5cef8a10bee656dd3c86307d93cc9b108aa483942f508c8ba9e85a31",
+        "oracleSha256": "16428db6ee418d5e896e9002aef72a0b62694bc397d4dc725f82702d2209547a"
+      },
+      {
+        "file": "listings.tex",
+        "sourceSha256": "2d4811baffb10a87dcb2a9c0a40938834637203b917216b618f1c74c99cce7e1",
+        "oracleSha256": "6a4577b8b720a9d8e23f9c4d926c298f36c2fba6b0a507e2f9bba32b88e9132c"
+      },
+      {
+        "file": "alltt.tex",
+        "sourceSha256": "70897e30a53e7f7f35de06b71141966c5c83e1cb9a9c75dbd75f3a187eb16d25",
+        "oracleSha256": "dd89ae386e31958ec7ec3b4d18138b52691bc122cd68305a773028c08032d70d"
+      },
+      {
+        "file": "subfigures.tex",
+        "sourceSha256": "fa6ebca6fe18a0845061d1bd1b0794338ea44a0e9579cef9e6d294f7434e88b1",
+        "oracleSha256": "f4b2a96199e9d5f80fb68cac3a210d94e8514a76e69b888c48658f14c92aa4d8"
+      },
+      {
+        "file": "notation-nested.tex",
+        "sourceSha256": "57db372ab6776db76475b74d195d8c7d6becd2e141cf9078d2d2e377a92903a9",
+        "oracleSha256": "f23c83314b6b035383e7394b29b5279fd1bd7f120524a3809563020d8932934a"
+      },
+      {
+        "file": "listings-literal.tex",
+        "sourceSha256": "6ec77491c031ce5bde0e4ba714793253a9cdb8a4f003c499049715722a18d2b9",
+        "oracleSha256": "416073ae3f659efdca9581910ce2f6bbf7ac0e3bd296532786c66501c3f37975"
+      },
+      {
+        "file": "subfigures-top.tex",
+        "sourceSha256": "e683c4ae02945ba57abd227f992ec1cb16eab40c78a569140c55776a4a52541d",
+        "oracleSha256": "82117b007731f759511930356123178417722e03af0b1f31191f2a064fd64828"
+      },
+      {
+        "file": "alltt-top-level.tex",
+        "sourceSha256": "ace0adf6b299bf3d1ead4ab5424ac5c9296cd4abd5d6f303462f1b3d608e2219",
+        "oracleSha256": "9b23eacf0e625d8303b87314c4afd21f080f4f9d37caffd59f8c33533d898e0c"
+      },
+      {
+        "file": "alltt-column.tex",
+        "sourceSha256": "dfebabd82d56f6f4765cbbd7b607f53fff08753efd338d2f8c59b59adc7131c2",
+        "oracleSha256": "19f047b7c84daed947f5a2229a05de0eb65544a2e2a9d46aac1876304969cb90"
+      },
+      {
+        "file": "alltt-block.tex",
+        "sourceSha256": "f555d445c19ff4715e5d42d52d04e856245c190ca53acce064205ceb7d477096",
+        "oracleSha256": "6cdcbbf97161cc246018a28f1864043ed0114eee475e763577448c54791ca3ba"
+      }
+    ]
+  },
+  "breadthCoverage": {
+    "test": "test/beamer-package-breadth.spec.ts",
+    "frames": 13,
+    "decks": 6,
+    "scope": "Coverage in unchanged inventoried sources, including preserved Quantikz source cards. No whole-deck fidelity score is claimed.",
+    "wholeDeckComparison": "The concurrent whole-deck rerun was stopped after CPU-contended timeouts; partial artifacts are not acceptance evidence."
+  },
+  "validation": {
+    "liveLuaLaTeX": {
+      "passed": 11,
+      "failed": 0,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/live.log"
+    },
+    "pinnedCampaign": {
+      "passed": 115,
+      "states": 118,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/pinned.log"
+    },
+    "breadthCoverage": {
+      "passed": 13,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/breadth-coverage.log"
+    },
+    "literalTyping": {
+      "passed": 3,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/typing.log"
+    },
+    "editingAndMutationCampaign": {
+      "passed": 42,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/editing.log"
+    },
+    "typecheck": {
+      "passed": true,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/typecheck.log",
+      "command": "npm run typecheck"
+    },
+    "productionLint": {
+      "passed": true,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/lint-prod.log",
+      "command": "npm run lint:prod"
+    },
+    "repositorySuite": {
+      "command": "npx vitest run --maxWorkers=2 --exclude test/beamer-fidelity-campaign.spec.ts",
+      "passed": 7472,
+      "skipped": 20,
+      "todo": 1,
+      "filesPassed": 466,
+      "filesSkipped": 1,
+      "log": "artifacts/beamer-fidelity-campaign/wave4-validation/repository-suite.log"
+    },
+    "allTestsAcrossFinalRuns": {
+      "passed": 7600,
+      "skipped": 20,
+      "todo": 1,
+      "scope": "Repository suite above, plus the separately run 115 pinned campaign cases and 13 package-bearing breadth cases."
+    }
+  }
+}

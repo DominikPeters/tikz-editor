@@ -119,7 +119,7 @@ export function isTexMathTypesettingCommand(command: string): boolean {
     namedOperatorCommandName(command) !== null || amsNamedOperatorDeclaration(command) !== null ||
     varLimitCommandName(command) !== null || extensibleArrowCommandName(command) !== null ||
     spacingCommandName(command) !== null || phantomCommandName(command) !== null ||
-    atomClassCommandName(command) !== null || operatorLimitsCommandName(command) !== null ||
+    atomClassCommandName(command) !== null || texMathCommandFamily(command) === "dirac" || operatorLimitsCommandName(command) !== null ||
     fractionCommandStyle(command) !== null || binomialCommandStyle(command) !== null ||
     modularArithmeticCommandName(command) !== null || mathtoolsColonRelationCommandName(command) !== null ||
     ["sqrt", "left", "right", "middle", "operatorname", "not", "text"].includes(commandName(command));
@@ -151,6 +151,7 @@ export type TexMathCommandFamily =
   | "big-delimiter"
   | "spacing"
   | "phantom"
+  | "dirac"
   | "atom-class"
   | "limits"
   | "style"
@@ -177,6 +178,7 @@ export function texMathNamedSymbolNames(): readonly string[] {
 
 export function texMathCommandFamily(command: string): TexMathCommandFamily | null {
   const name = commandName(command);
+  if (["bra", "ket", "braket", "Bra", "Ket"].includes(name)) return "dirac";
   if (fractionCommandStyle(command) !== null || binomialCommandStyle(command) !== null) return "fraction";
   if (infixFractionPrimitive(command) !== null) return "infix-fraction";
   if (name === "sqrt") return "radical";
@@ -707,6 +709,9 @@ class TexMathParser {
       }
       if (commandName(token.text) === "begin") {
         return this.parseEnvironment(allowScripts);
+      }
+      if (["bra", "ket", "braket", "Bra", "Ket"].includes(commandName(token.text))) {
+        return this.parseDirac(allowScripts);
       }
       const classCommand = atomClassCommandName(token.text);
       if (classCommand) {
@@ -2321,6 +2326,30 @@ class TexMathParser {
       token.sourceSpan
     );
     return null;
+  }
+
+  /** Fixed braket.sty mathinner forms, plus its simple scalable Bra/Ket. */
+  private parseDirac(allowScripts: boolean): TexMathAtom {
+    const command = this.advance();
+    const name = commandName(command.text);
+    const content = this.parseRequiredMathArgument(command.sourceSpan, `${command.text} content`);
+    const body = content?.list ?? emptyList(command.sourceSpan.end);
+    const sourceSpan = spanUnion(command.sourceSpan, content?.sourceSpan ?? command.sourceSpan);
+    const bra = name.toLowerCase() === "bra";
+    const ket = name.toLowerCase() === "ket";
+    if (name === "Bra" || name === "Ket") {
+      return this.maybeParseScripts({ kind: "atom", atomClass: "inner", sourceSpan,
+        nucleus: { kind: "left-right", leftDelimiter: bra ? "langle" : "vert", rightDelimiter: ket ? "rangle" : "vert",
+          leftDelimiterSourceSpan: command.sourceSpan, rightDelimiterSourceSpan: command.sourceSpan, body, sourceSpan } }, allowScripts);
+    }
+    const glyph = (text: string, atomClass: TexMathAtomClass): TexMathAtom => ({ kind: "atom", atomClass,
+      nucleus: { kind: "glyph", text, sourceSpan: command.sourceSpan }, sourceSpan: command.sourceSpan });
+    const grouped: TexMathAtom = { kind: "atom", atomClass: "ord", sourceSpan: body.sourceSpan,
+      nucleus: { kind: "list", list: body, sourceSpan: body.sourceSpan } };
+    return this.maybeParseScripts({ kind: "atom", atomClass: "inner", sourceSpan,
+      nucleus: { kind: "list", sourceSpan, list: { kind: "math-list", sourceSpan,
+        items: [glyph(ket ? "|" : "\\langle", ket ? "ord" : "open"), grouped,
+          glyph(bra ? "|" : "\\rangle", bra ? "ord" : "close")] } } }, allowScripts);
   }
 
   private parseClassCommand(

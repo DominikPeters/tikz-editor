@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -58,6 +59,17 @@ Display rows:
       .toContain("lmsans10-oblique");
     expect(displayLines.flatMap((line) => line.glyphs).map((item) => item.fontName))
       .toContain("cmss10");
+  });
+
+
+  it("traces a clipped graphic's painted viewport instead of its intrinsic image extent", async () => {
+    const render = await renderBeamerFrame(String.raw`\documentclass{beamer}\begin{document}\begin{frame}\mbox{\includegraphics[width=40pt,trim=50pt 0 0 0,clip]{crop.png}}\end{frame}\end{document}`, { graphicsResolver: {
+      cacheKey: "crop-trace", resolve: () => ({ status: "resolved", mimeType: "image/png", dataBase64: readFileSync(new URL("./fixtures/beamer/corpus-priorities/test-image.png", import.meta.url)).toString("base64"), naturalWidthPt: 100, naturalHeightPt: 50, revision: "crop" }),
+    } });
+    const images = buildNativeBeamerPageTrace(render, computerModernTexMetricProvider).rectangles.filter(rect => rect.role === "image");
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ width: 40, height: 40 });
+    expect(render.diagnostics).toEqual([]);
   });
 
   it("traces native display math rules alongside theme rectangles", async () => {

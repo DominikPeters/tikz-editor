@@ -265,7 +265,7 @@ export function previousDepthBeforeTrailingVerticalSpace(
 }
 
 export function trailingBeamerTrivlistSkip(source: string, topsepPt = 9): number {
-  const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/gu;
+  const endPattern = /\\end\s*\{\s*(?:center|flushleft|flushright|figure|table)\s*\}/gu;
   let lastEnd = -1;
   for (const match of source.matchAll(endPattern)) {
     lastEnd = match.index + match[0].length;
@@ -297,7 +297,7 @@ export function leadingBeamerTrivlistAdjustment(
   topsepPt = 9
 ): number {
   if (
-    !/\\begin\s*\{\s*(?:center|flushleft|flushright|table)\s*\}/u.test(source)
+    !/\\begin\s*\{\s*(?:center|flushleft|flushright|figure|table)\s*\}/u.test(source)
   ) {
     return 0;
   }
