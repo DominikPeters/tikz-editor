@@ -1,3 +1,5 @@
+import { texLength } from "../../text/tex/coordinates.js";
+import { createBeamerTexTextFontProfile } from "./font.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type {
   BeamerChromeTemplatePlan,
@@ -545,28 +547,33 @@ function planModernFootline(
   if (ref.options.numbering === "none") {
     return { inset: 0, primitives: [] };
   }
-  const height = context.theme.fonts.footline.lineHeightPt * 2;
+  const moloch = ref.id === "beamer/footline/moloch";
+  const footFont = context.theme.fonts.footline;
+  const numberFont = context.theme.fonts["page-number"];
+  const metrics = (font: typeof footFont) => {
+    const profile = createBeamerTexTextFontProfile(font);
+    return profile.resolveTextFont(profile.defaultFontState, texLength(font.sizePt), profile.metricProvider);
+  };
+  const foot = metrics(footFont), number = metrics(numberFont);
+  const text = ref.options.numbering === "fraction"
+    ? `${context.frameIndex + 1}/${context.totalFrames}` : String(context.frameIndex + 1);
+  const numberHeight = Math.max(0, ...[...text].map(character =>
+    (number.data.chars[String(character.codePointAt(0))]?.height ?? 0) * numberFont.sizePt));
+  const numberDepth = Math.max(0, ...[...text].map(character =>
+    (number.data.chars[String(character.codePointAt(0))]?.depth ?? 0) * numberFont.sizePt));
+  // sep=3ex is evaluated before and after selecting the page-number font.
+  const before = moloch ? 0 : 3 * foot.data.fontdimen.xheight * footFont.sizePt;
+  const after = moloch ? 4 : 3 * number.data.fontdimen.xheight * numberFont.sizePt;
+  const height = before + numberHeight + numberDepth + after + BEAMER_FOOTLINE_RESERVE_PT;
+  const rightSkip = moloch ? 5 : before;
   return {
     inset: height,
     primitives: [{
-      kind: "text",
-      id: `${context.frame.id}:footline:number`,
-      sourceSpan: context.frame.span,
-      bounds: {
-        x: context.page.textArea.x,
-        y: context.page.page.height - height,
-        width: context.page.textArea.width,
-        height,
-      },
-      source: {
-        kind: "derived",
-        text: String(context.frameIndex + 1),
-        sourceSpan: context.frame.span,
-      },
-      fontRole: "footline",
-      colorRole: "normal text",
-      alignment: "right",
-      verticalAlignment: "center",
+      kind: "text", id: `${context.frame.id}:footline:number`, sourceSpan: context.frame.span,
+      bounds: { x: 0, y: context.page.page.height - height, width: context.page.page.width - rightSkip, height },
+      source: { kind: "derived", text, sourceSpan: context.frame.span },
+      fontRole: "page-number", colorRole: "normal text", alignment: "right", verticalAlignment: "top",
+      baselineY: context.page.page.height - after - numberDepth,
     }],
   };
 }

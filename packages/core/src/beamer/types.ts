@@ -115,7 +115,8 @@ export type BeamerMetadataFieldName =
   | "subtitle"
   | "author"
   | "institute"
-  | "date";
+  | "date"
+  | "titlegraphic";
 
 export type BeamerMetadataFieldModel = {
   name: BeamerMetadataFieldName;
@@ -269,6 +270,7 @@ export type BeamerParagraphLayout = {
     | "author"
     | "institute"
     | "date"
+    | "titlegraphic"
     | "frame-title"
     | "frame-subtitle"
     | "body"

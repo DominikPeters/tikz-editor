@@ -46,7 +46,7 @@ const LOCAL_COMMANDS = new Set((
   "tiny scriptsize footnotesize small normalsize large Large LARGE huge Huge " +
   "centering raggedright raggedleft par newline linebreak hfill vfill hspace vspace smallskip medskip bigskip " +
   "includegraphics column columns color textcolor colorbox fcolorbox rule strut hphantom vphantom phantom " +
-  "titlepage tableofcontents insertframenumber inserttotalframenumber insertsection insertsubsection " +
+  "titlepage maketitle tableofcontents insertframenumber inserttotalframenumber insertsection insertsubsection " +
   "insertframetitle insertframesubtitle inserttitle insertsubtitle insertauthor insertdate insertinstitute " +
   "LaTeX TeX beamer logo ldots dots cdots vdots ddots mathrm mathbf mathit mathsf mathtt mathcal mathbb " +
   "frac dfrac tfrac sqrt left right middle big Big bigg Bigg sum prod int iint lim log ln exp sin cos tan " +

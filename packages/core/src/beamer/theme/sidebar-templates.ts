@@ -1,3 +1,4 @@
+import { resolveBeamerThemeColor } from "./resolve.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDelimitedSourceValue } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
@@ -156,7 +157,7 @@ export function planSidebarCanvas(
     ? context.page.page.width -
       (context.page.frameArea.x + context.page.frameArea.width)
     : context.page.frameArea.x;
-  if (!(width > 0)) {
+  if (!(width > 0) || !resolveBeamerThemeColor(context.theme, `sidebar ${side}`).bg) {
     return { inset: 0, primitives: [] };
   }
   return {

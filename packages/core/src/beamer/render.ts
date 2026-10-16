@@ -151,7 +151,6 @@ import type {
   PreparedColumnFlowItem,
   PreparedFrameFlowItem,
   PreparedTitlePage,
-  PreparedTitlePageMetadataBox,
 } from "./render-model.js";
 import {
   prepareUnsupportedPlaceholder,
@@ -181,18 +180,12 @@ import type {
 } from "./types.js";
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
+const TEX_POINTS_PER_BP = 72.27 / 72;
 const TOP_ALIGNED_FRAME_SKIP_PT = 0.2 * TEX_POINTS_PER_CM;
 // A root-level `center` is LaTeX's trivlist-based center environment.
 // size11.clo supplies \topsep 9pt plus 3pt minus 5pt. Beamer's frame vbox
 // applies one ordinary-order shrink ratio to these two skips and to display
 // skips in the surrounding body.
-// beamerinnerthemedefault.sty's title-page template under the 11pt class
-// profile. The rounded inner theme wraps the title colorbox with the PGF
-// rounded/shadow option but retains these TeX box dimensions.
-const BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT = 10.95;
-const BEAMER_EMPTY_METADATA_COLORBOX_PT = 16;
-const BEAMER_TITLE_TEMPLATE_INTERBOX_PT = 1;
-const BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT = 5.475;
 // beamerbaselocalstructure.sty: \leftmargini..iii=2em,
 // \topsep=3pt/2pt/2pt, \partopsep=0pt, \parsep=0pt, and first-level
 // \itemsep=3pt. The deeper itemsep values alias their zero parsep.
@@ -692,6 +685,9 @@ async function renderBeamerFrameStep(params: {
     textWidth: availableContentBounds.width,
     paperWidth: page.page.width,
     leftSidebarWidth: page.frameArea.x,
+    paperHeight: page.page.height,
+    textHeight: page.page.height - chrome.headlineInset - chrome.bottomInset,
+    plain: frame.options?.plain ?? false,
     availableHeight: allowFrameBreaks == null && !shrink ? availableContentBounds.height : Number.POSITIVE_INFINITY,
     diagnostics,
     theme,
@@ -758,6 +754,7 @@ async function renderBeamerFrameStep(params: {
       if (placement.item.kind === "title-page") {
         emitPreparedTitlePage({
           prepared: placement.item.titlePage,
+          fillUnit: verticalPacking.fillUnit,
           x: availableContentBounds.x,
           y: frameBlockTop + placement.contentTop,
           items,
@@ -1328,6 +1325,9 @@ async function prepareFrameFlow(params: {
   textWidth: number;
   paperWidth: number;
   leftSidebarWidth: number;
+  paperHeight: number;
+  textHeight: number;
+  plain: boolean;
   availableHeight: number;
   diagnostics: Diagnostic[];
   theme: ResolvedBeamerTheme;
@@ -1367,6 +1367,9 @@ async function prepareFrameFlow(params: {
           references: params.references,
           ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
           paperWidth: params.paperWidth,
+          paperHeight: params.paperHeight,
+          textHeight: params.textHeight,
+          plain: params.plain,
         })),
       });
       continue;
@@ -1560,129 +1563,178 @@ function prepareTitlePage(params: {
   node: BeamerTitlePageBodyNode;
   width: number;
   theme: ResolvedBeamerTheme;
-  metadata: Partial<
-    Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>
-  >;
+  metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>>;
   macroBindings: ReadonlyMap<string, MacroBinding>;
   references: BeamerReferenceContext;
   graphicsResolver?: DocumentGraphicsResolver;
   paperWidth: number;
+  paperHeight: number;
+  textHeight: number;
+  plain: boolean;
 }): PreparedTitlePage {
-  const hasSubtitle = params.metadata.subtitle?.value != null;
-  const plan = planBeamerTitlePageTemplate(params.theme, hasSubtitle);
-  const alignment = plan.style === "inmargin" ? "left" : "center";
-  const titleSource = params.metadata.title?.value;
-  const subtitleSource = params.metadata.subtitle?.value;
-  const title = titleSource
-    ? layoutParagraph({
-        mapped: createIdentityMappedText(
-          titleSource.value,
-          titleSource.contentSpan.from
-        ),
-        sourceSpan: titleSource.contentSpan,
-        paragraphId: `${params.node.id}:title`,
-        role: "title",
-        bounds: { x: 0, y: 0, width: params.width, height: 0 },
-        font: params.theme.fonts.title,
-        colorResolver: beamerAlertColorResolver(params.theme),
-        alignment,
-        macroBindings: params.macroBindings,
-        references: params.references,
-        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-        paperWidth: params.paperWidth,
-      })
-    : null;
-  const subtitle = subtitleSource
-    ? layoutParagraph({
-        mapped: createIdentityMappedText(
-          subtitleSource.value,
-          subtitleSource.contentSpan.from
-        ),
-        sourceSpan: subtitleSource.contentSpan,
-        paragraphId: `${params.node.id}:subtitle`,
-        role: "subtitle",
-        bounds: { x: 0, y: 0, width: params.width, height: 0 },
-        font: params.theme.fonts.subtitle,
-        colorResolver: beamerAlertColorResolver(params.theme),
-        alignment,
-        macroBindings: params.macroBindings,
-        references: params.references,
-        ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-        paperWidth: params.paperWidth,
-      })
-    : null;
-  if (plan.style === "inmargin") {
-    const finalParagraph = subtitle ?? title;
-    const naturalHeight =
-      plan.titleBoxTopPt +
-      (subtitle
-        ? plan.subtitleBaselineFromBoxTopPt
-        : plan.titleBaselineFromBoxTopPt) +
-      (finalParagraph ? paragraphLastLineDepth(finalParagraph) : 0) +
-      3;
-    return {
-      node: params.node,
-      plan,
-      width: params.width,
-      title,
-      subtitle,
-      metadataBoxes: [],
-      naturalHeight,
-      // Unlike the default title-page template, inmargin has no leading
-      // \vfill and retains one fill after the title group.
-      leadingFillWeight: 0,
-      trailingFillWeight: 1,
-    };
-  }
-  // The default template stacks author/institute/date colorboxes below the
-  // title box. Each is a sep=8pt colorbox (16pt when empty), separated by
-  // TeX \lineskip since the boxes exceed the baselineskip window.
-  const metadataBoxes: PreparedTitlePageMetadataBox[] = [];
-  let metadataTop =
-    plan.titleBoxTopPt +
-    plan.titleBoxHeightPt +
-    BEAMER_TITLE_TEMPLATE_AFTER_TITLE_PT;
-  for (const field of ["author", "institute", "date"] as const) {
-    metadataTop += BEAMER_TITLE_TEMPLATE_INTERBOX_PT;
-    const fieldSource = params.metadata[field]?.value;
-    const paragraph = fieldSource
-      ? layoutParagraph({
-          mapped: createIdentityMappedText(
-            fieldSource.value,
-            fieldSource.contentSpan.from
-          ),
-          sourceSpan: fieldSource.contentSpan,
-          paragraphId: `${params.node.id}:${field}`,
-          role: field,
-          bounds: { x: 0, y: 0, width: params.width, height: 0 },
-          font: params.theme.fonts[field],
-          colorResolver: beamerAlertColorResolver(params.theme),
-          alignment,
-          macroBindings: params.macroBindings,
-          references: params.references,
-          ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
-          paperWidth: params.paperWidth,
-        })
-      : null;
-    const heightPt =
-      BEAMER_EMPTY_METADATA_COLORBOX_PT +
-      (paragraph ? paragraphLineExtent(paragraph) : 0);
-    metadataBoxes.push({ field, paragraph, topPt: metadataTop, heightPt });
-    metadataTop += heightPt;
-  }
-  const naturalHeight =
-    metadataTop + BEAMER_TITLE_TEMPLATE_GRAPHIC_SKIP_PT;
-  return {
-    node: params.node,
-    plan,
-    width: params.width,
-    title,
-    subtitle,
-    metadataBoxes,
-    naturalHeight,
-    leadingFillWeight: 1,
-    trailingFillWeight: 1,
+  const plan = planBeamerTitlePageTemplate(params.theme);
+  const normal = params.theme.fonts["normal-text"];
+  const modern = plan.style === "metropolis" || plan.style === "moloch";
+  const centered = !modern && plan.style !== "inmargin";
+  const text: PreparedTitlePage["text"][number][] = [];
+  const boxes: PreparedTitlePage["boxes"][number][] = [];
+  const measure = (field: BeamerMetadataFieldName): LaidParagraph | null => {
+    const value = params.metadata[field]?.value;
+    if (!value) return null;
+    const baseFont = field === "titlegraphic" ? normal : params.theme.fonts[field];
+    const font = plan.style === "metropolis"
+      ? { ...baseFont, lineHeightPt: baseFont.lineHeightPt * 1.15 } : baseFont;
+    // colorbox's sep is part of the left/right skips, not extra box width.
+    // Its center skips have infinite stretch while retaining normal word glue.
+    const mapped = createIdentityMappedText(value.value, value.contentSpan.from);
+    return layoutParagraph({
+      mapped,
+      sourceSpan: value.contentSpan, paragraphId: `${params.node.id}:${field}`, role: field,
+      bounds: { x: 0, y: 0, width: params.width - (field === "titlegraphic" ? 0 : 2 * plan.paddingPt), height: 0 },
+      font, alignment: centered ? "center" : "left", spaceGlueProfile: "font", centerWithInfiniteGlue: centered,
+      colorResolver: beamerAlertColorResolver(params.theme), macroBindings: params.macroBindings,
+      references: params.references,
+      ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
+      paperWidth: params.paperWidth, textWidth: params.width,
+    });
   };
+  const paragraphs = new Map((["title", "subtitle", "author", "institute", "date", "titlegraphic"] as const)
+    .map(field => [field, measure(field)]));
+  const get = (field: BeamerMetadataFieldName) => paragraphs.get(field) ?? null;
+  const extent = (paragraph: LaidParagraph | null) => paragraph ? paragraphLineExtent(paragraph) : 0;
+  const firstHeight = (paragraph: LaidParagraph | null) => paragraph ? firstLineBaselineOffset(paragraph) : 0;
+  const lastDepth = (paragraph: LaidParagraph | null) => paragraph ? paragraphLastLineDepth(paragraph) : 0;
+  const add = (field: BeamerMetadataFieldName, top: number, x = field === "titlegraphic" ? 0 : plan.paddingPt, fillWeight = 0) => {
+    const paragraph = get(field);
+    if (paragraph) text.push({ paragraph, top, x, colorRole: field, fillWeight });
+  };
+  const interline = (baselineSkip: number, previousDepth: number, height: number) => {
+    const skip = baselineSkip - previousDepth - height;
+    return skip >= 0 ? skip : 1;
+  };
+  const title = get("title"), subtitle = get("subtitle");
+  let cursor = 0;
+  if (modern) {
+    // The two modern themes use fixed-height minipages, with their own
+    // internal fil glue, rather than the default colorbox/vfill stack.
+    const moloch = plan.style === "moloch";
+    let previousDepth: number | null = moloch ? 0 : null;
+    const append = (field: BeamerMetadataFieldName, before = 0, after = 0) => {
+      const paragraph = get(field);
+      if (!paragraph) return;
+      const font = field === "titlegraphic" ? normal : params.theme.fonts[field];
+      cursor += before;
+      if (previousDepth !== null) cursor += interline(font.lineHeightPt * (!moloch && field !== "title" ? 1.15 : 1), previousDepth, firstHeight(paragraph));
+      add(field, cursor, 0);
+      cursor += extent(paragraph) + after;
+      previousDepth = lastDepth(paragraph);
+    };
+    if (moloch) append("titlegraphic", 0, normal.sizePt);
+    append("title", 0, params.theme.fonts.title.sizePt * (moloch ? .2 : .5));
+    append("subtitle", moloch ? params.theme.fonts.subtitle.sizePt * .1 : 0, params.theme.fonts.subtitle.sizePt * (moloch ? .2 : .5));
+    // Metropolis wraps authored subtitles in its formatter macro, so even
+    // an empty argument passes the template's \ifx test and retains its skip.
+    if (!moloch && !subtitle && params.metadata.subtitle && params.theme.appliedComponents.some(component =>
+      component.kind === "font-theme" && component.name.toLowerCase() === "metropolis" &&
+      (component.source?.span.from ?? Number.POSITIVE_INFINITY) < (params.metadata.subtitle?.span.from ?? 0))) cursor += params.theme.fonts.subtitle.sizePt * .5;
+    cursor += interline(normal.lineHeightPt * (moloch ? 1 : 1.15), previousDepth ?? 0, .4);
+    boxes.push({ bounds: { x: 0, y: cursor, width: params.width, height: .4 }, colorRole: "title separator", rounded: false });
+    cursor += .4 + (moloch ? normal.sizePt * .8 : 0);
+    previousDepth = 0;
+    append("author", moloch ? 0 : params.theme.fonts.author.sizePt * 2, params.theme.fonts.author.sizePt * (moloch ? .5 : .25));
+    if (moloch) {
+      append("institute", 0, params.theme.fonts.institute.sizePt);
+      append("date");
+    } else {
+      append("date");
+      append("institute", 3 * TEX_POINTS_PER_CM / 10);
+    }
+    const height = moloch ? params.textHeight : params.paperHeight;
+    const trailing = moloch ? 0 : TEX_POINTS_PER_CM / 10;
+    if (moloch) cursor += normal.lineHeightPt - previousDepth;
+    const offset = Math.max(0, height - cursor - trailing) * (moloch ? 3.618 / 5.618 : .5) +
+      (params.plain ? (moloch ? (params.paperHeight - height) / 2 : 0) : 1);
+    for (const entry of text) entry.top += offset;
+    for (const box of boxes) box.bounds.y += offset;
+    if (!moloch) add("titlegraphic", 2 * normal.sizePt, 0);
+    return { node: params.node, plan, width: params.width, text, boxes,
+      naturalHeight: height, leadingFillWeight: 0, trailingFillWeight: 0 };
+  }
+  if (plan.style === "inmargin") {
+    let previousDepth = 0;
+    const appendBlock = (field: "title" | "author" | "institute" | "date", fillWeight: number) => {
+      const paragraph = get(field);
+      if (!paragraph && field !== "title") return;
+      const label = { title: "", author: "Who?", institute: "From?", date: "When?" }[field];
+      const labelWidth = params.paperWidth * .25 - 3 * fontXHeightPt(normal);
+      const indicator = label ? layoutParagraph({
+        mapped: createGeneratedMappedText(label, "Beamer inmargin titlepage indicator", params.node.span),
+        sourceSpan: params.node.span, paragraphId: `${params.node.id}:${field}:indicator`, role: "block-title",
+        bounds: { x: 0, y: 0, width: labelWidth, height: 0 }, font: params.theme.fonts["block-title"], alignment: "right",
+        references: params.references,
+      }) : null;
+      cursor += 6;
+      const height = Math.max(firstHeight(paragraph), firstHeight(indicator));
+      const baseline = cursor + interline(normal.lineHeightPt, previousDepth, height) + height;
+      add(field, baseline - firstHeight(paragraph), 0, fillWeight);
+      if (indicator) text.push({ paragraph: indicator, x: -labelWidth - 2.5 * fontXHeightPt(normal),
+        top: baseline - firstHeight(indicator), colorRole: "block title", fillWeight });
+      let depth = Math.max(lastDepth(indicator), extent(paragraph) - firstHeight(paragraph));
+      if (field === "title" && subtitle) {
+        const subtitleBaseline = baseline + lastDepth(paragraph) + firstHeight(subtitle) +
+          interline(params.theme.fonts.subtitle.lineHeightPt, lastDepth(paragraph), firstHeight(subtitle));
+        add("subtitle", subtitleBaseline - firstHeight(subtitle), 0);
+        depth = Math.max(depth, subtitleBaseline - baseline + extent(subtitle) - firstHeight(subtitle));
+      }
+      cursor = baseline + depth + 3;
+      previousDepth = depth;
+    };
+    appendBlock("title", 0);
+    for (const field of ["author", "institute", "date"] as const) appendBlock(field, 1);
+    return { node: params.node, plan, width: params.width, text, boxes,
+      naturalHeight: cursor, leadingFillWeight: 0, trailingFillWeight: 1 };
+  }
+  // An empty vbox precedes the leading vfill. The following title colorbox
+  // exceeds baselineskip, so TeX inserts lineskip before its outer hbox.
+  cursor = normal.lineHeightPt + 1;
+  const rounded = plan.style === "rounded";
+  const roundedBefore = rounded ? 4 * TEX_POINTS_PER_BP + 2.5 : 0;
+  const roundedAfter = rounded ? (plan.shadow ? 4 : 2) * TEX_POINTS_PER_BP + .5 : 0;
+  const boxTop = cursor;
+  cursor += roundedBefore + plan.paddingPt;
+  add("title", cursor);
+  cursor += extent(title);
+  if (subtitle) {
+    cursor += params.theme.fonts.title.sizePt * .25 +
+      interline(params.theme.fonts.subtitle.lineHeightPt, lastDepth(title), firstHeight(subtitle));
+    add("subtitle", cursor);
+    cursor += extent(subtitle);
+  }
+  cursor += plan.paddingPt + roundedAfter;
+  boxes.push({ bounds: { x: -plan.outerBleedPt, y: boxTop, width: params.width + 2 * plan.outerBleedPt, height: cursor - boxTop }, colorRole: "title", rounded });
+  cursor += normal.sizePt;
+  for (const field of ["author", "institute", "date"] as const) {
+    const paragraph = get(field);
+    const fieldRounded = plan.templateId.startsWith("beamer/title-page/rounded") &&
+      resolveBeamerThemeColor(params.theme, field).bg !== undefined;
+    const bleed = fieldRounded ? 4 * TEX_POINTS_PER_BP : 0;
+    cursor += 1;
+    const top = cursor;
+    if (fieldRounded) cursor += 4 * TEX_POINTS_PER_BP + 2.5;
+    add(field, cursor + plan.paddingPt);
+    cursor += 2 * plan.paddingPt + extent(paragraph);
+    if (fieldRounded) cursor += (plan.templateId.endsWith("-shadow") ? 4 : 2) * TEX_POINTS_PER_BP + .5;
+    boxes.push({ bounds: { x: -bleed, y: top, width: params.width + 2 * bleed, height: cursor - top }, colorRole: field, rounded: fieldRounded });
+  }
+  cursor += normal.sizePt * .5;
+  const graphic = get("titlegraphic");
+  if (graphic) {
+    cursor += interline(normal.lineHeightPt, 0, firstHeight(graphic));
+    add("titlegraphic", cursor);
+    cursor += extent(graphic);
+  }
+  return { node: params.node, plan, width: params.width, text, boxes,
+    naturalHeight: cursor, leadingFillWeight: 1, trailingFillWeight: 1 };
 }
 
 function prepareFrameParagraph(params: {
@@ -2707,140 +2759,55 @@ function emitPreparedTitlePage(params: {
   prepared: PreparedTitlePage;
   x: number;
   y: number;
+  fillUnit: number;
   items: BeamerFrameLayoutItem[];
   paragraphs: BeamerParagraphLayout[];
   modelBuilder: ReturnType<typeof createSvgModelBuilder>;
   theme: ResolvedBeamerTheme;
 }): void {
-  const titlePage = params.prepared;
-  const boxBounds: BeamerRect = {
-    x: params.x - titlePage.plan.outerBleedPt,
-    y: params.y + titlePage.plan.titleBoxTopPt,
-    width: titlePage.width + 2 * titlePage.plan.outerBleedPt,
-    height: titlePage.plan.titleBoxHeightPt,
-  };
-  const titleColor = resolveBeamerThemeColor(params.theme, "title");
-  const titleFill =
-    titleColor.bg ??
-    resolveBeamerThemeColor(params.theme, "titlelike").bg;
-  if (titlePage.plan.style === "colorbox" && titleFill) {
-    params.items.push({
-      id: `${titlePage.node.id}:title:background`,
-      kind: "background",
-      sourceSpan: titlePage.node.span,
-      bounds: boxBounds,
-      parentId: titlePage.node.id,
-    });
+  const page = params.prepared;
+  for (const [index, box] of page.boxes.entries()) {
+    const color = resolveBeamerThemeColor(params.theme, box.colorRole);
+    const fill = box.colorRole === "title separator" ? color.fg : color.bg;
+    if (!fill) continue;
+    const bounds = { ...box.bounds, x: params.x + box.bounds.x, y: params.y + box.bounds.y };
+    const id = `${page.node.id}:${box.colorRole}:background`;
+    if (!box.rounded && box.colorRole !== "title separator") params.items.push({ id, kind: "background", sourceSpan: page.node.span, bounds, parentId: page.node.id });
+    params.modelBuilder.addPart({ basePartId: `${page.node.id}:chrome:${index}`, sourceId: page.node.id, elementId: null,
+      markup: titlePageChromeMarkup({ id, bounds, templateId: page.plan.templateId,
+        style: box.rounded ? "rounded" : "colorbox", fill, shadow: box.rounded && page.plan.templateId.endsWith("-shadow") }) });
   }
-  params.modelBuilder.addPart({
-    basePartId: `${titlePage.node.id}:chrome`,
-    sourceId: titlePage.node.id,
-    elementId: null,
-    markup: titlePageChromeMarkup({
-      id: titlePage.node.id,
-      bounds: boxBounds,
-      templateId: titlePage.plan.templateId,
-      style: titlePage.plan.style,
-      fill: titleFill ?? "transparent",
-      shadow: titlePage.plan.shadow,
-    }),
-  });
-
+  // Retain a template marker even when all colorboxes are transparent.
+  params.modelBuilder.addPart({ basePartId: `${page.node.id}:template`, sourceId: page.node.id, elementId: null,
+    markup: `<g data-beamer-title-page-template="${escapeAttribute(page.plan.templateId)}" />` });
   const childIds: string[] = [];
-  const emitText = (
-    paragraph: LaidParagraph | null,
-    baselineFromBoxTop: number,
-    colorRole: "title" | "subtitle" | "author" | "institute" | "date"
-  ) => {
-    if (!paragraph) {
-      return;
-    }
-    const y =
-      boxBounds.y +
-      baselineFromBoxTop -
-      firstLineBaselineOffset(paragraph);
-    positionParagraphLayout(
-      paragraph.layout,
-      svgPoint(pt(params.x), pt(y)),
-      paragraphLineExtent(paragraph)
-    );
+  for (const entry of page.text) {
+    const { paragraph } = entry;
+    const x = params.x + entry.x;
+    const y = params.y + entry.top + entry.fillWeight * params.fillUnit;
+    positionParagraphLayout(paragraph.layout, svgPoint(pt(x), pt(y)), paragraphLineExtent(paragraph));
     params.paragraphs.push(paragraph.layout);
     childIds.push(paragraph.layout.paragraphId);
-    params.items.push({
-      id: paragraph.layout.paragraphId,
-      kind: "text",
-      sourceSpan: paragraph.layout.sourceSpan,
-      bounds: paragraph.layout.bounds,
-      parentId: titlePage.node.id,
-      paragraphId: paragraph.layout.paragraphId,
-    });
-    params.modelBuilder.addPart({
-      basePartId: paragraph.layout.paragraphId,
-      sourceId: paragraph.layout.paragraphId,
-      elementId: null,
-      markup: paragraphMarkup(
-        paragraph.svgBody,
-        params.x,
-        y,
-        textColor(params.theme, colorRole)
-      ),
-    });
-  };
-  emitText(
-    titlePage.title,
-    titlePage.plan.titleBaselineFromBoxTopPt,
-    "title"
-  );
-  emitText(
-    titlePage.subtitle,
-    titlePage.plan.subtitleBaselineFromBoxTopPt,
-    "subtitle"
-  );
-  for (const box of titlePage.metadataBoxes) {
-    if (!box.paragraph) {
-      continue;
-    }
-    // Content sits sep-inset below the colorbox top; emitText measures
-    // baselines from the title box top.
-    emitText(
-      box.paragraph,
-      box.topPt -
-        titlePage.plan.titleBoxTopPt +
-        BEAMER_EMPTY_METADATA_COLORBOX_PT / 2 +
-        firstLineBaselineOffset(box.paragraph),
-      box.field
-    );
+    params.items.push({ id: paragraph.layout.paragraphId, kind: "text", sourceSpan: paragraph.layout.sourceSpan,
+      bounds: paragraph.layout.bounds, parentId: page.node.id, paragraphId: paragraph.layout.paragraphId });
+    params.modelBuilder.addPart({ basePartId: paragraph.layout.paragraphId, sourceId: paragraph.layout.paragraphId, elementId: null,
+      markup: paragraphMarkup(paragraph.svgBody, x, y, textColor(params.theme, entry.colorRole)) });
   }
-
-  params.items.push({
-    id: titlePage.node.id,
-    kind: "title-page",
-    sourceSpan: titlePage.node.span,
-    bounds: {
-      x: boxBounds.x,
-      y: boxBounds.y,
-      width: boxBounds.width,
-      height: boxBounds.height + (childIds.length > 0 ? 4 : 0),
-    },
-    parentId: null,
-    childIds,
-  });
+  params.items.push({ id: page.node.id, kind: "title-page", sourceSpan: page.node.span,
+    bounds: { x: params.x - page.plan.outerBleedPt, y: params.y,
+      width: page.width + 2 * page.plan.outerBleedPt, height: page.naturalHeight + (page.plan.style === "inmargin" ? params.fillUnit : 0) },
+    parentId: null, childIds });
 }
 
 function titlePageChromeMarkup(params: {
   id: string;
   bounds: BeamerRect;
   templateId: string;
-  style: "colorbox" | "rounded" | "inmargin";
+  style: "colorbox" | "rounded";
   fill: string;
   shadow: boolean;
 }): string {
   const { bounds } = params;
-  if (params.style === "inmargin") {
-    return (
-      `<g data-beamer-title-page-template="${escapeAttribute(params.templateId)}" />`
-    );
-  }
   if (params.style === "colorbox") {
     return (
       `<g data-beamer-title-page-template="${escapeAttribute(params.templateId)}">` +
@@ -3751,6 +3718,8 @@ function layoutParagraph(params: {
   font: BeamerThemeFont;
   mathFont?: BeamerThemeFont;
   alignment: "left" | "center" | "right";
+  spaceGlueProfile?: "font" | "font-fixed";
+  centerWithInfiniteGlue?: boolean;
   interwordSpacePt?: number;
   initialBaselineSkipPt?: number;
   initialPreviousDepth?: number;
@@ -3873,7 +3842,7 @@ function layoutParagraph(params: {
     ...(params.alignment === "left"
       ? { rightskipStretch: Number.POSITIVE_INFINITY }
       : {}),
-    spaceGlueProfile:
+    spaceGlueProfile: params.spaceGlueProfile ?? (
       params.alignment === "left" ||
         /\\(?:begin\s*\{\s*center\s*\}|centering)(?![A-Za-z@])/u.test(
           mapped.text
@@ -3881,7 +3850,7 @@ function layoutParagraph(params: {
         ? "font"
         : params.role === "block-body"
           ? "font"
-          : "font-fixed",
+          : "font-fixed"),
     fallbackPolicy: "placeholder",
     mathBoxProvider: createTexDerivedInlineMathBoxProvider({
       baseAtPt: fontSize,
@@ -3923,9 +3892,12 @@ function layoutParagraph(params: {
       paperwidth: texLength(params.paperWidth ?? params.bounds.width),
     },
   } as const;
-  let result = layoutSimpleTexParagraph(mapped.text, layoutOptions);
+  let result = layoutSimpleTexParagraph(mapped.text, {
+    ...layoutOptions,
+    ...(params.centerWithInfiniteGlue ? { alignment: "ragged-right" as const, rightskipStretch: Number.POSITIVE_INFINITY } : {}),
+  });
   if (
-    !result.supported &&
+    (!result.supported || params.centerWithInfiniteGlue) &&
     (alignment === "ragged-left" || alignment === "center")
   ) {
     // A short right-aligned or centered template line in a wide Beamer color
@@ -3933,7 +3905,7 @@ function layoutParagraph(params: {
     // breaker. A ragged-right retry finds the symmetric feasible line
     // breaks; place those lines against the right edge or center, matching
     // TeX's template-level \hfill and \centering fil skips.
-    const leftAligned = layoutSimpleTexParagraph(mapped.text, {
+    const leftAligned = params.centerWithInfiniteGlue ? result : layoutSimpleTexParagraph(mapped.text, {
       ...layoutOptions,
       alignment: "ragged-right",
     });

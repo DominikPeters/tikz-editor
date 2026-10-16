@@ -30,6 +30,7 @@ export type BeamerThemeFontRole =
   | "section-in-sidebar"
   | "subsection-in-sidebar"
   | "footline"
+  | "page-number"
   | "block-title"
   | "block-body";
 
@@ -342,13 +343,10 @@ export type BeamerFrameNavigationSnapshot = {
 
 export type BeamerTitlePageTemplatePlan = {
   templateId: string;
-  style: "colorbox" | "rounded" | "inmargin";
+  style: "colorbox" | "rounded" | "inmargin" | "metropolis" | "moloch";
   shadow: boolean;
   outerBleedPt: number;
-  titleBoxTopPt: number;
-  titleBoxHeightPt: number;
-  titleBaselineFromBoxTopPt: number;
-  subtitleBaselineFromBoxTopPt: number;
+  paddingPt: number;
 };
 
 export type BeamerFrameTemplateContext = {

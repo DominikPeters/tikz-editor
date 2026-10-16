@@ -43,6 +43,7 @@ type DocumentRange = {
 };
 
 type FrameCandidate = {
+  titleCommand?: BeamerControlSequence;
   begin: BeamerEnvironmentBoundary;
   end: BeamerEnvironmentBoundary | null;
 };
@@ -217,7 +218,18 @@ function collectFrameCandidates(
     });
   }
 
-  return candidates;
+  // Outside a frame Beamer's \maketitle creates a frame itself. Ignore
+  // commands in argument/local groups: scanning never executes TeX wrappers.
+  for (const command of beamerControlSequencesIn(context, range)) {
+    if (command.name !== "maketitle" || candidates.some(candidate =>
+      command.from >= candidate.begin.span.from && command.from < (candidate.titleCommand?.to ?? candidate.end?.span.to ?? context.source.length))) continue;
+    let node = context.syntax.tree.resolveInner(command.from + 1, 1);
+    let grouped = false;
+    while (node.parent) { node = node.parent; if (node.name === "Group") grouped = true; }
+    if (grouped) continue;
+    candidates.push({ titleCommand: command, begin: { kind: "begin", name: "frame", span: { from: command.from, to: command.from } }, end: null });
+  }
+  return candidates.sort((left, right) => left.begin.span.from - right.begin.span.from);
 }
 
 function buildFrameModel(
@@ -227,6 +239,19 @@ function buildFrameModel(
   privateSpans: readonly Span[]
 ): BeamerFrameModel {
   const { source } = context;
+  if (candidate.titleCommand) {
+    const command = candidate.titleCommand;
+    const span = { from: command.from, to: command.to };
+    const preamble = scanPreamble(context, findDocumentRange(context, []).preambleSpan);
+    const inner = [...preamble.themes].reverse().find(use => use.kind === "theme" || use.kind === "inner-theme");
+    const modern = /^(metropolis|moloch)$/iu.test(inner?.name.value.trim() ?? "");
+    return { kind: "frame", id: formatDocumentRootId({ kind: "beamer-frame", index }), sourceOrder: index,
+      span, beginSpan: { from: span.from, to: span.from }, endSpan: null,
+      headerSpan: { from: span.from, to: span.from }, bodySpan: span,
+      ...(modern ? { options: { source: { span, contentSpan: span, value: "" }, entries: [],
+        alignment: "center" as const, fragile: false, plain: true, noFrameNumbering: true } } : {}),
+      sectionId: null, subsectionId: null, children: [] };
+  }
   const frameEnd = candidate.end?.span.from ?? source.length;
   const header = scanFrameHeader(context, candidate.begin.span.to, frameEnd);
   const bodySpan = { from: header.headerSpan.to, to: frameEnd };
@@ -527,7 +552,7 @@ function scanPreamble(
       }
       continue;
     }
-    if (command.name === "title" || command.name === "subtitle" || command.name === "author" || command.name === "institute" || command.name === "date") {
+    if (command.name === "title" || command.name === "subtitle" || command.name === "author" || command.name === "institute" || command.name === "date" || command.name === "titlegraphic") {
       const name = command.name;
       if (!metadata[name]) {
         const field = readMetadataField(context, command, name, span.to);

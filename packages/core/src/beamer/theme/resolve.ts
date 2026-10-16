@@ -4,6 +4,7 @@ import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDocumentModel, BeamerThemeKind } from "../types.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
 import { beamerClassFontSize, beamerNamedFontSize } from "./font-sizes.js";
+import { scanBeamerFontDeclarations, applyBeamerFontDeclaration } from "./font-declarations.js";
 import { scanBeamerNavigationTemplates } from "./template-declarations.js";
 import { applyBeamerColorDeclaration, beamerColorRgbToCss, diagnoseBeamerColorDeclarations, resolveBeamerColorExpressionRgb, scanBeamerColorDeclarations, type BeamerColorRgb } from "./color-declarations.js";
 import type {
@@ -80,9 +81,13 @@ export function resolveBeamerTheme(
     .filter((use) => use.name.length > 0 && !document.preamble.macroDefinitions.some(definition => definition.span.from <= use.source.span.from && definition.span.to >= use.source.span.to));
 
   const colorEvents = scanBeamerColorDeclarations(document);
-  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document)]
+  const events = [...uses.map(use => ({ kind: "theme-use" as const, span: use.source.span, use })), ...colorEvents, ...scanBeamerNavigationTemplates(document), ...scanBeamerFontDeclarations(document)]
     .sort((left, right) => left.span.from - right.span.from);
   for (const event of events) {
+    if (event.kind === "font-declaration") {
+      state.fonts[event.role] = applyBeamerFontDeclaration(state.fonts[event.role], event, String(state.options["class-font-size"]));
+      continue;
+    }
     if (event.kind === "navigation-template") {
       if (event.templateId) state.templates.navigationSymbols = DEFAULT_REF(event.templateId);
       if (event.diagnostic) state.diagnostics.push(event.diagnostic);
@@ -481,8 +486,7 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
       "normal-text": normalFont,
       title: {
         ...normalFont,
-        sizePt: 14.4,
-        lineHeightPt: 18,
+        ...beamerNamedFontSize(classSize, "Large"),
       },
       subtitle: normalFont,
       author: normalFont,
@@ -534,6 +538,7 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
         sizePt: 4,
         lineHeightPt: 5,
       },
+      "page-number": { ...normalFont, ...beamerNamedFontSize(classSize, "tiny") },
       footline: {
         ...normalFont,
         sizePt: 6,
@@ -1659,11 +1664,17 @@ function applyModernFonts(
         ? { substitutedFor: "Fira Sans" }
         : {}),
     };
+    const classSize = String(state.options["class-font-size"] ?? "11");
+    state.fonts.title = { ...state.fonts.title, ...beamerNamedFontSize(classSize, "Large"), series: "bold" };
+    state.fonts.subtitle = { ...state.fonts["normal-text"], ...beamerNamedFontSize(classSize, "large") };
+    state.fonts.author = { ...state.fonts.author, ...beamerNamedFontSize(classSize, "small") };
+    state.fonts.date = { ...state.fonts.date, ...beamerNamedFontSize(classSize, "small") };
     state.fonts["block-title"] = {
       ...state.fonts["normal-text"],
       series: "bold",
     };
     if (family === "metropolis") {
+      state.fonts["page-number"] = { ...state.fonts["page-number"], ...beamerNamedFontSize(classSize, "scriptsize") };
       state.diagnostics.push({
         severity: "warning",
         code: "beamer-font-substitution",
@@ -1704,6 +1715,8 @@ function applyModernColors(
   state.colors["alerted text"] = { fg: accent };
   state.colors["example text"] = { fg: example };
   state.colors["progress bar"] = { fg: accent, bg: "#8a5a35" };
+  state.colors["title separator"] = { parent: "progress bar" };
+  if (use.name.toLowerCase() === "moloch") state.colors.institute = { fgMix: { foregroundRole: "normal text", backgroundRole: "normal text", foregroundPercent: 80 } };
   state.colors["progress bar background"] = { bg: "#8a5a35" };
 }
 
@@ -1939,7 +1952,7 @@ function freezeColors(record: Readonly<Record<string, BeamerThemeColor>>): Reado
 
 function freezeFonts(record: Readonly<Record<BeamerThemeFontRole, BeamerThemeFont>>): Readonly<Record<BeamerThemeFontRole, BeamerThemeFont>> {
   const fonts = { ...record };
-  const roles: readonly BeamerThemeFontRole[] = ["normal-text", "title", "subtitle", "author", "institute", "date", "frame-title", "frame-subtitle", "headline", "section-in-head-foot", "subsection-in-head-foot", "title-in-sidebar", "author-in-sidebar", "section-in-sidebar", "subsection-in-sidebar", "footline", "block-title", "block-body"];
+  const roles: readonly BeamerThemeFontRole[] = ["normal-text", "title", "subtitle", "author", "institute", "date", "frame-title", "frame-subtitle", "headline", "section-in-head-foot", "subsection-in-head-foot", "title-in-sidebar", "author-in-sidebar", "section-in-sidebar", "subsection-in-sidebar", "footline", "page-number", "block-title", "block-body"];
   for (const role of roles) fonts[role] = Object.freeze({ ...record[role] });
   return Object.freeze(fonts);
 }

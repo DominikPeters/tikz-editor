@@ -16,15 +16,12 @@ describe("Beamer theme resolution", () => {
 \documentclass[11pt,aspectratio=169]{beamer}
 \begin{document}\begin{frame}A\end{frame}\end{document}`));
 
-    expect(planBeamerTitlePageTemplate(theme, true)).toEqual({
+    expect(planBeamerTitlePageTemplate(theme)).toEqual({
       templateId: "beamer/title-page/default",
       style: "colorbox",
       shadow: false,
       outerBleedPt: 0,
-      titleBoxTopPt: 14.6,
-      titleBoxHeightPt: 45.438339,
-      titleBaselineFromBoxTopPt: 17.993591,
-      subtitleBaselineFromBoxTopPt: 35.193588,
+      paddingPt: 8,
     });
     expect(
       planBeamerBlockTemplate({ environment: "block", theme })
@@ -263,12 +260,12 @@ describe("Beamer theme resolution", () => {
       fg: "#000000",
       bg: "#ebebf7",
     });
-    expect(planBeamerTitlePageTemplate(theme, true)).toEqual(
+    expect(planBeamerTitlePageTemplate(theme)).toEqual(
       expect.objectContaining({
         templateId: "beamer/title-page/rounded-shadow",
         style: "colorbox",
         shadow: false,
-        titleBoxHeightPt: 45.438339,
+        paddingPt: 8,
       })
     );
     expect(markers[1]?.glyph).toEqual(

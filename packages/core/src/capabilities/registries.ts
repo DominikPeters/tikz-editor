@@ -19,6 +19,7 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Embedded picture context and isolated SVG definitions share the overlay picture ID.
   // Headings/class sizes/columns, preamble color roles and basic tcolorbox
   // composition have separate document-renderer contracts.
+  // Measured stock and modern titlepages share the titlepage document contract.
   return FEATURE_IDS.filter((featureId) => {
     const status = capabilityMatrix[featureId][layer];
     return status !== "none" && status !== "not-applicable";

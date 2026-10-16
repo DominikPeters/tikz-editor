@@ -16,6 +16,7 @@ const TITLE_PAGE_METADATA_FIELDS: readonly BeamerMetadataFieldName[] = [
   "author",
   "institute",
   "date",
+  "titlegraphic",
 ];
 
 /**

@@ -135,15 +135,15 @@ describe("headless Beamer frame renderer", () => {
     expect(titlePage.bounds).toEqual(
       expect.objectContaining({
         x: expect.closeTo(6.935, 6),
-        y: expect.closeTo(20.944441, 6),
+        y: expect.closeTo(6.344435, 6),
         width: expect.closeTo(441.374094, 6),
-        height: expect.closeTo(60.468338, 6),
+        height: expect.closeTo(138.49335, 6),
       })
     );
-    expect(baseline(title)).toBeCloseTo(45.453032, 6);
-    expect(baseline(subtitle)).toBeCloseTo(62.653029, 6);
+    expect(baseline(title)).toBeCloseTo(45.453035, 6);
+    expect(baseline(subtitle)).toBeCloseTo(62.653035, 6);
     expect(result.layout.embeddedTikz[0]?.bounds.y).toBeCloseTo(
-      147.059999,
+      147.060003,
       6
     );
     expect(result.svg.svg).toContain(

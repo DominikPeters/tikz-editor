@@ -723,6 +723,11 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_frame_flow"],
     notes: "Source-backed frame titles/subtitles and title overlays, empty titles, class size ladders, command/environment columns and default/explicit column glue participate in common paragraph and block/list flow. Stock default heading boxes measure struts and enlarged title content. Exact LuaLaTeX snapshots cover representative scope, packing and font contracts; arbitrary frame/chrome template redefinitions are not executed.",
   },
+  beamer_titlepages: {
+    parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
+    fixtures: ["beamer_titlepages"],
+    notes: "Measured default/rounded/inmargin and distinct Metropolis/Moloch titlepage templates support title/subtitle wrapping, author/institute/date metadata, titlegraphics, class font sizes, literal preamble font-role settings and maketitle. Source-backed metadata retains edit scopes. Metropolis substitutes Latin Modern for Fira; arbitrary template code, font parents and local font declarations are not executed.",
+  },
   beamer_theme_colors: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",
     fixtures: ["beamer_theme_colors"],

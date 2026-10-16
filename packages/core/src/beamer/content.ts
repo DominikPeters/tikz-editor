@@ -520,7 +520,7 @@ function splitTitlePageCommands(
       continue;
     }
     const commands = beamerControlSequencesIn(context, child.span).filter(
-      (command) => command.name === "titlepage"
+      (command) => command.name === "titlepage" || command.name === "maketitle"
     );
     if (commands.length === 0) {
       result.push(child);
