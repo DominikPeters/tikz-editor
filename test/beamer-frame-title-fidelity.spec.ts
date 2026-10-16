@@ -93,4 +93,17 @@ describe("ordinary Beamer frame titles and subtitles", () => {
     expect(geometry(result)).toEqual(geometry(absent));
     expect(result.layout.contentBounds).toEqual(absent.layout.contentBounds);
   });
+  it.each(["", "   ", "% a comment\n   "])("keeps Moloch title padding when an authored subtitle is blank: %j", async subtitle => {
+    const preamble = String.raw`\usetheme{moloch}`;
+    const result = await prepareBeamerDocument(deck(String.raw`\begin{frame}[t]{Title}\framesubtitle{${subtitle}}Body.\end{frame}`, preamble)).renderFrame();
+    const absent = await prepareBeamerDocument(deck(String.raw`\begin{frame}[t]{Title}Body.\end{frame}`, preamble)).renderFrame();
+    expect(result.frame.subtitle?.value).toBe(subtitle);
+    const geometry = (page: RenderBeamerFrameResult) => trace(page).lines.map(line => ({
+      text: line.text, x: line.x, baselineY: line.baselineY, glyphs: line.glyphs,
+    }));
+    expect(geometry(result)).toEqual(geometry(absent));
+    expect(trace(result).rectangles).toEqual(trace(absent).rectangles);
+    expect(result.layout.contentBounds).toEqual(absent.layout.contentBounds);
+  });
+
 });

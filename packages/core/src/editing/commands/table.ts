@@ -321,6 +321,14 @@ function environmentEntry(name: string): EnvironmentSchema | null {
   if (TEXT_CONTAINERS.includes(name)) {
     return { name, node: "container", body: "flow", args: [] };
   }
+  if (name === "overlayarea") {
+    return { name, node: "container", body: "flow", args: [value("dimension"), value("dimension")] };
+  }
+  // This is a source-editing schema for the renderer's literal fallback,
+  // not a declaration of commutative-diagram rendering support.
+  if (name === "tikzcd") {
+    return { name, node: "container", body: "flow", args: [value("options", "optional")] };
+  }
   if (name === "tcolorbox" || name === "overprint") {
     return { name, node: "container", body: "flow", args: [value("options", "optional")] };
   }

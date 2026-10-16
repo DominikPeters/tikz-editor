@@ -1,3 +1,4 @@
+import type { TexListLayoutProfile } from "./layout-options.js";
 import { layoutTexTabularBox } from "./tabular/layout.js";
 import { layoutTexTransformBox } from "./text-box-transform.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
@@ -530,7 +531,8 @@ export function simpleTexSegmentToLayoutItems(
   textFontProfile: TexTextFontProfile = defaultTexTextFontProfile,
   graphicsResolver?: DocumentGraphicsResolver,
   dimensionContext?: TexDimensionContext,
-  tabularProfile?: TexTabularLayoutProfile
+  tabularProfile?: TexTabularLayoutProfile,
+  listProfile?: TexListLayoutProfile
 ): TexLayoutInlineItem[] {
   const tokens = simpleTexInlineNodesToTokens(segment.nodes, initialFontState);
   const items: TexLayoutInlineItem[] = [];
@@ -614,7 +616,7 @@ export function simpleTexSegmentToLayoutItems(
     }
 
     if (token.kind === "transform-box" && token.transformBox) {
-      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}), textFontProfile, ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}), ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}), ...(tabularProfile !== undefined ? { tabularProfile: tabularProfile } : {}) });
+      const box = layoutTexTransformBox({ ...(listProfile !== undefined ? { listProfile } : {}), node: token.transformBox, fontState: token.fontState, atPt, metricProvider, spaceGlueProfile, ...(mathBoxProvider !== undefined ? { mathBoxProvider: mathBoxProvider } : {}), textFontProfile, ...(graphicsResolver !== undefined ? { graphicsResolver: graphicsResolver } : {}), ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}), ...(tabularProfile !== undefined ? { tabularProfile: tabularProfile } : {}) });
       items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
       hasSeenText = true; spaceFactor = 1000; continue;
     }
@@ -730,6 +732,8 @@ export function simpleTexSegmentToLayoutItems(
     if (token.kind === "raisebox") {
       const surroundingSizePt = token.fontState.sizePt ?? atPt;
       const box = texRaiseBoxFromInlineNodes({
+        ...(listProfile !== undefined ? { listProfile } : {}),
+        ...(tabularProfile !== undefined ? { tabularProfile } : {}),
         source: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,
@@ -1583,6 +1587,8 @@ function texRaiseBoxFromInlineNodes(params: {
   readonly textFontProfile: TexTextFontProfile;
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly dimensionContext?: TexDimensionContext;
+  readonly listProfile?: TexListLayoutProfile;
+  readonly tabularProfile?: TexTabularLayoutProfile;
 }): TexMathBox | null {
   const childFontState = params.childFontScale === undefined
     ? params.fontState
@@ -1601,6 +1607,8 @@ function texRaiseBoxFromInlineNodes(params: {
     textFontProfile: params.textFontProfile,
     ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
     ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}),
+    ...(params.listProfile !== undefined ? { listProfile: params.listProfile } : {}),
+    ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}),
     trimEdges: false,
   });
   const body = texMBoxHListFromLayoutItems({
@@ -1825,6 +1833,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly dimensionContext?: TexDimensionContext;
   readonly tabularProfile?: TexTabularLayoutProfile;
+  readonly listProfile?: TexListLayoutProfile;
   readonly trimEdges: boolean;
 }): TexLayoutInlineItem[] {
   const items: TexLayoutInlineItem[] = [];
@@ -1900,7 +1909,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     }
 
     if (token.kind === "transform-box" && token.transformBox) {
-      const box = layoutTexTransformBox({ node: token.transformBox, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), textFontProfile: params.textFontProfile, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}) });
+      const box = layoutTexTransformBox({ ...(params.listProfile !== undefined ? { listProfile: params.listProfile } : {}), node: token.transformBox, fontState: token.fontState, atPt: params.atPt, metricProvider: params.metricProvider, spaceGlueProfile: params.spaceGlueProfile, ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), textFontProfile: params.textFontProfile, ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.dimensionContext !== undefined ? { dimensionContext: params.dimensionContext } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}) });
       items.push({ kind: "text-box", command: token.transformBox.command, text: token.text, content: token.transformBox.content, sourceStart: token.sourceStart, sourceEnd: token.sourceEnd, contentStart: token.transformBox.contentStart, contentEnd: token.transformBox.contentEnd, box });
       hasSeenText = true; spaceFactor = 1000; continue;
     }
@@ -2014,6 +2023,8 @@ export function simpleTexInlineTokensToLayoutItems(params: {
     if (token.kind === "raisebox") {
       const surroundingSizePt = token.fontState.sizePt ?? params.atPt;
       const box = texRaiseBoxFromInlineNodes({
+        ...(params.listProfile !== undefined ? { listProfile: params.listProfile } : {}),
+        ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}),
         source: token.text,
         content: token.content ?? "",
         sourceStart: token.sourceStart,

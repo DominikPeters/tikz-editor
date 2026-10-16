@@ -1,3 +1,4 @@
+import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import { resolveBeamerThemeColor } from "./resolve.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import type { BeamerDelimitedSourceValue } from "../types.js";
@@ -16,11 +17,7 @@ import type {
 
 const TEX_POINTS_PER_CM = 72.27 / 2.54;
 const FRAME_TITLE_HORIZONTAL_PADDING_PT = 0.3 * TEX_POINTS_PER_CM;
-const SIDEBAR_TITLE_FIRST_BASELINE_PT = 13.164001;
-const SIDEBAR_TITLE_LINE_HEIGHT_PT = 7;
-const SIDEBAR_FIRST_SECTION_BASELINE_PT = 44.888;
 const SIDEBAR_SUBSECTION_BASELINE_STEP_PT = 8.004;
-const SIDEBAR_NEXT_SECTION_BASELINE_STEP_PT = 12;
 const SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT = 26.999969;
 const SIDEBAR_FRAME_TITLE_INSET_PT = -0.1426;
 
@@ -73,14 +70,23 @@ export function planSidebarPageDecoration(
   ];
 
   const title = metadataValue(context, "title");
-  const titleLineCount = title
-    ? wrappedLineCount(
-        context,
-        title,
-        "title-in-sidebar",
-        Math.max(0, width - 6)
-      )
-    : 0;
+  const author = metadataValue(context, "author");
+  const measure = (value: BeamerDelimitedSourceValue | undefined, role: "title-in-sidebar" | "author-in-sidebar") => {
+    if (!value?.value.trim()) return { firstHeight: 0, extent: 0, endingDepth: 0 };
+    const font = context.theme.fonts[role];
+    return context.measureSidebarMetadata?.(value, role, Math.max(0, width - 6)) ?? {
+      firstHeight: .7 * font.lineHeightPt,
+      extent: wrappedLineCount(context, value, role, Math.max(0, width - 6)) * font.lineHeightPt,
+      endingDepth: .3 * font.lineHeightPt,
+    };
+  };
+  const titleMetrics = measure(title, "title-in-sidebar");
+  const authorMetrics = measure(author, "author-in-sidebar");
+  const titleFont = context.theme.fonts["title-in-sidebar"];
+  const authorFont = context.theme.fonts["author-in-sidebar"];
+  const titleBaseline = headHeight + 1.5 * titleFont.sizePt + titleMetrics.firstHeight;
+  const authorBaseline = headHeight + 1.5 * titleFont.sizePt + titleMetrics.extent + 1.25 * titleFont.sizePt +
+    Math.max(1, authorFont.lineHeightPt - titleMetrics.endingDepth - authorMetrics.firstHeight) + authorMetrics.firstHeight;
   if (title) {
     primitives.push(sidebarText({
       context,
@@ -88,19 +94,23 @@ export function planSidebarPageDecoration(
       text: title,
       x: x + 3,
       width: Math.max(0, width - 6),
-      baselineY: headHeight + SIDEBAR_TITLE_FIRST_BASELINE_PT,
+      baselineY: titleBaseline,
       colorRole: "title in sidebar",
       fontRole: "title-in-sidebar",
       alignment: "center",
     }));
   }
+  if (author?.value.trim()) primitives.push(sidebarText({ context, id: "sidebar:author", text: author,
+    x: x + 3, width: Math.max(0, width - 6), baselineY: authorBaseline,
+    colorRole: "author in sidebar", fontRole: "author-in-sidebar", alignment: "center" }));
 
   const hideAllSubsections = ref.options.hideAllSubsections === true;
   const hideOtherSubsections = ref.options.hideOtherSubsections === true;
-  let baselineY =
-    headHeight +
-    SIDEBAR_FIRST_SECTION_BASELINE_PT +
-    Math.max(0, titleLineCount - 2) * SIDEBAR_TITLE_LINE_HEIGHT_PT;
+  const sectionFont = context.theme.fonts["section-in-sidebar"];
+  const sectionProfile = createBeamerTexTextFontProfile(sectionFont);
+  const sectionResolved = sectionProfile.resolveTextFont(sectionProfile.defaultFontState, texLength(sectionFont.sizePt), sectionProfile.metricProvider);
+  const sectionEx = sectionResolved.data.fontdimen.xheight * sectionFont.sizePt;
+  let baselineY = authorBaseline + authorMetrics.extent - authorMetrics.firstHeight + 1.25 * authorFont.sizePt + sectionFont.lineHeightPt + sectionEx;
   for (const section of context.navigation.model.sections) {
     const sectionActive = section === context.navigation.currentSection;
     primitives.push(sidebarText({
@@ -137,7 +147,7 @@ export function planSidebarPageDecoration(
         alignment: "left",
       }));
     }
-    baselineY += SIDEBAR_NEXT_SECTION_BASELINE_STEP_PT;
+    baselineY += 2 * sectionFont.lineHeightPt - .5 * sectionEx;
   }
   return { inset: 0, primitives };
 }
@@ -226,12 +236,11 @@ export function planSidebarFrameTitle(
     return { inset: 0, primitives: [] };
   }
   const headHeight = numberOption(ref, "headHeightPt");
-  const font = context.theme.fonts["frame-title"];
-  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title",
-    context.page.frameArea.width - 2 * FRAME_TITLE_HORIZONTAL_PADDING_PT);
+  const width = context.page.frameArea.width - 2 * FRAME_TITLE_HORIZONTAL_PADDING_PT;
+  const measured = measureBeamerHeadingStack(context, width, { titleEnd: "", subtitleEnd: "" });
   // Both vfil glues share the fixed-height vbox's spare space. Wrapping
   // moves the first baseline upward by half the added paragraph extent.
-  const extra = measured ? measured.extent - font.lineHeightPt : 0;
+  const extra = measured?.lastBaseline ?? 0;
   return {
     // The fixed-height title vbox cancels the separately reserved headline
     // with `\vskip-\beamer@headheight`. Its remaining strut/depth and
@@ -255,7 +264,9 @@ export function planSidebarFrameTitle(
       alignment: "left",
       verticalAlignment: "top",
       baselineY: SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT - headHeight - extra / 2,
-    }],
+    }, ...(measured?.subtitle ? beamerSubtitlePrimitive(context,
+      context.page.frameArea.x + FRAME_TITLE_HORIZONTAL_PADDING_PT, width,
+      SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT - headHeight - extra / 2 + measured.subtitleBaseline) : [])],
   };
 }
 
@@ -326,7 +337,7 @@ function wrappedLineCount(
 
 function metadataValue(
   context: BeamerFrameTemplateContext,
-  field: "title"
+  field: "title" | "author"
 ): BeamerDelimitedSourceValue | undefined {
   const metadata = context.document.preamble.metadata[field];
   return metadata?.shortValue ?? metadata?.value;

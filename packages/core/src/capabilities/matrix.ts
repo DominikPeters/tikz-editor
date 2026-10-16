@@ -721,7 +721,7 @@ export const capabilityMatrix: CapabilityMatrix = {
   beamer_frame_flow: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",
     fixtures: ["beamer_frame_flow"],
-    notes: "Source-backed frame titles/subtitles and title overlays, empty titles, class size ladders, command/environment columns and default/explicit column glue participate in common paragraph and block/list flow. Default, sidebar, shadow and modern heading boxes measure wrapped content; modern themes retain their own padding, centering and paragraph spacing. Lists and display skips honor tested 10pt/14pt class-size compositions. Exact LuaLaTeX snapshots cover representative scope, packing and font contracts; arbitrary frame/chrome template redefinitions are not executed.",
+    notes: "Source-backed frame titles/subtitles and title overlays, empty titles, class size ladders, command/environment columns and default/explicit column glue participate in common paragraph and block/list flow. Default, sidebar, shadow, smoothbars/smoothtree and modern heading boxes measure wrapped content; Moloch subtitles retain their own font and template baseline register. Infolines author/institute/date and sidebar author metadata, standalone frame centering, text/math/list overlayarea boxes, default/ball section-subsection contents, and modern head/title/foot progress bars have independent LuaLaTeX checks. Lists, optical bullet fonts and display skips honor all eight Beamer class sizes (8–20pt). Generated section-hook frames, arbitrary TOC/template programs and package frontends remain outside this bounded support.",
   },
   beamer_titlepages: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "partial",
@@ -731,7 +731,7 @@ export const capabilityMatrix: CapabilityMatrix = {
   beamer_theme_colors: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",
     fixtures: ["beamer_theme_colors"],
-    notes: "Preamble setbeamercolor declarations interleave with theme components, supporting fg/bg expressions, ordered parent/use roles and starred resets, definecolor/colorlet aliases and background-canvas inheritance. Literal frame-local block role declarations retain source order and group lifetime; title-only background colorboxes retain asymmetric color separation. Arbitrary color macros and general TeX execution remain outside this support boundary.",
+    notes: "Preamble setbeamercolor declarations interleave with theme components, supporting fg/bg expressions, ordered parent/use roles and starred resets, definecolor/colorlet aliases and background-canvas inheritance. Dove's monochrome roles and text-alert weight, serif TU optical sizes and professionalfonts math-replacement suppression are registered stock components. Literal frame-local block role declarations retain source order and group lifetime; title-only background colorboxes retain asymmetric color separation. Arbitrary color macros and general TeX execution remain outside this support boundary.",
   },
   beamer_tcolorbox: {
     parser: "partial", semantic: "not-applicable", svg: "partial", edit: "none",

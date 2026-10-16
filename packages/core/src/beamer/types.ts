@@ -257,6 +257,8 @@ export type BeamerFrameLayoutItem = {
   message?: string;
   /** The marker is already represented by a glyph in its paragraph VList. */
   traceAsGlyph?: boolean;
+  /** Explicit node-rule correspondence for template paint (PGF paths are not TeX rules). */
+  traceAsRule?: boolean;
 };
 
 export type BeamerParagraphLayout = {

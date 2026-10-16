@@ -210,6 +210,15 @@ describe("edit tree over the Beamer fixture corpus", () => {
     expect(() => compareEditTreeWithEngines(unavailable)).not.toThrow();
   });
 
+  it("compares supported math next to an unsupported package macro's literal argument", () => {
+    const source = R`$\ket{\Phi^+}+x^2$`;
+    const built = tree(source);
+    expect(compareEditTreeWithEngines(built)).toEqual([]);
+    const adjacent = built.nodes.find(node => node.kind === "scripted" && source.slice(node.span.from, node.span.to) === "x^2")!;
+    const broken = { ...built, nodes: built.nodes.map(node => node.id === adjacent.id ? { ...node, span: { ...node.span, to: node.span.to - 1 } } : node) };
+    expect(compareEditTreeWithEngines(broken)).toContainEqual(expect.objectContaining({ engine: "math", side: "tree-only" }));
+  });
+
   it("agrees with the math parser and the text IR", () => {
     const disagreements = scopes.flatMap((scope) =>
       compareEditTreeWithEngines(buildEditTree(scope.text, { commands: scope.commands }))

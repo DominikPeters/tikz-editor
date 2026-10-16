@@ -467,6 +467,17 @@ const DEFAULT_OTF_GLYPHS = [
   },
 ];
 // Optional targeted regeneration avoids rewriting unrelated vendored faces.
+// Remaining TU/lmr optical sizes used by Beamer's serif font theme.
+for (const [shape, sizes] of [["regular", [6, 8, 9, 12, 17]], ["bold", [6, 8, 9, 12]], ["italic", [8, 9, 12]], ["slant", [9, 12, 17]]]) {
+  const baseName = shape === "slant" ? "lmromanslant10-regular" : `lmroman10-${shape}`;
+  const base = DEFAULT_OTF_GLYPHS.find(font => font.fontName === baseName);
+  for (const size of sizes) {
+    const fontName = shape === "slant" ? `lmromanslant${size}-regular` : `lmroman${size}-${shape}`;
+    DEFAULT_OTF_GLYPHS.push({ ...base, fontName, fileName: `${fontName}.otf` });
+    DEFERRED_OTF_FONT_NAMES.add(fontName);
+  }
+}
+
 const selectedFonts = process.argv.find((arg) => arg.startsWith("--fonts="))?.slice(8).split(",");
 const fontToolsOutlines = process.argv.includes("--fonttools-outlines");
 

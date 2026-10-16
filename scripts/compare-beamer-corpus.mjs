@@ -172,10 +172,14 @@ async function worker(requestPath) {
     result.dependencies = loaded.dependencies;
     result.sourceSha256 = sha256(loaded.source);
     writeFileSync(join(directory, "input.tex"), loaded.source);
-    const [beamer, core] = await Promise.all([
+    const [beamer, core, outlines] = await Promise.all([
       import(pathToFileURL(join(repoRoot, "packages/core/dist/beamer/index.js")).href),
       import(pathToFileURL(join(repoRoot, "packages/core/dist/index.js")).href),
+      import(pathToFileURL(join(repoRoot, "packages/core/dist/text/tex/fonts/glyph-outlines.js")).href),
     ]);
+    // Prepared documents cache painted paragraphs. Load outlines before the
+    // first render, including when a cached render is passed to the comparator.
+    await outlines.loadAllTexGlyphOutlines();
     const prepared = beamer.prepareBeamerDocument(loaded.source);
     result.frameCount = prepared.document.frames.length;
     result.scannerDiagnostics = prepared.document.diagnostics;
@@ -281,7 +285,7 @@ async function main() {
   }
   ensureDistBuildFresh(repoRoot);
   const rendererFingerprint = sha256(["core", "lezer-tex", "lezer-tikz"].map((name) => snapshotStamp(join(repoRoot, "packages", name, "dist"), true)).join(""));
-  const harnessFingerprint = sha256([scriptPath, join(repoRoot, "scripts/lib/beamer-corpus.mjs"), join(repoRoot, "scripts/compare-beamer-frame.mjs"), join(repoRoot, "scripts/probe-beamer-frame.mjs"), join(repoRoot, "scripts/lib/beamer-frame-oracle.mjs"), join(repoRoot, "scripts/lib/beamer-frame-compare.mjs")].map((path) => readFileSync(path, "utf8")).join(""));
+  const harnessFingerprint = sha256([scriptPath, join(repoRoot, "scripts/lib/beamer-corpus.mjs"), join(repoRoot, "scripts/compare-beamer-frame.mjs"), join(repoRoot, "scripts/probe-beamer-frame.mjs"), join(repoRoot, "scripts/lib/beamer-frame-oracle.mjs"), join(repoRoot, "scripts/lib/beamer-deck-context.mjs"), join(repoRoot, "scripts/lib/beamer-frame-compare.mjs")].map((path) => readFileSync(path, "utf8")).join(""));
   const stamps = new Map();
   mkdirSync(options.outDir, { recursive: true });
   const decks = new Array(entries.length);

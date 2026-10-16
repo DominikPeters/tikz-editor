@@ -1,3 +1,5 @@
+import { resolveBeamerThemeColor } from "./resolve.js";
+import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import type { BeamerDelimitedSourceValue } from "../types.js";
 import {
   appendMiniFrameSections,
@@ -197,8 +199,11 @@ export function planSmoothBarsFrameTitle(
         backgroundStop(0.5, "frametitle"),
         backgroundStop(1, "frametitle"),
       ];
+  const width = context.page.page.width - HORIZONTAL_MARGIN_PT - HORIZONTAL_MARGIN_PT;
+  const measured = measureBeamerHeadingStack(context, width, { titleEnd: context.frame.subtitle ? "" : "\\strut" });
+  const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
-    inset: geometry.topInsetPt - geometry.headlineInsetPt,
+    inset: geometry.topInsetPt - geometry.headlineInsetPt + extra,
     primitives: [
       gradientPrimitive({
         context,
@@ -214,26 +219,28 @@ export function planSmoothBarsFrameTitle(
         direction: "vertical",
         stops: transitionStops,
       }),
-      {
-        kind: "fill",
+      ...(resolveBeamerThemeColor(context.theme, "frametitle").bg ? [{
+        kind: "fill" as const,
         id: `${context.frame.id}:frame-title:background`,
         sourceSpan: context.frame.title.span,
         bounds: {
           x: 0,
           y: geometry.frameBackgroundY - geometry.headlineInsetPt,
           width: context.page.page.width,
-          height: geometry.frameBackgroundHeightPt,
+          height: geometry.frameBackgroundHeightPt + extra,
         },
         colorRole: "frametitle",
-      },
+      }] : []),
       frameTitleText(
         context,
         HORIZONTAL_MARGIN_PT,
         geometry.frameTitleBaselinePt - geometry.headlineInsetPt
       ),
+      ...(measured?.subtitle ? beamerSubtitlePrimitive(context, HORIZONTAL_MARGIN_PT, width,
+        geometry.frameTitleBaselinePt - geometry.headlineInsetPt + measured.subtitleBaseline) : []),
       frameBottomFade(
         context,
-        geometry.frameBottomFadeY - geometry.headlineInsetPt
+        geometry.frameBottomFadeY - geometry.headlineInsetPt + extra
       ),
     ],
   };
@@ -328,8 +335,11 @@ export function planSmoothTreeFrameTitle(
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
+  const width = context.page.page.width - SMOOTH_TREE_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT;
+  const measured = measureBeamerHeadingStack(context, width, { titleEnd: context.frame.subtitle ? "" : "\\strut" });
+  const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
-    inset: SMOOTH_TREE.topInsetPt - SMOOTH_TREE.headlineInsetPt,
+    inset: SMOOTH_TREE.topInsetPt - SMOOTH_TREE.headlineInsetPt + extra,
     primitives: [
       gradientPrimitive({
         context,
@@ -348,26 +358,28 @@ export function planSmoothTreeFrameTitle(
           backgroundStop(1, "frametitle"),
         ],
       }),
-      {
-        kind: "fill",
+      ...(resolveBeamerThemeColor(context.theme, "frametitle").bg ? [{
+        kind: "fill" as const,
         id: `${context.frame.id}:frame-title:background`,
         sourceSpan: context.frame.title.span,
         bounds: {
           x: 0,
           y: SMOOTH_TREE.frameBackgroundY - SMOOTH_TREE.headlineInsetPt,
           width: context.page.page.width,
-          height: SMOOTH_TREE.frameBackgroundHeightPt,
+          height: SMOOTH_TREE.frameBackgroundHeightPt + extra,
         },
         colorRole: "frametitle",
-      },
+      }] : []),
       frameTitleText(
         context,
         SMOOTH_TREE_FRAME_TITLE_X_PT,
         SMOOTH_TREE.frameTitleBaselinePt - SMOOTH_TREE.headlineInsetPt
       ),
+      ...(measured?.subtitle ? beamerSubtitlePrimitive(context, SMOOTH_TREE_FRAME_TITLE_X_PT, width,
+        SMOOTH_TREE.frameTitleBaselinePt - SMOOTH_TREE.headlineInsetPt + measured.subtitleBaseline) : []),
       frameBottomFade(
         context,
-        SMOOTH_TREE.frameBottomFadeY - SMOOTH_TREE.headlineInsetPt
+        SMOOTH_TREE.frameBottomFadeY - SMOOTH_TREE.headlineInsetPt + extra
       ),
     ],
   };
@@ -410,37 +422,12 @@ export function planShadowFrameTitle(
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
-  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title",
-    context.page.page.width - SHADOW_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT);
+  const width = context.page.page.width - SHADOW_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT;
+  const measured = measureBeamerHeadingStack(context, width, { subtitleStart: "" });
   const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
     inset: SHADOW_FRAME_TITLE_INSET_PT + extra,
     primitives: [
-      gradientPrimitive({
-        context,
-        // The PGF horizontal shading is clipped to the title box but its
-        // shipped rule spans `\paperheight`; it is visual chrome rather than
-        // a structurally comparable colorbox rectangle.
-        id: "frame-title:shade",
-        bounds: {
-          x: 0,
-          y: 0,
-          width: context.page.page.width,
-          height: SHADOW_FRAME_TITLE_HEIGHT_PT + extra,
-        },
-        templateId: "beamer/frame-title/shadow-shade",
-        layoutKind: "frame-title",
-        direction: "horizontal",
-        stops: [
-          backgroundStop(0, "frametitle"),
-          backgroundStop(1, "frametitle right"),
-        ],
-      }),
-      frameTitleText(
-        context,
-        SHADOW_FRAME_TITLE_X_PT,
-        SHADOW_FRAME_TITLE_BASELINE_PT
-      ),
       gradientPrimitive({
         context,
         id: "frame-title:shadow",
@@ -458,6 +445,34 @@ export function planShadowFrameTitle(
           foregroundStop(1, "normal text", 0),
         ],
       }),
+      gradientPrimitive({
+        context,
+        // The PGF horizontal shading is clipped to the title box but its
+        // shipped rule spans `\paperheight`; it is visual chrome rather than
+        // a structurally comparable colorbox rectangle.
+        id: "frame-title:shade",
+        bounds: {
+          x: 0,
+          y: -2,
+          width: context.page.page.width,
+          height: SHADOW_FRAME_TITLE_HEIGHT_PT + extra + 2,
+        },
+        templateId: "beamer/frame-title/shadow-shade",
+        layoutKind: "frame-title",
+        direction: "horizontal",
+        stops: [
+          backgroundStop(0, "frametitle"),
+          backgroundStop(1, "frametitle right"),
+        ],
+      }),
+      frameTitleText(
+        context,
+        SHADOW_FRAME_TITLE_X_PT,
+        SHADOW_FRAME_TITLE_BASELINE_PT
+      ),
+      ...(measured?.subtitle ? beamerSubtitlePrimitive(context, SHADOW_FRAME_TITLE_X_PT, width,
+        SHADOW_FRAME_TITLE_BASELINE_PT + measured.subtitleBaseline) : []),
+
     ],
   };
 }

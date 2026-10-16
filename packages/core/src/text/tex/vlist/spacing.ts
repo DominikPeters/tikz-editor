@@ -568,6 +568,8 @@ function displayMathProfileForItem(
   profile: TexDisplayMathLayoutProfile
 ): TexDisplayMathLayoutProfile {
   if (!item.displaySkipCommand) return profile;
+  const override = profile.sizeOverrides?.[item.displaySkipCommand];
+  if (override) return { ...profile, ...override };
   // size10/11/12.clo assign these registers only in normalsize, small and
   // footnotesize. Other size declarations and explicit fontsize inherit them.
   const classIndex = item.normalFontSizePt === 12 ? 2 :

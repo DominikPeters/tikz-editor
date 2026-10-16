@@ -96,7 +96,7 @@ export const FEATURE_IDS = [
   "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
   "beamer_document_scan",
   "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.
-  "beamer_frame_flow", // Measured stock/modern headings, class sizes and vertical block/list composition.
+  "beamer_frame_flow", // Measured headings, metadata chrome, stock contents, fixed overlay areas and vertical composition.
   "beamer_titlepages", // Measured stock and modern titlepage templates and metadata.
   "beamer_theme_colors", // Ordered preamble and scoped frame-local block color roles and aliases.
   "beamer_tcolorbox", // Ordinary unbroken standard-skin package boxes.
@@ -108,7 +108,7 @@ export const FEATURE_IDS = [
   // Manual entries and stock Beamer templates, verified against LuaLaTeX.
   "beamer_manual_bibliography",
   "beamer_footnotes",
-  "beamer_speaker_notes",
+  "beamer_speaker_notes", // Presenter-only notes stay excluded at frame/column flow boundaries too.
   "beamer_float_captions",
   "beamer_frame_continuations",
   "beamer_overlay_pictures", // TikZ `overlay` pictures: empty boxes in the text, drawn over the page.

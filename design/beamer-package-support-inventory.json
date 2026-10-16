@@ -1,0 +1,295 @@
+{
+  "formatVersion": 1,
+  "scope": "Observed breadth-deck package interfaces; no additional support approved or implemented.",
+  "packages": [
+    {
+      "package": "pgfplots",
+      "occurrences": [
+        {
+          "deck": "01-nvidia-performance",
+          "frame": 3,
+          "source": "test/fixtures/beamer/breadth-decks/01-nvidia-performance.tex",
+          "span": {
+            "from": 1572,
+            "to": 2327
+          }
+        },
+        {
+          "deck": "03-ml-selective-prediction",
+          "frame": 4,
+          "source": "test/fixtures/beamer/breadth-decks/03-ml-selective-prediction.tex",
+          "span": {
+            "from": 1496,
+            "to": 2192
+          }
+        },
+        {
+          "deck": "11-ecology-restoration",
+          "frame": 6,
+          "source": "test/fixtures/beamer/breadth-decks/11-ecology-restoration.tex",
+          "span": {
+            "from": 2445,
+            "to": 3156
+          }
+        }
+      ]
+    },
+    {
+      "package": "listings",
+      "occurrences": [
+        {
+          "deck": "04-algorithms-dijkstra",
+          "frame": 4,
+          "source": "test/fixtures/beamer/breadth-decks/04-algorithms-dijkstra.tex",
+          "span": {
+            "from": 1877,
+            "to": 2350
+          }
+        },
+        {
+          "deck": "10-distributed-timeout",
+          "frame": 7,
+          "source": "test/fixtures/beamer/breadth-decks/10-distributed-timeout.tex",
+          "span": {
+            "from": 3163,
+            "to": 3593
+          }
+        },
+        {
+          "deck": "12-numerical-debugging",
+          "frame": 2,
+          "source": "test/fixtures/beamer/breadth-decks/12-numerical-debugging.tex",
+          "span": {
+            "from": 581,
+            "to": 884
+          }
+        },
+        {
+          "deck": "12-numerical-debugging",
+          "frame": 7,
+          "source": "test/fixtures/beamer/breadth-decks/12-numerical-debugging.tex",
+          "span": {
+            "from": 2454,
+            "to": 2815
+          }
+        }
+      ]
+    },
+    {
+      "package": "alltt",
+      "occurrences": [
+        {
+          "deck": "12-numerical-debugging",
+          "frame": 9,
+          "source": "test/fixtures/beamer/breadth-decks/12-numerical-debugging.tex",
+          "span": {
+            "from": 3231,
+            "to": 3542
+          }
+        }
+      ]
+    },
+    {
+      "package": "siunitx",
+      "occurrences": [
+        {
+          "deck": "05-fluid-channel",
+          "frame": 6,
+          "source": "test/fixtures/beamer/breadth-decks/05-fluid-channel.tex",
+          "span": {
+            "from": 2535,
+            "to": 2995
+          }
+        }
+      ]
+    },
+    {
+      "package": "braket",
+      "occurrences": [
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 2,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 546,
+            "to": 839
+          }
+        },
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 3,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 913,
+            "to": 1233
+          }
+        },
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 4,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 1318,
+            "to": 1768
+          }
+        },
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 5,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 1846,
+            "to": 2243
+          }
+        },
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 6,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 2339,
+            "to": 2620
+          }
+        },
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 7,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 2679,
+            "to": 3017
+          }
+        }
+      ]
+    },
+    {
+      "package": "mhchem",
+      "occurrences": [
+        {
+          "deck": "09-organic-electrons",
+          "frame": 2,
+          "source": "test/fixtures/beamer/breadth-decks/09-organic-electrons.tex",
+          "span": {
+            "from": 671,
+            "to": 1079
+          }
+        },
+        {
+          "deck": "09-organic-electrons",
+          "frame": 3,
+          "source": "test/fixtures/beamer/breadth-decks/09-organic-electrons.tex",
+          "span": {
+            "from": 1158,
+            "to": 1778
+          }
+        }
+      ]
+    },
+    {
+      "package": "chemfig",
+      "occurrences": [
+        {
+          "deck": "09-organic-electrons",
+          "frame": 2,
+          "source": "test/fixtures/beamer/breadth-decks/09-organic-electrons.tex",
+          "span": {
+            "from": 671,
+            "to": 1079
+          }
+        }
+      ]
+    },
+    {
+      "package": "bussproofs",
+      "occurrences": [
+        {
+          "deck": "02-logic-proof-clinic",
+          "frame": 5,
+          "source": "test/fixtures/beamer/breadth-decks/02-logic-proof-clinic.tex",
+          "span": {
+            "from": 1542,
+            "to": 1876
+          }
+        },
+        {
+          "deck": "02-logic-proof-clinic",
+          "frame": 6,
+          "source": "test/fixtures/beamer/breadth-decks/02-logic-proof-clinic.tex",
+          "span": {
+            "from": 1941,
+            "to": 2229
+          }
+        }
+      ]
+    },
+    {
+      "package": "quantikz",
+      "occurrences": [
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 2,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 546,
+            "to": 839
+          }
+        },
+        {
+          "deck": "07-quantum-predict-observe",
+          "frame": 7,
+          "source": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+          "span": {
+            "from": 2679,
+            "to": 3017
+          }
+        }
+      ]
+    },
+    {
+      "package": "tikz-cd",
+      "occurrences": [
+        {
+          "deck": "08-category-products",
+          "frame": 3,
+          "source": "test/fixtures/beamer/breadth-decks/08-category-products.tex",
+          "span": {
+            "from": 1000,
+            "to": 1226
+          }
+        },
+        {
+          "deck": "08-category-products",
+          "frame": 4,
+          "source": "test/fixtures/beamer/breadth-decks/08-category-products.tex",
+          "span": {
+            "from": 1311,
+            "to": 1752
+          }
+        },
+        {
+          "deck": "08-category-products",
+          "frame": 9,
+          "source": "test/fixtures/beamer/breadth-decks/08-category-products.tex",
+          "span": {
+            "from": 3475,
+            "to": 3901
+          }
+        }
+      ]
+    },
+    {
+      "package": "subcaption",
+      "occurrences": [
+        {
+          "deck": "11-ecology-restoration",
+          "frame": 7,
+          "source": "test/fixtures/beamer/breadth-decks/11-ecology-restoration.tex",
+          "span": {
+            "from": 3206,
+            "to": 3668
+          }
+        }
+      ]
+    }
+  ]
+}

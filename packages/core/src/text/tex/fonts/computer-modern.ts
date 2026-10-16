@@ -71,6 +71,10 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "firasans-lightitalic",
   "firasans-regular",
   "firasans-italic",
+  "lmroman6-regular", "lmroman8-regular", "lmroman9-regular", "lmroman12-regular", "lmroman17-regular",
+  "lmroman6-bold", "lmroman8-bold", "lmroman9-bold", "lmroman12-bold",
+  "lmroman8-italic", "lmroman9-italic", "lmroman12-italic",
+  "lmromanslant9-regular", "lmromanslant12-regular", "lmromanslant17-regular",
 ] as const;
 
 export type DefaultComputerModernTextFont = typeof DEFAULT_COMPUTER_MODERN_TEXT_FONTS[number];

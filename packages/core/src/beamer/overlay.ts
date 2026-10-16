@@ -634,10 +634,11 @@ export function projectBeamerOverlayText(
     }
     // TeX reads the lines around removed material as before: an `\only` alone
     // on its line does not join the lines around it into an empty one, which
-    // would end the paragraph. An empty group keeps that line, and changes nothing else.
+    // would end the paragraph. Likewise, spaces on either side of an inline
+    // macro remain separate glue tokens. An empty group retains the boundary.
     const before = parts.at(-1)?.text ?? "";
     const after = mapped.text.slice(Math.max(0, removal.to - sourceSpan.from));
-    if (/\n[ \t]*$/u.test(before) && /^[ \t]*\n/u.test(after) && !/\n[ \t]*\n[ \t]*$/u.test(before) && !/^[ \t]*\n[ \t]*\n/u.test(after)) {
+    if ((/[ \t]$/u.test(before) && /^[ \t]/u.test(after)) || (/\n[ \t]*$/u.test(before) && /^[ \t]*\n/u.test(after) && !/\n[ \t]*\n[ \t]*$/u.test(before) && !/^[ \t]*\n[ \t]*\n/u.test(after))) {
       parts.push(createGeneratedMappedText("{}", "removed overlay material", { from: removal.from, to: removal.to }));
     }
     cursor = Math.max(cursor, removal.to);

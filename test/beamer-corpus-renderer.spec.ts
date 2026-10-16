@@ -136,6 +136,9 @@ TAIL
     expect(resumed.status).toBe(1);
     const svg = report.decks[0].pages[0].svg;
     if (!svg) throw new Error("Missing SVG artifact in successful page result.");
+    // The first page in a fresh worker must paint text, including sans faces
+    // that are loaded lazily outside Node. Layout-only checks miss blank SVGs.
+    expect(readFileSync(join(output, svg), "utf8")).toContain("data-tex-glyph=");
     rmSync(join(output, svg));
     const repaired = spawnSync(process.execPath, [...args, "--resume"], { encoding: "utf8", timeout: 30_000 });
     expect(repaired.status).toBe(1);

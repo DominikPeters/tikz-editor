@@ -10,6 +10,15 @@ The broader interaction campaign is documented in
 Its new discovery cases run with `npm run compare:beamer-campaign`; their failures
 remain strict targets, separate from the established corpus regression controls.
 
+Twelve original whole-deck fixtures now live in
+[`test/fixtures/beamer/breadth-decks/`](../test/fixtures/beamer/breadth-decks/README.md).
+They use twelve different themes and teaching/briefing approaches across finance,
+logic, ML, algorithms, physics, mathematics, chemistry, systems and ecology.
+`npm run check:beamer-breadth` compiles complete TeX reference decks and builds a
+PDF/PNG gallery; `npm run render:beamer-breadth` runs the native census across all
+authored frames and overlays. Package diagnostics and automatic-frame discovery
+boundaries are retained in the linked baseline, not accepted as fidelity goldens.
+
 Run a native renderer census across every indexed deck:
 
 ```sh
@@ -264,3 +273,11 @@ It retries deck-level timeouts and crashes. Complete decks containing page error
 are cached too: omit `--resume` to retry them after fixing external dependencies.
 Use a different `--out-dir` to retain an earlier baseline or compare raw and
 assembled-source runs side by side.
+
+Corpus workers preload glyph outlines before their first prepared render, so
+cached native paragraphs paint their glyphs. Isolated probes accept complete
+document-level `\maketitle` frames. Contents probes seed both `.nav` and `.toc`
+from a recorder-backed full-deck compilation and restore those seeds on each
+pass. The corpus fingerprint includes the full-deck context helper. See the
+[breadth-deck LuaLaTeX audit](../design/beamer-breadth-decks-lualatex.md) for
+exhaustive paired results, known trace limitations and the next gap reductions.

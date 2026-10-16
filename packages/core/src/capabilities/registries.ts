@@ -17,9 +17,12 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Automatic frame splitting and stock continuation titles share one ID.
   // Frame, column and nested block/theorem source cards share the placeholder ID.
   // Embedded picture context and isolated SVG definitions share the overlay picture ID.
-  // Headings/class sizes/columns, preamble color roles and basic tcolorbox
+  // Measured titles/subtitles, eight class display/list profiles and columns; preamble color roles and basic tcolorbox
   // composition have separate document-renderer contracts.
   // Measured stock/modern headings and class-sized list/math flow share frame flow.
+  // Footer/sidebar metadata, stock contents, fixed overlay areas, centering and
+  // modern progress paint extend that bounded flow contract. Dove/serif and
+  // professionalfonts extend the registered stock theme/color/font contracts.
   // Native Fira Sans typography shares stock modern theme contracts; scoped block
   // role declarations extend the existing color/titlepage document contracts.
   return FEATURE_IDS.filter((featureId) => {

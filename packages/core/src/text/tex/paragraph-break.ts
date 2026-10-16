@@ -1,3 +1,4 @@
+import type { TexListLayoutProfile } from "./layout-options.js";
 import type { TexTabularLayoutProfile } from "./tabular/types.js";
 import { englishDefaults } from "../knuth-plass/languages/en.js";
 import { breakWithDp, type DpOptions } from "../knuth-plass/paragraph/dp.js";
@@ -68,6 +69,7 @@ export interface TexParagraphBreakOptions {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly textFontProfile?: TexTextFontProfile;
   readonly tabularProfile?: TexTabularLayoutProfile;
+  readonly listProfile?: TexListLayoutProfile;
 }
 
 export function breakTexParagraphRuns(params: {

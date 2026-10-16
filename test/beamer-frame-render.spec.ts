@@ -85,11 +85,11 @@ describe("headless Beamer frame renderer", () => {
       "frame:0:headline:subsection",
     ]);
     expect(firstLinePosition(headline[0])).toEqual({
-      x: expect.closeTo(189.947056, 6),
+      x: expect.closeTo(189.954044, 6),
       baselineY: expect.closeTo(7.059586, 6),
     });
     expect(firstLinePosition(headline[1])).toEqual({
-      x: expect.closeTo(232.957039, 6),
+      x: expect.closeTo(232.950050, 6),
       baselineY: expect.closeTo(7.059586, 6),
     });
     const sectionVListReport = headline[0].vlistLayout.reports.find(
@@ -102,7 +102,7 @@ describe("headless Beamer frame renderer", () => {
       "lines" in sectionVListReport
         ? Number(sectionVListReport.lines[0]?.segments[0]?.caretStops?.[0])
         : undefined
-    ).toBeCloseTo(189.947056, 6);
+    ).toBeCloseTo(189.954044, 6);
     expect(result.svg.svg).toContain(
       'data-paragraph-id="frame:0:headline:section"'
     );

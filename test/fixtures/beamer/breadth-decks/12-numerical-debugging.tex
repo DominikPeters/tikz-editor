@@ -1,0 +1,114 @@
+% Original debugging lab. Arithmetic examples assume IEEE binary64, round-to-nearest.
+\documentclass[14pt,aspectratio=1610]{beamer}
+\usetheme{Rochester}
+\usecolortheme{beaver}
+\usepackage{amsmath,listings,alltt}
+\setbeamertemplate{navigation symbols}{}
+\lstset{basicstyle=\ttfamily\footnotesize,columns=fullflexible,keepspaces=true}
+\title{A plausible number can still be wrong}
+\subtitle{A numerical debugging lab}
+\author{Scientific computing studio}
+\date{Lab 12}
+\begin{document}
+\begin{frame}[plain]\titlepage\end{frame}
+\begin{frame}[fragile]{Run this before proposing a fix}
+\begin{lstlisting}[language=Python]
+a = 10.0**16
+print((a + 1.0) - a)
+print(0.1 + 0.2 == 0.3)
+\end{lstlisting}
+\pause
+\begin{block}{Typical binary64 output}
+\texttt{0.0}\par\texttt{False}
+\end{block}
+The operations are rounded. The algebraic rewrite you expected need not preserve the computed answer.
+\end{frame}
+\section{Diagnose}
+\begin{frame}{A model for one rounded operation}
+For a normal result under standard assumptions,
+\[
+ \operatorname{fl}(a\circ b)=(a\circ b)(1+\delta),
+ \qquad |\delta|\leq u.
+\]
+\small This relative-error model needs care near underflow and does not cover overflow, NaNs or division by zero. For binary64 round-to-nearest, $u=2^{-53}$.
+\end{frame}
+\begin{frame}{Separate the problem from the algorithm}
+\begin{description}
+\item[Conditioning] How much does the exact answer change under small input changes?
+\item[Stability] Does the algorithm behave like a nearby well-posed computation?
+\end{description}
+\pause
+\alert{A stable algorithm cannot remove intrinsic sensitivity in the problem.}
+\end{frame}
+\section{Repair}
+\begin{frame}[label=exercise]{Find the dangerous subtraction}
+For $ax^2+bx+c=0$,
+\[
+ x_{\pm}=\frac{-b\pm\sqrt{b^2-4ac}}{2a}.
+\]
+Take $a=c=1$ and $b=10^8$.
+\begin{itemize}
+\item Which branch subtracts nearly equal values?
+\item How could the product $x_+x_-=c/a$ help?
+\end{itemize}
+\end{frame}
+\begin{frame}{Use the large root to recover the small one}
+For real roots, $a\ne0$, and nonzero $q$, set
+\[
+ q=-\tfrac12\left(b+\operatorname{sign}(b)\sqrt{b^2-4ac}\right),
+ \quad x_1=q/a,\quad x_2=c/q.
+\]
+\small Take $\operatorname{sign}(0)=1$ in this formula. Handle repeated or zero roots separately. Scaling is still needed to avoid overflow in the discriminant.
+\medskip
+\hyperlink{exercise}{\beamerreturnbutton{Return to the exercise}}
+\end{frame}
+\begin{frame}[fragile]{Inspect a sum with an independent formulation}
+\begin{lstlisting}[language=Python]
+import math
+xs = [1e16, 1.0, -1e16]
+total = 0.0
+for x in xs:
+    total += x
+print(total)         # 0.0
+print(math.fsum(xs)) # 1.0
+\end{lstlisting}
+\small The exact real sum is 1. A changed summation method can preserve information lost by a left-to-right sum. Always state the arithmetic environment when comparing outputs.
+\end{frame}
+\section{Validate}
+\begin{frame}{A residual is evidence about a stated equation}
+Given a computed root $\widehat x$, inspect
+\[
+ r=a\widehat x^2+b\widehat x+c.
+\]
+\begin{itemize}
+\item Scale the residual relative to the problem data.
+\item Check a reference at higher precision.
+\item Test limiting and adversarial inputs.
+\end{itemize}
+\end{frame}
+\begin{frame}[fragile]{Leave a reproducible bug report}
+\begin{alltt}
+Inputs:      a = 1, b = 1e8, c = 1
+Arithmetic:  binary64, nearest rounding
+Observation: small root loses digits
+Check:       product of roots and residual
+\end{alltt}
+\small Keep inputs, arithmetic assumptions and the independent check together. A screenshot of the final number is insufficient.
+\end{frame}
+\appendix
+\begin{frame}[allowframebreaks]{Reading and lab checklist}
+\small
+\begin{thebibliography}{9}
+\bibitem{goldberg} David Goldberg. \emph{What Every Computer Scientist Should Know About Floating-Point Arithmetic} (1991).
+\href{https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html}{Author's article, hosted in Oracle's numerical guide}.
+\end{thebibliography}
+The examples and debugging sequence are original teaching material.
+\framebreak
+\begin{enumerate}
+\item Reproduce the failure with the smallest input.
+\item Distinguish representation, conditioning and algorithmic error.
+\item Replace one numerically dangerous operation.
+\item Validate using a different formulation.
+\end{enumerate}
+\end{frame}
+\end{document}

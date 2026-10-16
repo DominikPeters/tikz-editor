@@ -358,4 +358,24 @@ Fraction:
     })) };
     expect(compareBeamerPageTraces(changedSize, oracle).summary.fontMatch).toBe(false);
   });
+  it("compares represented page-edge shading without treating PDF mask carriers as paint", () => {
+    const page = { x: 0, y: 0, width: 160, height: 90 };
+    const rectangle = { id: "transition", role: "other", x: 0, y: -.7, width: 160, height: 2.66 };
+    const native: NativeBeamerPageTrace = {
+      coordinateSystem: COORDINATE_SYSTEM, page, untracedRegions: [], rectangles: [rectangle], glyphs: [], lines: [],
+    };
+    const oracle: OracleBeamerPageTrace = {
+      coordinateSystem: COORDINATE_SYSTEM, page, shipoutOrigin: { x: 0, y: 0 }, boxes: [], glyphs: [], lines: [],
+      rules: [
+        { ...rectangle, path: "transition", depth: 0, totalHeight: 2.66 },
+        { path: "mask-carrier", x: 0, y: -70, width: 160, height: 80, depth: 0, totalHeight: 80 },
+      ],
+    };
+    expect(compareBeamerPageTraces(native, oracle).summary).toMatchObject({ matchedRectangles: 1, unmatchedOracleRules: 0, maxRectangleEdgeDeltaPt: 0 });
+    const shifted = { ...native, rectangles: [{ ...rectangle, y: -.75 }] };
+    expect(compareBeamerPageTraces(shifted, oracle).summary.maxRectangleEdgeDeltaPt).toBe(.05);
+    const resized = { ...native, rectangles: [{ ...rectangle, height: 3 }] };
+    expect(compareBeamerPageTraces(resized, oracle).summary.unmatchedNativeRectangles).toBe(1);
+  });
+
 });

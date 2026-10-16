@@ -69,7 +69,8 @@ export function normalizeOracleBeamerPageTrace(pageTrace, pageGeometry) {
 export function buildNativeBeamerPageTrace(render, metricProvider) {
   const rectangles = render.layout.items
     .filter((item) =>
-      (
+      item.traceAsRule !== false && (
+        item.traceAsRule === true ||
         item.kind === "background" ||
         item.id.endsWith(":background") ||
         (item.kind === "list-marker" && item.traceAsGlyph !== true)
@@ -911,14 +912,15 @@ function sourceRangeIsHidden(from, to, hiddenSpans) {
 }
 
 export function compareBeamerPageTraces(nativeTrace, oracleTrace) {
-  const pageRules = oracleTrace.rules.filter((rule) =>
-      rule.width > 0 &&
-      rule.totalHeight > 0 &&
-      rule.x >= -0.01 &&
-      rule.y >= -0.01 &&
-      rule.x + rule.width <= oracleTrace.page.width + 0.01 &&
-      rule.y + rule.totalHeight <= oracleTrace.page.height + 0.01
-  );
+  // PDF shading masks can report enormous off-page carrier rules rather
+  // than painted extents. Retain the full-page contract, and also compare
+  // partially clipped rules when a native rectangle represents that extent.
+  const partialNative = nativeTrace.rectangles.filter(rect =>
+    rect.x < -.01 || rect.y < -.01 || rect.x + rect.width > nativeTrace.page.width + .01 || rect.y + rect.height > nativeTrace.page.height + .01);
+  const pageRules = oracleTrace.rules.filter(rule => rule.width > 0 && rule.totalHeight > 0 && (
+    (rule.x >= -.01 && rule.y >= -.01 && rule.x + rule.width <= oracleTrace.page.width + .01 && rule.y + rule.totalHeight <= oracleTrace.page.height + .01) ||
+    partialNative.some(rect => Math.abs(rect.width - rule.width) <= .02 && Math.abs(rect.height - rule.totalHeight) <= .02)
+  ));
   const coveredOracleRules = pageRules.filter((rule) =>
     (nativeTrace.coveredRectangles ?? []).some((covered) =>
       Math.max(

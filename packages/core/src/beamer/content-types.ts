@@ -18,6 +18,7 @@ export type BeamerParagraphBodyNode = {
   kind: "paragraph";
   id: string;
   span: Span;
+  alignment?: "left" | "center";
 };
 
 export type BeamerTitlePageBodyNode = {
@@ -25,6 +26,12 @@ export type BeamerTitlePageBodyNode = {
   id: string;
   span: Span;
   commandSpan: Span;
+};
+export type BeamerContentsBodyNode = {
+  kind: "contents";
+  id: string;
+  span: Span;
+  options?: BeamerDelimitedSourceValue;
 };
 
 export type BeamerListBodyNode = {
@@ -145,6 +152,7 @@ export type BeamerColumnsBodyNode = {
 };
 
 export type BeamerFrameBodyNode =
+  | BeamerContentsBodyNode
   | BeamerColumnsBodyNode
   | BeamerBlockBodyNode
   | BeamerTheoremBodyNode

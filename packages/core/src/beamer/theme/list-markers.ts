@@ -40,7 +40,7 @@ export function resolveBeamerItemizeMarkers(
   );
   const xHeightEm = resolvedFont.data.fontdimen.xheight;
   const triangleFont = fontProfile.metricProvider.resolveFont({
-    fontId: "msam10",
+    fontId: font.sizePt < 6 ? "msam5" : font.sizePt < 8 ? "msam7" : "msam10",
     atPt: texLength(font.sizePt),
   });
   const circleFont = fontProfile.metricProvider.resolveFont({
@@ -428,6 +428,21 @@ function sphereSvgBody(params: {
     `r="${fmt(params.size / 2)}" fill="url(#${params.id})"/>` +
     `</g>`
   );
+}
+
+/** PGF's toc/bigsphere use an offset inner focal point and a centered
+ * outer circle; preserve both centers instead of approximating the light. */
+export function beamerContentsSphere(params: { id: string; x: number; y: number; size: number; background: string; canvas: string; section: boolean }): string {
+  const { id, x, y, size, background, canvas, section } = params;
+  const ex = size / (section ? 2.6 : 1.06);
+  const radius = size / 2;
+  const colors = section
+    ? [mixHex(background, WHITE, .35), mixHex(background, WHITE, .75), mixHex(mixHex(background, BLACK, .7), canvas, .9), mixHex(mixHex(background, BLACK, .5), canvas, .9), canvas]
+    : [mixHex(background, WHITE, .15), mixHex(background, WHITE, .75), mixHex(background, BLACK, .7), mixHex(background, BLACK, .5), canvas];
+  const radii = section ? [0, .44 / 1.3, .88 / 1.3, 1.2 / 1.3, 1] : [0, .1643835 / .53, .3287671 / .53, .4520547 / .53, 1];
+  return `<defs><radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(radius)}" fx="${fmt(x - (section ? .5 : .1849315) * ex)}" fy="${fmt(y - (section ? .6 : .2260273) * ex)}">` +
+    colors.map((color, i) => `<stop offset="${fmt(requireArrayValue(radii, i))}" stop-color="${color}"/>`).join("") +
+    `</radialGradient></defs><rect x="${fmt(x - radius)}" y="${fmt(y - radius)}" width="${fmt(size)}" height="${fmt(size)}" fill="url(#${id})"/>`;
 }
 
 function triangleMarker(params: {

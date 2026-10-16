@@ -1,3 +1,4 @@
+import type { TexListLayoutProfile } from "./layout-options.js";
 import { isSimpleTexInlineNode } from "./ir.js";
 import type { DocumentGraphicsResolver } from "../../graphics/types.js";
 import { createIdentityMappedText } from "../source-map.js";
@@ -25,6 +26,7 @@ interface TransformLayoutParams {
   readonly graphicsResolver?: DocumentGraphicsResolver;
   readonly dimensionContext?: TexDimensionContext;
   readonly tabularProfile?: TexTabularLayoutProfile;
+  readonly listProfile?: TexListLayoutProfile;
 }
 type Matrix = readonly [number, number, number, number, number, number];
 type Geometry = { width: number; height: number; depth: number; matrix: Matrix };
@@ -52,12 +54,19 @@ function paragraphBox(node: SimpleTexBoxNode, params: TransformLayoutParams, fon
     textFontProfile: { ...params.textFontProfile, defaultFontState: fontState }, metricProvider: params.metricProvider,
     ...(params.mathBoxProvider !== undefined ? { mathBoxProvider: params.mathBoxProvider } : {}), ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}), ...(params.tabularProfile !== undefined ? { tabularProfile: params.tabularProfile } : {}),
     ...(params.dimensionContext ? { dimensionContext: { ...params.dimensionContext, linewidth: node.width, ...(node.command === "minipage" ? { textwidth: node.width, columnwidth: node.width } : {}) } } : {}),
+    ...(params.listProfile ? { listProfile: { ...params.listProfile, suppressInitialTopsep: true } } : {}),
     sourceMap: mapped.sourceMap,
   });
   if (!layout.supported || !layout.report || !layout.vlistLayout) throw new Error(layout.fallbackReason ?? "Unsupported transformed paragraph box.");
   const vlist = layout.vlistLayout;
   const total = vlist.metrics.height + vlist.metrics.depth;
-  const height = node.alignment === "top" ? vlist.items[0]?.metrics.height ?? 0 : node.alignment === "bottom" ? total - (vlist.items.at(-1)?.metrics.depth ?? 0) : scaled(total / 2 + factorProduct(font.atPt, .25));
+  // A leading list starts the minipage's vertical list with glue, even
+  // when its natural size is zero. TeX's \vtop then has zero height;
+  // our semantic list wrapper instead references its first text baseline.
+  const first = vlist.items[0];
+  const topHeight = first?.item.kind === "vbox" && first.item.role?.kind === "list"
+    ? 0 : first?.metrics.height ?? 0;
+  const height = node.alignment === "top" ? topHeight : node.alignment === "bottom" ? total - (vlist.items.at(-1)?.metrics.depth ?? 0) : scaled(total / 2 + factorProduct(font.atPt, .25));
   const svg = renderTexParagraphSvgBody(layout.report, { lineHeightPt: texLength(skip), metricProvider: params.metricProvider, textFontProfile: params.textFontProfile, vlistLayout: vlist });
   const entries: TexMathCaretEntry[] = [];
   const lines = new Map(vlist.linePlacements.map(line => [line.lineIndex, line]));

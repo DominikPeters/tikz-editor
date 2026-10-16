@@ -35,6 +35,13 @@ export function positionPreparedFrameFlow(
   let cursor = 0;
   let previousDepth = initialPreviousDepth;
   for (const [index, item] of flow.entries()) {
+    if (item.kind === "contents") {
+      const bottom = cursor + item.contents.naturalHeight + item.contents.fillWeight * fillUnit;
+      items.push({ item, contentTop: cursor, referenceY: bottom, visualTop: cursor, visualBottom: bottom });
+      cursor = bottom;
+      previousDepth = 0;
+      continue;
+    }
     if (item.kind === "title-page") {
       const contentTop =
         cursor + item.titlePage.leadingFillWeight * fillUnit;

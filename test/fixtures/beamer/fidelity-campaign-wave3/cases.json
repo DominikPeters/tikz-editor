@@ -1,0 +1,246 @@
+{
+  "formatVersion": 1,
+  "title": "Beamer breadth gap reductions",
+  "fidelity": [
+    {
+      "id": "footer-metadata",
+      "file": "footer-metadata.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "sidebar-author",
+      "file": "sidebar-author.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "notes-after-columns",
+      "file": "notes-after-columns.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Right"
+      ]
+    },
+    {
+      "id": "centering-picture",
+      "file": "centering-picture.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "overlayarea",
+      "file": "overlayarea.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 2,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "contents",
+      "file": "contents.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha"
+      ]
+    },
+    {
+      "id": "metropolis-progress-title",
+      "file": "metropolis-progress-title.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ],
+      "paintProbes": [
+        {
+          "id": "foreground",
+          "x": 100,
+          "y": 29.85
+        },
+        {
+          "id": "background",
+          "x": 350,
+          "y": 29.85
+        }
+      ],
+      "width": 6400
+    },
+    {
+      "id": "moloch-progress-foot",
+      "file": "moloch-progress-foot.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ],
+      "paintProbes": [
+        {
+          "id": "foreground",
+          "x": 100,
+          "y": 255.87
+        },
+        {
+          "id": "background",
+          "x": 350,
+          "y": 255.87
+        }
+      ],
+      "width": 6400
+    },
+    {
+      "id": "metropolis-progress-head",
+      "file": "metropolis-progress-head.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ],
+      "paintProbes": [
+        {
+          "id": "foreground",
+          "x": 100,
+          "y": 0.2
+        },
+        {
+          "id": "background",
+          "x": 350,
+          "y": 0.2
+        }
+      ],
+      "width": 6400
+    },
+    {
+      "id": "serif-dove",
+      "file": "serif-dove.tex",
+      "frame": 1,
+      "family": "beamer-breadth",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "contents-ball",
+      "file": "contents-ball.tex",
+      "frame": 1,
+      "family": "contents",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "First",
+        "Detail",
+        "Second"
+      ]
+    },
+    {
+      "id": "professional-math",
+      "file": "professional-math.tex",
+      "frame": 1,
+      "family": "theme-fonts",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "serif-math",
+      "file": "serif-math.tex",
+      "frame": 1,
+      "family": "theme-fonts",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "dove-alert",
+      "file": "dove-alert.tex",
+      "frame": 1,
+      "family": "theme-fonts",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "contents-hide-subsections",
+      "file": "contents-hide-subsections.tex",
+      "frame": 1,
+      "family": "contents",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "contents-hide-other-subsections",
+      "file": "contents-hide-other-subsections.tex",
+      "frame": 1,
+      "family": "contents",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "First",
+        "Second"
+      ]
+    },
+    {
+      "id": "overlayarea-list-math",
+      "file": "overlayarea-list-math.tex",
+      "frame": 1,
+      "family": "overlayarea",
+      "pages": 2,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    },
+    {
+      "id": "footer-multidigit",
+      "file": "footer-multidigit.tex",
+      "frame": 1,
+      "family": "metadata",
+      "pages": 1,
+      "oracleText": [
+        "Alpha",
+        "Omega"
+      ]
+    }
+  ],
+  "recognition": []
+}

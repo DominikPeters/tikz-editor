@@ -84,6 +84,7 @@ export function breakSimpleTexLayoutDocumentParagraphs(params: {
         ...(params.options.textFontProfile !== undefined ? { textFontProfile: params.options.textFontProfile } : {}),
         ...(dimensionContext !== undefined ? { dimensionContext: dimensionContext } : {}),
         ...(params.options.tabularProfile !== undefined ? { tabularProfile: params.options.tabularProfile } : {}),
+        ...(params.options.listProfile !== undefined ? { listProfile: params.options.listProfile } : {}),
       })
     );
     if (!runs.some((run) => run.kind === "text" || run.kind === "math")) {

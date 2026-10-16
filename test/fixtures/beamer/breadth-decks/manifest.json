@@ -1,0 +1,475 @@
+{
+  "formatVersion": 1,
+  "title": "Original Beamer breadth decks",
+  "description": "Twelve original, independently styled teaching and briefing decks. Package examples intentionally extend beyond current renderer support. Native completion is a smoke check, not a fidelity score. Historical company figures are sourced; all other numerical studies, graphs, measurements and incident details are teaching constructions.",
+  "license": "MIT (repository license); linked background readings are not copied into the fixtures.",
+  "decks": [
+    {
+      "id": "01-nvidia-performance",
+      "file": "01-nvidia-performance.tex",
+      "subject": "Public-company performance",
+      "theme": "Madrid",
+      "classSize": "11",
+      "aspectRatio": "169",
+      "pedagogy": "Executive briefing: headline, evidence, sensitivity, decisions",
+      "audience": "Readers of an earnings report",
+      "sourceFrames": 8,
+      "features": [
+        "titlepage",
+        "columns",
+        "blocks",
+        "pgfplots",
+        "booktabs",
+        "table-caption",
+        "description",
+        "footnote",
+        "pause",
+        "incremental-lists",
+        "appendix",
+        "bibliography",
+        "speaker-notes"
+      ],
+      "sources": [
+        "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-fourth-quarter-and-fiscal-2025"
+      ],
+      "syntheticData": false,
+      "assets": [],
+      "expectedPdfPages": 11,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 11,
+      "witnesses": [
+        "NVIDIA FY2025",
+        "Source and scope"
+      ]
+    },
+    {
+      "id": "02-logic-proof-clinic",
+      "file": "02-logic-proof-clinic.tex",
+      "subject": "Constructive logic",
+      "theme": "CambridgeUS",
+      "classSize": "12",
+      "aspectRatio": "43",
+      "pedagogy": "Proof clinic: attempt, rule, construction, flawed argument, transfer",
+      "audience": "Undergraduates learning natural deduction",
+      "sourceFrames": 10,
+      "features": [
+        "serif",
+        "titlepage-after-content",
+        "table-of-contents",
+        "sections",
+        "subsections",
+        "bussproofs",
+        "theorem",
+        "proof",
+        "custom-macros",
+        "nested-lists",
+        "quote",
+        "pause",
+        "bibliography",
+        "speaker-notes"
+      ],
+      "sources": [
+        "https://www.cs.cmu.edu/~fp/courses/15317-f17/lectures/02-natded.pdf"
+      ],
+      "syntheticData": false,
+      "assets": [],
+      "expectedPdfPages": 14,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 14,
+      "witnesses": [
+        "Can you build the proof?",
+        "Further reading"
+      ]
+    },
+    {
+      "id": "03-ml-selective-prediction",
+      "file": "03-ml-selective-prediction.tex",
+      "subject": "Machine learning",
+      "theme": "metropolis",
+      "classSize": "10",
+      "aspectRatio": "169",
+      "pedagogy": "Experiment-led reading group: operating point, method, subgroup stress test",
+      "audience": "Applied machine learning students",
+      "sourceFrames": 9,
+      "features": [
+        "maketitle",
+        "fira",
+        "progress-bar",
+        "tables",
+        "pgfplots",
+        "align",
+        "indicator",
+        "footnote",
+        "overprint",
+        "onslide",
+        "incremental-lists",
+        "appendix",
+        "bibliography",
+        "speaker-notes"
+      ],
+      "sources": [
+        "https://arxiv.org/abs/2208.12084"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 17,
+      "generatedSectionFrames": 3,
+      "expectedNativePages": 14,
+      "witnesses": [
+        "When should a classifier abstain?",
+        "Reading and reproducibility boundary"
+      ]
+    },
+    {
+      "id": "04-algorithms-dijkstra",
+      "file": "04-algorithms-dijkstra.tex",
+      "subject": "Algorithms",
+      "theme": "Warsaw",
+      "classSize": "11",
+      "aspectRatio": "43",
+      "pedagogy": "Worked trace: prediction, state table, pseudocode, invariant, counterexample",
+      "audience": "Students who know graphs and asymptotic notation",
+      "sourceFrames": 9,
+      "features": [
+        "tikz",
+        "arrows.meta",
+        "named-nodes",
+        "edge-labels",
+        "table-overlays",
+        "only",
+        "onslide",
+        "fragile",
+        "listings",
+        "theorem",
+        "proof",
+        "description",
+        "sections"
+      ],
+      "sources": [
+        "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/mit6_006f11_lec16/"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 13,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 13,
+      "witnesses": [
+        "Find the invariant",
+        "Take the invariant to a new problem"
+      ]
+    },
+    {
+      "id": "05-fluid-channel",
+      "file": "05-fluid-channel.tex",
+      "subject": "Fluid dynamics",
+      "theme": "Berkeley",
+      "classSize": "11",
+      "aspectRatio": "169",
+      "pedagogy": "Laboratory derivation: observe, assume, reduce, solve, test residuals",
+      "audience": "Beginning fluid mechanics students",
+      "sourceFrames": 9,
+      "features": [
+        "sidebar",
+        "tikz",
+        "fill",
+        "dimension-arrows",
+        "figure-caption",
+        "incremental-lists",
+        "align",
+        "integral",
+        "siunitx",
+        "columns",
+        "description",
+        "custom-macros"
+      ],
+      "sources": [
+        "https://davidtong.org/teaching/fluid-mechanics/"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 13,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 13,
+      "witnesses": [
+        "From a channel experiment to a scaling law",
+        "The laboratory handoff"
+      ]
+    },
+    {
+      "id": "06-relativity-clocks",
+      "file": "06-relativity-clocks.tex",
+      "subject": "General relativity",
+      "theme": "moloch",
+      "classSize": "11",
+      "aspectRatio": "169",
+      "pedagogy": "Thought experiment: operational prediction before geometric notation",
+      "audience": "Physics students beginning relativity",
+      "sourceFrames": 9,
+      "features": [
+        "maketitle",
+        "framesubtitle",
+        "progress-bar",
+        "tikz",
+        "decorations.pathmorphing",
+        "tensor-indices",
+        "align",
+        "columns",
+        "uncover",
+        "plain-frame",
+        "appendix",
+        "bibliography",
+        "speaker-notes"
+      ],
+      "sources": [
+        "https://www.damtp.cam.ac.uk/user/tong/gr/grhtml/S1.html"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 16,
+      "generatedSectionFrames": 3,
+      "expectedNativePages": 13,
+      "witnesses": [
+        "Gravity as clock comparison",
+        "Reading and conventions"
+      ]
+    },
+    {
+      "id": "07-quantum-predict-observe",
+      "file": "07-quantum-predict-observe.tex",
+      "subject": "Quantum information",
+      "theme": "Boadilla",
+      "classSize": "12",
+      "aspectRatio": "43",
+      "pedagogy": "Predict-observe-explain: contrast coherent evolution with intervention",
+      "audience": "Students familiar with matrices",
+      "sourceFrames": 9,
+      "features": [
+        "quantikz",
+        "braket",
+        "pmatrix",
+        "overlayarea",
+        "only",
+        "pause",
+        "columns",
+        "incremental-lists",
+        "frame-label",
+        "speaker-notes"
+      ],
+      "sources": [
+        "https://quantum.cloud.ibm.com/learning/en/courses/basics-of-quantum-information/single-systems/introduction"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 14,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 14,
+      "witnesses": [
+        "A qubit is not a hidden bit",
+        "Continue the tutorial"
+      ]
+    },
+    {
+      "id": "08-category-products",
+      "file": "08-category-products.tex",
+      "subject": "Category theory",
+      "theme": "Pittsburgh",
+      "classSize": "10",
+      "aspectRatio": "43",
+      "pedagogy": "Example-first construction: interface, universal property, uniqueness, transfer",
+      "audience": "Mathematics students encountering categories",
+      "sourceFrames": 10,
+      "features": [
+        "titlepage-after-content",
+        "tikz-cd",
+        "fragile",
+        "commutative-diagrams",
+        "definition",
+        "theorem",
+        "proof",
+        "operator-declaration",
+        "mathbb",
+        "pause"
+      ],
+      "sources": [
+        "https://math.mit.edu/~larsh/teaching/S2005/l12/"
+      ],
+      "syntheticData": false,
+      "assets": [],
+      "expectedPdfPages": 11,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 11,
+      "witnesses": [
+        "Products are interfaces",
+        "Reading path"
+      ]
+    },
+    {
+      "id": "09-organic-electrons",
+      "file": "09-organic-electrons.tex",
+      "subject": "Organic chemistry",
+      "theme": "Darmstadt",
+      "classSize": "11",
+      "aspectRatio": "169",
+      "pedagogy": "Mechanism workshop: atom inspection, electron arrows, kinetic tests, competing paths",
+      "audience": "First-year organic chemistry students",
+      "sourceFrames": 9,
+      "features": [
+        "chemfig",
+        "mhchem",
+        "curved-arrows",
+        "tikz-bezier",
+        "qualitative-plots",
+        "framesubtitle",
+        "booktabs",
+        "table-caption",
+        "columns",
+        "description",
+        "incremental-lists"
+      ],
+      "sources": [
+        "https://ocw.mit.edu/courses/5-12-organic-chemistry-i-spring-2003/pages/calendar/"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 12,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 12,
+      "witnesses": [
+        "Follow the electrons",
+        "Reading and representation"
+      ]
+    },
+    {
+      "id": "10-distributed-timeout",
+      "file": "10-distributed-timeout.tex",
+      "subject": "Distributed systems",
+      "theme": "Singapore",
+      "classSize": "10",
+      "aspectRatio": "169",
+      "pedagogy": "Incident review: reconstruct evidence, separate hypotheses, derive guarantees, assign tests",
+      "audience": "Software engineers learning distributed systems",
+      "sourceFrames": 9,
+      "features": [
+        "section-navigation",
+        "timeline-diagram",
+        "tikz",
+        "dashed-lines",
+        "align",
+        "fragile",
+        "listings",
+        "tabular-paragraph-columns",
+        "description",
+        "incremental-lists",
+        "speaker-notes"
+      ],
+      "sources": [
+        "https://raft.github.io/raft.pdf"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 12,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 12,
+      "witnesses": [
+        "Why a timeout is not a verdict",
+        "Close the review with two different guarantees"
+      ]
+    },
+    {
+      "id": "11-ecology-restoration",
+      "file": "11-ecology-restoration.tex",
+      "subject": "Ecology and causal inference",
+      "theme": "AnnArbor",
+      "classSize": "11",
+      "aspectRatio": "169",
+      "pedagogy": "Research seminar: field question, estimand, identification, uncertainty, next study",
+      "audience": "Interdisciplinary research audience",
+      "sourceFrames": 10,
+      "features": [
+        "graphicspath",
+        "includegraphics",
+        "image-trim-clip",
+        "subcaption",
+        "figure-caption",
+        "booktabs",
+        "pgfplots-error-bars",
+        "pause",
+        "columns",
+        "appendix",
+        "speaker-notes"
+      ],
+      "sources": [],
+      "syntheticData": true,
+      "assets": [
+        "assets/river-transects.png"
+      ],
+      "expectedPdfPages": 11,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 11,
+      "witnesses": [
+        "Did restoration change the river?",
+        "Data provenance and reuse"
+      ]
+    },
+    {
+      "id": "12-numerical-debugging",
+      "file": "12-numerical-debugging.tex",
+      "subject": "Numerical analysis",
+      "theme": "Rochester",
+      "classSize": "14",
+      "aspectRatio": "1610",
+      "pedagogy": "Debugging lab: reproduce, model error, repair, validate, report",
+      "audience": "Scientific programmers",
+      "sourceFrames": 10,
+      "features": [
+        "large-class",
+        "fragile",
+        "listings",
+        "alltt",
+        "math-operators",
+        "description",
+        "pause",
+        "frame-label",
+        "hyperlink",
+        "beamer-buttons",
+        "allowframebreaks",
+        "framebreak",
+        "bibliography",
+        "appendix"
+      ],
+      "sources": [
+        "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html"
+      ],
+      "syntheticData": true,
+      "assets": [],
+      "expectedPdfPages": 13,
+      "generatedSectionFrames": 0,
+      "expectedNativePages": 13,
+      "witnesses": [
+        "A plausible number can still be wrong",
+        "Reading and lab checklist"
+      ]
+    }
+  ],
+  "repositories": [
+    {
+      "repository": "fixtures/beamer-breadth",
+      "directory": ".",
+      "license": "MIT",
+      "entry_points": [
+        "01-nvidia-performance.tex",
+        "02-logic-proof-clinic.tex",
+        "03-ml-selective-prediction.tex",
+        "04-algorithms-dijkstra.tex",
+        "05-fluid-channel.tex",
+        "06-relativity-clocks.tex",
+        "07-quantum-predict-observe.tex",
+        "08-category-products.tex",
+        "09-organic-electrons.tex",
+        "10-distributed-timeout.tex",
+        "11-ecology-restoration.tex",
+        "12-numerical-debugging.tex"
+      ]
+    }
+  ]
+}

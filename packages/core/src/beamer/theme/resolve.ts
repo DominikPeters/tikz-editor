@@ -374,6 +374,11 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
       subsubitem: { parent: "subitem" },
       "item projected": { parent: "item", fg: "#ffffff", bgExpression: { value: "item.fg", span: { from: 0, to: 0 } } },
       "subitem projected": { parent: "item projected" },
+      "section in toc": { parent: "structure" },
+      "subsection in toc": { parent: "normal text" },
+      "section number projected": { parent: "item projected" },
+      "section number projected text": { fgExpression: { value: "section number projected.fg!90!section number projected.bg", span: { from: 0, to: 0 } } },
+      "subsection number projected": { parent: "subitem projected" },
       "subsubitem projected": { parent: "subitem projected" },
       "enumerate item": { parent: "item" },
       "enumerate subitem": { parent: "subitem" },
@@ -1059,6 +1064,23 @@ const themeAppliers = new Map<string, ComponentApplier>([
 
 const colorThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("color-theme", "default")],
+  ["dove", (state, use) => {
+    markApplied(state, "color-theme", "dove", use);
+    state.colors["normal text"] = { fg: BLACK, bg: WHITE };
+    for (const role of ["alerted text", "example text", "structure"]) state.colors[role] = { fg: BLACK };
+    for (const role of ["primary", "secondary", "tertiary", "quaternary"]) {
+      state.colors[`palette ${role}`] = { ...state.colors[`palette ${role}`], fg: BLACK, bg: WHITE };
+      state.colors[`palette sidebar ${role}`] = { fg: BLACK };
+    }
+    state.colors.sidebar = { bg: "#cccccc" };
+    state.colors["item projected"] = { fg: BLACK, bg: "#cccccc" };
+    for (const [suffix, parent] of [["", "structure"], [" alerted", "alerted text"], [" example", "example text"]] as const) {
+      state.colors[`block body${suffix}`] = {};
+      state.colors[`block title${suffix}`] = { parent };
+    }
+    state.colors.titlelike = { parent: "structure" };
+    state.options["alert-bold"] = true;
+  }],
   ["wolverine", applyWolverineColors],
   ["rose", applyRoseColors],
   ["dolphin", applyDolphinColors],
@@ -1114,6 +1136,20 @@ const colorThemeAppliers = new Map<string, ComponentApplier>([
 
 const fontThemeAppliers = new Map<string, ComponentApplier>([
   ["default", markComponentOnly("font-theme", "default")],
+  ["professionalfonts", (state, use) => {
+    markApplied(state, "font-theme", "professionalfonts", use);
+    for (const font of Object.values(state.fonts)) font.suppressMathReplacements = true;
+  }],
+  ["serif", (state, use) => {
+    markApplied(state, "font-theme", "serif", use);
+    for (const [role, font] of Object.entries(state.fonts)) {
+      const smallStructure = ["headline", "section-in-head-foot", "subsection-in-head-foot", "title-in-sidebar", "author-in-sidebar", "section-in-sidebar", "subsection-in-sidebar", "footline", "page-number"].includes(role);
+      const largeStructure = ["title", "subtitle", "frame-title", "frame-subtitle", "block-title"].includes(role);
+      const keepSans = use.options.onlymath !== undefined || (smallStructure ? use.options.stillsansserifsmall !== undefined : largeStructure ? use.options.stillsansseriflarge !== undefined : use.options.stillsansseriftext !== undefined);
+      if (!keepSans) { font.family = "serif"; delete font.typeface; }
+      font.mathFamily = use.options.stillsansserifmath === undefined ? "serif" : "sans";
+    }
+  }],
   ["metropolis", applyModernFonts("metropolis")],
   ["moloch", applyModernFonts("moloch")],
 ]);
@@ -1614,7 +1650,7 @@ function applyModernOuter(
     );
     state.templates.footline = templateRef(
       `beamer/footline/${family}`,
-      { numbering: optionString(use.options.numbering, "counter") },
+      { numbering: optionString(use.options.numbering, "counter"), progressbar: progressbar === "foot" },
     );
     state.templates.frameTitle = templateRef(
       `beamer/frame-title/${family}`,
@@ -1664,6 +1700,9 @@ function applyModernFonts(
       series: "bold",
     };
     const classSize = String(state.options["class-font-size"] ?? "11");
+    if (family === "moloch") {
+      state.fonts["frame-subtitle"] = { ...state.fonts["frame-title"], ...beamerNamedFontSize(classSize, "small") };
+    }
     state.fonts.title = { ...state.fonts.title, ...beamerNamedFontSize(classSize, "Large"), series: "bold" };
     state.fonts.subtitle = { ...state.fonts["normal-text"], ...beamerNamedFontSize(classSize, "large") };
     state.fonts.author = { ...state.fonts.author, ...beamerNamedFontSize(classSize, "small") };
@@ -1706,10 +1745,13 @@ function applyModernColors(
   state.colors.frametitle = { fg: bg, bg: fg };
   state.colors["alerted text"] = { fg: accent };
   state.colors["example text"] = { fg: example };
-  state.colors["progress bar"] = { fg: accent, bg: "#8a5a35" };
+  const progressExpression = (value: string) => ({ value, span: use.source.span });
+  state.colors["progress bar"] = { use: ["alerted text"], fgExpression: progressExpression("alerted text.fg"), bgExpression: progressExpression("alerted text.fg!50!black!30") };
+  state.colors["progress bar in head/foot"] = { parent: "progress bar" };
+  state.colors["progress bar in section page"] = { parent: "progress bar" };
   state.colors["title separator"] = { parent: "progress bar" };
   if (use.name.toLowerCase() === "moloch") state.colors.institute = { fgMix: { foregroundRole: "normal text", backgroundRole: "normal text", foregroundPercent: 80 } };
-  state.colors["progress bar background"] = { bg: "#8a5a35" };
+  state.colors["progress bar background"] = { parent: "progress bar in head/foot" };
 }
 
 function applyNamedComponent(

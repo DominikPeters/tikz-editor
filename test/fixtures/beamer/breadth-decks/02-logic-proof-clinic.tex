@@ -1,0 +1,110 @@
+% Original proof clinic; mathematical background: CMU 15-317 natural deduction.
+\documentclass[12pt,aspectratio=43]{beamer}
+\usetheme{CambridgeUS}
+\usecolortheme{dove}
+\usefonttheme{serif}
+\usepackage{amsmath,amssymb,bussproofs}
+\setbeamertemplate{theorems}[numbered]
+\setbeamertemplate{navigation symbols}{}
+\title{Can you build the proof?}
+\subtitle{A clinic in constructive natural deduction}
+\author{Logic teaching fixtures}
+\date{Seminar 2}
+\newcommand{\seq}[2]{#1\vdash #2}
+\begin{document}
+\section{The challenge}
+\begin{frame}{Start with a challenge, not a rule list}
+\centering
+\Large Given $A\land B$, construct $B\land A$.
+\bigskip
+\normalsize
+\begin{enumerate}
+\item Work alone for one minute.
+\item Name every assumption you use.
+\begin{itemize}\item What is given?\item What is the target?\end{itemize}
+\item Compare your construction with a neighbour.
+\end{enumerate}
+\note{Do not identify conjunction elimination yet. Let participants describe projection in ordinary language.}
+\end{frame}
+\begin{frame}[plain]\titlepage\end{frame}
+\begin{frame}{The route through the clinic}
+\tableofcontents
+\end{frame}
+\subsection{Judgments}
+\begin{frame}{A judgment records what is available}
+\begin{definition}
+The judgment $\seq{\Gamma}{A}$ says that $A$ has a derivation from assumptions in $\Gamma$.
+\end{definition}
+\begin{exampleblock}{Context}
+$\Gamma=A\land B$ is a resource for proof search, not a truth-table row.
+\end{exampleblock}
+\end{frame}
+\section{Build, then inspect}
+\begin{frame}{Introduction tells us what to construct}
+\begin{prooftree}
+\AxiomC{$\Gamma\vdash A$}
+\AxiomC{$\Gamma\vdash B$}
+\RightLabel{$\land I$}
+\BinaryInfC{$\Gamma\vdash A\land B$}
+\end{prooftree}
+\medskip
+To finish with a conjunction, plan two subproofs.
+\pause
+\begin{alertblock}{Proof-search prompt}
+Which component can you obtain first from the given assumption?
+\end{alertblock}
+\end{frame}
+\begin{frame}{The completed proof has no hidden step}
+\begin{prooftree}
+\AxiomC{$A\land B$}
+\RightLabel{$\land E_2$}\UnaryInfC{$B$}
+\AxiomC{$A\land B$}
+\RightLabel{$\land E_1$}\UnaryInfC{$A$}
+\RightLabel{$\land I$}\BinaryInfC{$B\land A$}
+\end{prooftree}
+\smallskip
+Read from leaves to root to check validity; read backwards to plan a proof.
+\end{frame}
+\begin{frame}{Turn the construction into a function}
+\begin{theorem}[Conjunction exchange]
+$A\land B\to B\land A$ is constructively derivable.
+\end{theorem}
+\begin{proof}
+Assume $p:A\land B$. Project its second and first components, then pair them in that order. Discharge $p$.
+\end{proof}
+\[
+ p\longmapsto (\pi_2p,\pi_1p).
+\]
+\end{frame}
+\begin{frame}{Find the mistake in this tempting argument}
+\begin{quote}
+``Either $A$ or $B$ holds, so choose $A$.''
+\end{quote}
+\pause
+\begin{alertblock}{Missing information}
+A proof of $A\lor B$ does not generally supply a proof of $A$.
+\end{alertblock}
+\begin{itemize}
+\item To eliminate a disjunction, handle \emph{both} cases.
+\item Each branch must establish the same target.
+\end{itemize}
+\end{frame}
+\section{Transfer}
+\begin{frame}{Now change the target}
+\begin{enumerate}[<+->]
+\item Derive $A\land(B\land C)\to (A\land B)\land C$.
+\item Mark where the same assumption is used more than once.
+\item Explain why this exercise would change in a resource-sensitive logic.
+\end{enumerate}
+\bigskip
+\textbf{Exit ticket:} describe introduction and elimination without using either word.
+\end{frame}
+\begin{frame}{Further reading}
+\small
+\begin{thebibliography}{9}
+\bibitem{pfenning} Frank Pfenning. \emph{Natural Deduction}, 15-317: Constructive Logic, Carnegie Mellon University.
+\href{https://www.cs.cmu.edu/~fp/courses/15317-f17/lectures/02-natded.pdf}{Course notes}.
+\end{thebibliography}
+The examples and proof-clinic sequence in this deck are original. The notation is standard intuitionistic natural deduction; no classical excluded-middle rule has been assumed.
+\end{frame}
+\end{document}

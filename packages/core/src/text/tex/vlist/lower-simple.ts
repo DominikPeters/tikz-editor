@@ -466,6 +466,15 @@ function attachPostDisplayVSpace(
     const glue = blockItems[index + 1];
     const paragraph = blockItems[index + 2];
     const resumedParagraph = blockItems[index + 1];
+    if (display?.kind === "display-math" && resumedParagraph?.kind === "paragraph" &&
+      resumedParagraph.block.listContext?.listStart !== undefined &&
+      resumedParagraph.block.listContext.listStart >= display.sourceEnd && !resumedParagraph.block.startsAfterExplicitPar) {
+      // \list ends the horizontal mode resumed by \]: ship its zero-sized
+      // paragraph before the list's topsep and first item, even without vspace.
+      output.push(display, postDisplayEmptyLineHBox(display, resumedParagraph.block.sourceStart), resumedParagraph);
+      index += 1;
+      continue;
+    }
     const resumedAdjustment =
       resumedParagraph?.kind === "paragraph"
         ? resumedParagraph.block.verticalAdjustments?.[0]

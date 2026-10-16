@@ -8,6 +8,7 @@ import type {
   BeamerTheoremBodyNode,
   BeamerTitlePageBodyNode,
   BeamerColumnsBodyNode,
+  BeamerContentsBodyNode,
 } from "./content-types.js";
 import type {
   BeamerBlockTemplatePlan,
@@ -134,6 +135,7 @@ export type PreparedColumnContent = {
 
 export type PreparedFrameFlowItem =
   | PreparedUnsupportedFlowItem
+  | { kind: "contents"; visibility: BeamerOverlayVisibility; contents: PreparedContents }
   | {
       kind: "title-page";
       visibility: BeamerOverlayVisibility;
@@ -211,6 +213,14 @@ export type PositionedFrameFlowItem = {
   referenceY: number;
   visualTop: number;
   visualBottom: number;
+};
+
+export type PreparedContents = {
+  node: BeamerContentsBodyNode;
+  rows: { paragraph: LaidParagraph; x: number; top: number; fillWeight: number; colorRole: string;
+    marker?: { bounds: BeamerRect; markup: string }; number?: { paragraph: LaidParagraph; x: number; top: number } }[];
+  naturalHeight: number;
+  fillWeight: number;
 };
 
 /**

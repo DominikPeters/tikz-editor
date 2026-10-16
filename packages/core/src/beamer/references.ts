@@ -17,7 +17,7 @@ import {
   beamerOverlaySpecContains, resolveBeamerOverlaySpanVisibility,
   type BeamerOverlayModel, type BeamerOverlaySpec,
 } from "./overlay.js";
-import type { BeamerDocumentModel, BeamerRect } from "./types.js";
+import type { BeamerDocumentModel, BeamerRect, BeamerSectionModel } from "./types.js";
 import type { BeamerFootnoteIndex } from "./footnotes.js";
 import type { TexTabularRegisters } from "../text/tex/tabular/types.js";
 import type { BeamerContinuationBreaks } from "./continuations.js";
@@ -47,6 +47,8 @@ export type BeamerReferenceIndex = {
 };
 
 export type BeamerReferenceContext = BeamerReferenceIndex & {
+  tocSections?: readonly BeamerSectionModel[];
+  currentSectionId?: string | null;
   /** Live item separation for Beamer shrink/squeeze frames. */
   crampedLists?: boolean;
   arrayPackage?: boolean;

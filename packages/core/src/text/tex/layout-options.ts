@@ -125,6 +125,8 @@ export interface TexDisplayMathGlueProfile {
  * changing the generic VList algorithm.
  */
 export interface TexDisplayMathLayoutProfile {
+  /** Class-specific registers installed by named size declarations. */
+  readonly sizeOverrides?: Readonly<Partial<Record<"normalsize" | "small" | "footnotesize", Pick<TexDisplayMathLayoutProfile, "above" | "below">>>>;
   /**
    * Some outer environments enter horizontal mode before their first source
    * token. If that token is display math, TeX ships a zero-sized line and

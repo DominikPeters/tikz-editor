@@ -128,6 +128,9 @@
     "compare:beamer-captions": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/captions-fidelity/cases.json --out-dir artifacts/beamer-caption-conformance",
     "compare:beamer-continuations": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/continuations-fidelity/cases.json --out-dir artifacts/beamer-continuation-conformance",
     "compare:beamer-followups": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/corpus-followups/cases.json --out-dir artifacts/beamer-followup-conformance",
+    "check:beamer-breadth": "node scripts/check-beamer-breadth.mjs",
+    "render:beamer-breadth": "node scripts/compare-beamer-corpus.mjs --index test/fixtures/beamer/breadth-decks/manifest.json --frames all --steps all --timeout-seconds 180 --out-dir artifacts/beamer-breadth-decks/native --strict",
+    "compare:beamer-campaign-wave2": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign-wave2/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave2/verified",
     "compare:beamer-campaign": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave1"
   },
   "keywords": [

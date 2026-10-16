@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export const BEAMER_FRAME_ORACLE_VERSION = 9;
+export const BEAMER_FRAME_ORACLE_VERSION = 10;
 export const SP_PER_TEX_POINT = 65_536;
 
 const PROBE_DIMENSIONS = [
@@ -411,6 +411,13 @@ luatexbase.add_to_callback(
 `;
 }
 
+// The scanner represents a document-level \maketitle as a complete command
+// frame, with no closing environment token. Keep rejecting truncated frames.
+export function isCompleteBeamerOracleFrame(source, frame) {
+  return !!frame.endSpan || (frame.beginSpan.from === frame.beginSpan.to &&
+    /^\\maketitle\s*$/u.test(source.slice(frame.span.from, frame.span.to)));
+}
+
 export function buildBeamerFrameProbeSource(
   source,
   document,
@@ -427,7 +434,7 @@ export function buildBeamerFrameProbeSource(
       `Frame ${frameIndex + 1} does not exist; document has ${document.frames.length} frames.`
     );
   }
-  if (!frame.endSpan) {
+  if (!isCompleteBeamerOracleFrame(source, frame)) {
     throw new Error(`Frame ${frameIndex + 1} is incomplete and cannot be compiled.`);
   }
 

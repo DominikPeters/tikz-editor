@@ -91,6 +91,12 @@ export function parseBeamerFrameBody(
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = requireArrayValue(tokens, index);
+    // The fixed box owns its inner paragraph/list structure; do not extract
+    // child environments into the surrounding frame's vertical flow.
+    if (token.kind === "begin" && token.name === "overlayarea") {
+      const endIndex = matchingEnvironmentEnd(tokens, index);
+      if (endIndex >= 0) { index = endIndex; continue; }
+    }
     // The editor's drawing layer stays in the paragraph, as an overlay picture does.
     if (tikzLayer && token.kind === "begin" && token.name === "tikzlayer") {
       const endIndex = matchingEnvironmentEnd(tokens, index);
@@ -214,10 +220,25 @@ export function parseBeamerFrameBody(
     kind: "frame-body",
     frameId: frame.id,
     span: frame.bodySpan,
-    children: splitStandaloneFrameCommands(context, frame.id, children),
+    children: applyStandaloneAlignment(source, splitStandaloneFrameCommands(context, frame.id, children)),
     overlays,
     diagnostics,
   };
+}
+
+/** A declaration before an extracted picture still governs the following
+ * frame material. It contributes no line or trivlist spacing of its own. */
+function applyStandaloneAlignment(source: string, children: BeamerFrameBodyNode[]): BeamerFrameBodyNode[] {
+  let alignment: "left" | "center" = "left";
+  return children.flatMap<BeamerFrameBodyNode>(node => {
+    if (node.kind === "paragraph") {
+      const declaration = /^\s*\\(centering|raggedright)\s*$/u.exec(source.slice(node.span.from, node.span.to).replace(/%[^\n]*/gu, ""));
+      if (declaration) { alignment = declaration[1] === "centering" ? "center" : "left"; return []; }
+      return [alignment === "center" ? { ...node, alignment } : node];
+    }
+    if (node.kind === "tikzpicture" && alignment === "center") return [{ ...node, horizontalAlignment: "center" as const }];
+    return [node];
+  });
 }
 
 function parseTheorem(params: {
@@ -520,7 +541,7 @@ function splitTitlePageCommands(
       continue;
     }
     const commands = beamerControlSequencesIn(context, child.span).filter(
-      (command) => command.name === "titlepage" || command.name === "maketitle"
+      (command) => command.name === "titlepage" || command.name === "maketitle" || command.name === "tableofcontents"
     );
     if (commands.length === 0) {
       result.push(child);
@@ -536,6 +557,13 @@ function splitTitlePageCommands(
           span: before,
         });
         paragraphIndex += 1;
+      }
+      if (command.name === "tableofcontents") {
+        const options = beamerOptionalArgumentAfter(context, command.to, child.span.to) ?? undefined;
+        const span = { from: command.from, to: options?.span.to ?? command.to };
+        result.push({ kind: "contents", id: `${frameId}:contents:${titlePageIndex++}`, span, ...(options ? { options } : {}) });
+        cursor = span.to;
+        continue;
       }
       const titlePage: BeamerTitlePageBodyNode = {
         kind: "title-page",
@@ -1315,6 +1343,7 @@ function findUnsupportedEnvironmentEndIndex(
       "table",
       "tcolorbox",
       "overprint",
+      "overlayarea",
       "center",
       "onlyenv",
       "uncoverenv",

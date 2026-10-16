@@ -1,0 +1,701 @@
+{
+  "formatVersion": 1,
+  "date": "2026-10-16",
+  "manifest": "test/fixtures/beamer/breadth-decks/manifest.json",
+  "manifestSha256": "80d592d8b1caa0b1a7df873a41ff62626c209f0f50d00212b9d65865ee473010",
+  "scope": "Original, differently styled whole-deck breadth fixtures. Compilation, discovery and native smoke results are coverage evidence; this is not a fidelity score. No native mismatch is accepted as a golden.",
+  "summary": {
+    "decks": 12,
+    "authoredSourceFrames": 111,
+    "texPdfPages": 157,
+    "validTexDecks": 12,
+    "texReferenceFailures": 0,
+    "nativeFrameOverlayStates": 150,
+    "nativeFrameOverlayStatesRendered": 150,
+    "nativePagesIncludingContinuations": 151,
+    "automaticSectionFramesNotDiscovered": 6,
+    "pairedFidelityComparisons": 0
+  },
+  "commands": {
+    "reference": "npm run check:beamer-breadth",
+    "native": "npm run render:beamer-breadth",
+    "smoke": "npx vitest run test/beamer-breadth-fixtures.spec.ts"
+  },
+  "referenceEngine": "This is LuaHBTeX, Version 1.21.0 (TeX Live 2025)",
+  "nativeRendererFingerprint": "818c699074e3a5e9a74037972d5a6fd52e6209b1baa58e6a367aeb71165d2233",
+  "nativeHarnessFingerprint": "c29ce147f786a9fd95e1278f0c9c8393fc5beaa012c0cb57736542d6bd98ade0",
+  "nativeDiagnosticInventory": [
+    {
+      "code": "beamer-unknown-theme-component",
+      "severity": "warning",
+      "occurrences": 39,
+      "pages": 25,
+      "example": "The Beamer color-theme component 'dove' is not registered; class defaults remain active for that component."
+    },
+    {
+      "code": "beamer-render-unsupported-flow-node",
+      "severity": "warning",
+      "occurrences": 24,
+      "pages": 21,
+      "example": "The prooftree environment is not supported in this preview."
+    },
+    {
+      "code": "missing-semicolon",
+      "severity": "warning",
+      "occurrences": 3,
+      "pages": 3,
+      "example": "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command."
+    },
+    {
+      "code": "parse-error",
+      "severity": "error",
+      "occurrences": 3,
+      "pages": 3,
+      "example": "Syntax error in command statement. Check for a missing semicolon."
+    },
+    {
+      "code": "unsupported-statement",
+      "severity": "warning",
+      "occurrences": 8,
+      "pages": 3,
+      "example": "Unknown or unsupported command `\\begin`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+    }
+  ],
+  "knownBoundaries": [
+    {
+      "kind": "discovery",
+      "detail": "The installed modern themes execute three section frames per deck, six total, from their section hooks. Native discovery currently omits those generated frames."
+    },
+    {
+      "kind": "census-sampling",
+      "detail": "The existing corpus census emits the first continuation of each sampled frame/overlay state. The smoke tests use renderFramePages and additionally cover the numerical deck continuation (151 native pages total)."
+    },
+    {
+      "kind": "reference-box-warning",
+      "detail": "Stock Metropolis uses a full-paper-height title minipage; its 10pt title frame emits a 13.79993pt overfull vbox warning. The titlepage was visually inspected and has no clipped visible content."
+    },
+    {
+      "kind": "native-support",
+      "detail": "Unsupported stock theme components, package flow, PGFPlots statements and literal glyph fallbacks are retained below. Renderer completion and empty diagnostics do not establish visual fidelity."
+    }
+  ],
+  "validation": {
+    "tests": "106 focused tests passed; 13 breadth tests rechecked after final fixture edits.",
+    "typecheck": "npm run typecheck passed",
+    "productionLint": "npm run lint:prod passed",
+    "manualReferenceInspection": "Three representative pages per deck, including all specialized diagram families, plus reinspection of chart precision, category diagram paragraph boundaries, chemistry equation fit and the navy Moloch palette.",
+    "reports": {
+      "tex": "artifacts/beamer-breadth-decks/tex/report.json",
+      "native": "artifacts/beamer-breadth-decks/native/report.json"
+    }
+  },
+  "assets": [
+    {
+      "file": "test/fixtures/beamer/breadth-decks/assets/river-transects.png",
+      "sha256": "592cfb5f056c09cb0adb9c80bd5f22991a645bba0f8ade5b80c7f4bc8db659c4"
+    },
+    {
+      "file": "test/fixtures/beamer/breadth-decks/assets/river-transects.svg",
+      "sha256": "23faf3f6ebcb9aa754e1d9beae4977e214f06752892424e20cc300242b7c39a5"
+    }
+  ],
+  "decks": [
+    {
+      "id": "01-nvidia-performance",
+      "file": "test/fixtures/beamer/breadth-decks/01-nvidia-performance.tex",
+      "sourceSha256": "89784862f39a5264a6bfd18b9747697c8db9a6795fd1dba43737f848a627b973",
+      "theme": "Madrid",
+      "pedagogy": "Executive briefing: headline, evidence, sensitivity, decisions",
+      "sourceFrames": 8,
+      "compiledPdfPages": 11,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 11,
+      "pdf": "artifacts/beamer-breadth-decks/tex/01-nvidia-performance/01-nvidia-performance.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "NVIDIA FY2025",
+          "found": true
+        },
+        {
+          "text": "Source and scope",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 8,
+        "sampledFrameOverlayStates": 11,
+        "diagnostics": {
+          "missing-semicolon": 1,
+          "parse-error": 1,
+          "unsupported-statement": 2
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "missing-semicolon",
+            "message": "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command."
+          },
+          {
+            "code": "parse-error",
+            "message": "Syntax error in command statement. Check for a missing semicolon."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\begin`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\end`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 1,
+        "pagesWithUnsupportedItems": 0,
+        "pagesWithPaintedLiteralMarkers": 0,
+        "paintedLiteralMarkers": 0,
+        "assets": []
+      }
+    },
+    {
+      "id": "02-logic-proof-clinic",
+      "file": "test/fixtures/beamer/breadth-decks/02-logic-proof-clinic.tex",
+      "sourceSha256": "2dc997113f2ab7dd473681a9da241bce84f1df32bf2882c1d4d57e14d0854ca5",
+      "theme": "CambridgeUS",
+      "pedagogy": "Proof clinic: attempt, rule, construction, flawed argument, transfer",
+      "sourceFrames": 10,
+      "compiledPdfPages": 14,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 14,
+      "pdf": "artifacts/beamer-breadth-decks/tex/02-logic-proof-clinic/02-logic-proof-clinic.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Can you build the proof?",
+          "found": true
+        },
+        {
+          "text": "Further reading",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 10,
+        "sampledFrameOverlayStates": 14,
+        "diagnostics": {
+          "beamer-unknown-theme-component": 28,
+          "beamer-render-unsupported-flow-node": 3
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The prooftree environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-unknown-theme-component",
+            "message": "The Beamer color-theme component 'dove' is not registered; class defaults remain active for that component."
+          },
+          {
+            "code": "beamer-unknown-theme-component",
+            "message": "The Beamer font-theme component 'serif' is not registered; class defaults remain active for that component."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 3,
+        "pagesWithPaintedLiteralMarkers": 8,
+        "paintedLiteralMarkers": 100,
+        "assets": []
+      }
+    },
+    {
+      "id": "03-ml-selective-prediction",
+      "file": "test/fixtures/beamer/breadth-decks/03-ml-selective-prediction.tex",
+      "sourceSha256": "5cc1ca131d284c945eaf7699e10a14df2b2f8235fb422b76d0a67232294c1a5f",
+      "theme": "metropolis",
+      "pedagogy": "Experiment-led reading group: operating point, method, subgroup stress test",
+      "sourceFrames": 9,
+      "compiledPdfPages": 17,
+      "generatedSectionFrames": 3,
+      "expectedNativePagesIncludingContinuations": 14,
+      "pdf": "artifacts/beamer-breadth-decks/tex/03-ml-selective-prediction/03-ml-selective-prediction.pdf",
+      "texBoxWarnings": [
+        "Overfull \\vbox (13.79993pt too high) detected at line 11"
+      ],
+      "contentWitnesses": [
+        {
+          "text": "When should a classifier abstain?",
+          "found": true
+        },
+        {
+          "text": "Reading and reproducibility boundary",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 14,
+        "diagnostics": {
+          "missing-semicolon": 1,
+          "parse-error": 1,
+          "unsupported-statement": 3
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "missing-semicolon",
+            "message": "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command."
+          },
+          {
+            "code": "parse-error",
+            "message": "Syntax error in command statement. Check for a missing semicolon."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\addlegendentry`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\begin`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 1,
+        "pagesWithUnsupportedItems": 0,
+        "pagesWithPaintedLiteralMarkers": 2,
+        "paintedLiteralMarkers": 12,
+        "assets": []
+      }
+    },
+    {
+      "id": "04-algorithms-dijkstra",
+      "file": "test/fixtures/beamer/breadth-decks/04-algorithms-dijkstra.tex",
+      "sourceSha256": "f3aede815fd5a78aba1599d6d54b7e1b61929f50f9ebdd1625c02032d0965a2c",
+      "theme": "Warsaw",
+      "pedagogy": "Worked trace: prediction, state table, pseudocode, invariant, counterexample",
+      "sourceFrames": 9,
+      "compiledPdfPages": 13,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 13,
+      "pdf": "artifacts/beamer-breadth-decks/tex/04-algorithms-dijkstra/04-algorithms-dijkstra.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Find the invariant",
+          "found": true
+        },
+        {
+          "text": "Take the invariant to a new problem",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 13,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 2
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The lstlisting environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 2,
+        "pagesWithPaintedLiteralMarkers": 0,
+        "paintedLiteralMarkers": 0,
+        "assets": []
+      }
+    },
+    {
+      "id": "05-fluid-channel",
+      "file": "test/fixtures/beamer/breadth-decks/05-fluid-channel.tex",
+      "sourceSha256": "b19d18ef890ad7d557f7e43c6ad7dbfc9124170a401907f2c42eb9ce9d68ec8e",
+      "theme": "Berkeley",
+      "pedagogy": "Laboratory derivation: observe, assume, reduce, solve, test residuals",
+      "sourceFrames": 9,
+      "compiledPdfPages": 13,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 13,
+      "pdf": "artifacts/beamer-breadth-decks/tex/05-fluid-channel/05-fluid-channel.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "From a channel experiment to a scaling law",
+          "found": true
+        },
+        {
+          "text": "The laboratory handoff",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 13,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 1
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 1,
+        "pagesWithPaintedLiteralMarkers": 2,
+        "paintedLiteralMarkers": 129,
+        "assets": []
+      }
+    },
+    {
+      "id": "06-relativity-clocks",
+      "file": "test/fixtures/beamer/breadth-decks/06-relativity-clocks.tex",
+      "sourceSha256": "0d7578422e9d0c8942cd7fc84f65d99c4128804130a75b1de595b2f488d66539",
+      "theme": "moloch",
+      "pedagogy": "Thought experiment: operational prediction before geometric notation",
+      "sourceFrames": 9,
+      "compiledPdfPages": 16,
+      "generatedSectionFrames": 3,
+      "expectedNativePagesIncludingContinuations": 13,
+      "pdf": "artifacts/beamer-breadth-decks/tex/06-relativity-clocks/06-relativity-clocks.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Gravity as clock comparison",
+          "found": true
+        },
+        {
+          "text": "Reading and conventions",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 13,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 1
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 1,
+        "pagesWithPaintedLiteralMarkers": 0,
+        "paintedLiteralMarkers": 0,
+        "assets": []
+      }
+    },
+    {
+      "id": "07-quantum-predict-observe",
+      "file": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+      "sourceSha256": "fc3a72baaac67800b55614bb512f9a3ab26b9dbc55529d099188d4ca8de05861",
+      "theme": "Boadilla",
+      "pedagogy": "Predict-observe-explain: contrast coherent evolution with intervention",
+      "sourceFrames": 9,
+      "compiledPdfPages": 14,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 14,
+      "pdf": "artifacts/beamer-breadth-decks/tex/07-quantum-predict-observe/07-quantum-predict-observe.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "A qubit is not a hidden bit",
+          "found": true
+        },
+        {
+          "text": "Continue the tutorial",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 14,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 7
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The overlayarea environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The quantikz environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 5,
+        "pagesWithPaintedLiteralMarkers": 5,
+        "paintedLiteralMarkers": 116,
+        "assets": []
+      }
+    },
+    {
+      "id": "08-category-products",
+      "file": "test/fixtures/beamer/breadth-decks/08-category-products.tex",
+      "sourceSha256": "9384662e89a38994b7095fc620474c836544448467d9179011af923c966bc1ec",
+      "theme": "Pittsburgh",
+      "pedagogy": "Example-first construction: interface, universal property, uniqueness, transfer",
+      "sourceFrames": 10,
+      "compiledPdfPages": 11,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 11,
+      "pdf": "artifacts/beamer-breadth-decks/tex/08-category-products/08-category-products.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Products are interfaces",
+          "found": true
+        },
+        {
+          "text": "Reading path",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 10,
+        "sampledFrameOverlayStates": 11,
+        "diagnostics": {
+          "beamer-unknown-theme-component": 11
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-unknown-theme-component",
+            "message": "The Beamer font-theme component 'professionalfonts' is not registered; class defaults remain active for that component."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 0,
+        "pagesWithPaintedLiteralMarkers": 4,
+        "paintedLiteralMarkers": 164,
+        "assets": []
+      }
+    },
+    {
+      "id": "09-organic-electrons",
+      "file": "test/fixtures/beamer/breadth-decks/09-organic-electrons.tex",
+      "sourceSha256": "341d89d08dd3e9e42bcf0581b2a2a0031b8a81baeb679c7eebc106121a524b1c",
+      "theme": "Darmstadt",
+      "pedagogy": "Mechanism workshop: atom inspection, electron arrows, kinetic tests, competing paths",
+      "sourceFrames": 9,
+      "compiledPdfPages": 12,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 12,
+      "pdf": "artifacts/beamer-breadth-decks/tex/09-organic-electrons/09-organic-electrons.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Follow the electrons",
+          "found": true
+        },
+        {
+          "text": "Reading and representation",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 12,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 1
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 1,
+        "pagesWithPaintedLiteralMarkers": 4,
+        "paintedLiteralMarkers": 25,
+        "assets": []
+      }
+    },
+    {
+      "id": "10-distributed-timeout",
+      "file": "test/fixtures/beamer/breadth-decks/10-distributed-timeout.tex",
+      "sourceSha256": "1c8b2b148f3991ce8d4375b9cf832b9caa029b8decd9a7baa50fb035dec96f9b",
+      "theme": "Singapore",
+      "pedagogy": "Incident review: reconstruct evidence, separate hypotheses, derive guarantees, assign tests",
+      "sourceFrames": 9,
+      "compiledPdfPages": 12,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 12,
+      "pdf": "artifacts/beamer-breadth-decks/tex/10-distributed-timeout/10-distributed-timeout.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Why a timeout is not a verdict",
+          "found": true
+        },
+        {
+          "text": "Close the review with two different guarantees",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 9,
+        "sampledFrameOverlayStates": 12,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 2
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The lstlisting environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 2,
+        "pagesWithPaintedLiteralMarkers": 0,
+        "paintedLiteralMarkers": 0,
+        "assets": []
+      }
+    },
+    {
+      "id": "11-ecology-restoration",
+      "file": "test/fixtures/beamer/breadth-decks/11-ecology-restoration.tex",
+      "sourceSha256": "2d2c247e575f3188a656dc0107be6c6ceff63a42a088960729fada502f2dcd50",
+      "theme": "AnnArbor",
+      "pedagogy": "Research seminar: field question, estimand, identification, uncertainty, next study",
+      "sourceFrames": 10,
+      "compiledPdfPages": 11,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 11,
+      "pdf": "artifacts/beamer-breadth-decks/tex/11-ecology-restoration/11-ecology-restoration.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "Did restoration change the river?",
+          "found": true
+        },
+        {
+          "text": "Data provenance and reuse",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 10,
+        "sampledFrameOverlayStates": 11,
+        "diagnostics": {
+          "missing-semicolon": 1,
+          "parse-error": 1,
+          "unsupported-statement": 3,
+          "beamer-render-unsupported-flow-node": 3
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The subfigure environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "This content could not be laid out."
+          },
+          {
+            "code": "missing-semicolon",
+            "message": "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command."
+          },
+          {
+            "code": "parse-error",
+            "message": "Syntax error in command statement. Check for a missing semicolon."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\addplot`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\begin`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          },
+          {
+            "code": "unsupported-statement",
+            "message": "Unknown or unsupported command `\\end`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 1,
+        "pagesWithUnsupportedItems": 2,
+        "pagesWithPaintedLiteralMarkers": 1,
+        "paintedLiteralMarkers": 20,
+        "assets": [
+          {
+            "filename": "river-transects.png",
+            "page": 1,
+            "path": "/Users/dominik/GitHub/tikz-editor/test/fixtures/beamer/breadth-decks/assets/river-transects.png",
+            "status": "resolved"
+          }
+        ]
+      }
+    },
+    {
+      "id": "12-numerical-debugging",
+      "file": "test/fixtures/beamer/breadth-decks/12-numerical-debugging.tex",
+      "sourceSha256": "4c0b2a9c2430029daddf8561ff88b5ad0c00f1b5d88bd1476f08b80d82125bb1",
+      "theme": "Rochester",
+      "pedagogy": "Debugging lab: reproduce, model error, repair, validate, report",
+      "sourceFrames": 10,
+      "compiledPdfPages": 13,
+      "generatedSectionFrames": 0,
+      "expectedNativePagesIncludingContinuations": 13,
+      "pdf": "artifacts/beamer-breadth-decks/tex/12-numerical-debugging/12-numerical-debugging.pdf",
+      "texBoxWarnings": [],
+      "contentWitnesses": [
+        {
+          "text": "A plausible number can still be wrong",
+          "found": true
+        },
+        {
+          "text": "Reading and lab checklist",
+          "found": true
+        }
+      ],
+      "native": {
+        "status": "complete",
+        "frameCount": 10,
+        "sampledFrameOverlayStates": 12,
+        "diagnostics": {
+          "beamer-render-unsupported-flow-node": 4
+        },
+        "distinctDiagnostics": [
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The alltt environment is not supported in this preview."
+          },
+          {
+            "code": "beamer-render-unsupported-flow-node",
+            "message": "The lstlisting environment is not supported in this preview."
+          }
+        ],
+        "pagesWithErrorDiagnostics": 0,
+        "pagesWithUnsupportedItems": 4,
+        "pagesWithPaintedLiteralMarkers": 0,
+        "paintedLiteralMarkers": 0,
+        "assets": []
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
@@ -173,12 +174,15 @@ function compileProbe(runDir, options) {
   const searchPaths = [runDir, sourceDir, ...(options.texRoot ? [`${options.texRoot}//`] : [])];
   const searchPath = searchPaths.join(delimiter) + delimiter;
   const navigationSeed = readFileSync(join(runDir, "probe.nav"), "utf8");
+  const contentsPath = join(runDir, "probe.toc");
+  const contentsSeed = existsSync(contentsPath) ? readFileSync(contentsPath, "utf8") : "";
   // A fresh isolated frame can contain local labels/references. The second
   // pass resolves those and replaces the shipout trace with the final output.
   for (let pass = 1; pass <= 2; pass += 1) {
     // Compilation rewrites .nav with just the isolated frame. Restore the
     // original deck context on each pass while retaining .aux label state.
     writeFileSync(join(runDir, "probe.nav"), navigationSeed, "utf8");
+    writeFileSync(contentsPath, contentsSeed, "utf8");
     let stdout;
     try {
       stdout = execFileSync(
@@ -270,7 +274,8 @@ async function main() {
   const previousCaptions = selectedFrame && beamerControlSequencesIn(beamerSyntaxContext(source), {
     from: document.preamble.span.to, to: selectedFrame.span.from,
   }).some(control => control.name === "caption");
-  const deckContext = previousCaptions || document.frames.some(frame => frame.options?.allowFrameBreaks != null) ? collectBeamerDeckContext({
+  const hasContents = beamerControlSequencesIn(beamerSyntaxContext(source), { from: 0, to: source.length }).some(control => control.name === "tableofcontents");
+  const deckContext = previousCaptions || hasContents || document.frames.some(frame => frame.options?.allowFrameBreaks != null || !frame.endSpan) ? collectBeamerDeckContext({
     source, document, inputPath: options.inputPath, sourceDir: options.sourceDir ?? dirname(options.inputPath),
     texRoot: options.texRoot, cacheDir: join(repoRoot, "artifacts", "beamer-full-deck-context"),
   }) : null;
@@ -307,6 +312,7 @@ async function main() {
     probe.navSource,
     "utf8"
   );
+  writeFileSync(join(runDir, "probe.toc"), deckContext?.tocSource ?? "", "utf8");
 
   compileProbe(runDir, options);
   const log = readFileSync(join(runDir, "probe.log"), "utf8");

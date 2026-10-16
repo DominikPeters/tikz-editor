@@ -1,0 +1,399 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-10-16T21:12:37.960450+00:00",
+  "scope": "Ordinary Beamer gap fixes. Specialist package frontends reserved for inventory/decision; strict geometry is not whole-image fidelity.",
+  "findings": "design/beamer-breadth-gap-fixes.md",
+  "packageInventory": "design/beamer-package-support-inventory.md",
+  "focused": {
+    "report": "artifacts/beamer-fidelity-campaign/wave3/report.json",
+    "sha256": "7f6729a4354a420313938edc8fcc6c7d7ce750933a6f5ddb57783365aab7c73e",
+    "cases": 18,
+    "states": 20,
+    "passed": 18,
+    "failed": 0,
+    "paintProbeCases": 3,
+    "source": "test/fixtures/beamer/fidelity-campaign-wave3/cases.json",
+    "pinnedIndependentTexTraces": true
+  },
+  "breadth": {
+    "baseline": {
+      "report": "artifacts/beamer-breadth-decks/lualatex-audit/report.json",
+      "sha256": "5767707a5d105377348a3c849bfbd08c84937867410eb2c6275bd76bad1f0fd4"
+    },
+    "current": {
+      "report": "artifacts/beamer-breadth-decks/fixes/report.json",
+      "sha256": "7a27f90b1fc781eb44f35a6583cae60e13d40dfdaead6d6a2d3fc80f6299ba56",
+      "rendererFingerprint": "0d312c86aa7e59781c5aa403a1cd91118bda751564972321591906f940ef4c1b",
+      "harnessFingerprint": "1f256be2680bb6604dd3dd9680ebdd8055625a30d1e5af47c930d00383d35423",
+      "fullRunStrictMatches": 31,
+      "followups": [
+        {
+          "report": "artifacts/beamer-breadth-decks/fixes-final-logic/report.json",
+          "sha256": "1e6b4a4875640f006e09e674b802bff7e5e2ab7eb6417ec0a5393f585c002e29",
+          "rendererFingerprint": "e8e4b233edd954466cba48b2849e2a7c133374be1b1547a679ee1ee27b9e6d26",
+          "harnessFingerprint": "1f256be2680bb6604dd3dd9680ebdd8055625a30d1e5af47c930d00383d35423"
+        },
+        {
+          "report": "artifacts/beamer-breadth-decks/fixes-final-ecology/report.json",
+          "sha256": "8c4f50cb9d2ae2547b0a897c4edcf7233f413d669b69143c4d23d739d42b8561",
+          "rendererFingerprint": "e8e4b233edd954466cba48b2849e2a7c133374be1b1547a679ee1ee27b9e6d26",
+          "harnessFingerprint": "1f256be2680bb6604dd3dd9680ebdd8055625a30d1e5af47c930d00383d35423"
+        }
+      ],
+      "scope": "Complete 150-state rerun, followed by final footer-width rechecks of the 25 states in the two affected decks. Per-deck final results use the latest corresponding run."
+    },
+    "decks": 12,
+    "authoredSourceFrames": 111,
+    "pairedAuthoredFrameOverlayStates": 150,
+    "physicalTexPages": 157,
+    "automaticSectionFramesStillNotDiscovered": 6,
+    "extraContinuationNotRecomparedInThisRun": 1,
+    "strictMatchesBefore": 2,
+    "strictMatchesAfter": 34,
+    "pagesWithoutDiagnosticsBefore": 104,
+    "pagesWithoutDiagnosticsAfter": 134,
+    "regressions": 0,
+    "sourceHashesVerified": true,
+    "diagnosticsBefore": [
+      {
+        "code": "beamer-unknown-theme-component",
+        "severity": "warning",
+        "occurrences": 39,
+        "pages": 25,
+        "example": "The Beamer color-theme component 'dove' is not registered; class defaults remain active for that component."
+      },
+      {
+        "code": "beamer-render-unsupported-flow-node",
+        "severity": "warning",
+        "occurrences": 24,
+        "pages": 21,
+        "example": "The prooftree environment is not supported in this preview."
+      },
+      {
+        "code": "missing-semicolon",
+        "severity": "warning",
+        "occurrences": 3,
+        "pages": 3,
+        "example": "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command."
+      },
+      {
+        "code": "parse-error",
+        "severity": "error",
+        "occurrences": 3,
+        "pages": 3,
+        "example": "Syntax error in command statement. Check for a missing semicolon."
+      },
+      {
+        "code": "unsupported-statement",
+        "severity": "warning",
+        "occurrences": 8,
+        "pages": 3,
+        "example": "Unknown or unsupported command `\\begin`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+      }
+    ],
+    "diagnosticsAfter": [
+      {
+        "code": "beamer-render-unsupported-flow-node",
+        "severity": "warning",
+        "occurrences": 14,
+        "pages": 13,
+        "example": "The prooftree environment is not supported in this preview."
+      },
+      {
+        "code": "missing-semicolon",
+        "severity": "warning",
+        "occurrences": 3,
+        "pages": 3,
+        "example": "Statement is missing a trailing semicolon; add `;` at the end of this TikZ command."
+      },
+      {
+        "code": "parse-error",
+        "severity": "error",
+        "occurrences": 3,
+        "pages": 3,
+        "example": "Syntax error in command statement. Check for a missing semicolon."
+      },
+      {
+        "code": "unsupported-statement",
+        "severity": "warning",
+        "occurrences": 8,
+        "pages": 3,
+        "example": "Unknown or unsupported command `\\begin`; this editor will ignore the statement. Check for a typo or unsupported TikZ command."
+      }
+    ],
+    "details": [
+      {
+        "file": "test/fixtures/beamer/breadth-decks/01-nvidia-performance.tex",
+        "sourceSha256": "89784862f39a5264a6bfd18b9747697c8db9a6795fd1dba43737f848a627b973",
+        "states": 11,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 7,
+        "newMatches": [
+          {
+            "frame": 2,
+            "step": 1
+          },
+          {
+            "frame": 4,
+            "step": 1
+          },
+          {
+            "frame": 5,
+            "step": 1
+          },
+          {
+            "frame": 5,
+            "step": 2
+          },
+          {
+            "frame": 6,
+            "step": 1
+          },
+          {
+            "frame": 6,
+            "step": 2
+          },
+          {
+            "frame": 6,
+            "step": 3
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/02-logic-proof-clinic.tex",
+        "sourceSha256": "2dc997113f2ab7dd473681a9da241bce84f1df32bf2882c1d4d57e14d0854ca5",
+        "states": 14,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 1,
+        "newMatches": [
+          {
+            "frame": 3,
+            "step": 1
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/03-ml-selective-prediction.tex",
+        "sourceSha256": "5cc1ca131d284c945eaf7699e10a14df2b2f8235fb422b76d0a67232294c1a5f",
+        "states": 14,
+        "strictMatchesBefore": 1,
+        "strictMatchesAfter": 1,
+        "newMatches": [],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/04-algorithms-dijkstra.tex",
+        "sourceSha256": "f3aede815fd5a78aba1599d6d54b7e1b61929f50f9ebdd1625c02032d0965a2c",
+        "states": 13,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 0,
+        "newMatches": [],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/05-fluid-channel.tex",
+        "sourceSha256": "b19d18ef890ad7d557f7e43c6ad7dbfc9124170a401907f2c42eb9ce9d68ec8e",
+        "states": 13,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 10,
+        "newMatches": [
+          {
+            "frame": 3,
+            "step": 1
+          },
+          {
+            "frame": 3,
+            "step": 2
+          },
+          {
+            "frame": 3,
+            "step": 3
+          },
+          {
+            "frame": 3,
+            "step": 4
+          },
+          {
+            "frame": 4,
+            "step": 1
+          },
+          {
+            "frame": 5,
+            "step": 1
+          },
+          {
+            "frame": 7,
+            "step": 1
+          },
+          {
+            "frame": 8,
+            "step": 1
+          },
+          {
+            "frame": 8,
+            "step": 2
+          },
+          {
+            "frame": 9,
+            "step": 1
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/06-relativity-clocks.tex",
+        "sourceSha256": "0d7578422e9d0c8942cd7fc84f65d99c4128804130a75b1de595b2f488d66539",
+        "states": 13,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 3,
+        "newMatches": [
+          {
+            "frame": 1,
+            "step": 1
+          },
+          {
+            "frame": 7,
+            "step": 1
+          },
+          {
+            "frame": 7,
+            "step": 2
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/07-quantum-predict-observe.tex",
+        "sourceSha256": "fc3a72baaac67800b55614bb512f9a3ab26b9dbc55529d099188d4ca8de05861",
+        "states": 14,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 4,
+        "newMatches": [
+          {
+            "frame": 4,
+            "step": 1
+          },
+          {
+            "frame": 4,
+            "step": 3
+          },
+          {
+            "frame": 8,
+            "step": 1
+          },
+          {
+            "frame": 9,
+            "step": 1
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/08-category-products.tex",
+        "sourceSha256": "9384662e89a38994b7095fc620474c836544448467d9179011af923c966bc1ec",
+        "states": 11,
+        "strictMatchesBefore": 1,
+        "strictMatchesAfter": 5,
+        "newMatches": [
+          {
+            "frame": 5,
+            "step": 1
+          },
+          {
+            "frame": 5,
+            "step": 2
+          },
+          {
+            "frame": 6,
+            "step": 1
+          },
+          {
+            "frame": 7,
+            "step": 1
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/09-organic-electrons.tex",
+        "sourceSha256": "341d89d08dd3e9e42bcf0581b2a2a0031b8a81baeb679c7eebc106121a524b1c",
+        "states": 12,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 0,
+        "newMatches": [],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/10-distributed-timeout.tex",
+        "sourceSha256": "1c8b2b148f3991ce8d4375b9cf832b9caa029b8decd9a7baa50fb035dec96f9b",
+        "states": 12,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 0,
+        "newMatches": [],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/11-ecology-restoration.tex",
+        "sourceSha256": "2d2c247e575f3188a656dc0107be6c6ceff63a42a088960729fada502f2dcd50",
+        "states": 11,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 3,
+        "newMatches": [
+          {
+            "frame": 3,
+            "step": 1
+          },
+          {
+            "frame": 8,
+            "step": 1
+          },
+          {
+            "frame": 10,
+            "step": 1
+          }
+        ],
+        "regressions": []
+      },
+      {
+        "file": "test/fixtures/beamer/breadth-decks/12-numerical-debugging.tex",
+        "sourceSha256": "4c0b2a9c2430029daddf8561ff88b5ad0c00f1b5d88bd1476f08b80d82125bb1",
+        "states": 12,
+        "strictMatchesBefore": 0,
+        "strictMatchesAfter": 0,
+        "newMatches": [],
+        "regressions": []
+      }
+    ]
+  },
+  "validation": {
+    "fullRepositoryTests": {
+      "passed": 7550,
+      "skipped": 20,
+      "todo": 1,
+      "log": "artifacts/beamer-breadth-decks/gap-full-tests-final.log"
+    },
+    "editingTests": {
+      "passed": 695,
+      "skipped": 3,
+      "todo": 1,
+      "log": "artifacts/beamer-breadth-decks/gap-editing-tests-final.log"
+    },
+    "finalBeamerAndCapabilityTests": {
+      "passed": 995,
+      "skipped": 6,
+      "log": "artifacts/beamer-breadth-decks/gap-beamer-tests-final.log"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "passed": true,
+      "log": "artifacts/beamer-breadth-decks/gap-typecheck-final.log"
+    },
+    "productionLint": {
+      "command": "npm run lint:prod",
+      "passed": true,
+      "log": "artifacts/beamer-breadth-decks/gap-lint-prod-final.log"
+    }
+  }
+}

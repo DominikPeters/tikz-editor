@@ -176,3 +176,94 @@ recognition results and every discovery result. Detailed logs and raster
 artifacts are ignored under `artifacts/beamer-fidelity-campaign/2026-10-16/`.
 No combined percentage is presented as overall renderer fidelity: these are
 selected controls and discovery cases, with different coverage and contracts.
+
+## Wave 2: subtitle templates and class registers
+
+The second wave covers Moloch, sidebar and shadow subtitles, measured
+smoothbars/smoothtree title stacks, and all eight Beamer class sizes (8, 9, 10,
+11, 12, 14, 17 and 20pt). Its 66 original cases produce 67 overlay pages.
+The [discovery record](beamer-fidelity-campaign-wave2-baseline.json) preserves
+11 passes and 27 mismatches among the initial valid references, plus one
+Berkeley reference failure caused by the theme filename's capitalization.
+Repairing that reference before renderer changes yielded one further mismatch.
+The remaining 27 cases are additional holdouts, not part of that baseline.
+
+The fixes follow the installed TeX Live 2025 sources:
+
+- Shared title/subtitle paragraph measurement preserves each template's actual
+  initial/final struts and TeX's nonnegative baseline glue or 1pt lineskip.
+  Sidebar templates center the complete title stack in their fixed box; smooth
+  and shadow templates grow with the measured content.
+- Moloch uses small bold subtitle glyphs, the restored title paragraph's
+  baseline register, its negative `.8ex` skip and final padding rule.
+  Blank subtitles retain the title-only padding. Metropolis retains its
+  upstream title-only frame-title template.
+- Shadow paint precedes its background and glyphs. A visual comparison caught
+  the old fade overlapping the last subtitle line despite correct glyph traces;
+  two color probes now protect the top and lower title background.
+- Plain frame body placement removes the suppressed headline's inset.
+  Removed inline overlay macros preserve separate spaces on either side.
+- The class profiles supply normal/small/footnotesize display skips and list
+  registers from `sizeNN.clo`. Named declarations remain named through lowering
+  so they change registers as well as glyph sizes; groups restore their state.
+  AMS triangle bullets select their actual optical face, and a newly opened
+  list after a display ships TeX's resumed empty line before its first item.
+
+Run the independent comparison and pin only a fully passing current run:
+
+```sh
+npm run compare:beamer-campaign-wave2 -- --out-dir artifacts/beamer-fidelity-campaign/verified-wave2
+node scripts/update-beamer-campaign-oracles.mjs artifacts/beamer-fidelity-campaign/verified-wave2 test/fixtures/beamer/fidelity-campaign-wave2/cases.json
+```
+
+The offline campaign test checks source hashes and the same strict geometry,
+font, glyph-code and transform contracts as the live comparison. Color probes
+cover the shadow subtitle, colored smooth title boxes and the 14pt Moloch
+subtitle. Native/PDF raster pairs are also inspected for gradients, shadow
+stacking and wrapping. The comparator can check represented partial page-edge
+rectangles without treating oversized PDF shading-mask carrier rules as painted
+extents; it still does not model arbitrary clipping or assert whole-image pixel
+equality. The tolerances remain `.02pt` horizontally, `.01pt` vertically and at
+rectangle edges, and two RGB channel levels for sampled paint.
+
+The [wave 2 verification record](beamer-fidelity-campaign-wave2-results.json)
+records the exact fixtures, provenance, live results and regression checks.
+All 66 cases pass, along with fresh runs of the previous 20 campaign controls.
+One reference subprocess could not load the scanner during a parallel build;
+that error was preserved and the case was independently rerun after the build.
+The complete pinning record combines those 65 passing comparisons and the
+passing retry; no renderer mismatch was replaced. The 7,513 passing tests
+include both campaign waves and three blank-subtitle padding regressions.
+
+
+## Authored whole-deck breadth collection
+
+The [twelve original breadth decks](../test/fixtures/beamer/breadth-decks/README.md)
+provide longer, differently styled briefing and teaching contexts for the next
+campaign. They contain 111 authored source frames and compile to 157 TeX pages,
+including automatic section frames and a continuation. Each has a distinct
+subject, audience and pedagogical sequence; the collection includes advanced
+package interfaces alongside ordinary Beamer composition. Local assets and
+source/data provenance are included.
+
+The [initial inventory](beamer-breadth-decks-baseline.json) separates valid TeX
+compilation, authored-frame discovery, native smoke rendering and actual paired
+fidelity (not yet scored). Use its package/paint/discovery signals to choose
+focused comparisons; do not count an unsupported card as a successful rendering
+of the slide's content.
+
+The [LuaLaTeX follow-up audit](beamer-breadth-decks-lualatex.md) now compares
+all 150 discovered frame/overlay states plus the extra continuation. It records
+151 valid paired references, two strict structural matches, six undiscovered
+generated section pages, and a prioritized gap list. Corpus font loading and
+isolated title/contents reference construction were repaired before the final
+measurement; no mismatches became goldens.
+
+## Breadth gap reductions (wave three)
+
+The [gap-fix record](beamer-breadth-gap-fixes.md) covers metadata, private notes,
+contents, standalone centering, fixed overlay areas, modern progress paint and
+layout, and Dove/serif/professional font components. Its eighteen independent
+LuaLaTeX reductions (twenty states) pass and join the previous two campaign
+waves. Specialist package rendering remains a separate
+[inventory and support decision](beamer-package-support-inventory.md).

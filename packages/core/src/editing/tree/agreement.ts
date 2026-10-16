@@ -45,13 +45,21 @@ export function compareEditTreeWithEngines(tree: EditTree): EngineDisagreement[]
       const slot = slotId === undefined ? undefined : tree.slots[slotId];
       if (slot?.role !== "content") continue;
       const { from, to } = slot.contentSpan;
-      const engine = mathFacts(tree.text.slice(from, to), from);
+      const literalSpans: { from: number; to: number }[] = [];
+      const engine = mathFacts(tree.text.slice(from, to), from, literalSpans);
       const ours = new Set(
         [...treeFacts(tree, node.id, ["fraction", "radical", "scripted", "overset"])]
           .map((fact) => fact.replace(/^overset/u, "scripted"))
       );
       for (const id of emptyBaseScripts(tree, node.id)) {
         ours.delete(`scripted@${editNodeAt(tree.nodes, id).span.from}-${editNodeAt(tree.nodes, id).span.to}`);
+      }
+      // Unsupported package macros are literal text in the math IR. Their
+      // argument groups have no math facts to compare, though the edit tree
+      // still exposes source structure there. Keep checking adjacent math.
+      for (const fact of ours) {
+        const range = /@(\d+)-(\d+)$/u.exec(fact);
+        if (range && literalSpans.some(span => Number(range[1]) >= span.from && Number(range[2]) <= span.to)) ours.delete(fact);
       }
       diff(disagreements, "math", ours, engine, slot.contentSpan);
     } else if (node.kind === "paragraph") {
@@ -150,7 +158,7 @@ function emptyBaseScripts(tree: EditTree, root: NodeId): NodeId[] {
     .map((node) => node.id);
 }
 
-function mathFacts(source: string, offset: number): Set<string> {
+function mathFacts(source: string, offset: number, literalSpans: { from: number; to: number }[]): Set<string> {
   const facts = new Set<string>();
   const visit = (value: unknown, insideText: boolean) => {
     if (Array.isArray(value)) {
@@ -160,7 +168,14 @@ function mathFacts(source: string, offset: number): Set<string> {
     if (!isObjectRecord(value)) return;
     const record = value;
     // Formulas nested in \text are their own comparison.
-    if (record.kind === "text") return;
+    if (record.kind === "text") {
+      if (Array.isArray(record.nodes)) for (const node of record.nodes) {
+        if (isObjectRecord(node) && node.kind === "literal" && typeof node.sourceStart === "number" && typeof node.sourceEnd === "number") {
+          literalSpans.push({ from: node.sourceStart, to: node.sourceEnd });
+        }
+      }
+      return;
+    }
     const span = record.sourceSpan;
     if (isObjectRecord(span) && typeof span.start === "number" && typeof span.end === "number" && !insideText) {
       if (record.kind === "fraction") facts.add(`fraction@${span.start}-${span.end}`);

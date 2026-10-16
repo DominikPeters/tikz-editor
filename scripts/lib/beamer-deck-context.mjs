@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
-import { fileSha256 } from "./beamer-frame-oracle.mjs";
+import { fileSha256, isCompleteBeamerOracleFrame } from "./beamer-frame-oracle.mjs";
 import { texOracleEnv } from "./tex-oracle.mjs";
 
 /** Instrument the authored document, independently of the native renderer. */
@@ -11,7 +11,7 @@ export function instrumentBeamerDeckCounters(source, document) {
   let cursor = 0;
   const mark = (phase, index) => `\n\\typeout{TIKZ_BEAMER_CONTEXT ${phase} ${index} \\arabic{framenumber} \\arabic{page} \\arabic{figure} \\arabic{table}}\n`;
   for (const [index, frame] of document.frames.entries()) {
-    if (!frame.endSpan) throw new Error(`Full-deck counter context requires complete frame ${index + 1}.`);
+    if (!isCompleteBeamerOracleFrame(source, frame)) throw new Error(`Full-deck counter context requires complete frame ${index + 1}.`);
     result += source.slice(cursor, frame.span.from) + mark("B", index) + source.slice(frame.span.from, frame.span.to) + mark("E", index);
     cursor = frame.span.to;
   }
@@ -44,7 +44,7 @@ export function parseBeamerDeckCounters(log, navSource, frameCount) {
 export function collectBeamerDeckContext({ source, document, inputPath, sourceDir = dirname(inputPath), texRoot, cacheDir }) {
   const engine = execFileSync("lualatex", ["--version"], { encoding: "utf8" });
   const beamerClass = execFileSync("kpsewhich", ["beamer.cls"], { encoding: "utf8" }).trim();
-  const digest = createHash("sha256").update(JSON.stringify({ version: 2, source, sourceDir, texRoot, engine, beamerClassSha256: fileSha256(beamerClass) })).digest("hex");
+  const digest = createHash("sha256").update(JSON.stringify({ version: 3, source, sourceDir, texRoot, engine, beamerClassSha256: fileSha256(beamerClass) })).digest("hex");
   const directory = join(cacheDir, digest);
   const contextPath = join(directory, "context.json");
   if (existsSync(contextPath)) {
@@ -67,6 +67,8 @@ export function collectBeamerDeckContext({ source, document, inputPath, sourceDi
     }
   }
   const context = parseBeamerDeckCounters(readFileSync(join(directory, "deck-context.log"), "utf8"), readFileSync(join(directory, "deck-context.nav"), "utf8"), document.frames.length);
+  const tocPath = join(directory, "deck-context.toc");
+  context.tocSource = existsSync(tocPath) ? readFileSync(tocPath, "utf8") : "";
   const dependencies = [...new Set(readFileSync(join(directory, "deck-context.fls"), "utf8").split(/\r?\n/u).filter(line => line.startsWith("INPUT ")).map(line => {
     const path = line.slice(6);
     return isAbsolute(path) ? path : resolve(sourceDir, path);

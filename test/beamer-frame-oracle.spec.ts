@@ -22,6 +22,22 @@ const runOracleIntegration = process.env.BEAMER_ORACLE_TESTS === "1" &&
   spawnSync("lualatex", ["--version"], { stdio: "ignore" }).status === 0;
 
 describe("Beamer frame oracle", () => {
+  it("probes and instruments document-level maketitle while rejecting truncated environments", () => {
+    const source = String.raw`\documentclass{beamer}\usetheme{metropolis}
+\title{Command title}\begin{document}\maketitle
+\section{First}\begin{frame}Body.\end{frame}\end{document}`;
+    const document = scanBeamerDocument(source);
+    expect(document.frames).toHaveLength(2);
+    expect(document.frames[0].endSpan).toBeNull();
+    expect(buildBeamerFrameProbeSource(source, document, 0).source).toContain(String.raw`\maketitle`);
+    const instrumented = instrumentBeamerDeckCounters(source, document);
+    expect(instrumented).toContain(String.raw`\maketitle`);
+    expect(instrumented.indexOf("CONTEXT B 0")).toBeLessThan(instrumented.indexOf(String.raw`\maketitle`));
+    expect(instrumented.indexOf("CONTEXT E 0")).toBeGreaterThan(instrumented.indexOf(String.raw`\maketitle`));
+    const truncated = String.raw`\documentclass{beamer}\begin{document}\begin{frame}No end.`;
+    expect(() => instrumentBeamerDeckCounters(truncated, scanBeamerDocument(truncated))).toThrow("requires complete frame");
+  });
+
   it("seeds figure/table numbering from actual authored TeX counters", () => {
     const source = String.raw`\documentclass{beamer}\begin{document}\begin{frame}Later.\end{frame}\end{document}`;
     const document = scanBeamerDocument(source);
@@ -81,6 +97,30 @@ TIKZ_BEAMER_CONTEXT E 1 3 4`, nav, 2);
       rmSync(directory, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it.skipIf(!runOracleIntegration)("retains authored contents for an isolated contents frame", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tikz-beamer-contents-context-"));
+    try {
+      const source = String.raw`\documentclass{beamer}\begin{document}
+\begin{frame}{Contents}\tableofcontents\end{frame}
+\section{First topic}\begin{frame}Alpha.\end{frame}
+\section{Second topic}\begin{frame}Beta.\end{frame}\end{document}`;
+      const inputPath = join(directory, "deck.tex");
+      writeFileSync(inputPath, source);
+      const run = spawnSync(process.execPath, [join(process.cwd(), "scripts/probe-beamer-frame.mjs"),
+        "--input", inputPath, "--frame", "1", "--out-dir", directory, "--name", "contents", "--trace-only"],
+      { encoding: "utf8", timeout: 30_000 });
+      expect(run.status, run.stderr).toBe(0);
+      const context = collectBeamerDeckContext({ source, document: scanBeamerDocument(source), inputPath, cacheDir: join(directory, "cache") });
+      const toc = context.tocSource;
+      expect(toc).toContain("First topic");
+      expect(toc).toContain("Second topic");
+      const trace = parseBeamerPageTraceTsv(readFileSync(join(directory, "contents/beamer-page-trace.tsv"), "utf8"));
+      expect(trace.pages[0].glyphs.length).toBeGreaterThan(20);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 40_000);
 
   it("builds a single-frame probe while retaining the source preamble", () => {
     const source = String.raw`\documentclass[aspectratio=169]{beamer}

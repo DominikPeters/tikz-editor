@@ -33,9 +33,11 @@ export interface BeamerStructuredTextLine {
 
 export function beamerProbeInstrumentation(): string;
 export function beamerPageTraceLuaSource(): string;
+export function isCompleteBeamerOracleFrame(source: string, frame: BeamerFrameModel): boolean;
 export interface BeamerDeckCounterContext {
   readonly totalFrames: number;
   readonly navSource: string;
+  readonly tocSource?: string;
   readonly frames: readonly { readonly beforeFrameNumber: number; readonly afterFrameNumber: number; readonly firstPage: number; readonly lastPage: number }[];
 }
 export function buildBeamerFrameProbeSource(

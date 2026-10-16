@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileSha256 } from "./lib/beamer-frame-oracle.mjs";
 const run = resolve(process.argv[2] ?? "artifacts/beamer-fidelity-campaign/wave1");
-const manifestPath = resolve("test/fixtures/beamer/fidelity-campaign/cases.json");
+const manifestPath = resolve(process.argv[3] ?? "test/fixtures/beamer/fidelity-campaign/cases.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const report = JSON.parse(readFileSync(join(run, "report.json"), "utf8"));
 if (report.status !== "complete" || report.failed || report.results.length !== manifest.fidelity.length || report.manifestSha256 !== fileSha256(manifestPath)) {
@@ -19,7 +19,7 @@ for (const fixture of manifest.fidelity) {
     // Box trees aid live diagnosis; the offline contract consumes glyphs and rules.
     return { ...trace, boxes: [] };
   });
-  const snapshot = { sourceSha256: result.sourceSha256, engine: "LuaLaTeX / TeX Live 2025", provenance: "compare:beamer-campaign, valid content witnesses and matching page counts", pages };
+  const snapshot = { sourceSha256: result.sourceSha256, engine: "LuaLaTeX / TeX Live 2025", provenance: "compare-beamer-priorities.mjs, valid content witnesses and matching page counts", pages };
   writeFileSync(input.replace(/\.tex$/u, ".oracle.json"), JSON.stringify(snapshot, null, 2) + "\n");
 }
 console.log(`Pinned ${manifest.fidelity.length} independent TeX traces.`);

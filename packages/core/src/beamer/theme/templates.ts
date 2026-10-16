@@ -1,3 +1,4 @@
+import { measureBeamerHeadingStack, beamerSubtitlePrimitive } from "./heading-layout.js";
 import { texLength } from "../../text/tex/coordinates.js";
 import { createBeamerTexTextFontProfile } from "./font.js";
 import { requireDefined } from "../../utils/invariants.js";
@@ -53,12 +54,9 @@ const EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT = 1;
 // beamerbaseframecomponents.sty belongs to \footheight, not the painted boxes.
 // beamerouterthemeinfolines.sty: ht=2.65ex,dp=1.5ex at the 6pt
 // `tiny structure` headline font.
-const INFOLINES_HEADLINE_PAINT_HEIGHT_PT = 11.055587768554688;
-const INFOLINES_HEADLINE_BASELINE_PT = 7.0595855712890625;
 const BEAMER_FOOTLINE_RESERVE_PT = 4;
 // The Infolines template uses leftskip=2ex,rightskip=2ex at its 6pt footline
 // font. This is the LuaLaTeX/Latin Modern Sans 8 ex measured in TeX points.
-const INFOLINES_FOOTLINE_EX_PT = 2.6674957275390625;
 
 type FrameTitlePlanner = (
   context: BeamerFrameTemplateContext,
@@ -123,6 +121,13 @@ export function planBeamerFrameChrome(
   if (context.frame.title && isBlankBeamerFrameHeading(context.document.source, context.frame.title)) {
     const frame = { ...context.frame };
     delete frame.title;
+    context = { ...context, frame };
+  }
+  // \framesubtitle uses the same \ifblank guard. Do not let a retained
+  // editor value suppress the title's final padding/strut in a template.
+  if (context.frame.subtitle && isBlankBeamerFrameHeading(context.document.source, context.frame.subtitle)) {
+    const frame = { ...context.frame };
+    delete frame.subtitle;
     context = { ...context, frame };
   }
   const sidebar = getPlanner(
@@ -317,10 +322,20 @@ function planModernFrameTitle(
   const padding = typeof ref.options.paddingPt === "number" ? ref.options.paddingPt : Math.round(2.2 * bodyResolved.data.fontdimen.xheight * body.sizePt * 65536) / 65536;
   const horizontalPadding = ref.id.endsWith("/moloch") ? Math.round(1.6 * xHeight * 65536) / 65536 : padding;
   const capHeight = Math.max(0, ...profile.metricProvider.shapeText("X", resolved).items.map(item => item.kind === "glyph" ? Number(item.height) + Number(item.depth) : 0));
-  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title", context.page.page.width - 2 * horizontalPadding,
-    { start: `\\rule{0pt}{${padding + capHeight}pt}`, end: `\\rule[-${padding}pt]{0pt}{${padding}pt}` });
+  const width = context.page.page.width - 2 * horizontalPadding;
+  const start = `\\rule{0pt}{${padding + capHeight}pt}`;
+  const end = `\\rule[-${padding}pt]{0pt}{${padding}pt}`;
+  // Moloch ends the subtitle paragraph after restoring the title font. The
+  // subtitle uses small bold glyphs, the title's baseline register, -.8ex
+  // vertical space, and the final title-depth padding rule.
+  const stack = ref.id.endsWith("/moloch") ? measureBeamerHeadingStack(context, width, {
+    titleStart: start, titleEnd: context.frame.subtitle ? "" : end,
+    subtitleStart: "", subtitleEnd: end, subtitleBaselineSkipPt: font.lineHeightPt,
+  }) : null;
+  const measured = stack?.title ?? context.measureFrameHeading?.(context.frame.title, "frame-title", width, { start, end });
+  const subtitleSpace = stack?.subtitle ? -.8 * stack.subtitle.xHeight : 0;
   const progressHeight = ref.options.progressbar === true ? 0.4 : 0;
-  const height = (measured?.extent ?? font.lineHeightPt + 2 * padding) + progressHeight;
+  const height = (stack ? stack.extent + subtitleSpace : measured?.extent ?? font.lineHeightPt + 2 * padding) + progressHeight;
   const baselineY = measured?.firstHeight ?? padding + capHeight;
   const primitives: BeamerTemplatePrimitive[] = [
     {
@@ -357,6 +372,10 @@ function planModernFrameTitle(
       justify: ref.id.endsWith("/metropolis"),
     },
   ];
+  if (stack?.subtitle) {
+    primitives.push(...beamerSubtitlePrimitive(context, horizontalPadding, width,
+      baselineY + stack.subtitleBaseline + subtitleSpace, font.lineHeightPt));
+  }
   if (progressHeight > 0) {
     const progress = (context.frameIndex + 1) / Math.max(context.totalFrames, 1);
     primitives.push(
@@ -383,6 +402,7 @@ function planModernFrameTitle(
           height: progressHeight,
         },
         colorRole: "progress bar",
+        paint: "foreground",
       }
     );
   }
@@ -409,6 +429,16 @@ function planInfolinesFootline(
     infolinesFill(context, third, y, third, paintHeight, "palette secondary", "title"),
     infolinesFill(context, 2 * third, y, third, paintHeight, "palette primary", "date"),
   ];
+  const metadata = context.document.preamble.metadata;
+  const author = metadata.author?.shortValue ?? metadata.author?.value;
+  const institute = metadata.institute?.shortValue ?? metadata.institute?.value;
+  const authorText = (author?.value ?? "") + (institute?.value.trim() ? `~~(${institute.value})` : "");
+  if (authorText) primitives.push({
+    kind: "text", id: `${context.frame.id}:footline:author`, sourceSpan: author?.contentSpan ?? context.frame.span,
+    bounds: { x: 0, y, width: third, height: paintHeight },
+    source: { kind: "derived", text: authorText, sourceSpan: author?.contentSpan ?? context.frame.span },
+    fontRole: "footline", colorRole: "author in head/foot", alignment: "center", verticalAlignment: "center", baselineY,
+  });
   const title = context.document.preamble.metadata.title;
   if (title) {
     primitives.push({
@@ -454,15 +484,40 @@ function planInfolinesFootline(
     baselineY,
     interwordSpacePt: context.theme.fonts.footline.sizePt / 6,
   });
+  const date = metadata.date?.shortValue ?? metadata.date?.value;
+  if (date?.value.trim()) {
+    // totalframenumber reserves the width of total/total, then right-aligns
+    // the current count within it (beamerbaseauxtemplates.sty).
+    const numberText = `${context.totalFrames}/${context.totalFrames}`;
+    const measure = (text: string) => context.measureTemplateTextWidth?.(text, "footline") ??
+      Number(profile.metricProvider.shapeText(text, resolved).width);
+    const left = 2 * third + 2 * ex;
+    const available = third - 4 * ex;
+    const dateWidth = measure(date.value);
+    const free = Math.max(0, available - dateWidth - measure(numberText) - font.sizePt / 3);
+    primitives.push({
+      kind: "text", id: `${context.frame.id}:footline:date`, sourceSpan: date.contentSpan,
+      bounds: { x: left + free / 2, y, width: Math.max(dateWidth, .01), height: paintHeight },
+      source: { kind: "mapped", value: date }, fontRole: "footline", colorRole: "date in head/foot",
+      alignment: "left", verticalAlignment: "center", baselineY,
+    });
+  }
   return { inset, primitives };
 }
 
 function planInfolinesHeadline(
   context: BeamerFrameTemplateContext
 ): BeamerChromeTemplatePlan {
-  const height = INFOLINES_HEADLINE_PAINT_HEIGHT_PT;
+  const font = context.theme.fonts["section-in-head-foot"];
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(profile.defaultFontState, texLength(font.sizePt), profile.metricProvider);
+  const ex = Math.round(resolved.data.fontdimen.xheight * font.sizePt * 65536) / 65536;
+  // TeX first scans the decimal multiplier into a 16-bit fraction, then
+  // truncates the product with the already-scaled ex register.
+  const baselineY = Math.floor(Math.round(2.65 * 65536) * ex) / 65536;
+  const height = baselineY + Math.round(1.5 * ex * 65536) / 65536;
   const half = context.page.page.width / 2;
-  const horizontalPadding = 2 * INFOLINES_FOOTLINE_EX_PT;
+  const horizontalPadding = 2 * ex;
   const section = context.navigation.currentSection;
   const subsection = context.navigation.currentSubsection;
   const primitives: BeamerTemplatePrimitive[] = [
@@ -497,7 +552,7 @@ function planInfolinesHeadline(
       colorRole: "section in head/foot",
       alignment: "right",
       verticalAlignment: "center",
-      baselineY: INFOLINES_HEADLINE_BASELINE_PT,
+      baselineY,
     });
   }
   if (subsection) {
@@ -516,7 +571,7 @@ function planInfolinesHeadline(
       colorRole: "subsection in head/foot",
       alignment: "left",
       verticalAlignment: "center",
-      baselineY: INFOLINES_HEADLINE_BASELINE_PT,
+      baselineY,
     });
   }
   return { inset: height, primitives };
@@ -548,6 +603,7 @@ function planModernHeadline(
           height,
         },
         colorRole: "progress bar",
+        paint: "foreground",
       },
     ],
   };
@@ -557,9 +613,6 @@ function planModernFootline(
   context: BeamerFrameTemplateContext,
   ref: BeamerThemeTemplateRef
 ): BeamerChromeTemplatePlan {
-  if (ref.options.numbering === "none") {
-    return { inset: 0, primitives: [] };
-  }
   const moloch = ref.id === "beamer/footline/moloch";
   const footFont = context.theme.fonts.footline;
   const numberFont = context.theme.fonts["page-number"];
@@ -568,7 +621,7 @@ function planModernFootline(
     return profile.resolveTextFont(profile.defaultFontState, texLength(font.sizePt), profile.metricProvider);
   };
   const foot = metrics(footFont), number = metrics(numberFont);
-  const text = ref.options.numbering === "fraction"
+  const text = ref.options.numbering === "none" ? "" : ref.options.numbering === "fraction"
     ? `${context.frameIndex + 1}/${context.totalFrames}` : String(context.frameIndex + 1);
   const numberHeight = Math.max(0, ...[...text].map(character =>
     (number.data.chars[String(character.codePointAt(0))]?.height ?? 0) * numberFont.sizePt));
@@ -577,7 +630,8 @@ function planModernFootline(
   // sep=3ex is evaluated before and after selecting the page-number font.
   const before = moloch ? 0 : 3 * foot.data.fontdimen.xheight * footFont.sizePt;
   const after = moloch ? 4 : 3 * number.data.fontdimen.xheight * numberFont.sizePt;
-  const height = before + numberHeight + numberDepth + after + BEAMER_FOOTLINE_RESERVE_PT;
+  const progressHeight = ref.options.progressbar === true ? .4 : 0;
+  const height = before + numberHeight + numberDepth + after + BEAMER_FOOTLINE_RESERVE_PT + progressHeight;
   const rightSkip = moloch ? 5 : before;
   return {
     inset: height,
@@ -586,8 +640,13 @@ function planModernFootline(
       bounds: { x: 0, y: context.page.page.height - height, width: context.page.page.width - rightSkip, height },
       source: { kind: "derived", text, sourceSpan: context.frame.span },
       fontRole: "page-number", colorRole: "normal text", alignment: "right", verticalAlignment: "top",
-      baselineY: context.page.page.height - after - numberDepth,
-    }],
+      baselineY: context.page.page.height - progressHeight - after - numberDepth,
+    }, ...(progressHeight ? [
+      { kind: "fill" as const, id: `${context.frame.id}:footline:progress-background`, sourceSpan: context.frame.span,
+        bounds: { x: 0, y: context.page.page.height - progressHeight, width: context.page.page.width, height: progressHeight }, colorRole: "progress bar in head/foot" },
+      { kind: "fill" as const, id: `${context.frame.id}:footline:progress`, sourceSpan: context.frame.span,
+        bounds: { x: 0, y: context.page.page.height - progressHeight, width: context.page.page.width * Math.min(1, (context.frameIndex + 1) / Math.max(context.totalFrames, 1)), height: progressHeight }, colorRole: "progress bar in head/foot", paint: "foreground" as const },
+    ] : [])],
   };
 }
 

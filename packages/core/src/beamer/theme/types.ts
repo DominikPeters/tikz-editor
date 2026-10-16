@@ -37,6 +37,9 @@ export type BeamerThemeFontRole =
 export type BeamerThemeFont = {
   family: "serif" | "sans" | "monospace";
   typeface?: "fira";
+  /** professionalfonts suppresses Beamer's replacements of math alphabets. */
+  suppressMathReplacements?: boolean;
+  mathFamily?: "serif" | "sans";
   series: "medium" | "bold";
   shape: "upright" | "italic" | "slanted" | "small-caps";
   sizePt: number;
@@ -256,6 +259,8 @@ export type BeamerTemplatePrimitive =
       verticalAlignment: "top" | "center" | "bottom";
       /** Optional absolute page baseline for single-line template text. */
       baselineY?: number;
+      /** Paragraph baseline register inherited at template paragraph termination. */
+      baselineSkipPt?: number;
       /** Fixed interword glue for template-generated spacing such as `\,`. */
       interwordSpacePt?: number;
       justify?: boolean;
@@ -352,8 +357,11 @@ export type BeamerTitlePageTemplatePlan = {
 };
 
 export type BeamerFrameTemplateContext = {
+  /** Natural text width for horizontal template glue, measured by the shared frontend. */
+  measureTemplateTextWidth?: (text: string, role: BeamerThemeFontRole) => number;
+  measureSidebarMetadata?: (value: BeamerDelimitedSourceValue, role: "title-in-sidebar" | "author-in-sidebar", width: number) => { firstHeight: number; extent: number; endingDepth: number } | null;
   /** Measured strut-backed paragraphs for the stock frame-title color box. */
-  measureFrameHeading?: (value: BeamerDelimitedSourceValue, role: "frame-title" | "frame-subtitle", width: number, struts?: { start: string; end: string }) => {
+  measureFrameHeading?: (value: BeamerDelimitedSourceValue, role: "frame-title" | "frame-subtitle", width: number, struts?: { start: string; end: string; baselineSkipPt?: number }) => {
     firstHeight: number; extent: number; endingDepth: number; baselineSkip: number; xHeight: number;
   } | null;
   document: BeamerDocumentModel;

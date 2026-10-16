@@ -1,0 +1,98 @@
+% Original predict-observe-explain lesson. Counts are ideal Born probabilities, not experimental data.
+\documentclass[12pt,aspectratio=43]{beamer}
+\usetheme{Boadilla}
+\usecolortheme{orchid}
+\usepackage{amsmath,braket,quantikz}
+\setbeamertemplate{navigation symbols}{}
+\title{A qubit is not a hidden bit}
+\subtitle{Predict, observe, explain}
+\author{Quantum information tutorial}
+\date{Tutorial 07}
+\begin{document}
+\begin{frame}[plain]\titlepage\end{frame}
+\section{Predict}
+\begin{frame}[label=prediction]{What comes out of the second Hadamard?}
+\centering
+\begin{quantikz}
+\lstick{$\ket{0}$} & \gate{H} & \gate{H} & \meter{}\end{quantikz}
+\bigskip
+\begin{enumerate}
+\item Always 0.
+\item Half 0, half 1.
+\item Always 1.
+\end{enumerate}
+\note{Take a show of hands. Ask whether the first gate is being treated as a random classical flip.}
+\end{frame}
+\begin{frame}{Compute the amplitudes before the probabilities}
+\[
+ H=\frac{1}{\sqrt2}\begin{pmatrix}1&1\\1&-1\end{pmatrix},
+ \quad H\ket{0}=\frac{\ket{0}+\ket{1}}{\sqrt2}.
+\]
+\pause
+\[
+ H^2=I,\qquad H^2\ket{0}=\ket{0}.
+\]
+\begin{exampleblock}{Ideal prediction}
+Without an intermediate measurement, the final computational-basis outcome is 0 with probability one.
+\end{exampleblock}
+\end{frame}
+\section{Intervene}
+\begin{frame}{Now insert an intermediate measurement}
+\begin{overlayarea}{\textwidth}{4.2cm}
+\only<1>{Measure after the first $H$, then apply the second $H$. Predict the final distribution again.}
+\only<2>{The first measurement yields $\ket{0}$ or $\ket{1}$, each with probability $1/2$. Applying $H$ to either gives equal computational-basis probabilities.}
+\only<3>{The final distribution is now $P(0)=P(1)=1/2$. Measurement changed the state preparation for the remaining circuit.}
+\end{overlayarea}
+\end{frame}
+\begin{frame}{A phase can matter without changing one measurement}
+\[
+ \ket{+}=\frac{\ket0+\ket1}{\sqrt2},\qquad
+ \ket{-}=\frac{\ket0-\ket1}{\sqrt2}.
+\]
+\begin{columns}[T]
+\begin{column}{.47\textwidth}\begin{block}{Measure now}
+Both give 0 and 1 with equal probabilities in the computational basis.
+\end{block}\end{column}
+\begin{column}{.47\textwidth}\begin{block}{Apply $H$ first}
+$H\ket{+}=\ket0$, while $H\ket{-}=\ket1$.
+\end{block}\end{column}
+\end{columns}
+\end{frame}
+\section{Explain}
+\begin{frame}{State vectors carry more than a classical histogram}
+\begin{itemize}[<+->]
+\item Relative phase affects interference under a later operation.
+\item Probabilities are squared moduli of amplitudes.
+\item A measurement basis is part of the prediction.
+\end{itemize}
+\[
+ \ket\psi=\alpha\ket0+\beta\ket1,\qquad |\alpha|^2+|\beta|^2=1.
+\]
+\end{frame}
+\begin{frame}{Two qubits: prepare a Bell state}
+\centering
+\begin{quantikz}
+\lstick{$\ket0$} & \gate{H} & \ctrl{1} & \qw\\
+\lstick{$\ket0$} & \qw & \targ{} & \qw
+\end{quantikz}
+\[
+ \ket{\Phi^+}=\frac{\ket{00}+\ket{11}}{\sqrt2}.
+\]
+\small Computational-basis results are correlated. This single basis of data alone does not establish entanglement against every alternative preparation.
+\end{frame}
+\begin{frame}{Exit ticket: distinguish three statements}
+\begin{description}
+\item[State] What mathematical object represents the preparation?
+\item[Operation] Which transformation occurs before measurement?
+\item[Observation] Which basis and outcome probabilities are being reported?
+\end{description}
+\bigskip
+Return to the first circuit and explain why ``two random flips'' gives the wrong model.
+\end{frame}
+\begin{frame}{Continue the tutorial}
+\small
+\href{https://quantum.cloud.ibm.com/learning/en/courses/basics-of-quantum-information/single-systems/introduction}{IBM Quantum Learning: Basics of Quantum Information} provides background on state vectors, measurements and operations.
+\medskip
+The lesson sequence and circuits here are original; all probabilities assume ideal gates and measurements. There are no hardware execution results in this deck.
+\end{frame}
+\end{document}
