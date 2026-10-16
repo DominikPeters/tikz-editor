@@ -66,6 +66,39 @@ async function rasterizePdfWithPdfJs(request: PdfAssetRasterizeRequest): Promise
   }
 }
 
+export type PdfDocument = PdfJs.PDFDocumentProxy;
+
+/**
+ * Opens a PDF to render several of its pages onto canvases, as a viewer
+ * does: one parse for all of them. The caller destroys it.
+ */
+export async function openPdfDocument(bytes: Uint8Array): Promise<PdfDocument> {
+  const ownerDocument = typeof document !== "undefined" ? document : null;
+  if (!ownerDocument) {
+    throw new Error("PDF rendering requires a DOM document.");
+  }
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const open = async (): Promise<PdfDocument> => {
+    await configurePdfJsWorker(pdfjs);
+    // pdf.js hands its data to the worker, so it gets a copy.
+    return await pdfjs.getDocument({
+      data: new Uint8Array(bytes),
+      isOffscreenCanvasSupported: false,
+      useWorkerFetch: false,
+      ownerDocument,
+    }).promise;
+  };
+  try {
+    return await open();
+  } catch (error) {
+    if (pdfWorkerMode !== "fake-worker" && isPdfWorkerSetupError(error)) {
+      pdfWorkerMode = "fake-worker";
+      return await open();
+    }
+    throw error;
+  }
+}
+
 async function rasterizePdfWithWorkerMode(
   pdfjs: PdfJsModule,
   request: PdfAssetRasterizeRequest,

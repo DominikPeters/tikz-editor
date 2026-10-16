@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { beamerCompiledPages, createBeamerCompileDocument, type BeamerCompiledPages } from "@tikz-editor/core/beamer/index";
 import { Modal } from "./Modal";
-import { rasterizePdfAsset } from "../pdf-asset-rasterizer";
+import { openPdfDocument, type PdfDocument } from "../pdf-asset-rasterizer";
 import type { LatexPdfCompileResult, PlatformFileApi, PlatformLatex } from "../platform/types";
 import type { DocumentFileRef } from "../store/types";
+import { PdfPageView } from "./PdfPageView";
 import css from "./CompiledSlideModal.module.css";
-
-/** A slide's page at about twice the dialog's width on a Retina display. */
-const PAGE_RENDER_SCALE = 4;
 
 type CompiledSlideModalProps = {
   source: string;
@@ -38,7 +36,7 @@ export function CompiledSlideModal({ source, frameIndex, step, documentFileRef, 
   const job = useMemo(() => createBeamerCompileDocument(source), [source]);
   const [state, setState] = useState<State>({ phase: "compiling" });
   const [page, setPage] = useState(1);
-  const [image, setImage] = useState<{ page: number; url: string } | null>(null);
+  const [pdf, setPdf] = useState<PdfDocument | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -70,18 +68,28 @@ export function CompiledSlideModal({ source, frameIndex, step, documentFileRef, 
   }, [buildKey, documentFileRef, frameIndex, job, latex, step]);
 
   const compiled = state.phase === "done" ? state.compiled : null;
+  // One parse of the PDF serves every page the dialog shows.
   useEffect(() => {
     if (!compiled) return;
     let cancelled = false;
-    rasterizePdfAsset({ bytes: compiled.pdf, pageNumber: page, renderScale: PAGE_RENDER_SCALE }).then((result) => {
-      if (cancelled) return;
-      setRenderError(null);
-      setImage({ page, url: `data:${result.mimeType};base64,${result.dataBase64}` });
+    let opened: PdfDocument | null = null;
+    openPdfDocument(compiled.pdf).then((document) => {
+      if (cancelled) {
+        void document.loadingTask.destroy();
+        return;
+      }
+      opened = document;
+      setPdf(document);
     }, (error: unknown) => {
       if (!cancelled) setRenderError(error instanceof Error ? error.message : String(error));
     });
-    return () => { cancelled = true; };
-  }, [compiled, page]);
+    return () => {
+      cancelled = true;
+      setPdf(null);
+      if (opened) void opened.loadingTask.destroy();
+    };
+  }, [compiled]);
+  const onRenderError = useCallback((message: string) => { setRenderError(message); }, []);
 
   const pageCount = compiled ? Math.max(compiled.pages.pageCount, 1) : 0;
   const go = (delta: number) => { setPage((current) => Math.min(Math.max(current + delta, 1), pageCount)); };
@@ -119,7 +127,8 @@ export function CompiledSlideModal({ source, frameIndex, step, documentFileRef, 
       <Modal.Body padding="none">
         <div className={css.output}>
           {state.phase === "error" || showLog ? <pre className={css.log} data-select="text">{state.phase === "error" ? state.log : compiled?.log ?? "No log."}</pre>
-            : image ? <img className={css.page} src={image.url} alt={compiled ? pageLabel(compiled.pages, image.page) : ""} draggable={false} />
+            : pdf && compiled ? <PdfPageView pdf={pdf} page={page} label={pageLabel(compiled.pages, page)} className={css.view ?? ""}
+              pageClassName={css.page ?? ""} onError={onRenderError} />
               : null}
         </div>
       </Modal.Body>
