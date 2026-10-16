@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { beamerCompiledPages, createBeamerCompileDocument, type BeamerCompiledPages } from "@tikz-editor/core/beamer/index";
+import { beamerCompiledPages, createBeamerCompileDocument, type BeamerCompiledPages, type BeamerTexEngine } from "@tikz-editor/core/beamer/index";
 import { Modal } from "./Modal";
 import { openPdfDocument, type PdfDocument } from "../pdf-asset-rasterizer";
 import type { LatexPdfCompileResult, PlatformFileApi, PlatformLatex } from "../platform/types";
 import type { DocumentFileRef } from "../store/types";
 import { PdfPageView } from "./PdfPageView";
 import css from "./CompiledSlideModal.module.css";
+
+const ENGINE_NAMES: Record<BeamerTexEngine, string> = { pdflatex: "pdfLaTeX", xelatex: "XeLaTeX", lualatex: "LuaLaTeX" };
 
 type CompiledSlideModalProps = {
   source: string;
@@ -57,8 +59,8 @@ export function CompiledSlideModal({ source, frameIndex, step, documentFileRef, 
       if (cancelled) return;
       const log = error instanceof Error ? error.message : String(error);
       const message = /Failed to spawn/u.test(log)
-        ? `${job.engine} was not found. Showing slides as LaTeX compiles them needs a TeX distribution, such as MacTeX or TeX Live.`
-        : `${job.engine} did not produce a PDF.`;
+        ? `${ENGINE_NAMES[job.engine]} not found. Install MacTeX or TeX Live to compile slides.`
+        : `${ENGINE_NAMES[job.engine]} stopped without making a PDF.`;
       setState({ phase: "error", message, log });
     }).finally(() => { window.clearInterval(timer); });
     return () => {
@@ -108,11 +110,11 @@ export function CompiledSlideModal({ source, frameIndex, step, documentFileRef, 
     return () => { window.removeEventListener("keydown", onKeyDown, true); };
   }, [pageCount, showLog]);
   const missing = compiled != null && frameIndex != null && !compiled.pages.framePages.has(frameIndex);
-  const statusText = state.phase === "compiling" ? `Compiling the deck with ${job.engine}…${elapsed >= 2 ? ` ${elapsed} s` : ""}`
+  const statusText = state.phase === "compiling" ? `Compiling with ${ENGINE_NAMES[job.engine]}…${elapsed >= 2 ? ` ${elapsed} s` : ""}`
     : state.phase === "error" ? state.message
-      : renderError ? `The PDF did not render: ${renderError}`
-        : compiled?.hadErrors ? `${job.engine} reported errors; the slides show what it typeset. The log has the details.`
-          : missing ? "This slide has no page in the compiled PDF." : null;
+      : renderError ? `Can't display the PDF: ${renderError}`
+        : compiled?.hadErrors ? `${ENGINE_NAMES[job.engine]} reported errors. See the log.`
+          : missing ? "This slide isn't in the compiled PDF." : null;
   const savePdf = () => {
     if (!compiled || !exportFile) return;
     void exportFile([new Uint8Array(compiled.pdf)], { fileName: pdfFileName(documentFileRef), mimeType: "application/pdf" });
