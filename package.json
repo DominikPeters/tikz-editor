@@ -127,7 +127,8 @@
     "compare:beamer-transforms": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/transforms/cases.json --out-dir artifacts/beamer-transform-conformance",
     "compare:beamer-captions": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/captions-fidelity/cases.json --out-dir artifacts/beamer-caption-conformance",
     "compare:beamer-continuations": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/continuations-fidelity/cases.json --out-dir artifacts/beamer-continuation-conformance",
-    "compare:beamer-followups": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/corpus-followups/cases.json --out-dir artifacts/beamer-followup-conformance"
+    "compare:beamer-followups": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/corpus-followups/cases.json --out-dir artifacts/beamer-followup-conformance",
+    "compare:beamer-campaign": "node scripts/compare-beamer-priorities.mjs --manifest test/fixtures/beamer/fidelity-campaign/cases.json --out-dir artifacts/beamer-fidelity-campaign/wave1"
   },
   "keywords": [
     "tikz",

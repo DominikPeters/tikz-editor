@@ -51,13 +51,11 @@ const DEFAULT_FRAME_TITLE_BASELINE_PT = 20.142303466796875;
 const EMPTY_BACKGROUND_FRAME_TITLE_LINE_SKIP_PT = 1;
 // beamerouterthemeinfolines.sty: ht=2.25ex,dp=1ex. The 4pt reserve added by
 // beamerbaseframecomponents.sty belongs to \footheight, not the painted boxes.
-const INFOLINES_FOOTLINE_PAINT_HEIGHT_PT = 8.658004760742188;
 // beamerouterthemeinfolines.sty: ht=2.65ex,dp=1.5ex at the 6pt
 // `tiny structure` headline font.
 const INFOLINES_HEADLINE_PAINT_HEIGHT_PT = 11.055587768554688;
 const INFOLINES_HEADLINE_BASELINE_PT = 7.0595855712890625;
 const BEAMER_FOOTLINE_RESERVE_PT = 4;
-const LATIN_MODERN_SANS_X_HEIGHT_EM = 0.444;
 // The Infolines template uses leftskip=2ex,rightskip=2ex at its 6pt footline
 // font. This is the LuaLaTeX/Latin Modern Sans 8 ex measured in TeX points.
 const INFOLINES_FOOTLINE_EX_PT = 2.6674957275390625;
@@ -307,12 +305,23 @@ function planModernFrameTitle(
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
-  // metropolis/moloch outer themes: left/right padding 2.2ex around the
-  // frametitle struts; the optional progress rule is 0.4pt.
+  // Padding is assigned while the body font is active at theme load;
+  // Moloch's horizontal skips are evaluated later in the title font.
   const font = context.theme.fonts["frame-title"];
-  const padding = 2.2 * font.sizePt * 0.431;
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(profile.defaultFontState, texLength(font.sizePt), profile.metricProvider);
+  const xHeight = Math.round(resolved.data.fontdimen.xheight * font.sizePt * 65536) / 65536;
+  const body = context.theme.fonts["normal-text"];
+  const bodyProfile = createBeamerTexTextFontProfile(body);
+  const bodyResolved = bodyProfile.resolveTextFont(bodyProfile.defaultFontState, texLength(body.sizePt), bodyProfile.metricProvider);
+  const padding = typeof ref.options.paddingPt === "number" ? ref.options.paddingPt : Math.round(2.2 * bodyResolved.data.fontdimen.xheight * body.sizePt * 65536) / 65536;
+  const horizontalPadding = ref.id.endsWith("/moloch") ? Math.round(1.6 * xHeight * 65536) / 65536 : padding;
+  const capHeight = Math.max(0, ...profile.metricProvider.shapeText("X", resolved).items.map(item => item.kind === "glyph" ? Number(item.height) + Number(item.depth) : 0));
+  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title", context.page.page.width - 2 * horizontalPadding,
+    { start: `\\rule{0pt}{${padding + capHeight}pt}`, end: `\\rule[-${padding}pt]{0pt}{${padding}pt}` });
   const progressHeight = ref.options.progressbar === true ? 0.4 : 0;
-  const height = font.lineHeightPt + 2 * padding + progressHeight;
+  const height = (measured?.extent ?? font.lineHeightPt + 2 * padding) + progressHeight;
+  const baselineY = measured?.firstHeight ?? padding + capHeight;
   const primitives: BeamerTemplatePrimitive[] = [
     {
       kind: "fill",
@@ -331,9 +340,9 @@ function planModernFrameTitle(
       id: `${context.frame.id}:frame-title:text`,
       sourceSpan: context.frame.title.contentSpan,
       bounds: {
-        x: padding,
+        x: horizontalPadding,
         y: padding,
-        width: context.page.page.width - 2 * padding,
+        width: context.page.page.width - 2 * horizontalPadding,
         height: font.lineHeightPt,
       },
       source: {
@@ -344,6 +353,8 @@ function planModernFrameTitle(
       colorRole: "frametitle",
       alignment: "left",
       verticalAlignment: "top",
+      baselineY,
+      justify: ref.id.endsWith("/metropolis"),
     },
   ];
   if (progressHeight > 0) {
@@ -375,7 +386,7 @@ function planModernFrameTitle(
       }
     );
   }
-  return { inset: height, primitives };
+  return { inset: height + .25 * body.sizePt, primitives };
 }
 
 function planInfolinesFootline(
@@ -383,13 +394,15 @@ function planInfolinesFootline(
 ): BeamerChromeTemplatePlan {
   // beamerouterthemeinfolines.sty: three .333333 paperwidth color boxes,
   // ht=2.25ex, dp=1ex.
-  const paintHeight = INFOLINES_FOOTLINE_PAINT_HEIGHT_PT;
+  const font = context.theme.fonts.footline;
+  const profile = createBeamerTexTextFontProfile(font);
+  const resolved = profile.resolveTextFont(profile.defaultFontState, texLength(font.sizePt), profile.metricProvider);
+  const ex = Math.round(resolved.data.fontdimen.xheight * font.sizePt * 65536) / 65536;
+  const paintHeight = Math.round(2.25 * ex * 65536) / 65536 + ex;
   const inset = paintHeight + BEAMER_FOOTLINE_RESERVE_PT;
   const y = context.page.page.height - paintHeight;
   const baselineY = y +
-    2.25 *
-      LATIN_MODERN_SANS_X_HEIGHT_EM *
-      context.theme.fonts.footline.sizePt;
+    Math.round(2.25 * ex * 65536) / 65536;
   const third = context.page.page.width / 3;
   const primitives: BeamerTemplatePrimitive[] = [
     infolinesFill(context, 0, y, third, paintHeight, "palette tertiary", "author"),
@@ -424,9 +437,9 @@ function planInfolinesFootline(
     id: `${context.frame.id}:footline:number`,
     sourceSpan: context.frame.span,
     bounds: {
-      x: 2 * third + 2 * INFOLINES_FOOTLINE_EX_PT,
+      x: 2 * third + 2 * ex,
       y,
-      width: third - 4 * INFOLINES_FOOTLINE_EX_PT,
+      width: third - 4 * ex,
       height: paintHeight,
     },
     source: {

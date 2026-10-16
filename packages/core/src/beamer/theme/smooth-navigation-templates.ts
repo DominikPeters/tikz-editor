@@ -410,8 +410,11 @@ export function planShadowFrameTitle(
   if (!context.frame.title) {
     return { inset: 0, primitives: [] };
   }
+  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title",
+    context.page.page.width - SHADOW_FRAME_TITLE_X_PT - HORIZONTAL_MARGIN_PT);
+  const extra = measured ? measured.extent - context.theme.fonts["frame-title"].lineHeightPt : 0;
   return {
-    inset: SHADOW_FRAME_TITLE_INSET_PT,
+    inset: SHADOW_FRAME_TITLE_INSET_PT + extra,
     primitives: [
       gradientPrimitive({
         context,
@@ -423,7 +426,7 @@ export function planShadowFrameTitle(
           x: 0,
           y: 0,
           width: context.page.page.width,
-          height: SHADOW_FRAME_TITLE_HEIGHT_PT,
+          height: SHADOW_FRAME_TITLE_HEIGHT_PT + extra,
         },
         templateId: "beamer/frame-title/shadow-shade",
         layoutKind: "frame-title",
@@ -443,7 +446,7 @@ export function planShadowFrameTitle(
         id: "frame-title:shadow",
         bounds: {
           x: 0,
-          y: SHADOW_FRAME_TITLE_HEIGHT_PT - 4,
+          y: SHADOW_FRAME_TITLE_HEIGHT_PT + extra - 4,
           width: context.page.page.width,
           height: SHADOW_FADE_HEIGHT_PT,
         },
@@ -451,7 +454,7 @@ export function planShadowFrameTitle(
         layoutKind: "headline-decoration",
         direction: "vertical",
         stops: [
-          foregroundStop(0, "normal text", 0.3),
+          foregroundStop(0, "normal text", 1),
           foregroundStop(1, "normal text", 0),
         ],
       }),

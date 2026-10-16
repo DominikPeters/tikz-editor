@@ -626,7 +626,7 @@ describe("Beamer theme resolution", () => {
       expect(theme.id).toBe(name);
       expect(theme.templates.frameTitle).toEqual({
         id: `beamer/frame-title/${name}`,
-        options: { progressbar: true },
+        options: { progressbar: true, paddingPt: expect.closeTo(10.69595, 4) },
       });
       expect(theme.templates.block).toEqual({
         id: `beamer/block/${name}`,
@@ -641,22 +641,14 @@ describe("Beamer theme resolution", () => {
           series: "bold",
           sizePt: 12,
           ...(name === "metropolis"
-            ? { substitutedFor: "Fira Sans" }
+            ? { typeface: "fira" }
             : {}),
         })
       );
       const markers = resolveBeamerItemizeMarkers(theme);
-      expect(markers[0]?.svgBody).toContain(
-        'data-beamer-list-marker="bullet"'
-      );
-      expect(markers[1]?.svgBody).toContain(
-        `data-beamer-list-marker="${name === "moloch" ? "circle" : "bullet"}"`
-      );
-      expect(theme.diagnostics).toEqual(
-        name === "metropolis"
-          ? [expect.objectContaining({ code: "beamer-font-substitution" })]
-          : []
-      );
+      expect(markers[0]?.glyph).toMatchObject({ fontId: "cmsy10", code: 15, baselineOffsetEm: 0 });
+      expect(markers[1]?.glyph?.code).toBe(name === "moloch" ? 14 : 15);
+      expect(theme.diagnostics).toEqual([]);
     }
   );
 

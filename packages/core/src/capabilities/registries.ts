@@ -19,7 +19,9 @@ function featuresSupportedBy(layer: CapabilityLayer): readonly FeatureId[] {
   // Embedded picture context and isolated SVG definitions share the overlay picture ID.
   // Headings/class sizes/columns, preamble color roles and basic tcolorbox
   // composition have separate document-renderer contracts.
-  // Measured stock and modern titlepages share the titlepage document contract.
+  // Measured stock/modern headings and class-sized list/math flow share frame flow.
+  // Native Fira Sans typography shares stock modern theme contracts; scoped block
+  // role declarations extend the existing color/titlepage document contracts.
   return FEATURE_IDS.filter((featureId) => {
     const status = capabilityMatrix[featureId][layer];
     return status !== "none" && status !== "not-applicable";

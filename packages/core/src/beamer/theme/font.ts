@@ -48,15 +48,26 @@ export function createBeamerTexTextFontProfile(
   return {
     ...luaLatexDefaultTextFontProfile,
     defaultFontState: { ...luaLatexDefaultTextFontProfile.defaultFontState, emphasisStyle: "beamer" },
-    id: `lualatex-beamer-${role.family}-${role.series}-${role.shape}`,
+    id: `lualatex-beamer-${role.typeface ?? "lm"}-${role.family}-${role.series}-${role.shape}`,
     label: `LuaLaTeX Beamer ${role.family}`,
     resolveTextFontId(state, atPt) {
+      const normalized = normalize(state);
+      if (role.typeface === "fira" && normalized.family === "sans") {
+        const italic = normalized.shape === "italic" || normalized.shape === "slanted";
+        return `firasans-${normalized.series === "bold" ? italic ? "italic" : "regular" : italic ? "lightitalic" : "light"}`;
+      }
       return luaLatexDefaultTextFontProfile.resolveTextFontId(
         normalize(state),
         atPt
       );
     },
     resolveTextFont(state, atPt, metricProvider) {
+      const normalized = normalize(state);
+      if (role.typeface === "fira" && normalized.family === "sans") {
+        const italic = normalized.shape === "italic" || normalized.shape === "slanted";
+        const face = normalized.series === "bold" ? italic ? "italic" : "regular" : italic ? "lightitalic" : "light";
+        return (metricProvider ?? computerModernTexMetricProvider).resolveFont({ fontId: `firasans-${face}`, atPt });
+      }
       return luaLatexDefaultTextFontProfile.resolveTextFont(
         normalize(state),
         atPt,
@@ -78,7 +89,7 @@ export function createBeamerTexMathFontProfile(
   role: BeamerThemeFont
 ): TexMathFontProfile {
   const key = Number.isFinite(role.lineHeightPt) && !Object.is(role.lineHeightPt, -0)
-    ? JSON.stringify([role.family, role.series, role.shape, role.lineHeightPt])
+    ? JSON.stringify([role.typeface, role.family, role.series, role.shape, role.lineHeightPt])
     : null;
   if (key !== null) {
     const cached = mathProfiles.get(key);

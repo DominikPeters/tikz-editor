@@ -847,7 +847,7 @@ ${opening}
       pageNumber.bounds.y +
         Number(pageNumberPlacement.y) +
         Number(pageNumberLine.ascent)
-    ).toBeCloseTo(253.410798, 6);
+    ).toBeCloseTo(253.410802, 6);
     expect(
       result.layout.items.filter((item) => item.kind === "column")
     ).toHaveLength(1);

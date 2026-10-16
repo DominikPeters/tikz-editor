@@ -226,6 +226,12 @@ export function planSidebarFrameTitle(
     return { inset: 0, primitives: [] };
   }
   const headHeight = numberOption(ref, "headHeightPt");
+  const font = context.theme.fonts["frame-title"];
+  const measured = context.measureFrameHeading?.(context.frame.title, "frame-title",
+    context.page.frameArea.width - 2 * FRAME_TITLE_HORIZONTAL_PADDING_PT);
+  // Both vfil glues share the fixed-height vbox's spare space. Wrapping
+  // moves the first baseline upward by half the added paragraph extent.
+  const extra = measured ? measured.extent - font.lineHeightPt : 0;
   return {
     // The fixed-height title vbox cancels the separately reserved headline
     // with `\vskip-\beamer@headheight`. Its remaining strut/depth and
@@ -248,7 +254,7 @@ export function planSidebarFrameTitle(
       colorRole: "frametitle",
       alignment: "left",
       verticalAlignment: "top",
-      baselineY: SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT - headHeight,
+      baselineY: SIDEBAR_FRAME_TITLE_ABSOLUTE_BASELINE_PT - headHeight - extra / 2,
     }],
   };
 }

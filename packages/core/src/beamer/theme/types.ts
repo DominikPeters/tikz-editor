@@ -36,6 +36,7 @@ export type BeamerThemeFontRole =
 
 export type BeamerThemeFont = {
   family: "serif" | "sans" | "monospace";
+  typeface?: "fira";
   series: "medium" | "bold";
   shape: "upright" | "italic" | "slanted" | "small-caps";
   sizePt: number;
@@ -257,6 +258,7 @@ export type BeamerTemplatePrimitive =
       baselineY?: number;
       /** Fixed interword glue for template-generated spacing such as `\,`. */
       interwordSpacePt?: number;
+      justify?: boolean;
       /** Templates such as sidebar metadata preserve whole-word wrapping. */
       disableAutomaticHyphenation?: boolean;
     }
@@ -351,7 +353,7 @@ export type BeamerTitlePageTemplatePlan = {
 
 export type BeamerFrameTemplateContext = {
   /** Measured strut-backed paragraphs for the stock frame-title color box. */
-  measureFrameHeading?: (value: BeamerDelimitedSourceValue, role: "frame-title" | "frame-subtitle", width: number) => {
+  measureFrameHeading?: (value: BeamerDelimitedSourceValue, role: "frame-title" | "frame-subtitle", width: number, struts?: { start: string; end: string }) => {
     firstHeight: number; extent: number; endingDepth: number; baselineSkip: number; xHeight: number;
   } | null;
   document: BeamerDocumentModel;

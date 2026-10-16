@@ -73,7 +73,7 @@ const DEFAULT_FONTS = [
   "cmss17",
 ];
 const DEFERRED_FONT_NAMES = new Set(DEFAULT_FONTS.slice(-15));
-const DEFERRED_OTF_FONT_NAMES = new Set(["lmromandemi10-regular"]);
+const DEFERRED_OTF_FONT_NAMES = new Set(["lmromandemi10-regular", "firasans-light", "firasans-lightitalic", "firasans-regular", "firasans-italic"]);
 // Keep the generated Latin Modern tables compact while covering the characters
 // people routinely type in prose.  U+0080..U+009F are controls, so deliberately
 // leave that hole between ASCII and Latin-1 Supplement.
@@ -90,6 +90,14 @@ const COMMON_PROSE_CODES = [
   0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2026,
 ];
 const DEFAULT_OTF_GLYPHS = [
+  ...["Light", "LightItalic", "Regular", "Italic"].map(face => ({
+    fontName: `firasans-${face.toLowerCase()}`,
+    ligKernEncoding: "unicode",
+    fileName: `FiraSans-${face}.otf`,
+    codeRanges: LATIN_TEXT_CODE_RANGES,
+    codes: [0xfb01, 0xfb02],
+    ligKerns: [["lig", 0x66, 0x69, 0xfb01], ["lig", 0x66, 0x6c, 0xfb02]],
+  })),
   {
     fontName: "lmroman10-regular",
     fileName: "lmroman10-regular.otf",
@@ -753,7 +761,7 @@ X
   }
 }
 
-function extractOtfCharMetrics(fontPath, codes) {
+function extractOtfCharMetrics(fontPath, codes, namedGlyphs = []) {
   const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-metrics-"));
   try {
     const fontDir = `${dirname(fontPath)}/`;
@@ -770,7 +778,16 @@ X
 \\directlua{
   local f = font.getfont(font.current())
   local size = f.size or 1
-  for _, code in ipairs({${luaCodes}}) do
+  local codes = {${luaCodes}}
+  for _, name in ipairs({${namedGlyphs.map(name => JSON.stringify(name)).join(",")}}) do
+    local code = (f.resources.unicodes or {})[name]
+    if type(code) == "table" then code = code[1] end
+    if code then
+      texio.write_nl("TIKZ_GLYPH_NAME " .. name .. "=" .. tostring(code))
+      codes[rawlen(codes) + 1] = code
+    end
+  end
+  for _, code in ipairs(codes) do
     local c = (f.characters or {})[code]
     if c then
       texio.write_nl(
@@ -811,7 +828,8 @@ X
       };
       metrics.set(metric.code, metric);
     }
-    return metrics;
+    const namedCodes = new Map([...log.matchAll(/TIKZ_GLYPH_NAME ([a-z_]+)=(\d+)/gu)].map(match => [match[1], Number(match[2])]));
+    return { metrics, namedCodes };
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -900,7 +918,11 @@ function generateOtfGlyphFont(font) {
   // Generate the useful intersection instead of making a broad prose range
   // require every code point in every face.
   const codes = otfCodesForFont(font).filter((code) => cmap.has(code));
-  const metrics = extractOtfCharMetrics(fontPath, codes);
+  // Fira's common ff/ffi/ffl/fj ligatures are GSUB glyphs without Unicode
+  // cmap entries. Retain Luaotfload's actual private codes and original paths.
+  const { metrics, namedCodes } = extractOtfCharMetrics(fontPath, codes,
+    font.fontName.startsWith("firasans-") ? ["f_f", "f_f_i", "f_f_l", "f_j", "f_f_j"] : []);
+  for (const [name, code] of namedCodes) { codes.push(code); cmap.set(code, name); }
   const chars = {};
   const glyphs = {};
   for (const code of codes) {
@@ -915,7 +937,7 @@ function generateOtfGlyphFont(font) {
       glyphs[code] = "";
     }
   }
-  const extractedGlyphs = extractOtfSvgGlyphPaths(fontPath, Object.keys(glyphs).map(Number));
+  const extractedGlyphs = extractOtfSvgGlyphPaths(fontPath, Object.keys(glyphs).map(Number), Object.fromEntries([...namedCodes].map(([name, code]) => [code, name])));
   for (const code of Object.keys(glyphs).map(Number)) {
     const path = extractedGlyphs[code];
     if (path) {
@@ -925,13 +947,22 @@ function generateOtfGlyphFont(font) {
       delete chars[code];
     }
   }
+  const extraLigatures = [];
+  const ff = namedCodes.get("f_f");
+  if (ff != null) extraLigatures.push(["lig", 102, 102, ff]);
+  for (const [left, right, name] of [[ff, 105, "f_f_i"], [ff, 108, "f_f_l"], [ff, 106, "f_f_j"], [102, 106, "f_j"]]) {
+    const code = namedCodes.get(name);
+    if (left != null && code != null) extraLigatures.push(["lig", left, right, code]);
+  }
   const ligKerns = [
     ...font.ligKerns ?? [],
+    ...extraLigatures,
     ...extractOtfKernPairs(fontPath, [
       // Keep the generated table tractable: the shaping engine still applies
       // the established ASCII kerning program, while extended prose glyphs
       // use their OpenType advances without materializing an O(n²) pair table.
-      ...codes.filter((code) => code >= 0x20 && code <= 0x7e),
+      ...codes.filter((code) => (code >= 0x20 && code <= 0x7e) || (font.fontName.startsWith("firasans-") && [0x2018, 0x2019, 0x201c, 0x201d, 0x2013, 0x2014].includes(code))),
+      ...extraLigatures.map(rule => rule[3]),
       ...((font.ligKerns ?? [])
         .filter((rule) => rule[0] === "lig")
         .map((rule) => rule[3])),
@@ -940,6 +971,7 @@ function generateOtfGlyphFont(font) {
   return {
     family: font.fontName,
     codingScheme: "Unicode OpenType",
+    ...(font.ligKernEncoding ? { ligKernEncoding: font.ligKernEncoding } : {}),
     checksum: "",
     designSize: 10,
     source: {
@@ -994,7 +1026,7 @@ function escapeTexPath(value) {
   return value.replace(/\\/g, "\\textbackslash{}").replace(/([{}%#&_$])/g, "\\$1");
 }
 
-function extractOtfSvgGlyphPaths(fontPath, codes) {
+function extractOtfSvgGlyphPaths(fontPath, codes, namedGlyphs = {}) {
   if (fontToolsOutlines) {
     // ttx (used above) and these pens come from the same FontTools install.
     // Read the original OpenType outlines when dvisvgm cannot open PDFs.
@@ -1006,6 +1038,7 @@ from fontTools.pens.transformPen import TransformPen
 font = TTFont(sys.argv[1])
 glyphs = font.getGlyphSet()
 cmap = font.getBestCmap()
+cmap.update({int(code): name for code, name in json.loads(sys.argv[3]).items()})
 scale = 10 / font["head"].unitsPerEm
 result = {}
 for code in json.loads(sys.argv[2]):
@@ -1016,7 +1049,7 @@ for code in json.loads(sys.argv[2]):
     result[code] = pen.getCommands()
 print(json.dumps(result))
 `;
-    return JSON.parse(execFileSync("python3", ["-c", script, fontPath, JSON.stringify(codes)], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }));
+    return JSON.parse(execFileSync("python3", ["-c", script, fontPath, JSON.stringify(codes), JSON.stringify(namedGlyphs)], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 }));
   }
   const tempDir = mkdtempSync(join(tmpdir(), "tikz-tex-otf-glyph-"));
   try {

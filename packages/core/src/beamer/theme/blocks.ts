@@ -46,10 +46,11 @@ export function planBeamerBlockTemplate(
     resolveBeamerThemeColor(context.theme, bodyColorRole).bg != null;
   const defaultColored =
     style === "default" && hasTitleBackground && hasBodyBackground;
-  const titleColorSepPt = defaultColored
+  const titleColorSepPt = style === "default" && hasTitleBackground
     ? 0.75 * fontXHeightPt(context, "block-title")
     : 0;
-  const bodyColorSepPt = defaultColored
+  const titleTopSepPt = style === "default" && hasTitleBackground ? .75 * fontXHeightPt(context, "normal-text") : 0;
+  const bodyColorSepPt = style === "default" && hasBodyBackground
     ? 0.75 * fontXHeightPt(context, "block-body")
     : 0;
 
@@ -128,10 +129,10 @@ export function planBeamerBlockTemplate(
           afterSkipPt: 3,
           // A non-empty default colorbox paints `colsep*=.75ex` outside the
           // text width as well as above and below its contents.
-          outerBleedPt: titleColorSepPt,
-          roundedTopInsetPt: titleColorSepPt,
+          outerBleedPt: hasTitleBackground || hasBodyBackground ? .75 * fontXHeightPt(context, "normal-text") : 0,
+          roundedTopInsetPt: titleTopSepPt,
           titleDepthFloorPt: 0,
-          titleExtraHeightPt: 2 * titleColorSepPt,
+          titleExtraHeightPt: titleTopSepPt + titleColorSepPt,
           // When both boxes have backgrounds, the source joins them using
           // `\nointerlineskip\vskip-.5pt`.
           transitionHeightPt: defaultColored ? -0.5 : 0,

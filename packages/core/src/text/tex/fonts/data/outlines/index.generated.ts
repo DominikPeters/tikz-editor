@@ -100,4 +100,8 @@ export const TEX_GLYPH_OUTLINE_LOADERS: Readonly<Record<string, () => Promise<{ 
   "cmss12": () => import("./cmss12.generated.js"),
   "cmss17": () => import("./cmss17.generated.js"),
   "lmromandemi10-regular": () => import("./lmromandemi10-regular.generated.js"),
+  "firasans-light": () => import("./firasans-light.generated.js"),
+  "firasans-lightitalic": () => import("./firasans-lightitalic.generated.js"),
+  "firasans-regular": () => import("./firasans-regular.generated.js"),
+  "firasans-italic": () => import("./firasans-italic.generated.js"),
 };

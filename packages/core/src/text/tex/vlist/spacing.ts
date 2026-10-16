@@ -230,7 +230,7 @@ function planSimpleTexParagraphVerticalSkipsInto(
     const exitsTrivlistScope =
       state.previousEmittedTrivlistScopes.length > scope.trivlistScopes.length;
     const suppressInitialTopsep = !hasPreviousEmittedParagraph && listProfile?.suppressInitialTopsep === true;
-    const listVerticalSkipBefore = followsDisplay || suppressInitialTopsep
+    let listVerticalSkipBefore = followsDisplay || suppressInitialTopsep
       ? texLength(0)
       : texArticleListVerticalSkipBefore(
           state,
@@ -242,6 +242,9 @@ function planSimpleTexParagraphVerticalSkipsInto(
           font,
           resolvedListProfile
         );
+    if (hasPreviousEmittedParagraph && !state.previousEmittedListContext && !scope.listContext && !followsDisplay) {
+      listVerticalSkipBefore = texLength(listVerticalSkipBefore + (listProfile?.paragraphSkipPt ?? 0));
+    }
     const listFlex = followsDisplay || suppressInitialTopsep
       ? { stretch: texLength(0), shrink: texLength(0) }
       : texProfileListVerticalGlueFlex(

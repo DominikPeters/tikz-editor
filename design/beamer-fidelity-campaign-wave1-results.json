@@ -1,0 +1,915 @@
+{
+  "formatVersion": 1,
+  "date": "2026-10-16",
+  "baseline": "design/beamer-fidelity-campaign-baseline.json",
+  "manifest": "test/fixtures/beamer/fidelity-campaign/cases.json",
+  "manifestSha256": "902f2d0727412f327b92385cc07cd211397d326e87f51d4764d4fad741ababb1",
+  "coverage": "Closes the 14 original mismatches among 18 discovery cases; adds two Fira holdouts. Selected cases do not establish overall renderer fidelity.",
+  "command": "npm run compare:beamer-campaign -- --out-dir artifacts/beamer-fidelity-campaign/verified-wave1",
+  "passed": 20,
+  "failed": 0,
+  "thresholds": {
+    "maxAbsoluteGlyphDxPt": 0.02,
+    "maxAbsoluteGlyphDyPt": 0.01,
+    "maxRectangleEdgeDeltaPt": 0.01,
+    "exactFonts": true,
+    "exactGlyphCodes": true,
+    "exactTransforms": true,
+    "flatPaintRgb": 2
+  },
+  "cases": [
+    {
+      "id": "default-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/default-wrapped-heading.tex",
+      "sourceSha256": "9f57733131a8ca9dc7ea2fbe2bbcd065c78c8670647bf6394abaa081a40e3319",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 145,
+        "maxAbsoluteGlyphDxPt": 0.000286,
+        "maxAbsoluteGlyphDyPt": 1.4e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/default-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "madrid-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/madrid-wrapped-heading.tex",
+      "sourceSha256": "7ab8ef892ab5b59b984c741f1ccda40feeb5b4bd7d2839bb3031401bf1909080",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 5,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.007003,
+        "matchedTextLines": 5,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 148,
+        "maxAbsoluteGlyphDxPt": 0.007445,
+        "maxAbsoluteGlyphDyPt": 5e-06,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/madrid-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "berlin-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/berlin-wrapped-heading.tex",
+      "sourceSha256": "f212fa4def498cf02a2a4165f6028818f8dd97641b9e0a83fd56a05d9206c58e",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 6,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 145,
+        "maxAbsoluteGlyphDxPt": 0.000286,
+        "maxAbsoluteGlyphDyPt": 1.1e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/berlin-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "berkeley-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/berkeley-wrapped-heading.tex",
+      "sourceSha256": "e0851c179fe1b22c3de99578793992dcb3719ff0cf4c95790031d3c6431787d2",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 4,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 145,
+        "maxAbsoluteGlyphDxPt": 0.000223,
+        "maxAbsoluteGlyphDyPt": 8.9e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/berkeley-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "warsaw-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/warsaw-wrapped-heading.tex",
+      "sourceSha256": "eb14759bd61c458976c81477164a3c40205c40e47846163810c20b18a8202433",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 3,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 145,
+        "maxAbsoluteGlyphDxPt": 0.000286,
+        "maxAbsoluteGlyphDyPt": 0.000172,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": [
+          {
+            "id": "second-line-background",
+            "x": 420,
+            "y": 27,
+            "native": [
+              4,
+              4,
+              14
+            ],
+            "oracle": [
+              4,
+              4,
+              14
+            ],
+            "maxChannelDelta": 0
+          }
+        ]
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/warsaw-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "rochester-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/rochester-wrapped-heading.tex",
+      "sourceSha256": "70f884b66ff72c19549fe7a63d20d916a670c42af4051989d2eb964743b5f9f9",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 145,
+        "maxAbsoluteGlyphDxPt": 0.000209,
+        "maxAbsoluteGlyphDyPt": 8.9e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/rochester-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "moloch-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/moloch-wrapped-heading.tex",
+      "sourceSha256": "7c168175e3391d00787ed265dba2fdfaf88fcdbe0a0743b3684e5fe0a7c3320b",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 2.7e-05,
+        "matchedTextLines": 5,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 146,
+        "maxAbsoluteGlyphDxPt": 0.000225,
+        "maxAbsoluteGlyphDyPt": 1.6e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/moloch-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "metropolis-lm-wrapped-heading",
+      "file": "test/fixtures/beamer/fidelity-campaign/metropolis-lm-wrapped-heading.tex",
+      "sourceSha256": "ba4a08c28670a26c0f50c7d25c29305b739cbe2bda726a06d7173cc096281571",
+      "status": "passed",
+      "family": "wrapped-headings",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.000112,
+        "matchedTextLines": 5,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 146,
+        "maxAbsoluteGlyphDxPt": 8.2e-05,
+        "maxAbsoluteGlyphDyPt": 0.000155,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/metropolis-lm-wrapped-heading-state-1/report.json"
+    },
+    {
+      "id": "metropolis-requested-font",
+      "file": "test/fixtures/beamer/fidelity-campaign/metropolis-requested-font.tex",
+      "sourceSha256": "55c2d81cd61c88f1ebc91a1960eeb17a5c252d9af93020b0d68e07e8b1dec70d",
+      "status": "passed",
+      "family": "font-selection",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 2.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 84,
+        "maxAbsoluteGlyphDxPt": 4.3e-05,
+        "maxAbsoluteGlyphDyPt": 0.000116,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/metropolis-requested-font-state-1/report.json"
+    },
+    {
+      "id": "default-14pt-list",
+      "file": "test/fixtures/beamer/fidelity-campaign/default-14pt-list.tex",
+      "sourceSha256": "e7e4bbce992860c5cdedf4ceb79bab7034d540362a5b4eede5ab6fbfc13d2487",
+      "status": "passed",
+      "family": "class-size-composition",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 10,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 118,
+        "maxAbsoluteGlyphDxPt": 0.000407,
+        "maxAbsoluteGlyphDyPt": 2e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/default-14pt-list-state-1/report.json"
+    },
+    {
+      "id": "default-10pt-math-block",
+      "file": "test/fixtures/beamer/fidelity-campaign/default-10pt-math-block.tex",
+      "sourceSha256": "12ede1f16e8f8f2802567d15286d1f989b610af538dac48edfcaf974c84812dc",
+      "status": "passed",
+      "family": "class-size-composition",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 11,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 145,
+        "maxAbsoluteGlyphDxPt": 0.000115,
+        "maxAbsoluteGlyphDyPt": 2.8e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": [
+          {
+            "id": "frame:0:block:0:block-title",
+            "x": 418.7913385826771,
+            "y": 98.29165630574096,
+            "native": [
+              255,
+              255,
+              255
+            ],
+            "oracle": [
+              255,
+              255,
+              255
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "frame:0:block:0:block-body",
+            "x": 418.7913385826771,
+            "y": 136.3075556953894,
+            "native": [
+              255,
+              255,
+              255
+            ],
+            "oracle": [
+              255,
+              255,
+              255
+            ],
+            "maxChannelDelta": 0
+          }
+        ]
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/default-10pt-math-block-state-1/report.json"
+    },
+    {
+      "id": "madrid-14pt-list",
+      "file": "test/fixtures/beamer/fidelity-campaign/madrid-14pt-list.tex",
+      "sourceSha256": "8246a1dc4520b878fc22780224dee5408a5f87a9b7bded62a0c96193ee2b7d26",
+      "status": "passed",
+      "family": "class-size-composition",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 8,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.007003,
+        "matchedTextLines": 8,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 118,
+        "maxAbsoluteGlyphDxPt": 0.007445,
+        "maxAbsoluteGlyphDyPt": 3.5e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/madrid-14pt-list-state-1/report.json"
+    },
+    {
+      "id": "madrid-10pt-math-block",
+      "file": "test/fixtures/beamer/fidelity-campaign/madrid-10pt-math-block.tex",
+      "sourceSha256": "74b40534eb107a765c39125b1e0c1bba3b7341973a23f780e0db641f8cdf4260",
+      "status": "passed",
+      "family": "class-size-composition",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 5,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 0.007003,
+        "matchedTextLines": 12,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 148,
+        "maxAbsoluteGlyphDxPt": 0.007356,
+        "maxAbsoluteGlyphDyPt": 3.8e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": [
+          {
+            "id": "frame:0:block:0:block-title",
+            "x": 437.2440944881889,
+            "y": 98.65099378132689,
+            "native": [
+              38,
+              38,
+              134
+            ],
+            "oracle": [
+              38,
+              38,
+              134
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "frame:0:block:0:block-body",
+            "x": 437.2440944881889,
+            "y": 138.32689378132687,
+            "native": [
+              233,
+              233,
+              243
+            ],
+            "oracle": [
+              233,
+              233,
+              243
+            ],
+            "maxChannelDelta": 0
+          }
+        ]
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/madrid-10pt-math-block-state-1/report.json"
+    },
+    {
+      "id": "moloch-14pt-list",
+      "file": "test/fixtures/beamer/fidelity-campaign/moloch-14pt-list.tex",
+      "sourceSha256": "3ba9608685802fdddedf1f41fdb44069e32eb440316dc68539516b8a65a00a32",
+      "status": "passed",
+      "family": "class-size-composition",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 5.6e-05,
+        "matchedTextLines": 8,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 119,
+        "maxAbsoluteGlyphDxPt": 0.000407,
+        "maxAbsoluteGlyphDyPt": 3.6e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/moloch-14pt-list-state-1/report.json"
+    },
+    {
+      "id": "moloch-10pt-math-block",
+      "file": "test/fixtures/beamer/fidelity-campaign/moloch-10pt-math-block.tex",
+      "sourceSha256": "ae4ea51a92171ef22f10920fa8157b478b1c826d4c0b23b5a79860503c2bad56",
+      "status": "passed",
+      "family": "class-size-composition",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 2.7e-05,
+        "matchedTextLines": 12,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 146,
+        "maxAbsoluteGlyphDxPt": 0.000115,
+        "maxAbsoluteGlyphDyPt": 3.5e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": [
+          {
+            "id": "frame:0:block:0:block-title",
+            "x": 418.7913385826771,
+            "y": 111.29500687997893,
+            "native": [
+              250,
+              250,
+              250
+            ],
+            "oracle": [
+              250,
+              250,
+              250
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "frame:0:block:0:block-body",
+            "x": 418.7913385826771,
+            "y": 148.41690626962736,
+            "native": [
+              250,
+              250,
+              250
+            ],
+            "oracle": [
+              250,
+              250,
+              250
+            ],
+            "maxChannelDelta": 0
+          }
+        ]
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/moloch-10pt-math-block-state-1/report.json"
+    },
+    {
+      "id": "grouped-text-color",
+      "file": "test/fixtures/beamer/fidelity-campaign/grouped-text-color.tex",
+      "sourceSha256": "72d032a7d9c7608bda1551bdee307bcb462d305ffc7e7f6e608c98e9ef245991",
+      "status": "passed",
+      "family": "scoped-declarations",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 3,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 63,
+        "maxAbsoluteGlyphDxPt": 6.2e-05,
+        "maxAbsoluteGlyphDyPt": 5e-06,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/grouped-text-color-state-1/report.json"
+    },
+    {
+      "id": "body-local-beamer-font",
+      "file": "test/fixtures/beamer/fidelity-campaign/body-local-beamer-font.tex",
+      "sourceSha256": "ac1ea48576415e68e53769f6a95fee52d5585189f3b4014a675f88a97a5ff87a",
+      "status": "passed",
+      "family": "scoped-declarations",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 5,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 91,
+        "maxAbsoluteGlyphDxPt": 6.2e-05,
+        "maxAbsoluteGlyphDyPt": 2e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": [
+          {
+            "id": "frame:0:block:0:block-title",
+            "x": 418.7913385826771,
+            "y": 116.88541617634644,
+            "native": [
+              255,
+              255,
+              255
+            ],
+            "oracle": [
+              255,
+              255,
+              255
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "frame:0:block:0:block-body",
+            "x": 418.7913385826771,
+            "y": 134.07269088948118,
+            "native": [
+              255,
+              255,
+              255
+            ],
+            "oracle": [
+              255,
+              255,
+              255
+            ],
+            "maxChannelDelta": 0
+          }
+        ]
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/body-local-beamer-font-state-1/report.json"
+    },
+    {
+      "id": "body-local-beamer-color",
+      "file": "test/fixtures/beamer/fidelity-campaign/body-local-beamer-color.tex",
+      "sourceSha256": "f6445e7891d849b2d7a76dd2abc7ccb3e20db52feb095e796da3240cccede270",
+      "status": "passed",
+      "family": "scoped-declarations",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 5,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 90,
+        "maxAbsoluteGlyphDxPt": 6.2e-05,
+        "maxAbsoluteGlyphDyPt": 1.2e-05,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": [
+          {
+            "id": "frame:0:block:0:block-title",
+            "x": 418.7913385826771,
+            "y": 116.88218606160034,
+            "native": [
+              255,
+              0,
+              0
+            ],
+            "oracle": [
+              255,
+              0,
+              0
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "frame:0:block:0:block-body",
+            "x": 418.7913385826771,
+            "y": 137.19491106160032,
+            "native": [
+              255,
+              255,
+              255
+            ],
+            "oracle": [
+              255,
+              255,
+              255
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "local-red-title-background",
+            "x": 400,
+            "y": 116,
+            "native": [
+              255,
+              0,
+              0
+            ],
+            "oracle": [
+              255,
+              0,
+              0
+            ],
+            "maxChannelDelta": 0
+          },
+          {
+            "id": "body-remains-uncolored",
+            "x": 400,
+            "y": 137,
+            "native": [
+              255,
+              255,
+              255
+            ],
+            "oracle": [
+              255,
+              255,
+              255
+            ],
+            "maxChannelDelta": 0
+          }
+        ]
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/body-local-beamer-color-state-1/report.json"
+    },
+    {
+      "id": "metropolis-fira-styles",
+      "file": "test/fixtures/beamer/fidelity-campaign/metropolis-fira-styles.tex",
+      "sourceSha256": "52ef2a85ee96a5e9cee011f1966514382e08f6f1c721a88a992c3e7db0a62363",
+      "status": "passed",
+      "family": "font-selection-holdout",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 2,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 2.4e-05,
+        "matchedTextLines": 4,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 106,
+        "maxAbsoluteGlyphDxPt": 6.5e-05,
+        "maxAbsoluteGlyphDyPt": 0.000116,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/metropolis-fira-styles-state-1/report.json"
+    },
+    {
+      "id": "metropolis-fira-titlepage",
+      "file": "test/fixtures/beamer/fidelity-campaign/metropolis-fira-titlepage.tex",
+      "sourceSha256": "d21b6128408247d408ae891298f3c15c0dc484fc02f1f74671e0dfd086a1b142",
+      "status": "passed",
+      "family": "font-selection-holdout",
+      "pages": 1,
+      "summary": {
+        "matchedRectangles": 1,
+        "unmatchedNativeRectangles": 0,
+        "unmatchedOracleRules": 0,
+        "coveredOverlayRules": 0,
+        "maxRectangleEdgeDeltaPt": 1.4e-05,
+        "matchedTextLines": 5,
+        "unmatchedNativeTextLines": 0,
+        "unmatchedOracleTextLines": 0,
+        "excludedOracleTextLines": 0,
+        "coveredOverlayTextLines": 0,
+        "comparedGlyphs": 102,
+        "maxAbsoluteGlyphDxPt": 0.000103,
+        "maxAbsoluteGlyphDyPt": 0.000203,
+        "glyphCodeMatch": true,
+        "fontMatch": true,
+        "transformMatch": true
+      },
+      "paint": {
+        "tolerance": 2,
+        "samples": []
+      },
+      "report": "artifacts/beamer-fidelity-campaign/verified-wave1/metropolis-fira-titlepage-state-1/report.json"
+    }
+  ],
+  "controls": [
+    {
+      "id": "priorities",
+      "report": "artifacts/beamer-fidelity-campaign/controls-priorities/report.json",
+      "passed": 26,
+      "failed": 0
+    },
+    {
+      "id": "followups",
+      "report": "artifacts/beamer-fidelity-campaign/controls-followups/report.json",
+      "passed": 34,
+      "failed": 0
+    },
+    {
+      "id": "stock-themes",
+      "report": "artifacts/beamer-fidelity-campaign/controls-themes/matrix-report.json",
+      "passed": 18,
+      "failed": 0
+    }
+  ],
+  "visualReview": {
+    "native": "left",
+    "oracle": "right",
+    "inspected": [
+      "warsaw-wrapped-heading",
+      "moloch-wrapped-heading",
+      "metropolis-fira-styles",
+      "body-local-beamer-color"
+    ],
+    "artifacts": "artifacts/beamer-fidelity-campaign/verified-wave1/index.html",
+    "note": "Flat fills are sampled exactly. Gradients/shadows are reviewed in raster pairs; subpixel raster phase is not a flat-fill RGB contract."
+  },
+  "limitations": [
+    "Arbitrary TeX/template execution and font-role parents remain unsupported.",
+    "Fira Mono and general fontspec programs remain outside the native font subset.",
+    "Additional theme/class-size/subtitle/overlay combinations and real-document holdouts remain campaign work."
+  ],
+  "verification": {
+    "fullSuite": {
+      "command": "npx vitest run --maxWorkers=4",
+      "passed": 7443,
+      "skipped": 19,
+      "todo": 1,
+      "passedFiles": 463,
+      "log": "artifacts/beamer-fidelity-campaign/full-tests-final.log"
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "status": "passed",
+      "log": "artifacts/beamer-fidelity-campaign/typecheck.log"
+    },
+    "productionLint": {
+      "command": "npm run lint:prod",
+      "status": "passed",
+      "log": "artifacts/beamer-fidelity-campaign/lint.log"
+    },
+    "offlineOracleCases": 20,
+    "unrelatedDrafts": "Left unchanged"
+  }
+}

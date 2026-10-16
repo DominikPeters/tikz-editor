@@ -35,7 +35,8 @@ function isFont(value: unknown): value is GeneratedTexFont {
       !isFiniteNumber(value.designSize) || !isRecord(value.source) ||
       (value.source.kind !== "tfm" && value.source.kind !== "opentype") ||
       typeof value.source.name !== "string" || !isRecord(value.fontdimen) ||
-      !isRecord(value.chars) || !Array.isArray(value.ligKerns)) return false;
+      !isRecord(value.chars) || !Array.isArray(value.ligKerns) ||
+      (value.ligKernEncoding !== undefined && value.ligKernEncoding !== "unicode")) return false;
   for (const key of ["slant", "space", "stretch", "shrink", "xheight", "quad"]) {
     if (!isFiniteNumber(value.fontdimen[key])) return false;
   }

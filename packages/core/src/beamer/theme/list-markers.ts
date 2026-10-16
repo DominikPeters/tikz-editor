@@ -325,10 +325,10 @@ function markerForTemplate(params: {
     return tinyAmsMarker(params, 0x46, "tiny-star");
   }
   if (family === "metropolis") {
-    return circleMarker(params, false);
+    return circleGlyphMarker({ ...params, unraised: true });
   }
   if (family === "moloch") {
-    return circleMarker(params, params.depth === 2);
+    return circleGlyphMarker({ ...params, unraised: true, code: params.depth === 2 ? 14 : 15 });
   }
   return triangleMarker(params);
 }
@@ -486,8 +486,10 @@ function circleGlyphMarker(params: {
   fontSizePt: number;
   circleFont: ResolvedTexFont;
   structure: string;
+  code?: number;
+  unraised?: boolean;
 }): TexListMarkerProfile {
-  const code = 15;
+  const code = params.code ?? 15;
   const metric = params.circleFont.data.chars[String(code)];
   if (
     metric?.width == null ||
@@ -496,7 +498,7 @@ function circleGlyphMarker(params: {
     throw new Error("The cmsy10 bullet metric is unavailable.");
   }
   const scale = Number(params.circleFont.atPt) / params.fontSizePt;
-  const raiseEm = (params.depth === 1 ? 1.25 : 1.5) / params.fontSizePt;
+  const raiseEm = params.unraised ? 0 : (params.depth === 1 ? 1.25 : 1.5) / params.fontSizePt;
   return {
     widthEm: metric.width * scale,
     heightEm: metric.height * scale + raiseEm,
@@ -507,34 +509,9 @@ function circleGlyphMarker(params: {
       fontId: params.circleFont.id,
       fontSizePt: Number(params.circleFont.atPt),
       color: params.structure,
-      baselineOffsetEm: -raiseEm,
+      baselineOffsetEm: raiseEm === 0 ? 0 : -raiseEm,
     },
     svgBody: '<g data-beamer-list-marker="circle"/>',
-  };
-}
-
-function circleMarker(
-  params: {
-    depth: number;
-    fontSizePt: number;
-    xHeightEm: number;
-    structure: string;
-  },
-  outlined: boolean
-): TexListMarkerProfile {
-  const diameterEm = (params.depth === 1 ? 0.88 : 0.72) * params.xHeightEm;
-  const size = diameterEm * params.fontSizePt * 100;
-  const center = size / 2;
-  const paint = outlined
-    ? `fill="none" stroke="${params.structure}" stroke-width="${fmt(size * 0.16)}"`
-    : `fill="${params.structure}"`;
-  return {
-    widthEm: diameterEm,
-    heightEm: diameterEm,
-    depthEm: 0,
-    svgBody:
-      `<circle data-beamer-list-marker="${outlined ? "circle" : "bullet"}" ` +
-      `cx="${fmt(center)}" cy="${fmt(-center)}" r="${fmt(size * 0.42)}" ${paint}/>`,
   };
 }
 

@@ -73,7 +73,7 @@ function applyLigKernProgram(encoded: readonly Ot1EncodedChar[], font: ResolvedT
       continue;
     }
 
-    const rule = ligKernRule(rules, current.code, char.code);
+    const rule = ligKernRule(rules, current.code, char.code, font.data.ligKernEncoding !== "unicode");
     if (rule?.kind === "lig") {
       current = {
         code: rule.out,
@@ -154,17 +154,19 @@ function buildLigKernMap(rules: readonly GeneratedTexLigKern[]): Map<number, Lig
 }
 
 function ruleKey(left: number, right: number): number {
-  return left * 0x10000 + right;
+  // Cover Unicode and Luaotfload private glyph slots without pair collisions.
+  return left * 0x110000 + right;
 }
 
 function ligKernRule(
   rules: ReadonlyMap<number, LigKernRule>,
   left: number,
-  right: number
+  right: number,
+  ot1Aliases: boolean
 ): LigKernRule | undefined {
   return rules.get(ruleKey(
-    ot1LigKernAlias(left),
-    ot1LigKernAlias(right)
+    ot1Aliases ? ot1LigKernAlias(left) : left,
+    ot1Aliases ? ot1LigKernAlias(right) : right
   ));
 }
 

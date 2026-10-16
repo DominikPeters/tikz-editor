@@ -1,3 +1,4 @@
+import { createBeamerScopedTheme } from "./theme/scoped-declarations.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { beamerBibliographyStyle, beamerBibliographyGraphicsResolver } from "./bibliography.js";
@@ -63,7 +64,7 @@ import { parseSimpleTexTabularRegisters } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
-import { beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
+import { beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
 import { emitTcolorboxBackground, measureTcolorboxGeometry, parseTcolorboxOptions, projectTcolorboxFontDeclaration, resolveTcolorboxPlan, tcolorboxSurroundingSpacing } from "./tcolorbox.js";
 import { parseBeamerFrameBody } from "./content.js";
 import { beamerRecoveryDiagnostics, collectBeamerEditScopes, collectBeamerRecovery } from "./edit-scopes.js";
@@ -259,11 +260,16 @@ function beamerListLayoutProfile(
   cramped = false
 ): TexListLayoutProfile {
   const markerCache = new Map<number, ReturnType<typeof resolveBeamerItemizeMarkers>>();
+  const classSize = String(theme.options["class-font-size"] ?? "11");
+  const small = beamerNamedFontSize(classSize, "small");
+  const footnotesize = beamerNamedFontSize(classSize, "footnotesize");
   const profile: TexListLayoutProfile = {
     ...BEAMER_LIST_LAYOUT_PROFILE,
     trivlistTopsepPt: beamerTrivlistSpacing(theme).naturalPt,
-    bodyFontSizePtByDepth: [undefined, 10, 9],
-    bodyBaselineSkipPtByDepth: [undefined, 12, 11],
+    paragraphSkipPt: Number(theme.options["paragraph-skip-pt"] ?? 0),
+    selectBodyFontBeforeList: true,
+    bodyFontSizePtByDepth: [undefined, small.sizePt, footnotesize.sizePt],
+    bodyBaselineSkipPtByDepth: [undefined, small.lineHeightPt * Number(theme.options["line-spread"] ?? 1), footnotesize.lineHeightPt * Number(theme.options["line-spread"] ?? 1)],
     leftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
     itemizeMarkersByDepth: resolveBeamerItemizeMarkers(theme),
     resolveItemizeMarker: (depth, sizePt, listDepth = depth) => {
@@ -606,11 +612,11 @@ async function renderBeamerFrameStep(params: {
     step,
     page,
     theme,
-    measureFrameHeading: (value, role, width) => {
+    measureFrameHeading: (value, role, width, struts) => {
       const projection = projectBeamerOverlayText(createIdentityMappedText(source.slice(value.contentSpan.from, value.contentSpan.to), value.contentSpan.from),
         value.contentSpan, { ...bodyIr.overlays, pauses: [] }, step);
-      const mapped = concatMappedText([createGeneratedMappedText("\\strut {", "Beamer heading strut", value.span),
-        projection.mapped, createGeneratedMappedText("}\\strut", "Beamer heading strut", value.span)]);
+      const mapped = concatMappedText([createGeneratedMappedText((struts?.start ?? "\\strut") + " {", "Beamer heading strut", value.span),
+        projection.mapped, createGeneratedMappedText("}" + (struts?.end ?? "\\strut"), "Beamer heading strut", value.span)]);
       const font = theme.fonts[role];
       const measured = layoutParagraph({ mapped, sourceSpan: value.contentSpan, paragraphId: `${frame.id}:${role}:measure`, role,
         bounds: { x: 0, y: 0, width, height: 0 }, font, alignment: "left", macroBindings,
@@ -628,6 +634,7 @@ async function renderBeamerFrameStep(params: {
   diagnostics.push(...bodyIr.diagnostics, ...context.references.diagnostics);
   const references: BeamerReferenceContext = {
     ...context.references, step, theme, renderDiagnostics: diagnostics,
+    scopedTheme: createBeamerScopedTheme(document, theme, frame.bodySpan),
     tikzLayer: beamerTikzLayerState(source) === "ours",
     overlayPictures: beamerOverlayPicturesIn({ source, syntax: context.syntax }, frame.bodySpan),
     crampedLists: shrink != null || (frame.options?.entries.some(entry => entry.key === "squeeze") ?? false),
@@ -729,7 +736,8 @@ async function renderBeamerFrameStep(params: {
       availableContentBounds,
       rigidPositioned.extent,
       preparedFrameFlow,
-      shrink ? "top" : frame.options?.alignment ?? "center"
+      shrink ? "top" : frame.options?.alignment ?? "center",
+      theme.options["symmetric-frame-center"] === true
     );
     const positioned = continuationPages?.[continuationIndex - 1] ?? positionPreparedFrameFlow(
       preparedFrameFlow,
@@ -1177,6 +1185,7 @@ function renderChrome(params: {
       font,
       colorResolver: beamerAlertColorResolver(theme),
       alignment: primitive.alignment,
+      ...(primitive.justify !== undefined ? { justify: primitive.justify } : {}),
       ...(primitive.interwordSpacePt !== undefined ? { interwordSpacePt: primitive.interwordSpacePt } : {}),
       ...(primitive.disableAutomaticHyphenation !== undefined ? { disableAutomaticHyphenation: primitive.disableAutomaticHyphenation } : {}),
       macroBindings: params.macroBindings,
@@ -1582,7 +1591,7 @@ function prepareTitlePage(params: {
     const value = params.metadata[field]?.value;
     if (!value) return null;
     const baseFont = field === "titlegraphic" ? normal : params.theme.fonts[field];
-    const font = plan.style === "metropolis"
+    const font = plan.style === "metropolis" && field !== "titlegraphic"
       ? { ...baseFont, lineHeightPt: baseFont.lineHeightPt * 1.15 } : baseFont;
     // colorbox's sep is part of the left/right skips, not extra box width.
     // Its center skips have infinite stretch while retaining normal word glue.
@@ -1637,7 +1646,7 @@ function prepareTitlePage(params: {
     if (!moloch && !subtitle && params.metadata.subtitle && params.theme.appliedComponents.some(component =>
       component.kind === "font-theme" && component.name.toLowerCase() === "metropolis" &&
       (component.source?.span.from ?? Number.POSITIVE_INFINITY) < (params.metadata.subtitle?.span.from ?? 0))) cursor += params.theme.fonts.subtitle.sizePt * .5;
-    cursor += interline(normal.lineHeightPt * (moloch ? 1 : 1.15), previousDepth ?? 0, .4);
+    cursor += interline(normal.lineHeightPt, previousDepth ?? 0, .4);
     boxes.push({ bounds: { x: 0, y: cursor, width: params.width, height: .4 }, colorRole: "title separator", rounded: false });
     cursor += .4 + (moloch ? normal.sizePt * .8 : 0);
     previousDepth = 0;
@@ -2047,7 +2056,13 @@ function suppressCenteredTikzTopGlueAfterNormalDisplay(
   };
 }
 
-function prepareBlock(params: {
+function prepareBlock(params: Parameters<typeof prepareBlockWithTheme>[0]): PreparedBlock | null {
+  const theme = params.references.scopedTheme?.at(params.node.span.from) ?? params.theme;
+  const block = prepareBlockWithTheme({ ...params, theme, references: { ...params.references, theme } });
+  return block ? { ...block, theme } : null;
+}
+
+function prepareBlockWithTheme(params: {
   source: string;
   node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
   width: number;
@@ -2291,7 +2306,7 @@ function prepareBlock(params: {
           : 1) + geometry.bodyInitialVSkipEx * fontXHeightPt(params.theme.fonts[plan.bodyFontRole])
       : geometry.bodyTopPaddingPt;
   const bodyBoxHeight = bodyBaselineInset + bodyExtent - (firstBody ? paragraphEndingMaterialDepth(firstBody) : 0);
-  const titleBodyInterline = params.theme.fonts[plan.bodyFontRole].lineHeightPt - titleDepth - bodyBoxHeight;
+  const titleBodyInterline = params.theme.fonts[plan.bodyFontRole].lineHeightPt - (geometry.titleExtraHeightPt > 0 ? 0 : titleDepth) - bodyBoxHeight;
   const titleBodyGap = plan.style === "default" && geometry.flowBoxHeight === "title-ascent"
     ? titleBodyInterline >= 0 ? titleBodyInterline : 1
     : geometry.titleBodyGapPt;
@@ -2299,6 +2314,7 @@ function prepareBlock(params: {
     geometry.beforeSkipPt +
     geometry.boxTopSkipPt +
     titleBoxExtent +
+    (geometry.flowBoxHeight === "title-ascent" ? geometry.titleExtraHeightPt : 0) +
     titleBodyGap +
     bodyBaselineInset;
   const bodyBackgroundHeight =
@@ -2331,7 +2347,7 @@ function prepareBlock(params: {
     naturalHeight,
     flowBoxHeight:
       geometry.flowBoxHeight === "title-ascent"
-        ? titleAscent
+        ? titleAscent + geometry.roundedTopInsetPt
         : naturalHeight,
     endingDepth:
       geometry.flowEndingDepth === "body-last-line" && body
@@ -2388,6 +2404,7 @@ function emitPreparedBlock(params: {
   visibility?: "visible" | "hidden";
 }): void {
   const block = params.prepared;
+  params = { ...params, theme: block.theme ?? params.theme };
   if (block.packageBox) {
     emitPreparedTcolorbox(params);
     return;
@@ -3720,6 +3737,7 @@ function layoutParagraph(params: {
   alignment: "left" | "center" | "right";
   spaceGlueProfile?: "font" | "font-fixed";
   centerWithInfiniteGlue?: boolean;
+  justify?: boolean;
   interwordSpacePt?: number;
   initialBaselineSkipPt?: number;
   initialPreviousDepth?: number;
@@ -3736,6 +3754,7 @@ function layoutParagraph(params: {
   textWidth?: number;
   columnWidth?: number;
 }): LaidParagraph | null {
+  if (params.references.scopedTheme) params = { ...params, mapped: params.references.scopedTheme.project(params.mapped) };
   params = { ...params, mapped: projectBeamerOverlayPictureBoxes(projectBeamerSpeakerNotes(params.mapped), params.references.tikzLayer === true, params.references.overlayPictures) };
   // A size declaration preceding the list is an ambient font selection,
   // not an empty paragraph (and must apply to its generated labels too).
@@ -3763,7 +3782,7 @@ function layoutParagraph(params: {
     fontSize,
     metricProvider
   );
-  const alignment =
+  const alignment = params.justify ? "justified" :
     params.alignment === "center"
       ? "center"
       : params.alignment === "right"
@@ -3823,7 +3842,12 @@ function layoutParagraph(params: {
       mathBoxProvider: createTexDerivedInlineMathBoxProvider({ baseAtPt: fontSize, fontProfile: createBeamerTexMathFontProfile(params.mathFont ?? params.font) }),
     }).report?.lines[0]?.naturalWidth ?? 0;
   });
-  const blockDisplayProfile = { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE };
+  const normalDisplayProfile = params.references.theme?.options["class-font-size"] === "10"
+    ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
+        above: { normal: { sizePt: 10, stretchPt: 2, shrinkPt: 5 }, short: { sizePt: 0, stretchPt: 3, shrinkPt: 0 } },
+        below: { normal: { sizePt: 10, stretchPt: 2, shrinkPt: 5 }, short: { sizePt: 6, stretchPt: 3, shrinkPt: 3 } } }
+    : BEAMER_NORMAL_DISPLAY_MATH_PROFILE;
+  const blockDisplayProfile = { ...normalDisplayProfile };
   delete blockDisplayProfile.leadingDisplay;
   const layoutOptions = {
     namedFontSizes: Object.fromEntries(namedSizes.map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
@@ -3839,7 +3863,7 @@ function layoutParagraph(params: {
     // it again. LaTeX implements that as `\rightskip 0pt plus 1fil`, so loose
     // lines consume margin glue while near-full lines retain the font's finite
     // interword stretch and shrink for line-breaking.
-    ...(params.alignment === "left"
+    ...(params.alignment === "left" && !params.justify
       ? { rightskipStretch: Number.POSITIVE_INFINITY }
       : {}),
     spaceGlueProfile: params.spaceGlueProfile ?? (
@@ -3878,10 +3902,10 @@ function layoutParagraph(params: {
     displayMathProfile: params.role === "block-body"
       ? blockDisplayProfile
       : params.leadingDisplayBaselineSkipPt != null
-        ? { ...BEAMER_NORMAL_DISPLAY_MATH_PROFILE, leadingDisplay: {
+        ? { ...normalDisplayProfile, leadingDisplay: {
             emptyLineBaselineSkipPt: params.leadingDisplayBaselineSkipPt,
           } }
-        : BEAMER_NORMAL_DISPLAY_MATH_PROFILE,
+        : normalDisplayProfile,
     ...(params.disableAutomaticHyphenation ? { hyphenator: { hyphenate: () => [] } } : {}),
     graphicsResolver,
     ...(params.colorResolver !== undefined ? { colorResolver: params.colorResolver } : {}),
@@ -4516,7 +4540,8 @@ function resolveFrameVerticalPacking(
   available: BeamerRect,
   rigidContentHeight: number,
   flow: readonly PreparedFrameFlowItem[],
-  alignment: "top" | "center" | "bottom"
+  alignment: "top" | "center" | "bottom",
+  symmetricCenter = false
 ): { topOffset: number; fillUnit: number } {
   const freeHeight = Math.max(
     0,
@@ -4552,7 +4577,7 @@ function resolveFrameVerticalPacking(
   // Beamer's default `c` frame uses 1fill above and 1.5fill below, so the
   // title page's own leading/trailing `\vfill` glues compete at the same
   // infinite order with the frame glues.
-  const totalWeight = 2.5 + internalFillWeight;
+  const totalWeight = (symmetricCenter ? 2 : 2.5) + internalFillWeight;
   const fillUnit = totalWeight > 0 ? freeHeight / totalWeight : 0;
   return { topOffset: fillUnit, fillUnit };
 }
@@ -4656,7 +4681,7 @@ function hasProjectedContent(
     overlays,
     step
   );
-  return projectBeamerReferences(projected.mapped, references).mapped.text
+  return projectBeamerReferences(references.scopedTheme?.project(projected.mapped) ?? projected.mapped, references).mapped.text
     .replace(/%[^\n]*/gu, "").replace(/[{}\s]/gu, "").length > 0;
 }
 

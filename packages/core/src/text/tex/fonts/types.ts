@@ -35,6 +35,8 @@ export interface GeneratedTexFont {
   readonly fontdimen: GeneratedTexFontDimensions;
   readonly chars: Readonly<Record<string, GeneratedTexCharMetric>>;
   readonly ligKerns: readonly GeneratedTexLigKern[];
+  /** Legacy tables use OT1 quote aliases; Unicode pair programs address cmap codes directly. */
+  readonly ligKernEncoding?: "unicode";
 }
 
 /** The six common TFM parameters are present in every generated font. */

@@ -546,7 +546,7 @@ export function simpleTexSegmentToLayoutItems(
       const font = textFontProfile.resolveTextFont(token.fontState, atPt, metricProvider);
       const italicCorrectionAfter =
         token.italicCorrectionAfter === true &&
-        !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]);
+        (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(tokens[tokenIndex + 1]));
       const spaceFactorBefore = spaceFactor;
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
       items.push({
@@ -1840,7 +1840,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       const font = params.textFontProfile.resolveTextFont(token.fontState, params.atPt, params.metricProvider);
       const italicCorrectionAfter =
         token.italicCorrectionAfter === true &&
-        !texItalicCorrectionSuppressedByNextToken(params.tokens[tokenIndex + 1]);
+        (token.italicCorrectionUnconditional === true || !texItalicCorrectionSuppressedByNextToken(params.tokens[tokenIndex + 1]));
       const spaceFactorBefore = spaceFactor;
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
       items.push({

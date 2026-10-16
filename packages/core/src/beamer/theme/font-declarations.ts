@@ -15,24 +15,25 @@ export type BeamerFontDeclaration = {
 const roles: Readonly<Partial<Record<string, BeamerThemeFontRole>>> = {
   title: "title", subtitle: "subtitle", author: "author", institute: "institute", date: "date",
   "normal text": "normal-text", frametitle: "frame-title", framesubtitle: "frame-subtitle",
+  "block title": "block-title", "block body": "block-body",
 };
 
 /** Literal preamble role settings, interleaved with theme component uses. */
-export function scanBeamerFontDeclarations(document: BeamerDocumentModel): BeamerFontDeclaration[] {
+export function scanBeamerFontDeclarations(document: BeamerDocumentModel, span: Span = document.preamble.span, scoped = false): BeamerFontDeclaration[] {
   const context = createBeamerSyntaxContext(document.source);
   const declarations: BeamerFontDeclaration[] = [];
-  for (const command of beamerControlSequencesIn(context, document.preamble.span)) {
+  for (const command of beamerControlSequencesIn(context, span)) {
     if (command.name !== "setbeamerfont" || document.preamble.macroDefinitions.some(definition =>
       definition.span.from <= command.from && definition.span.to >= command.to)) continue;
     let node = context.syntax.tree.resolveInner(command.from + 1, 1);
     let grouped = false;
     while (node.parent) { node = node.parent; if (node.name === "Group") grouped = true; }
-    if (grouped) continue;
-    const role = beamerRequiredArgumentAfter(context, command.to, document.preamble.span.to);
+    if (grouped && !scoped) continue;
+    const role = beamerRequiredArgumentAfter(context, command.to, span.to);
     if (!role) continue;
     const target = roles[role.value.trim()];
     if (!target) continue;
-    const body = beamerRequiredArgumentAfter(context, role.span.to, document.preamble.span.to);
+    const body = beamerRequiredArgumentAfter(context, role.span.to, span.to);
     if (!body) continue;
     const values: Record<string, string> = {};
     for (const entry of parseOptionListRaw(`[${body.value}]`).entries) {

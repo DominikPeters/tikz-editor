@@ -1,6 +1,7 @@
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import type { BeamerOverlayPicture } from "./overlay-pictures.js";
+import type { BeamerScopedTheme } from "./theme/scoped-declarations.js";
 import type { ResolvedBeamerTheme } from "./theme/types.js";
 import type { Span } from "../ast/types.js";
 import type { Diagnostic } from "../diagnostics/types.js";
@@ -54,6 +55,7 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   footnotes?: BeamerFootnoteIndex;
   continuationBreaks?: BeamerContinuationBreaks;
   theme?: ResolvedBeamerTheme;
+  scopedTheme?: BeamerScopedTheme;
   /** The document's `tikzlayer` is the editor's drawing layer (beamerTikzLayerState). */
   tikzLayer?: boolean;
   /** The frame's overlay pictures, by document span: paragraphs set each as an empty box. */

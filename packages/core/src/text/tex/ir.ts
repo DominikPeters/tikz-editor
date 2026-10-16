@@ -601,6 +601,8 @@ export interface SimpleTexToken {
   readonly nonBreaking?: boolean;
   readonly controlSpace?: boolean;
   readonly italicCorrectionAfter?: boolean;
+  /** An inner font command committed its correction before an enclosing group closed. */
+  readonly italicCorrectionUnconditional?: boolean;
   readonly literal?: SimpleTexTokenLiteralInfo;
 }
 
@@ -5908,6 +5910,7 @@ function markLastTextTokenItalicCorrection(tokens: SimpleTexToken[]): void {
     tokens[index] = {
       ...token,
       italicCorrectionAfter: true,
+      ...(token.italicCorrectionAfter ? { italicCorrectionUnconditional: true } : {}),
     };
     break;
   }

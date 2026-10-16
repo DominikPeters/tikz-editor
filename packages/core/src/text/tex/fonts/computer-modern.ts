@@ -67,6 +67,10 @@ export const DEFAULT_COMPUTER_MODERN_TEXT_FONTS = [
   "cmss12",
   "cmss17",
   "lmromandemi10-regular",
+  "firasans-light",
+  "firasans-lightitalic",
+  "firasans-regular",
+  "firasans-italic",
 ] as const;
 
 export type DefaultComputerModernTextFont = typeof DEFAULT_COMPUTER_MODERN_TEXT_FONTS[number];

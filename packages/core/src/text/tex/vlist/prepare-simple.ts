@@ -52,15 +52,33 @@ export function prepareSimpleTexVList(
 }
 
 function applyListBodyFonts(vlist: TexVListDocument, profile?: TexListLayoutProfile): TexVListDocument {
-  return { ...vlist, items: vlist.items.map(item => {
-    if (item.kind === "vbox") return { ...item, items: applyListBodyFonts({ kind: "vlist", items: item.items }, profile).items };
-    if (item.kind !== "paragraph" || !item.paragraph.listContext || item.paragraph.listContext.kind === "bibliography") return item;
-    const depth = item.paragraph.listContext.depth - 1;
-    const size = profile?.bodyFontSizePtByDepth?.[depth];
-    const skip = profile?.bodyBaselineSkipPtByDepth?.[depth];
-    return { ...item, paragraph: { ...item.paragraph,
-      ...(size != null ? { fontSizePt: texLength(size) } : {}),
-      ...(skip != null ? { baselineSkip: texLength(skip) } : {}),
-    } };
-  }) };
+  const items = [...vlist.items];
+  let nextParagraph: Extract<(typeof items)[number], { kind: "paragraph" }> | undefined;
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index];
+    if (!item) continue;
+    if (item.kind === "vbox") {
+      items[index] = { ...item, items: applyListBodyFonts({ kind: "vlist", items: item.items }, profile).items };
+      nextParagraph = undefined;
+      continue;
+    }
+    if (item.kind !== "paragraph") continue;
+    const context = item.paragraph.listContext;
+    if (context && context.kind !== "bibliography") {
+      const depth = context.depth - 1;
+      const size = profile?.bodyFontSizePtByDepth?.[depth];
+      const nextDepth = nextParagraph?.paragraph.listContext?.depth;
+      // Beamer selects the incoming list font before \list ends the current
+      // paragraph. An explicit \par has already committed its baseline grid.
+      const endingDepth = profile?.selectBodyFontBeforeList && nextDepth != null && nextDepth > depth + 1 &&
+        !nextParagraph?.paragraph.startsAfterExplicitPar ? nextDepth - 1 : depth;
+      const skip = profile?.bodyBaselineSkipPtByDepth?.[endingDepth];
+      items[index] = { ...item, paragraph: { ...item.paragraph,
+        ...(size != null ? { fontSizePt: texLength(size) } : {}),
+        ...(skip != null ? { baselineSkip: texLength(skip) } : {}),
+      } };
+    }
+    nextParagraph = item;
+  }
+  return { ...vlist, items };
 }

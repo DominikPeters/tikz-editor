@@ -96,9 +96,9 @@ export const FEATURE_IDS = [
   "text_transform_boxes", // Source-backed graphicx transforms of text/math and paragraph boxes.
   "beamer_document_scan",
   "beamer_frame_shrink", // Stock shrink/squeeze arithmetic and body paint transforms.
-  "beamer_frame_flow", // Source-backed headings, class sizes, columns and vertical block/list composition.
+  "beamer_frame_flow", // Measured stock/modern headings, class sizes and vertical block/list composition.
   "beamer_titlepages", // Measured stock and modern titlepage templates and metadata.
-  "beamer_theme_colors", // Ordered preamble color roles and aliases.
+  "beamer_theme_colors", // Ordered preamble and scoped frame-local block color roles and aliases.
   "beamer_tcolorbox", // Ordinary unbroken standard-skin package boxes.
   "beamer_slide_manager", // Authored frame insertion, dependency-aware reorder with concrete effect checks, duplication, clipboard paste and deletion.
   "beamer_direct_resize", // Source-backed columns, image corners, and explicit vertical spacing.

@@ -114,6 +114,15 @@ export function resolveBeamerTheme(
       span: use.source.span,
     });
   }
+  const sansOverride = document.preamble.macroDefinitions.filter(definition => definition.nameRaw === "\\sfdefault" &&
+    definition.span.from > Math.max(-1, ...uses.filter(use => use.kind === "theme" || use.kind === "font-theme").map(use => use.source.span.from))).at(-1);
+  if (sansOverride && (sansOverride.kind === "MacroCommandDefinition" ? sansOverride.bodyRaw : sansOverride.kind === "MacroDefinition" ? sansOverride.valueRaw : "").replace(/[{}\s]/gu, "") === "lmss") {
+    for (const font of Object.values(state.fonts)) delete font.typeface;
+  }
+  const lineSpread = Number(state.options["line-spread"] ?? 1);
+  for (const role of ["normal-text", "block-body", "frame-title"] as const) {
+    state.fonts[role] = { ...state.fonts[role], lineHeightPt: state.fonts[role].lineHeightPt * lineSpread };
+  }
   diagnoseBeamerColorDeclarations(state, colorEvents, role => resolveMutableThemeColor(state, role));
 
   return {
@@ -505,33 +514,27 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
       },
       headline: {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       "section-in-head-foot": {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       "subsection-in-head-foot": {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       "title-in-sidebar": {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       "author-in-sidebar": {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       "section-in-sidebar": {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       "subsection-in-sidebar": {
         ...normalFont,
@@ -541,8 +544,7 @@ function createDefaultTheme(classSize = "11"): MutableTheme {
       "page-number": { ...normalFont, ...beamerNamedFontSize(classSize, "tiny") },
       footline: {
         ...normalFont,
-        sizePt: 6,
-        lineHeightPt: 7,
+        ...beamerNamedFontSize(classSize, "tiny"),
       },
       // beamerfontthemedefault.sty: block title inherits block body and
       // selects \large. In the 11pt class profile that is 12pt/14pt.
@@ -1616,7 +1618,7 @@ function applyModernOuter(
     );
     state.templates.frameTitle = templateRef(
       `beamer/frame-title/${family}`,
-      { progressbar: progressbar === "frametitle" },
+      { progressbar: progressbar === "frametitle", paddingPt: Math.round(2.2 * themeFontXHeightPt(state.fonts["normal-text"]) * 65536) / 65536 },
     );
   };
 }
@@ -1626,6 +1628,11 @@ function applyModernInner(
 ): ComponentApplier {
   return (state, use) => {
     markApplied(state, "inner-theme", family, use);
+    state.options["symmetric-frame-center"] = true;
+    if (family === "metropolis") {
+      state.options["line-spread"] = "1.15";
+      state.options["paragraph-skip-pt"] = String(.5 * state.fonts["normal-text"].sizePt);
+    }
     state.templates.titlePage = DEFAULT_REF(`beamer/title-page/${family}`);
     state.templates.sectionPage = templateRef(
       `beamer/section-page/${family}`,
@@ -1648,21 +1655,13 @@ function applyModernFonts(
 ): ComponentApplier {
   return (state, use) => {
     markApplied(state, "font-theme", family, use);
-    // Native Fira metrics are deferred; retain the requested face explicitly.
-    state.fonts["normal-text"] = {
-      ...state.fonts["normal-text"],
-      ...(family === "metropolis"
-        ? { substitutedFor: "Fira Sans Light" }
-        : {}),
-    };
+    if (family === "metropolis") {
+      for (const font of Object.values(state.fonts)) font.typeface = "fira";
+    }
     state.fonts["frame-title"] = {
       ...state.fonts["frame-title"],
-      sizePt: 12,
-      lineHeightPt: 14.4,
+      ...beamerNamedFontSize(String(state.options["class-font-size"] ?? "11"), "large"),
       series: "bold",
-      ...(family === "metropolis"
-        ? { substitutedFor: "Fira Sans" }
-        : {}),
     };
     const classSize = String(state.options["class-font-size"] ?? "11");
     state.fonts.title = { ...state.fonts.title, ...beamerNamedFontSize(classSize, "Large"), series: "bold" };
@@ -1675,13 +1674,6 @@ function applyModernFonts(
     };
     if (family === "metropolis") {
       state.fonts["page-number"] = { ...state.fonts["page-number"], ...beamerNamedFontSize(classSize, "scriptsize") };
-      state.diagnostics.push({
-        severity: "warning",
-        code: "beamer-font-substitution",
-        message:
-          "Metropolis requests Fira Sans; the native Beamer renderer currently substitutes Latin Modern Sans.",
-        span: use.source.span,
-      });
     }
   };
 }

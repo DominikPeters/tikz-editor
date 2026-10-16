@@ -20,7 +20,7 @@ describe("Beamer titlepage fidelity", () => {
       const pages = await document.renderFramePages();
       expect(pages.pageCount).toBe(oracle.pages.length);
       for (const [index, page] of pages.pages.entries()) {
-        expect(page.diagnostics.map(diagnostic => diagnostic.code)).toEqual(name.startsWith("metropolis") ? ["beamer-font-substitution"] : []);
+        expect(page.diagnostics.map(diagnostic => diagnostic.code)).toEqual([]);
         expect(page.svg.svg).not.toContain("data-tex-literal=");
         const { summary } = compareBeamerPageTraces(buildNativeBeamerPageTrace(page, computerModernTexMetricProvider), oracle.pages[index]);
         expect(summary).toMatchObject({ unmatchedNativeRectangles: 0, unmatchedOracleRules: 0,

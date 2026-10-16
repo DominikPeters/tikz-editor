@@ -5,6 +5,11 @@ directory. `deck-index.json` identifies candidate entry points, repository commi
 and licenses. The runner resolves paths relative to that index, so the corpus can
 be moved to another machine. It does not download additional sources.
 
+The broader interaction campaign is documented in
+[`design/beamer-fidelity-campaign.md`](../design/beamer-fidelity-campaign.md).
+Its new discovery cases run with `npm run compare:beamer-campaign`; their failures
+remain strict targets, separate from the established corpus regression controls.
+
 Run a native renderer census across every indexed deck:
 
 ```sh

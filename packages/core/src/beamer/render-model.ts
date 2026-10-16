@@ -12,6 +12,7 @@ import type {
 import type {
   BeamerBlockTemplatePlan,
   BeamerTitlePageTemplatePlan,
+  ResolvedBeamerTheme,
 } from "./theme/types.js";
 import type {
   BeamerEmbeddedTikzLayout,
@@ -42,6 +43,7 @@ export type LaidParagraph = {
 };
 
 export type PreparedBlock = {
+  theme?: ResolvedBeamerTheme;
   node: BeamerBlockBodyNode | BeamerTheoremBodyNode;
   plan: BeamerBlockTemplatePlan;
   width: number;

@@ -64,6 +64,10 @@ export interface TexListMarkerProfile {
  * selected `\@listi`, `\@listii`, and `\@listiii`.
  */
 export interface TexListLayoutProfile {
+  /** Ambient paragraph glue, outside lists (which install their own parsep). */
+  readonly paragraphSkipPt?: number;
+  /** Beamer selects the incoming list body font before ending the preceding paragraph. */
+  readonly selectBodyFontBeforeList?: boolean;
   /** Class-owned center/flushleft/flushright (trivlist) boundary skips. */
   readonly trivlistTopsepPt?: number;
   readonly trivlistPartopsepPt?: number;

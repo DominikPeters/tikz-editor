@@ -18,12 +18,12 @@ export type BeamerColorDeclarationEvent =
   | { kind: "color-diagnostic"; span: Span; diagnostic: Diagnostic };
 
 /** Authored preamble declarations only. Commands stored inside macro definitions do not execute here. */
-export function scanBeamerColorDeclarations(document: BeamerDocumentModel): BeamerColorDeclarationEvent[] {
+export function scanBeamerColorDeclarations(document: BeamerDocumentModel, span: Span = document.preamble.span, scoped = false): BeamerColorDeclarationEvent[] {
   const context = createBeamerSyntaxContext(document.source);
-  const limit = document.preamble.span.to;
+  const limit = span.to;
   const events: BeamerColorDeclarationEvent[] = [];
   const names = new Set(["setbeamercolor", "definecolor", "providecolor", "colorlet", "usebeamercolor"]);
-  for (const command of beamerControlSequencesIn(context, document.preamble.span)) {
+  for (const command of beamerControlSequencesIn(context, span)) {
     if (!names.has(command.name) || document.preamble.macroDefinitions.some(definition => definition.span.from <= command.from && definition.span.to >= command.to)) continue;
     const commandSpan = { from: command.from, to: command.to };
     let syntaxNode = context.syntax.tree.resolveInner(command.from + 1, 1);
@@ -32,7 +32,7 @@ export function scanBeamerColorDeclarations(document: BeamerDocumentModel): Beam
       syntaxNode = syntaxNode.parent;
       if (syntaxNode.name === "Group") grouped = true;
     }
-    if (grouped) {
+    if (grouped && !scoped) {
       events.push(colorDiagnostic(commandSpan, "beamer-color-scoped-declaration", "Grouped preamble color declarations are not supported in this preview."));
       continue;
     }
