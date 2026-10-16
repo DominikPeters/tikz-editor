@@ -1,0 +1,95 @@
+.dialog {
+  min-width: 480px;
+  min-height: 360px;
+}
+
+.statusBar {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-pane) 92%, var(--bg-app));
+  border-bottom: 1px solid var(--border-lighter);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.output {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-app);
+  padding: 18px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 22%);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.log {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-family: var(--font-mono);
+  background: var(--bg-pane);
+  color: var(--text);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.footerSide {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+}
+
+.footerSide:last-child {
+  justify-content: flex-end;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.step {
+  width: 24px;
+  height: 22px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: var(--bg-pane);
+  color: var(--text);
+  font-size: calc(var(--app-ui-scale, 1) * 14px);
+  line-height: 1;
+}
+
+.step:disabled {
+  opacity: 0.4;
+}
+
+.pageLabel {
+  min-width: 150px;
+  text-align: center;
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}

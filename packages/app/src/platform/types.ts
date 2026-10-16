@@ -348,4 +348,24 @@ export type PlatformLatex = {
   checkAvailable: () => Promise<{ available: boolean; details: string }>;
   compileTikzToSvg: (latexDocument: string, options?: { sourceDirectory?: string | null }) => Promise<string>;
   readLastCompileLog?: () => Promise<string>;
+  /**
+   * Compiles a whole document to PDF, keeping its auxiliary files per
+   * `buildKey` so that one compile's frame numbers, navigation and
+   * references feed the next. `marks` is the job's `.marks` file.
+   */
+  compileToPdf?: (latexDocument: string, options: LatexPdfCompileOptions) => Promise<LatexPdfCompileResult>;
+};
+
+export type LatexPdfCompileOptions = {
+  engine: "pdflatex" | "xelatex" | "lualatex";
+  sourceDirectory?: string | null;
+  buildKey: string;
+};
+
+export type LatexPdfCompileResult = {
+  pdf: Uint8Array;
+  marks: string;
+  log: string;
+  /** TeX reported errors; the PDF holds what it typeset regardless. */
+  hadErrors: boolean;
 };

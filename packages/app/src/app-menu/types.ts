@@ -131,6 +131,7 @@ export const APP_MENU_COMMAND_IDS = {
   CHECK_FOR_UPDATES: "help.check-for-updates",
   SHOW_ABOUT: "help.show-about",
   SHOW_COMPILED_PICTURE: "file.show-compiled-picture",
+  SHOW_COMPILED_SLIDE: "file.show-compiled-slide",
   OPEN_SETTINGS: "file.open-settings",
   CLEAR_RECENT_FILES: "file.clear-recent-files"
 } as const;

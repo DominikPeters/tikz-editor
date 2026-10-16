@@ -122,6 +122,7 @@ function makeMockBridge() {
         return "<svg data-mock-latex=\"true\" />";
       },
       readLastCompileLog: async () => "mock compile log",
+      compileLatexPdf: async () => ({ pdfBase64: "", marks: "", log: "mock compile log", hadErrors: false }),
       checkForUpdate: async () => updateAvailable
         ? {
             version: "0.2.0",

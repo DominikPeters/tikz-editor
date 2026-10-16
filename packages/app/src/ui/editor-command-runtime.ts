@@ -139,6 +139,7 @@ type RuntimeInput = {
   onPositionNodeRelativeTo?: () => void;
   onConvertNodePositionToAbsolute?: () => void;
   onShowCompiledPicture?: () => void;
+  onShowCompiledSlide?: () => void;
   onOpenSettings?: () => void;
   onFocusAssistant?: () => void;
   onOpenInsertEquation?: () => void;
@@ -209,6 +210,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onPositionNodeRelativeTo,
     onConvertNodePositionToAbsolute,
     onShowCompiledPicture,
+    onShowCompiledSlide,
     onOpenSettings,
     onFocusAssistant,
     onOpenInsertEquation,
@@ -560,6 +562,10 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE]: {
       enabled: onShowCompiledPicture != null,
       run: () => onShowCompiledPicture?.()
+    },
+    [APP_MENU_COMMAND_IDS.SHOW_COMPILED_SLIDE]: {
+      enabled: onShowCompiledSlide != null && (input.documentKind ?? documentKindForSource(source)) === "beamer",
+      run: () => onShowCompiledSlide?.()
     },
     [APP_MENU_COMMAND_IDS.EXPORT_SVG_DOWNLOAD]: {
       enabled: canExport && onOpenSvgExport != null,
@@ -1149,6 +1155,7 @@ export function useEditorCommandRuntime(
     onPositionNodeRelativeTo?: () => void;
     onConvertNodePositionToAbsolute?: () => void;
     onShowCompiledPicture?: () => void;
+    onShowCompiledSlide?: () => void;
     onOpenSettings?: () => void;
     onFocusAssistant?: () => void;
     onOpenInsertEquation?: () => void;
@@ -1277,6 +1284,7 @@ export function useEditorCommandRuntime(
         ...(options.onPositionNodeRelativeTo === undefined ? {} : { onPositionNodeRelativeTo: options.onPositionNodeRelativeTo }),
         ...(options.onConvertNodePositionToAbsolute === undefined ? {} : { onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute }),
         ...(options.onShowCompiledPicture === undefined ? {} : { onShowCompiledPicture: options.onShowCompiledPicture }),
+        ...(options.onShowCompiledSlide === undefined ? {} : { onShowCompiledSlide: options.onShowCompiledSlide }),
         ...(options.onOpenSettings === undefined ? {} : { onOpenSettings: options.onOpenSettings }),
         ...(options.onCheckForUpdates === undefined ? {} : { onCheckForUpdates: options.onCheckForUpdates }),
         ...(options.onShowAbout === undefined ? {} : { onShowAbout: options.onShowAbout }),
@@ -1334,6 +1342,7 @@ export function useEditorCommandRuntime(
       options.onPositionNodeRelativeTo,
       options.onConvertNodePositionToAbsolute,
       options.onShowCompiledPicture,
+      options.onShowCompiledSlide,
       options.onOpenSettings,
       options.onCheckForUpdates,
       options.onShowAbout,

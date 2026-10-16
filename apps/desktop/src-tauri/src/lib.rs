@@ -194,6 +194,9 @@ mod macos_activation {
 
 const MAX_RECENT_FILES: usize = 10;
 const LATEX_COMMAND_TIMEOUT_SECS: u64 = 20;
+/// A whole deck, with its pictures, can take minutes on a first run.
+const DECK_COMPILE_TIMEOUT_SECS: u64 = 300;
+const DECK_COMPILE_ENGINES: [&str; 3] = ["pdflatex", "xelatex", "lualatex"];
 const ARXIV_SOURCE_DOWNLOAD_TIMEOUT_SECS: u64 = 60;
 const ARXIV_SOURCE_MAX_ARCHIVE_BYTES: u64 = 80 * 1024 * 1024;
 const ARXIV_SOURCE_MAX_TEXT_BYTES: u64 = 30 * 1024 * 1024;
@@ -205,6 +208,8 @@ const DESKTOP_OPEN_REQUESTS_CHANGED_EVENT: &str = "desktop-open-requests-changed
 const DESKTOP_LINKED_FILE_CHANGED_EVENT: &str = "desktop-linked-file-changed";
 const DESKTOP_LOCAL_ASSET_CHANGED_EVENT: &str = "desktop-local-asset-changed";
 static NEXT_LATEX_COMPILE_ID: AtomicU64 = AtomicU64::new(1);
+/// Deck compiles share build directories; one runs at a time.
+static DECK_COMPILE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 #[cfg(target_os = "macos")]
 const DESKTOP_SVG_CLIPBOARD_FORMATS: [&str; 2] =
     ["public.svg-image", "com.microsoft.image-svg-xml"];
@@ -1299,6 +1304,9 @@ fn common_bin_dirs() -> Vec<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     {
         vec![
+            // MacTeX links the TeX Live binaries here; a Finder launch has no
+            // shell PATH to find them.
+            PathBuf::from("/Library/TeX/texbin"),
             PathBuf::from("/opt/homebrew/bin"),
             PathBuf::from("/usr/local/bin"),
             PathBuf::from("/opt/local/bin"),
@@ -1847,24 +1855,32 @@ async fn run_shell_command(
     command: &str,
     args: &[String],
     working_dir: &Path,
+    timeout_secs: u64,
 ) -> Result<CommandRunOutput, String> {
-    let (mut receiver, child) = app
+    // TeX's own helpers (kpsewhich, mktexpk, …) live beside it.
+    let executable = find_executable(command, None);
+    let mut shell_command = app
         .shell()
-        .command(command)
+        .command(executable.as_ref().map_or_else(
+            || command.to_string(),
+            |path| path.to_string_lossy().to_string(),
+        ))
         .args(args.to_vec())
-        .current_dir(working_dir)
-        .spawn()
-        .map_err(|e| {
-            format!(
-                "Failed to spawn `{command}` in {}: {e}",
-                working_dir.to_string_lossy()
-            )
-        })?;
+        .current_dir(working_dir);
+    if let Some(path) = augmented_path(executable.as_deref().and_then(Path::parent), None) {
+        shell_command = shell_command.env("PATH", path);
+    }
+    let (mut receiver, child) = shell_command.spawn().map_err(|e| {
+        format!(
+            "Failed to spawn `{command}` in {}: {e}",
+            working_dir.to_string_lossy()
+        )
+    })?;
 
     let mut stdout = Vec::<u8>::new();
     let mut stderr = Vec::<u8>::new();
     let mut status_code = None;
-    let deadline = Instant::now() + Duration::from_secs(LATEX_COMMAND_TIMEOUT_SECS);
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
 
     loop {
         let now = Instant::now();
@@ -1874,7 +1890,7 @@ async fn run_shell_command(
                 format_command_failure(command, None, &stdout, &stderr, None, working_dir);
             return Err(format!(
                 "Command timed out after {}s.\n{}",
-                LATEX_COMMAND_TIMEOUT_SECS, timeout_details
+                timeout_secs, timeout_details
             ));
         }
         let remaining = deadline.saturating_duration_since(now);
@@ -1886,7 +1902,7 @@ async fn run_shell_command(
                     format_command_failure(command, None, &stdout, &stderr, None, working_dir);
                 return Err(format!(
                     "Command timed out after {}s.\n{}",
-                    LATEX_COMMAND_TIMEOUT_SECS, timeout_details
+                    timeout_secs, timeout_details
                 ));
             }
         };
@@ -1953,6 +1969,7 @@ async fn desktop_compile_tikz(
             tex_path_arg,
         ],
         &compile_cwd,
+        LATEX_COMMAND_TIMEOUT_SECS,
     )
     .await?;
 
@@ -2005,6 +2022,7 @@ async fn desktop_compile_tikz(
             dvi_path_arg,
         ],
         &compile_cwd,
+        LATEX_COMMAND_TIMEOUT_SECS,
     )
     .await?;
 
@@ -2037,6 +2055,106 @@ async fn desktop_compile_tikz(
     publish_last_latex_compile_log(&working_dir);
     let _ = fs::remove_dir_all(&working_dir);
     Ok(svg)
+}
+
+#[derive(Serialize)]
+struct LatexPdfPayload {
+    #[serde(rename = "pdfBase64")]
+    pdf_base64: String,
+    marks: String,
+    log: String,
+    /// Whether TeX reported errors; the PDF holds what it typeset regardless.
+    #[serde(rename = "hadErrors")]
+    had_errors: bool,
+}
+
+fn latex_pdf_build_dir(build_key: &str) -> PathBuf {
+    latex_compile_working_dir()
+        .join("pdf")
+        .join(hash_text_for_revision(build_key))
+}
+
+/// Compiles a whole document to PDF with the engine it asks for, in a build
+/// directory kept per `build_key`, so that the .aux, .nav and .toc of one
+/// compile feed the next (frame numbers, navigation, references). A first
+/// compile, or one whose log asks for it, runs twice. Returns the PDF, the
+/// job's `.marks` file (which the document may write for its caller) and the
+/// log.
+#[tauri::command]
+async fn desktop_compile_latex_pdf(
+    latex_document: String,
+    engine: String,
+    source_directory: Option<String>,
+    build_key: String,
+    app: AppHandle,
+) -> Result<LatexPdfPayload, String> {
+    if !DECK_COMPILE_ENGINES.contains(&engine.as_str()) {
+        return Err(format!("Unknown TeX engine: {engine}"));
+    }
+    let _guard = DECK_COMPILE_LOCK.lock().await;
+    let build_dir = latex_pdf_build_dir(&build_key);
+    fs::create_dir_all(&build_dir).map_err(|e| {
+        format!(
+            "Failed to create build dir {}: {e}",
+            build_dir.to_string_lossy()
+        )
+    })?;
+    let compile_cwd =
+        resolve_latex_compile_cwd(source_directory.as_deref()).unwrap_or_else(|| build_dir.clone());
+    let tex_path = build_dir.join("input.tex");
+    let pdf_path = build_dir.join("input.pdf");
+    let log_path = build_dir.join("input.log");
+    let marks_path = build_dir.join("input.marks");
+    fs::write(&tex_path, &latex_document).map_err(|e| {
+        format!(
+            "Failed to write .tex in {}: {e}",
+            build_dir.to_string_lossy()
+        )
+    })?;
+    let args = vec![
+        "-interaction=batchmode".to_string(),
+        "-file-line-error".to_string(),
+        format!("-output-directory={}", build_dir.to_string_lossy()),
+        tex_path.to_string_lossy().to_string(),
+    ];
+    let first = !build_dir.join("input.aux").exists();
+    let mut runs = 0;
+    loop {
+        let _ = fs::remove_file(&pdf_path);
+        let _ = fs::remove_file(&marks_path);
+        let result = run_shell_command(
+            &app,
+            &engine,
+            &args,
+            &compile_cwd,
+            DECK_COMPILE_TIMEOUT_SECS,
+        )
+        .await?;
+        if !pdf_path.exists() {
+            return Err(format_command_failure(
+                &engine,
+                result.status_code,
+                &result.stdout,
+                &result.stderr,
+                Some(&log_path),
+                &build_dir,
+            ));
+        }
+        let log = read_text_if_exists(&log_path);
+        let had_errors = result.status_code != Some(0);
+        runs += 1;
+        let asks_rerun = log.contains("Rerun to get") || log.contains("may have changed. Rerun");
+        if runs < 2 && !had_errors && (first || asks_rerun) {
+            continue;
+        }
+        let pdf = fs::read(&pdf_path).map_err(|e| format!("Failed to read PDF: {e}"))?;
+        return Ok(LatexPdfPayload {
+            pdf_base64: base64::engine::general_purpose::STANDARD.encode(pdf),
+            marks: read_text_if_exists(&marks_path),
+            log,
+            had_errors,
+        });
+    }
 }
 
 #[tauri::command]
@@ -3091,6 +3209,7 @@ pub fn run() {
             desktop_install_codex,
             desktop_check_latex_available,
             desktop_compile_tikz,
+            desktop_compile_latex_pdf,
             desktop_read_last_compile_log,
             desktop_open_text,
             desktop_open_binary,

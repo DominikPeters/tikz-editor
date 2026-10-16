@@ -163,7 +163,8 @@ export function installDeterministicBridgeInPage(): void {
     onContextMenuCommand: () => Promise.resolve(noOp),
     checkLatexAvailable: () => Promise.resolve({ available: true, details: "desktop e2e mock" }),
     compileTikz: () => Promise.resolve("<svg />"),
-    readLastCompileLog: () => Promise.resolve("")
+    readLastCompileLog: () => Promise.resolve(""),
+    compileLatexPdf: () => Promise.reject(new Error("desktop e2e mock: no TeX"))
   } satisfies DesktopBridge;
 
   e2eWindow.__DESKTOP_E2E_WRITES__ = writes;

@@ -562,7 +562,11 @@ export function createDesktopPlatformAdapter(env: DesktopPlatformEnvironment = {
     latex: {
       checkAvailable: async () => await getBridge().checkLatexAvailable(),
       compileTikzToSvg: async (latexDocument, options) => await getBridge().compileTikz(latexDocument, options),
-      readLastCompileLog: async () => await getBridge().readLastCompileLog()
+      readLastCompileLog: async () => await getBridge().readLastCompileLog(),
+      compileToPdf: async (latexDocument, options) => {
+        const { pdfBase64, ...result } = await getBridge().compileLatexPdf(latexDocument, options);
+        return { ...result, pdf: bytesFromBase64(pdfBase64) };
+      }
     },
     assistant: {
       checkCodexStatus: async () => {

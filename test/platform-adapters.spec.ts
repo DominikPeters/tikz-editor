@@ -33,6 +33,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
     checkLatexAvailable: async () => ({ available: false, details: "test bridge" }),
     compileTikz: async () => "<svg />",
     readLastCompileLog: async () => "",
+    compileLatexPdf: async () => ({ pdfBase64: "", marks: "", log: "", hadErrors: false }),
     ...overrides
   };
 }

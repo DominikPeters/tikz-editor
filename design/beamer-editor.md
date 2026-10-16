@@ -1676,6 +1676,11 @@ render correctly across the supported themes.
   figure editing (coordinate composition); image drag-insertion; outline
   panel; new-deck flow.
 - Desktop enhancement: compiled-preview frame fallback via local TeX.
+  File > Show Compiled Slide already compiles the whole deck on desktop
+  (`createBeamerCompileDocument`, `desktop_compile_latex_pdf`): the deck's
+  engine, a build directory kept per document so `.aux`/`.nav` carry over,
+  and a `.marks` file naming each PDF page's source frame. A frame fallback
+  can take its pages from the same compile.
 
 Exit: rectangle-anywhere works and round-trips as `[remember picture,
 overlay]`; double-click-to-edit works in place.

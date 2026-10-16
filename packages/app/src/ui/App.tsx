@@ -104,6 +104,10 @@ const TikzJaxModal = lazy(async () => {
   return { default: mod.TikzJaxModal };
 });
 
+const CompiledSlideModal = lazy(async () => {
+  const mod = await import("./CompiledSlideModal");
+  return { default: mod.CompiledSlideModal };
+});
 const UnsavedChangesModal = lazy(async () => {
   const mod = await import("./UnsavedChangesModal");
   return { default: mod.UnsavedChangesModal };
@@ -347,6 +351,13 @@ function EditorApp() {
     activeRootId: string | null;
     fileRef: DocumentFileRef | null;
   } | null>(null);
+  const [compiledSlide, setCompiledSlide] = useState<{
+    source: string;
+    frameIndex: number | null;
+    step: number;
+    fileRef: DocumentFileRef | null;
+    buildKey: string;
+  } | null>(null);
   const [svgExportSvgResult, setSvgExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pngExportSvgResult, setPngExportSvgResult] = useState<EmitSvgResult | null>(null);
   const [pendingAutoFit, setPendingAutoFit] = useState(false);
@@ -486,6 +497,16 @@ function EditorApp() {
       fileRef: activeDocumentFileRef
     });
   }, [activeDocumentFileRef, activeRootId, source]);
+  const handleShowCompiledSlideCommand = useCallback(() => {
+    const root = parseDocumentRootId(activeRootId ?? "");
+    setCompiledSlide({
+      source,
+      frameIndex: root?.kind === "beamer-frame" ? root.index : root?.kind === "beamer-frame-tikz" ? root.frameIndex : null,
+      step: activeDeckStep ?? 1,
+      fileRef: activeDocumentFileRef,
+      buildKey: activeDocumentFileRef?.provider === "desktop-fs" && activeDocumentFileRef.path ? activeDocumentFileRef.path : activeDocumentId
+    });
+  }, [activeDeckStep, activeDocumentFileRef, activeDocumentId, activeRootId, source]);
   const handleOpenSettingsCommand = useCallback(() => {
     setShowSettingsModal(true);
   }, []);
@@ -542,6 +563,7 @@ function EditorApp() {
     onOpenSvgExport: handleOpenSvgExportCommand,
     onOpenPngExport: handleOpenPngExportCommand,
     onShowCompiledPicture: handleShowCompiledPictureCommand,
+    ...(platform.latex?.compileToPdf ? { onShowCompiledSlide: handleShowCompiledSlideCommand } : {}),
     onOpenSettings: handleOpenSettingsCommand,
     onCheckForUpdates: handleCheckForUpdatesCommand,
     updateCheckBusy: updateCheckBusy || updateModalPhase.status === "installing",
@@ -2101,6 +2123,20 @@ function EditorApp() {
             {...(platform.latex === undefined ? {} : { latex: platform.latex })}
             showOpenInNewTab={!platform.id.startsWith("desktop")}
             showLogToggle={platform.id.startsWith("desktop")}
+          />
+        </Suspense>
+      ) : null}
+      {compiledSlide !== null && platform.latex ? (
+        <Suspense fallback={null}>
+          <CompiledSlideModal
+            source={compiledSlide.source}
+            frameIndex={compiledSlide.frameIndex}
+            step={compiledSlide.step}
+            documentFileRef={compiledSlide.fileRef}
+            buildKey={compiledSlide.buildKey}
+            latex={platform.latex}
+            {...(platform.files?.exportFile ? { exportFile: platform.files.exportFile } : {})}
+            onClose={() => { setCompiledSlide(null); }}
           />
         </Suspense>
       ) : null}

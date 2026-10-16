@@ -116,6 +116,13 @@ export const APP_MENU_DEFINITION = [
         commandId: APP_MENU_COMMAND_IDS.SHOW_COMPILED_PICTURE,
         label: "Show Compiled Picture..."
       },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.SHOW_COMPILED_SLIDE,
+        label: "Show Compiled Slide...",
+        // Compiles the deck with the TeX installation.
+        platforms: ["desktop"]
+      },
       { kind: "separator" },
       {
         kind: "command",

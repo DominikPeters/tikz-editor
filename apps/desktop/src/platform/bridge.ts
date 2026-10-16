@@ -124,6 +124,12 @@ export type DesktopBridge = {
   checkLatexAvailable: () => Promise<{ available: boolean; details: string }>;
   compileTikz: (latexDocument: string, options?: { sourceDirectory?: string | null }) => Promise<string>;
   readLastCompileLog: () => Promise<string>;
+  compileLatexPdf: (latexDocument: string, options: { engine: string; sourceDirectory?: string | null; buildKey: string }) => Promise<{
+    pdfBase64: string;
+    marks: string;
+    log: string;
+    hadErrors: boolean;
+  }>;
   checkCodexStatus?: () => Promise<{ installed: boolean; has_npm: boolean; has_brew: boolean; has_wsl: boolean }>;
   installCodex?: (method: "npm" | "brew" | "wsl") => Promise<string>;
   checkForUpdate?: () => Promise<UpdateInfo | null>;
@@ -331,6 +337,10 @@ export function createDefaultBridge(): DesktopBridge {
       sourceDirectory: options?.sourceDirectory ?? null
     }),
     readLastCompileLog: async () => await invoke<string>("desktop_read_last_compile_log"),
+    compileLatexPdf: async (latexDocument, options) => await invoke<{ pdfBase64: string; marks: string; log: string; hadErrors: boolean }>(
+      "desktop_compile_latex_pdf",
+      { latexDocument, engine: options.engine, sourceDirectory: options.sourceDirectory ?? null, buildKey: options.buildKey }
+    ),
     checkCodexStatus: async () => await invoke<{
       installed: boolean;
       has_npm: boolean;
