@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <!-- Match the MSI's per-machine scope. Use registry entries rather than
+           an advertised Extension, which would claim the .tex default. -->
+      <Component Id="TeXOpenWith" Guid="A4219B22-86C4-4B97-B71C-AF78CD260A90" Win64="no">
+        <RegistryValue Root="HKLM" Key="Software\Classes\.tex\OpenWithProgids"
+                       Name="TikZEditor.TeX" Type="string" Value="" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\TikZEditor.TeX"
+                       Type="string" Value="TeX source document" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\TikZEditor.TeX\DefaultIcon"
+                       Type="string" Value="&quot;[#Path]&quot;,0" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\TikZEditor.TeX\shell\open\command"
+                       Type="string" Value="&quot;[#Path]&quot; &quot;%1&quot;" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

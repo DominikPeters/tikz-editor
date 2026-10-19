@@ -665,6 +665,13 @@ Section Install
     {{/each}}
   {{/each}}
 
+  ; TeX is an existing format: offer Open with without claiming its default.
+  WriteRegStr SHCTX "Software\Classes\TikZEditor.TeX" "" "TeX source document"
+  WriteRegStr SHCTX "Software\Classes\TikZEditor.TeX\DefaultIcon" "" '$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0'
+  WriteRegStr SHCTX "Software\Classes\TikZEditor.TeX\shell\open\command" "" '$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\"'
+  WriteRegStr SHCTX "Software\Classes\.tex\OpenWithProgids" "TikZEditor.TeX" ""
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0x1000, p 0, p 0)'
+
   ; Register deep links
   {{#each deep_link_protocols as |protocol| ~}}
     WriteRegStr SHCTX "Software\Classes\\{{protocol}}" "URL Protocol" ""
@@ -799,6 +806,12 @@ Section Uninstall
       !insertmacro APP_UNASSOCIATE "{{ext}}" "{{or association.name ext}}"
     {{/each}}
   {{/each}}
+
+  ; Remove only our Open with entry; preserve defaults and other applications.
+  DeleteRegValue SHCTX "Software\Classes\.tex\OpenWithProgids" "TikZEditor.TeX"
+  DeleteRegKey /ifempty SHCTX "Software\Classes\.tex\OpenWithProgids"
+  DeleteRegKey SHCTX "Software\Classes\TikZEditor.TeX"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0x1000, p 0, p 0)'
 
   ; Delete deep links
   {{#each deep_link_protocols as |protocol| ~}}
