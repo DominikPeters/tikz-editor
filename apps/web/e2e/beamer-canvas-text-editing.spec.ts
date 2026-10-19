@@ -143,6 +143,92 @@ async function clickRenderedSourceOffset(page: Page, sourceOffset: number): Prom
   throw new Error(`No visible rendered source geometry starts at ${sourceOffset}.`);
 }
 
+for (const surface of ["canvas", "bar"] as const) {
+  test(`dead-key composition replaces its preview once on the ${surface}`, async ({ page }) => {
+    const textarea = await openScopeContaining(page, "Body typo.");
+    const input = surface === "canvas" ? page.getByTestId("canvas-focus-input") : textarea;
+    const start = (await textarea.inputValue()).indexOf("typo");
+    await input.evaluate((element, start) => {
+      const field = element as HTMLTextAreaElement;
+      field.focus();
+      field.setSelectionRange(start, start + 4);
+      field.dispatchEvent(new Event("select", { bubbles: true }));
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Dead", altKey: true, bubbles: true }));
+      field.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "" }));
+    }, start);
+    let previous = "typo";
+    for (const text of ["^", "ô"]) {
+      const nativeValue = await input.evaluate((element, args) => {
+        const field = element as HTMLTextAreaElement;
+        field.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true, data: args.text }));
+        field.dispatchEvent(new InputEvent("beforeinput", {
+          bubbles: true, cancelable: false, inputType: "insertCompositionText", data: args.text, isComposing: true
+        }));
+        field.setRangeText(args.text, args.start, args.start + args.previous.length, "end");
+        field.dispatchEvent(new InputEvent("input", {
+          bubbles: true, inputType: "insertCompositionText", data: args.text, isComposing: true
+        }));
+        // Native select events during composition must not reset its range.
+        field.dispatchEvent(new Event("select", { bubbles: true }));
+        return field.value;
+      }, { start, previous, text });
+      await expect(input).toHaveValue(nativeValue);
+      await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body typo.", `Body ${text}.`));
+      previous = text;
+    }
+    await input.evaluate((element) => {
+      element.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "ô" }));
+    });
+    await page.keyboard.type("!");
+    await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body typo.", "Body ô!."));
+    await page.keyboard.press(`${PRIMARY_MOD}+z`);
+    await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body typo.", "Body ô."));
+    await page.keyboard.press(`${PRIMARY_MOD}+z`);
+    await expect.poll(() => readStoreSource(page)).toBe(SOURCE);
+  });
+}
+
+test("native browser composition commits an accented character once", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "Native IME control uses Chromium's input protocol.");
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const start = (await textarea.inputValue()).indexOf("typo");
+  await input.evaluate((element, start) => {
+    const field = element as HTMLTextAreaElement;
+    field.setSelectionRange(start, start + 4);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, start);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", { text: "^", selectionStart: 0, selectionEnd: 1 });
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body typo.", "Body ^."));
+  await cdp.send("Input.imeSetComposition", { text: "ô", selectionStart: 1, selectionEnd: 1 });
+  await cdp.send("Input.insertText", { text: "ô" });
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body typo.", "Body ô."));
+  await page.keyboard.type("!");
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body typo.", "Body ô!."));
+  await cdp.detach();
+});
+
+test("TeX accents put the canvas caret inside their braces and keep the letter editable", async ({ page }) => {
+  const textarea = await openScopeContaining(page, "Body typo.");
+  const input = page.getByTestId("canvas-focus-input");
+  const start = (await textarea.inputValue()).indexOf("Body");
+  await input.evaluate((element, start) => {
+    const field = element as HTMLTextAreaElement;
+    field.setSelectionRange(start, start);
+    field.dispatchEvent(new Event("select", { bubbles: true }));
+  }, start);
+  await page.keyboard.type(String.raw`\^`);
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body", String.raw`\^{}Body`));
+  await expect.poll(() => input.evaluate((element) => (element as HTMLTextAreaElement).selectionStart)).toBe(start + 3);
+  await page.keyboard.type("{o}");
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body", String.raw`\^{o}Body`));
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("a");
+  await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("Body", String.raw`\^{a}Body`));
+});
+
 test("opens scope-wide sessions and edits title and list text with undo/redo", async ({ page }) => {
   const titleTextarea = await openScopeContaining(page, "Titel typo");
   // The frame-title scope buffer is the whole title argument, including

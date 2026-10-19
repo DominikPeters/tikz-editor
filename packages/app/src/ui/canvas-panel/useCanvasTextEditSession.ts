@@ -813,6 +813,8 @@ export function useCanvasTextEditSession(
   >(null);
   const pendingTextEditPasteRef = useRef<ClipboardPayload | null>(null);
   const pendingTextEditInsertTextRef = useRef<string | null>(null);
+  // The browser owns this input's value and selection until compositionend.
+  const composingInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previousContextKeyRef = useRef(contextKey);
   const sourceRevisionRef = useRef(sourceRevision);
 
@@ -856,7 +858,7 @@ export function useCanvasTextEditSession(
     const end = Math.max(state.anchor, state.focus);
     const direction = state.focus < state.anchor ? "backward" : "forward";
     for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
-      if (input) {
+      if (input && input !== composingInputRef.current) {
         if (input.value !== state.text) {
           input.value = state.text;
         }
@@ -912,7 +914,7 @@ export function useCanvasTextEditSession(
     const start = clamp(session.selectionStart, 0, session.text.length);
     const end = clamp(session.selectionEnd, 0, session.text.length);
     for (const input of [canvasFocusInputRef.current, textEditTextareaRef.current]) {
-      if (input && (input.selectionStart !== start || input.selectionEnd !== end)) {
+      if (input && input !== composingInputRef.current && (input.selectionStart !== start || input.selectionEnd !== end)) {
         input.setSelectionRange(start, end);
       }
     }
@@ -1067,6 +1069,7 @@ export function useCanvasTextEditSession(
     if (!textEditingSession) {
       pendingTextEditPasteRef.current = null;
       pendingTextEditInsertTextRef.current = null;
+      composingInputRef.current = null;
       intentScheduler.reset();
       if (layoutWaitTimerRef.current != null) {
         clearTimeout(layoutWaitTimerRef.current);
@@ -1547,6 +1550,12 @@ export function useCanvasTextEditSession(
       }
       const inputType = nativeEvent.inputType;
       nativeEvent.stopPropagation();
+      // Composition beforeinput is often non-cancelable. Interpreting it
+      // before the browser edits would apply the same text twice. Observe
+      // the resulting input instead, without rewriting the native buffer.
+      if (composingInputRef.current === textarea) {
+        return;
+      }
       let data = nativeEvent.data;
       if (inputType === "insertFromDrop" && data == null) {
         data = nativeEvent.dataTransfer?.getData("text/plain") ?? null;
@@ -1571,6 +1580,9 @@ export function useCanvasTextEditSession(
 
   const handleTextEditTextareaSelect = useCallback((event: ReactSyntheticEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget;
+    if (composingInputRef.current) {
+      return;
+    }
     dispatchCanvasTextEditAction({
       type: "textarea_selection",
       selectionStart: textarea.selectionStart,
@@ -1642,6 +1654,11 @@ export function useCanvasTextEditSession(
     event: ReactKeyboardEvent<HTMLTextAreaElement>,
     surface: InputSurface
   ) => {
+    if (event.nativeEvent.isComposing || composingInputRef.current === event.currentTarget) {
+      pendingTextEditInsertTextRef.current = null;
+      event.stopPropagation();
+      return;
+    }
     const decision = interpretKeyDown(
       {
         key: event.key,
@@ -1649,7 +1666,7 @@ export function useCanvasTextEditSession(
         primary: event.metaKey || event.ctrlKey,
         alt: event.altKey,
         repeat: event.repeat,
-        composing: event.nativeEvent.isComposing
+        composing: false
       },
       surface,
       // ⌥←/⌥→ take a pending `\right` along (M14).
@@ -1755,20 +1772,63 @@ export function useCanvasTextEditSession(
       return;
     }
     const cleanups = inputs.map((input) => {
+      const handleCompositionStart = () => {
+        intentScheduler.flush();
+        pendingTextEditInsertTextRef.current = null;
+        dispatchCanvasTextEditAction({
+          type: "textarea_selection",
+          selectionStart: input.selectionStart,
+          selectionEnd: input.selectionEnd
+        });
+        composingInputRef.current = input;
+      };
+      const handleCompositionInput = (event: Event) => {
+        if (composingInputRef.current !== input || !(event instanceof InputEvent)) {
+          return;
+        }
+        event.stopPropagation();
+        const state = stateRef.current;
+        const session = state.session;
+        if (!session) {
+          return;
+        }
+        const from = state.compositionRange?.start ?? session.selectionStart;
+        const to = state.compositionRange?.end ?? session.selectionEnd;
+        // Read the browser's replacement, including events with null data
+        // (e.g. deleting a composition preview before committing it).
+        const text = input.value.slice(from, input.value.length - (session.text.length - to));
+        intentScheduler.submit({ type: "compose", text, commit: false, origin: "composition", repeat: false });
+      };
+      const handleCompositionEnd = (event: CompositionEvent) => {
+        if (composingInputRef.current !== input) {
+          return;
+        }
+        composingInputRef.current = null;
+        pendingTextEditInsertTextRef.current = null;
+        intentScheduler.submit({ type: "compose", text: event.data, commit: true, origin: "composition", repeat: false });
+      };
       const handleBeforeInput = (event: Event) => {
         if (event instanceof InputEvent && typeof event.inputType === "string") {
           dispatchTextEditBeforeInputIntent(event, input);
         }
       };
       input.addEventListener("beforeinput", handleBeforeInput);
-      return () => { input.removeEventListener("beforeinput", handleBeforeInput); };
+      input.addEventListener("compositionstart", handleCompositionStart);
+      input.addEventListener("input", handleCompositionInput);
+      input.addEventListener("compositionend", handleCompositionEnd);
+      return () => {
+        input.removeEventListener("beforeinput", handleBeforeInput);
+        input.removeEventListener("compositionstart", handleCompositionStart);
+        input.removeEventListener("input", handleCompositionInput);
+        input.removeEventListener("compositionend", handleCompositionEnd);
+      };
     });
     return () => {
       for (const cleanup of cleanups) {
         cleanup();
       }
     };
-  }, [dispatchTextEditBeforeInputIntent, textEditingSession]);
+  }, [dispatchCanvasTextEditAction, dispatchTextEditBeforeInputIntent, intentScheduler, textEditingSession]);
 
   // Layout effect so the scroll-into-view adjustment lands before the caret
   // overlay (a later layout effect) measures against the textarea viewport.
@@ -1790,7 +1850,13 @@ export function useCanvasTextEditSession(
     // Both inputs mirror the buffer selection so native editing semantics
     // (word deletes, composition) report correct offsets from either.
     for (const input of [textarea, canvasInput]) {
-      if (input && (input.selectionStart !== start || input.selectionEnd !== end)) {
+      if (!input || input === composingInputRef.current) {
+        continue;
+      }
+      if (input.value !== textEditingSession.text) {
+        input.value = textEditingSession.text;
+      }
+      if (input.selectionStart !== start || input.selectionEnd !== end) {
         input.setSelectionRange(start, end);
       }
     }
@@ -1822,7 +1888,7 @@ export function useCanvasTextEditSession(
     // With two mirroring inputs only the focused one is authoritative for
     // selection; the other's selection is programmatic echo.
     const syncSelectionFromInput = (input: HTMLTextAreaElement) => {
-      if (document.activeElement !== input) {
+      if (document.activeElement !== input || composingInputRef.current === input) {
         return;
       }
       dispatchCanvasTextEditAction({

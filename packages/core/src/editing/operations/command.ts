@@ -37,6 +37,8 @@ export type CommitKey = "space" | "structure" | "brace" | "bracket" | "overlay" 
 
 export type CommandCommit = {
   readonly outcome: EditOutcome;
+  /** An opening brace typed next is the generated argument's brace. */
+  readonly consumeOpen?: boolean;
   /** The command just written, when its optional argument may still be opened by `[` (O4). */
   readonly pending?: number;
 };
@@ -283,7 +285,12 @@ export function commitControlSymbol(view: EditView, caret: Position, at: number,
     default: {
       // A text accent takes the next character as its argument: given its
       // own braces, it never grabs the text after the caret (`\\^{}`, as R2).
-      const insert = mode === "text" && TEXT_ACCENTS.has(char) ? `\\${char}{}` : `\\${char}`;
+      if (mode === "text" && TEXT_ACCENTS.has(char)) {
+        const selected = held ? tree.text.slice(held.from, held.to) : "";
+        const caret = range.from + 3;
+        return { outcome: { ...edit(range, `\\${char}{${selected}}`, caret), ...(selected ? { selectionEnd: caret + selected.length } : {}) }, consumeOpen: !held };
+      }
+      const insert = `\\${char}`;
       return { outcome: edit(range, insert, range.from + insert.length) };
     }
   }

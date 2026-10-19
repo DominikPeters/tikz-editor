@@ -221,6 +221,11 @@ export const structuralKeyScenarios: readonly Scenario[] = [
  * until a commit writes the command in one step.
  */
 export const chipScenarios: readonly Scenario[] = [
+  { id: "text circumflex", title: "a control-symbol accent opens an editable argument", body: "h‸tel", keys: R`\^o}x`, expect: R`h\^{o}x‸tel` },
+  { id: "text accent braces", title: "an explicit opening brace enters the generated accent argument", body: "h‸tel", keys: R`\^{o}`, expect: R`h\^{o}‸tel` },
+  { id: "text accent selection", title: "an accent wraps the selected letter", body: "h⟦o⟧tel", keys: R`\^`, expect: R`h\^{⟦o⟧}tel` },
+  { id: "text named accent", title: "a named text accent has an editable argument", body: "‸", keys: R`\v{s}`, expect: R`\v{s}‸` },
+  { id: "text accent edit", title: "an existing accent argument can be edited", body: R`h\^{‸o}tel`, keys: "⌦ a", expect: R`h\^{a‸}tel` },
   { id: "P1", title: "\\% commits the control symbol at once", body: "Up by 5‸ overall.", keys: R`\%`, expect: R`Up by 5\%‸ overall.` },
   { id: "P6", title: "␣ after a text command gives a word space", body: "I use ‸ daily", keys: R`\LaTeX␣`, expect: R`I use \LaTeX{}‸ daily` },
   { id: "P6 end", title: "␣ after a text command adds the space when none follows", body: "I use ‸", keys: R`\LaTeX␣`, expect: R`I use \LaTeX{} ‸` },

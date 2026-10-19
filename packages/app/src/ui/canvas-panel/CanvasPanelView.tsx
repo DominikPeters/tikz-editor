@@ -1077,10 +1077,11 @@ export function CanvasPanelView(props: CanvasPanelViewProps) {
           ) : null}
 
           {canvasTextEdit.canvasFocusInput ? (
+            // The session hook owns synchronization so React cannot reset an IME preview.
             <textarea
               ref={canvasTextEdit.canvasFocusInput.inputRef}
               className={css.canvasFocusInput}
-              value={canvasTextEdit.canvasFocusInput.value}
+              defaultValue={canvasTextEdit.canvasFocusInput.value}
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"

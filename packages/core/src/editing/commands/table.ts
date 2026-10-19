@@ -132,7 +132,7 @@ const TEXT_COMMANDS = new Map<string, Entry>([
     args: [],
   }),
   // Text accents take one argument, usually unbraced: \c c, \v{s}.
-  ...entries(["c", "v", "u", "H", "r", "k", "b", "d", "t"], { category: "symbol", node: "symbol", args: [value("value")] }),
+  ...entries(["c", "v", "u", "H", "r", "k", "b", "d", "t"], { category: "construct", node: "accent", args: [content()] }),
   ...entries(["quad", "qquad", "enspace", "enskip", "hfill", "hfil", "thinspace", "negthinspace"], {
     category: "spacing",
     node: "space",
@@ -181,7 +181,7 @@ const TEXT_COMMANDS = new Map<string, Entry>([
 /** Control symbols in text mode (`\&`, `\'e`, `\ `). */
 function textControlSymbol(name: string): Entry | null {
   if ("'\"`^~=.".includes(name)) {
-    return { category: "symbol", node: "symbol", args: [value("value")] };
+    return { category: "construct", node: "accent", args: [content()] };
   }
   if (" ,;:!@/".includes(name)) {
     return { category: "spacing", node: "space", args: [] };

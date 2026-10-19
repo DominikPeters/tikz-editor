@@ -185,7 +185,7 @@ function plainText(view: EditView, from: number, to: number): string {
       parts.push(leaf ?? source);
       return;
     }
-    if (record.kind === "symbol") {
+    if (record.kind === "symbol" || (record.kind === "accent" && inside)) {
       parts.push(symbolText(source));
       return;
     }

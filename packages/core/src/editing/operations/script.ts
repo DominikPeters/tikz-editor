@@ -52,7 +52,7 @@ export function enterExistingScript(view: EditView, caret: Position, marker: "^"
 }
 
 /** Commands whose content is an argument (`\textbf x`, `\href{u} x`, `\only<2> x`). */
-const COMMAND_WRAPPERS: ReadonlySet<string> = new Set(["style", "link", "overlay", "text-in-math"]);
+const COMMAND_WRAPPERS: ReadonlySet<string> = new Set(["style", "link", "overlay", "text-in-math", "accent"]);
 
 /**
  * R6 for any edit at a caret in a single-token unbraced argument (`x_‸i`):

@@ -1065,6 +1065,23 @@ describe("canvas text edit machine", () => {
     expect(committed.history.undo).toHaveLength(1);
   });
 
+  it("preserves composition while its source echo waits for a rendered target", () => {
+    const target = buildTarget(BASE_SOURCE, "$x$");
+    const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {
+      type: "start_session", source: BASE_SOURCE, target,
+      selectionStart: 2, selectionEnd: 2, historyMergeKey: "merge"
+    }).state;
+    const preview = reduceInputIntent(started, "insertCompositionText", 2, 2, "^").state;
+    const echoed = reduceCanvasTextEdit(preview, {
+      type: "source_reconciled", source: preview.session!.workingSource, sourceRevision: 1, target: null
+    }).state;
+    expect(echoed.compositionRange).toEqual({ start: 2, end: 3 });
+    const committed = reduceInputIntent(echoed, "insertFromComposition", 3, 3, "ô").state;
+    expect(committed.session?.text).toBe("$xô$");
+    expect(committed.compositionRange).toBeNull();
+    expect(committed.history.undo).toHaveLength(1);
+  });
+
   it("preserves composition range across selection sync before commit", () => {
     const target = buildTarget(BASE_SOURCE, "$x$");
     const started = reduceCanvasTextEdit(INITIAL_CANVAS_TEXT_EDIT_STATE, {

@@ -1358,7 +1358,7 @@ class Resolver {
       if (!symbol) {
         return this.keepSelection(NO_INTERACTION);
       }
-      return this.commitOutcome(view, symbol.outcome, symbol.pending);
+      return this.commitOutcome(view, symbol.outcome, symbol.pending, symbol.consumeOpen);
     }
     const delimiterChip = /^(left|right)(?:\\([A-Za-z]*))?$/u.exec(chip.name);
     if (delimiterChip) {
@@ -1764,7 +1764,7 @@ class Resolver {
   }
 
   /** A commit is one undo step (R12), whatever the chip took to type. */
-  private commitOutcome(view: EditView, written: EditOutcome, pending?: number): IntentResolution {
+  private commitOutcome(view: EditView, written: EditOutcome, pending?: number, consumeOpen = false): IntentResolution {
     const chip = this.context.interaction.chip;
     const outcome = chip ? braceUnbracedArgument(view, caretAt(view, chip.at), written) : written;
     if (outcome.kind !== "patch") {
@@ -1775,7 +1775,12 @@ class Resolver {
       outcome.patches,
       { kind: "absolute", anchor: outcome.caret, focus },
       { group: "own-step" },
-      pending != null ? { interaction: { pending } } : {}
+      pending != null || consumeOpen ? {
+        interaction: {
+          ...(pending == null ? {} : { pending }),
+          ...(consumeOpen ? { consumeOpen: outcome.caret } : {})
+        }
+      } : {}
     );
   }
 

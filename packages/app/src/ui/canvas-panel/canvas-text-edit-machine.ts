@@ -816,7 +816,9 @@ export function reduceCanvasTextEdit(
           state: {
             ...state,
             sourceRevision: action.sourceRevision,
-            compositionRange: null,
+            // An input echo may arrive before rendering finds the edited
+            // target again. It must not end the native composition.
+            compositionRange: session.workingSource === action.source ? state.compositionRange : null,
             session: {
               ...session,
               workingSource: action.source

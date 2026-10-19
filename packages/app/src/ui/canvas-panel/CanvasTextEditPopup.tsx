@@ -357,6 +357,7 @@ export function CanvasTextEditPopup({
         />
       ) : null}
       <div className={css.textEditTextareaLayer}>
+        {/* The session hook mirrors value/selection, leaving native composition untouched. */}
         <textarea
           ref={model.textareaRef}
           className={[
@@ -368,7 +369,7 @@ export function CanvasTextEditPopup({
           ]
             .filter(Boolean)
             .join(" ")}
-          value={session.text}
+          defaultValue={session.text}
           spellCheck={false}
           rows={
             session.editMode === "inline-typo"
