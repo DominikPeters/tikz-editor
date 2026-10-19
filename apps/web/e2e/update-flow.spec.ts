@@ -15,6 +15,7 @@ test.beforeEach(async ({ page }) => {
 async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Promise<void> {
   await page.addInitScript((opts: UpdateEnvOptions) => {
     let updateAvailable = opts.updateAvailable ?? true;
+    let updateVersion = "0.2.0";
     const installFails = opts.installFails ?? false;
     const progressEvents: unknown[] = [];
     let relaunchCalls = 0;
@@ -24,6 +25,7 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
     (globalThis as typeof globalThis & {
       __UPDATE_TEST__?: {
         setUpdateAvailable: (available: boolean) => void;
+        setUpdateVersion: (version: string) => void;
         getProgressEvents: () => unknown[];
         getRelaunchCalls: () => number;
         getCheckCalls: () => number;
@@ -33,6 +35,9 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
     }).__UPDATE_TEST__ = {
       setUpdateAvailable: (available) => {
         updateAvailable = available;
+      },
+      setUpdateVersion: (version) => {
+        updateVersion = version;
       },
       getProgressEvents: () => progressEvents,
       getRelaunchCalls: () => relaunchCalls,
@@ -57,7 +62,7 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
           checkCalls += 1;
           return updateAvailable
           ? {
-              version: "0.2.0",
+              version: updateVersion,
               currentVersion: "0.1.0",
               date: "2026-05-08T12:00:00Z",
               body: "## Highlights\n\n- Update notes\n- **Bold note**"
@@ -178,6 +183,42 @@ test("later hides the update chip for the session", async ({ page }) => {
   await expect(page.getByTestId("toolbar-update-chip")).toHaveCount(0);
 });
 
+test("skipping a version survives relaunch and still allows manual installation", async ({ page }) => {
+  await installUpdateEnv(page);
+  await gotoApp(page);
+
+  await page.getByTestId("toolbar-update-chip").click();
+  await page.getByRole("button", { name: "Skip this version" }).click();
+  await expect(page.getByTestId("update-modal")).toHaveCount(0);
+  await expect(page.getByTestId("toolbar-update-chip")).toHaveCount(0);
+
+  await page.reload();
+  await expect.poll(() => getCheckCalls(page)).toBe(1);
+  await expect(page.getByTestId("toolbar-update-chip")).toHaveCount(0);
+  await runCheckForUpdatesCommand(page);
+  await expect(page.getByTestId("update-modal")).toBeVisible();
+  await expect(page.getByText("0.2.0")).toBeVisible();
+  await page.getByTestId("update-install").click();
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getRelaunchCalls: () => number };
+  }).__UPDATE_TEST__?.getRelaunchCalls())).toBe(1);
+});
+
+test("skipping one version does not hide a different release", async ({ page }) => {
+  await installUpdateEnv(page);
+  await gotoApp(page);
+
+  await page.getByTestId("toolbar-update-chip").click();
+  await page.getByTestId("update-skip").click();
+  await page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { setUpdateVersion: (version: string) => void };
+  }).__UPDATE_TEST__?.setUpdateVersion("0.3.0"));
+  await runCheckForUpdatesCommand(page);
+  await expect(page.getByText("0.3.0")).toBeVisible();
+  await page.getByRole("button", { name: "Close update", exact: true }).click();
+  await expect(page.getByTestId("toolbar-update-chip")).toBeVisible();
+});
+
 test("manual check reports no update with an alert", async ({ page }) => {
   await installUpdateEnv(page, { updateAvailable: false });
   await gotoApp(page);
@@ -207,6 +248,7 @@ test("install progress relaunches after success", async ({ page }) => {
   await page.getByTestId("update-install").click();
 
   await expect(page.getByTestId("update-install-progress")).toBeVisible();
+  await expect(page.getByTestId("update-skip")).toBeDisabled();
   await expect.poll(async () => page.evaluate(() => {
     return (globalThis as typeof globalThis & {
       __UPDATE_TEST__?: { getRelaunchCalls: () => number };

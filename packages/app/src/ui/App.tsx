@@ -68,6 +68,7 @@ import presentationCss from "../presentation/PresentationControls.module.css";
 
 /** How long typing must pause before a deck with syntax errors is parsed afresh. */
 const EXACT_PARSE_IDLE_MS = 500;
+const SKIPPED_UPDATE_VERSION_KEY = "tikz-editor:skipped-update-version";
 
 const DevPanel = lazy(async () => {
   const mod = await import("./DevPanel");
@@ -333,6 +334,13 @@ function EditorApp() {
   const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [updateDismissedForSession, setUpdateDismissedForSession] = useState(false);
+  const [skippedUpdateVersion, setSkippedUpdateVersion] = useState<string | null>(() => {
+    try {
+      return platform.persistence.load(SKIPPED_UPDATE_VERSION_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
   const [updateModalPhase, setUpdateModalPhase] = useState<UpdateModalPhase>({ status: "idle" });
   const userWorkspaces = useWorkspaceListStore((s) => s.userWorkspaces);
@@ -1957,6 +1965,22 @@ function EditorApp() {
     setUpdateModalPhase({ status: "idle" });
   }
 
+  function handleSkipUpdate(): void {
+    if (!availableUpdate) return;
+    try {
+      getActiveEditorPlatform().persistence.save(SKIPPED_UPDATE_VERSION_KEY, availableUpdate.version);
+    } catch (error) {
+      void showNativeMessage(
+        "Could Not Skip Update",
+        error instanceof Error ? error.message : String(error),
+        "error"
+      );
+      return;
+    }
+    setSkippedUpdateVersion(availableUpdate.version);
+    handleUpdateLater();
+  }
+
   function handleUpdateModalClose(): void {
     setShowUpdateModal(false);
     setUpdateModalPhase({ status: "idle" });
@@ -2063,7 +2087,7 @@ function EditorApp() {
       <Toolbar
         onPresentationOptions={handlePresentationOptions}
         updateChip={
-          availableUpdate && !showUpdateModal && !updateDismissedForSession
+          availableUpdate && availableUpdate.version !== skippedUpdateVersion && !showUpdateModal && !updateDismissedForSession
             ? {
                 version: availableUpdate.version,
                 onClick: () => {
@@ -2315,6 +2339,7 @@ function EditorApp() {
             }}
             onClose={handleUpdateModalClose}
             onLater={handleUpdateLater}
+            onSkip={handleSkipUpdate}
           />
         </Suspense>
       ) : null}
