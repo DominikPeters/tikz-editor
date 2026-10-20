@@ -69,3 +69,57 @@ jobs:
         if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
       - run: npm run -w @tikz-editor/desktop tauri:build -- --no-bundle
       - run: xvfb-run -a npm run test:desktop:e2e
+
+  desktop-windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+      - id: cache-tauri-driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver.exe
+          key: ${{ runner.os }}-tauri-driver-v1-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-driver-v1-
+      - run: npm ci
+      - name: Test Windows native code
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib
+      - name: Build unsigned Windows installers
+        shell: pwsh
+        run: |
+          $config = Join-Path $env:RUNNER_TEMP "tauri-ci.json"
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -LiteralPath $config
+          npm run -w @tikz-editor/desktop tauri:build -- --ci --bundles nsis,msi --config $config
+      - name: Install tauri-driver
+        if: steps.cache-tauri-driver.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver --locked
+      - name: Install matching Microsoft Edge Driver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          if ($LASTEXITCODE -ne 0) { throw "Could not install msedgedriver-tool." }
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Could not download Microsoft Edge Driver." }
+          $PWD.Path >> $env:GITHUB_PATH
+      - name: Run Windows desktop end-to-end tests
+        timeout-minutes: 10
+        run: npm run test:desktop:e2e
+      - name: Upload unsigned Windows installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-ci-installers
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error

@@ -40,7 +40,7 @@ if (driverProbe.status !== 0) {
   throw new Error(`tauri-driver check failed:\n${driverProbe.stderr ?? driverProbe.stdout ?? ""}`);
 }
 
-const nativeDriver = resolveNativeWebkitDriver();
+const nativeDriver = resolveNativeDriver();
 const driverArgs = nativeDriver ? ["--native-driver", nativeDriver] : [];
 const driver = spawn("tauri-driver", driverArgs, {
   stdio: "pipe"
@@ -649,13 +649,13 @@ async function isPortOpen(port) {
   });
 }
 
-function resolveNativeWebkitDriver() {
+function resolveNativeDriver() {
   const envCandidates = [
     process.env.WEBKIT_WEBDRIVER_PATH,
     process.env.NATIVE_WEBDRIVER_PATH
   ].filter(Boolean);
-  const pathCandidates = binariesFromPath(process.platform === "win32" ? ["WebKitWebDriver.exe"] : ["WebKitWebDriver"]);
-  const fallbackCandidates = [
+  const pathCandidates = binariesFromPath(process.platform === "win32" ? ["msedgedriver.exe"] : ["WebKitWebDriver"]);
+  const fallbackCandidates = process.platform === "win32" ? [] : [
     "/usr/bin/WebKitWebDriver",
     "/usr/libexec/webkit2gtk-4.1/WebKitWebDriver",
     "/usr/libexec/webkit2gtk-4.0/WebKitWebDriver"
