@@ -478,6 +478,7 @@ function visibleItems(view: EditView): Item[] {
   const ruleArguments: { from: number; to: number }[] = [];
   for (const node of tree.nodes) {
     const source = tree.text.slice(node.span.from, node.span.to);
+    // eslint-disable-next-line vitest/no-conditional-tests -- This is RegExp.test, not a conditional test declaration.
     if (TABLE_RULES.test(source) && tree.text[node.span.to] === "[") {
       const close = tree.text.indexOf("]", node.span.to);
       ruleArguments.push({ from: node.span.to, to: close < 0 ? node.span.to : close + 1 });
@@ -490,6 +491,7 @@ function visibleItems(view: EditView): Item[] {
     if (node.id === tree.root || !isLeaf(tree, node.id) || node.kind === "space" || node.kind === "break") {
       continue;
     }
+    // eslint-disable-next-line vitest/no-conditional-tests -- This is RegExp.test, not a conditional test declaration.
     if (view.role(node.id) === "invisible" || itemRole(tree, node.id) === "flow" || TABLE_RULES.test(tree.text.slice(node.span.from, node.span.to))) {
       continue;
     }

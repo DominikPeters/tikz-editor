@@ -1136,9 +1136,9 @@ describe("getInspectorDescriptor – path controls", () => {
     expect(dashStylePresetFromStyle([1, 2, 3], 1)).toBe("custom");
     expect(dashStylePresetFromStyle([5, 5], 1)).toBe("custom");
     expect(lineCapPresetFromStyle("round")).toBe("round");
-    expect(lineCapPresetFromStyle("invalid" as never)).toBe("custom");
+    expect(lineCapPresetFromStyle("invalid")).toBe("custom");
     expect(lineJoinPresetFromStyle("bevel")).toBe("bevel");
-    expect(lineJoinPresetFromStyle("invalid" as never)).toBe("custom");
+    expect(lineJoinPresetFromStyle("invalid")).toBe("custom");
   });
 
   it("resolves fill mode from flag, disabled, and corner-color option states", () => {

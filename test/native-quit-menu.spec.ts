@@ -32,7 +32,7 @@ describe("guarded native Quit", () => {
     expect(quits[0]).toMatchObject({ enabled: true, accelerator: "CmdOrCtrl+Q" });
     (quits[0].action as (id: string) => void)(APP_MENU_COMMAND_IDS.QUIT_APP);
     expect(dispatch).toHaveBeenCalledExactlyOnceWith(APP_MENU_COMMAND_IDS.QUIT_APP, "platform");
-    await manager.sync({ definition, commandStates: { [APP_MENU_COMMAND_IDS.QUIT_APP]: { enabled: false } } as never });
+    await manager.sync({ definition, commandStates: { [APP_MENU_COMMAND_IDS.QUIT_APP]: { enabled: false } } });
     expect(capture.enabled.filter(([id]) => id === APP_MENU_COMMAND_IDS.QUIT_APP).at(-1)).toEqual([APP_MENU_COMMAND_IDS.QUIT_APP, false]);
   });
 });

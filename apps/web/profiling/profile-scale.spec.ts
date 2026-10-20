@@ -212,7 +212,7 @@ async function measureDocument(page: Page, doc: DocumentCase): Promise<Metrics> 
       const anchor = source.split("\n").slice(0, lineIndex + 1).join("\n").lastIndexOf("}");
       type View = { dispatch: (spec: unknown) => void; focus: () => void };
       // CodeMirror's content element links back to its view (`cmTile` in current versions).
-      const content = document.querySelector(".cm-content") as (HTMLElement & { cmTile?: { view?: View }; cmView?: { view?: View } }) | null;
+      const content = document.querySelector<HTMLElement & { cmTile?: { view?: View }; cmView?: { view?: View } }>(".cm-content");
       const view = content?.cmTile?.view ?? content?.cmView?.view;
       if (!view) return false;
       view.dispatch({ selection: { anchor }, scrollIntoView: true });

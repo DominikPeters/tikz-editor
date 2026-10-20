@@ -17,7 +17,7 @@ describe("frame-local Beamer declarations", () => {
   it("executes role changes in order and restores the enclosing group/frame state", () => {
     const document = scanBeamerDocument(source);
     const base = resolveBeamerTheme(document);
-    const scope = createBeamerScopedTheme(document, base, document.frames[0]!.bodySpan);
+    const scope = createBeamerScopedTheme(document, base, document.frames[0].bodySpan);
     const before = scope.at(source.indexOf("Before"));
     const inside = scope.at(source.indexOf("Inside"));
     const after = scope.at(source.indexOf("After"));
@@ -27,13 +27,13 @@ describe("frame-local Beamer declarations", () => {
     expect(before.fonts["block-title"]).toMatchObject({ sizePt: 14.4, series: "medium" });
     expect(inside.fonts["block-title"]).toMatchObject({ sizePt: 14.4, series: "bold" });
     expect(after.fonts["block-title"].series).toBe("medium");
-    expect(createBeamerScopedTheme(document, base, document.frames[1]!.bodySpan).at(source.indexOf("Next"))).toBe(base);
+    expect(createBeamerScopedTheme(document, base, document.frames[1].bodySpan).at(source.indexOf("Next"))).toBe(base);
     expect(base.fonts["block-title"].sizePt).toBe(12);
   });
 
   it("removes declaration paint while preserving authored text source ownership", () => {
     const document = scanBeamerDocument(source);
-    const scope = createBeamerScopedTheme(document, resolveBeamerTheme(document), document.frames[0]!.bodySpan);
+    const scope = createBeamerScopedTheme(document, resolveBeamerTheme(document), document.frames[0].bodySpan);
     const mapped = scope.project(createIdentityMappedText(source));
     expect(mapped.text).not.toContain("setbeamer");
     const offset = mapped.text.indexOf("After");

@@ -117,5 +117,5 @@ function makeBindings(): CommandBindings {
         run: () => undefined
       }
     ])
-  ) as unknown as CommandBindings;
+  );
 }

@@ -840,7 +840,7 @@ describe("selective replay past an unchanged corridor", () => {
       : `  \\draw[->] (a) -- (${index},4);`),
     "\\end{tikzpicture}"
   ].join("\n");
-  const shapeId = (source: string) => parseTikz(source).figure.body[9]!.id;
+  const shapeId = (source: string) => parseTikz(source).figure.body[9].id;
 
   function edit(session: ReturnType<typeof createIncrementalSemanticSession>, source: string, changedSourceIds: string[]) {
     const parsed = parseTikz(source, { recover: true });
@@ -910,7 +910,7 @@ describe("selective replay past an unchanged corridor", () => {
       const source = randomPicture("\\draw (0,0) -- (1,1);");
       const session = createIncrementalSemanticSession();
       session.evaluate({ figure: parseTikz(source).figure, source });
-      edit(session, randomPicture("\\draw (rand,0) -- (1,1);"), [parseTikz(source).figure.body[9]!.id]);
+      edit(session, randomPicture("\\draw (rand,0) -- (1,1);"), [parseTikz(source).figure.body[9].id]);
     });
 
     it("keeps the random seed in the checkpoints past a replayed corridor", () => {
@@ -918,8 +918,8 @@ describe("selective replay past an unchanged corridor", () => {
       const session = createIncrementalSemanticSession();
       session.evaluate({ figure: parseTikz(source).figure, source });
       source = source.replace("at (1,1)", "at (2,1)");
-      expect(edit(session, source, [parseTikz(source).figure.body[9]!.id]).suffixReplay).toBe("replayed");
-      const late = parseTikz(source).figure.body[35]!;
+      expect(edit(session, source, [parseTikz(source).figure.body[9].id]).suffixReplay).toBe("replayed");
+      const late = parseTikz(source).figure.body[35];
       source = source.slice(0, late.span.from) + source.slice(late.span.from, late.span.to).replace("(rand,4)", "(rand,5)") + source.slice(late.span.to);
       expect(edit(session, source, [late.id]).recomputeFromStatementIndex).toBeGreaterThan(9);
     });

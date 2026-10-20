@@ -573,7 +573,7 @@ const INTERESTING = /\\[a-zA-Z]+|[{}[\]<>%$\n();,]/gu;
 
 function interestingOffsets(source: string): number[] {
   const offsets: number[] = [];
-  for (const match of source.matchAll(INTERESTING)) offsets.push(match.index!, match.index! + match[0].length);
+  for (const match of source.matchAll(INTERESTING)) offsets.push(match.index, match.index + match[0].length);
   return offsets;
 }
 
@@ -601,10 +601,10 @@ export function randomTextEdit(source: string, rng: () => number, within?: Span)
   if (roll < 0.75) return { from: Math.max(within?.from ?? 0, at - 1), to: at, insert: "" };
   if (roll < 0.88) return { from: at, to: Math.min(limit, at + 1 + Math.floor(rng() * 60)), insert: "" };
   // Replace a number, as dragging a coordinate does.
-  const numbers = [...source.matchAll(/-?\d+(\.\d+)?/gu)].filter((match) => match.index! >= (within?.from ?? 0) && match.index! + match[0].length <= limit);
+  const numbers = [...source.matchAll(/-?\d+(\.\d+)?/gu)].filter((match) => match.index >= (within?.from ?? 0) && match.index + match[0].length <= limit);
   if (numbers.length === 0) return { from: at, to: at, insert: pick(CHARACTERS, rng) };
   const number = pick(numbers, rng);
-  return { from: number.index!, to: number.index! + number[0].length, insert: (Number(number[0]) + (rng() - 0.4) * 3).toFixed(2) };
+  return { from: number.index, to: number.index + number[0].length, insert: (Number(number[0]) + (rng() - 0.4) * 3).toFixed(2) };
 }
 
 /**
@@ -616,13 +616,13 @@ export function benignTextEdit(source: string, rng: () => number, within?: reado
   const inside = (from: number, to: number) => !within || within.some((span) => span.from <= from && to <= span.to);
   const roll = rng();
   if (roll < 0.5) {
-    const numbers = [...source.matchAll(/-?\d+(\.\d+)?/gu)].filter((match) => inside(match.index!, match.index! + match[0].length));
+    const numbers = [...source.matchAll(/-?\d+(\.\d+)?/gu)].filter((match) => inside(match.index, match.index + match[0].length));
     if (numbers.length > 0) {
       const number = pick(numbers, rng);
-      return { from: number.index!, to: number.index! + number[0].length, insert: (Number(number[0]) + (rng() - 0.4) * 3).toFixed(2) };
+      return { from: number.index, to: number.index + number[0].length, insert: (Number(number[0]) + (rng() - 0.4) * 3).toFixed(2) };
     }
   }
-  const texts = [...source.matchAll(/\{([A-Za-z][A-Za-z ]*)\}/gu)].filter((match) => inside(match.index!, match.index! + match[0].length));
+  const texts = [...source.matchAll(/\{([A-Za-z][A-Za-z ]*)\}/gu)].filter((match) => inside(match.index, match.index + match[0].length));
   if (texts.length === 0) {
     // Nothing to nudge or retype: a space inside one of the spans keeps it well formed.
     const span = within && within.length > 0 ? pick(within, rng) : { from: 0, to: source.length };
@@ -630,7 +630,7 @@ export function benignTextEdit(source: string, rng: () => number, within?: reado
     return { from: at, to: at, insert: " " };
   }
   const text = pick(texts, rng);
-  const from = text.index! + 1 + Math.floor(rng() * text[1].length);
+  const from = text.index + 1 + Math.floor(rng() * text[1].length);
   return roll < 0.8 || text[1].length < 2
     ? { from, to: from, insert: pick(["q", "W", "e", " ", "k"], rng) }
     : { from, to: from + 1, insert: "" };
@@ -885,6 +885,7 @@ async function generateOp(docs: DocState[], rng: () => number, focus: Focus, pro
     if (view.sceneIds.length > 0) return { kind: "hover-prewarm", doc: index, sourceId: pick(view.sceneIds, rng) };
   }
   // A drawing tool or a shape's click picks a layer on the slide shown.
+  // eslint-disable-next-line vitest/no-conditional-tests -- This is RegExp.test, not a conditional test declaration.
   if (view.isDeck && /^frame:\d+$/u.test(doc.root ?? "")) return { kind: "layer", doc: index, root: pick(drawingLayerChoices(doc, view), rng) };
   return { kind: "render", doc: index };
 }
@@ -944,7 +945,10 @@ function advanceModel(docs: DocState[], op: FuzzOp): void {
     case "mask":
       doc.mask = op.span && op.span.to <= doc.source.length && op.span.from < op.span.to ? op.span : null;
       break;
-    default:
+    case "render":
+    case "aborted-render":
+    case "neighbors":
+    case "hover-prewarm":
       break;
   }
 }

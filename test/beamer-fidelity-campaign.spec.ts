@@ -37,7 +37,7 @@ for (const campaign of ["fidelity-campaign", "fidelity-campaign-wave2", "fidelit
             if (fixture.id === "metropolis-fira-styles") {
               const faces = ["firasans-light", "firasans-lightitalic", "firasans-regular", "firasans-italic"];
               expect(new Set(native.glyphs.map(glyph => glyph.fontName))).toEqual(new Set(faces));
-              expect(new Set(oracle.pages[index]!.glyphs.map(glyph => glyph.fontName))).toEqual(new Set(faces));
+              expect(new Set(oracle.pages[index].glyphs.map(glyph => glyph.fontName))).toEqual(new Set(faces));
             }
             expect(priorityFidelityFailures({ input: { overlayStepCount: fixture.pages }, oracle: { page: { pageCount: oracle.pages.length } }, structural: comparison }, { pages: fixture.pages })).toEqual([]);
           }

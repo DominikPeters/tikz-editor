@@ -20,7 +20,8 @@
     "scripts/**/*.mjs",
     "scripts/**/*.mts",
     "scripts/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "test/**/*.mjs"
   ],
   "exclude": [
     "node_modules",

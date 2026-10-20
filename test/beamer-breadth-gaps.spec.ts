@@ -20,7 +20,7 @@ describe("Beamer breadth gap boundaries", () => {
     const page = await prepareBeamerDocument(source).renderFrame();
     const warning = page.diagnostics.find(item => item.code === "beamer-contents-unsupported-options");
     expect(warning).toBeDefined();
-    expect(source.slice(warning!.span!.from, warning!.span!.to)).toContain("currentsection");
+    expect(source.slice(warning!.span.from, warning!.span.to)).toContain("currentsection");
     expect(page.svg.svg).not.toContain("data-tex-literal=");
   });
 

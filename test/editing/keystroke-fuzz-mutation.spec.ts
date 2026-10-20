@@ -24,6 +24,7 @@ vi.mock("../../packages/core/src/editing/operations/insert.js", async (importOri
         const patches = outcome.patches.map((patch) => (patch.insert === "${}$" ? { ...patch, insert: "$$" } : patch));
         return { ...outcome, patches, caret: outcome.caret - 1, placeholder: undefined };
       }
+      // eslint-disable-next-line vitest/no-conditional-tests -- This is RegExp.test, not a conditional test declaration.
       if (sabotage.mutant === "no terminator" && /^[A-Za-z]$/u.test(args[2])) {
         const patches = outcome.patches.map((patch) => ({ ...patch, insert: patch.insert.replace(/^(?: |\{\})(?=[A-Za-z]$)/u, "") }));
         const removed = outcome.patches.reduce((sum, patch, index) => sum + patch.insert.length - patches[index].insert.length, 0);

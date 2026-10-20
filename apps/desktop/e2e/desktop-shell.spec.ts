@@ -257,7 +257,7 @@ describe("desktop shell flows", () => {
       commandStates: {
         [APP_MENU_COMMAND_IDS.UNDO]: { enabled: true },
         [APP_MENU_COMMAND_IDS.TOGGLE_GRID]: { enabled: true, checked: true }
-      } as Record<string, { enabled: boolean; checked?: boolean }>
+      }
     });
 
     expect(mock.contextMenuPayloads).toHaveLength(1);
@@ -291,7 +291,7 @@ describe("desktop shell flows", () => {
         [APP_MENU_COMMAND_IDS.REDO]: { enabled: true },
         [APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]: { enabled: false },
         [APP_MENU_COMMAND_IDS.UNDO]: { enabled: false }
-      } as Record<string, { enabled: boolean; checked?: boolean }>
+      }
     });
 
     expect(mock.contextMenuPayloads).toHaveLength(1);
@@ -326,7 +326,7 @@ describe("desktop shell flows", () => {
       ],
       commandStates: {
         [APP_MENU_COMMAND_IDS.NODE_POSITION_RELATIVE_TO]: { enabled: true }
-      } as Record<string, { enabled: boolean; checked?: boolean }>,
+      },
       onCommandRun: (commandId) => {
         contextMenuCommand = commandId;
       }

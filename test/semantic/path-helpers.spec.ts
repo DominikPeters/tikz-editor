@@ -408,7 +408,7 @@ describe("semantic path segment helpers", () => {
     expect(verticalHorizontal.segment?.kind).toBe("hv");
     expect(commands.some((command) => command.kind === "C")).toBe(true);
 
-    expect(appendPathPoint(commands, "??" as "--", p(30, 40), p(50, 50), null, 5)).toMatchObject({
+    expect(appendPathPoint(commands, "??", p(30, 40), p(50, 50), null, 5)).toMatchObject({
       segment: null,
       nextRoundedCorners: 5
     });

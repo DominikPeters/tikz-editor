@@ -29,6 +29,15 @@ function containsError(tree: Tree): boolean {
   return found;
 }
 
+function treeShape(tree: Tree): string[] {
+  const nodes: string[] = [];
+  tree.iterate({
+    enter(node) { nodes.push(`${node.name}@${node.from}:${node.to}`); },
+    leave() { nodes.push("/"); }
+  });
+  return nodes;
+}
+
 // Lezer reuses only whole subtrees, which short decks lack: join the bodies
 // of the beamer fixtures that parse cleanly into one long deck, and repeat a small one.
 function bundle(): string {
@@ -109,7 +118,7 @@ describe("syntax index reparse", () => {
     const previous = buildTexSyntaxIndex(wrap(before), beamerDocumentParser);
     const reparsed = buildTexSyntaxIndex(wrap(after), beamerDocumentParser, { previous });
     expect(reparsed.overlayArguments.length).not.toBe(previous.overlayArguments.length);
-    expect(reparsed.tree.toString()).toBe(beamerDocumentParser.parse(wrap(after)).toString());
+    expect(treeShape(reparsed.tree)).toEqual(treeShape(beamerDocumentParser.parse(wrap(after))));
   });
 
   it("gives the tree of a fresh parse after edits and mask changes", () => {
@@ -127,7 +136,7 @@ describe("syntax index reparse", () => {
         const reparsed = buildTexSyntaxIndex(source, beamerDocumentParser, { parseSource, previous });
         const fresh = beamerDocumentParser.parse(parseSource);
         if (!containsError(fresh)) {
-          expect(reparsed.tree.toString(), `seed ${SEED}, case ${index}, step ${step}`).toBe(fresh.toString());
+          expect(treeShape(reparsed.tree), `seed ${SEED}, case ${index}, step ${step}`).toEqual(treeShape(fresh));
           checked += 1;
         } else if (rng() < 0.7) {
           // Usually the breakage is undone next, reparsing a broken tree into clean text.
