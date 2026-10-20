@@ -3216,6 +3216,7 @@ pub fn run() {
                     state: None,
                     radius: None,
                     color: None,
+                    interactive: false,
                 });
             }
 

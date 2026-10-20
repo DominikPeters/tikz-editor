@@ -35,8 +35,8 @@ value before writing it, so upgrades preserve preferences; new silent MSI instal
 default to on. The MSI preference component is permanent so an uninstall during
 a major upgrade cannot delete the preference.
 
-`installer.nsi` is the upstream Tauri CLI 2.11.2 template from
-https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.2/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi
+`installer.nsi` is the upstream Tauri CLI 2.12.3 template from
+https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.12.3/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi
 with a custom page inserted before the installation page and `.tex` Open with
 registration and cleanup. When upgrading Tauri, refresh this template and retain
 these changes. `update-checks.nsh` provides the
