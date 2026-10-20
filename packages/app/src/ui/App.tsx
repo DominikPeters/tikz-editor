@@ -1991,6 +1991,17 @@ function EditorApp() {
     if (!updates || !availableUpdate) {
       return;
     }
+    if (availableUpdate.downloadUrl) {
+      try {
+        const open = getActiveEditorPlatform().window?.openExternalUrl;
+        if (!open) throw new Error("Could not open the update download.");
+        if (!await open(availableUpdate.downloadUrl)) throw new Error("Could not open the update download.");
+        handleUpdateLater();
+      } catch (error) {
+        setUpdateModalPhase({ status: "failed", message: error instanceof Error ? error.message : String(error) });
+      }
+      return;
+    }
     setUpdateModalPhase({ status: "installing", downloadedBytes: 0 });
     let downloadedBytes = 0;
     try {

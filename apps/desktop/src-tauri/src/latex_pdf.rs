@@ -634,32 +634,36 @@ mod tests {
 
     #[test]
     fn recorder_inputs_resolve_against_pwd() {
-        let fls = "PWD /deck\nINPUT /tex/beamer.cls\nINPUT logo.png\nOUTPUT /build/input.log\nINPUT /tex/beamer.cls\n";
+        let deck = std::env::temp_dir().join("deck");
+        let class = std::env::temp_dir().join("tex/beamer.cls");
+        let fls = format!("PWD {}\nINPUT {}\nINPUT logo.png\nOUTPUT input.log\nINPUT {}\n", deck.display(), class.display(), class.display());
         assert_eq!(
-            recorded_inputs(fls),
+            recorded_inputs(&fls),
             vec![
-                PathBuf::from("/tex/beamer.cls"),
-                PathBuf::from("/deck/logo.png"),
-                PathBuf::from("/tex/beamer.cls"),
+                class.clone(),
+                deck.join("logo.png"),
+                class,
             ]
         );
     }
 
     #[test]
     fn bibliography_sources_come_from_bibtex_and_biber_logs() {
+        let build = std::env::temp_dir().join("build");
+        let bibliography = std::env::temp_dir().join("deck/refs.bib");
         let bibtex =
             "The style file: plain.bst\nDatabase file #1: refs.bib\nDatabase file #2: more.bib\n";
         assert_eq!(
-            bibliography_sources(bibtex, None, Path::new("/build")),
+            bibliography_sources(bibtex, None, &build),
             vec![
-                PathBuf::from("/build/refs.bib"),
-                PathBuf::from("/build/more.bib")
+                build.join("refs.bib"),
+                build.join("more.bib")
             ]
         );
-        let biber = "[225] bibtex.pm:1519> INFO - Found BibTeX data source '/deck/refs.bib'\n";
+        let biber = format!("[225] bibtex.pm:1519> INFO - Found BibTeX data source '{}'\n", bibliography.display());
         assert_eq!(
-            bibliography_sources(biber, None, Path::new("/build")),
-            vec![PathBuf::from("/deck/refs.bib")]
+            bibliography_sources(&biber, None, &build),
+            vec![bibliography]
         );
     }
 

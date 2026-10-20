@@ -2,6 +2,7 @@ mod assistant;
 mod latex_pdf;
 mod presentation;
 mod update_preferences;
+mod portable;
 
 use assistant::{
     AssistantAccountSnapshot, AssistantModelOption, AssistantState, AssistantThreadStatePayload,
@@ -3039,6 +3040,15 @@ async fn desktop_assistant_logout(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    if let Err(error) = portable::prepare(context.config()) {
+        rfd::MessageDialog::new()
+            .set_title("Could Not Start Portable TikZ Editor")
+            .set_description(&error)
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+        return;
+    }
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
     {
@@ -3104,6 +3114,7 @@ pub fn run() {
             presentation::desktop_presentation_keep_awake,
             presentation::desktop_prepare_presentation_window,
             update_preferences::desktop_get_automatic_update_checks,
+            portable::desktop_is_portable,
             update_preferences::desktop_set_automatic_update_checks,
             update_preferences::desktop_reset_automatic_update_checks,
             desktop_check_codex_status,
@@ -3231,7 +3242,7 @@ pub fn run() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
@@ -3476,41 +3487,29 @@ mod tests {
             "first.tikz".to_string(),
         ];
 
-        let collected = collect_associated_file_paths(&args, Some("/tmp/work"));
-        let rendered: Vec<String> = collected
-            .iter()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect();
+        let work = std::env::temp_dir().join("work");
+        let collected = collect_associated_file_paths(&args, work.to_str());
         assert_eq!(
-            rendered,
-            vec![
-                "/tmp/work/first.tikz".to_string(),
-                "/tmp/work/second.tex".to_string()
-            ]
+            collected,
+            vec![work.join("first.tikz"), work.join("second.tex")]
         );
     }
 
     #[test]
     fn collects_associated_paths_from_file_urls() {
+        let work = std::env::temp_dir().join("work with spaces");
         let urls = vec![
-            Url::from_file_path("/tmp/work/first.tikz").unwrap(),
+            Url::from_file_path(work.join("first.tikz")).unwrap(),
             Url::parse("https://example.com/second.tex").unwrap(),
-            Url::from_file_path("/tmp/work/second.tex").unwrap(),
-            Url::from_file_path("/tmp/work/third.txt").unwrap(),
-            Url::from_file_path("/tmp/work/first.tikz").unwrap(),
+            Url::from_file_path(work.join("second.tex")).unwrap(),
+            Url::from_file_path(work.join("third.txt")).unwrap(),
+            Url::from_file_path(work.join("first.tikz")).unwrap(),
         ];
 
         let collected = collect_associated_file_paths_from_urls(&urls);
-        let rendered: Vec<String> = collected
-            .iter()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect();
         assert_eq!(
-            rendered,
-            vec![
-                "/tmp/work/first.tikz".to_string(),
-                "/tmp/work/second.tex".to_string()
-            ]
+            collected,
+            vec![work.join("first.tikz"), work.join("second.tex")]
         );
     }
 

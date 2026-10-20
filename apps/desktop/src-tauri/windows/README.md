@@ -30,6 +30,10 @@ reads this before any startup check and Settings writes the same value. A missin
 value defaults to on everywhere. Reset to Defaults restores on; otherwise an
 explicit installer or Settings choice takes precedence. Manual update checks remain available.
 
+The portable executable instead uses `tikz-editor-data/automatic-update-checks.json`
+beside itself and never reads or writes the installed edition's registry preference.
+The portable edition is distributed as a ZIP and offers download-only updates.
+
 Silent and passive NSIS installs leave this value alone. MSI searches the existing
 value before writing it, so upgrades preserve preferences; new silent MSI installs
 default to on. The MSI preference component is permanent so an uninstall during
@@ -42,6 +46,11 @@ registration and cleanup. When upgrading Tauri, refresh this template and retain
 these changes. `update-checks.nsh` provides the
 page and post-install persistence. The MSI uses a WiX fragment rather than a copy
 of the upstream template.
+
+Release bundling uses `--no-binary-patching` to preserve the executable's existing
+Authenticode signature. Update checks therefore use the generic Windows manifest
+entry. The portable executable is built and signed separately, then zipped without
+passing through the installer bundler.
 
 On Windows, verify a fresh EXE and MSI install with the checkbox on and off, then
 change the preference in Settings and perform interactive and silent upgrades.

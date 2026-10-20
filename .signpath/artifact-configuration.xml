@@ -6,8 +6,8 @@
   <zip-file>
     <!--
       The first signing request contains the application executable. The second
-      contains the NSIS bootstrapper and the MSI. Exactly one top-level PE file
-      is expected in either request.
+      contains the NSIS bootstrapper and the MSI. A third contains the portable
+      executable. Exactly one top-level PE file is expected in each request.
     -->
     <pe-file path="*.exe" min-matches="1" max-matches="1"
              product-name="TikZ Editor" product-version="${version}">

@@ -387,7 +387,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions }: ToolbarPro
       <div className={css.spacer} />
       <PresentationToolbar onOptions={onPresentationOptions} />
       {updateChip ? (
-        <RenderedTooltip content={`Install update ${updateChip.version}`}>
+        <RenderedTooltip content={`View update ${updateChip.version}`}>
           <button
             type="button"
             className={css.updateChip}

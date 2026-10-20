@@ -50,11 +50,13 @@ driver.stderr.on("data", (chunk) => {
   process.stderr.write(chunk);
 });
 
-await waitForDriverReady(driver);
-
-const browser = await createSession(appPath);
-
+let browser;
 try {
+  await waitForDriverReady(driver);
+  browser = await createSession(appPath);
+  if (process.env.TIKZ_DESKTOP_E2E_PORTABLE === "1") {
+    await scenarioPortableStorage(browser);
+  }
   await installDeterministicBridge(browser);
   const scenarios = [
     ["boot and tab lifecycle", scenarioBootAndTabLifecycle],
@@ -88,11 +90,20 @@ try {
   }
   console.log(`[desktop-e2e] Completed ${passed}/${scenarios.length} scenarios in ${Date.now() - runStartedAt}ms`);
 } finally {
-  await browser.deleteSession().catch(() => undefined);
-  driver.kill("SIGTERM");
+  await browser?.deleteSession().catch(() => undefined);
+  if (process.platform === "win32" && driver.pid) {
+    // Windows terminates the driver immediately; stop its native-driver child
+    // too so the next build flavor can bind the same WebDriver ports.
+    spawnSync("taskkill", ["/PID", String(driver.pid), "/T", "/F"], { stdio: "ignore" });
+  } else {
+    driver.kill("SIGTERM");
+  }
 }
 
 function resolveAppBinary() {
+  if (process.env.TIKZ_DESKTOP_E2E_APP_PATH) {
+    return path.resolve(process.env.TIKZ_DESKTOP_E2E_APP_PATH);
+  }
   const root = process.cwd();
   const binaryName = process.platform === "win32" ? "tikz-editor.exe" : "tikz-editor";
   const plain = path.resolve(root, "src-tauri/target/release", binaryName);
@@ -184,6 +195,28 @@ async function createSession(application) {
 
 async function installDeterministicBridge(browserInstance) {
   await browserInstance.execute(installDeterministicBridgeInPage);
+}
+
+async function scenarioPortableStorage(browserInstance) {
+  assert.equal(process.platform, "win32", "Portable desktop e2e requires Windows");
+  const registryArgs = ["query", "HKCU\\Software\\TikZEditor\\Preferences", "/v", "AutomaticUpdateChecks"];
+  const readRegistry = () => spawnSync("reg.exe", registryArgs, { encoding: "utf8" });
+  const before = readRegistry();
+  assert.equal(await browserInstance.execute(() => window.__TAURI_INTERNALS__.invoke("desktop_is_portable")), true);
+  await browserInstance.execute(async () => {
+    localStorage.setItem("portable-e2e", "persisted");
+    await window.__TAURI_INTERNALS__.invoke("desktop_set_automatic_update_checks", { enabled: false });
+  });
+  const data = path.join(path.dirname(appPath), "tikz-editor-data");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(data, "automatic-update-checks.json"), "utf8")), false);
+  assert.ok(fs.existsSync(path.join(data, "EBWebView")), "WebView2 profile should live beside the executable");
+  await browserInstance.reloadSession();
+  assert.equal(await browserInstance.execute(() => window.__TAURI_INTERNALS__.invoke("desktop_get_automatic_update_checks")), false);
+  assert.equal(await browserInstance.execute(() => localStorage.getItem("portable-e2e")), "persisted");
+  const after = readRegistry();
+  assert.equal(after.status, before.status);
+  assert.equal(after.stdout, before.stdout, "Portable preferences must not change the installed edition's registry value");
+  console.log("[desktop-e2e] PASS portable profile and preference persistence after restart");
 }
 
 async function scenarioBootAndTabLifecycle(browserInstance) {

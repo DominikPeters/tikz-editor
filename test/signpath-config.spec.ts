@@ -18,19 +18,20 @@ describe("SignPath product metadata restrictions", () => {
     expect(xml).toContain('author="tikz"');
   });
 
-  it("passes the validated build version to both signing requests, without hardcoding it", () => {
+  it("passes the validated build version to every signing request, without hardcoding it", () => {
     const action = read(".github/actions/build-sign-windows/action.yml");
     expect(action).toContain('id: metadata');
     expect(action).toContain('$version = [string]$config.version');
     expect(action).toContain('$metadata.ProductName -cne $config.productName');
     expect(action).toContain('$metadata.ProductVersion -cne $version');
     expect(action).toContain('"version=$version" >> $env:GITHUB_OUTPUT');
-    const requests = action.split(/ {4}- name: Sign (?:application executable|Windows installers)\n/).slice(1);
-    expect(requests).toHaveLength(2);
+    const requests = action.split(/ {4}- name: Sign (?:application executable|Windows installers|portable application executable)\n/).slice(1);
+    expect(requests).toHaveLength(3);
     for (const request of requests) {
       const step = request.split(/\n {4}- /)[0];
       expect(step).toContain('version: ${{ toJSON(steps.metadata.outputs.version) }}');
     }
     expect(action.indexOf('id: metadata')).toBeLessThan(action.indexOf('name: Sign application executable'));
+    expect(action).toContain('bundle --ci --no-binary-patching');
   });
 });

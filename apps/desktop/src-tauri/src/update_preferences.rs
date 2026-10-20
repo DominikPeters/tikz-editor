@@ -1,5 +1,4 @@
 use tauri::AppHandle;
-#[cfg(not(target_os = "windows"))]
 use tauri::Manager;
 
 // Shared with windows/update-checks.nsh and windows/update-checks.wxs.
@@ -18,8 +17,7 @@ pub fn desktop_reset_automatic_update_checks(app: AppHandle) -> Result<bool, Str
 #[tauri::command]
 pub fn desktop_get_automatic_update_checks(app: AppHandle) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
-    {
-        let _ = app;
+    if !crate::portable::is_portable(&app) {
         let key = match winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
             .open_subkey(REGISTRY_KEY)
         {
@@ -27,13 +25,12 @@ pub fn desktop_get_automatic_update_checks(app: AppHandle) -> Result<bool, Strin
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
             Err(error) => return Err(error.to_string()),
         };
-        match key.get_value::<String, _>(REGISTRY_VALUE) {
+        return match key.get_value::<String, _>(REGISTRY_VALUE) {
             Ok(value) => Ok(value == "1"),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
             Err(error) => Err(error.to_string()),
-        }
+        };
     }
-    #[cfg(not(target_os = "windows"))]
     {
         let path = app
             .path()
@@ -51,15 +48,13 @@ pub fn desktop_get_automatic_update_checks(app: AppHandle) -> Result<bool, Strin
 #[tauri::command]
 pub fn desktop_set_automatic_update_checks(app: AppHandle, enabled: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
-    {
-        let _ = app;
+    if !crate::portable::is_portable(&app) {
         let (key, _) = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
             .create_subkey(REGISTRY_KEY)
             .map_err(|e| e.to_string())?;
-        key.set_value(REGISTRY_VALUE, &if enabled { "1" } else { "0" })
-            .map_err(|e| e.to_string())
+        return key.set_value(REGISTRY_VALUE, &if enabled { "1" } else { "0" })
+            .map_err(|e| e.to_string());
     }
-    #[cfg(not(target_os = "windows"))]
     {
         let directory = app.path().app_config_dir().map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;

@@ -263,6 +263,8 @@ export type UpdateInfo = {
   currentVersion: string;
   date?: string;
   body?: string;
+  /** Manual update package, used by portable distributions. */
+  downloadUrl?: string;
 };
 
 export type UpdateInstallProgress =

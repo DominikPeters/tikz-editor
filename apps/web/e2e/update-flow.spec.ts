@@ -6,6 +6,7 @@ type UpdateEnvOptions = {
   installFails?: boolean;
   automaticChecks?: boolean;
   preferenceFails?: boolean;
+  portable?: boolean;
 };
 
 test.beforeEach(async ({ page }) => {
@@ -65,6 +66,7 @@ async function installUpdateEnv(page: Page, options: UpdateEnvOptions = {}): Pro
               version: updateVersion,
               currentVersion: "0.1.0",
               date: "2026-05-08T12:00:00Z",
+              ...(opts.portable ? { downloadUrl: "https://example.com/TikZ.Editor_0.2.0_x64-portable.zip" } : {}),
               body: "## Highlights\n\n- Update notes\n- **Bold note**"
             }
           : null;
@@ -254,6 +256,30 @@ test("install progress relaunches after success", async ({ page }) => {
       __UPDATE_TEST__?: { getRelaunchCalls: () => number };
     }).__UPDATE_TEST__?.getRelaunchCalls() ?? 0;
   })).toBe(1);
+});
+
+test("portable updates offer a ZIP without installing or relaunching", async ({ page }) => {
+  await installUpdateEnv(page, { portable: true });
+  await gotoApp(page);
+  await page.getByTestId("toolbar-update-chip").click();
+  await expect(page.getByText(/Keep your tikz-editor-data folder/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Install and Relaunch" })).toHaveCount(0);
+  await page.evaluate(() => {
+    window.open = (url) => {
+      localStorage.setItem("update-test-opened-url", String(url));
+      return window;
+    };
+  });
+  await page.getByRole("button", { name: "Download ZIP" }).click();
+  expect(await page.evaluate(() => localStorage.getItem("update-test-opened-url")))
+    .toBe("https://example.com/TikZ.Editor_0.2.0_x64-portable.zip");
+  await expect(page.getByTestId("update-modal")).toHaveCount(0);
+  expect(await page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getRelaunchCalls: () => number };
+  }).__UPDATE_TEST__?.getRelaunchCalls())).toBe(0);
+  expect(await page.evaluate(() => (globalThis as typeof globalThis & {
+    __UPDATE_TEST__?: { getProgressEvents: () => unknown[] };
+  }).__UPDATE_TEST__?.getProgressEvents())).toEqual([]);
 });
 
 test("install failure stays in the update modal with retry available", async ({ page }) => {

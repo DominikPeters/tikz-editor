@@ -140,6 +140,7 @@
 }
 
 .warning,
+.instructions,
 .error {
   margin: 0;
   font-size: calc(var(--app-ui-scale, 1) * 12px);

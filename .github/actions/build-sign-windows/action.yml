@@ -32,7 +32,7 @@ inputs:
 
 outputs:
   signed-artifact-directory:
-    description: Directory containing signed installers and regenerated updater signatures.
+    description: Directory containing signed installers, updater signatures, and the signed portable ZIP.
     value: ${{ steps.collect.outputs.directory }}
 
 runs:
@@ -122,7 +122,8 @@ runs:
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.tauri-signing-private-key }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.tauri-signing-private-key-password }}
-      run: npm run -w @tikz-editor/desktop tauri -- bundle --ci
+      # Bundle type patching would invalidate the already-signed executable.
+      run: npm run -w @tikz-editor/desktop tauri -- bundle --ci --no-binary-patching
 
     - name: Stage unsigned installers
       shell: pwsh
@@ -186,6 +187,46 @@ runs:
           }
         }
 
+    - name: Build portable application executable
+      shell: pwsh
+      run: npm run -w @tikz-editor/desktop tauri:build:portable -- --ci
+
+    - name: Stage unsigned portable executable
+      shell: pwsh
+      run: |
+        $source = Join-Path $env:GITHUB_WORKSPACE "apps\desktop\src-tauri\target\release\tikz-editor.exe"
+        $metadata = (Get-Item -LiteralPath $source).VersionInfo
+        if ($metadata.ProductName -cne "TikZ Editor" -or $metadata.ProductVersion -cne "${{ steps.metadata.outputs.version }}") {
+          throw "Portable application metadata does not match the validated product and version."
+        }
+        $destination = Join-Path $env:RUNNER_TEMP "signpath-unsigned-portable"
+        New-Item -ItemType Directory -Force -Path $destination | Out-Null
+        Copy-Item -LiteralPath $source -Destination (Join-Path $destination "tikz-editor.exe")
+
+    - name: Upload unsigned portable executable
+      id: upload-unsigned-portable
+      uses: actions/upload-artifact@v7
+      with:
+        name: signpath-portable-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}\signpath-unsigned-portable\tikz-editor.exe
+        compression-level: 0
+        if-no-files-found: error
+
+    - name: Sign portable application executable
+      uses: signpath/github-action-submit-signing-request@v2
+      with:
+        api-token: ${{ inputs.api-token }}
+        organization-id: ${{ inputs.organization-id }}
+        project-slug: ${{ inputs.project-slug }}
+        signing-policy-slug: ${{ inputs.signing-policy-slug }}
+        artifact-configuration-slug: ${{ inputs.artifact-configuration-slug }}
+        github-artifact-id: ${{ steps.upload-unsigned-portable.outputs.artifact-id }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: ${{ inputs.wait-for-completion-timeout-in-seconds }}
+        output-artifact-directory: ${{ runner.temp }}\signpath-signed-portable
+        parameters: |
+          version: ${{ toJSON(steps.metadata.outputs.version) }}
+
     - name: Collect signed Windows artifacts
       id: collect
       shell: pwsh
@@ -196,4 +237,10 @@ runs:
         Copy-Item -Path (Join-Path $source "*.exe") -Destination $destination
         Copy-Item -Path (Join-Path $source "*.msi") -Destination $destination
         Copy-Item -Path (Join-Path $source "*.sig") -Destination $destination
+        $portable = Join-Path $env:RUNNER_TEMP "signpath-signed-portable\tikz-editor.exe"
+        $signature = Get-AuthenticodeSignature -LiteralPath $portable
+        if ($null -eq $signature.SignerCertificate) {
+          throw "SignPath returned a portable executable without an Authenticode signature."
+        }
+        & ./apps/desktop/scripts/package-portable.ps1 -ExecutablePath $portable -OutputDirectory $destination
         "directory=$destination" >> $env:GITHUB_OUTPUT

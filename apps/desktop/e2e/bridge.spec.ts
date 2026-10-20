@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppMenuCommandId } from "@tikz-editor/app/app-menu";
 import { createDefaultBridge } from "../src/platform/bridge";
-import { createNativeDesktopMenuManager, type NativeCommandState } from "../src/platform/native-menu";
+import { createNativeDesktopMenuManager } from "../src/platform/native-menu";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   menuItemNew: vi.fn(),
-  setTheme: vi.fn()
+  setTheme: vi.fn(),
+  updaterCheck: vi.fn(),
+  downloadAndInstall: vi.fn()
 }));
+
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: mocks.updaterCheck }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: mocks.invoke
@@ -49,6 +52,8 @@ describe("default desktop bridge", () => {
       setEnabled: () => Promise.resolve()
     }));
     mocks.setTheme.mockReset();
+    mocks.updaterCheck.mockReset();
+    mocks.downloadAndInstall.mockReset();
   });
 
   afterEach(() => {
@@ -88,6 +93,32 @@ describe("default desktop bridge", () => {
     ]);
   });
 
+  it("offers portable ZIP updates and refuses installer-based updates", async () => {
+    mocks.invoke.mockResolvedValue(true);
+    mocks.updaterCheck.mockResolvedValue({
+      version: "0.7.0", currentVersion: "0.6.0", downloadAndInstall: mocks.downloadAndInstall
+    });
+    const bridge = createDefaultBridge();
+    await expect(bridge.checkForUpdate?.()).resolves.toEqual({
+      version: "0.7.0", currentVersion: "0.6.0",
+      downloadUrl: "https://github.com/DominikPeters/tikz-editor/releases/download/app-v0.7.0/TikZ.Editor_0.7.0_x64-portable.zip"
+    });
+    await expect(bridge.installUpdate?.(() => {})).rejects.toThrow("Portable updates must be downloaded");
+    expect(mocks.downloadAndInstall).not.toHaveBeenCalled();
+    expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith("desktop_is_portable", undefined);
+  });
+
+  it("keeps installer updates for the installed edition", async () => {
+    mocks.invoke.mockResolvedValue(false);
+    mocks.updaterCheck.mockResolvedValue({
+      version: "0.7.0", currentVersion: "0.6.0", downloadAndInstall: mocks.downloadAndInstall
+    });
+    const bridge = createDefaultBridge();
+    await expect(bridge.checkForUpdate?.()).resolves.toEqual({ version: "0.7.0", currentVersion: "0.6.0" });
+    await bridge.installUpdate?.(() => {});
+    expect(mocks.downloadAndInstall).toHaveBeenCalledOnce();
+  });
+
   it("routes the macOS About menu action through the injected bridge", async () => {
     vi.stubGlobal("navigator", { platform: "MacIntel" });
     const showAboutPanel = vi.fn(() => Promise.resolve());
@@ -105,7 +136,7 @@ describe("default desktop bridge", () => {
 
     await manager.sync({
       definition: [],
-      commandStates: {} as Record<AppMenuCommandId, NativeCommandState>
+      commandStates: {}
     });
     const aboutOptions = mocks.menuItemNew.mock.calls
       .map(([options]) => options as { id?: string; action?: () => void })

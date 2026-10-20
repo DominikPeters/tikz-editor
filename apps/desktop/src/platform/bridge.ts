@@ -204,6 +204,8 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 
 export function createDefaultBridge(): DesktopBridge {
   let pendingUpdate: Update | null = null;
+  let portable: Promise<boolean> | undefined;
+  const isPortable = () => portable ??= invoke<boolean>("desktop_is_portable");
 
   return {
     getAutomaticUpdateChecks: async () => await invoke<boolean>("desktop_get_automatic_update_checks"),
@@ -349,14 +351,25 @@ export function createDefaultBridge(): DesktopBridge {
     }>("desktop_check_codex_status"),
     installCodex: async (method) => await invoke<string>("desktop_install_codex", { method }),
     checkForUpdate: async () => {
+      const downloadOnly = await isPortable();
       const { check } = await import("@tauri-apps/plugin-updater");
       const update = await check();
-      pendingUpdate = update;
+      pendingUpdate = downloadOnly ? null : update;
       return update
-        ? { version: update.version, currentVersion: update.currentVersion, ...(update.date === undefined ? {} : { date: update.date }), ...(update.body === undefined ? {} : { body: update.body }) }
+        ? {
+            version: update.version, currentVersion: update.currentVersion,
+            ...(update.date === undefined ? {} : { date: update.date }),
+            ...(update.body === undefined ? {} : { body: update.body }),
+            ...(downloadOnly ? {
+              downloadUrl: `https://github.com/DominikPeters/tikz-editor/releases/download/app-v${encodeURIComponent(update.version)}/TikZ.Editor_${encodeURIComponent(update.version)}_x64-portable.zip`
+            } : {})
+          }
         : null;
     },
     installUpdate: async (onProgress) => {
+      if (await isPortable()) {
+        throw new Error("Portable updates must be downloaded and extracted manually.");
+      }
       if (!pendingUpdate) {
         throw new Error("No pending update is available.");
       }
