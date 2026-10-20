@@ -50,5 +50,9 @@ required and is not included in the ZIP.
 
 Push CI builds both flavors and tests the portable ZIP after extracting it to a
 folder with spaces, including profile/preferences persistence after restarting.
+It first launches the portable executable without WebDriver to verify that the
+app creates its own profile beside the executable. The WebDriver sessions then
+explicitly reuse that data folder: EdgeDriver otherwise overrides the app's
+profile with a [temporary directory for every session](https://learn.microsoft.com/en-us/microsoft-edge/webdriver/capabilities-edge-options#webviewoptions-object).
 The release and SignPath test workflows sign the portable executable separately
 and include its ZIP alongside the installers. CI artifacts are unsigned.

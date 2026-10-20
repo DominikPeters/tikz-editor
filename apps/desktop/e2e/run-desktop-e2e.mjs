@@ -153,17 +153,24 @@ async function createSession(application) {
   const deadline = Date.now() + 20_000;
   let lastError = null;
   let warnedCapabilityFallback = false;
+  // EdgeDriver otherwise overrides the app's profile with a fresh temporary
+  // directory for each session, defeating portable persistence checks.
+  const portableOptions = process.platform === "win32" && process.env.TIKZ_DESKTOP_E2E_PORTABLE === "1"
+    ? { webviewOptions: { userDataFolder: path.join(path.dirname(application), "tikz-editor-data") } }
+    : {};
   const capabilityCandidates = [
     {
       "tauri:options": {
-        application
+        application,
+        ...portableOptions
       },
       "wdio:enforceWebDriverClassic": true
     },
     {
       browserName: "wry",
       "tauri:options": {
-        application
+        application,
+        ...portableOptions
       },
       "wdio:enforceWebDriverClassic": true
     }

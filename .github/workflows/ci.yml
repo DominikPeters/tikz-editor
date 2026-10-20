@@ -144,6 +144,31 @@ jobs:
           Expand-Archive -LiteralPath $archive.FullName -DestinationPath $directory
           $env:TIKZ_DESKTOP_E2E_APP_PATH = Join-Path $directory "tikz-editor.exe"
           $env:TIKZ_DESKTOP_E2E_PORTABLE = "1"
+          # Launch without WebDriver first: EdgeDriver overrides the app's own
+          # profile setting, so verify the release binary's storage independently.
+          $portableProfilePath = Join-Path $directory "tikz-editor-data\EBWebView"
+          $app = Start-Process -FilePath $env:TIKZ_DESKTOP_E2E_APP_PATH -WorkingDirectory $env:RUNNER_TEMP -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $deadline) {
+              $app.Refresh()
+              if ($app.HasExited) { throw "Portable app exited before the profile check: $($app.ExitCode)" }
+              if ((Test-Path -LiteralPath $portableProfilePath -PathType Container) -and $app.MainWindowHandle -ne 0) { break }
+              Start-Sleep -Milliseconds 250
+            }
+            if (-not (Test-Path -LiteralPath $portableProfilePath -PathType Container)) {
+              throw "Portable app did not create its WebView2 profile at $portableProfilePath"
+            }
+            Write-Host "Portable app created its profile without WebDriver: $portableProfilePath"
+          } finally {
+            if (-not $app.HasExited) {
+              $null = $app.CloseMainWindow()
+              if (-not $app.WaitForExit(10000)) {
+                taskkill /PID $app.Id /T /F
+                if ($LASTEXITCODE -ne 0) { throw "Could not stop the portable launch probe." }
+              }
+            }
+          }
           npm run test:desktop:e2e
       - name: Upload unsigned Windows packages
         uses: actions/upload-artifact@v7
