@@ -14,6 +14,11 @@ shell context (currently per-user); the MSI uses its per-machine scope. Uninstal
 removes our Open with value and ProgID, without removing other handlers. There is
 no automatic restoration or migration of defaults set by previous releases.
 
+The MSI association component inherits the target architecture from WiX. Its
+icon and open command use `[INSTALLDIR]tikz-editor.exe`; keep this filename in
+sync with the Cargo binary name. Referencing Tauri's `[#Path]` file from this
+separate component fails Windows Installer's ICE69 validation.
+
 On Windows, verify fresh EXE and MSI installs with an existing `.tex` default:
 the default app and icon should stay the same, TikZ Editor should appear in
 Open with, and a file with spaces in its path should open correctly. Verify that

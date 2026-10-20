@@ -3,16 +3,19 @@
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
       <!-- Match the MSI's per-machine scope. Use registry entries rather than
-           an advertised Extension, which would claim the .tex default. -->
-      <Component Id="TeXOpenWith" Guid="A4219B22-86C4-4B97-B71C-AF78CD260A90" Win64="no">
+           an advertised Extension, which would claim the .tex default.
+           Omit Win64 so candle's target architecture determines the registry view. -->
+      <Component Id="TeXOpenWith" Guid="B3692F5D-0662-4E50-AD57-A691A5A28A87">
         <RegistryValue Root="HKLM" Key="Software\Classes\.tex\OpenWithProgids"
                        Name="TikZEditor.TeX" Type="string" Value="" KeyPath="yes" />
         <RegistryValue Root="HKLM" Key="Software\Classes\TikZEditor.TeX"
                        Type="string" Value="TeX source document" />
+        <!-- Path belongs to a different Tauri feature. Use the install directory
+             property rather than a cross-component [#Path] reference (ICE69). -->
         <RegistryValue Root="HKLM" Key="Software\Classes\TikZEditor.TeX\DefaultIcon"
-                       Type="string" Value="&quot;[#Path]&quot;,0" />
+                       Type="string" Value="&quot;[INSTALLDIR]tikz-editor.exe&quot;,0" />
         <RegistryValue Root="HKLM" Key="Software\Classes\TikZEditor.TeX\shell\open\command"
-                       Type="string" Value="&quot;[#Path]&quot; &quot;%1&quot;" />
+                       Type="string" Value="&quot;[INSTALLDIR]tikz-editor.exe&quot; &quot;%1&quot;" />
       </Component>
     </DirectoryRef>
   </Fragment>
