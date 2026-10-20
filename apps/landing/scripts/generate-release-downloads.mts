@@ -17,7 +17,7 @@ type GhRelease = {
   url: string;
 };
 
-type DownloadFormat = "dmg" | "exe" | "msi" | "appimage" | "deb" | "rpm";
+type DownloadFormat = "dmg" | "exe" | "msi" | "zip" | "appimage" | "deb" | "rpm";
 type DownloadPlatform = "mac" | "windows" | "linux";
 type DownloadArch = "arm64" | "x64";
 
@@ -133,6 +133,9 @@ function classifyAsset(asset: ReleaseAsset): ReleaseDownload | null {
   if (/_x64(?:_[a-z]{2}-[A-Z]{2})?\.msi$/i.test(name)) {
     return download(asset, "windows", "msi", "x64");
   }
+  if (/_x64-portable\.zip$/i.test(name)) {
+    return download(asset, "windows", "zip", "x64");
+  }
   if (/_amd64\.AppImage$/i.test(name)) {
     return download(asset, "linux", "appimage", "x64");
   }
@@ -164,7 +167,7 @@ function download(
 
 function compareDownloads(left: ReleaseDownload, right: ReleaseDownload): number {
   const platformOrder: Record<DownloadPlatform, number> = { mac: 0, windows: 1, linux: 2 };
-  const formatOrder: Record<DownloadFormat, number> = { dmg: 0, exe: 1, msi: 2, appimage: 3, deb: 4, rpm: 5 };
+  const formatOrder: Record<DownloadFormat, number> = { dmg: 0, exe: 1, msi: 2, zip: 3, appimage: 4, deb: 5, rpm: 6 };
   const platformDelta = platformOrder[left.platform] - platformOrder[right.platform];
   if (platformDelta !== 0) {
     return platformDelta;

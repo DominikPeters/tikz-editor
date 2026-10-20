@@ -316,7 +316,7 @@ select {
 }
 
 .landingHeroCopy {
-  max-width: 680px;
+  max-width: 780px;
   margin-bottom: clamp(16px, 2vw, 24px);
   text-align: center;
   margin: 0 auto;
@@ -355,7 +355,7 @@ select {
 }
 
 .landingHeroText {
-  max-width: 700px;
+  max-width: 680px;
   margin: 16px auto 0;
   color: var(--landing-muted);
   font-size: clamp(1rem, 1.1vw, 1.2rem);
@@ -380,7 +380,6 @@ select {
 .landingPrimaryLink {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
   height: 34px;
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--landing-blue) 42%, var(--landing-line-strong));
@@ -407,7 +406,6 @@ select {
 .landingDownloadLink {
   display: inline-flex;
   align-items: center;
-  gap: 0.42em;
   height: 34px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--landing-blue) 54%, var(--landing-line-strong));
@@ -431,16 +429,36 @@ select {
   text-decoration: none;
 }
 
-.landingDownloadIcons {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1em;
+.landingPortableDownloadLink,
+.landingPortableDownloadLink:visited {
+  border-color: color-mix(in srgb, var(--landing-blue) 22%, var(--landing-line));
+  background: transparent;
+  color: color-mix(in srgb, var(--landing-blue) 75%, var(--landing-muted));
+  font-weight: 400;
+}
+
+.landingPortableDownloadLink:hover {
+  border-color: color-mix(in srgb, var(--landing-blue) 54%, var(--landing-line-strong));
+  background: color-mix(in srgb, var(--landing-blue) 6%, transparent);
+  color: var(--landing-blue);
+}
+
+.landingPortableDownloadLink .landingDownloadSize {
+  color: color-mix(in srgb, var(--landing-blue) 40%, var(--landing-faint));
+}
+
+.landingPortableDownloadLink:hover .landingDownloadSize {
+  color: var(--landing-blue);
+}
+
+.landingCtaContent {
+  white-space: nowrap;
 }
 
 .landingCtaIcon {
-  flex: 0 0 auto;
-  position: relative;
-  top: 0;
+  display: inline-block;
+  margin-inline-end: 0.4em;
+  vertical-align: -0.125em;
 }
 
 .landingCtaLabel {
@@ -452,8 +470,7 @@ select {
   font-size: 0.78em;
   font-weight: 400;
   line-height: 1.15;
-  position: relative;
-  top: 0.14em;
+  margin-inline-start: 0.5em;
 }
 
 .landingDownloadLink:hover .landingDownloadSize {

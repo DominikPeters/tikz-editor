@@ -15,6 +15,7 @@ import {
   RiEdit2Line,
   RiExternalLinkLine,
   RiFileListLine,
+  RiFolderZipLine,
   RiGithubFill,
   RiNodeTree,
   RiRobot2Line,
@@ -314,6 +315,9 @@ function Hero() {
   const desktopDownloadSelection = useDesktopDownloadSelection();
   const desktopDownload = getDesktopDownload(desktopDownloadSelection);
   const DesktopDownloadIcon = desktopDownload.icon;
+  const portableDownload = releaseDownloadMetadata.downloads.find(
+    (download) => download.platform === "windows" && /_x64-portable\.zip$/i.test(download.name)
+  );
 
   return (
     <section className="landingHero" aria-labelledby="landing-title">
@@ -334,16 +338,18 @@ function Hero() {
         </p>
         <div className="landingHeroActions" aria-label="Landing page links">
           <a href="https://tikz.dev/editor/web" className="landingPrimaryLink">
-            <RiExternalLinkLine className="landingCtaIcon" aria-hidden="true" size={17} />
-            <span className="landingCtaLabel">Open TikZ Editor Web</span>
+            <span className="landingCtaContent">
+              <RiExternalLinkLine className="landingCtaIcon" aria-hidden="true" size={17} />
+              <span className="landingCtaLabel">Open TikZ Editor Web</span>
+            </span>
           </a>
           <div className="landingDownloadBlock">
             <a href={desktopDownload.primary.url} className="landingDownloadLink">
-              <span className="landingDownloadIcons" aria-hidden="true">
-                <DesktopDownloadIcon className="landingCtaIcon" size={17} />
+              <span className="landingCtaContent">
+                <DesktopDownloadIcon className="landingCtaIcon" aria-hidden="true" size={17} />
+                <span className="landingCtaLabel">{desktopDownload.primary.label}</span>
+                <span className="landingDownloadSize">{formatDownloadSize(desktopDownload.primary.sizeBytes)}</span>
               </span>
-              <span className="landingCtaLabel">{desktopDownload.primary.label}</span>
-              <span className="landingDownloadSize">{formatDownloadSize(desktopDownload.primary.sizeBytes)}</span>
             </a>
             <div className="landingDownloadAlternates">
               {desktopDownload.alternatePrefix}
@@ -355,6 +361,18 @@ function Hero() {
               ))}
             </div>
           </div>
+          {desktopDownloadSelection.platform === "windows" && portableDownload ? (
+            <div className="landingDownloadBlock">
+              <a href={portableDownload.url} className="landingDownloadLink landingPortableDownloadLink">
+                <span className="landingCtaContent">
+                  <RiFolderZipLine className="landingCtaIcon" aria-hidden="true" size={17} />
+                  <span className="landingCtaLabel">Windows Portable</span>
+                  <span className="landingDownloadSize">{formatDownloadSize(portableDownload.sizeBytes)}</span>
+                </span>
+              </a>
+              <div className="landingDownloadAlternates">ZIP · No installation needed</div>
+            </div>
+          ) : null}
         </div>
       </div>
       <figure className="landingHeroScreenshot" aria-label="TikZ Editor interface screenshot">
