@@ -35,6 +35,7 @@ export const FRAMES: FrameStack[] = [
   { label: "path-xyscale", picture: "", scope: "", path: "xscale=2,yscale=.7" },
   { label: "path-units", picture: "", scope: "", path: "x=2cm" },
   { label: "path-rotate-shift", picture: "", scope: "", path: "rotate=-35,xshift=3mm" },
+  { label: "every-path", picture: "every path/.style={rotate=20,xshift=5mm}", scope: "", path: "" },
   { label: "stacked", picture: "x=2cm,y=1.6cm,rotate=20", scope: "xshift=1cm,scale=1.5", path: "rotate=-35,xshift=3mm" }
 ];
 

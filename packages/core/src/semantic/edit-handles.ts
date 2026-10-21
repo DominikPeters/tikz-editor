@@ -7,6 +7,7 @@ import type { EditHandle } from "./types.js";
 import { identityMatrix } from "./transform.js";
 import { frameTransform, worldTransform } from "../coords/transforms.js";
 import { coordinateTransform } from "./coords/axis-basis.js";
+import { captureSiteContext } from "./site-context.js";
 
 export function createEditHandle(
   evaluated: EvaluatedCoordinate,
@@ -36,6 +37,7 @@ export function createEditHandle(
     world: evaluated.world,
     sourceText,
     axisBasis: currentFrame(context).axisBasis,
+    siteContext: captureSiteContext(currentFrame(context)),
     ...(evaluated.sourceUnits === undefined ? {} : { sourceUnits: evaluated.sourceUnits }),
     coordinateForm: evaluated.coordinateForm,
     ...(evaluated.relativePrefix === undefined ? {} : { relativePrefix: evaluated.relativePrefix }),

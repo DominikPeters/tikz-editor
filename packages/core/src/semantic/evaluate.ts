@@ -74,6 +74,7 @@ import {
   type NodeDistanceSpec,
   type NodeQuotesMode
 } from "./context.js";
+import { captureSiteContext, type FigureSiteContexts, type StatementEntryContext } from "./site-context.js";
 import {
   collectBackgroundOptionEffects,
   extractOnBackgroundLayerOptionLayers,
@@ -131,6 +132,8 @@ import type { SemanticSymbolDependencyEdge, SemanticUnresolvedSymbol } from "./s
 
 export type EvaluateTikzResult = {
   scene: SceneFigure;
+  /** Frames at every statement and at the end, for writing new text there. */
+  siteContexts: FigureSiteContexts;
   diagnostics: Diagnostic[];
   featureUsage: FeatureUsage;
   editHandles: EditHandle[];
@@ -156,6 +159,7 @@ export type SemanticStatementEvaluationRecord = {
   effectSummary: SemanticStatementEffectSummary;
   /** Sparse usage emitted by this statement, independent of prior providers. */
   featureUsage: FeatureUsage;
+  entryContext: StatementEntryContext;
 };
 
 export type SemanticEvaluationRun = {
@@ -179,6 +183,8 @@ export type SemanticEvaluationRun = {
   scopeSteps: WeakMap<Statement, "enter" | "leave">;
   geometryCheckpoints: Map<number, SemanticContextSnapshot>;
   captureGeometryCheckpoints: boolean;
+  /** Indexed like `expandedFigureBody`; sparse when only some statements were evaluated. */
+  statementEntryContexts: StatementEntryContext[];
 };
 
 function pushStyleDiagnostics(
@@ -382,6 +388,7 @@ export function createSemanticEvaluationRun(
     scopeSteps,
     geometryCheckpoints: new Map(),
     captureGeometryCheckpoints: true,
+    statementEntryContexts: [],
     diagnostics,
     featureUsage,
     expandedFigureBody: evaluationBody,
@@ -418,6 +425,9 @@ export function evaluateSemanticStatementByIndex(
     run.geometryCheckpoints.set(statementIndex, snapshotSemanticContext(run.context, { editHandlesMode: "length" }));
   }
   const scopeStep = run.scopeSteps.get(statement);
+  const sourceId = run.statementAttribution.get(statement)?.sourceId ?? statement.id;
+  const entryContext: StatementEntryContext = { statementId: statement.id, sourceId, context: captureSiteContext(currentFrame(run.context)) };
+  run.statementEntryContexts[statementIndex] = entryContext;
   const handleStart = run.context.editHandles.length;
   const diagnosticsStart = run.diagnostics.length;
   const beforeCurrentPoint = run.context.currentPoint ? { ...run.context.currentPoint } : null;
@@ -434,7 +444,6 @@ export function evaluateSemanticStatementByIndex(
     )
   );
   mergeFeatureUsage(run.featureUsage, featureUsage);
-  const sourceId = run.statementAttribution.get(statement)?.sourceId ?? statement.id;
   const statementSourceMap = run.statementSourceMaps.get(statement);
   const sourceSpan = statementSourceMap
     ? mapExpansionSpan(statementSourceMap, statement.span)
@@ -506,7 +515,8 @@ export function evaluateSemanticStatementByIndex(
     diagnosticsStart,
     diagnosticsEnd: run.diagnostics.length,
     featureUsage,
-    effectSummary
+    effectSummary,
+    entryContext
   };
 }
 
@@ -529,6 +539,10 @@ export function finalizeSemanticEvaluationRun(
     run.diagnostics.push(...generatedBackground.diagnostics);
   }
 
+  const siteContexts: FigureSiteContexts = {
+    statementEntries: [...run.statementEntryContexts],
+    figureEnd: captureSiteContext(currentFrame(run.context))
+  };
   if (run.rootFramePushed) {
     popFrame(run.context);
   }
@@ -564,6 +578,7 @@ export function finalizeSemanticEvaluationRun(
           ? computeBounds(orderedElements) ?? run.context.pictureBounds ?? undefined
           : run.context.pictureBounds ?? computeBounds(orderedElements);
   const result: EvaluateTikzResult = {
+    siteContexts,
     scene: {
       kind: "SceneFigure",
       span: run.figure.span,
@@ -980,6 +995,11 @@ export function resolvePathBoundary(
     (raw) => resolveContextColorAliasValue(context, raw), parent.axisBasis
   );
   return { resolved, customStyles };
+}
+
+/** Enter a scope exactly as its `enter` step does, so edit code can resolve frames inside it. */
+export function enterScopeStatement(statement: Extract<Statement, { kind: "Scope" }>, context: SemanticContext): void {
+  evaluateStatement(statement, context, [], {}, new WeakMap(), true);
 }
 
 function evaluateStatement(

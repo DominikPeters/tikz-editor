@@ -33,6 +33,7 @@ import {
   type EvaluateTikzResult
 } from "./evaluate.js";
 import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
+import { captureSiteContext, type StatementEntryContext } from "./site-context.js";
 import { mergeFeatureUsage } from "./feature-usage.js";
 import type {
   EditHandle,
@@ -131,6 +132,8 @@ type SemanticStatementFragment = {
   mathRandomSeed: number;
   /** Holds every source location in the elements and diagnostics: while it stands, they stand. */
   sourceExtent: Span;
+  /** Valid exactly as long as the reused elements are: both depend on the state the statement starts from. */
+  entryContext: StatementEntryContext;
 };
 
 type CapturedSemanticCheckpoints = {
@@ -492,6 +495,8 @@ function* evaluateIncrementalSuffix(args: {
   run.context.editHandles = nextFragments.flatMap(fragment => fragment.editHandles);
   run.diagnostics.length = run.baseDiagnosticsCount;
   for (const fragment of nextFragments) run.diagnostics.push(...fragment.diagnostics);
+  // The reused prefix is not evaluated again, so the final result takes its entry contexts from the fragments.
+  for (const [index, fragment] of nextFragments.entries()) run.statementEntryContexts[index] = fragment.entryContext;
   const checkpointsBeforeStatement = cloneCheckpointsBefore(
     previousCheckpoints.checkpointsBeforeStatement,
     restoreIndex,
@@ -788,6 +793,11 @@ function assembleSelectiveSemanticResult(args: {
   scene.requiredTikzLibraries = listContextRequiredLibraries(run.context);
 
   const result: EvaluateTikzResult = {
+    // The run ends at the last statement, replayed or restored from the previous run's final state.
+    siteContexts: {
+      statementEntries: fragments.map(fragment => fragment.entryContext),
+      figureEnd: captureSiteContext(currentFrame(run.context))
+    },
     scene,
     diagnostics,
     featureUsage: finalFeatureUsage,
@@ -818,7 +828,8 @@ function createStatementFragment(
     diagnostics: evaluated.diagnostics,
     effectSummary: evaluated.effectSummary,
     featureUsage: evaluated.featureUsage,
-    sourceExtent: sceneSourceExtent(evaluated.elements, evaluated.diagnostics, evaluated.sourceSpan)
+    sourceExtent: sceneSourceExtent(evaluated.elements, evaluated.diagnostics, evaluated.sourceSpan),
+    entryContext: evaluated.entryContext
   };
 }
 

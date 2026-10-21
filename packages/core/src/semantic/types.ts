@@ -1,4 +1,5 @@
 import type { AxisBasis } from "./coords/axis-basis.js";
+import type { SiteContext } from "./site-context.js";
 import { isObjectRecord } from "../utils/records.js";
 import type { AdornmentOwnerGeometry, CoordinateForm, Span } from "../ast/types.js";
 import type { DocumentGraphicsResolver } from "../graphics/types.js";
@@ -605,6 +606,8 @@ export type CoordinateSourceUnits = { x?: string; y?: string; radius?: string };
 
 type CoordinateEditHandleBase = EditHandleBase & {
   axisBasis?: AxisBasis;
+  /** The raw frame the coordinate was read in; `frame` is it composed for the coordinate's own spelling. */
+  siteContext?: SiteContext;
   sourceUnits?: CoordinateSourceUnits;
   handleType: "coordinate";
   kind: "node-position" | "path-point" | "path-control";
