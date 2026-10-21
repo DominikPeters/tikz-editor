@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from "react";
@@ -39,7 +40,12 @@ import { IpadMenu, IpadMenuItem, IpadPopover } from "./ipad/IpadPopover";
 import { IpadToolPalette, paletteFitInsets, type PaletteDock } from "./ipad/IpadToolPalette";
 import { useSourceFloat } from "./ipad/useSourceFloat";
 import { isCodeMirrorEventTarget } from "./editor-commands";
-import { requestSourceAccessoryCommand, type SourceAccessoryCommandDetail } from "./source-sync";
+import {
+  getSourceEditorHistorySnapshot,
+  requestSourceAccessoryCommand,
+  subscribeSourceEditorHistory,
+  type SourceAccessoryCommandDetail
+} from "./source-sync";
 import { resolveToolbarToolMode } from "./tool-config";
 import { ACTUAL_SIZE_SCALE, zoomPercentForScale } from "./canvas-zoom";
 import css from "./IpadEditorShell.module.css";
@@ -160,6 +166,14 @@ export function IpadEditorShell({
   const [documentGalleryOpen, setDocumentGalleryOpen] = useState(false);
   const [paletteDock, setPaletteDock] = useState<PaletteDock>({ kind: "edge", edge: "bottom" });
   const [rightPanelInset, setRightPanelInset] = useState(0);
+  // Which history the nav bar's Undo and Redo act on: the source editor's
+  // typing history once the user works there, the document's after a canvas touch.
+  const [historySurface, setHistorySurface] = useState<"document" | "source">("document");
+  const sourceEditorHistory = useSyncExternalStore(
+    subscribeSourceEditorHistory,
+    getSourceEditorHistorySnapshot,
+    getSourceEditorHistorySnapshot
+  );
   const {
     toolMode,
     pendingRequestId,
@@ -538,7 +552,11 @@ export function IpadEditorShell({
   );
 
   const sourceSurface = (
-    <div className={css.sourcePanelStack}>
+    <div
+      className={css.sourcePanelStack}
+      onFocus={() => { setHistorySurface("source"); }}
+      onPointerDownCapture={() => { setHistorySurface("source"); }}
+    >
       <div
         className={css.sourceHeader}
         data-select="chrome"
@@ -598,6 +616,7 @@ export function IpadEditorShell({
         hasMultipleFigures={hasMultipleFigures}
         showFiguresPanel={showFiguresPanel}
         onToggleFigures={toggleFigures}
+        sourceHistory={showSourcePanel && historySurface === "source" ? sourceEditorHistory : null}
         updateChip={updateChip}
       />
 
@@ -645,7 +664,10 @@ export function IpadEditorShell({
               </button>
             </>
           ) : null}
-          <section className={css.canvasFrame}>
+          <section
+            className={css.canvasFrame}
+            onPointerDownCapture={() => { setHistorySurface("document"); }}
+          >
             {canvasPanelElement}
           </section>
         </main>

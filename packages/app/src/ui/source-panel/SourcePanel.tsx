@@ -27,8 +27,10 @@ import {
   indentLess,
   indentMore,
   redo,
+  redoDepth,
   toggleLineComment,
-  undo
+  undo,
+  undoDepth
 } from "@codemirror/commands";
 import {
   bracketMatching,
@@ -79,7 +81,8 @@ import { ColorPicker } from "../ColorPicker";
 import {
   SOURCE_ACCESSORY_COMMAND_EVENT,
   SOURCE_FORMAT_REQUEST_EVENT,
-  isSourceAccessoryCommandDetail
+  isSourceAccessoryCommandDetail,
+  publishSourceEditorHistory
 } from "../source-sync";
 import css from "./SourcePanel.module.css";
 import { formatTikzSource } from "@tikz-editor/core/edit/source-format";
@@ -94,6 +97,7 @@ const tabSizeCompartment = new Compartment();
 const editableCompartment = new Compartment();
 const highlightCompartment = new Compartment();
 const languageCompartment = new Compartment();
+const historyCompartment = new Compartment();
 
 type SourceLanguageMode = "tikz" | "tex" | "beamer";
 
@@ -903,6 +907,7 @@ export function SourcePanel() {
     if (!editorRef.current) return;
 
     const updateListener = EditorView.updateListener.of((update) => {
+      publishSourceEditorHistory({ canUndo: undoDepth(update.state) > 0, canRedo: redoDepth(update.state) > 0 });
       const externalSourceSync = findExternalSourceSyncAnnotation(update.transactions);
       if (update.docChanged) {
         const appliedByColorPicker = colorPickerApplyingRef.current;
@@ -1003,7 +1008,7 @@ export function SourcePanel() {
         highlightActiveLineGutter(),
         highlightSpecialChars(),
         CMState.lineSeparator.of("\n"),
-        history(),
+        historyCompartment.of(history()),
         foldGutter(),
         drawSelection(),
         dropCursor(),
@@ -1079,9 +1084,21 @@ export function SourcePanel() {
       dispatch({ type: "SET_ACTIVE_SOURCE_SCRUB", sourceId: null });
       view.destroy();
       viewRef.current = null;
+      publishSourceEditorHistory(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run once; source synced via separate effect below
+
+  // One editor view serves every document. Typing history from the previous
+  // document cannot apply to the next one, so start it afresh.
+  const historyDocumentIdRef = useRef(activeDocumentId);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || historyDocumentIdRef.current === activeDocumentId) return;
+    historyDocumentIdRef.current = activeDocumentId;
+    view.dispatch({ effects: historyCompartment.reconfigure([]) });
+    view.dispatch({ effects: historyCompartment.reconfigure(history()) });
+  }, [activeDocumentId]);
 
   // ── Reactively apply editor settings ────────────────────────────────────────
   useEffect(() => {

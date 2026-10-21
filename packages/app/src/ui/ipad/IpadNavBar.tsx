@@ -13,6 +13,7 @@ import { useShallow } from "zustand/react/shallow";
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId } from "../../app-menu";
 import { useEditorStore } from "../../store/store";
 import type { EditorCommandRuntime } from "../editor-command-runtime";
+import { requestSourceAccessoryCommand, type SourceEditorHistoryState } from "../source-sync";
 import { IpadMenu, IpadMenuItem, IpadMenuSeparator, IpadPopover } from "./IpadPopover";
 import css from "./IpadNavBar.module.css";
 
@@ -32,6 +33,8 @@ export type IpadNavBarProps = {
   hasMultipleFigures: boolean;
   showFiguresPanel: boolean;
   onToggleFigures: () => void;
+  /** Set while the source editor is the surface being edited: Undo and Redo then act on its typing history. */
+  sourceHistory: SourceEditorHistoryState | null;
   updateChip?: { version: string; onClick: () => void } | null;
 };
 
@@ -49,6 +52,7 @@ export function IpadNavBar({
   hasMultipleFigures,
   showFiguresPanel,
   onToggleFigures,
+  sourceHistory,
   updateChip = null
 }: IpadNavBarProps) {
   const [openPopover, setOpenPopover] = useState<NavPopoverId | null>(null);
@@ -165,8 +169,16 @@ export function IpadNavBar({
           className={css.iconButton}
           aria-label="Undo"
           title="Undo"
-          disabled={!commandEnabled(APP_MENU_COMMAND_IDS.UNDO)}
-          onClick={() => { runCommand(APP_MENU_COMMAND_IDS.UNDO); }}
+          disabled={sourceHistory ? !sourceHistory.canUndo : !commandEnabled(APP_MENU_COMMAND_IDS.UNDO)}
+          // Keep focus (and the software keyboard) in the source editor.
+          onMouseDown={(event) => { event.preventDefault(); }}
+          onClick={() => {
+            if (sourceHistory) {
+              requestSourceAccessoryCommand({ command: "undo" });
+            } else {
+              runCommand(APP_MENU_COMMAND_IDS.UNDO);
+            }
+          }}
           data-testid="ipad-undo-button"
         >
           <RiArrowGoBackLine size={21} aria-hidden />
@@ -176,8 +188,15 @@ export function IpadNavBar({
           className={css.iconButton}
           aria-label="Redo"
           title="Redo"
-          disabled={!commandEnabled(APP_MENU_COMMAND_IDS.REDO)}
-          onClick={() => { runCommand(APP_MENU_COMMAND_IDS.REDO); }}
+          disabled={sourceHistory ? !sourceHistory.canRedo : !commandEnabled(APP_MENU_COMMAND_IDS.REDO)}
+          onMouseDown={(event) => { event.preventDefault(); }}
+          onClick={() => {
+            if (sourceHistory) {
+              requestSourceAccessoryCommand({ command: "redo" });
+            } else {
+              runCommand(APP_MENU_COMMAND_IDS.REDO);
+            }
+          }}
           data-testid="ipad-redo-button"
         >
           <RiArrowGoForwardLine size={21} aria-hidden />
