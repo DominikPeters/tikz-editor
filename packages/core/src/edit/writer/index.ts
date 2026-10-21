@@ -1,15 +1,15 @@
-import { frameLocalPoint, worldPoint, worldVector, type FrameLocalPoint, type WorldBounds, type WorldPoint } from "../../coords/points.js";
+import { frameLocalPoint, worldPoint, worldVector, type FrameLocalPoint, type WorldBounds, type WorldPoint, type WorldVector } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { applyFrameToWorldPoint } from "../../coords/frame.js";
-import { parseLengthWithInfo } from "../../semantic/coords/parse-length.js";
+import { coordinateSourceUnit, parseLengthWithInfo } from "../../semantic/coords/parse-length.js";
 import { spelledCoordinateFrame, type CoordinateSpelling, type SiteContext } from "../../semantic/site-context.js";
 import { isFrameLocalCoordinateEditHandle, isRelativeCoordinateEditHandle, type CoordinateEditHandle } from "../../semantic/types.js";
 import { worldDeltaToLocalDelta, worldToLocal } from "../coords.js";
 import { formatNumber, type NumberFormatOptions } from "../format.js";
 import { joinFragments, tikz, type CoordinateText, type TikzFragment } from "../fragment.js";
 import { coordinateText } from "./coordinate-text.js";
-import { cartesianComponents, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate } from "./format.js";
+import { cartesianComponents, coordinateLayout, formatCanvasCoordinate, formatCoordinate, formatPolarCoordinate, translatedComponent } from "./format.js";
 import { localToSourceUnits } from "./source-units.js";
 
 /**
@@ -52,9 +52,21 @@ export type PointPrecision = "drag" | "reparameterize";
 
 export type PointWriteOptions = Readonly<{ precision?: PointPrecision }>;
 
+/** A loop variable and the world vector one step of it moves a copy by. */
+export type LoopStep = Readonly<{ variable: string; world: WorldVector }>;
+
 export interface CoordinateWriter {
   /** The text that puts `site`'s coordinate at `world`, in its own spelling. */
   point(site: WriteSite, world: WorldPoint, options?: PointWriteOptions): WriterResult<CoordinateText>;
+  /**
+   * The coordinate at `site` moved by the sum of `variable × world` over the
+   * steps, as the loop expression `1+\i*2-\j*0.5`, in the coordinate's own
+   * spelling: each component keeps its unit, and a plain number stays one,
+   * so the move is right under axis vectors and rotated scopes alike. At a
+   * context site the coordinate is `replaces` (`(0,0)` when absent), which
+   * serves a vector such as a scope's `shift`.
+   */
+  translated(site: WriteSite, steps: readonly LoopStep[]): WriterResult<CoordinateText>;
   /**
    * A path body read in `context` whose canvas hull is `world`. PGF grows the
    * picture by canvas-transformed points, so a `rectangle` serves only where
@@ -82,6 +94,9 @@ export function createCoordinateWriter(source: string): CoordinateWriter {
       return site.kind === "context"
         ? writeContextPoint(site, world, options.precision ?? "drag")
         : writeCoordinatePoint(source, site, world, options.precision ?? "drag");
+    },
+    translated(site, steps) {
+      return writeTranslated(source, site, steps);
     },
     rotation(context, angle, pivot) {
       let authored: number;
@@ -206,6 +221,37 @@ function writeCoordinatePoint(source: string, site: CoordinateSite, world: World
     case "unknown":
       return unsupported(`${handle.coordinateForm} coordinates are not rewritten`);
   }
+}
+
+function writeTranslated(source: string, site: WriteSite, steps: readonly LoopStep[]): WriterResult<CoordinateText> {
+  let context: SiteContext;
+  let oldRaw: string;
+  if (site.kind === "context") {
+    context = site.context;
+    oldRaw = site.replaces ?? "(0,0)";
+  } else {
+    const { handle } = site;
+    if (handle.rewriteMode !== "direct" || !isFrameLocalCoordinateEditHandle(handle) || (handle.coordinateForm !== "cartesian" && handle.coordinateForm !== "xyz")) {
+      return unsupported("only cartesian coordinates are moved by a loop");
+    }
+    context = site.context ?? handle.siteContext;
+    oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
+  }
+  const layout = coordinateLayout(oldRaw);
+  const x = layout && parseLengthWithInfo(layout.x, "cm");
+  const y = layout && parseLengthWithInfo(layout.y, "cm");
+  if (!layout || !x || !y) return unsupported("only cartesian coordinates are moved by a loop");
+  const frame = spelledCoordinateFrame(context, { unitlessX: !x.hasExplicitUnit, unitlessY: !y.hasExplicitUnit });
+  const moves: { variable: string; x: number; y: number }[] = [];
+  for (const step of steps) {
+    const local = worldDeltaToLocalDelta(step.world, frame);
+    if (!local) return singular();
+    const units = localToSourceUnits(local);
+    moves.push({ variable: step.variable, x: units.x, y: units.y });
+  }
+  const xText = translatedComponent(layout.x, moves.map(move => ({ variable: move.variable, value: move.x })), coordinateSourceUnit(layout.x));
+  const yText = translatedComponent(layout.y, moves.map(move => ({ variable: move.variable, value: move.y })), coordinateSourceUnit(layout.y));
+  return ok(`(${layout.open}${layout.options}${xText}${layout.gap}${yText}${layout.afterY}${layout.z === null ? "" : `,${layout.z}`})`);
 }
 
 function polar(oldRaw: string, units: { x: number; y: number }, handle: CoordinateEditHandle, precision: PointPrecision): WriterResult<CoordinateText> {

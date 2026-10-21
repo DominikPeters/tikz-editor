@@ -343,6 +343,10 @@ export function createCoordinateWriter(snapshot: EditGeometrySnapshot | EditGeom
   refusals. Forcing unitless spelling in the writer fails five frames.
 - Refusals carry a reason, which actions pass through: singular axes, a
   rotation the frame cannot express, a loop-dependent context.
+- `translated(site, steps)` (class 2): a cartesian or xyz coordinate moved
+  by `Σ variable × world vector`, as loop terms in its own spelling. At a
+  context site the coordinate is `(0,0)` or the text it replaces, which
+  serves a scope's `shift`.
 
 ### Bounds
 
@@ -401,7 +405,7 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
 | class | fix |
 |---|---|
 | 1. world cm as source units | insertPathPoint, convert-to-absolute: `writer.point` at an `in-statement` site; figure bounds: `writer.bounds`/`readBounds`; center-pivot rotation: corners via `writer.point`, angle via `writer.rotation` |
-| 2. offsets in a bare picture | `writer.offsetStatement` replaces `getOffsetPreparation` and `translateSingleStatementSnippet`: the copy's gap context, not a fresh picture; the original's handles plan the offset only when the contexts match. Repeat steps go through `writer.vector`; positioned nodes through `writer.positioning` |
+| 2. offsets in a bare picture (done) | a copy is inserted unmoved and offset in the document it landed in, by the move machinery (no `offsetStatement`: the copy's own handles carry its frame). Repeat steps are world vectors, written by `writer.translated`; positioned nodes through `writer.positioning` (class 4) |
 | 3. new coordinates ignore axes and scopes (done) | insertion actions take world points, written at the gap or target-statement context. A core `addPath { start, segments, closed, style }` replaces app-side path and freehand string generation; `appendToPath` takes world segments. The app's `*InPictureCoordinates` mappings are deleted |
 | 4. positioning | drags and `positionNodeRelativeTo` use `writer.positioning`, choosing the direction from the local delta. Aligning `A` with a node positioned from `A` is a move-planning bug (dependents move with `A`), tracked separately |
 | 5. relative coordinates in rewritten paths | restructuring actions compute anchors' world positions and re-spell each one at its new place: `writer.point` for absolute, `writer.vector` from the new predecessor for `+`/`++` |
@@ -508,6 +512,29 @@ distances (`right=1 of A`) go through `\pgfpointxy`, i.e. the axes.
      and ellipse radii stay `legacyText` until phase 5 (`writer.radius`).
      Exception entries: reviewed 58 → 68 (the template text values),
      migration 64 → 62.
+   - Class 2 done: 163 recorded failures pass (208 → 45); one case went
+     ok → partial and was fixed (below). `duplicateElements` and
+     `pasteStatements` insert the unmoved copy, evaluate the edited
+     document and move the copy's statements with `applyMoveElements`, so
+     the copy's coordinates are rewritten in the frame, spelling and path
+     options they are read with there (the old bare-picture preparation and
+     its cache are gone). Moving after inserting cost one evaluation per
+     group of copies. Statements are found by span, trimmed of the line
+     break before them, innermost first (a copy in a scope matched the
+     scope). Groups are copied from the end of the document, since an
+     insertion shifts the ids after it. A copy that ends at a named node
+     keeps the node: those skipped endpoints no longer make a duplicate
+     partial. `repeatElements` evaluates the source and gives the writer a
+     step per loop variable (`translated`, `LoopStep`): the coordinate
+     `1+\i*1.5-\j*0.5` keeps each component's unit, a plain number stays
+     one, and the step is the world vector through the inverse of the
+     coordinate's own frame, so axes, rotation and skew are right. A
+     coordinate without a handle, or a relative, polar or named one,
+     sends the statement into `\begin{scope}[shift={…}]`, read in the frame
+     the statement starts in; a frame that differs between passes of an
+     enclosing loop is refused. Output in a plain picture changed: plain
+     numbers stay plain (`(1+\i*2,0)`, not `(1cm+\i*2cm,0)`).
+     Exception entries: migration 62 → 60.
 5. **Remaining writers.** Radii and other frame-dependent lengths (after
    adding circle/ellipse resize cases), SVG import, assistant handlers,
    semantic-internal source (`fit`, `tree-child`, `label-quotes`) or audited

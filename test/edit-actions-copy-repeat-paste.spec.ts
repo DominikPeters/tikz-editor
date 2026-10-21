@@ -3,7 +3,9 @@ import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { applyPasteStatementsAction } from "../packages/core/src/edit/actions/paste-duplicate.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
 import { renameSnippetDeclaredNames } from "../packages/core/src/edit/name-conflicts.js";
+import { unchangedSource } from "../packages/core/src/edit/fragment.js";
 import { wp } from "./coords-helpers.js";
+import { computeSourceFingerprint } from "../packages/core/src/utils/source-fingerprint.js";
 import { cm, expectPatchesReconstructSource } from "./edit-actions-helpers.js";
 
 describe("applyEditAction – duplicateElements", () => {
@@ -192,7 +194,7 @@ describe("applyEditAction – duplicateElements", () => {
     expectPatchesReconstructSource(source, result);
   });
 
-  it("reuses offset preparation for identical snippets in mixed-parent duplicates", () => {
+  it("offsets each copy in its own parent when duplicating across parents", () => {
     const source = String.raw`\begin{tikzpicture}
   \draw (0,0) -- (1,0);
   \begin{scope}
@@ -211,6 +213,39 @@ describe("applyEditAction – duplicateElements", () => {
     }
     expect((result.newSource.match(/\\draw \(0\.25,-0\.25\) -- \(1\.25,-0\.25\);/g) ?? []).length).toBe(2);
     expect(result.selectedSourceIds).toHaveLength(2);
+  });
+
+  it("offsets a copy in the frame it lands in", () => {
+    const axes = applyEditAction(String.raw`\begin{tikzpicture}[x=2cm,y=2cm]
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`, [], { kind: "duplicateElements", elementIds: ["path:0"], delta: wp(cm(1), cm(-1)) });
+    expect(axes.kind === "success" && axes.newSource).toContain(String.raw`\draw (0.5,-0.5) -- (1.5,-0.5);`);
+
+    const pasted = applyEditAction(String.raw`\begin{tikzpicture}
+  \begin{scope}[rotate=90,scale=2]
+    \draw (0,0) -- (1,0);
+  \end{scope}
+\end{tikzpicture}`, [], { kind: "pasteStatements", snippets: [String.raw`\draw (0,0) -- (1,1);`], anchorElementId: "path:1", delta: wp(cm(1), 0) });
+    expect(pasted.kind === "success" && pasted.newSource).toContain(String.raw`\draw (0,-0.5) -- (1,0.5);`);
+  });
+
+  it("offsets the copy when the caller prepared the original document's fingerprint, as the app does", () => {
+    const source = String.raw`\begin{tikzpicture}[x=2cm,y=2cm]
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`;
+    const sourceFingerprint = computeSourceFingerprint(source);
+    const result = applyEditAction(source, [], { kind: "duplicateElements", elementIds: ["path:0"], delta: wp(cm(1), cm(-1)) },
+      { parseOptions: { sourceFingerprint }, evaluateOptions: { sourceFingerprint } });
+    expect(result.kind === "success" && result.newSource).toContain(String.raw`\draw (0.5,-0.5) -- (1.5,-0.5);`);
+  });
+
+  it("keeps a copy's named endpoints on their nodes without calling the duplicate partial", () => {
+    const result = applyEditAction(String.raw`\begin{tikzpicture}
+  \node (A) at (0,0) {A};
+  \draw (A) -- (2,1);
+\end{tikzpicture}`, [], { kind: "duplicateElements", elementIds: ["path:1"], delta: wp(cm(1), 0) });
+    expect(result.kind).toBe("success");
+    expect(result.kind === "success" && result.newSource).toContain(String.raw`\draw (A) -- (3,1);`);
   });
 });
 
@@ -346,9 +381,42 @@ describe("applyEditAction – repeatElements", () => {
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 2} {`);
-    expect(result.newSource).toContain(String.raw`\draw (\i*2cm,0) -- (1cm+\i*2cm,0);`);
+    expect(result.newSource).toContain(String.raw`\draw (\i*2,0) -- (1+\i*2,0);`);
     expect(result.newSource).not.toContain("shift=");
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
+  });
+
+  it("steps copies in the frame the statement is read in: axis vectors, rotated scopes, shifted scopes", () => {
+    const step = { columns: 2, rows: 2, horizontalStep: cm(3), verticalStep: cm(1) };
+    const units = applyEditAction(String.raw`\begin{tikzpicture}[x=2cm,y=2cm]
+  \draw (0,0) -- (1,0);
+\end{tikzpicture}`, [], { kind: "repeatElements", elementIds: ["path:0"], ...step });
+    expect(units.kind === "success" && units.newSource).toContain(String.raw`\draw (\i*1.5,-\j*0.5) -- (1+\i*1.5,-\j*0.5);`);
+
+    // Three cm to the right is three cm along the scope's y axis, and one down is one along its x.
+    const rotated = applyEditAction(String.raw`\begin{tikzpicture}
+  \begin{scope}[rotate=90]
+    \draw (0,0) -- (1,0);
+  \end{scope}
+\end{tikzpicture}`, [], { kind: "repeatElements", elementIds: ["path:1"], ...step });
+    expect(rotated.kind === "success" && rotated.newSource).toContain(String.raw`\draw (-\j*1,-\i*3) -- (1-\j*1,-\i*3);`);
+
+    const block = applyEditAction(String.raw`\begin{tikzpicture}[x=2cm,y=2cm]
+  \draw (0,0) -- (1,0);
+  \draw (0,1) -- (1,1);
+\end{tikzpicture}`, [], { kind: "repeatElements", elementIds: ["path:0", "path:1"], ...step, rows: 1 });
+    expect(block.kind === "success" && block.newSource).toContain(String.raw`\begin{scope}[shift={(\i*1.5,0)}]`);
+  });
+
+  it("refuses a repeat whose frame differs on each pass of an enclosing loop", () => {
+    const result = applyEditAction(String.raw`\begin{tikzpicture}
+  \foreach \k in {1,2} {
+    \begin{scope}[scale=\k]
+      \draw (0,0) -- ++(1,0);
+    \end{scope}
+  }
+\end{tikzpicture}`, [], { kind: "repeatElements", elementIds: ["path:2"], columns: 2, rows: 1, horizontalStep: cm(1), verticalStep: cm(1) });
+    expect(result.kind).toBe("unsupported");
   });
 
   it("normalizes duplicate changed ids for successful repeats without indentation", () => {
@@ -387,9 +455,9 @@ describe("applyEditAction – repeatElements", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain(String.raw`([xshift=1pt] \i*1cm,-\j*0.5cm,2)`);
-    expect(result.newSource).toContain(String.raw`to[out=20,in=160] (1cm+\i*1cm,-\j*0.5cm)`);
-    expect(result.newSource).toContain(String.raw`edge (2cm+\i*1cm,-\j*0.5cm)`);
+    expect(result.newSource).toContain(String.raw`([xshift=1pt] \i*1,-\j*0.5,2)`);
+    expect(result.newSource).toContain(String.raw`to[out=20,in=160] (1+\i*1,-\j*0.5)`);
+    expect(result.newSource).toContain(String.raw`edge (2+\i*1,-\j*0.5)`);
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
   });
 
@@ -409,7 +477,7 @@ describe("applyEditAction – repeatElements", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2cm,0)}]`);
+    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2,0)}]`);
     expect(result.newSource).toContain(String.raw`\draw (0,0) -- ++(1,0) -- (45:1);`);
   });
 
@@ -429,7 +497,7 @@ describe("applyEditAction – repeatElements", () => {
     if (relativeResult.kind !== "success") {
       throw new Error("Expected relative to-target repeat to succeed via fallback");
     }
-    expect(relativeResult.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2cm,0)}]`);
+    expect(relativeResult.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2,0)}]`);
     expect(relativeResult.newSource).toContain(String.raw`\draw (0,0) to ++(1,0);`);
 
     const malformed = String.raw`\begin{tikzpicture}
@@ -447,7 +515,7 @@ describe("applyEditAction – repeatElements", () => {
     if (malformedResult.kind !== "success") {
       throw new Error("Expected malformed-coordinate repeat to succeed via fallback");
     }
-    expect(malformedResult.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2cm,0)}]`);
+    expect(malformedResult.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2,0)}]`);
     expect(malformedResult.newSource).toContain(String.raw`\draw (,0) -- (1,0);`);
   });
 
@@ -467,7 +535,7 @@ describe("applyEditAction – repeatElements", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain(String.raw`\draw (A) at (\i*2cm,0) node[draw] (A) {A};`);
+    expect(result.newSource).toContain(String.raw`\draw (A) at (\i*2,0) node[draw] (A) {A};`);
   });
 
   it("chooses fallback loop variables when the snippet already uses preferred names", () => {
@@ -506,7 +574,7 @@ describe("applyEditAction – repeatElements", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain(String.raw`\draw (1cm,2) -- (3cm,4);`);
+    expect(result.newSource).toContain(String.raw`\draw (1,2) -- (3,4);`);
     expect(result.newSource).not.toContain("*0cm");
   });
 
@@ -545,7 +613,7 @@ describe("applyEditAction – repeatElements", () => {
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 1} {`);
-    expect(result.newSource).toContain(String.raw`\node[draw] at (\i*3cm,1.5) {C};`);
+    expect(result.newSource).toContain(String.raw`\node[draw] at (\i*3, 1.5) {C};`);
     expect(result.newSource).not.toContain("shift=");
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
   });
@@ -566,7 +634,7 @@ describe("applyEditAction – repeatElements", () => {
 
     expect(result.kind).toBe("success");
     if (result.kind !== "success") return;
-    expect(result.newSource).toContain(String.raw`\node[draw] (C) at (\i*3cm,1.5cm-\j*2cm) {C};`);
+    expect(result.newSource).toContain(String.raw`\node[draw] (C) at (\i*3, 1.5-\j*2) {C};`);
     expect(result.newSource).not.toContain(String.raw`\begin{scope}[shift=`);
     expect(result.newSource).not.toContain("shift=");
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
@@ -590,7 +658,7 @@ describe("applyEditAction – repeatElements", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \j in {0, ..., 1} {`);
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 2} {`);
-    expect(result.newSource).toContain(String.raw`\node[draw] at (\i*3cm,1.5cm-\j*2cm) {C};`);
+    expect(result.newSource).toContain(String.raw`\node[draw] at (\i*3, 1.5-\j*2) {C};`);
     expect(result.newSource).not.toContain(String.raw`\begin{scope}[shift=`);
     expect(result.newSource).not.toContain("shift=");
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
@@ -614,7 +682,7 @@ describe("applyEditAction – repeatElements", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \j in {0, ..., 1} {`);
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 2} {`);
-    expect(result.newSource).toContain(String.raw`\draw (\i*3cm,-\j*2cm) rectangle (1cm+\i*3cm,1cm-\j*2cm);`);
+    expect(result.newSource).toContain(String.raw`\draw (\i*3,-\j*2) rectangle (1+\i*3,1-\j*2);`);
     expect(result.newSource).not.toContain(String.raw`\begin{scope}[shift=`);
     expect(result.newSource).not.toContain("shift=");
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
@@ -638,7 +706,7 @@ describe("applyEditAction – repeatElements", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \j in {0, ..., 1} {`);
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 2} {`);
-    expect(result.newSource).toContain(String.raw`\draw (\i*3cm,-\j*2cm) -- (1cm+\i*3cm,-\j*2cm);`);
+    expect(result.newSource).toContain(String.raw`\draw (\i*3,-\j*2) -- (1+\i*3,-\j*2);`);
     expect(result.newSource).not.toContain(String.raw`\begin{scope}[shift=`);
     expect(result.newSource).not.toContain("shift=");
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
@@ -664,7 +732,7 @@ describe("applyEditAction – repeatElements", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \j in {0, ..., 1} {`);
     expect((result.newSource.match(/\\begin\{scope\}/g) ?? []).length).toBe(1);
-    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(0,-\j*2cm)}]`);
+    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(0,-\j*2)}]`);
   });
 
   it("repeats a scope in two dimensions without wrapping it in an extra shifted scope", () => {
@@ -687,7 +755,7 @@ describe("applyEditAction – repeatElements", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \j in {0, ..., 1} {`);
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 2} {`);
-    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(\i*3cm,-\j*2cm)}]`);
+    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(\i*3,-\j*2)}]`);
     expect((result.newSource.match(/\\begin\{scope\}/g) ?? []).length).toBe(1);
   });
 
@@ -710,7 +778,7 @@ describe("applyEditAction – repeatElements", () => {
     if (result.kind !== "success") return;
     expect(result.newSource).toContain(String.raw`\foreach \j in {0, ..., 1} {`);
     expect(result.newSource).toContain(String.raw`\foreach \i in {0, ..., 1} {`);
-    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2cm,-\j*1cm)}]`);
+    expect(result.newSource).toContain(String.raw`\begin{scope}[shift={(\i*2,-\j*1)}]`);
     expect(parseTikz(result.newSource, { recover: true }).diagnostics.some((diagnostic) => diagnostic.severity === "error")).toBe(false);
   });
 
@@ -806,7 +874,7 @@ describe("applyEditAction – pasteStatements", () => {
     }, {
       applyMoveElements: () => {
         moveCallCount += 1;
-        return { kind: "success", newSource: "" };
+        return { kind: "success", newSource: unchangedSource(""), patches: [] };
       },
       normalizeElementIds: (ids) => ids.map((id) => id.trim()).filter((id) => id.length > 0),
       uniqueStrings: (values) => [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))],

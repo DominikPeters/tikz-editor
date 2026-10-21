@@ -288,6 +288,31 @@ export function applyTextReplacements(
   };
 }
 
+/**
+ * Where spans of the old source stand after `patches`, whose old spans are
+ * all against that source (their new spans are not relied on). A span that
+ * starts or ends inside a replaced stretch keeps its offset into it, up to
+ * the replacement's length.
+ */
+export function mapSpansThroughPatches(spans: readonly Span[], patches: readonly SourcePatch[]): Span[] {
+  const sorted = [...patches].sort((left, right) => left.oldSpan.from - right.oldSpan.from || left.oldSpan.to - right.oldSpan.to);
+  const map = (offset: number): number => {
+    let shift = 0;
+    for (const patch of sorted) {
+      if (patch.oldSpan.to <= offset) {
+        shift += patch.replacement.length - (patch.oldSpan.to - patch.oldSpan.from);
+        continue;
+      }
+      if (patch.oldSpan.from < offset) {
+        return patch.oldSpan.from + shift + Math.min(offset - patch.oldSpan.from, patch.replacement.length);
+      }
+      break;
+    }
+    return offset + shift;
+  };
+  return spans.map((span) => ({ from: map(span.from), to: map(span.to) }));
+}
+
 export function shiftSpansAfterReplacement(
   spans: readonly Span[],
   oldSpan: Span,

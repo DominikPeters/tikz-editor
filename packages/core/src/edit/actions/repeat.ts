@@ -1,11 +1,16 @@
-import { legacyText, type TikzFragment } from "../fragment.js";
-import { requireDefined } from "../../utils/invariants.js";
+import { applyFragments, editedSlice, legacyText, type FragmentEdit } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
-import type { CoordinateItem, NodeItem, PathItem, PathStatement, Span, Statement } from "../../ast/types.js";
+import type { PathItem, PathStatement, Span } from "../../ast/types.js";
 import { walkPathItems } from "../../ast/walk.js";
-import { parseCoordinate } from "../../domains/coordinates/parse.js";
-import { CM_PER_PT, formatNumber } from "../format.js";
+import { worldVector } from "../../coords/points.js";
+import { pt } from "../../coords/scalars.js";
+import type { ParseTikzResult } from "../../parser/index.js";
+import { evaluateTikzFigure } from "../../semantic/evaluate.js";
+import { entryContextsForSource, sameSiteContext, type SiteContext } from "../../semantic/site-context.js";
+import { isCoordinateEditHandle, type CoordinateEditHandle } from "../../semantic/types.js";
+import { CoordinateWriteRefused } from "../new-statement.js";
+import { createCoordinateWriter, type CoordinateWriter, type LoopStep } from "../writer/index.js";
 import {
   applyTextReplacements,
   lineIndentAtOffset,
@@ -108,13 +113,19 @@ export function applyRepeatElementsAction(
     return { kind: "unsupported", reason: eligibility.reason };
   }
 
-  const replacement = buildRepeatReplacement(source, eligibility.refs, {
-    columns,
-    rows,
-    horizontalStep: action.horizontalStep,
-    verticalStep: action.verticalStep,
-    parseOptions
-  });
+  let replacement: { text: string };
+  try {
+    replacement = buildRepeatReplacement(source, eligibility.refs, {
+      columns,
+      rows,
+      horizontalStep: action.horizontalStep,
+      verticalStep: action.verticalStep,
+      parseOptions
+    });
+  } catch (error) {
+    if (error instanceof CoordinateWriteRefused) return { kind: "unsupported", reason: `Cannot repeat here: ${error.message}.` };
+    throw error;
+  }
 
   const preferredNewline = detectPreferredNewline(source, eligibility.replaceSpan.from);
   const replacementText = indentFollowingLines(
@@ -147,6 +158,18 @@ export function applyRepeatElementsAction(
   };
 }
 
+/**
+ * What the copies are written against: the document as the evaluator reads
+ * it, so every coordinate moves in the frame it is read in. A step of a loop
+ * is a world vector; the writer turns it into the coordinate's own units.
+ */
+type RepeatGeometry = {
+  source: string;
+  parsed: ParseTikzResult;
+  semantic: ReturnType<typeof evaluateTikzFigure>;
+  writer: CoordinateWriter;
+};
+
 function buildRepeatReplacement(
   source: string,
   refs: readonly StatementRef[],
@@ -176,9 +199,17 @@ function buildRepeatReplacement(
         stepPt: -options.verticalStep
       }
     : null;
+  const parsed = parseTikzForEdit(source, options.parseOptions);
+  const geometry: RepeatGeometry = {
+    source,
+    parsed,
+    semantic: evaluateTikzFigure(parsed.figure, source),
+    writer: createCoordinateWriter(source)
+  };
+  const steps = loopSteps(xLoop, yLoop);
   const body = refs.length === 1
-    ? translateSingleStatementSnippet(source, requireArrayValue(refs, 0), xLoop, yLoop, options.parseOptions)
-    : wrapRepeatedBlockInScope(source, refs, xLoop, yLoop);
+    ? translateSingleStatementSnippet(geometry, requireArrayValue(refs, 0), steps, options.parseOptions)
+    : wrapRepeatedBlockInScope(geometry, refs, steps);
 
   return {
     text: buildForeachChain(
@@ -190,55 +221,70 @@ function buildRepeatReplacement(
   };
 }
 
-function translateSingleStatementSnippet(
-  source: string,
-  ref: StatementRef,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null,
-  parseOptions: EditParseOptions
-): string {
-  const snippet = statementSnippet(source, ref);
-  const wrapped = wrapSnippetInFigure(snippet);
-  const wrappedParseOptions = withoutActiveFigure(parseOptions);
-  const wrappedParsed = parseTikzForEdit(wrapped, wrappedParseOptions);
-  const rootStatement = requireArrayValue(wrappedParsed.figure.body, 0);
-
-  if (rootStatement.kind === "Path") {
-    const rewritten = rewritePathStatementCoordinates(wrapped, rootStatement, xLoop, yLoop);
-    if (rewritten && !hasParseErrors(rewritten, wrappedParseOptions)) {
-      const movedSnapshot = parseStatementSnapshot(rewritten, wrappedParseOptions);
-      const movedRootRef = movedSnapshot.byParentKey.get("root")?.[0];
-      if (movedRootRef) {
-        return statementSnippet(rewritten, movedRootRef);
-      }
-    }
-  }
-
-  if (rootStatement.kind === "Scope") {
-    const shifted = applyInlineScopeShift(wrapped, rootStatement, xLoop, yLoop, wrappedParseOptions);
-    if (shifted && !hasParseErrors(shifted, wrappedParseOptions)) {
-      const movedSnapshot = parseStatementSnapshot(shifted, wrappedParseOptions);
-      const movedRootRef = movedSnapshot.byParentKey.get("root")?.[0];
-      if (movedRootRef) {
-        return statementSnippet(shifted, movedRootRef);
-      }
-    }
-  }
-
-  return wrapRepeatedBlockInScope(source, [ref], xLoop, yLoop);
+/** Each loop moves a copy by its step along the page: the first to the right, the second down. */
+function loopSteps(xLoop: RepeatLoop | null, yLoop: RepeatLoop | null): LoopStep[] {
+  return [
+    ...(xLoop ? [{ variable: xLoop.variable, world: worldVector(pt(xLoop.stepPt), pt(0)) }] : []),
+    ...(yLoop ? [{ variable: yLoop.variable, world: worldVector(pt(0), pt(yLoop.stepPt)) }] : [])
+  ];
 }
 
+/** The frame a statement starts in. Refused where the document does not tell one frame. */
+function statementEntryContext(geometry: RepeatGeometry, statementId: string): SiteContext {
+  const contexts = entryContextsForSource(geometry.semantic.siteContexts, statementId);
+  const [first] = contexts;
+  if (!first) throw new CoordinateWriteRefused("the frame of the selection is unknown");
+  if (contexts.some((context) => !sameSiteContext(first, context))) {
+    throw new CoordinateWriteRefused("the selection is read in a different frame on each pass of an enclosing loop");
+  }
+  return first;
+}
+
+function translateSingleStatementSnippet(
+  geometry: RepeatGeometry,
+  ref: StatementRef,
+  steps: readonly LoopStep[],
+  parseOptions: EditParseOptions
+): string {
+  const { source } = geometry;
+  const wrappedParseOptions = withoutActiveFigure(parseOptions);
+  const statement = ref.statement;
+
+  if (statement.kind === "Path") {
+    const rewritten = rewritePathStatementCoordinates(geometry, statement, steps);
+    if (rewritten && !hasParseErrors(wrapSnippetInFigure(rewritten), wrappedParseOptions)) {
+      return rewritten;
+    }
+  }
+
+  // A scope without options of its own is shifted in place: nothing in it reads the shift.
+  if (statement.kind === "Scope" && (statement.options?.entries.length ?? 0) === 0) {
+    const shift = geometry.writer.translated({ kind: "context", context: statementEntryContext(geometry, ref.id) }, steps);
+    if (shift.kind !== "ok") throw new CoordinateWriteRefused(shift.reason);
+    const result = applySetPropertyAction(source, { elementId: statement.id, key: "shift", value: `{${shift.fragment}}` }, parseOptions);
+    if (result.kind === "success" || result.kind === "partial") {
+      const movedRef = parseStatementSnapshot(result.newSource, parseOptions).byId.get(ref.id);
+      if (movedRef && !hasParseErrors(wrapSnippetInFigure(statementSnippet(result.newSource, movedRef)), wrappedParseOptions)) {
+        return statementSnippet(result.newSource, movedRef);
+      }
+    }
+  }
+
+  return wrapRepeatedBlockInScope(geometry, [ref], steps);
+}
+
+/** The block inside a scope whose `shift` is the loops' step, read in the frame the block starts in. */
 function wrapRepeatedBlockInScope(
-  source: string,
+  geometry: RepeatGeometry,
   refs: readonly StatementRef[],
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null
+  steps: readonly LoopStep[]
 ): string {
   const first = requireArrayValue(refs, 0);
   const last = requireArrayValue(refs, refs.length - 1);
-  const block = source.slice(first.span.from, last.span.to);
-  const shiftTuple = requireDefined(buildShiftTuple(xLoop, yLoop), "Missing required buildShiftTuple(xLoop, yLoop)");
-  return `\\begin{scope}[shift={${shiftTuple}}]\n${reindentSnippet(block, "  ")}\n\\end{scope}`;
+  const block = geometry.source.slice(first.span.from, last.span.to);
+  const shift = geometry.writer.translated({ kind: "context", context: statementEntryContext(geometry, first.id) }, steps);
+  if (shift.kind !== "ok") throw new CoordinateWriteRefused(shift.reason);
+  return `\\begin{scope}[shift={${shift.fragment}}]\n${reindentSnippet(block, "  ")}\n\\end{scope}`;
 }
 
 function buildForeachChain(headers: readonly string[], body: string): string {
@@ -273,76 +319,6 @@ function buildIndexList(count: number): string {
   return `0, ..., ${count - 1}`;
 }
 
-function buildShiftTuple(xLoop: RepeatLoop | null, yLoop: RepeatLoop | null): string | null {
-  if (!xLoop && !yLoop) {
-    return null;
-  }
-  return `(${buildLoopOffsetExpression(xLoop) ?? "0"},${buildLoopOffsetExpression(yLoop) ?? "0"})`;
-}
-
-function rewritePathStatementCoordinates(
-  source: string,
-  statement: PathStatement,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null
-): string | null {
-  const replacements: Array<{ span: Span; text: TikzFragment }> = [];
-  const status = { failed: false };
-  const nodeNameCoordinateIds = collectNodeNameCoordinateIds(statement.items);
-
-  walkPathItems(statement.items, {
-    onPathItem: (item) => {
-      if (status.failed) {
-        return;
-      }
-
-      if (item.kind === "Coordinate") {
-        if (nodeNameCoordinateIds.has(item.id)) {
-          return;
-        }
-        const translated = buildTranslatedCoordinateItemRaw(item, source, xLoop, yLoop);
-        if (!translated) {
-          status.failed = true;
-          return;
-        }
-        replacements.push({ span: item.span, text: legacyText(translated) });
-        return;
-      }
-
-      if ((item.kind === "ToOperation" || item.kind === "EdgeOperation") && item.target?.kind === "coordinate" && item.target.span) {
-        const translated = buildTranslatedCoordinateTextFromRaw(
-          item.target.raw,
-          item.target.relativePrefix,
-          xLoop,
-          yLoop
-        );
-        if (!translated) {
-          status.failed = true;
-          return;
-        }
-        replacements.push({ span: item.target.span, text: legacyText(translated) });
-      }
-    },
-    onNode: (node) => {
-      if (status.failed || !node.atSpan || !node.atRaw) {
-        return;
-      }
-      const translated = buildTranslatedNodePlacementRaw(node, source, xLoop, yLoop);
-      if (!translated) {
-        status.failed = true;
-        return;
-      }
-      replacements.push({ span: node.atSpan, text: legacyText(translated) });
-    }
-  });
-
-  if (status.failed || replacements.length === 0) {
-    return null;
-  }
-
-  return applyTextReplacements(source, replacements).source;
-}
-
 function collectNodeNameCoordinateIds(items: readonly PathItem[]): Set<string> {
   const ids = new Set<string>();
   for (const [index, current] of items.entries()) {
@@ -366,149 +342,77 @@ function collectNodeNameCoordinateIds(items: readonly PathItem[]): Set<string> {
   return ids;
 }
 
-function buildTranslatedCoordinateItemRaw(
-  item: CoordinateItem,
-  source: string,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null
+/**
+ * The statement's text with every coordinate moved by the loops' steps, each
+ * in the frame its own handle was read in. Null where one cannot be moved
+ * (relative, polar, named, or none recorded), and the caller wraps the
+ * statement in a shifted scope instead.
+ */
+function rewritePathStatementCoordinates(
+  geometry: RepeatGeometry,
+  statement: PathStatement,
+  steps: readonly LoopStep[]
 ): string | null {
-  if (item.relativePrefix) {
-    return null;
-  }
-
-  return buildTranslatedCoordinateText(
-    item.form,
-    item.x,
-    item.y,
-    item.z,
-    item.optionsSpan ? source.slice(item.optionsSpan.from, item.optionsSpan.to).trim() : "",
-    xLoop,
-    yLoop
+  const { source, writer } = geometry;
+  const handles = geometry.semantic.editHandles.filter(
+    (handle): handle is CoordinateEditHandle => handle.sourceRef.sourceId === statement.id && isCoordinateEditHandle(handle)
   );
-}
+  const edits: FragmentEdit[] = [];
+  const status = { failed: false };
+  const nodeNameCoordinateIds = collectNodeNameCoordinateIds(statement.items);
 
-function buildTranslatedNodePlacementRaw(
-  node: NodeItem,
-  source: string,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null
-): string | null {
-  const translated = buildTranslatedCoordinateTextFromRaw(node.atRaw ?? "", node.atRelativePrefix, xLoop, yLoop);
-  if (!translated || !node.atSpan) {
-    return null;
-  }
+  const translate = (span: Span, within = false): void => {
+    // Each pass of a loop around the statement has its own handle; they must agree.
+    const found = handles.filter(({ sourceRef: { sourceSpan } }) =>
+      within ? sourceSpan.from >= span.from && sourceSpan.to <= span.to : sourceSpan.from === span.from && sourceSpan.to === span.to);
+    const [first] = found;
+    const at = first?.sourceRef.sourceSpan;
+    if (!first || !at || found.some((handle) => !sameSiteContext(first.siteContext, handle.siteContext) || handle.sourceRef.sourceSpan.from !== at.from || handle.sourceRef.sourceSpan.to !== at.to)) {
+      status.failed = true;
+      return;
+    }
+    if (edits.some((edit) => edit.span.from === at.from && edit.span.to === at.to)) return;
+    const written = writer.translated({ kind: "coordinate", handle: first }, steps);
+    if (written.kind !== "ok") {
+      status.failed = true;
+      return;
+    }
+    edits.push({ span: at, fragment: written.fragment });
+  };
 
-  const current = source.slice(node.atSpan.from, node.atSpan.to).trim();
-  if (current.startsWith("(")) {
-    return translated;
-  }
+  walkPathItems(statement.items, {
+    onPathItem: (item) => {
+      if (status.failed) {
+        return;
+      }
 
-  const relativePrefix = node.atRelativePrefix ?? "";
-  return `at={${relativePrefix}${translated}}`;
-}
+      if (item.kind === "Coordinate") {
+        if (nodeNameCoordinateIds.has(item.id)) {
+          return;
+        }
+        translate(item.span);
+        return;
+      }
 
-function buildTranslatedCoordinateTextFromRaw(
-  raw: string,
-  relativePrefix: string | undefined,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null
-): string | null {
-  if (relativePrefix) {
-    return null;
-  }
-
-  const parsed = parseCoordinate(raw);
-  return buildTranslatedCoordinateText(parsed.form, parsed.x, parsed.y, parsed.z, parsed.optionsRaw ?? "", xLoop, yLoop);
-}
-
-function buildTranslatedCoordinateText(
-  form: string,
-  x: string,
-  y: string,
-  z: string | undefined,
-  optionsRaw: string,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null
-): string | null {
-  if (form !== "cartesian" && form !== "xyz") {
-    return null;
-  }
-
-  const translatedX = translateCoordinateComponent(x, xLoop);
-  const translatedY = translateCoordinateComponent(y, yLoop);
-  if (!translatedX || !translatedY) {
-    return null;
-  }
-
-  const parts = [translatedX, translatedY];
-  if (form === "xyz" && z != null) {
-    parts.push(z.trim());
-  }
-  const optionsPrefix = optionsRaw.trim().length > 0 ? `${optionsRaw.trim()} ` : "";
-  return `(${optionsPrefix}${parts.join(",")})`;
-}
-
-function translateCoordinateComponent(raw: string, loop: RepeatLoop | null): string | null {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  if (!loop) {
-    return trimmed;
-  }
-  const offsetExpression = buildLoopOffsetExpression(loop);
-  if (!offsetExpression || offsetExpression === "0") {
-    return isBareNumber(trimmed) ? `${trimmed}cm` : trimmed;
-  }
-  if (trimmed === "0") {
-    return offsetExpression;
-  }
-  const baseExpression = isBareNumber(trimmed) ? `${trimmed}cm` : trimmed;
-  return offsetExpression.startsWith("-")
-    ? `${baseExpression}${offsetExpression}`
-    : `${baseExpression}+${offsetExpression}`;
-}
-
-function buildLoopOffsetExpression(loop: RepeatLoop | null): string | null {
-  if (!loop) {
-    return null;
-  }
-  const stepCm = Math.abs(loop.stepPt * CM_PER_PT);
-  if (stepCm <= 1e-9) {
-    return "0";
-  }
-  const magnitude = `${formatNumber(stepCm)}cm`;
-  return loop.stepPt < 0
-    ? `-${loop.variable}*${magnitude}`
-    : `${loop.variable}*${magnitude}`;
-}
-
-function isBareNumber(raw: string): boolean {
-  return /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw.trim());
-}
-
-function applyInlineScopeShift(
-  source: string,
-  statement: Statement,
-  xLoop: RepeatLoop | null,
-  yLoop: RepeatLoop | null,
-  parseOptions: EditParseOptions
-): string | null {
-  const shiftTuple = requireDefined(buildShiftTuple(xLoop, yLoop), "Missing required buildShiftTuple(xLoop, yLoop)");
-
-  const result = applySetPropertyAction(
-    source,
-    {
-      elementId: statement.id,
-      key: "shift",
-      value: `{${shiftTuple}}`
+      if ((item.kind === "ToOperation" || item.kind === "EdgeOperation") && item.target?.kind === "coordinate" && item.target.span) {
+        translate(item.target.span);
+      }
     },
-    parseOptions
-  );
-  if (result.kind !== "success" && result.kind !== "partial") {
+    onNode: (node) => {
+      if (status.failed || !node.atSpan || !node.atRaw) {
+        return;
+      }
+      // `at={(x,y)}` has its handle on the inner coordinate; `at (x,y)` on the whole.
+      translate(node.atSpan, true);
+    }
+  });
+
+  if (status.failed || edits.length === 0) {
     return null;
   }
-  return result.newSource;
+
+  const rewritten = applyFragments(source, edits);
+  return editedSlice(rewritten, statement.span.from, statement.span.to + (rewritten.length - source.length));
 }
 
 function wrapSnippetInFigure(snippet: string): string {

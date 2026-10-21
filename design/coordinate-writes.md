@@ -147,8 +147,8 @@ frame).
 | resizeElement | `resize-element.ts` (7 raw `CM_PER_PT`) | local transform for rectangles | pass for rectangle corners; edges, circles, ellipses, node sizes not checked |
 | rotateElement | `rotate-element.ts` | `rewritePreciseFrameCoordinate`; recentered corners in cm | fails (class 1); only rectangles/circles/ellipses supported |
 | addElement | `element-templates.ts` `generateElementSource` | world points written at the end-gap context (`new-statement.ts`) | pass (class 3 done); radii still `legacyText` |
-| pasteStatements / duplicateElements | `paste-duplicate.ts` | offset planned in identity frame | fails (classes 2, 4) |
-| repeatElements | `repeat.ts` | step planned in identity frame | fails (class 2) |
+| pasteStatements / duplicateElements | `paste-duplicate.ts` | copy inserted, then offset in place by the move machinery | pass (class 2 done); positioning (class 4) and `to` bends partial/fail as for moveElement |
+| repeatElements | `repeat.ts` | loop steps as world vectors, `writer.translated` per coordinate or the scope's `shift` | pass (class 2 done) |
 | insertPathPoint | `path-editing-actions.ts` | none | fails (class 1); refuses scoped paths and paths with options |
 | reversePath / setPathPointKind | `path-editing-actions.ts` | n/a (rewrites existing text) | fail on relative (class 5); refuse scoped paths and paths with options |
 | appendToPath | `path-editing-actions.ts`, world segments from the app path tool | written in the path's shared frame | pass (class 3 done) |

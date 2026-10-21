@@ -1,4 +1,4 @@
-import { legacyText, unchangedSource } from "../fragment.js";
+import { legacyText, unchangedSource, type EditedSource } from "../fragment.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import type { EditActionResultLike } from "../result-types.js";
 import { worldPoint } from "../../coords/points.js";
@@ -7,20 +7,22 @@ import { pt } from "../../coords/scalars.js";
 import type { EditHandle } from "../../semantic/types.js";
 import type { Span } from "../../ast/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
+import { isCoordinateEditHandle, type EvaluateOptions } from "../../semantic/types.js";
 import {
   applyTextReplacements,
-  buildStatementSnapshotFromStatements,
   formatSnippetsForInsertion,
   groupStatementRefsByParent,
   lineIndentAtOffset,
+  mapSpansThroughPatches,
   parseStatementSnapshot,
   resolveRootInsertionPoint,
   resolveStatementRefs,
-  shiftSpansAfterReplacement,
   statementSnippet,
   type StatementSnapshot
 } from "../statement-ops.js";
 import { renameSnippetDeclaredNames } from "../name-conflicts.js";
+import { computeMinimalReplacementPatch } from "../patch.js";
+import { composeSourcePatches, patchesMatchSourceTransition } from "../source-patches.js";
 import type { SourcePatch } from "../types.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 
@@ -36,12 +38,6 @@ export type DuplicateElementsAction = {
 };
 
 
-type MoveElementsResultLike =
-  | { kind: "success"; newSource: string }
-  | { kind: "partial"; newSource: string; skippedHandles: string[]; reason: string }
-  | { kind: "unsupported"; reason: string }
-  | { kind: "error"; message: string };
-
 type PasteDuplicateDeps = {
   applyMoveElements: (
     source: string,
@@ -49,34 +45,29 @@ type PasteDuplicateDeps = {
     elementIds: readonly string[],
     delta: WorldPoint,
     parseOptions?: EditParseOptions
-  ) => MoveElementsResultLike;
+  ) => EditActionResultLike;
   normalizeElementIds: (elementIds: readonly string[]) => string[];
   uniqueStrings: (values: readonly string[]) => string[];
   defaultDuplicateOffsetPt: number;
 };
 
-type OffsetSnippetsResult = {
-  snippets: string[];
+type OffsetInsertedResult = {
+  source: EditedSource;
+  patches: SourcePatch[];
   partialReason?: string;
   skippedHandles: string[];
 };
 
-type OffsetPreparation = {
-  wrappedSource: string;
-  rootIds: string[];
-  editHandles: readonly EditHandle[];
-};
-
 type PasteDuplicateCaches = {
   snapshots: Map<string, StatementSnapshot>;
-  offsetPreparations: Map<string, OffsetPreparation>;
 };
 
 export function applyPasteStatementsAction(
   source: string,
   action: PasteStatementsAction,
   deps: PasteDuplicateDeps,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions: EvaluateOptions = {}
 ): EditActionResultLike {
   const caches = createPasteDuplicateCaches();
   const snippets = action.snippets
@@ -87,8 +78,7 @@ export function applyPasteStatementsAction(
   }
 
   const delta = normalizeDuplicateDelta(action.delta, deps.defaultDuplicateOffsetPt);
-  const shifted = offsetSnippetsByDelta(snippets, delta, deps, parseOptions, caches);
-  const renamedSnippets = renameSnippetDeclaredNames(source, shifted.snippets, parseOptions);
+  const renamedSnippets = renameSnippetDeclaredNames(source, snippets, parseOptions);
 
   const snapshot = getStatementSnapshot(source, parseOptions, caches);
   const anchorId = action.anchorElementId?.trim();
@@ -120,17 +110,20 @@ export function applyPasteStatementsAction(
     from: appliedInsertion.newSpan.from + span.from,
     to: appliedInsertion.newSpan.from + span.to
   }));
+  // The copy is offset where it now stands, so its coordinates are read in the frame it lands in.
+  const shifted = offsetInsertedStatements(applied.source, insertedSpans, delta, deps, parseOptions, evaluateOptions, caches);
+  const patches = composeSourcePatches(source, [applied.patches, shifted.patches]);
   const selectedSourceIds = mapSpansToStatementIdsWithSnapshot(
-    getStatementSnapshot(applied.source, parseOptions, caches),
-    insertedSpans
+    getStatementSnapshot(shifted.source, parseOptions, caches),
+    mapSpansThroughPatches(insertedSpans, shifted.patches)
   );
   const changedSourceIds = selectedSourceIds.length > 0 ? selectedSourceIds : undefined;
 
   if (shifted.partialReason) {
     return {
       kind: "partial",
-      newSource: applied.source,
-      patches: applied.patches,
+      newSource: shifted.source,
+      patches,
       skippedHandles: shifted.skippedHandles,
       reason: shifted.partialReason,
       ...(changedSourceIds === undefined ? {} : { selectedSourceIds: changedSourceIds }),
@@ -140,8 +133,8 @@ export function applyPasteStatementsAction(
 
   return {
     kind: "success",
-    newSource: applied.source,
-    patches: applied.patches,
+    newSource: shifted.source,
+    patches,
     ...(changedSourceIds === undefined ? {} : { selectedSourceIds: changedSourceIds }),
     ...(changedSourceIds === undefined ? {} : { changedSourceIds })
   };
@@ -151,7 +144,8 @@ export function applyDuplicateElementsAction(
   source: string,
   action: DuplicateElementsAction,
   deps: PasteDuplicateDeps,
-  parseOptions: EditParseOptions = {}
+  parseOptions: EditParseOptions = {},
+  evaluateOptions: EvaluateOptions = {}
 ): EditActionResultLike {
   const caches = createPasteDuplicateCaches();
   const normalizedIds = deps.normalizeElementIds(action.elementIds);
@@ -165,9 +159,11 @@ export function applyDuplicateElementsAction(
     return { kind: "unsupported", reason: "No duplicable statements were found for the selected element ids." };
   }
 
-  const groups = groupStatementRefsByParent(initialRefs);
+  // Ids count statements from the top, so a copy only shifts the ids after it: work from the end.
+  const groups = groupStatementRefsByParent(initialRefs)
+    .sort((left, right) => Math.max(...right.refs.map((ref) => ref.span.to)) - Math.max(...left.refs.map((ref) => ref.span.to)));
   let currentSource = unchangedSource(source);
-  const patches: SourcePatch[] = [];
+  const steps: SourcePatch[][] = [];
   let insertedSpans: Span[] = [];
   const partialReasons: string[] = [];
   const partialSkippedHandles: string[] = [];
@@ -183,13 +179,10 @@ export function applyDuplicateElementsAction(
     const resolvedGroups = groupStatementRefsByParent(currentRefs);
     for (const resolvedGroup of resolvedGroups) {
       const orderedRefs = [...resolvedGroup.refs].sort((left, right) => left.index - right.index);
-      const snippets = orderedRefs.map((ref) => statementSnippet(currentSource, ref));
-      const shifted = offsetSnippetsByDelta(snippets, delta, deps, parseOptions, caches);
-      const renamedSnippets = renameSnippetDeclaredNames(currentSource, shifted.snippets, parseOptions);
-      if (shifted.partialReason) {
-        partialReasons.push(shifted.partialReason);
-        partialSkippedHandles.push(...shifted.skippedHandles);
-      }
+      const snippets = orderedRefs
+        .map((ref) => statementSnippet(currentSource, ref).replace(/\r\n?/g, "\n").trimEnd())
+        .filter((snippet) => snippet.trim().length > 0);
+      const renamedSnippets = renameSnippetDeclaredNames(currentSource, snippets, parseOptions);
 
       const anchor = requireArrayValue(orderedRefs, orderedRefs.length - 1);
 
@@ -205,19 +198,26 @@ export function applyDuplicateElementsAction(
         }
       ]);
       const appliedInsertion = requireArrayValue(applied.applied, 0);
+      const groupSpans = insertion.snippetSpans.map((span) => ({
+        from: appliedInsertion.newSpan.from + span.from,
+        to: appliedInsertion.newSpan.from + span.to
+      }));
+      const shifted = offsetInsertedStatements(applied.source, groupSpans, delta, deps, parseOptions, evaluateOptions, caches);
+      if (shifted.partialReason) {
+        partialReasons.push(shifted.partialReason);
+        partialSkippedHandles.push(...shifted.skippedHandles);
+      }
 
-      patches.push(...applied.patches);
-      currentSource = applied.source;
-      insertedSpans = shiftSpansAfterReplacement(insertedSpans, appliedInsertion.oldSpan, appliedInsertion.newSpan);
-      insertedSpans.push(
-        ...insertion.snippetSpans.map((span) => ({
-          from: appliedInsertion.newSpan.from + span.from,
-          to: appliedInsertion.newSpan.from + span.to
-        }))
-      );
+      steps.push(applied.patches, shifted.patches);
+      currentSource = shifted.source;
+      insertedSpans = [
+        ...mapSpansThroughPatches(mapSpansThroughPatches(insertedSpans, applied.patches), shifted.patches),
+        ...mapSpansThroughPatches(groupSpans, shifted.patches)
+      ];
     }
   }
 
+  const patches = composeSourcePatches(source, steps);
   const selectedSourceIds = mapSpansToStatementIdsWithSnapshot(
     getStatementSnapshot(currentSource, parseOptions, caches),
     insertedSpans
@@ -244,37 +244,45 @@ export function applyDuplicateElementsAction(
   };
 }
 
-function offsetSnippetsByDelta(
-  snippets: readonly string[],
+/**
+ * Moves the statements just inserted at `spans` by `delta`, in the document
+ * they were inserted into: each coordinate is rewritten in the frame it is
+ * read in there (scopes, axis vectors and styles around the copy included),
+ * by the same code as dragging them. The copy that cannot be offset stays
+ * where it was inserted.
+ */
+function offsetInsertedStatements(
+  inserted: EditedSource,
+  spans: readonly Span[],
   delta: WorldPoint,
   deps: PasteDuplicateDeps,
   parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions,
   caches: PasteDuplicateCaches
-): OffsetSnippetsResult {
-  const normalized = snippets
-    .map((snippet) => snippet.replace(/\r\n?/g, "\n").trimEnd())
-    .filter((snippet) => snippet.trim().length > 0);
+): OffsetInsertedResult {
+  const unmoved: OffsetInsertedResult = { source: inserted, patches: [], skippedHandles: [] };
   if (Math.abs(delta.x) <= 1e-9 && Math.abs(delta.y) <= 1e-9) {
-    return { snippets: normalized, skippedHandles: [] };
+    return unmoved;
+  }
+  const ids = mapSpansToStatementIdsWithSnapshot(getStatementSnapshot(inserted, parseOptions, caches), spans);
+  if (ids.length === 0) {
+    return unmoved;
   }
 
-  const preparation = getOffsetPreparation(normalized, parseOptions, caches);
-  if (preparation.rootIds.length === 0) {
-    return { snippets: normalized, skippedHandles: [] };
-  }
-
-  const moved = deps.applyMoveElements(
-    preparation.wrappedSource,
-    preparation.editHandles,
-    preparation.rootIds,
-    delta,
-    parseOptions
-  );
+  // The handles belong to the edited document; whatever the caller prepared is for the one before.
+  const { preparedParse, sourceFingerprint, analysisView, analysisSession, ...current } = parseOptions;
+  void preparedParse;
+  void sourceFingerprint;
+  void analysisView;
+  void analysisSession;
+  const parsed = parseTikzForEdit(inserted, current);
+  const { sourceFingerprint: _previousFingerprint, ...evaluating } = evaluateOptions;
+  const semantic = evaluateTikzFigure(parsed.figure, inserted, evaluating);
+  const moved = deps.applyMoveElements(inserted, semantic.editHandles, ids, delta, current);
 
   if (moved.kind !== "success" && moved.kind !== "partial") {
     return {
-      snippets: normalized,
-      skippedHandles: [],
+      ...unmoved,
       partialReason:
         moved.kind === "unsupported"
           ? `Could not offset all pasted/duplicated statements: ${moved.reason}`
@@ -282,43 +290,30 @@ function offsetSnippetsByDelta(
     };
   }
 
-  const movedSnapshot = getStatementSnapshot(moved.newSource, parseOptions, caches);
-  const movedRootRefs = movedSnapshot.byParentKey.get("root") ?? [];
-  const movedSnippets = movedRootRefs.map((ref) => statementSnippet(moved.newSource, ref));
-  if (movedSnippets.length !== normalized.length) {
-    return {
-      snippets: normalized,
-      skippedHandles: moved.kind === "partial" ? moved.skippedHandles : [],
-      partialReason:
-        moved.kind === "partial"
-          ? `Some pasted/duplicated coordinates could not be offset: ${moved.reason}`
-          : "Some pasted/duplicated statements could not be offset."
-    };
-  }
-
+  const patches = patchesMatchSourceTransition(inserted, moved.newSource, moved.patches)
+    ? moved.patches
+    : [computeMinimalReplacementPatch(inserted, moved.newSource)];
   if (moved.kind === "partial") {
-    return {
-      snippets: movedSnippets,
-      partialReason: `Some pasted/duplicated coordinates could not be offset: ${moved.reason}`,
-      skippedHandles: moved.skippedHandles
-    };
+    // A copy that ends at a named node still ends there: that endpoint is not a place to move.
+    const unmoved = moved.skippedHandles.filter((id) => {
+      const handle = semantic.editHandles.find((candidate) => candidate.id === id);
+      return !(handle && isCoordinateEditHandle(handle) && handle.coordinateForm === "named");
+    });
+    if (unmoved.length > 0) {
+      return {
+        source: moved.newSource,
+        patches,
+        partialReason: `Some pasted/duplicated coordinates could not be offset: ${moved.reason}`,
+        skippedHandles: unmoved
+      };
+    }
   }
-
-  return {
-    snippets: movedSnippets,
-    skippedHandles: []
-  };
-}
-
-function wrapSnippetsInFigure(snippets: readonly string[]): string {
-  const body = snippets.map((snippet) => `  ${snippet}`).join("\n");
-  return `\\begin{tikzpicture}\n${body}\n\\end{tikzpicture}`;
+  return { source: moved.newSource, patches, skippedHandles: [] };
 }
 
 function createPasteDuplicateCaches(): PasteDuplicateCaches {
   return {
-    snapshots: new Map<string, StatementSnapshot>(),
-    offsetPreparations: new Map<string, OffsetPreparation>()
+    snapshots: new Map<string, StatementSnapshot>()
   };
 }
 
@@ -336,32 +331,6 @@ function getStatementSnapshot(
   return snapshot;
 }
 
-function getOffsetPreparation(
-  snippets: readonly string[],
-  parseOptions: EditParseOptions,
-  caches: PasteDuplicateCaches
-): OffsetPreparation {
-  const wrappedSource = wrapSnippetsInFigure(snippets);
-  const cached = caches.offsetPreparations.get(wrappedSource);
-  if (cached) {
-    return cached;
-  }
-
-  const parsed = parseTikzForEdit(wrappedSource, {
-    ...parseOptions
-  });
-  const snapshot = buildStatementSnapshotFromStatements(wrappedSource, parsed.figure.body);
-  caches.snapshots.set(wrappedSource, snapshot);
-  const semantic = evaluateTikzFigure(parsed.figure, wrappedSource);
-  const preparation: OffsetPreparation = {
-    wrappedSource,
-    rootIds: (snapshot.byParentKey.get("root") ?? []).map((ref) => ref.id),
-    editHandles: semantic.editHandles
-  };
-  caches.offsetPreparations.set(wrappedSource, preparation);
-  return preparation;
-}
-
 function mapSpansToStatementIdsWithSnapshot(snapshot: StatementSnapshot, spans: readonly Span[]): string[] {
   if (spans.length === 0) {
     return [];
@@ -370,15 +339,17 @@ function mapSpansToStatementIdsWithSnapshot(snapshot: StatementSnapshot, spans: 
   const seen = new Set<string>();
   const ids: string[] = [];
 
-  for (const span of spans) {
-    let bestOverlap: { id: string; overlap: number } | null = null;
+  for (const span of spans.map((raw) => trimmedToContent(snapshot.source, raw))) {
+    // The statement the span is: most overlap, and the innermost where an enclosing scope overlaps as much.
+    let bestOverlap: { id: string; overlap: number; length: number } | null = null;
     for (const ref of snapshot.all) {
       const overlap = Math.max(0, Math.min(span.to, ref.span.to) - Math.max(span.from, ref.span.from));
       if (overlap <= 0) {
         continue;
       }
-      if (!bestOverlap || overlap > bestOverlap.overlap) {
-        bestOverlap = { id: ref.id, overlap };
+      const length = ref.span.to - ref.span.from;
+      if (!bestOverlap || overlap > bestOverlap.overlap || (overlap === bestOverlap.overlap && length < bestOverlap.length)) {
+        bestOverlap = { id: ref.id, overlap, length };
       }
     }
     if (bestOverlap && !seen.has(bestOverlap.id)) {
@@ -388,6 +359,14 @@ function mapSpansToStatementIdsWithSnapshot(snapshot: StatementSnapshot, spans: 
   }
 
   return ids;
+}
+
+/** Inserted spans carry the line break and indentation before a statement; the statement is what follows. */
+function trimmedToContent(source: string, span: Span): Span {
+  let { from, to } = span;
+  while (from < to && /\s/u.test(source.charAt(from))) from += 1;
+  while (to > from && /\s/u.test(source.charAt(to - 1))) to -= 1;
+  return { from, to };
 }
 
 function normalizeDuplicateDelta(delta: WorldPoint | undefined, defaultDuplicateOffsetPt: number): WorldPoint {

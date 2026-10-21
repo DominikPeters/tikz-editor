@@ -354,9 +354,9 @@ export function applyEditAction(
       case "deleteAdornment":
         return applyDeleteAdornmentAction(source, action.targetId, parseOptions);
       case "pasteStatements":
-        return applyPasteStatements(source, action, parseOptions);
+        return applyPasteStatements(source, action, parseOptions, evaluateOptions);
       case "duplicateElements":
-        return applyDuplicateElements(source, action, parseOptions);
+        return applyDuplicateElements(source, action, parseOptions, evaluateOptions);
       case "duplicateAdornment":
         return applyDuplicateAdornment(source, action.targetId, parseOptions);
       case "moveAdornment":
@@ -907,27 +907,29 @@ function applyMoveElements(
 function applyPasteStatements(
   source: string,
   action: Extract<EditAction, { kind: "pasteStatements" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
   return applyPasteStatementsAction(source, action, {
     applyMoveElements,
     normalizeElementIds,
     uniqueStrings,
     defaultDuplicateOffsetPt: DEFAULT_DUPLICATE_OFFSET_PT
-  }, parseOptions);
+  }, parseOptions, evaluateOptions);
 }
 
 function applyDuplicateElements(
   source: string,
   action: Extract<EditAction, { kind: "duplicateElements" }>,
-  parseOptions: EditParseOptions
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
 ): EditActionResult {
   return applyDuplicateElementsAction(source, action, {
     applyMoveElements,
     normalizeElementIds,
     uniqueStrings,
     defaultDuplicateOffsetPt: DEFAULT_DUPLICATE_OFFSET_PT
-  }, parseOptions);
+  }, parseOptions, evaluateOptions);
 }
 
 function applyDuplicateAdornment(source: string, targetId: string, parseOptions: EditParseOptions): EditActionResult {

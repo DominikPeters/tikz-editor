@@ -56,3 +56,49 @@ export function cartesianComponents(raw: string): { x: string; y: string } | nul
   const exact = raw.match(/^\(\s*([^,()[\]$:]*?)\s*,\s*([^,()[\]$:]*?)\s*\)$/s);
   return exact ? { x: requireArrayValue(exact, 1), y: requireArrayValue(exact, 2) } : null;
 }
+
+/**
+ * The components of an authored cartesian coordinate with its layout, for
+ * writing new components in the same spelling. `z` is an xyz coordinate's
+ * third component, which a translation leaves alone.
+ */
+export type CoordinateLayout = Readonly<{
+  open: string;
+  options: string;
+  x: string;
+  gap: string;
+  y: string;
+  afterY: string;
+  z: string | null;
+}>;
+
+export function coordinateLayout(raw: string): CoordinateLayout | null {
+  const match = raw.match(/^\((\s*)(\[[^\]]*\]\s*)?([^,()[\]$:]*?)(\s*,\s*)([^,()[\]$:]*?)(\s*)(?:,([^,()[\]$:]*?)(\s*))?\)$/s);
+  if (!match) return null;
+  return {
+    open: requireArrayValue(match, 1),
+    options: match[2] ?? "",
+    x: requireArrayValue(match, 3),
+    gap: requireArrayValue(match, 4),
+    y: requireArrayValue(match, 5),
+    afterY: requireArrayValue(match, 6),
+    z: match[7] === undefined ? null : `${match[7]}${match[8] ?? ""}`
+  };
+}
+
+/** A component plus `variable × value` terms, `value` in cm-equivalent units of the component. */
+export function translatedComponent(
+  oldComponent: string,
+  terms: readonly Readonly<{ variable: string; value: number }>[],
+  unit?: string
+): string {
+  const written = terms.flatMap(term => {
+    const magnitude = formatNumber(Math.abs(term.value), { fractionDigits: 6 });
+    return magnitude === "0" ? [] : [{ negative: term.value < 0, text: `${term.variable}*${componentWithUnit(magnitude, oldComponent, unit)}` }];
+  });
+  if (written.length === 0) return oldComponent;
+  const zero = Number(oldComponent.trim()) === 0 && oldComponent.trim() !== "";
+  let text = zero ? "" : oldComponent;
+  for (const term of written) text += term.negative ? `-${term.text}` : `${text.length > 0 ? "+" : ""}${term.text}`;
+  return text;
+}

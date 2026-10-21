@@ -915,24 +915,6 @@
     {
       "rule": "F2",
       "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/repeat.ts",
-      "declaration": "rewritePathStatementCoordinates.onNode.text",
-      "hash": "846a82b2f196",
-      "count": 1,
-      "expression": "legacyText(translated)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
-      "file": "packages/core/src/edit/actions/repeat.ts",
-      "declaration": "rewritePathStatementCoordinates.onPathItem.text",
-      "hash": "846a82b2f196",
-      "count": 2,
-      "expression": "legacyText(translated)"
-    },
-    {
-      "rule": "F2",
-      "symbol": "legacyText",
       "file": "packages/core/src/edit/actions/resize-element.ts",
       "declaration": "applyResizePathCircleOrEllipse.inserted",
       "hash": "3a0bf63e200f",
